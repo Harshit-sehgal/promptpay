@@ -50,7 +50,14 @@ export class DeveloperService {
 
   async exportData(userId: string) {
     const [user, earnings, impressions, clicks, payouts] = await Promise.all([
-      this.prisma.user.findUnique({ where: { id: userId } }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true, email: true, name: true, role: true, status: true,
+          trustLevel: true, country: true, emailVerified: true, googleVerified: true,
+          githubVerified: true, referralCode: true, createdAt: true,
+        },
+      }),
       this.prisma.earningsLedger.findMany({ where: { userId } }),
       this.prisma.adImpression.findMany({ where: { userId }, take: 1000 }),
       this.prisma.adClick.findMany({ where: { userId }, take: 1000 }),
@@ -60,6 +67,24 @@ export class DeveloperService {
   }
 
   async deleteAccount(userId: string) {
-    return this.prisma.user.update({ where: { id: userId }, data: { status: 'deleted', email: `deleted-${userId}@waitlayer.com` } });
+    // Anonymize user data and revoke all sessions
+    return this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          status: 'deleted',
+          email: `deleted-${userId}@waitlayer.com`,
+          passwordHash: null,
+          googleId: null,
+          githubId: null,
+          name: null,
+          referralCode: null,
+        },
+      }),
+      this.prisma.session.updateMany({
+        where: { userId },
+        data: { revoked: true },
+      }),
+    ]);
   }
 }

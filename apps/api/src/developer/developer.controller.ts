@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, UseGuards, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
@@ -35,11 +35,15 @@ export class DeveloperController {
     return this.service.updateSettings(userId, dto);
   }
 
-  @Post('export-data') exportData(@CurrentUser('id') userId: string) {
+  @Post('export-data')
+  @HttpCode(HttpStatus.OK)
+  exportData(@CurrentUser('id') userId: string) {
     return this.service.exportData(userId);
   }
 
-  @Post('delete-account') deleteAccount(@CurrentUser('id') userId: string) {
+  @Post('delete-account')
+  @HttpCode(HttpStatus.OK)
+  deleteAccount(@CurrentUser('id') userId: string) {
     return this.service.deleteAccount(userId);
   }
 }

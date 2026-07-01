@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../config/prisma.service';
+import { UserStatus } from '@waitlayer/shared';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -19,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       where: { id: payload.sub },
       select: { id: true, email: true, role: true, status: true, trustLevel: true },
     });
-    if (!user || user.status === 'banned' || user.status === 'deleted') throw new UnauthorizedException();
+    if (!user || user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) throw new UnauthorizedException();
     return user;
   }
 }

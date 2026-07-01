@@ -111,6 +111,12 @@ export class ExtensionService {
       throw new ForbiddenException('Device does not belong to this user');
     }
 
+    // Verify HMAC signature
+    const { signature: _, ...payload } = dto;
+    if (!this.verifySignature(payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
     return this.prisma.waitStateEvent.create({
       data: {
         userId,
@@ -136,6 +142,12 @@ export class ExtensionService {
       where: { idempotencyKey: dto.idempotencyKey },
     });
     if (existing) return existing;
+
+    // Verify HMAC signature
+    const { signature: _, ...payload } = dto;
+    if (!this.verifySignature(payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
 
     const start = await this.prisma.waitStateEvent.findFirst({
       where: { waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
@@ -175,6 +187,15 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    // Enforce privacy: reject payloads containing prohibited data fields
+    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+
+    // Verify HMAC signature
+    const { signature: _, ...payload } = dto;
+    if (!this.verifySignature(payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
     // Check user settings
     const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
     if (settings && !settings.adsEnabled) {
@@ -303,6 +324,12 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    // Verify HMAC signature
+    const { signature: _, ...payload } = dto;
+    if (!this.verifySignature(payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -326,6 +353,12 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    // Verify HMAC signature
+    const { signature: _, ...payload } = dto;
+    if (!this.verifySignature(payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
     // Must meet minimum visible duration
     if (dto.visibleDurationMs < MINIMUM_VISIBLE_DURATION_MS) {
       return {
@@ -361,6 +394,12 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    // Verify HMAC signature
+    const { signature: _, ...payload } = dto;
+    if (!this.verifySignature(payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
     // Idempotency check
     const existing = await this.prisma.adClick.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
