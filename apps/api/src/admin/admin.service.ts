@@ -33,12 +33,21 @@ export class AdminService {
   }
 
   async approveCampaign(campaignId: string, reviewerId: string, reason?: string) {
-    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId }, include: { creatives: true } });
     if (!campaign || campaign.status !== 'submitted') {
       throw new BadRequestException('Campaign must be in submitted status to approve');
     }
+
+    // Must have at least one approved creative to activate
+    const hasApprovedCreative = campaign.creatives.some((c: any) => c.status === 'approved');
+
+    // Set status: 'approved' if no approved creatives yet, 'active' if ready to serve
+    const newStatus = hasApprovedCreative ? 'active' : 'approved';
     return this.prisma.$transaction([
-      this.prisma.campaign.update({ where: { id: campaignId }, data: { status: 'approved', approvedAt: new Date() } }),
+      this.prisma.campaign.update({
+        where: { id: campaignId },
+        data: { status: newStatus, approvedAt: new Date(), activatedAt: hasApprovedCreative ? new Date() : null },
+      }),
       this.prisma.campaignApproval.create({ data: { campaignId, reviewerId, decision: 'approved', reason } }),
     ]);
   }

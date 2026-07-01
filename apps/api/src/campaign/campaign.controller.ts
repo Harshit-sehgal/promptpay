@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, HttpCode, HttpStatus, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators';
 import { CampaignService } from './campaign.service';
 import { CreateCreativeDto, UpdateCreativeDto } from './dto';
@@ -48,6 +50,25 @@ export class CampaignController {
     @Body() dto: UpdateCreativeDto,
   ) {
     return this.campaignService.updateCreative(creativeId, dto);
+  }
+
+  @Post('creatives/:creativeId/approve')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
+  approveCreative(@Param('creativeId') creativeId: string) {
+    return this.campaignService.approveCreative(creativeId);
+  }
+
+  @Post('creatives/:creativeId/reject')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
+  rejectCreative(
+    @Param('creativeId') creativeId: string,
+    @Body('reason') reason: string,
+  ) {
+    return this.campaignService.rejectCreative(creativeId, reason);
   }
 
   @Post(':id/targeting/countries')

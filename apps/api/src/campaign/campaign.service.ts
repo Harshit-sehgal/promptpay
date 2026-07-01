@@ -72,6 +72,45 @@ export class CampaignService {
     });
   }
 
+  // ── Creative Approval ──
+
+  /** Approve a creative for serving — only admin or system should call this */
+  async approveCreative(creativeId: string) {
+    const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
+    if (!creative) throw new NotFoundException('Creative not found');
+
+    const updated = await this.prisma.adCreative.update({
+      where: { id: creativeId },
+      data: { status: 'approved', rejectionReason: null },
+    });
+
+    // Check if the campaign is 'approved' and now has at least one approved creative
+    // If so, auto-activate the campaign so it can serve ads
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: creative.campaignId },
+      include: { creatives: { where: { status: 'approved' } } },
+    });
+    if (campaign && campaign.status === 'approved' && campaign.creatives.length > 0) {
+      await this.prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { status: 'active', activatedAt: new Date() },
+      });
+    }
+
+    return updated;
+  }
+
+  /** Reject a creative with a reason */
+  async rejectCreative(creativeId: string, reason: string) {
+    const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
+    if (!creative) throw new NotFoundException('Creative not found');
+
+    return this.prisma.adCreative.update({
+      where: { id: creativeId },
+      data: { status: 'rejected', rejectionReason: reason },
+    });
+  }
+
   // ── Country Targeting ──
 
   async setCountryTargeting(campaignId: string, targets: Array<{ countryCode: string; include: boolean }>) {

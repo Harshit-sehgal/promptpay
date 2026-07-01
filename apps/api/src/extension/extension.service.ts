@@ -375,18 +375,116 @@ export class ExtensionService {
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
+      include: {
+        campaign: {
+          select: { id: true, bidAmountMinor: true, currency: true, advertiserId: true, bidType: true },
+        },
+      },
     });
     if (!impression) throw new NotFoundException('Impression not found');
     if (impression.qualifiedAt) return { qualified: true, impressionId: impression.id, alreadyQualified: true };
 
-    await this.prisma.adImpression.update({
-      where: { id: impression.id },
-      data: {
-        qualifiedAt: new Date(dto.qualifiedAt),
-        visibleDurationMs: dto.visibleDurationMs,
-        isBillable: true,
-      },
-    });
+    // Fraud check via rate limits
+    const rateCheck = await this.fraud.checkImpressionRateLimit(
+      impression.userId,
+      impression.deviceId,
+    );
+    const isBillable = rateCheck.allowed;
+    if (!isBillable) {
+      // Record the impression as qualified but not billable — fraud was flagged
+      await this.prisma.adImpression.update({
+        where: { id: impression.id },
+        data: {
+          qualifiedAt: new Date(dto.qualifiedAt),
+          visibleDurationMs: dto.visibleDurationMs,
+          isBillable: false,
+        },
+      });
+      return { qualified: false, impressionId: impression.id, reason: rateCheck.reason || 'fraud_detected' };
+    }
+
+    // Look up the user's trust level for hold days
+    const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
+    const trustLevel = trustScore?.level || 'new';
+
+    const split = this.ledger.calculateSplit(impression.campaign.bidAmountMinor);
+    const holdDays = this.ledger.getHoldDays(trustLevel);
+    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    const idempotencyBase = `imp-${impression.id}`;
+
+    // Single atomic transaction: impression update + all ledger entries + campaign spend
+    await this.prisma.$transaction([
+      // (1) Mark impression as billable qualified
+      this.prisma.adImpression.update({
+        where: { id: impression.id },
+        data: {
+          qualifiedAt: new Date(dto.qualifiedAt),
+          visibleDurationMs: dto.visibleDurationMs,
+          isBillable: true,
+        },
+      }),
+      // (2) Debit advertiser balance
+      this.prisma.advertiserLedger.create({
+        data: {
+          advertiserId: impression.campaign.advertiserId,
+          campaignId: impression.campaignId,
+          entryType: 'debit',
+          status: 'confirmed',
+          amountMinor: impression.campaign.bidAmountMinor,
+          currency: impression.campaign.currency,
+          idempotencyKey: `${idempotencyBase}-adv`,
+          description: `Impression ${impression.id} - campaign ${impression.campaignId}`,
+        },
+      }),
+      // (3) Credit developer (estimated until hold expires)
+      this.prisma.earningsLedger.create({
+        data: {
+          userId: impression.userId,
+          campaignId: impression.campaignId,
+          impressionId: impression.id,
+          entryType: 'credit',
+          status: 'estimated',
+          amountMinor: split.userShare,
+          currency: impression.campaign.currency,
+          availableAt,
+          idempotencyKey: `${idempotencyBase}-usr`,
+          description: 'Earnings from qualified impression',
+        },
+      }),
+      // (4) Credit platform fee
+      this.prisma.platformLedger.create({
+        data: {
+          campaignId: impression.campaignId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: split.platformShare,
+          currency: impression.campaign.currency,
+          bucket: 'platform_fee',
+          referenceId: impression.id,
+          idempotencyKey: `${idempotencyBase}-plt`,
+          description: 'Platform fee from impression',
+        },
+      }),
+      // (5) Credit fraud/payment reserve
+      this.prisma.platformLedger.create({
+        data: {
+          campaignId: impression.campaignId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: split.reserveShare,
+          currency: impression.campaign.currency,
+          bucket: 'fraud_reserve',
+          referenceId: impression.id,
+          idempotencyKey: `${idempotencyBase}-res`,
+          description: 'Fraud/payment reserve from impression',
+        },
+      }),
+      // (6) Increment campaign spend
+      this.prisma.campaign.update({
+        where: { id: impression.campaignId },
+        data: { budgetSpentMinor: { increment: impression.campaign.bidAmountMinor } },
+      }),
+    ]);
 
     return { qualified: true, impressionId: impression.id };
   }
@@ -412,9 +510,24 @@ export class ExtensionService {
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
+      include: {
+        campaign: {
+          select: { id: true, bidAmountMinor: true, currency: true, advertiserId: true, bidType: true },
+        },
+      },
     });
     if (!impression) throw new NotFoundException('Impression not found');
     if (!impression.qualifiedAt) throw new BadRequestException('Impression not yet qualified');
+
+    // Fraud checks: rate + self-click
+    const clickPatterns = await this.fraud.checkClickPatterns(impression.userId, impression.id);
+    if (!clickPatterns.allowed) {
+      return { clicked: false, reason: clickPatterns.reason || 'click_blocked' };
+    }
+    const selfClick = await this.fraud.checkSelfClick(impression.userId, impression.campaignId);
+    if (!selfClick.allowed) {
+      return { clicked: false, reason: selfClick.reason || 'self_click' };
+    }
 
     // One click per impression
     const existingClick = await this.prisma.adClick.findFirst({
@@ -422,19 +535,70 @@ export class ExtensionService {
     });
     if (existingClick) return { clicked: false, reason: 'duplicate_click' };
 
-    const click = await this.prisma.adClick.create({
-      data: {
-        impressionId: impression.id,
-        userId: impression.userId,
-        deviceId: impression.deviceId,
-        sessionId: impression.sessionId,
-        campaignId: impression.campaignId,
-        creativeId: impression.creativeId,
-        clickedAt: new Date(dto.clickedAt),
-        targetUrl: '',
-        idempotencyKey: dto.idempotencyKey,
-      },
-    });
+    // Find appropriate click bid (use campaign.cpcBid or default to campaign bid; CPC is the click-specific bid)
+    // For CPC campaigns, the campaign.bidAmountMinor is the per-click bid.
+    // For CPM campaigns, clicks don't earn — skip the ledger write.
+    const isCpcBid = impression.campaign.bidType === 'cpc';
+
+    // Trust level for hold days
+    const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
+    const trustLevel = trustScore?.level || 'new';
+
+    const holdDays = this.ledger.getHoldDays(trustLevel);
+    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    const split = isCpcBid ? this.ledger.calculateSplit(impression.campaign.bidAmountMinor) : null;
+
+    const operations: any[] = [
+      // Create the click record
+      this.prisma.adClick.create({
+        data: {
+          impressionId: impression.id,
+          userId: impression.userId,
+          deviceId: impression.deviceId,
+          sessionId: impression.sessionId,
+          campaignId: impression.campaignId,
+          creativeId: impression.creativeId,
+          clickedAt: new Date(dto.clickedAt),
+          targetUrl: '',
+          idempotencyKey: dto.idempotencyKey,
+        },
+      }),
+    ];
+
+    if (isCpcBid && split) {
+      const idempotencyBase = `clk-${dto.idempotencyKey}`;
+      // Add ledger entries for CPC campaigns
+      operations.push(
+        this.prisma.advertiserLedger.create({
+          data: {
+            advertiserId: impression.campaign.advertiserId,
+            campaignId: impression.campaignId,
+            entryType: 'debit',
+            status: 'confirmed',
+            amountMinor: impression.campaign.bidAmountMinor,
+            currency: impression.campaign.currency,
+            idempotencyKey: `${idempotencyBase}-adv`,
+            description: `Click charge - campaign ${impression.campaignId}`,
+          },
+        }),
+        this.prisma.earningsLedger.create({
+          data: {
+            userId: impression.userId,
+            campaignId: impression.campaignId,
+            impressionId: impression.id,
+            entryType: 'credit',
+            status: 'estimated',
+            amountMinor: split.userShare,
+            currency: impression.campaign.currency,
+            availableAt,
+            idempotencyKey: `${idempotencyBase}-usr`,
+            description: 'Earnings from ad click',
+          },
+        }),
+      );
+    }
+
+    const [click] = await this.prisma.$transaction(operations);
 
     return { clicked: true, clickId: click.id };
   }
@@ -493,7 +657,11 @@ export class ExtensionService {
       .createHmac('sha256', this.hmacSecret)
       .update(canonical)
       .digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    // timingSafeEqual requires equal-length buffers; pad or compare safely
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length) return false;
+    return crypto.timingSafeEqual(sigBuf, expBuf);
   }
 
   // ── Privacy Enforcement ──
