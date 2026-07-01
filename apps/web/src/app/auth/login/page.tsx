@@ -25,7 +25,7 @@ function GoogleG({ size = 20 }: { size?: number }) {
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
   credential: string,
-  googleLoginFn: (idToken: string) => Promise<void>,
+  googleLoginFn: (idToken: string) => Promise<unknown>,
 ): Promise<string | null> {
   try {
     // credential from GIS is the ID token itself

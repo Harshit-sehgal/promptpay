@@ -1,13 +1,30 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+
+/** Convert the Google credential response into an idToken and call our API. */
+async function handleGoogleCredential(
+  credential: string,
+  googleLoginFn: (idToken: string, role?: string) => Promise<unknown>,
+  role: string,
+): Promise<string | null> {
+  try {
+    // credential from GIS is the ID token itself
+    await googleLoginFn(credential, role);
+    return null;
+  } catch (err: any) {
+    return err.response?.data?.message || err.message || 'Google sign-in failed';
+  }
+}
+
 export default function SignupPage() {
   const router = useRouter();
-  const { signup } = useAuth();
+  const { signup, googleLogin } = useAuth();
   const [role, setRole] = useState<'developer' | 'advertiser'>('developer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,6 +32,60 @@ export default function SignupPage() {
   const [referrerCode, setReferrerCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(!!GOOGLE_CLIENT_ID);
+  const googleInitialized = useRef(false);
+
+  // Initialize Google Identity Services for signup
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || googleInitialized.current) return;
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: async (response: any) => {
+            setError('');
+            setLoading(true);
+            const errorMsg = await handleGoogleCredential(response.credential, googleLogin, role);
+            setLoading(false);
+            if (errorMsg) {
+              setError(errorMsg);
+            } else {
+              const dashboard = localStorage.getItem('lastDashboard') || '/developer';
+              router.push(dashboard);
+            }
+          },
+          auto_select: false,
+          context: 'signup',
+        });
+        googleInitialized.current = true;
+
+        const btn = document.getElementById('google-signup-btn');
+        if (btn) {
+          window.google.accounts.id.renderButton(btn, {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            text: 'continue_with',
+            shape: 'rectangular',
+            width: btn.clientWidth || 320,
+            logo_alignment: 'left',
+          });
+        }
+      }
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      if (script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+  }, [googleLogin, router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -72,6 +143,21 @@ export default function SignupPage() {
               Advertiser
             </button>
           </div>
+
+          {/* Google Sign-In */}
+          {googleEnabled && (
+            <>
+              <div
+                id="google-signup-btn"
+                className="flex justify-center w-full mb-6"
+              />
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 h-px bg-surface-200" />
+                <span className="text-surface-400 text-[12px] font-medium uppercase tracking-wider">or</span>
+                <div className="flex-1 h-px bg-surface-200" />
+              </div>
+            </>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5">
@@ -154,4 +240,19 @@ export default function SignupPage() {
       </div>
     </div>
   );
+}
+
+/** Extend window type for Google Identity Services */
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: Record<string, unknown>) => void;
+          renderButton: (element: HTMLElement, config: Record<string, unknown>) => void;
+          prompt: () => void;
+        };
+      };
+    };
+  }
 }
