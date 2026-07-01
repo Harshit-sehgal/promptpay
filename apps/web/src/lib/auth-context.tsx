@@ -27,8 +27,9 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (data: any) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  signup: (data: any) => Promise<User>;
+  googleLogin: (idToken: string, role?: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -74,6 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return userData;
   }, []);
 
+  const googleLogin = useCallback(async (idToken: string, role?: string) => {
+    const res = await authApi.googleLogin({ idToken, role });
+    const { accessToken, refreshToken, user: userData } = res.data;
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    localStorage.setItem('lastDashboard', getDashboardPath(userData.role));
+    setUser(userData);
+    return userData;
+  }, []);
+
   const logout = useCallback(() => {
     authApi.logout().catch(() => {});
     localStorage.removeItem('accessToken');
@@ -89,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         login,
         signup,
+        googleLogin,
         logout,
       }}
     >

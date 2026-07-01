@@ -3,6 +3,7 @@ import api from './client';
 export const authApi = {
   signup: (data: any) => api.post('/auth/signup', data),
   login: (data: any) => api.post('/auth/login', data),
+  googleLogin: (data: { idToken: string; role?: string }) => api.post('/auth/google', data),
   refresh: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),
   logout: () => api.post('/auth/logout'),
   getMe: () => api.get('/auth/me'),

@@ -80,5 +80,5 @@ function resolveIp(req: Record<string, any>): string {
 }
 
 function isAuthRoute(path: string): boolean {
-  return path.includes('/auth/login') || path.includes('/auth/signup');
+  return path.includes('/auth/login') || path.includes('/auth/signup') || path.includes('/auth/google');
 }

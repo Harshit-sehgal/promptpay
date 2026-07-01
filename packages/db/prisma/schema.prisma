@@ -170,14 +170,16 @@ enum ApprovalDecision {
 model User {
   id              String     @id @default(uuid())
   email           String     @unique
-  passwordHash    String
+  passwordHash    String?
   name            String?
   role            UserRole   @default(developer)
   status          UserStatus @default(active)
   trustLevel      TrustLevel @default(new)
   country         String?
+  googleId        String?    @unique
   githubId        String?
   emailVerified   Boolean    @default(false)
+  googleVerified  Boolean    @default(false)
   githubVerified  Boolean    @default(false)
   referralCode    String?    @unique
 

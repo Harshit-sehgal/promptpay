@@ -3,9 +3,9 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../config/prisma.service';
-import { SignUpDto } from './dto';
-import { LoginDto } from './dto';
+import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
 import { UserRole, UserStatus } from '@waitlayer/shared';
+import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 
 interface TokenPayload {
   sub: string;
@@ -23,6 +23,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private googleVerifier: GoogleTokenVerifier,
   ) {
     this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
     this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d');
@@ -86,6 +87,10 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('Account uses social login — sign in with Google');
+    }
+
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
@@ -98,6 +103,84 @@ export class AuthService {
       user: this.sanitizeUser(user),
       ...tokens,
     };
+  }
+
+  /** ── Google OAuth ──
+   *  Verifies the Google ID token, then:
+   *  1. Finds user by googleId → login
+   *  2. Finds user by email → link Google account, then login
+   *  3. No user → create new account with Google profile info
+   */
+  async googleOAuth(dto: GoogleOAuthDto) {
+    const payload = await this.googleVerifier.verify(dto.idToken);
+    if (!payload.email_verified) {
+      throw new UnauthorizedException('Google account email is not verified');
+    }
+
+    const googleId = payload.sub;
+    const email = payload.email;
+    const name = payload.name || undefined;
+    const role = dto.role || UserRole.DEVELOPER;
+
+    // 1. Find by googleId
+    let user = await this.prisma.user.findUnique({ where: { googleId } });
+
+    if (user) {
+      // Existing Google user — just login
+      if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+        throw new UnauthorizedException('Account is not active');
+      }
+      const tokens = await this.generateTokenPair(user.id, user.role);
+      return { user: this.sanitizeUser(user), ...tokens };
+    }
+
+    // 2. Find by email → link Google account
+    user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (user) {
+      if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+        throw new UnauthorizedException('Account is not active');
+      }
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          googleId,
+          googleVerified: true,
+          emailVerified: true,
+        },
+      });
+      const tokens = await this.generateTokenPair(user.id, user.role);
+      return { user: this.sanitizeUser(user), ...tokens };
+    }
+
+    // 3. Create new user
+    user = await this.prisma.user.create({
+      data: {
+        email,
+        googleId,
+        name,
+        role,
+        googleVerified: true,
+        emailVerified: true,
+        // No passwordHash — social login only
+      },
+    });
+
+    // Developer onboarding: create settings + trust score
+    if (role === UserRole.DEVELOPER) {
+      await this.prisma.userSettings.create({ data: { userId: user.id } });
+      await this.prisma.trustScore.create({ data: { userId: user.id } });
+    }
+
+    // Advertiser onboarding: create advertiser profile stub
+    if (role === UserRole.ADVERTISER) {
+      await this.prisma.advertiser.create({
+        data: { userId: user.id, companyName: name || 'Unnamed Company', billingEmail: email },
+      });
+    }
+
+    const tokens = await this.generateTokenPair(user.id, user.role);
+    return { user: this.sanitizeUser(user), ...tokens };
   }
 
   /** ── Refresh Token Rotation ──
@@ -166,6 +249,7 @@ export class AuthService {
         trustLevel: true,
         country: true,
         emailVerified: true,
+        googleVerified: true,
         githubVerified: true,
         referralCode: true,
         createdAt: true,

@@ -11,7 +11,7 @@ import {
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators';
-import { SignUpDto, LoginDto, RefreshDto } from './dto';
+import { SignUpDto, LoginDto, RefreshDto, GoogleOAuthDto } from './dto';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 
 @Controller('auth')
@@ -36,6 +36,19 @@ export class AuthController {
   async login(@Body() dto: LoginDto, @Req() req: any) {
     try {
       const result = await this.authService.login(dto);
+      BruteForceGuard.resetOnSuccess(req);
+      return result;
+    } catch (err: any) {
+      BruteForceGuard.recordFailure(req);
+      throw err;
+    }
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  async googleOAuth(@Body() dto: GoogleOAuthDto, @Req() req: any) {
+    try {
+      const result = await this.authService.googleOAuth(dto);
       BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: any) {
