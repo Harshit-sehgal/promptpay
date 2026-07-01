@@ -16,6 +16,7 @@ RUN pnpm install --frozen-lockfile
 # ── Build Stage: turbo build all packages ──
 FROM base AS build
 COPY . .
+RUN pnpm --filter @waitlayer/db run generate
 RUN pnpm run build
 
 # ── API Runtime ──
@@ -37,7 +38,7 @@ COPY --from=build /app/package.json ./
 
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["node", "apps/api/dist/apps/api/src/main.js"]
+CMD ["node", "apps/api/dist/main.js"]
 
 # ── Web Runtime ──
 FROM node:22-alpine AS web
