@@ -33,6 +33,8 @@ interface AuthContextValue {
   logout: () => void;
 }
 
+const SESSION_COOKIE = 'session=1; path=/; max-age=2592000; SameSite=Lax';
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -44,10 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = localStorage.getItem('accessToken');
     if (token) {
       authApi.getMe()
-        .then((res) => setUser(res.data))
+        .then((res) => {
+          setUser(res.data);
+          // Ensure session cookie is set if we have a valid token
+          document.cookie = SESSION_COOKIE;
+        })
         .catch(() => {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
+          document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -61,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('lastDashboard', getDashboardPath(userData.role));
+    document.cookie = SESSION_COOKIE;
     setUser(userData);
     return userData;
   }, []);
@@ -71,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('lastDashboard', getDashboardPath(userData.role));
+    document.cookie = SESSION_COOKIE;
     setUser(userData);
     return userData;
   }, []);
@@ -81,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('lastDashboard', getDashboardPath(userData.role));
+    document.cookie = SESSION_COOKIE;
     setUser(userData);
     return userData;
   }, []);
@@ -90,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('lastDashboard');
+    document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
     setUser(null);
   }, []);
 

@@ -59,6 +59,7 @@ api.interceptors.response.use(
       // No refresh token — clear session and reject
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
       return Promise.reject(error);
     }
 
@@ -95,6 +96,7 @@ api.interceptors.response.use(
       // Refresh failed — clear session
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
       return Promise.reject(refreshErr);
     } finally {
       isRefreshing = false;
