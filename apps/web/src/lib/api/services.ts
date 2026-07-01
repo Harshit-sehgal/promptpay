@@ -35,8 +35,9 @@ export const adminApi = {
   getPendingPayouts: () => api.get('/admin/payouts/pending'),
   approvePayout: (id: string, note?: string) => api.post(`/admin/payouts/${id}/approve`, { note }),
   rejectPayout: (id: string, reason: string) => api.post(`/admin/payouts/${id}/reject`, { reason }),
-  getFraudFlags: (params?: any) => api.get('/admin/fraud/flags', { params }),
-  resolveFraudFlag: (id: string, isValid: boolean, note?: string) => api.post(`/admin/fraud/flags/${id}/resolve`, { isValid, note }),
+  getFraudFlags: (params?: any) => api.get('/admin/fraud', { params }),
+  resolveFraudFlag: (id: string, decision: 'confirmed' | 'invalid', note?: string) => api.post(`/admin/fraud/${id}/resolve`, { decision, note }),
+  getAuditLog: (params?: any) => api.get('/admin/audit-log', { params }),
 };
 
 export const payoutApi = {

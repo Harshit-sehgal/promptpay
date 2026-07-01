@@ -2,6 +2,8 @@ import { Injectable, BadRequestException, ForbiddenException, NotFoundException 
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
+import { LedgerService } from '../ledger/ledger.service';
+import { FraudService } from '../fraud/fraud.service';
 import * as crypto from 'crypto';
 import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS } from '@waitlayer/shared';
 
@@ -13,6 +15,8 @@ export class ExtensionService {
     private prisma: PrismaService,
     private audit: AuditService,
     private config: ConfigService,
+    private ledger: LedgerService,
+    private fraud: FraudService,
   ) {
     this.hmacSecret = this.config.get<string>('EXTENSION_HMAC_SECRET', 'dev-secret-change-me');
   }

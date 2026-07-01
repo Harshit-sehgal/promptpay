@@ -30,11 +30,7 @@ export default function AdminAuditPage() {
     // returns paginated entries; we render a flat list when present.
     import('@/lib/api/services')
       .then(({ adminApi }) => {
-        // adminApi now has a getAuditLogs shape; if not present, we fall
-        // back to a no-op rather than throwing — keeps the route stable.
-        const fn = (adminApi as any).getAuditLogs;
-        if (typeof fn !== 'function') return null;
-        return fn({
+        return adminApi.getAuditLog({
           actorRole: actorFilter || undefined,
           action: actionFilter || undefined,
         });

@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from './config';
 
 export interface Ad {
-  impressionId: string;
+  impressionToken: string;
   campaignId: string;
   headline: string;
   message: string;
@@ -47,19 +47,36 @@ export class ApiClient {
     waitDurationMs: number;
     deviceFingerprint: string;
   }): Promise<Ad | null> {
-    const res = await this.post<ServerAdResponse>('/extension/ad', input);
+    const res = await this.post<ServerAdResponse>('/extension/ad-request', input);
     return res?.data ?? null;
   }
 
-  async recordImpressionEnd(impressionId: string, visibleDurationMs: number): Promise<void> {
-    await this.post('/extension/impression/end', {
-      impressionId,
+  async recordImpressionEnd(impressionToken: string, visibleDurationMs: number): Promise<void> {
+    await this.post('/extension/impression-qualified', {
+      impressionToken,
+      qualifiedAt: new Date().toISOString(),
       visibleDurationMs,
+      idempotencyKey: `imp-${impressionToken}`,
+      signature: this.signPayload(JSON.stringify({
+        impressionToken,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs,
+        idempotencyKey: `imp-${impressionToken}`,
+      })),
     });
   }
 
-  async recordClick(impressionId: string): Promise<void> {
-    await this.post('/extension/click', { impressionId });
+  async recordClick(impressionToken: string): Promise<void> {
+    await this.post('/extension/click', {
+      impressionToken,
+      clickedAt: new Date().toISOString(),
+      idempotencyKey: `click-${impressionToken}`,
+      signature: this.signPayload(JSON.stringify({
+        impressionToken,
+        clickedAt: new Date().toISOString(),
+        idempotencyKey: `click-${impressionToken}`,
+      })),
+    });
   }
 
   async getBalance(): Promise<Balance> {

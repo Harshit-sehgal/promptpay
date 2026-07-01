@@ -7,7 +7,7 @@ import * as http from 'http';
 import * as crypto from 'crypto';
 import { Credentials, getCredentials, setCredentials } from './credentials';
 
-const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com';
+const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
 
 export class ApiClient {
   constructor(private creds: Credentials | null = null) {
@@ -53,7 +53,15 @@ export class ApiClient {
     durationMs: number;
     deviceFingerprint: string;
   }) {
-    return this.raw('POST', '/extension/wait-state', input);
+    return this.raw('POST', '/extension/wait-state/start', {
+      ...input,
+      sessionId: 'cli-' + Date.now(),
+      idempotencyKey: 'cli-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+      signature: crypto
+        .createHmac('sha256', process.env.WAITLAYER_SECRET ?? 'dev-secret')
+        .update(JSON.stringify(input))
+        .digest('hex'),
+    });
   }
 
   private async raw<T>(method: 'GET' | 'POST', path: string, body?: any): Promise<T> {

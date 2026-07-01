@@ -56,9 +56,9 @@ export function activate(context: vscode.ExtensionContext) {
         status.showAdServing();
         panel.show(ad, async (clicked) => {
           if (clicked) {
-            await api.recordClick(ad.impressionId);
+            await api.recordClick(ad.impressionToken);
           }
-          await api.recordImpressionEnd(ad.impressionId, 5000);
+          await api.recordImpressionEnd(ad.impressionToken, 5000);
           panel.hide();
           status.showIdle();
         });

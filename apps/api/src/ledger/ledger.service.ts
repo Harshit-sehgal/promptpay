@@ -379,7 +379,7 @@ export class LedgerService {
     };
   }
 
-  private async getHistoryForAdmin(
+  async getHistoryForAdmin(
     filters: { ledgerKind?: string; status?: string } | undefined,
     page: number,
     limit: number,
@@ -421,5 +421,27 @@ export class LedgerService {
     }
     const total = entries.length;
     return { entries, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  /** Platform-wide breakdown for admin dashboard */
+  async getPlatformBreakdown() {
+    const [
+      totalEarnings,
+      totalAdvertiserSpend,
+      totalPlatformFee,
+      totalReserve,
+    ] = await Promise.all([
+      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true } }),
+      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: 'reserve' } }),
+    ]);
+
+    return {
+      totalEarnings: totalEarnings._sum?.amountMinor ?? 0,
+      totalAdvertiserSpend: totalAdvertiserSpend._sum?.amountMinor ?? 0,
+      totalPlatformFee: totalPlatformFee._sum?.amountMinor ?? 0,
+      totalReserve: totalReserve._sum?.amountMinor ?? 0,
+    };
   }
 }

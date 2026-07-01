@@ -1,5 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators';
 import { LedgerService } from './ledger.service';
 import { LedgerHistoryQueryDto } from './dto';
@@ -9,6 +11,7 @@ import { LedgerHistoryQueryDto } from './dto';
 export class LedgerController {
   constructor(private ledgerService: LedgerService) {}
 
+  /** Developer: own earnings balance only */
   @Get('balance')
   getBalance(@CurrentUser('id') userId: string) {
     return Promise.all([
@@ -24,21 +27,47 @@ export class LedgerController {
     }));
   }
 
+  /** Developer: own earnings breakdown only */
   @Get('breakdown')
   getBreakdown(@CurrentUser('id') userId: string) {
     return this.ledgerService.getEarningsBreakdown(userId);
   }
 
+  /** Developer: own earnings history only. Ignores ledgerKind if set (no privilege escalation). */
   @Get('history')
   getHistory(
     @CurrentUser('id') userId: string,
     @Query() query: LedgerHistoryQueryDto,
   ) {
+    // Force ledgerKind to 'earnings' — developers can only see their own earnings.
+    // Platform/advertiser ledgers are exposed only via /admin/ledger/* endpoints.
     return this.ledgerService.getEarningsHistory(
       userId,
       query.page ?? 1,
       query.limit ?? 20,
-      { ledgerKind: query.ledgerKind, status: query.status },
+      { ledgerKind: 'earnings', status: query.status },
     );
+  }
+
+  /** Admin: platform-wide ledger history (all ledger kinds) */
+  @Get('admin/history')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
+  getAdminHistory(
+    @Query() query: LedgerHistoryQueryDto,
+  ) {
+    return this.ledgerService.getHistoryForAdmin(
+      { ledgerKind: query.ledgerKind, status: query.status },
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
+  }
+
+  /** Admin: platform-wide breakdown */
+  @Get('admin/breakdown')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
+  getAdminBreakdown() {
+    return this.ledgerService.getPlatformBreakdown();
   }
 }

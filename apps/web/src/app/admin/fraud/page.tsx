@@ -36,10 +36,10 @@ export default function AdminFraudPage() {
     fetchFlags();
   }, [severityFilter]);
 
-  const handleResolve = async (id: string, isValid: boolean) => {
+  const handleResolve = async (id: string, decision: 'confirmed' | 'invalid') => {
     setResolving(id);
     try {
-      await adminApi.resolveFraudFlag(id, isValid, isValid ? 'Confirmed via admin review' : 'False positive');
+      await adminApi.resolveFraudFlag(id, decision, decision === 'confirmed' ? 'Confirmed via admin review' : 'False positive');
       fetchFlags();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Resolve failed');
@@ -107,14 +107,14 @@ export default function AdminFraudPage() {
                   {flag.status === 'open' && (
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleResolve(flag.id, false)}
+                        onClick={() => handleResolve(flag.id, 'invalid')}
                         disabled={resolving === flag.id}
                         className="bg-ink-700 hover:bg-ink-600 text-emerald-400 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
                       >
                         Mark invalid
                       </button>
                       <button
-                        onClick={() => handleResolve(flag.id, true)}
+                        onClick={() => handleResolve(flag.id, 'confirmed')}
                         disabled={resolving === flag.id}
                         className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
                       >

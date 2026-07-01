@@ -14,7 +14,7 @@ export class ConfigurationManager {
   getApiUrl(): string {
     return (
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('apiUrl') ||
-      'http://localhost:3001'
+      'http://localhost:4001/api/v1'
     );
   }
 
@@ -60,14 +60,23 @@ export class ConfigurationManager {
       const id = await this.secrets.get(this.deviceKey);
       if (id) return id;
     } catch {
-      /* fall through to fingerprint fallback */
+      /* fall through to fingerprint generation */
     }
 
-    // Fallback to stable hash from machine id (non-secret)
-    return crypto
+    // Generate a stable fingerprint from machineId only (no sessionId — it changes per session)
+    const fingerprint = crypto
       .createHash('sha256')
-      .update(`${vscode.env.machineId}-${vscode.env.sessionId}-vscode`)
+      .update(`${vscode.env.machineId}-waitlayer-device`)
       .digest('hex');
+
+    // Persist in SecretStorage so it's stable across restarts
+    try {
+      await this.secrets.store(this.deviceKey, fingerprint);
+    } catch {
+      /* storage not available — fingerprint regenerated each session */
+    }
+
+    return fingerprint;
   }
 }
 
