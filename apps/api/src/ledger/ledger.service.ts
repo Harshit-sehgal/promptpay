@@ -322,7 +322,7 @@ export class LedgerService {
       _count: true,
     });
 
-    return grouped.map((g) => ({
+    return grouped.map((g: any) => ({
       status: g.status,
       amountMinor: g._sum.amountMinor || 0,
       count: g._count,

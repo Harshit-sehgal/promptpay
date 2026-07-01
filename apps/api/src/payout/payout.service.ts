@@ -242,7 +242,7 @@ export class PayoutService {
     });
 
     if (earningEntries.length > 0) {
-      await this.ledger.markAsPaid(earningEntries.map(e => e.id));
+      await this.ledger.markAsPaid(earningEntries.map((e: { id: string }) => e.id));
     }
 
     return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });

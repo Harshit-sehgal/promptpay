@@ -163,7 +163,7 @@ export class FraudService {
     score += payoutHistoryPts;
 
     // Fraud penalties: subtract based on severity
-    const fraudPenaltyPts = user.fraudFlags.reduce((acc, f) => {
+    const fraudPenaltyPts = user.fraudFlags.reduce((acc: number, f: { severity: string }) => {
       switch (f.severity) {
         case 'critical': return acc + 20;
         case 'high': return acc + 10;
