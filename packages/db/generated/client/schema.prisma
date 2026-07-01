@@ -1,0 +1,858 @@
+generator client {
+  provider   = "prisma-client-js"
+  output     = "../generated/client"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ══════════════════════════════════════════════════════════
+// Enums
+// ══════════════════════════════════════════════════════════
+
+enum UserRole {
+  developer
+  advertiser
+  admin
+  support
+  super_admin
+}
+
+enum UserStatus {
+  active
+  restricted
+  banned
+  deleted
+}
+
+enum TrustLevel {
+  new
+  low_trust
+  normal
+  high_trust
+  restricted
+  banned
+}
+
+enum CampaignStatus {
+  draft
+  submitted
+  approved
+  active
+  paused
+  rejected
+  archived
+}
+
+enum CreativeStatus {
+  draft
+  pending_review
+  approved
+  rejected
+  paused
+}
+
+enum BidType {
+  cpm
+  cpc
+}
+
+enum EventType {
+  wait_state_start
+  wait_state_end
+  ad_request
+  ad_rendered
+  qualified_impression
+  click
+  report_ad
+}
+
+enum ToolTypeEnum {
+  vscode
+  cursor
+  cline
+  windsurf
+  aider
+  codex_cli
+  claude_code
+  terminal
+  browser
+}
+
+enum LedgerEntryType {
+  debit
+  credit
+  hold
+  release
+  reversal
+  payout
+  refund
+  reserve
+  fee
+}
+
+enum LedgerStatus {
+  estimated
+  pending
+  confirmed
+  held
+  reversed
+  paid
+  void
+}
+
+enum PayoutProvider {
+  manual
+  paypal_email
+  paypal_payouts
+  stripe_connect
+  payoneer
+  wise
+  razorpay
+}
+
+enum PayoutStatus {
+  draft
+  requested
+  under_review
+  approved
+  rejected
+  processing
+  paid
+  failed
+  cancelled
+}
+
+enum FraudFlagStatus {
+  open
+  reviewing
+  resolved_valid
+  resolved_invalid
+  escalated
+}
+
+enum FraudFlagType {
+  impression_rate_limit
+  click_rate_limit
+  duplicate_device
+  suspicious_ctr
+  impossible_volume
+  shared_payout_destination
+  vpn_proxy_pattern
+  emulator_vm_pattern
+  rapid_earning_spike
+  country_device_change
+  repeated_click_abuse
+  self_clicking
+  automated_pattern
+  duplicate_account
+}
+
+enum FraudSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum ApprovalDecision {
+  approved
+  rejected
+  changes_requested
+}
+
+// ══════════════════════════════════════════════════════════
+// User & Identity
+// ══════════════════════════════════════════════════════════
+
+model User {
+  id             String     @id @default(uuid())
+  email          String     @unique
+  passwordHash   String
+  name           String?
+  role           UserRole   @default(developer)
+  status         UserStatus @default(active)
+  trustLevel     TrustLevel @default(new)
+  country        String?
+  githubId       String?
+  emailVerified  Boolean    @default(false)
+  githubVerified Boolean    @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  adminProfile    AdminUser?
+  advertiser      Advertiser?
+  sessions        Session[]
+  devices         Device[]
+  settings        UserSettings?
+  payoutAccounts  PayoutAccount[]
+  earnings        EarningsLedger[]
+  payoutRequests  PayoutRequest[]
+  trustScore      TrustScore?
+  fraudFlags      FraudFlag[]
+  adReports       AdReport[]
+  waitStateEvents WaitStateEvent[]
+  adImpressions   AdImpression[]
+  adClicks        AdClick[]
+  referralOut     Referral[]       @relation("Referrer")
+  referralIn      Referral[]       @relation("Referred")
+  referralRewards ReferralReward[]
+
+  @@index([email])
+  @@index([role, status])
+  @@map("users")
+}
+
+model AdminUser {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  adminRole   UserRole
+  permissions String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceHash String?
+  ipHash     String?
+  tokenHash  String
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("sessions")
+}
+
+model Device {
+  id               String       @id @default(uuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fingerprintHash  String
+  publicKey        String?
+  toolType         ToolTypeEnum
+  extensionVersion String?
+  platform         String?
+
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  waitStateEvents WaitStateEvent[]
+  adImpressions   AdImpression[]
+  adClicks        AdClick[]
+  fraudFlags      FraudFlag[]
+
+  @@unique([userId, fingerprintHash])
+  @@index([fingerprintHash])
+  @@index([userId])
+  @@map("devices")
+}
+
+// ══════════════════════════════════════════════════════════
+// User Settings
+// ══════════════════════════════════════════════════════════
+
+model UserSettings {
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adsEnabled    Boolean @default(true)
+  quietMode     Boolean @default(false)
+  maxAdsPerHour Int     @default(6)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_settings")
+}
+
+// ══════════════════════════════════════════════════════════
+// Payout Accounts
+// ══════════════════════════════════════════════════════════
+
+model PayoutAccount {
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    PayoutProvider
+  destination String
+  currency    String         @default("USD")
+  isVerified  Boolean        @default(false)
+  isActive    Boolean        @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payoutRequests PayoutRequest[]
+
+  @@unique([userId, provider, isActive])
+  @@map("payout_accounts")
+}
+
+// ══════════════════════════════════════════════════════════
+// Advertiser
+// ══════════════════════════════════════════════════════════
+
+model Advertiser {
+  id               String     @id @default(uuid())
+  userId           String     @unique
+  user             User       @relation(fields: [userId], references: [id])
+  companyName      String
+  billingEmail     String
+  stripeCustomerId String?
+  websiteUrl       String?
+  trustStatus      TrustLevel @default(new)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns     Campaign[]
+  ledgerEntries AdvertiserLedger[]
+  apiKeys       ApiKey[]
+
+  @@map("advertisers")
+}
+
+// ══════════════════════════════════════════════════════════
+// Campaigns & Ads
+// ══════════════════════════════════════════════════════════
+
+model Campaign {
+  id                  String         @id @default(uuid())
+  advertiserId        String
+  advertiser          Advertiser     @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
+  name                String
+  status              CampaignStatus @default(draft)
+  category            String
+  bidType             BidType
+  bidAmountMinor      Int
+  budgetTotalMinor    Int
+  budgetSpentMinor    Int            @default(0)
+  currency            String         @default("USD")
+  frequencyCapPerHour Int            @default(2)
+  frequencyCapPerDay  Int            @default(6)
+  qualityScore        Float          @default(0)
+  submittedAt         DateTime?
+  approvedAt          DateTime?
+  activatedAt         DateTime?
+  pausedAt            DateTime?
+  archivedAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creatives        AdCreative[]
+  impressions      AdImpression[]
+  countryTargeting CountryTargeting[]
+  approvals        CampaignApproval[]
+  fraudFlags       FraudFlag[]
+  earningsEntries  EarningsLedger[]
+
+  @@index([advertiserId])
+  @@index([status])
+  @@index([status, category])
+  @@map("campaigns")
+}
+
+model AdCreative {
+  id               String         @id @default(uuid())
+  campaignId       String
+  campaign         Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  title            String
+  sponsoredMessage String
+  destinationUrl   String
+  displayDomain    String
+  status           CreativeStatus @default(draft)
+  rejectionReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  impressions AdImpression[]
+  adReports   AdReport[]
+
+  @@index([campaignId])
+  @@map("ad_creatives")
+}
+
+model Category {
+  id           String  @id @default(uuid())
+  slug         String  @unique
+  name         String
+  description  String?
+  isBlocked    Boolean @default(false)
+  isMvpAllowed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blockedEntries BlockedCategory[]
+
+  @@map("categories")
+}
+
+model BlockedCategory {
+  id         String   @id @default(uuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+  blockedBy  String
+  reason     String
+
+  createdAt DateTime @default(now())
+
+  @@map("blocked_categories")
+}
+
+model CountryTargeting {
+  id          String   @id @default(uuid())
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  countryCode String
+  include     Boolean  @default(true)
+
+  @@unique([campaignId, countryCode])
+  @@index([campaignId])
+  @@map("country_targeting")
+}
+
+model ToolIntegration {
+  id         String       @id @default(uuid())
+  slug       String       @unique
+  name       String
+  type       ToolTypeEnum
+  minVersion String?
+  isActive   Boolean      @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tool_integrations")
+}
+
+// ══════════════════════════════════════════════════════════
+// Events & Tracking
+// ══════════════════════════════════════════════════════════
+
+model WaitStateEvent {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId       String
+  device         Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessionId      String
+  eventType      EventType
+  waitStateId    String
+  toolType       ToolTypeEnum
+  duration       Int?
+  ipHash         String?
+  signature      String
+  idempotencyKey String       @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([idempotencyKey])
+  @@map("wait_state_events")
+}
+
+model AdImpression {
+  id                  String     @id @default(uuid())
+  campaignId          String
+  campaign            Campaign   @relation(fields: [campaignId], references: [id])
+  creativeId          String
+  creative            AdCreative @relation(fields: [creativeId], references: [id])
+  userId              String
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId            String
+  device              Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessionId           String
+  impressionTokenHash String     @unique
+  renderedAt          DateTime?
+  qualifiedAt         DateTime?
+  visibleDurationMs   Int?
+  visibleSurface      Float?
+  isBillable          Boolean    @default(false)
+  invalidationReason  String?
+  invalidatedAt       DateTime?
+  ipHash              String?
+
+  createdAt DateTime @default(now())
+
+  clicks     AdClick[]
+  earnings   EarningsLedger[]
+  adReports  AdReport[]
+  fraudFlags FraudFlag[]
+
+  @@index([campaignId, qualifiedAt])
+  @@index([userId, qualifiedAt])
+  @@index([deviceId, qualifiedAt])
+  @@index([ipHash, qualifiedAt])
+  @@index([impressionTokenHash])
+  @@index([isBillable, createdAt])
+  @@map("ad_impressions")
+}
+
+model AdClick {
+  id                 String       @id @default(uuid())
+  impressionId       String
+  impression         AdImpression @relation(fields: [impressionId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId           String
+  device             Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessionId          String
+  campaignId         String
+  creativeId         String
+  clickedAt          DateTime
+  targetUrl          String
+  isValid            Boolean      @default(true)
+  invalidationReason String?
+  idempotencyKey     String       @unique
+  ipHash             String?
+
+  createdAt DateTime @default(now())
+
+  earnings   EarningsLedger[]
+  fraudFlags FraudFlag[]
+
+  @@index([impressionId])
+  @@index([userId, createdAt])
+  @@index([idempotencyKey])
+  @@index([isValid, createdAt])
+  @@map("ad_clicks")
+}
+
+model AdReport {
+  id           String       @id @default(uuid())
+  impressionId String
+  impression   AdImpression @relation(fields: [impressionId], references: [id], onDelete: Cascade)
+  creativeId   String
+  creative     AdCreative   @relation(fields: [creativeId], references: [id])
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason       String
+  details      String?
+  resolution   String?
+  resolvedAt   DateTime?
+  resolvedBy   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([impressionId])
+  @@index([userId])
+  @@map("ad_reports")
+}
+
+// ══════════════════════════════════════════════════════════
+// Ledger (append-only)
+// ══════════════════════════════════════════════════════════
+
+model EarningsLedger {
+  id             String          @id @default(uuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId     String?
+  campaign       Campaign?       @relation(fields: [campaignId], references: [id])
+  impressionId   String?
+  impression     AdImpression?   @relation(fields: [impressionId], references: [id])
+  clickId        String?
+  click          AdClick?        @relation(fields: [clickId], references: [id])
+  entryType      LedgerEntryType
+  status         LedgerStatus
+  amountMinor    Int
+  currency       String          @default("USD")
+  availableAt    DateTime?
+  idempotencyKey String          @unique
+  description    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, status, availableAt])
+  @@index([campaignId])
+  @@index([idempotencyKey])
+  @@index([createdAt])
+  @@map("earnings_ledger")
+}
+
+model AdvertiserLedger {
+  id                    String          @id @default(uuid())
+  advertiserId          String
+  advertiser            Advertiser      @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
+  campaignId            String?
+  stripePaymentIntentId String?
+  entryType             LedgerEntryType
+  status                LedgerStatus
+  amountMinor           Int
+  currency              String          @default("USD")
+  idempotencyKey        String          @unique
+  description           String?
+
+  createdAt DateTime @default(now())
+
+  @@index([advertiserId, status])
+  @@index([campaignId])
+  @@index([idempotencyKey])
+  @@index([createdAt])
+  @@map("advertiser_ledger")
+}
+
+model PlatformLedger {
+  id             String          @id @default(uuid())
+  campaignId     String?
+  entryType      LedgerEntryType
+  status         LedgerStatus
+  amountMinor    Int
+  currency       String          @default("USD")
+  bucket         String
+  referenceId    String?
+  idempotencyKey String          @unique
+  description    String?
+
+  createdAt DateTime @default(now())
+
+  @@index([bucket, status])
+  @@index([campaignId])
+  @@index([idempotencyKey])
+  @@index([createdAt])
+  @@map("platform_ledger")
+}
+
+// ══════════════════════════════════════════════════════════
+// Payouts
+// ══════════════════════════════════════════════════════════
+
+model PayoutRequest {
+  id                   String        @id @default(uuid())
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payoutAccountId      String
+  payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id])
+  status               PayoutStatus  @default(draft)
+  requestedAmountMinor Int
+  approvedAmountMinor  Int?
+  currency             String        @default("USD")
+  reviewerId           String?
+  reviewNote           String?
+  processedAt          DateTime?
+  paidAt               DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions PayoutTransaction[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("payout_requests")
+}
+
+model PayoutTransaction {
+  id              String         @id @default(uuid())
+  payoutRequestId String
+  payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  provider        PayoutProvider
+  providerTxId    String?
+  status          PayoutStatus   @default(processing)
+  paidAt          DateTime?
+  failureReason   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([payoutRequestId])
+  @@index([providerTxId])
+  @@map("payout_transactions")
+}
+
+// ══════════════════════════════════════════════════════════
+// Fraud & Trust
+// ══════════════════════════════════════════════════════════
+
+model FraudFlag {
+  id           String          @id @default(uuid())
+  userId       String?
+  user         User?           @relation(fields: [userId], references: [id])
+  deviceId     String?
+  device       Device?         @relation(fields: [deviceId], references: [id])
+  campaignId   String?
+  campaign     Campaign?       @relation(fields: [campaignId], references: [id])
+  impressionId String?
+  impression   AdImpression?   @relation(fields: [impressionId], references: [id])
+  clickId      String?
+  click        AdClick?        @relation(fields: [clickId], references: [id])
+  flagType     FraudFlagType
+  severity     FraudSeverity   @default(medium)
+  status       FraudFlagStatus @default(open)
+  scoreDelta   Int             @default(0)
+  evidence     Json
+  reviewNote   String?
+  reviewerId   String?
+  resolvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([deviceId, status])
+  @@index([campaignId, status])
+  @@index([flagType, severity])
+  @@index([status, createdAt])
+  @@map("fraud_flags")
+}
+
+model TrustScore {
+  id                 String     @id @default(uuid())
+  userId             String     @unique
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score              Int        @default(40)
+  level              TrustLevel @default(new)
+  accountAgePoints   Int        @default(0)
+  emailVerifiedPts   Int        @default(0)
+  githubVerifiedPts  Int        @default(0)
+  deviceConsistPts   Int        @default(0)
+  activityPatternPts Int        @default(0)
+  payoutHistoryPts   Int        @default(0)
+  fraudPenaltyPts    Int        @default(0)
+
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@map("trust_scores")
+}
+
+// ══════════════════════════════════════════════════════════
+// Campaign Approvals
+// ══════════════════════════════════════════════════════════
+
+model CampaignApproval {
+  id         String           @id @default(uuid())
+  campaignId String
+  campaign   Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  reviewerId String
+  decision   ApprovalDecision
+  reason     String?
+  checklist  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId])
+  @@map("campaign_approvals")
+}
+
+// ══════════════════════════════════════════════════════════
+// API Keys & Webhooks
+// ══════════════════════════════════════════════════════════
+
+model ApiKey {
+  id           String      @id @default(uuid())
+  ownerId      String
+  advertiserId String?
+  advertiser   Advertiser? @relation(fields: [advertiserId], references: [id])
+  keyHash      String      @unique
+  keyPrefix    String
+  scopes       String[]
+  isActive     Boolean     @default(true)
+  lastUsedAt   DateTime?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  @@index([ownerId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model WebhookEvent {
+  id               String    @id @default(uuid())
+  provider         String
+  eventId          String    @unique
+  eventType        String
+  payload          Json
+  processingStatus String    @default("pending")
+  processedAt      DateTime?
+  error            String?
+
+  createdAt DateTime @default(now())
+
+  @@index([provider, eventType])
+  @@index([processingStatus])
+  @@map("webhook_events")
+}
+
+// ══════════════════════════════════════════════════════════
+// Audit Log
+// ══════════════════════════════════════════════════════════
+
+model AuditLog {
+  id         String  @id @default(uuid())
+  actorId    String
+  actorRole  String
+  targetType String
+  targetId   String
+  action     String
+  beforeSnap Json?
+  afterSnap  Json?
+  ipHash     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([action, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ══════════════════════════════════════════════════════════
+// Referrals
+// ══════════════════════════════════════════════════════════
+
+model Referral {
+  id         String @id @default(uuid())
+  referrerId String
+  referrer   User   @relation("Referrer", fields: [referrerId], references: [id])
+  referredId String
+  referred   User   @relation("Referred", fields: [referredId], references: [id])
+  code       String @unique
+  status     String @default("pending")
+
+  createdAt DateTime @default(now())
+
+  rewards ReferralReward[]
+
+  @@index([referrerId])
+  @@index([referredId])
+  @@map("referrals")
+}
+
+model ReferralReward {
+  id          String       @id @default(uuid())
+  referralId  String
+  referral    Referral     @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountMinor Int
+  currency    String       @default("USD")
+  status      LedgerStatus @default(estimated)
+
+  createdAt DateTime @default(now())
+
+  @@index([referralId])
+  @@index([userId])
+  @@map("referral_rewards")
+}

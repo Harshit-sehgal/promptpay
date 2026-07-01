@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: waitlayer
+      POSTGRES_USER: waitlayer
+      POSTGRES_PASSWORD: waitlayer-dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waitlayer -d waitlayer"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer
+      JWT_SECRET: change-me-in-production
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 30d
+      EXTENSION_HMAC_SECRET: change-me-in-production
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:3001
+      NODE_ENV: production
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

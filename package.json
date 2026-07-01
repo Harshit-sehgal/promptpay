@@ -1,0 +1,26 @@
+{
+  "name": "waitlayer",
+  "private": true,
+  "description": "Privacy-first reward marketplace for AI wait time and developer attention",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @waitlayer/db generate",
+    "db:migrate": "pnpm --filter @waitlayer/db migrate",
+    "db:push": "pnpm --filter @waitlayer/db push",
+    "db:studio": "pnpm --filter @waitlayer/db studio",
+    "start:api": "pnpm --filter @waitlayer/api build && node apps/api/dist/main",
+    "start:web": "pnpm --filter @waitlayer/web build && cd apps/web && next start"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  }
+}

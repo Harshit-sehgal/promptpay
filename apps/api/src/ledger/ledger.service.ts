@@ -1,0 +1,425 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../config/prisma.service';
+import { REVENUE_SPLIT, LAUNCH_INCENTIVE_SPLIT, PAYOUT_HOLD_DAYS, TRUST_SCORE } from '@waitlayer/shared';
+import { LedgerStatus } from '@waitlayer/shared';
+
+/** Valid earning state transitions */
+const EARNING_TRANSITIONS: Record<string, LedgerStatus[]> = {
+  estimated: ['pending', 'confirmed', 'held', 'reversed', 'void'] as LedgerStatus[],
+  pending: ['confirmed', 'held', 'reversed', 'void'] as LedgerStatus[],
+  confirmed: ['held', 'paid', 'reversed', 'void'] as LedgerStatus[],
+  held: ['confirmed', 'reversed', 'void'] as LedgerStatus[],
+  paid: [] as LedgerStatus[],
+  reversed: [] as LedgerStatus[],
+  void: [] as LedgerStatus[],
+};
+
+@Injectable()
+export class LedgerService {
+  constructor(private prisma: PrismaService) {}
+
+  // ── Revenue Split ──
+
+  /** Calculate revenue split with optional launch incentive */
+  calculateSplit(bidAmountMinor: number, useLaunchIncentive = false) {
+    const split = useLaunchIncentive ? LAUNCH_INCENTIVE_SPLIT : REVENUE_SPLIT;
+    const userShare = Math.floor(bidAmountMinor * split.USER);
+    const platformShare = Math.floor(bidAmountMinor * split.PLATFORM);
+    const reserveShare = Math.floor(bidAmountMinor * split.RESERVE);
+    // Remainder goes to user to avoid rounding loss
+    const remainder = bidAmountMinor - userShare - platformShare - reserveShare;
+    return {
+      userShare: userShare + remainder,
+      platformShare,
+      reserveShare,
+    };
+  }
+
+  /** Get hold days based on trust level */
+  getHoldDays(trustLevel: string): number {
+    switch (trustLevel) {
+      case 'high_trust': return PAYOUT_HOLD_DAYS.HIGH_TRUST;
+      case 'normal': return PAYOUT_HOLD_DAYS.NORMAL;
+      case 'new':
+      case 'low_trust':
+        return PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+      default:
+        return PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+    }
+  }
+
+  // ── Recording Earnings ──
+
+  /** Record impression earnings across all three ledgers atomically */
+  async recordImpressionEarnings(params: {
+    userId: string;
+    campaignId: string;
+    impressionId: string;
+    bidAmountMinor: number;
+    currency: string;
+    advertiserId: string;
+    trustLevel: string;
+  }) {
+    const {
+      userId,
+      campaignId,
+      impressionId,
+      bidAmountMinor,
+      currency,
+      advertiserId,
+      trustLevel,
+    } = params;
+
+    const split = this.calculateSplit(bidAmountMinor);
+    const holdDays = this.getHoldDays(trustLevel);
+    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    const idempotencyBase = `imp-${impressionId}`;
+
+    return this.prisma.$transaction([
+      // Debit advertiser
+      this.prisma.advertiserLedger.create({
+        data: {
+          advertiserId,
+          campaignId,
+          entryType: 'debit',
+          status: 'confirmed',
+          amountMinor: bidAmountMinor,
+          currency,
+          idempotencyKey: `${idempotencyBase}-adv`,
+          description: `Impression charge - campaign ${campaignId}`,
+        },
+      }),
+      // Credit developer (estimated until matured)
+      this.prisma.earningsLedger.create({
+        data: {
+          userId,
+          campaignId,
+          impressionId,
+          entryType: 'credit',
+          status: 'estimated',
+          amountMinor: split.userShare,
+          currency,
+          availableAt,
+          idempotencyKey: `${idempotencyBase}-usr`,
+          description: 'Earnings from qualified impression',
+        },
+      }),
+      // Credit platform fee
+      this.prisma.platformLedger.create({
+        data: {
+          campaignId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: split.platformShare,
+          currency,
+          bucket: 'platform_fee',
+          referenceId: impressionId,
+          idempotencyKey: `${idempotencyBase}-plt`,
+          description: 'Platform fee from impression',
+        },
+      }),
+      // Credit fraud/payment reserve
+      this.prisma.platformLedger.create({
+        data: {
+          campaignId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: split.reserveShare,
+          currency,
+          bucket: 'fraud_reserve',
+          referenceId: impressionId,
+          idempotencyKey: `${idempotencyBase}-res`,
+          description: 'Fraud/payment reserve from impression',
+        },
+      }),
+    ]);
+  }
+
+  /** Record click earnings (on top of impression) */
+  async recordClickEarnings(params: {
+    userId: string;
+    campaignId: string;
+    clickId: string;
+    clickBidMinor: number;
+    currency: string;
+    advertiserId: string;
+    trustLevel: string;
+  }) {
+    const {
+      userId,
+      campaignId,
+      clickId,
+      clickBidMinor,
+      currency,
+      advertiserId,
+      trustLevel,
+    } = params;
+
+    const split = this.calculateSplit(clickBidMinor);
+    const holdDays = this.getHoldDays(trustLevel);
+    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    const idempotencyBase = `clk-${clickId}`;
+
+    return this.prisma.$transaction([
+      // Debit advertiser for click
+      this.prisma.advertiserLedger.create({
+        data: {
+          advertiserId,
+          campaignId,
+          entryType: 'debit',
+          status: 'confirmed',
+          amountMinor: clickBidMinor,
+          currency,
+          idempotencyKey: `${idempotencyBase}-adv`,
+          description: `Click charge - campaign ${campaignId}`,
+        },
+      }),
+      // Credit developer for click
+      this.prisma.earningsLedger.create({
+        data: {
+          userId,
+          campaignId,
+          clickId,
+          entryType: 'credit',
+          status: 'estimated',
+          amountMinor: split.userShare,
+          currency,
+          availableAt,
+          idempotencyKey: `${idempotencyBase}-usr`,
+          description: 'Earnings from ad click',
+        },
+      }),
+    ]);
+  }
+
+  // ── State Transitions ──
+
+  /** Mature estimated earnings to confirmed after hold period */
+  async matureEarnings() {
+    const updated = await this.prisma.earningsLedger.updateMany({
+      where: {
+        status: 'estimated',
+        availableAt: { lte: new Date() },
+      },
+      data: { status: 'confirmed' },
+    });
+    return { matured: updated.count };
+  }
+
+  /** Transition a single earning entry to a new status (with validation) */
+  async transitionEarning(entryId: string, newStatus: LedgerStatus, reason?: string) {
+    const entry = await this.prisma.earningsLedger.findUnique({
+      where: { id: entryId },
+    });
+    if (!entry) throw new Error(`Earning entry ${entryId} not found`);
+
+    const allowed = EARNING_TRANSITIONS[entry.status];
+    if (!allowed || !allowed.includes(newStatus)) {
+      throw new Error(
+        `Invalid transition: ${entry.status} → ${newStatus}. Allowed: ${allowed?.join(', ') || 'none'}`,
+      );
+    }
+
+    return this.prisma.earningsLedger.update({
+      where: { id: entryId },
+      data: {
+        status: newStatus,
+        description: reason
+          ? `${entry.description || ''} [${newStatus}: ${reason}]`
+          : undefined,
+      },
+    });
+  }
+
+  /** Hold all earnings for a user (e.g., during fraud investigation) */
+  async holdEarnings(userId: string, reason?: string) {
+    return this.prisma.earningsLedger.updateMany({
+      where: {
+        userId,
+        status: { in: ['estimated', 'pending', 'confirmed'] },
+      },
+      data: {
+        status: 'held',
+        description: reason ? `Held: ${reason}` : undefined,
+      },
+    });
+  }
+
+  /** Release held earnings for a user (after fraud review clears) */
+  async releaseEarnings(userId: string) {
+    return this.prisma.earningsLedger.updateMany({
+      where: { userId, status: 'held' },
+      data: { status: 'confirmed' },
+    });
+  }
+
+  /** Reverse earnings for a specific impression (fraud or user report) */
+  async reverseEarnings(impressionId: string, reason?: string) {
+    return this.prisma.earningsLedger.updateMany({
+      where: {
+        impressionId,
+        status: { in: ['estimated', 'pending', 'confirmed'] },
+      },
+      data: {
+        status: 'reversed',
+        description: reason ? `Reversed: ${reason}` : undefined,
+      },
+    });
+  }
+
+  /** Mark earnings as paid after successful payout */
+  async markAsPaid(entryIds: string[]) {
+    return this.prisma.earningsLedger.updateMany({
+      where: { id: { in: entryIds }, status: 'confirmed' },
+      data: { status: 'paid' },
+    });
+  }
+
+  // ── Balance Queries ──
+
+  /** Get total confirmed (available) earnings for a user */
+  async getAvailableBalance(userId: string): Promise<{ amountMinor: number; currency: string }> {
+    const result = await this.prisma.earningsLedger.aggregate({
+      where: { userId, status: 'confirmed', entryType: 'credit' },
+      _sum: { amountMinor: true },
+    });
+    return {
+      amountMinor: result._sum.amountMinor || 0,
+      currency: 'USD',
+    };
+  }
+
+  /** Get total pending (estimated + confirmed) earnings for a user */
+  async getPendingBalance(userId: string): Promise<{ amountMinor: number; currency: string }> {
+    const result = await this.prisma.earningsLedger.aggregate({
+      where: { userId, status: { in: ['estimated', 'pending'] }, entryType: 'credit' },
+      _sum: { amountMinor: true },
+    });
+    return {
+      amountMinor: result._sum.amountMinor || 0,
+      currency: 'USD',
+    };
+  }
+
+  /** Get all-time total earnings for a user (excluding reversed/void) */
+  async getTotalEarnings(userId: string): Promise<{ amountMinor: number; currency: string }> {
+    const result = await this.prisma.earningsLedger.aggregate({
+      where: { userId, status: { notIn: ['reversed', 'void'] }, entryType: 'credit' },
+      _sum: { amountMinor: true },
+    });
+    return {
+      amountMinor: result._sum.amountMinor || 0,
+      currency: 'USD',
+    };
+  }
+
+  /** Get breakdown of earnings by status for a user */
+  async getEarningsBreakdown(userId: string) {
+    const grouped = await this.prisma.earningsLedger.groupBy({
+      by: ['status'],
+      where: { userId, entryType: 'credit' },
+      _sum: { amountMinor: true },
+      _count: true,
+    });
+
+    return grouped.map((g) => ({
+      status: g.status,
+      amountMinor: g._sum.amountMinor || 0,
+      count: g._count,
+    }));
+  }
+
+  /** Get paid-out total for a user */
+  async getPaidOutTotal(userId: string): Promise<{ amountMinor: number; currency: string }> {
+    const result = await this.prisma.earningsLedger.aggregate({
+      where: { userId, status: 'paid', entryType: 'credit' },
+      _sum: { amountMinor: true },
+    });
+    return {
+      amountMinor: result._sum.amountMinor || 0,
+      currency: 'USD',
+    };
+  }
+
+  /** Get earnings history with pagination */
+  async getEarningsHistory(
+    userId: string,
+    page = 1,
+    limit = 20,
+    filters?: { ledgerKind?: string; status?: string },
+  ) {
+    const skip = (page - 1) * limit;
+    const where: any = { userId };
+    if (filters?.status) where.status = filters.status;
+    if (filters?.ledgerKind === 'earnings') {
+      // already constrained to earningsLedger below
+    }
+
+    if (filters?.ledgerKind === 'platform' || filters?.ledgerKind === 'advertiser') {
+      // Admins get all ledgers via getHistoryForAdmin
+      return this.getHistoryForAdmin(filters, page, limit);
+    }
+
+    const [entries, total] = await Promise.all([
+      this.prisma.earningsLedger.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.earningsLedger.count({ where }),
+    ]);
+
+    return {
+      entries,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  private async getHistoryForAdmin(
+    filters: { ledgerKind?: string; status?: string } | undefined,
+    page: number,
+    limit: number,
+  ) {
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    if (filters?.status) where.status = filters.status;
+    let entries: any[] = [];
+    if (filters?.ledgerKind === 'platform') {
+      entries = await this.prisma.platformLedger.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      });
+    } else if (filters?.ledgerKind === 'advertiser') {
+      entries = await this.prisma.advertiserLedger.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      });
+    } else {
+      const [e, a, p] = await Promise.all([
+        this.prisma.earningsLedger.findMany({ orderBy: { createdAt: 'desc' }, take: limit }),
+        this.prisma.advertiserLedger.findMany({ orderBy: { createdAt: 'desc' }, take: limit }),
+        this.prisma.platformLedger.findMany({ orderBy: { createdAt: 'desc' }, take: limit }),
+      ]);
+      entries = [
+        ...e.map((x: any) => ({ ...x, ledgerKind: 'earnings' })),
+        ...a.map((x: any) => ({ ...x, ledgerKind: 'advertiser' })),
+        ...p.map((x: any) => ({ ...x, ledgerKind: 'platform' })),
+      ]
+        .sort(
+          (x: any, y: any) =>
+            new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime(),
+        )
+        .slice(skip, skip + limit);
+    }
+    const total = entries.length;
+    return { entries, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+}

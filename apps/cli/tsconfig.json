@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "declaration": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["ES2022"],
+    "module": "CommonJS",
+    "outDir": "dist",
+    "paths": {
+      "@waitlayer/config": ["../../packages/config/src"],
+      "@waitlayer/db": ["../../packages/db/src"],
+      "@waitlayer/shared": ["../../packages/shared/src"]
+    },
+    "resolveJsonModule": true,
+    "rootDir": "src",
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "target": "ES2022",
+    "types": ["node"]
+  },
+  "exclude": ["node_modules", "dist"],
+  "include": ["src"]
+}

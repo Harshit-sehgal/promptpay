@@ -1,0 +1,78 @@
+import chalk from 'chalk';
+import * as fs from 'fs';
+import { getCredentials } from '../lib/credentials';
+import { ApiClient } from '../lib/api-client';
+
+const STATE_FILE = `${process.cwd()}/.waitlayer-wait`;
+
+interface WaitState {
+  startTime: number;
+  tool: string;
+}
+
+/**
+ * Detects a "wait state" marker file (e.g. created by a script that wraps an
+ * AI command) and reports it to WaitLayer. Users can integrate by writing a
+ * JSON file before invoking their AI tool:
+ *
+ *   echo '{"startTime": $(date +%s%3N), "tool": "claude_code"}' > .waitlayer-wait
+ *   claude ...                          # AI tool runs
+ *   date +%s%3N > .waitlayer-wait       # complete
+ *   echo '' > .waitlayer-wait           # clear
+ *
+ * This CLI command tails the file and reports wait-state events to the API.
+ */
+export async function runWatch(opts: { once?: boolean }) {
+  const creds = getCredentials();
+  if (!creds) {
+    console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
+    process.exit(1);
+  }
+
+  const api = new ApiClient(creds);
+
+  console.log(chalk.cyan('WaitLayer watch') + chalk.dim(` — watching ${STATE_FILE}`));
+  console.log(chalk.dim('Press Ctrl+C to stop.'));
+
+  let lastState: WaitState | null = null;
+
+  const poll = async () => {
+    try {
+      const raw = fs.readFileSync(STATE_FILE, 'utf-8').trim();
+      if (!raw) return;
+
+      const state = JSON.parse(raw) as WaitState;
+      if (!state.startTime || state.startTime === lastState?.startTime) {
+        return;
+      }
+
+      const durationMs = Date.now() - state.startTime;
+      if (durationMs < 1000) return;
+
+      console.log(chalk.dim(`[wait] ${state.tool} — ${durationMs}ms`));
+      await api.reportWaitState({
+        toolType: state.tool,
+        durationMs,
+        deviceFingerprint: getDeviceFingerprint(),
+      });
+
+      lastState = state;
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') {
+        console.error(chalk.red(`watch error: ${err.message}`));
+      }
+    }
+  };
+
+  if (opts.once) {
+    await poll();
+    return;
+  }
+
+  setInterval(poll, 3000);
+}
+
+function getDeviceFingerprint(): string {
+  const hostname = require('os').hostname();
+  return require('crypto').createHash('sha256').update(`cli-${hostname}`).digest('hex');
+}

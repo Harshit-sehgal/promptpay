@@ -1,0 +1,28 @@
+{
+  "name": "waitlayer-vscode",
+  "displayName": "WaitLayer",
+  "version": "0.0.1",
+  "publisher": "waitlayer",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "main": "./out/extension.js",
+  "dependencies": {
+    "@waitlayer/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/vscode": "^1.90.0",
+    "@waitlayer/eslint-config": "workspace:*",
+    "typescript": "^5.8.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "waitlayer-cli",
+  "version": "0.0.1",
+  "private": true,
+  "bin": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@waitlayer/shared": "workspace:*",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@waitlayer/eslint-config": "workspace:*",
+    "typescript": "^5.8.0"
+  }
+}

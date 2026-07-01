@@ -1,0 +1,25 @@
+{
+  "name": "@waitlayer/db",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "push": "prisma db push",
+    "studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "@waitlayer/eslint-config": "workspace:*",
+    "prisma": "^6.10.0",
+    "typescript": "^5.8.0"
+  }
+}
