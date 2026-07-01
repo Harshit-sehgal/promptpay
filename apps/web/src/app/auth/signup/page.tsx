@@ -34,6 +34,12 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(!!GOOGLE_CLIENT_ID);
   const googleInitialized = useRef(false);
+  const roleRef = useRef(role);
+
+  // Keep roleRef in sync with role state
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
 
   // Initialize Google Identity Services for signup
   useEffect(() => {
@@ -50,7 +56,8 @@ export default function SignupPage() {
           callback: async (response: any) => {
             setError('');
             setLoading(true);
-            const errorMsg = await handleGoogleCredential(response.credential, googleLogin, role);
+            // Use roleRef.current to avoid stale closure
+            const errorMsg = await handleGoogleCredential(response.credential, googleLogin, roleRef.current);
             setLoading(false);
             if (errorMsg) {
               setError(errorMsg);

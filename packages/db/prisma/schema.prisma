@@ -470,7 +470,7 @@ model WaitStateEvent {
 
   @@index([userId, createdAt])
   @@index([deviceId, createdAt])
-  @@index([idempotencyKey])
+  @@index([waitStateId, eventType])
   @@map("wait_state_events")
 }
 
@@ -506,8 +506,8 @@ model AdImpression {
   @@index([userId, qualifiedAt])
   @@index([deviceId, qualifiedAt])
   @@index([ipHash, qualifiedAt])
-  @@index([impressionTokenHash])
   @@index([isBillable, createdAt])
+  @@index([userId, sessionId])
   @@map("ad_impressions")
 }
 
@@ -536,8 +536,9 @@ model AdClick {
 
   @@index([impressionId])
   @@index([userId, createdAt])
-  @@index([idempotencyKey])
   @@index([isValid, createdAt])
+  @@index([campaignId])
+  @@index([creativeId])
   @@map("ad_clicks")
 }
 
@@ -588,7 +589,6 @@ model EarningsLedger {
 
   @@index([userId, status, availableAt])
   @@index([campaignId])
-  @@index([idempotencyKey])
   @@index([createdAt])
   @@map("earnings_ledger")
 }
@@ -610,7 +610,6 @@ model AdvertiserLedger {
 
   @@index([advertiserId, status])
   @@index([campaignId])
-  @@index([idempotencyKey])
   @@index([createdAt])
   @@map("advertiser_ledger")
 }
@@ -631,7 +630,6 @@ model PlatformLedger {
 
   @@index([bucket, status])
   @@index([campaignId])
-  @@index([idempotencyKey])
   @@index([createdAt])
   @@map("platform_ledger")
 }
@@ -736,7 +734,6 @@ model TrustScore {
   computedAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@index([userId])
   @@map("trust_scores")
 }
 

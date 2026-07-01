@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { RATE_LIMITS, TRUST_SCORE, FraudSeverity, FraudFlagType } from '@waitlayer/shared';
@@ -275,7 +275,7 @@ export class FraudService {
 
   async resolveFlag(flagId: string, reviewerId: string, isValid: boolean, reviewNote?: string) {
     const flag = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
-    if (!flag) throw new Error('Flag not found');
+    if (!flag) throw new NotFoundException('Fraud flag not found');
 
     const status = isValid ? 'resolved_valid' : 'resolved_invalid';
 

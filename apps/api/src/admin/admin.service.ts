@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -33,6 +33,10 @@ export class AdminService {
   }
 
   async approveCampaign(campaignId: string, reviewerId: string, reason?: string) {
+    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    if (!campaign || campaign.status !== 'submitted') {
+      throw new BadRequestException('Campaign must be in submitted status to approve');
+    }
     return this.prisma.$transaction([
       this.prisma.campaign.update({ where: { id: campaignId }, data: { status: 'approved', approvedAt: new Date() } }),
       this.prisma.campaignApproval.create({ data: { campaignId, reviewerId, decision: 'approved', reason } }),
@@ -40,6 +44,10 @@ export class AdminService {
   }
 
   async rejectCampaign(campaignId: string, reviewerId: string, reason: string) {
+    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    if (!campaign || campaign.status !== 'submitted') {
+      throw new BadRequestException('Campaign must be in submitted status to reject');
+    }
     return this.prisma.$transaction([
       this.prisma.campaign.update({ where: { id: campaignId }, data: { status: 'rejected' } }),
       this.prisma.campaignApproval.create({ data: { campaignId, reviewerId, decision: 'rejected', reason } }),
@@ -73,7 +81,8 @@ export class AdminService {
   }
 
   async resolveFraudFlag(flagId: string, reviewerId: string, decision: string, note?: string) {
-    return this.prisma.fraudFlag.update({ where: { id: flagId }, data: { status: decision === 'valid' ? 'resolved_valid' : 'resolved_invalid', reviewerId, reviewNote: note, resolvedAt: new Date() } });
+    const status = decision === 'confirmed' ? 'resolved_valid' : 'resolved_invalid';
+    return this.prisma.fraudFlag.update({ where: { id: flagId }, data: { status: status as any, reviewerId, reviewNote: note, resolvedAt: new Date() } });
   }
 
   async getAuditLog(params: { actorId?: string; actorRole?: string; targetType?: string; from?: string; to?: string; page?: number; limit?: number }) {

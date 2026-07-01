@@ -1,5 +1,4 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
-import { Observable } from 'rxjs';
+import { Injectable, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
 
 /**
  * Brute-force detection guard — tracks sequential login failures.
@@ -34,8 +33,10 @@ export class BruteForceGuard {
 
     if (entry) {
       if (entry.lockUntil > now) {
-        return false; // locked — guards will reject request
+        throw new HttpException('Too many failed attempts — try again later', HttpStatus.TOO_MANY_REQUESTS);
       }
+      // Lock expired — clear and allow
+      tracker.delete(key);
     }
 
     // Pre-allow — failures increment on POST hook
@@ -68,7 +69,20 @@ export class BruteForceGuard {
     const key = `${path}:${ip}`;
     tracker.delete(key);
   }
+  /** Clean up stale entries (lock expired + no recent failures) */
+  static cleanup(): void {
+    const now = Date.now();
+    for (const [key, entry] of tracker.entries()) {
+      // Remove entries where lock has expired or where there's no lock and no recent activity
+      if (entry.lockUntil && entry.lockUntil <= now) {
+        tracker.delete(key);
+      }
+    }
+  }
 }
+
+// Periodic cleanup every 5 minutes to prevent unbounded memory growth
+setInterval(() => BruteForceGuard.cleanup(), 5 * 60 * 1000);
 
 function resolveIp(req: Record<string, any>): string {
   return (

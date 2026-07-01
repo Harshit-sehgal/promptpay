@@ -30,8 +30,9 @@ export default function AdvertiserCampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refresh = () => {
     setLoading(true);
     advertiserApi.getDashboard()
       .then((res: any) => {
@@ -43,7 +44,36 @@ export default function AdvertiserCampaignsPage() {
       })
       .catch((err: any) => setError(err.response?.data?.message || 'Failed to load campaigns'))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
+
+  const handlePause = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await advertiserApi.pauseCampaign(id);
+      await refresh();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to pause campaign');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleResume = async (id: string) => {
+    setActionLoading(id);
+    try {
+      await advertiserApi.resumeCampaign(id);
+      await refresh();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to resume campaign');
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const totalBudget = data?.campaigns.reduce((sum, c) => sum + c.budgetTotalMinor, 0) || 0;
   const totalSpent = data?.campaigns.reduce((sum, c) => sum + c.budgetSpentMinor, 0) || 0;
@@ -138,18 +168,20 @@ export default function AdvertiserCampaignsPage() {
                         )}
                         {campaign.status === 'approved' && (
                           <button
-                            onClick={() => advertiserApi.pauseCampaign(campaign.id)}
-                            className="text-amber-400 hover:text-amber-300 text-xs font-medium"
+                            onClick={() => handlePause(campaign.id)}
+                            disabled={actionLoading === campaign.id}
+                            className="text-amber-400 hover:text-amber-300 text-xs font-medium disabled:opacity-50"
                           >
-                            Pause
+                            {actionLoading === campaign.id ? 'Pausing...' : 'Pause'}
                           </button>
                         )}
                         {campaign.status === 'paused' && (
                           <button
-                            onClick={() => advertiserApi.resumeCampaign(campaign.id)}
-                            className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                            onClick={() => handleResume(campaign.id)}
+                            disabled={actionLoading === campaign.id}
+                            className="text-emerald-400 hover:text-emerald-300 text-xs font-medium disabled:opacity-50"
                           >
-                            Resume
+                            {actionLoading === campaign.id ? 'Resuming...' : 'Resume'}
                           </button>
                         )}
                       </div>

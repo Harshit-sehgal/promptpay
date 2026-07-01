@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
-import { Request } from 'express';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
@@ -14,9 +14,11 @@ export class AdvertiserController {
   constructor(
     private service: AdvertiserService,
     private stripe: StripeProvider,
+    private config: ConfigService,
   ) {}
 
   @Post('profile')
+  @HttpCode(HttpStatus.OK)
   createProfile(@CurrentUser('id') userId: string, @Body() dto: CreateProfileDto) {
     return this.service.createProfile(userId, dto);
   }
@@ -83,12 +85,13 @@ export class AdvertiserController {
     @Body() body: { amountMinor: number; currency?: string },
   ) {
     const advertiser = await this.service.getOrCreateProfile(userId);
+    const webBaseUrl = this.config.get<string>('WEB_BASE_URL', 'http://localhost:3000');
     return this.stripe.createDepositSession({
       advertiserId: advertiser.id,
       amountMinor: body.amountMinor,
       currency: body.currency ?? 'usd',
-      successUrl: `${process.env.WEB_BASE_URL ?? 'http://localhost:3000'}/advertiser?deposit=success`,
-      cancelUrl: `${process.env.WEB_BASE_URL ?? 'http://localhost:3000'}/advertiser?deposit=cancelled`,
+      successUrl: `${webBaseUrl}/advertiser?deposit=success`,
+      cancelUrl: `${webBaseUrl}/advertiser?deposit=cancelled`,
     });
   }
 }

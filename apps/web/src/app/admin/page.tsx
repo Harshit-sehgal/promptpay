@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { adminApi } from '@/lib/api/services';
-import { Sidebar, LoadingSpinner, StatCard } from '@/components';
+import { LoadingSpinner, StatCard } from '@/components';
 import { formatCurrency, formatNumber } from '@/lib/format';
 
 interface AdminOverview {
@@ -30,120 +30,103 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-ink-900 flex">
-      <Sidebar
-        brand="Admin"
-        brandLetter="A"
-        brandColor="bg-red-500"
-        navItems={[
-          { label: 'Overview', href: '/admin' },
-          { label: 'Users', href: '/admin/users' },
-          { label: 'Campaign approvals', href: '/admin/campaigns' },
-          { label: 'Fraud review', href: '/admin/fraud' },
-          { label: 'Payout requests', href: '/admin/payouts' },
-          { label: 'Ledger / Revenue', href: '/admin/ledger' },
-          { label: 'Audit log', href: '/admin/audit' },
-        ]}
-      />
+    <>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white mb-1">Platform overview</h1>
+        <p className="text-ink-300 text-sm">System health and key metrics</p>
+      </div>
 
-      <main className="flex-1 p-8 overflow-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white mb-1">Platform overview</h1>
-          <p className="text-ink-300 text-sm">System health and key metrics</p>
+      {loading && <LoadingSpinner />}
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
+          <p className="text-red-400 text-sm">{error}</p>
         </div>
+      )}
 
-        {loading && <LoadingSpinner />}
-
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-            <p className="text-red-400 text-sm">{error}</p>
+      {data && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <StatCard
+              label="Active users"
+              value={formatNumber(data.activeUsers)}
+            />
+            <StatCard
+              label="Active campaigns"
+              value={formatNumber(data.activeCampaigns)}
+            />
+            <StatCard
+              label="Billable impressions"
+              value={formatNumber(data.totalBillableImpressions)}
+            />
+            <StatCard
+              label="Open fraud flags"
+              value={formatNumber(data.openFraudFlags)}
+              valueColor="text-red-400"
+            />
           </div>
-        )}
 
-        {data && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <StatCard
-                label="Active users"
-                value={formatNumber(data.activeUsers)}
-              />
-              <StatCard
-                label="Active campaigns"
-                value={formatNumber(data.activeCampaigns)}
-              />
-              <StatCard
-                label="Billable impressions"
-                value={formatNumber(data.totalBillableImpressions)}
-              />
-              <StatCard
-                label="Open fraud flags"
-                value={formatNumber(data.openFraudFlags)}
-                valueColor="text-red-400"
-              />
-            </div>
-
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
-              <h2 className="text-white font-semibold mb-4">Pending actions</h2>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                  <div>
-                    <p className="text-white font-medium">Campaign approvals</p>
-                    <p className="text-ink-400 text-xs">Pending review by admin</p>
-                  </div>
-                  <button
-                    onClick={() => router.push('/admin/campaigns')}
-                    className="text-brand-500 hover:text-brand-400 text-sm"
-                  >
-                    Review →
-                  </button>
+          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
+            <h2 className="text-white font-semibold mb-4">Pending actions</h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
+                <div>
+                  <p className="text-white font-medium">Campaign approvals</p>
+                  <p className="text-ink-400 text-xs">Pending review by admin</p>
                 </div>
-                <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                  <div>
-                    <p className="text-white font-medium">Payout requests</p>
-                    <p className="text-ink-400 text-xs">Awaiting approval</p>
-                  </div>
-                  <button
-                    onClick={() => router.push('/admin/payouts')}
-                    className="text-brand-500 hover:text-brand-400 text-sm"
-                  >
-                    Review →
-                  </button>
+                <button
+                  onClick={() => router.push('/admin/campaigns')}
+                  className="text-brand-500 hover:text-brand-400 text-sm"
+                >
+                  Review →
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
+                <div>
+                  <p className="text-white font-medium">Payout requests</p>
+                  <p className="text-ink-400 text-xs">Awaiting approval</p>
                 </div>
-                <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                  <div>
-                    <p className="text-white font-medium">Fraud flags</p>
-                    <p className="text-ink-400 text-xs">Suspicious activity detected</p>
-                  </div>
-                  <button
-                    onClick={() => router.push('/admin/fraud')}
-                    className="text-brand-500 hover:text-brand-400 text-sm"
-                  >
-                    Review →
-                  </button>
+                <button
+                  onClick={() => router.push('/admin/payouts')}
+                  className="text-brand-500 hover:text-brand-400 text-sm"
+                >
+                  Review →
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
+                <div>
+                  <p className="text-white font-medium">Fraud flags</p>
+                  <p className="text-ink-400 text-xs">Suspicious activity detected</p>
                 </div>
+                <button
+                  onClick={() => router.push('/admin/fraud')}
+                  className="text-brand-500 hover:text-brand-400 text-sm"
+                >
+                  Review →
+                </button>
               </div>
             </div>
+          </div>
 
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-              <h2 className="text-white font-semibold mb-4">Platform revenue</h2>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <p className="text-ink-400 text-xs uppercase tracking-wider">Total payouts</p>
-                  <p className="text-white font-mono text-lg">{formatCurrency(data.totalPayoutsMinor)}</p>
-                </div>
-                <div>
-                  <p className="text-ink-400 text-xs uppercase tracking-wider">Currency</p>
-                  <p className="text-white font-mono text-lg">USD</p>
-                </div>
-                <div>
-                  <p className="text-ink-400 text-xs uppercase tracking-wider">Currency notes</p>
-                  <p className="text-ink-300 text-xs">All payouts in USD. Multi-currency planned.</p>
-                </div>
+          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+            <h2 className="text-white font-semibold mb-4">Platform revenue</h2>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-ink-400 text-xs uppercase tracking-wider">Total payouts</p>
+                <p className="text-white font-mono text-lg">{formatCurrency(data.totalPayoutsMinor)}</p>
+              </div>
+              <div>
+                <p className="text-ink-400 text-xs uppercase tracking-wider">Currency</p>
+                <p className="text-white font-mono text-lg">USD</p>
+              </div>
+              <div>
+                <p className="text-ink-400 text-xs uppercase tracking-wider">Currency notes</p>
+                <p className="text-ink-300 text-xs">All payouts in USD. Multi-currency planned.</p>
               </div>
             </div>
-          </>
-        )}
-      </main>
-    </div>
+          </div>
+        </>
+      )}
+    </>
   );
 }

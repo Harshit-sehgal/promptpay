@@ -89,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi.logout().catch(() => {});
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('lastDashboard');
     setUser(null);
   }, []);
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
 import { advertiserApi } from '@/lib/api/services';
-import { formatCurrency, formatNumber, formatPercent, formatDate } from '@/lib/format';
+import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 
 interface ReportRow {
   campaignId: string;

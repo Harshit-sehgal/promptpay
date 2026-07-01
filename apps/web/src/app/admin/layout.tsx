@@ -1,6 +1,5 @@
 'use client';
 
-import { useAuth } from '@/lib/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { Sidebar } from '@/components/sidebar';
 

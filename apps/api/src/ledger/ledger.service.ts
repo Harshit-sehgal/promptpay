@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { REVENUE_SPLIT, LAUNCH_INCENTIVE_SPLIT, PAYOUT_HOLD_DAYS, TRUST_SCORE } from '@waitlayer/shared';
 import { LedgerStatus } from '@waitlayer/shared';
@@ -211,11 +211,11 @@ export class LedgerService {
     const entry = await this.prisma.earningsLedger.findUnique({
       where: { id: entryId },
     });
-    if (!entry) throw new Error(`Earning entry ${entryId} not found`);
+    if (!entry) throw new NotFoundException(`Earning entry ${entryId} not found`);
 
     const allowed = EARNING_TRANSITIONS[entry.status];
     if (!allowed || !allowed.includes(newStatus)) {
-      throw new Error(
+      throw new BadRequestException(
         `Invalid transition: ${entry.status} → ${newStatus}. Allowed: ${allowed?.join(', ') || 'none'}`,
       );
     }

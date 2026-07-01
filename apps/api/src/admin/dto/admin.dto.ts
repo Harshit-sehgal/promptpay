@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, IsString, Min, Max, MaxLength } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, Min, Max, MaxLength } from 'class-validator';
 import { FraudSeverity, FraudFlagStatus } from '@waitlayer/shared';
 
 // ── Campaign approval ──
@@ -51,8 +51,8 @@ export class MarkPayoutPaidDto {
 // ── Fraud ──
 
 export class ResolveFraudFlagDto {
-  @IsString()
-  decision!: string; // 'confirmed' | 'invalid'
+  @IsIn(['confirmed', 'invalid'])
+  decision!: string;
 
   @IsOptional()
   @IsString()
