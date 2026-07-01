@@ -55,7 +55,7 @@ export class AdvertiserService {
     });
 
     const totalClicks = await this.prisma.adClick.count({
-      where: { campaignId: { in: campaigns.map(c => c.id) }, isValid: true },
+      where: { campaignId: { in: campaigns.map((c: { id: string }) => c.id) }, isValid: true },
     });
 
     const spend = await this.prisma.advertiserLedger.aggregate({
@@ -68,7 +68,7 @@ export class AdvertiserService {
       totalImpressions,
       totalClicks,
       ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
-      activeCampaigns: campaigns.filter(c => c.status === 'active').length,
+      activeCampaigns: campaigns.filter((c: { status: string }) => c.status === 'active').length,
       totalCampaigns: campaigns.length,
       campaigns,
     };
@@ -120,7 +120,7 @@ export class AdvertiserService {
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
 
     // Must have at least one approved creative
-    if (campaign.creatives.filter(c => c.status === 'approved').length === 0 && campaign.creatives.length === 0) {
+    if (campaign.creatives.filter((c: { status: string }) => c.status === 'approved').length === 0 && campaign.creatives.length === 0) {
       throw new BadRequestException('Campaign must have at least one creative before submission');
     }
 

@@ -222,7 +222,7 @@ export class ExtensionService {
       select: { campaignId: true },
     });
 
-    const recentCampaignIds = [...new Set(recentImpressions.map(i => i.campaignId))];
+    const recentCampaignIds = [...new Set(recentImpressions.map((i: { campaignId: string }) => i.campaignId))];
 
     // Find active campaigns with approved creatives
     const campaigns = await this.prisma.campaign.findMany({
@@ -242,7 +242,7 @@ export class ExtensionService {
     });
 
     // Filter by category preferences and budget
-    const eligible = campaigns.filter(c => {
+    const eligible = campaigns.filter((c: any) => {
       if (c.creatives.length === 0) return false;
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
       // Category filter
@@ -256,7 +256,7 @@ export class ExtensionService {
     }
 
     // Simple weighted selection (higher bid = higher chance)
-    const totalBid = eligible.reduce((sum, c) => sum + c.bidAmountMinor, 0);
+    const totalBid = eligible.reduce((sum: number, c: any) => sum + c.bidAmountMinor, 0);
     let random = Math.random() * totalBid;
     let selected = eligible[0];
     for (const c of eligible) {

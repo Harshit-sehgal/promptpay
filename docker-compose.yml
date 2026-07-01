@@ -20,7 +20,7 @@ services:
       context: .
       target: api
     ports:
-      - "3001:3001"
+      - "4001:3001"
     environment:
       DATABASE_URL: postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer
       JWT_SECRET: change-me-in-production
