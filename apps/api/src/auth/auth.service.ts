@@ -227,8 +227,7 @@ export class AuthService {
       throw new UnauthorizedException('Account is not active');
     }
 
-    const tokens = await this.generateTokenPair(user.id, user.role, payload.family);
-    return tokens;
+    return this.generateTokenPair(user.id, user.role, payload.family);
   }
 
   /** ── Logout ── */

@@ -230,7 +230,7 @@ model Session {
   deviceHash  String?
   ipHash      String?
   tokenHash   String
-  tokenFamily String?  @unique
+  tokenFamily String?
   revoked     Boolean  @default(false)
   expiresAt   DateTime
 
