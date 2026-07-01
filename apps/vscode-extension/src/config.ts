@@ -82,6 +82,11 @@ export class ConfigurationManager {
 
 class DummySecretStorage {
   private map = new Map<string, string>();
+  constructor() {
+    console.warn(
+      '[WaitLayer] SecretStorage not available. Falling back to insecure in-memory storage. This should only happen in development or tests.',
+    );
+  }
   async get(k: string): Promise<string | undefined> {
     return Promise.resolve(this.map.get(k));
   }

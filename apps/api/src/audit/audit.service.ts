@@ -7,8 +7,8 @@ export interface AuditLogEntry {
   action: string;
   targetType: string;
   targetId: string;
-  beforeSnap?: Record<string, any>;
-  afterSnap?: Record<string, any>;
+  beforeSnap?: Record<string, unknown>;
+  afterSnap?: Record<string, unknown>;
   ipHash?: string;
 }
 

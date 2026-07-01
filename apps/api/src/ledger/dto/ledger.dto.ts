@@ -1,9 +1,8 @@
-import { IsInt, IsOptional, IsString, Min, Max, MaxLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Min, Max, MaxLength } from 'class-validator';
 
 export class LedgerHistoryQueryDto {
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @IsIn(['earnings', 'advertiser', 'platform'])
   ledgerKind?: string; // 'earnings' | 'advertiser' | 'platform'
 
   @IsOptional()

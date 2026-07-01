@@ -4,9 +4,10 @@ import {
   ExecutionContext,
   CallHandler,
   Logger,
+  HttpStatus,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, throwError } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -15,9 +16,20 @@ export class LoggingInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const { method, url } = request;
     const now = Date.now();
+
     return next.handle().pipe(
       tap(() => {
-        this.logger.log(`${method} ${url} - ${Date.now() - now}ms`);
+        const response = context.switchToHttp().getResponse();
+        const { statusCode } = response;
+        this.logger.log(`${method} ${url} ${statusCode} - ${Date.now() - now}ms`);
+      }),
+      catchError((err) => {
+        const response = context.switchToHttp().getResponse();
+        const statusCode = err.status || HttpStatus.INTERNAL_SERVER_ERROR;
+        this.logger.error(
+          `${method} ${url} ${statusCode} - ${Date.now() - now}ms - ${err.message}`,
+        );
+        return throwError(() => err);
       }),
     );
   }

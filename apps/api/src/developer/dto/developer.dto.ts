@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, IsString, Max, Min, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Max, Min, MaxLength } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -32,11 +32,11 @@ export class EarningsQueryDto {
   status?: string;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   from?: string;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   to?: string;
 
   @IsOptional()
