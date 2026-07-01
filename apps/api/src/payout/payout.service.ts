@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
+import { Prisma } from '@waitlayer/db';
 import { LedgerService } from '../ledger/ledger.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 import { PayPalPayoutsProvider } from './providers';
@@ -59,14 +60,14 @@ export class PayoutService {
   }) {
     // Deactivate existing methods with same provider
     await this.prisma.payoutAccount.updateMany({
-      where: { userId, provider: dto.provider as any, isActive: true },
+      where: { userId, provider: dto.provider as PayoutProvider, isActive: true },
       data: { isActive: false },
     });
 
     return this.prisma.payoutAccount.create({
       data: {
         userId,
-        provider: dto.provider as any,
+        provider: dto.provider as PayoutProvider,
         destination: dto.destination,
         currency: dto.currency || 'USD',
       },
@@ -145,7 +146,7 @@ export class PayoutService {
 
   /** Allocate specific confirmed earnings to a payout request */
   private async allocatePayoutEarnings(
-    tx: any,
+    tx: Prisma.TransactionClient,
     payoutRequestId: string,
     userId: string,
     amountMinor: number,
@@ -425,9 +426,9 @@ export class PayoutService {
       await tx.payoutTransaction.create({
         data: {
           payoutRequestId: payoutId,
-          provider: 'manual' as any,
+          provider: 'manual',
           providerTxId: data.providerTxId,
-          status: 'paid' as any,
+          status: 'paid',
           paidAt: paidAtDate,
         },
       });

@@ -1,5 +1,7 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
+import { Prisma } from '@waitlayer/db';
+import { LedgerStatus } from '@waitlayer/shared';
 
 @Injectable()
 export class DeveloperService {
@@ -31,9 +33,14 @@ export class DeveloperService {
   }
 
   async getEarnings(userId: string, params: { status?: string; from?: string; to?: string; page?: number; limit?: number }) {
-    const where: any = { userId };
-    if (params.status) where.status = params.status;
-    if (params.from || params.to) { where.createdAt = {}; if (params.from) where.createdAt.gte = new Date(params.from); if (params.to) where.createdAt.lte = new Date(params.to); }
+    const where: Prisma.EarningsLedgerWhereInput = { userId };
+    if (params.status) where.status = params.status as LedgerStatus;
+    if (params.from || params.to) {
+      where.createdAt = {
+        ...(params.from ? { gte: new Date(params.from) } : {}),
+        ...(params.to ? { lte: new Date(params.to) } : {}),
+      };
+    }
     const page = params.page ?? 1; const limit = params.limit ?? 20;
     const [entries, total] = await Promise.all([
       this.prisma.earningsLedger.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),

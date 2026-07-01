@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
-import { REVENUE_SPLIT, LAUNCH_INCENTIVE_SPLIT, PAYOUT_HOLD_DAYS, TRUST_SCORE } from '@waitlayer/shared';
+import { REVENUE_SPLIT, LAUNCH_INCENTIVE_SPLIT, PAYOUT_HOLD_DAYS } from '@waitlayer/shared';
 import { LedgerStatus } from '@waitlayer/shared';
+import { Prisma } from '@waitlayer/db';
 
 /** Valid earning state transitions */
 const EARNING_TRANSITIONS: Record<string, LedgerStatus[]> = {
@@ -322,7 +323,7 @@ export class LedgerService {
       _count: true,
     });
 
-    return grouped.map((g: any) => ({
+    return grouped.map((g) => ({
       status: g.status,
       amountMinor: g._sum.amountMinor || 0,
       count: g._count,
@@ -349,8 +350,8 @@ export class LedgerService {
     filters?: { ledgerKind?: string; status?: string },
   ) {
     const skip = (page - 1) * limit;
-    const where: any = { userId };
-    if (filters?.status) where.status = filters.status;
+    const where: Prisma.EarningsLedgerWhereInput = { userId };
+    if (filters?.status) where.status = filters.status as LedgerStatus;
     if (filters?.ledgerKind === 'earnings') {
       // already constrained to earningsLedger below
     }
@@ -385,41 +386,83 @@ export class LedgerService {
     limit: number,
   ) {
     const skip = (page - 1) * limit;
-    const where: any = {};
-    if (filters?.status) where.status = filters.status;
-    let entries: any[] = [];
+    const statusFilter = filters?.status
+      ? { status: filters.status as LedgerStatus }
+      : {};
+
+    // Single-ledger views: paginate at the DB layer with a real total count.
     if (filters?.ledgerKind === 'platform') {
-      entries = await this.prisma.platformLedger.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      });
-    } else if (filters?.ledgerKind === 'advertiser') {
-      entries = await this.prisma.advertiserLedger.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      });
-    } else {
-      const [e, a, p] = await Promise.all([
-        this.prisma.earningsLedger.findMany({ orderBy: { createdAt: 'desc' }, take: limit }),
-        this.prisma.advertiserLedger.findMany({ orderBy: { createdAt: 'desc' }, take: limit }),
-        this.prisma.platformLedger.findMany({ orderBy: { createdAt: 'desc' }, take: limit }),
+      const [rows, total] = await Promise.all([
+        this.prisma.platformLedger.findMany({
+          where: statusFilter,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        this.prisma.platformLedger.count({ where: statusFilter }),
       ]);
-      entries = [
-        ...e.map((x: any) => ({ ...x, ledgerKind: 'earnings' })),
-        ...a.map((x: any) => ({ ...x, ledgerKind: 'advertiser' })),
-        ...p.map((x: any) => ({ ...x, ledgerKind: 'platform' })),
-      ]
-        .sort(
-          (x: any, y: any) =>
-            new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime(),
-        )
-        .slice(skip, skip + limit);
+      return {
+        entries: rows.map((x) => ({ ...x, ledgerKind: 'platform' as const })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
     }
-    const total = entries.length;
+
+    if (filters?.ledgerKind === 'advertiser') {
+      const [rows, total] = await Promise.all([
+        this.prisma.advertiserLedger.findMany({
+          where: statusFilter,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        this.prisma.advertiserLedger.count({ where: statusFilter }),
+      ]);
+      return {
+        entries: rows.map((x) => ({ ...x, ledgerKind: 'advertiser' as const })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    }
+
+    // Cross-ledger view: merge the top `skip + limit` rows from each table,
+    // re-sort globally, then slice the requested page. Fetching `skip + limit`
+    // (not just `limit`) keeps pagination correct beyond page 1, and the total
+    // is the sum of per-table counts so totalPages is accurate.
+    const take = skip + limit;
+    const [e, a, p, ce, ca, cp] = await Promise.all([
+      this.prisma.earningsLedger.findMany({
+        where: statusFilter,
+        orderBy: { createdAt: 'desc' },
+        take,
+      }),
+      this.prisma.advertiserLedger.findMany({
+        where: statusFilter,
+        orderBy: { createdAt: 'desc' },
+        take,
+      }),
+      this.prisma.platformLedger.findMany({
+        where: statusFilter,
+        orderBy: { createdAt: 'desc' },
+        take,
+      }),
+      this.prisma.earningsLedger.count({ where: statusFilter }),
+      this.prisma.advertiserLedger.count({ where: statusFilter }),
+      this.prisma.platformLedger.count({ where: statusFilter }),
+    ]);
+    const total = ce + ca + cp;
+    const entries = [
+      ...e.map((x) => ({ ...x, ledgerKind: 'earnings' as const })),
+      ...a.map((x) => ({ ...x, ledgerKind: 'advertiser' as const })),
+      ...p.map((x) => ({ ...x, ledgerKind: 'platform' as const })),
+    ]
+      .sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime())
+      .slice(skip, skip + limit);
+
     return { entries, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 

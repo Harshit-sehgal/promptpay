@@ -38,7 +38,7 @@ COPY --from=build /app/pnpm-workspace.yaml ./
 COPY --from=build /app/package.json ./
 
 ENV NODE_ENV=production
-EXPOSE 3001
+EXPOSE 4000
 CMD ["node", "apps/api/dist/main.js"]
 
 # ── Web Runtime ──

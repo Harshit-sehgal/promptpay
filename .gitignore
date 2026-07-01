@@ -32,8 +32,9 @@ pnpm-debug.log*
 # Testing
 coverage/
 
-# Prisma
-packages/db/prisma/migrations/
+# Prisma — generated client is rebuilt via `pnpm db:generate`; do not commit it.
+# Schema migrations ARE committed so DB history is tracked.
+packages/db/generated/
 
 # Secrets - never commit
 *.pem
@@ -49,3 +50,4 @@ credentials.json
 
 # Extension build
 apps/vscode-extension/*.vsix
+.aider*

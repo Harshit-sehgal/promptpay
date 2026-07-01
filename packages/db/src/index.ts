@@ -17,4 +17,7 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-export { PrismaClient } from '@prisma/client';
+// Re-export the `Prisma` namespace (types like InputJsonValue, *WhereInput,
+// TransactionClient) so app packages can consume them without depending on
+// @prisma/client directly.
+export { PrismaClient, Prisma } from '@prisma/client';

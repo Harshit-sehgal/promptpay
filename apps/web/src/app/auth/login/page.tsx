@@ -132,7 +132,7 @@ export default function LoginPage() {
           <p className="text-surface-500 text-[14px] mb-8">Sign in to your account</p>
 
           {/* Google Sign-In */}
-          {googleEnabled && (
+          {googleEnabled ? (
             <>
               <div
                 id="google-signin-btn"
@@ -145,6 +145,14 @@ export default function LoginPage() {
                 <div className="flex-1 h-px bg-surface-200" />
               </div>
             </>
+          ) : (
+            <div className="mb-6 p-4 bg-surface-50 border border-surface-200 rounded-xl text-center">
+              <div className="flex items-center justify-center gap-2 text-surface-400 text-[13px]">
+                <GoogleG size={18} />
+                <span>Continue with Google</span>
+                <span className="text-surface-300 text-[11px]">(set NEXT_PUBLIC_GOOGLE_CLIENT_ID to enable)</span>
+              </div>
+            </div>
           )}
 
           {error && (

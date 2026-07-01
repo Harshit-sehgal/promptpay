@@ -35,7 +35,18 @@ export class PayoutController {
     @CurrentUser('id') userId: string,
     @Body() dto: RequestPayoutDto,
   ) {
-    return this.service.requestPayout(userId, dto);
+    return this.service.requestPayout(userId, {
+      payoutAccountId: dto.payoutAccountId,
+      amountMinor: dto.amountMinor,
+      currency: dto.currency,
+      earningsEntryIds: dto.earningsEntryIds,
+    });
+  }
+
+  @Get('available')
+  @Roles('developer')
+  getAvailableForPayout(@CurrentUser('id') userId: string) {
+    return this.service.getAvailableForPayout(userId);
   }
 
   @Get('history')

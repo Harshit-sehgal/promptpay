@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 
 export interface AuditLogEntry {
@@ -7,8 +8,10 @@ export interface AuditLogEntry {
   action: string;
   targetType: string;
   targetId: string;
-  beforeSnap?: Record<string, unknown>;
-  afterSnap?: Record<string, unknown>;
+  // JSON columns are typed with Prisma's InputJsonValue so callers are
+  // constrained to JSON-serializable shapes and the create() call type-checks.
+  beforeSnap?: Prisma.InputJsonValue;
+  afterSnap?: Prisma.InputJsonValue;
   ipHash?: string;
 }
 
@@ -55,7 +58,7 @@ export class AuditService {
     page?: number;
     limit?: number;
   }) {
-    const where: any = {};
+    const where: Prisma.AuditLogWhereInput = {};
     if (params.actorId) where.actorId = params.actorId;
     if (params.actorRole) where.actorRole = params.actorRole;
     if (params.targetType) where.targetType = params.targetType;

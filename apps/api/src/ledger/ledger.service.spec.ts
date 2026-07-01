@@ -82,38 +82,39 @@ describe('LedgerService', () => {
   });
 
   describe('getAvailableBalance', () => {
-    it('returns confirmed earnings minus pending payouts', async () => {
-      // Confirmed earnings: $250.00
+    // NOTE: getAvailableBalance is the *confirmed-credits* total only. It does
+    // NOT subtract in-flight payouts — that is PayoutService.getAvailableForPayout's
+    // responsibility (it reserves funds via PayoutAllocation). These tests pin the
+    // actual contract so a regression that silently changes the semantics is caught.
+    it('returns the sum of confirmed credit earnings', async () => {
       mockPrisma.earningsLedger.aggregate.mockResolvedValueOnce({
         _sum: { amountMinor: 250_00 },
       });
-      // Pending payout withdraws: $150.00
-      mockPrisma.payoutRequest.aggregate.mockResolvedValueOnce({
-        _sum: { requestedAmountMinor: 150_00 },
-      });
-      // Paid out total: $0
-      mockPrisma.payoutRequest.aggregate.mockResolvedValueOnce({
-        _sum: { paidAmountMinor: 0 },
-      });
 
       const result = await service.getAvailableBalance('u-1');
-      // 250_00 - 150_00 = 100_00
-      expect(result.amountMinor).toBeDefined();
+
+      expect(result.amountMinor).toBe(250_00);
+      expect(result.currency).toBe('USD');
+      // Must aggregate confirmed credits and must never touch payoutRequest.
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'u-1', status: 'confirmed', entryType: 'credit' },
+        }),
+      );
+      expect(mockPrisma.payoutRequest.aggregate).not.toHaveBeenCalled();
     });
 
-    it('returns 0 when no earnings', async () => {
-      mockPrisma.earningsLedger.aggregate.mockResolvedValue({
+    it('returns 0 when there are no confirmed earnings', async () => {
+      mockPrisma.earningsLedger.aggregate.mockResolvedValueOnce({
         _sum: { amountMinor: null },
-      });
-      mockPrisma.payoutRequest.aggregate.mockResolvedValue({
-        _sum: { requestedAmountMinor: null },
-      });
-      mockPrisma.payoutRequest.aggregate.mockResolvedValue({
-        _sum: { paidAmountMinor: null },
       });
 
       const result = await service.getAvailableBalance('u-1');
+
       expect(result.amountMinor).toBe(0);
+      expect(result.currency).toBe('USD');
+      expect(mockPrisma.payoutRequest.aggregate).not.toHaveBeenCalled();
     });
   });
 

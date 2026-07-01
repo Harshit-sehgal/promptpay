@@ -9,6 +9,7 @@ const mockPrisma = {
   user: {
     findUnique: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
   },
   userSettings: { create: vi.fn() },
   trustScore: { create: vi.fn() },
@@ -65,6 +66,15 @@ describe('AuthService', () => {
         role: 'developer',
         status: 'active',
         passwordHash: '$2a$12$hash',
+      });
+      // referral code update after creation
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'u-1',
+        email: 'dev@test.com',
+        role: 'developer',
+        status: 'active',
+        passwordHash: '$2a$12$hash',
+        referralCode: 'ABCD1234',
       });
 
       const result = await service.signUp({
