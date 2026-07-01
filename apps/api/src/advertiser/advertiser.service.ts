@@ -1,5 +1,6 @@
 import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
+import { CampaignService } from '../campaign/campaign.service';
 import { CampaignStatus, AD_SERVING } from '@waitlayer/shared';
 
 /** Valid campaign status transitions */
@@ -15,7 +16,7 @@ const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
 
 @Injectable()
 export class AdvertiserService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private campaignService: CampaignService) {}
 
   /** Get or create advertiser profile for user */
   async getOrCreateProfile(userId: string) {
@@ -95,6 +96,9 @@ export class AdvertiserService {
     if (dto.bidAmountMinor <= 0) {
       throw new BadRequestException('Bid amount must be positive');
     }
+
+    // Validate campaign category (blocks prohibited categories)
+    await this.campaignService.validateCampaignCategory(dto.category);
 
     return this.prisma.campaign.create({
       data: {
