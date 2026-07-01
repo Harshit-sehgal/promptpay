@@ -1,5 +1,5 @@
 import { IsString, IsEnum, IsUUID, MinLength, MaxLength } from 'class-validator';
-import { ToolType, EventType } from '@waitlayer/shared';
+import { ToolType } from '@waitlayer/shared';
 
 export class WaitStateStartDto {
   @IsUUID()

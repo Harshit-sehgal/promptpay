@@ -1,5 +1,5 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min, Max, MaxLength } from 'class-validator';
-import { ApprovalDecision, FraudSeverity, FraudFlagStatus } from '@waitlayer/shared';
+import { FraudSeverity, FraudFlagStatus } from '@waitlayer/shared';
 
 // ── Campaign approval ──
 

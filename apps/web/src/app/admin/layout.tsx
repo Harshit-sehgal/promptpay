@@ -17,7 +17,7 @@ const ADMIN_NAV = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-      <div className="min-h-screen bg-ink-900 flex">
+      <div className="dark min-h-screen bg-ink-900 flex">
         <Sidebar
           brand="Admin"
           brandLetter="A"

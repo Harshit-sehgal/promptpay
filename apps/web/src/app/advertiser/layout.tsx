@@ -14,7 +14,7 @@ const ADVERTISER_NAV = [
 export default function AdvertiserLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute allowedRoles={['advertiser']}>
-      <div className="min-h-screen bg-ink-900 flex">
+      <div className="dark min-h-screen bg-ink-900 flex">
         <Sidebar
           brand="WaitLayer"
           brandLetter="W"

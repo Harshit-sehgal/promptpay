@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottleByRouteGuard } from './common/guards/throttle-by-route.guard';
+import { BruteForceGuard } from './common/guards/brute-force.guard';
 import { AuthModule } from './auth/auth.module';
 import { DeveloperModule } from './developer/developer.module';
 import { AdvertiserModule } from './advertiser/advertiser.module';
@@ -37,6 +38,7 @@ import { PrismaModule } from './config/prisma.module';
     CampaignModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: BruteForceGuard },
     { provide: APP_GUARD, useClass: ThrottleByRouteGuard },
   ],
 })
