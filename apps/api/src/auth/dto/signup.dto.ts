@@ -24,6 +24,7 @@ export class SignUpDto {
   country?: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(64)
   referrerCode?: string;
 }

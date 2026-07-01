@@ -27,6 +27,7 @@ services:
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
       EXTENSION_HMAC_SECRET: change-me-in-production
+      API_PORT: "3001"
       NODE_ENV: production
     depends_on:
       postgres:

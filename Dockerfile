@@ -42,23 +42,23 @@ CMD ["node", "apps/api/dist/main.js"]
 
 # ── Web Runtime ──
 FROM node:22-alpine AS web
-WORKDIR /app
+WORKDIR /app/apps/web
 
-# Copy pruned production node_modules
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages ./packages
+# Copy pruned production node_modules (monorepo root)
+COPY --from=build /app/node_modules /app/node_modules
+COPY --from=build /app/packages /app/packages
 
 # Copy web build output
-COPY --from=build /app/apps/web/.next ./apps/web/.next
-COPY --from=build /app/apps/web/node_modules ./apps/web/node_modules
-COPY --from=build /app/apps/web/public ./apps/web/public
-COPY --from=build /app/apps/web/next.config.* ./apps/web/
-COPY --from=build /app/apps/web/package.json ./apps/web/package.json
+COPY --from=build /app/apps/web/.next ./.next
+COPY --from=build /app/apps/web/node_modules ./node_modules
+COPY --from=build /app/apps/web/public ./public
+COPY --from=build /app/apps/web/next.config.* ./
+COPY --from=build /app/apps/web/package.json ./package.json
 
 # Workspace metadata
-COPY --from=build /app/pnpm-workspace.yaml ./
-COPY --from=build /app/package.json ./
+COPY --from=build /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
+COPY --from=build /app/package.json /app/package.json
 
 ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["npx", "next", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]
