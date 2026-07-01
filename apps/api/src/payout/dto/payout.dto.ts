@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Min, Max, MaxLength, IsEnum } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min, Max, MaxLength, IsEnum, IsArray } from 'class-validator';
 import { PayoutProvider } from '@waitlayer/shared';
 
 export class AddPayoutMethodDto {
@@ -26,6 +26,13 @@ export class RequestPayoutDto {
   @IsString()
   @MaxLength(3)
   currency!: string;
+
+  /** Optional: specify exact earnings entry IDs to allocate.
+   *  If omitted, the oldest confirmed entries are auto-selected. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  earningsEntryIds?: string[];
 }
 
 export class PayoutHistoryQueryDto {

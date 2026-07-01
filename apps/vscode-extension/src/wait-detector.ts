@@ -1,39 +1,61 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 
 export interface WaitStateEvent {
   startTime: number;
   durationMs: number;
   tool: string;
+  waitStateId: string;
 }
+
+/**
+ * Signals that are emitted during wait-state lifecycle.
+ */
+export type DetectorSignal =
+  | { type: 'wait_start'; event: WaitStateEvent }
+  | { type: 'wait_end'; event: WaitStateEvent };
 
 /**
  * Detects "wait states" when AI coding assistants appear to be thinking.
  *
- * Heuristics:
- *  - GitHub Copilot / Cursor / Copilot Chat: status bar shows "Working..." or
- *    channel updates with progress messages
- *  - Comments in chat that indicate generation in progress
- *  - Extensions may emit progress events
+ * VS Code API constraints: extensions cannot read other extensions' status bar
+ * items, nor read arbitrary terminal output. So we use a multi-signal approach:
  *
- * Implementation: poll key status bar text and listen for relevant chat
- * events. Fires waitStateStart when a long-running operation begins.
+ *  1. Editor inactivity — if the user has stopped typing for a threshold
+ *     while the window is focused, it likely means they are reading AI output.
+ *  2. Window state — when the user returns to VS Code after a brief switch
+ *     away, they were probably waiting for AI elsewhere.
+ *  3. Task execution — AI extensions often register tasks; task start/end
+ *     gives a strong signal.
+ *  4. Own status bar item — our extension's status bar text is the only text
+ *     we control, but we can watch for other extensions updating their items
+ *     indirectly via the editor/terminal state changes they trigger.
+ *
+ * Frequency caps and quiet hours are enforced externally (in extension.ts),
+ * so the detector fires unfiltered — the caller applies policy.
  */
 export class WaitStateDetector {
   private listeners: Array<(e: WaitStateEvent) => void> = [];
-  private watch?: NodeJS.Timeout;
-  private lastStatus = '';
+  private signalListeners: Array<(s: DetectorSignal) => void> = [];
+  private disposables: vscode.Disposable[] = [];
+
+  // ── Editor inactivity tracking ──
+  private inactivityTimer?: NodeJS.Timeout;
+  private lastEditTime = 0;
+  private inactivityThresholdMs = 4_000; // 4 seconds of no typing = likely AI wait
   private inWait = false;
   private waitStart = 0;
+  private waitStateId = '';
+  private windowFocused = true;
 
-  // Triggers for "the AI is thinking" status messages
-  private readonly WAIT_PATTERNS = [
-    /generating/i,
-    /^working/i,
-    /thinking/i,
-    /processing/i,
-    /waiting for/i,
-    /(cursor|copilot|claude).*(running|thinking)/i,
-  ];
+  // ── Task monitoring ──
+  private activeTaskCount = 0;
+  private taskWaitStart = 0;
+
+  // ── Terminal activity detection ──
+  // We track when terminals are opened/closed and watch for AI tool names
+  private terminalWriteCounts = new Map<string, number>();
+  private lastTerminalActiveTime = 0;
 
   onWaitStateStart(fn: (e: WaitStateEvent) => void) {
     this.listeners.push(fn);
@@ -42,44 +64,203 @@ export class WaitStateDetector {
     };
   }
 
+  onSignal(fn: (s: DetectorSignal) => void) {
+    this.signalListeners.push(fn);
+    return () => {
+      this.signalListeners = this.signalListeners.filter((l) => l !== fn);
+    };
+  }
+
   start(context: vscode.ExtensionContext) {
-    this.watch = setInterval(() => this.checkStatusBar(), 1000);
+    // ── 1. Editor change tracking ──
+    this.lastEditTime = Date.now();
+    const editListener = vscode.workspace.onDidChangeTextDocument((e) => {
+      // Only track user-initiated changes (not programmatic)
+      if (e.document.uri.scheme === 'file' || e.document.uri.scheme === 'untitled') {
+        this.lastEditTime = Date.now();
+        if (this.inWait) {
+          // User started typing again — wait state likely ended
+          this.endWait();
+        }
+      }
+    });
+    this.disposables.push(editListener);
+
+    // ── 2. Window focus tracking ──
+    const windowListener = vscode.window.onDidChangeWindowState((state) => {
+      this.windowFocused = state.focused;
+      if (state.focused) {
+        // User came back — reset inactivity baseline
+        this.lastEditTime = Date.now();
+        // If we were in a wait, check if still waiting
+        if (this.inWait) {
+          this.scheduleInactivityCheck();
+        }
+      }
+    });
+    this.disposables.push(windowListener);
+
+    // ── 3. Task execution monitoring ──
+    const taskStartListener = vscode.tasks.onDidStartTask((e) => {
+      this.activeTaskCount++;
+      if (this.activeTaskCount === 1 && !this.inWait) {
+        this.enterWait('task');
+        this.taskWaitStart = Date.now();
+      }
+    });
+    const taskEndListener = vscode.tasks.onDidEndTask((e) => {
+      this.activeTaskCount = Math.max(0, this.activeTaskCount - 1);
+      if (this.activeTaskCount === 0 && this.inWait && this.taskWaitStart > 0) {
+        const duration = Date.now() - this.taskWaitStart;
+        this.taskWaitStart = 0;
+        if (duration >= 2_000) {
+          this.endWait();
+        }
+      }
+    });
+    this.disposables.push(taskStartListener, taskEndListener);
+
+    // ── 4. Terminal monitoring ──
+    // Watch for new terminals and track when they are created/hidden
+    vscode.window.terminals.forEach((t) => {
+      this.trackTerminal(t);
+    });
+    const termOpenListener = vscode.window.onDidOpenTerminal((t) => {
+      this.trackTerminal(t);
+    });
+    const termCloseListener = vscode.window.onDidCloseTerminal((_) => {
+      // Terminal burst activity often precedes AI output
+      if (!this.inWait) {
+        this.enterWait('terminal');
+        // Short wait — terminal activity bursts are brief
+        setTimeout(() => {
+          if (this.inWait && this.waitStart > 0) {
+            this.endWait();
+          }
+        }, 3_000);
+      }
+    });
+    this.disposables.push(termOpenListener, termCloseListener);
+
+    // ── 5. Active editor change (user switching contexts) ──
+    const editorChangeListener = vscode.window.onDidChangeActiveTextEditor((_) => {
+      // Switching editors often means the user is navigating while AI works
+      this.lastEditTime = Date.now();
+      this.scheduleInactivityCheck();
+    });
+    this.disposables.push(editorChangeListener);
+
+    // ── Start the main inactivity polling loop ──
+    this.scheduleInactivityCheck();
 
     context.subscriptions.push({
       dispose: () => {
-        if (this.watch) clearInterval(this.watch);
+        for (const d of this.disposables) d.dispose();
+        if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
       },
     });
   }
 
-  private checkStatusBar() {
-    const status = vscode.window?.state ? '' : ''; // placeholder
-    // Inspect all status bar items
-    const editorStatus = (vscode.window as any).statusBar?.text || '';
-    const combined = `${lastStatusCache} ${editorStatus}`.trim();
+  /** Public method to manually trigger a wait from a command */
+  triggerManualWait(tool: string): string {
+    return this.enterWait(tool);
+  }
 
-    if (!combined) return;
+  /** Public method to manually end a wait */
+  endManualWait(): void {
+    if (this.inWait) {
+      this.endWait();
+    }
+  }
 
-    const matches = this.WAIT_PATTERNS.some((p) => p.test(combined));
+  // ── Private implementation ──
 
-    if (matches && !this.inWait) {
-      this.inWait = true;
-      this.waitStart = Date.now();
-    } else if (!matches && this.inWait) {
-      const durationMs = Date.now() - this.waitStart;
-      this.inWait = false;
+  private trackTerminal(terminal: vscode.Terminal) {
+    // We can't read terminal output directly, but we can track its process ID
+    // and watch for terminal state changes via the creation/destruction lifecycle
+    this.lastTerminalActiveTime = Date.now();
+  }
 
-      // Only fire if wait was meaningful (>2s) — short flickers are noise
-      if (durationMs >= 2000) {
-        this.notify({
-          startTime: this.waitStart,
-          durationMs,
-          tool: 'vscode',
-        });
-      }
+  private scheduleInactivityCheck() {
+    if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
+    this.inactivityTimer = setTimeout(() => {
+      this.checkInactivity();
+    }, this.inactivityThresholdMs);
+  }
+
+  private checkInactivity() {
+    if (!this.windowFocused) return;
+    if (this.inWait) return;
+
+    const idleTime = Date.now() - this.lastEditTime;
+    // Must have an active text editor (user is actually coding, not idle browsing)
+    const editor = vscode.window.activeTextEditor;
+
+    if (editor && idleTime >= this.inactivityThresholdMs) {
+      // User has stopped typing for 4+ seconds while editor is open and focused.
+      // This is a strong signal that AI is generating/thinking.
+      this.enterWait('inactivity');
     }
 
-    lastStatusCache = combined.slice(-120);
+    // Re-schedule for the next check cycle
+    this.scheduleInactivityCheck();
+  }
+
+  private enterWait(tool: string): string {
+    if (this.inWait) {
+      // Already in a wait — don't stack
+      return this.waitStateId;
+    }
+
+    this.inWait = true;
+    this.waitStart = Date.now();
+    this.waitStateId = generateWaitStateId();
+
+    const event: WaitStateEvent = {
+      startTime: this.waitStart,
+      durationMs: 0, // updated at end
+      tool,
+      waitStateId: this.waitStateId,
+    };
+
+    // Emit signal for external listeners (extension.ts uses onWaitStateStart)
+    this.emitSignal({ type: 'wait_start', event });
+
+    return this.waitStateId;
+  }
+
+  private endWait() {
+    if (!this.inWait) return;
+
+    const durationMs = Date.now() - this.waitStart;
+    this.inWait = false;
+
+    // Only fire if wait was meaningful (>2s) — short flickers are noise
+    if (durationMs >= 2_000) {
+      const event: WaitStateEvent = {
+        startTime: this.waitStart,
+        durationMs,
+        tool: 'vscode',
+        waitStateId: this.waitStateId,
+      };
+
+      this.emitSignal({ type: 'wait_end', event });
+      this.notify(event);
+    }
+
+    this.waitStart = 0;
+    this.waitStateId = '';
+    this.lastEditTime = Date.now();
+  }
+
+  private emitSignal(signal: DetectorSignal) {
+    for (const l of this.signalListeners) {
+      try {
+        l(signal);
+      } catch {
+        /* never let a listener disrupt detector */
+      }
+    }
   }
 
   private notify(event: WaitStateEvent) {
@@ -93,4 +274,6 @@ export class WaitStateDetector {
   }
 }
 
-let lastStatusCache = '';
+function generateWaitStateId(): string {
+  return `ws_${crypto.randomUUID()}`;
+}

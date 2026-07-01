@@ -42,6 +42,25 @@ export class ApiClient {
       .digest('hex');
   }
 
+  async waitStateStart(input: {
+    deviceId: string;
+    waitStateId: string;
+    toolType: string;
+    idempotencyKey: string;
+  }): Promise<void> {
+    const payload = {
+      deviceId: input.deviceId,
+      waitStateId: input.waitStateId,
+      toolType: input.toolType,
+      timestamp: new Date().toISOString(),
+      idempotencyKey: input.idempotencyKey,
+    };
+    await this.post('/extension/wait-state/start', {
+      ...payload,
+      signature: this.signPayload(JSON.stringify(payload)),
+    });
+  }
+
   async requestAd(input: {
     toolType: string;
     waitDurationMs: number;

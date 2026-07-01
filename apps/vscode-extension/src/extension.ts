@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { ConfigurationManager } from './config';
 import { WaitStateDetector } from './wait-detector';
 import { ApiClient } from './api-client';
@@ -14,6 +15,10 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Register status bar
   status.register(context);
+
+  // Frequency cap tracking
+  let adTimestamps: number[] = [];
+  let sessionId = crypto.randomUUID();
 
   // Register all commands
   const commands: vscode.Disposable[] = [
@@ -45,14 +50,35 @@ export function activate(context: vscode.ExtensionContext) {
     if (!(await config.adsEnabled())) return;
     if (await config.inQuietHours()) return;
 
+    // Enforce frequency cap
+    const maxAdsPerHour = await config.getMaxAdsPerHour();
+    const now = Date.now();
+    adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
+    if (adTimestamps.length >= maxAdsPerHour) {
+      console.log('WaitLayer: frequency cap reached, skipping ad');
+      return;
+    }
+
     try {
+      // 1. Register wait state start with API
+      const deviceId = await config.getDeviceFingerprint();
+      const idempotencyKey = `ws-start-${event.waitStateId}`;
+      await api.waitStateStart({
+        deviceId,
+        waitStateId: event.waitStateId,
+        toolType: 'vscode',
+        idempotencyKey,
+      });
+
+      // 2. Request an ad
       const ad = await api.requestAd({
         toolType: 'vscode',
         waitDurationMs: event.durationMs,
-        deviceFingerprint: await config.getDeviceFingerprint(),
+        deviceFingerprint: deviceId,
       });
 
       if (ad) {
+        adTimestamps.push(now);
         status.showAdServing();
         panel.show(ad, async (clicked) => {
           if (clicked) {

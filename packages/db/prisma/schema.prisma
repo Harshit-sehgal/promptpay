@@ -587,6 +587,8 @@ model EarningsLedger {
 
   createdAt DateTime @default(now())
 
+  payoutAllocations PayoutAllocation[]
+
   @@index([userId, status, availableAt])
   @@index([campaignId])
   @@index([createdAt])
@@ -657,10 +659,25 @@ model PayoutRequest {
   updatedAt DateTime @updatedAt
 
   transactions PayoutTransaction[]
+  allocations   PayoutAllocation[]
 
   @@index([userId])
   @@index([status])
   @@map("payout_requests")
+}
+
+model PayoutAllocation {
+  id               String          @id @default(uuid())
+  payoutRequestId  String
+  payoutRequest    PayoutRequest   @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  earningsEntryId  String
+  earningsEntry    EarningsLedger  @relation(fields: [earningsEntryId], references: [id])
+  amountMinor      Int
+  createdAt        DateTime        @default(now())
+
+  @@unique([payoutRequestId, earningsEntryId])
+  @@index([earningsEntryId])
+  @@map("payout_allocations")
 }
 
 model PayoutTransaction {

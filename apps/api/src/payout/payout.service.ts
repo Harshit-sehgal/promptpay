@@ -75,24 +75,30 @@ export class PayoutService {
 
   /** Get payout info for a user */
   async getPayoutInfo(userId: string) {
-    const [accounts, payoutHistory, confirmedEarnings, pendingPayouts] = await Promise.all([
+    const [accounts, payoutHistory, confirmedEarnings, allocatedTotal] = await Promise.all([
       this.prisma.payoutAccount.findMany({ where: { userId, isActive: true } }),
       this.prisma.payoutRequest.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: 20,
+        include: { allocations: true },
       }),
       this.prisma.earningsLedger.aggregate({
         where: { userId, status: 'confirmed', entryType: 'credit' },
         _sum: { amountMinor: true },
       }),
-      this.prisma.payoutRequest.aggregate({
-        where: { userId, status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] } },
-        _sum: { requestedAmountMinor: true },
+      this.prisma.payoutAllocation.aggregate({
+        where: {
+          payoutRequest: {
+            userId,
+            status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+          },
+        },
+        _sum: { amountMinor: true },
       }),
     ]);
 
-    const availableBalance = (confirmedEarnings._sum.amountMinor || 0) - (pendingPayouts._sum.requestedAmountMinor || 0);
+    const availableBalance = (confirmedEarnings._sum.amountMinor || 0) - (allocatedTotal._sum.amountMinor || 0);
 
     return {
       payoutAccounts: accounts,
@@ -103,11 +109,136 @@ export class PayoutService {
     };
   }
 
+  /** Get confirmed earnings available for payout (not already allocated to another payout request) */
+  async getAvailableForPayout(userId: string) {
+    // Find earnings that are confirmed and not already allocated to an active payout
+    const allocatedEntryIds = await this.prisma.payoutAllocation.findMany({
+      where: {
+        payoutRequest: {
+          userId,
+          status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+        },
+      },
+      select: { earningsEntryId: true },
+    });
+    const excludeIds = allocatedEntryIds.map((a: { earningsEntryId: string }) => a.earningsEntryId);
+
+    const available = await this.prisma.earningsLedger.findMany({
+      where: {
+        userId,
+        status: 'confirmed',
+        entryType: 'credit',
+        ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const totalMinor = available.reduce((sum: number, e: { amountMinor: number }) => sum + e.amountMinor, 0);
+
+    return {
+      entries: available,
+      totalMinor,
+      currency: 'USD',
+      count: available.length,
+    };
+  }
+
+  /** Allocate specific confirmed earnings to a payout request */
+  private async allocatePayoutEarnings(
+    tx: any,
+    payoutRequestId: string,
+    userId: string,
+    amountMinor: number,
+    specificEntryIds?: string[],
+  ) {
+    // Fetch candidate earnings: confirmed, credited, and not already allocated
+    const allocatedEntryIds = await tx.payoutAllocation.findMany({
+      where: {
+        payoutRequest: {
+          userId,
+          status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+        },
+      },
+      select: { earningsEntryId: true },
+    });
+    const excludeIds = allocatedEntryIds.map((a: { earningsEntryId: string }) => a.earningsEntryId);
+
+    let candidateEntries: { id: string; amountMinor: number; status: string }[];
+
+    if (specificEntryIds && specificEntryIds.length > 0) {
+      // Caller specified exact entries — validate they belong to user and are confirmed
+      candidateEntries = await tx.earningsLedger.findMany({
+        where: {
+          id: { in: specificEntryIds },
+          userId,
+          entryType: 'credit',
+          status: 'confirmed',
+          ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      // Check for entries that were requested but are not eligible
+      const foundIds = new Set(candidateEntries.map((e: { id: string }) => e.id));
+      const invalidIds = specificEntryIds.filter(id => !foundIds.has(id));
+      if (invalidIds.length > 0) {
+        throw new BadRequestException(
+          `Earnings entries not eligible for payout: ${invalidIds.join(', ')}`,
+        );
+      }
+    } else {
+      // Auto-select: oldest confirmed entries that are not allocated, up to the requested amount
+      candidateEntries = await tx.earningsLedger.findMany({
+        where: {
+          userId,
+          status: 'confirmed',
+          entryType: 'credit',
+          ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    // Walk through candidates, allocating entries until we reach the requested amount
+    let remaining = amountMinor;
+    const allocations: { earningsEntryId: string; amountMinor: number }[] = [];
+
+    for (const entry of candidateEntries) {
+      if (remaining <= 0) break;
+      const allocAmount = Math.min(entry.amountMinor, remaining);
+      allocations.push({
+        earningsEntryId: entry.id,
+        amountMinor: allocAmount,
+      });
+      remaining -= allocAmount;
+    }
+
+    if (remaining > 0) {
+      throw new BadRequestException(
+        `Insufficient confirmed earnings to allocate. Short by ${remaining} minor units.`,
+      );
+    }
+
+    // Create allocation records
+    for (const alloc of allocations) {
+      await tx.payoutAllocation.create({
+        data: {
+          payoutRequestId,
+          earningsEntryId: alloc.earningsEntryId,
+          amountMinor: alloc.amountMinor,
+        },
+      });
+    }
+
+    return allocations;
+  }
+
   /** Request a payout */
   async requestPayout(userId: string, dto: {
     payoutAccountId: string;
     amountMinor: number;
     currency: string;
+    earningsEntryIds?: string[];
   }) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
@@ -120,16 +251,23 @@ export class PayoutService {
       throw new BadRequestException(`Minimum payout is $${PAYOUT.MINIMUM_THRESHOLD_MINOR / 100}`);
     }
 
-    // Balance check
-    const confirmedEarnings = await this.prisma.earningsLedger.aggregate({
-      where: { userId, status: 'confirmed', entryType: 'credit' },
-      _sum: { amountMinor: true },
-    });
-    const pendingPayouts = await this.prisma.payoutRequest.aggregate({
-      where: { userId, status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] } },
-      _sum: { requestedAmountMinor: true },
-    });
-    const available = (confirmedEarnings._sum.amountMinor || 0) - (pendingPayouts._sum.requestedAmountMinor || 0);
+    // Balance check using precise allocation totals (not requestedAmountMinor)
+    const [confirmedEarnings, allocatedTotal] = await Promise.all([
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.payoutAllocation.aggregate({
+        where: {
+          payoutRequest: {
+            userId,
+            status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+          },
+        },
+        _sum: { amountMinor: true },
+      }),
+    ]);
+    const available = (confirmedEarnings._sum.amountMinor || 0) - (allocatedTotal._sum.amountMinor || 0);
     if (dto.amountMinor > available) {
       throw new BadRequestException('Insufficient available earnings');
     }
@@ -150,14 +288,30 @@ export class PayoutService {
       throw new BadRequestException('Invalid payout account');
     }
 
-    return this.prisma.payoutRequest.create({
-      data: {
+    // Create payout request + allocations atomically
+    return this.prisma.$transaction(async (tx) => {
+      const payoutRequest = await tx.payoutRequest.create({
+        data: {
+          userId,
+          payoutAccountId: dto.payoutAccountId,
+          status: 'requested',
+          requestedAmountMinor: dto.amountMinor,
+          currency: dto.currency,
+        },
+      });
+
+      await this.allocatePayoutEarnings(
+        tx,
+        payoutRequest.id,
         userId,
-        payoutAccountId: dto.payoutAccountId,
-        status: 'requested',
-        requestedAmountMinor: dto.amountMinor,
-        currency: dto.currency,
-      },
+        dto.amountMinor,
+        dto.earningsEntryIds,
+      );
+
+      return tx.payoutRequest.findUnique({
+        where: { id: payoutRequest.id },
+        include: { allocations: true },
+      });
     });
   }
 
@@ -165,7 +319,7 @@ export class PayoutService {
   async processPayout(payoutId: string) {
     const payout = await this.prisma.payoutRequest.findUnique({
       where: { id: payoutId },
-      include: { payoutAccount: true },
+      include: { payoutAccount: true, allocations: true },
     });
     if (!payout) throw new BadRequestException('Payout request not found');
     if (payout.status !== 'approved') {
@@ -177,10 +331,22 @@ export class PayoutService {
       throw new BadRequestException(`Payout provider "${payout.payoutAccount.provider}" not implemented`);
     }
 
+    // Reconcile: verify the allocated sum matches approvedAmountMinor (or requestedAmountMinor)
+    const allocatedSum = payout.allocations.reduce(
+      (sum: number, a: { amountMinor: number }) => sum + a.amountMinor,
+      0,
+    );
+    const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
+    if (allocatedSum !== expectedAmount) {
+      throw new BadRequestException(
+        `Allocation mismatch: allocated ${allocatedSum} but expected ${expectedAmount}`,
+      );
+    }
+
     const result = await provider.initiate({
       payoutRequestId: payout.id,
       destination: payout.payoutAccount.destination,
-      amountMinor: payout.approvedAmountMinor || payout.requestedAmountMinor,
+      amountMinor: expectedAmount,
       currency: payout.currency,
     });
 
@@ -201,25 +367,62 @@ export class PayoutService {
     return { payoutId, providerTxId: result.providerTxId, status: 'processing' };
   }
 
-  /** Mark a payout as paid (called by admin or webhook) */
+  /** Mark a payout as paid (called by admin or webhook).
+   *  Marks only the exact allocated earnings entries as paid, inside a single transaction. */
   async markPayoutPaid(payoutId: string, data: {
     providerTxId: string;
     paidAt: string;
   }) {
     const payout = await this.prisma.payoutRequest.findUnique({
       where: { id: payoutId },
+      include: { allocations: { include: { earningsEntry: true } } },
     });
     if (!payout) throw new BadRequestException('Payout not found');
 
+    // Idempotency: already paid
+    if (payout.status === 'paid') {
+      return this.prisma.payoutRequest.findUnique({
+        where: { id: payoutId },
+        include: { allocations: true },
+      });
+    }
+
     const paidAtDate = new Date(data.paidAt);
 
-    // Mark payout as paid
-    await this.prisma.$transaction([
-      this.prisma.payoutRequest.update({
+    // Collect the earnings entry IDs from allocations, but only those still in 'confirmed' status
+    const confirmedAllocations = payout.allocations.filter(
+      (a: { earningsEntry: { status: string } }) => a.earningsEntry.status === 'confirmed',
+    );
+
+    if (confirmedAllocations.length === 0 && payout.allocations.length > 0) {
+      // All allocated entries already paid or not confirmed — nothing to do for earnings
+      // but still mark the payout itself
+    }
+
+    const earningsIds = confirmedAllocations.map(
+      (a: { earningsEntryId: string }) => a.earningsEntryId,
+    );
+
+    // Double-payout prevention: verify no allocated entry is already 'paid'
+    const alreadyPaid = payout.allocations.filter(
+      (a: { earningsEntry: { status: string } }) => a.earningsEntry.status === 'paid',
+    );
+    if (alreadyPaid.length > 0) {
+      throw new BadRequestException(
+        `Payout ${payoutId} has ${alreadyPaid.length} earnings entries already marked as paid — possible double payout`,
+      );
+    }
+
+    // Single atomic transaction: mark payout paid + mark allocated earnings paid + record tx
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Mark payout as paid
+      await tx.payoutRequest.update({
         where: { id: payoutId },
         data: { status: 'paid', paidAt: paidAtDate },
-      }),
-      this.prisma.payoutTransaction.create({
+      });
+
+      // 2. Record payout transaction
+      await tx.payoutTransaction.create({
         data: {
           payoutRequestId: payoutId,
           provider: 'manual' as any,
@@ -227,25 +430,21 @@ export class PayoutService {
           status: 'paid' as any,
           paidAt: paidAtDate,
         },
-      }),
-    ]);
+      });
 
-    // Mark earning entries as paid (separate from the transaction since it returns BatchPayload)
-    const earningEntries = await this.prisma.earningsLedger.findMany({
-      where: {
-        userId: payout.userId,
-        status: 'confirmed',
-        entryType: 'credit',
-      },
-      orderBy: { createdAt: 'asc' },
-      take: 100,
+      // 3. Mark only the allocated earnings entries as paid
+      if (earningsIds.length > 0) {
+        await tx.earningsLedger.updateMany({
+          where: { id: { in: earningsIds }, status: 'confirmed' },
+          data: { status: 'paid' },
+        });
+      }
     });
 
-    if (earningEntries.length > 0) {
-      await this.ledger.markAsPaid(earningEntries.map((e: { id: string }) => e.id));
-    }
-
-    return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+    return this.prisma.payoutRequest.findUnique({
+      where: { id: payoutId },
+      include: { allocations: true },
+    });
   }
 
   /** Get payout history for a user */
@@ -253,7 +452,7 @@ export class PayoutService {
     const [payouts, total] = await Promise.all([
       this.prisma.payoutRequest.findMany({
         where: { userId },
-        include: { payoutAccount: true, transactions: true },
+        include: { payoutAccount: true, transactions: true, allocations: true },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,

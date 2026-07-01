@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -45,6 +46,14 @@ export class AuthService {
         country: dto.country,
       },
     });
+
+    // Generate referral code for the new user
+    const referralCode = await this.generateReferralCode();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { referralCode },
+    });
+    user.referralCode = referralCode;
 
     // Developer onboarding: create settings + trust score
     if (dto.role === UserRole.DEVELOPER) {
@@ -165,6 +174,14 @@ export class AuthService {
         // No passwordHash — social login only
       },
     });
+
+    // Generate referral code for the new user
+    const referralCode = await this.generateReferralCode();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { referralCode },
+    });
+    user.referralCode = referralCode;
 
     // Developer onboarding: create settings + trust score
     if (role === UserRole.DEVELOPER) {
@@ -314,5 +331,29 @@ export class AuthService {
   private sanitizeUser(user: any) {
     const { passwordHash, ...safe } = user;
     return safe;
+  }
+
+  /** Generate a unique 8-char alphanumeric referral code (uppercase + digits) */
+  private async generateReferralCode(): Promise<string> {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const length = 8;
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const code = Array.from(randomBytes(length))
+        .map((b) => chars[b % chars.length])
+        .join('');
+
+      const exists = await this.prisma.user.findUnique({
+        where: { referralCode: code },
+      });
+      if (!exists) return code;
+    }
+
+    // Fallback: append random suffix to avoid infinite loop
+    const base = Array.from(randomBytes(6))
+      .map((b) => chars[b % chars.length])
+      .join('');
+    const suffix = Date.now().toString(36).slice(-4).toUpperCase();
+    return `${base}${suffix}`;
   }
 }
