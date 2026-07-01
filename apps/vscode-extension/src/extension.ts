@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
   // Wait-state detection — fires when AI assistant shows waiting indicator
   detector.onWaitStateStart(async (event) => {
     if (!(await config.adsEnabled())) return;
-    if (!(await config.inQuietHours())) return;
+    if (await config.inQuietHours()) return;
 
     try {
       const ad = await api.requestAd({

@@ -250,7 +250,6 @@ export class ExtensionService {
       where: {
         status: 'active',
         id: { notIn: recentCampaignIds }, // Frequency cap: don't show same campaign within the hour
-        budgetSpentMinor: { lt: this.prisma.campaign.fields.budgetTotalMinor }, // Budget check
       },
       include: {
         creatives: {
@@ -259,10 +258,10 @@ export class ExtensionService {
         countryTargeting: true,
       },
       orderBy: { bidAmountMinor: 'desc' },
-      take: 20,
+      take: 50,
     });
 
-    // Filter by category preferences and budget
+    // Filter by budget and category preferences
     const eligible = campaigns.filter((c: any) => {
       if (c.creatives.length === 0) return false;
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;

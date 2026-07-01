@@ -123,9 +123,12 @@ export class AdvertiserService {
     });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
 
-    // Must have at least one approved creative
-    if (campaign.creatives.filter((c: { status: string }) => c.status === 'approved').length === 0 && campaign.creatives.length === 0) {
+    // Must have at least one creative, and at least one must be approved
+    if (campaign.creatives.length === 0) {
       throw new BadRequestException('Campaign must have at least one creative before submission');
+    }
+    if (campaign.creatives.filter((c: { status: string }) => c.status === 'approved').length === 0) {
+      throw new BadRequestException('Campaign must have at least one approved creative before submission');
     }
 
     this.validateTransition(campaign.status, 'submitted');

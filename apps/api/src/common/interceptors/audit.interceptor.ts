@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import {
   Injectable,
   NestInterceptor,
@@ -107,6 +108,5 @@ function hashIp(req: Record<string, any>): string | undefined {
     req.connection?.remoteAddress;
   if (!ip || ip === 'unknown') return undefined;
 
-  const crypto = require('crypto');
   return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);
 }
