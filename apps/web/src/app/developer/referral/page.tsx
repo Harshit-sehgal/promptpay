@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { referralApi } from '@/lib/api/services';
-import { LoadingSpinner } from '@/components';
+import { LoadingSpinner, StatusBadge } from '@/components';
 import { formatCurrency, formatDate } from '@/lib/format';
 
 interface ReferralData {
@@ -40,14 +40,6 @@ export default function ReferralPage() {
       navigator.clipboard.writeText(data.referralLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case 'rewarded': return 'bg-emerald-50 border-emerald-200/60 text-emerald-600';
-      case 'pending': return 'bg-amber-50 border-amber-200/60 text-amber-600';
-      default: return 'bg-surface-50 border-surface-200/60 text-surface-500';
     }
   };
 
@@ -137,9 +129,7 @@ export default function ReferralPage() {
                           <p className="text-surface-400 text-xs font-mono mt-0.5">{r.referredEmail}</p>
                         </td>
                         <td className="px-5 py-3.5">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusBadge(r.status)}`}>
-                            {r.status}
-                          </span>
+                          <StatusBadge status={r.status} />
                         </td>
                         <td className="px-5 py-3.5 text-surface-500">{formatDate(r.createdAt)}</td>
                         <td className="px-5 py-3.5 text-right text-emerald-600 font-mono font-bold">

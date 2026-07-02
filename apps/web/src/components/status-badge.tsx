@@ -1,47 +1,59 @@
 export function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    // Campaign statuses
-    draft: 'bg-ink-600 text-ink-200',
-    submitted: 'bg-yellow-500/20 text-yellow-400',
-    approved: 'bg-blue-500/20 text-blue-400',
-    active: 'bg-emerald-500/20 text-emerald-400',
-    paused: 'bg-amber-500/20 text-amber-400',
-    rejected: 'bg-red-500/20 text-red-400',
-    archived: 'bg-ink-600 text-ink-400',
-    // Payout statuses
-    requested: 'bg-yellow-500/20 text-yellow-400',
-    under_review: 'bg-blue-500/20 text-blue-400',
-    processing: 'bg-purple-500/20 text-purple-400',
-    paid: 'bg-emerald-500/20 text-emerald-400',
-    failed: 'bg-red-500/20 text-red-400',
-    cancelled: 'bg-ink-600 text-ink-400',
-    // Fraud statuses
-    open: 'bg-red-500/20 text-red-400',
-    reviewing: 'bg-yellow-500/20 text-yellow-400',
-    resolved_valid: 'bg-orange-500/20 text-orange-400',
-    resolved_invalid: 'bg-emerald-500/20 text-emerald-400',
-    escalated: 'bg-red-500/20 text-red-400',
-    // Earning statuses
-    estimated: 'bg-ink-600 text-ink-200',
-    pending: 'bg-yellow-500/20 text-yellow-400',
-    confirmed: 'bg-emerald-500/20 text-emerald-400',
-    held: 'bg-amber-500/20 text-amber-400',
-    reversed: 'bg-red-500/20 text-red-400',
-    void: 'bg-ink-600 text-ink-400',
-    // Trust levels
-    new: 'bg-ink-600 text-ink-200',
-    normal: 'bg-blue-500/20 text-blue-400',
-    high_trust: 'bg-emerald-500/20 text-emerald-400',
-    low_trust: 'bg-amber-500/20 text-amber-400',
-    restricted: 'bg-red-500/20 text-red-400',
-    banned: 'bg-red-500/20 text-red-400',
+  const normalizedStatus = status.toLowerCase();
+
+  // Group statuses into semantic buckets for clean, professional, and accessible badges
+  const getBadgeStyle = (s: string) => {
+    switch (s) {
+      // Positive / Success
+      case 'active':
+      case 'paid':
+      case 'confirmed':
+      case 'approved':
+      case 'resolved_invalid':
+      case 'high_trust':
+        return 'bg-emerald-50 border-emerald-200/60 text-emerald-700';
+
+      // Warning / Pending
+      case 'submitted':
+      case 'requested':
+      case 'reviewing':
+      case 'pending':
+      case 'paused':
+      case 'held':
+      case 'low_trust':
+        return 'bg-amber-50 border-amber-200/60 text-amber-700';
+
+      // Error / Critical
+      case 'rejected':
+      case 'failed':
+      case 'open':
+      case 'escalated':
+      case 'reversed':
+      case 'restricted':
+      case 'banned':
+        return 'bg-rose-50 border-rose-200/60 text-rose-700';
+
+      // Neutral / Informational
+      case 'draft':
+      case 'archived':
+      case 'under_review':
+      case 'processing':
+      case 'cancelled':
+      case 'void':
+      case 'new':
+      case 'normal':
+      default:
+        return 'bg-slate-50 border-slate-200 text-slate-600';
+    }
   };
 
-  const colorClass = colors[status] || 'bg-ink-600 text-ink-200';
+  const badgeStyle = getBadgeStyle(normalizedStatus);
 
   return (
-    <span className={`px-2 py-1 rounded text-xs font-medium ${colorClass}`}>
-      {status.replace(/_/g, ' ')}
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${badgeStyle} tracking-tight`}
+    >
+      {normalizedStatus.replace(/_/g, ' ')}
     </span>
   );
 }
