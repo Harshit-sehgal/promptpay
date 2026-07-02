@@ -25,7 +25,7 @@ export class ApiClient {
     const fingerprint = require('crypto').createHash('sha256').update(`cli-${hostname}`).digest('hex');
 
     const res = await this.raw<{ id: string }>('POST', '/extension/register-device', {
-      toolType: 'vscode',
+      toolType: 'terminal',
       fingerprintHash: fingerprint,
       extensionVersion: '0.0.1',
       platform: os.platform() || 'unknown',
@@ -190,4 +190,27 @@ export class ApiClient {
       req.end();
     });
   }
+}
+
+/**
+ * Map user-supplied tool names to valid ToolType enum values.
+ * Common AI tools → their enum value; unknown → 'terminal' (generic catch-all).
+ */
+function normalizeToolType(raw: string): string {
+  const TOOL_MAP: Record<string, string> = {
+    claude_code: 'claude_code',
+    'claude-code': 'claude_code',
+    codex_cli: 'codex_cli',
+    'codex-cli': 'codex_cli',
+    codex: 'codex_cli',
+    cursor: 'cursor',
+    cline: 'cline',
+    windsurf: 'windsurf',
+    aider: 'aider',
+    vscode: 'vscode',
+    terminal: 'terminal',
+    browser: 'browser',
+  };
+  const key = raw.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+  return TOOL_MAP[key] ?? 'terminal';
 }
