@@ -3,6 +3,11 @@ import * as vscode from 'vscode';
 export class AdPanel {
   private panel?: vscode.WebviewPanel;
   private onComplete?: (clicked: boolean) => void;
+  // One-shot guard. The dispose handler races with the click handler — VS Code may
+  // dispose the panel after a click has already fired (or vice versa). Without this
+  // flag, `recordClick` and `recordImpressionEnd` would each fire twice and the
+  // server would return idempotency-rejected duplicates (or, worse, ledger drift).
+  private completed = false;
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -20,6 +25,7 @@ export class AdPanel {
     onComplete: (clicked: boolean) => void,
   ) {
     this.onComplete = onComplete;
+    this.completed = false;
 
     this.panel = vscode.window.createWebviewPanel(
       'waitlayerAd',
@@ -34,12 +40,20 @@ export class AdPanel {
     this.panel.webview.html = renderHtml(ad, this.panel.webview);
     this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg.type === 'click') {
-        this.onComplete?.(true);
+        this.fireComplete(true);
       }
     });
     this.panel.onDidDispose(() => {
-      this.onComplete?.(false);
+      this.fireComplete(false);
     });
+  }
+
+  /** Dispatch the completion callback at most once. Subsequent calls (from a
+   *  racing dispose handler, repeated click events, etc.) are ignored. */
+  private fireComplete(clicked: boolean): void {
+    if (this.completed) return;
+    this.completed = true;
+    this.onComplete?.(clicked);
   }
 
   hide() {

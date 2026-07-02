@@ -252,6 +252,9 @@ describe('End-to-End HTTP Integration Flow', () => {
   });
 
   describe('2. Campaign Creation & Approval Flow', () => {
+    let cpcCampaignId: string;
+    let cpcCreativeId: string;
+
     it('should create an advertiser profile automatically', async () => {
       const res = await request(app.getHttpServer())
         .get('/api/v1/advertiser/profile')
@@ -262,12 +265,12 @@ describe('End-to-End HTTP Integration Flow', () => {
       advertiserId = res.body.id;
     });
 
-    it('should create a new draft campaign', async () => {
+    it('should create a new draft CPM campaign', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/advertiser/campaigns')
         .set('Authorization', `Bearer ${advertiserToken}`)
         .send({
-          name: 'E2E Testing Campaign',
+          name: 'E2E CPM Campaign',
           category: 'technology',
           bidType: BidType.CPM,
           currency: 'USD',
@@ -281,7 +284,25 @@ describe('End-to-End HTTP Integration Flow', () => {
       campaignId = res.body.id;
     });
 
-    it('should add a creative to the draft campaign', async () => {
+    it('should create a new draft CPC campaign', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/advertiser/campaigns')
+        .set('Authorization', `Bearer ${advertiserToken}`)
+        .send({
+          name: 'E2E CPC Campaign',
+          category: 'technology',
+          bidType: BidType.CPC,
+          currency: 'USD',
+          bidAmountMinor: 500, // $5.00 per click
+          budgetTotalMinor: 10000, // $100.00 total budget
+        })
+        .expect(201);
+
+      expect(res.body.id).toBeDefined();
+      cpcCampaignId = res.body.id;
+    });
+
+    it('should add a creative to the draft CPM campaign', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/campaigns/${campaignId}/creatives`)
         .set('Authorization', `Bearer ${advertiserToken}`)
@@ -298,59 +319,84 @@ describe('End-to-End HTTP Integration Flow', () => {
       creativeId = res.body.id;
     });
 
-    it('should set country targeting for the campaign', async () => {
+    it('should add a creative to the draft CPC campaign', async () => {
       const res = await request(app.getHttpServer())
-        .post(`/api/v1/campaigns/${campaignId}/targeting/countries`)
+        .post(`/api/v1/campaigns/${cpcCampaignId}/creatives`)
         .set('Authorization', `Bearer ${advertiserToken}`)
-        .send([
-          { countryCode: 'US', include: true },
-          { countryCode: 'CA', include: true },
-        ])
+        .send({
+          title: 'Click-Based Offer',
+          sponsoredMessage: 'Get $5 back per visit',
+          destinationUrl: 'https://click.promo/offer',
+          displayDomain: 'click.promo',
+        })
         .expect(200);
 
-      expect(res.body.length).toBe(2);
+      expect(res.body.id).toBeDefined();
+      cpcCreativeId = res.body.id;
     });
 
-    it('should submit the campaign for review', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/api/v1/advertiser/campaigns/${campaignId}/submit`)
-        .set('Authorization', `Bearer ${advertiserToken}`);
-
-      if (res.status !== 201) {
-        console.error('submitCampaign failed with body:', res.body);
+    it('should set country targeting for both campaigns', async () => {
+      for (const id of [campaignId, cpcCampaignId]) {
+        const res = await request(app.getHttpServer())
+          .post(`/api/v1/campaigns/${id}/targeting/countries`)
+          .set('Authorization', `Bearer ${advertiserToken}`)
+          .send([
+            { countryCode: 'US', include: true },
+            { countryCode: 'CA', include: true },
+          ])
+          .expect(200);
+        expect(res.body.length).toBe(2);
       }
-      expect(res.status).toBe(201);
-      expect(res.body.status).toBe('submitted');
+    });
 
-      // Check creative status is now pending_review
+    it('should submit both campaigns for review', async () => {
+      for (const id of [campaignId, cpcCampaignId]) {
+        const res = await request(app.getHttpServer())
+          .post(`/api/v1/advertiser/campaigns/${id}/submit`)
+          .set('Authorization', `Bearer ${advertiserToken}`);
+
+        if (res.status !== 201) {
+          console.error('submitCampaign failed with body:', res.body);
+        }
+        expect(res.status).toBe(201);
+        expect(res.body.status).toBe('submitted');
+      }
+
+      // Check creatives are now pending_review
       const creative = await prisma.adCreative.findUnique({ where: { id: creativeId } });
       expect(creative?.status).toBe('pending_review');
+      const cpcCreative = await prisma.adCreative.findUnique({ where: { id: cpcCreativeId } });
+      expect(cpcCreative?.status).toBe('pending_review');
     });
 
-    it('should allow admin to approve creative and campaign', async () => {
-      // Approve Creative
-      const crApprove = await request(app.getHttpServer())
-        .post(`/api/v1/campaigns/creatives/${creativeId}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`);
-      if (crApprove.status !== 200) {
-        console.error('approveCreative failed with body:', crApprove.body);
+    it('should allow admin to approve creatives and both campaigns', async () => {
+      for (const id of [creativeId, cpcCreativeId]) {
+        const crApprove = await request(app.getHttpServer())
+          .post(`/api/v1/campaigns/creatives/${id}/approve`)
+          .set('Authorization', `Bearer ${adminToken}`);
+        if (crApprove.status !== 200) {
+          console.error('approveCreative failed with body:', crApprove.body);
+        }
+        expect(crApprove.status).toBe(200);
       }
-      expect(crApprove.status).toBe(200);
 
-      // Approve Campaign
-      const approveRes = await request(app.getHttpServer())
-        .post(`/api/v1/admin/campaigns/${campaignId}/approve`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ reason: 'Good content' });
+      for (const id of [campaignId, cpcCampaignId]) {
+        const approveRes = await request(app.getHttpServer())
+          .post(`/api/v1/admin/campaigns/${id}/approve`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({ reason: 'Good content' });
 
-      if (approveRes.status !== 201) {
-        console.error('approveCampaign failed with body:', approveRes.body);
+        if (approveRes.status !== 201) {
+          console.error('approveCampaign failed with body:', approveRes.body);
+        }
+        expect(approveRes.status).toBe(201);
       }
-      expect(approveRes.status).toBe(201);
 
-      // Campaign should transition to active as it has an approved creative
-      const updatedCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
-      expect(updatedCampaign?.status).toBe('active');
+      // Both campaigns should be active
+      const cpmCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
+      expect(cpmCampaign?.status).toBe('active');
+      const cpcCampaign = await prisma.campaign.findUnique({ where: { id: cpcCampaignId } });
+      expect(cpcCampaign?.status).toBe('active');
     });
 
     it('should prevent unauthorized users from accessing campaign stats', async () => {
@@ -401,6 +447,8 @@ describe('End-to-End HTTP Integration Flow', () => {
   describe('3. Ad Serving & Impression Logging Loop', () => {
     const sessionId = 'test-session-123';
     const waitStateId = 'wait-state-456';
+    const cpcWaitStateId = 'cpc-wait-state-789';
+    let cpcImpressionToken: string;
 
     it('should register a developer device', async () => {
       const res = await request(app.getHttpServer())
@@ -437,7 +485,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       expect(res.body.id).toBeDefined();
     });
 
-    it('should serve an active campaign ad on request', async () => {
+    it('should serve the CPM campaign ad on request', async () => {
       const adReqPayload = {
         deviceId,
         sessionId,
@@ -455,12 +503,11 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       expect(res.body.ad).toBeDefined();
       expect(res.body.ad.impressionToken).toBeDefined();
-      expect(res.body.ad.campaignId).toBe(campaignId);
-      expect(res.body.ad.creativeId).toBe(creativeId);
+      expect(res.body.ad.campaignId).toBe(campaignId); // CPM campaign
       impressionToken = res.body.ad.impressionToken;
     });
 
-    it('should record ad rendered event', async () => {
+    it('should record ad rendered event (CPM)', async () => {
       const renderPayload = {
         impressionToken,
         renderedAt: new Date().toISOString(),
@@ -479,7 +526,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       expect(res.body.renderedAt).toBeDefined();
     });
 
-    it('should record qualified impression, triggering ledger splits', async () => {
+    it('should record qualified impression (CPM), triggering ledger splits', async () => {
       const impressionPayload = {
         impressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -528,7 +575,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       expect(reserveEntry?.amountMinor).toBe(200);
     });
 
-    it('should record ad click event', async () => {
+    it('should record ad click event on CPM impression (no extra charge)', async () => {
       const clickPayload = {
         impressionToken,
         clickedAt: new Date().toISOString(),
@@ -545,9 +592,276 @@ describe('End-to-End HTTP Integration Flow', () => {
       expect(res.body.clicked).toBe(true);
       expect(res.body.clickId).toBeDefined();
     });
+
+    // ── CPC Campaign Flow ──
+
+    it('should log a CPC wait state start', async () => {
+      const startPayload = {
+        deviceId,
+        sessionId,
+        toolType: 'vscode',
+        waitStateId: cpcWaitStateId,
+        idempotencyKey: `start-${cpcWaitStateId}`,
+      };
+      const signature = signPayload(startPayload, HMAC_SECRET);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/start')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...startPayload, signature })
+        .expect(200);
+    });
+
+    it('should serve the CPC campaign ad on request', async () => {
+      const adReqPayload = {
+        deviceId,
+        sessionId,
+        waitStateId: cpcWaitStateId,
+        toolType: 'vscode',
+        idempotencyKey: `ad-req-${cpcWaitStateId}`,
+      };
+      const signature = signPayload(adReqPayload, HMAC_SECRET);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-request')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...adReqPayload, signature })
+        .expect(200);
+
+      expect(res.body.ad).toBeDefined();
+      expect(res.body.ad.campaignId).toBe(cpcCampaignId);
+      cpcImpressionToken = res.body.ad.impressionToken;
+    });
+
+    it('should record ad rendered event (CPC)', async () => {
+      const renderPayload = {
+        impressionToken: cpcImpressionToken,
+        renderedAt: new Date().toISOString(),
+        visibleSurface: 100,
+        idempotencyKey: `render-${cpcWaitStateId}`,
+      };
+      const signature = signPayload(renderPayload, HMAC_SECRET);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-rendered')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...renderPayload, signature })
+        .expect(200);
+    });
+
+    it('should qualify CPC impression (no CPM charge)', async () => {
+      const impressionPayload = {
+        impressionToken: cpcImpressionToken,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: `imp-${cpcWaitStateId}`,
+      };
+      const signature = signPayload(impressionPayload, HMAC_SECRET);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/extension/impression-qualified')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...impressionPayload, signature });
+
+      expect(res.status).toBe(200);
+      expect(res.body.qualified).toBe(true);
+      // CPC campaigns don't charge on qualification — no ledger entries should be created for earnings
+      const newDevisions = await prisma.earningsLedger.findMany({
+        where: { userId: devUserId, status: 'estimated' },
+      });
+      // Still just the CPM entry from earlier (1 estimated entry)
+      expect(newDevisions.length).toBe(1);
+    });
+
+    it('should record click on CPC impression, triggering ledger splits', async () => {
+      const oldDevEarnings = await prisma.earningsLedger.findMany({
+        where: { userId: devUserId, status: 'estimated' },
+      });
+
+      const clickPayload = {
+        impressionToken: cpcImpressionToken,
+        clickedAt: new Date().toISOString(),
+        idempotencyKey: `click-${cpcWaitStateId}`,
+      };
+      const signature = signPayload(clickPayload, HMAC_SECRET);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/extension/click')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...clickPayload, signature })
+        .expect(200);
+
+      expect(res.body.clicked).toBe(true);
+
+      // CPC bid = $5.00 (500 minor). Split: dev=60%=300, platform=30%=150, reserve=10%=50
+      const newDevEarnings = await prisma.earningsLedger.findMany({
+        where: { userId: devUserId, status: 'estimated' },
+      });
+      expect(newDevEarnings.length).toBe(oldDevEarnings.length + 1);
+
+      const cpcEarning = newDevEarnings.find(e => !oldDevEarnings.map(o => o.id).includes(e.id));
+      expect(cpcEarning?.amountMinor).toBe(300);
+
+      // Advertiser debit for CPC click
+      const advDebits = await prisma.advertiserLedger.findMany({
+        where: { advertiserId, entryType: 'debit' },
+      });
+      // Two debits: one CPM (2000) + one CPC click (500)
+      expect(advDebits.length).toBe(2);
+      const cpcDebit = await prisma.advertiserLedger.findFirst({
+        where: { advertiserId, entryType: 'debit', amountMinor: 500 },
+      });
+      expect(cpcDebit).toBeDefined();
+    });
   });
 
-  describe('4. Ledger Maturation & Payouts', () => {
+  describe('4. Cross-User Ownership Checks', () => {
+    // Register a second developer, get an impression, verify ad-rendered/qualified/click
+    // are 403-rejected for the wrong user.
+    let dev2Token: string;
+    let dev2UserId: string;
+    let dev2DeviceId: string;
+    let dev2ImpressionToken: string;
+
+    it('should register a second developer', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/signup')
+        .send({
+          email: 'dev2@waitlayer.com',
+          password: 'password123',
+          role: UserRole.DEVELOPER,
+          name: 'Dev Two',
+          country: 'US',
+        })
+        .expect(201);
+      dev2UserId = res.body.user.id;
+
+      const loginRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: 'dev2@waitlayer.com', password: 'password123' })
+        .expect(200);
+      dev2Token = loginRes.body.accessToken);
+    });
+
+    it('should register second developer device and get impression', async () => {
+      const devRes = await request(app.getHttpServer())
+        .post('/api/v1/extension/register-device')
+        .set('Authorization', `Bearer ${dev2Token}`)
+        .send({
+          toolType: 'vscode',
+          fingerprintHash: 'dev2-fingerprint',
+          extensionVersion: '1.0.0',
+          platform: 'linux',
+        })
+        .expect(200);
+      dev2DeviceId = devRes.body.id;
+
+      const adReqPayload = {
+        deviceId: dev2DeviceId,
+        sessionId: 'dev2-session',
+        waitStateId: 'dev2-wait',
+        toolType: 'vscode',
+        idempotencyKey: 'dev2-ad-req',
+      };
+      const signature = signPayload(adReqPayload, HMAC_SECRET);
+      const adRes = await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-request')
+        .set('Authorization', `Bearer ${dev2Token}`)
+        .send({ ...adReqPayload, signature })
+        .expect(200);
+      dev2ImpressionToken = adRes.body.ad.impressionToken;
+    });
+
+    it('should block cross-user ad-rendered (403)', async () => {
+      const renderPayload = {
+        impressionToken: dev2ImpressionToken,
+        renderedAt: new Date().toISOString(),
+        idempotencyKey: 'dev2-render',
+      };
+      const signature = signPayload(renderPayload, HMAC_SECRET);
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-rendered')
+        .set('Authorization', `Bearer ${devToken}`) // dev token, dev2 impression — wrong
+        .send({ ...renderPayload, signature })
+        .expect(403);
+    });
+
+    it('should block cross-user impression-qualified (403)', async () => {
+      const impPayload = {
+        impressionToken: dev2ImpressionToken,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'dev2-imp',
+      };
+      const signature = signPayload(impPayload, HMAC_SECRET);
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/impression-qualified')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...impPayload, signature })
+        .expect(403);
+    });
+
+    it('should block cross-user click (403)', async () => {
+      const clickPayload = {
+        impressionToken: dev2ImpressionToken,
+        clickedAt: new Date().toISOString(),
+        idempotencyKey: 'dev2-click',
+      };
+      const signature = signPayload(clickPayload, HMAC_SECRET);
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/click')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...clickPayload, signature })
+        .expect(403);
+    });
+  });
+
+  describe('5. Budget Exhaustion Guard', () => {
+    it('should exhaust CPM campaign budget and reject next qualified impression', async () => {
+      // Current campaign: CPM bid 2000, total budget 50000, already spent 2000 → remaining 48000
+      // Qualify 24 more impressions at 2000 each = 48000 → exhaust
+      for (let i = 0; i < 24; i++) {
+        const wsId = `ws-${i}`;
+        // ad-request
+        const adReqPayload = { deviceId, sessionId: `s-${i}`, waitStateId: wsId, toolType: 'vscode', idempotencyKey: `ad-${wsId}` };
+        const sig = signPayload(adReqPayload, HMAC_SECRET);
+        const adRes = await request(app.getHttpServer())
+          .post('/api/v1/extension/ad-request')
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ ...adReqPayload, signature: sig })
+          .expect(200);
+        const t = adRes.body.ad.impressionToken;
+
+        // rendered
+        const rp = { impressionToken: t, renderedAt: new Date().toISOString(), idempotencyKey: `r-${wsId}` };
+        await request(app.getHttpServer()).post('/api/v1/extension/ad-rendered')
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ ...rp, signature: signPayload(rp, HMAC_SECRET) })
+          .expect(200);
+
+        // qualified (CPM charge)
+        const ip = { impressionToken: t, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: `i-${wsId}` };
+        signPayload(ip, HMAC_SECRET);
+        await request(app.getHttpServer()).post('/api/v1/extension/impression-qualified')
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ ...ip, signature: signPayload(ip, HMAC_SECRET) });
+      }
+
+      // Now budget should be 50000 → request one more ad should fail (no eligible)
+      const adReqPayload = { deviceId, sessionId: 'final', waitStateId: 'final-ws', toolType: 'vscode', idempotencyKey: 'final-ad' };
+      const sig = signPayload(adReqPayload, HMAC_SECRET);
+      const adRes = await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-request')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...adReqPayload, signature: sig })
+        .expect(200);
+      // No eligible campaign → ad=null
+      expect(adRes.body.ad).toBeNull();
+      expect(adRes.body.reason).toBe('no_eligible_campaign');
+    });
+  });
+
+  describe('6. Ledger Maturation & Payouts', () => {
     it('should mature estimated developer earnings', async () => {
       // Manually set the earnings entry availableAt to past date to mature it
       await prisma.earningsLedger.update({

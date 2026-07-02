@@ -206,6 +206,10 @@ const mockPrisma = {
     create: vi.fn(),
   },
 
+  // Raw SQL — used for atomic budget guards. Default return = 1 (row updated).
+  $executeRawUnsafe: vi.fn(async (_sql: string, ..._params: any[]) => 1),
+  $executeRaw: vi.fn(async (_tpl: any, ..._vals: any[]) => 1),
+
   // $transaction — mimic the real one: accepts either array or callback
   $transaction: vi.fn(async (arg: any) => {
     if (typeof arg === 'function') return arg(mockPrisma);
@@ -753,7 +757,7 @@ describe('E2E Money Loop', () => {
       };
       const signed = { ...payload, signature: hmacSign(payload) };
 
-      const result = await svc.extension.recordQualifiedImpression(signed);
+      const result = await svc.extension.recordQualifiedImpression(DEV_USER_ID, signed);
       expect(result.qualified).toBe(true);
       expect(result.impressionId).toBe(IMPRESSION_ID);
 
@@ -803,7 +807,7 @@ describe('E2E Money Loop', () => {
       };
       const signed = { ...payload, signature: hmacSign(payload) };
 
-      const result = await svc.extension.recordQualifiedImpression(signed);
+      const result = await svc.extension.recordQualifiedImpression(DEV_USER_ID, signed);
       expect(result.qualified).toBe(false);
       expect(result.reason).toBe('minimum_duration_not_met');
       expect(result.minimumRequired).toBe(5000);
@@ -828,7 +832,7 @@ describe('E2E Money Loop', () => {
       };
       const signed = { ...payload, signature: hmacSign(payload) };
 
-      const result = await svc.extension.recordQualifiedImpression(signed);
+      const result = await svc.extension.recordQualifiedImpression(DEV_USER_ID, signed);
       expect(result.qualified).toBe(false);
       expect(result.reason).toMatch(/fraud|limit/i);
     });
@@ -921,7 +925,7 @@ describe('E2E Money Loop', () => {
       };
       const signed = { ...payload, signature: hmacSign(payload) };
 
-      const result = await svc.extension.recordClick(signed);
+      const result = await svc.extension.recordClick(DEV_USER_ID, signed);
       expect(result.clicked).toBe(true);
 
       // CPC campaigns generate advertiser debit + developer credit
@@ -1205,7 +1209,7 @@ describe('E2E Money Loop', () => {
         impressionToken, renderedAt: new Date().toISOString(),
         idempotencyKey: 'idem-e2e-rend',
       };
-      await svc.extension.recordRendered({ ...rendPayload, signature: hmacSign(rendPayload) });
+      await svc.extension.recordRendered(devUserId, { ...rendPayload, signature: hmacSign(rendPayload) });
 
       // ── Step 11: Qualified impression → MONEY MOVES ──
       mockPrisma.adImpression.count.mockResolvedValue(5); // under fraud limit
@@ -1246,7 +1250,7 @@ describe('E2E Money Loop', () => {
         impressionToken, qualifiedAt: new Date().toISOString(),
         visibleDurationMs: 8000, idempotencyKey: 'idem-e2e-qual',
       };
-      const qualResult = await svc.extension.recordQualifiedImpression({
+      const qualResult = await svc.extension.recordQualifiedImpression(devUserId, {
         ...qualPayload, signature: hmacSign(qualPayload),
       });
       expect(qualResult.qualified).toBe(true);
@@ -1394,11 +1398,12 @@ describe('E2E Money Loop', () => {
       const token = 'token-cpc-123';
       const hash = require('crypto').createHash('sha256').update(token).digest('hex');
 
+      const cpcDevUserId = 'cpc-dev-user';
       mockPrisma.adImpression.findUnique.mockResolvedValue({
         id: impId,
         campaignId: uid('c'),
         creativeId: uid('cr'),
-        userId: uid('u'),
+        userId: cpcDevUserId,
         deviceId: uid('dev'),
         sessionId: uid('sess'),
         impressionTokenHash: hash,
@@ -1428,7 +1433,7 @@ describe('E2E Money Loop', () => {
       };
       const signedImpPayload = { ...signedImp, signature: hmacSign(signedImp) };
 
-      const impResult = await svc.extension.recordQualifiedImpression(signedImpPayload);
+      const impResult = await svc.extension.recordQualifiedImpression(cpcDevUserId, signedImpPayload);
       expect(impResult.qualified).toBe(true);
 
       // Verify NO ledger entries were created during qualification
@@ -1454,7 +1459,7 @@ describe('E2E Money Loop', () => {
         id: impId,
         campaignId: uid('c'),
         creativeId: uid('cr'),
-        userId: uid('u'),
+        userId: cpcDevUserId,
         deviceId: uid('dev'),
         sessionId: uid('sess'),
         impressionTokenHash: hash,
@@ -1475,7 +1480,7 @@ describe('E2E Money Loop', () => {
       };
       const signedClickPayload = { ...signedClick, signature: hmacSign(signedClick) };
 
-      const clickResult = await svc.extension.recordClick(signedClickPayload);
+      const clickResult = await svc.extension.recordClick(cpcDevUserId, signedClickPayload);
       expect(clickResult.clicked).toBe(true);
 
       // Verify CPC click charged advertiser & credited user & platform & reserve

@@ -93,7 +93,11 @@ export function activate(context: vscode.ExtensionContext) {
           idempotencyKey: `render-${ad.impressionToken}`,
         });
 
-        // 5. Show ad in panel
+        // 5. Show ad in panel.
+        // Order: qualify (CPM/billboard) FIRST, then click (CPC charge). The server already
+        // rejects un-qualified clicks (recordClick throws "Impression not yet qualified"),
+        // so this client order means CPC double-billing is impossible: we never fire a
+        // click record until the impression is qualified.
         panel.show({
           headline: ad.title,
           message: ad.message,
@@ -101,11 +105,11 @@ export function activate(context: vscode.ExtensionContext) {
           ctaUrl: ad.destinationUrl,
           impressionToken: ad.impressionToken,
         }, async (clicked) => {
+          // Always qualify first — CPM bills here; CPC uses qualifiedAt as a gate.
+          await api.recordImpressionEnd(ad.impressionToken, 5000);
           if (clicked) {
             await api.recordClick(ad.impressionToken);
           }
-          await api.recordImpressionEnd(ad.impressionToken, 5000);
-
           // Signal wait-state end after ad interaction completes
           await api.waitStateEnd({
             waitStateId: event.waitStateId,

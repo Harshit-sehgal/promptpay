@@ -254,30 +254,11 @@ export class PayoutService {
       if (remaining <= 0) break;
       const allocAmount = Math.min(entry.amountMinor, remaining);
 
-      if (allocAmount < entry.amountMinor) {
-        // Splitting required: reduce the original entry to match allocAmount,
-        // and spawn a new remainder entry in the confirmed state.
-        const remainder = entry.amountMinor - allocAmount;
-        await tx.earningsLedger.update({
-          where: { id: entry.id },
-          data: { amountMinor: allocAmount },
-        });
-
-        await tx.earningsLedger.create({
-          data: {
-            userId: entry.userId,
-            amountMinor: remainder,
-            currency: entry.currency,
-            entryType: entry.entryType,
-            status: 'confirmed',
-            description: entry.description 
-              ? `${entry.description} (split remainder)` 
-              : 'Remaining balance after partial payout allocation',
-            idempotencyKey: `${entry.idempotencyKey || entry.id}-split-${Date.now()}`,
-            createdAt: entry.createdAt, // Preserve original creation timestamp
-          },
-        });
-      }
+      // Immutable allocation: do NOT mutate EarningsLedger.amountMinor.
+      // The PayoutAllocation row tracks how much was drawn from this entry.
+      // Future allocations skip this entry (excludeIds already guards it).
+      // Partial allocations are allowed — the user's remaining earnings are
+      // just the next confirmed entries in the pool. No remainder splitting.
 
       allocations.push({
         earningsEntryId: entry.id,

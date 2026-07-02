@@ -56,20 +56,29 @@ export class ExtensionController {
 
   @Post('ad-rendered')
   @HttpCode(HttpStatus.OK)
-  recordRendered(@Body() dto: AdRenderedDto) {
-    return this.service.recordRendered(dto);
+  recordRendered(
+    @CurrentUser('id') userId: string,
+    @Body() dto: AdRenderedDto,
+  ) {
+    return this.service.recordRendered(userId, dto);
   }
 
   @Post('impression-qualified')
   @HttpCode(HttpStatus.OK)
-  recordQualifiedImpression(@Body() dto: QualifiedImpressionDto) {
-    return this.service.recordQualifiedImpression(dto);
+  recordQualifiedImpression(
+    @CurrentUser('id') userId: string,
+    @Body() dto: QualifiedImpressionDto,
+  ) {
+    return this.service.recordQualifiedImpression(userId, dto);
   }
 
   @Post('click')
   @HttpCode(HttpStatus.OK)
-  recordClick(@Body() dto: AdClickDto) {
-    return this.service.recordClick(dto);
+  recordClick(
+    @CurrentUser('id') userId: string,
+    @Body() dto: AdClickDto,
+  ) {
+    return this.service.recordClick(userId, dto);
   }
 
   @Post('report-ad')

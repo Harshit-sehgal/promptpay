@@ -354,7 +354,7 @@ export class ExtensionService {
 
   // ── Ad Event Tracking ──
 
-  async recordRendered(dto: {
+  async recordRendered(userId: string, dto: {
     impressionToken: string;
     renderedAt: string;
     visibleSurface?: number;
@@ -372,6 +372,12 @@ export class ExtensionService {
       where: { impressionTokenHash: hash },
     });
     if (!impression) throw new NotFoundException('Impression not found');
+    // Ownership: rendering must be initiated by the impression's owner. Without
+    // this, a leaked impressionToken could be replayed by user A to mark user B's
+    // impression as rendered (and short-circuit fraud-detection timeline checks).
+    if (impression.userId !== userId) {
+      throw new ForbiddenException('You do not own this impression');
+    }
     if (impression.renderedAt) return impression; // Already recorded
 
     return this.prisma.adImpression.update({
@@ -383,7 +389,7 @@ export class ExtensionService {
     });
   }
 
-  async recordQualifiedImpression(dto: {
+  async recordQualifiedImpression(userId: string, dto: {
     impressionToken: string;
     qualifiedAt: string;
     visibleDurationMs: number;
@@ -416,6 +422,12 @@ export class ExtensionService {
       },
     });
     if (!impression) throw new NotFoundException('Impression not found');
+    // Ownership: billing events MUST be initiated by the impression's owner.
+    // Otherwise the (advertiser debit + developer credit) would credit user B
+    // for an impression requested by user A — a direct money-fraud vector.
+    if (impression.userId !== userId) {
+      throw new ForbiddenException('You do not own this impression');
+    }
     if (impression.qualifiedAt) return { qualified: true, impressionId: impression.id, alreadyQualified: true };
 
     // Fraud check via rate limits
@@ -458,19 +470,30 @@ export class ExtensionService {
     const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const idempotencyBase = `imp-${impression.id}`;
 
-    // Single atomic transaction: impression update + all ledger entries + campaign spend
-    await this.prisma.$transaction([
+    // Single atomic transaction: impression update + all ledger entries + campaign spend.
+    // The spend guard uses raw SQL UPDATE…WHERE so two concurrent CPM impressions
+    // cannot both pass the JS pre-flight check and exceed budgetTotalMinor.
+    // $executeRaw returns row count: 0 means the WHERE rejected (budget full).
+    const billed = await this.prisma.$transaction(async (tx) => {
+      // (0) Atomic spend increment — rejects when budget would overflow.
+      const spent: number = await (tx as any).$executeRawUnsafe(
+        `UPDATE "Campaign" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+        impression.campaign.bidAmountMinor,
+        impression.campaignId,
+      );
+      if (spent === 0) return false; // budget exhausted — mark not billable below
+
       // (1) Mark impression as billable qualified
-      this.prisma.adImpression.update({
+      await tx.adImpression.update({
         where: { id: impression.id },
         data: {
           qualifiedAt: new Date(dto.qualifiedAt),
           visibleDurationMs: dto.visibleDurationMs,
           isBillable: true,
         },
-      }),
+      });
       // (2) Debit advertiser balance
-      this.prisma.advertiserLedger.create({
+      await tx.advertiserLedger.create({
         data: {
           advertiserId: impression.campaign.advertiserId,
           campaignId: impression.campaignId,
@@ -481,9 +504,9 @@ export class ExtensionService {
           idempotencyKey: `${idempotencyBase}-adv`,
           description: `Impression ${impression.id} - campaign ${impression.campaignId}`,
         },
-      }),
+      });
       // (3) Credit developer (estimated until hold expires)
-      this.prisma.earningsLedger.create({
+      await tx.earningsLedger.create({
         data: {
           userId: impression.userId,
           campaignId: impression.campaignId,
@@ -496,9 +519,9 @@ export class ExtensionService {
           idempotencyKey: `${idempotencyBase}-usr`,
           description: 'Earnings from qualified impression',
         },
-      }),
+      });
       // (4) Credit platform fee
-      this.prisma.platformLedger.create({
+      await tx.platformLedger.create({
         data: {
           campaignId: impression.campaignId,
           entryType: 'credit',
@@ -510,9 +533,9 @@ export class ExtensionService {
           idempotencyKey: `${idempotencyBase}-plt`,
           description: 'Platform fee from impression',
         },
-      }),
+      });
       // (5) Credit fraud/payment reserve
-      this.prisma.platformLedger.create({
+      await tx.platformLedger.create({
         data: {
           campaignId: impression.campaignId,
           entryType: 'credit',
@@ -524,18 +547,22 @@ export class ExtensionService {
           idempotencyKey: `${idempotencyBase}-res`,
           description: 'Fraud/payment reserve from impression',
         },
-      }),
-      // (6) Increment campaign spend
-      this.prisma.campaign.update({
-        where: { id: impression.campaignId },
-        data: { budgetSpentMinor: { increment: impression.campaign.bidAmountMinor } },
-      }),
-    ]);
+      });
+      return true;
+    });
+
+    if (!billed) {
+      await this.prisma.adImpression.update({
+        where: { id: impression.id },
+        data: { isBillable: false, invalidationReason: 'budget_exhausted' },
+      });
+      return { qualified: false, impressionId: impression.id, reason: 'budget_exhausted' };
+    }
 
     return { qualified: true, impressionId: impression.id };
   }
 
-  async recordClick(dto: {
+  async recordClick(userId: string, dto: {
     impressionToken: string;
     clickedAt: string;
     idempotencyKey: string;
@@ -563,6 +590,15 @@ export class ExtensionService {
       },
     });
     if (!impression) throw new NotFoundException('Impression not found');
+    // Ownership: clicks MUST be initiated by the impression's owner (the user who
+    // saw the ad). Without this, an attacker who learns a token could credit
+    // charges against any user's impression — direct money loss for the attacker
+    // would not occur, but self-click-style fraud would be hidden and the
+    // attacker could grief any campaign by spamming clicks.
+
+    if (impression.userId !== userId) {
+      throw new ForbiddenException('You do not own this impression');
+    }
     if (!impression.qualifiedAt) throw new BadRequestException('Impression not yet qualified');
 
     // Fraud checks: rate + self-click
@@ -610,11 +646,36 @@ export class ExtensionService {
 
     const operations: [typeof createClick, ...Prisma.PrismaPromise<unknown>[]] = [createClick];
 
-    if (isCpcBid && split) {
-      const idempotencyBase = `clk-${dto.idempotencyKey}`;
-      // Add ledger entries for CPC campaigns
-      operations.push(
-        this.prisma.advertiserLedger.create({
+    const click = await this.prisma.$transaction(async (tx) => {
+      if (isCpcBid && split) {
+        // Atomic budget guard for CPC clicks — same pattern as CPM above.
+        const spent: number = await (tx as any).$executeRawUnsafe(
+          `UPDATE "Campaign" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+          impression.campaign.bidAmountMinor,
+          impression.campaignId,
+        );
+        if (spent === 0) {
+          throw new ConflictException('Campaign budget exhausted');
+        }
+      }
+
+      const click = await tx.adClick.create({
+        data: {
+          impressionId: impression.id,
+          userId: impression.userId,
+          deviceId: impression.deviceId,
+          sessionId: impression.sessionId,
+          campaignId: impression.campaignId,
+          creativeId: impression.creativeId,
+          clickedAt: new Date(dto.clickedAt),
+          targetUrl: '',
+          idempotencyKey: dto.idempotencyKey,
+        },
+      });
+
+      if (isCpcBid && split) {
+        const idempotencyBase = `clk-${dto.idempotencyKey}`;
+        await tx.advertiserLedger.create({
           data: {
             advertiserId: impression.campaign.advertiserId,
             campaignId: impression.campaignId,
@@ -625,8 +686,8 @@ export class ExtensionService {
             idempotencyKey: `${idempotencyBase}-adv`,
             description: `Click charge - campaign ${impression.campaignId}`,
           },
-        }),
-        this.prisma.earningsLedger.create({
+        });
+        await tx.earningsLedger.create({
           data: {
             userId: impression.userId,
             campaignId: impression.campaignId,
@@ -639,8 +700,8 @@ export class ExtensionService {
             idempotencyKey: `${idempotencyBase}-usr`,
             description: 'Earnings from ad click',
           },
-        }),
-        this.prisma.platformLedger.create({
+        });
+        await tx.platformLedger.create({
           data: {
             campaignId: impression.campaignId,
             entryType: 'credit',
@@ -652,8 +713,8 @@ export class ExtensionService {
             idempotencyKey: `${idempotencyBase}-plt`,
             description: 'Platform fee from ad click',
           },
-        }),
-        this.prisma.platformLedger.create({
+        });
+        await tx.platformLedger.create({
           data: {
             campaignId: impression.campaignId,
             entryType: 'credit',
@@ -665,15 +726,11 @@ export class ExtensionService {
             idempotencyKey: `${idempotencyBase}-res`,
             description: 'Fraud/payment reserve from ad click',
           },
-        }),
-        this.prisma.campaign.update({
-          where: { id: impression.campaignId },
-          data: { budgetSpentMinor: { increment: impression.campaign.bidAmountMinor } },
-        }),
-      );
-    }
+        });
+      }
 
-    const [click] = await this.prisma.$transaction(operations);
+      return click;
+    }) as any;
 
     return { clicked: true, clickId: click.id };
   }
