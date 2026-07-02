@@ -31,12 +31,52 @@ interface ServerBalanceResponse {
 
 export class ApiClient {
   private currentTokens: { accessToken?: string; refreshToken?: string } | null = null;
+  private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
+  private _initialized: Promise<void>;
 
-  constructor(private config: ConfigurationManager) {}
+  constructor(private config: ConfigurationManager) {
+    // Load persisted tokens from SecretStorage on construction
+    this._initialized = this.config.getTokens().then((tokens) => {
+      if (tokens) this.currentTokens = tokens;
+    });
+  }
 
   /** Sign payload object with HMAC using canonical JSON (sorted keys). */
   sign(payload: Record<string, unknown>): string {
     return signPayload(payload, this.config.getSecretKey());
+  }
+
+  /** Refresh the access token using the stored refresh token.
+   *  Returns the new token pair or null on failure. */
+  private async refreshTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
+    if (!this.currentTokens?.refreshToken) return null;
+
+    // Deduplicate concurrent refresh attempts
+    if (this._refreshInProgress) return this._refreshInProgress;
+
+    this._refreshInProgress = (async () => {
+      try {
+        const res = await this.post<{ data: { accessToken: string; refreshToken: string } }>(
+          '/auth/refresh',
+          { refreshToken: this.currentTokens!.refreshToken },
+          true, // skipAuth: don't attach Authorization header for refresh itself
+        );
+        const tokens = res.data;
+        // Update in-memory and persist
+        this.currentTokens = tokens;
+        this.config.storeTokens(tokens).catch(() => {});
+        return tokens;
+      } catch {
+        // Refresh failed — clear tokens
+        this.currentTokens = null;
+        this.config.clearTokens().catch(() => {});
+        return null;
+      } finally {
+        this._refreshInProgress = null;
+      }
+    })();
+
+    return this._refreshInProgress;
   }
 
   async waitStateStart(input: {
@@ -128,6 +168,8 @@ export class ApiClient {
         { email, password },
       );
       this.currentTokens = res.data;
+      // Persist tokens so they survive extension restarts
+      this.config.storeTokens(res.data).catch(() => {});
       vscode.window.showInformationMessage('WaitLayer: logged in');
     } catch {
       vscode.window.showErrorMessage('WaitLayer: login failed');
@@ -137,6 +179,8 @@ export class ApiClient {
   async logout(): Promise<void> {
     await this.post('/auth/logout', {});
     this.currentTokens = null;
+    // Clear persisted tokens
+    this.config.clearTokens().catch(() => {});
     vscode.window.showInformationMessage('WaitLayer: logged out');
   }
 
@@ -146,7 +190,7 @@ export class ApiClient {
     return `${this.config.getApiUrl()}${path}`;
   }
 
-  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  private async post<T>(path: string, body: Record<string, unknown>, skipAuth = false): Promise<T> {
     const bodyStr = JSON.stringify(body);
 
     // Compute header signature from canonical form WITHOUT the signature field
@@ -161,6 +205,7 @@ export class ApiClient {
       path,
       headers(path, bodyStr, headerSignature),
       bodyStr,
+      skipAuth,
     );
   }
 
@@ -168,49 +213,92 @@ export class ApiClient {
     return this.request<T>('GET', path, { 'Content-Type': 'application/json' }, '');
   }
 
-  private request<T>(
+  private async request<T>(
+    method: string,
+    path: string,
+    reqHeaders: Record<string, string>,
+    body: string,
+    skipAuth = false,
+  ): Promise<T> {
+    // Ensure tokens are loaded before first request
+    await this._initialized;
+
+    // Build auth header (skip for refresh endpoint itself)
+    const authHeaders: Record<string, string> = {};
+    if (!skipAuth && this.currentTokens?.accessToken) {
+      authHeaders['Authorization'] = `Bearer ${this.currentTokens.accessToken}`;
+    }
+
+    return new Promise((resolve, reject) => {
+      this._doRequest(method, path, { ...reqHeaders, ...authHeaders }, body, resolve, reject, false, skipAuth);
+    });
+  }
+
+  private _doRequest<T>(
     method: string,
     path: string,
     headers: Record<string, string>,
     body: string,
-  ): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const url = new URL(path.startsWith('http') ? path : this.url(path));
-      const transport = url.protocol === 'https:' ? https : http;
-      const req = transport.request(
-        {
-          method,
-          hostname: url.hostname,
-          port: url.port,
-          path: url.pathname + url.search,
-          headers: {
-            ...headers,
-            ...(this.currentTokens?.accessToken
-              ? { Authorization: `Bearer ${this.currentTokens.accessToken}` }
-              : {}),
-          },
+    resolve: (value: T) => void,
+    reject: (reason: unknown) => void,
+    isRetry = false,
+    skipAuth = false,
+  ): void {
+    const url = new URL(path.startsWith('http') ? path : this.url(path));
+    const transport = url.protocol === 'https:' ? https : http;
+    const req = transport.request(
+      {
+        method,
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname + url.search,
+        headers: {
+          ...headers,
+          'X-Extension-Version': '0.0.1',
+          'X-Tool-Type': 'vscode',
         },
-        (res) => {
-          let data = '';
-          res.on('data', (chunk) => (data += chunk));
-          res.on('end', () => {
-            try {
-              const parsed = data.length ? JSON.parse(data) : {};
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                resolve(parsed as T);
-              } else {
-                reject(parsed);
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', async () => {
+          try {
+            const parsed = data.length ? JSON.parse(data) : {};
+
+            // On 401, try token refresh and retry once (skip for auth endpoints)
+            if (
+              res.statusCode === 401 &&
+              !isRetry &&
+              !skipAuth &&
+              !path.includes('/auth/')
+            ) {
+              const newTokens = await this.refreshTokens();
+              if (newTokens) {
+                // Rebuild headers with new access token (replacing any old auth header)
+                const { Authorization: _, ...restHeaders } = headers;
+                const retryHeaders = {
+                  ...restHeaders,
+                  Authorization: `Bearer ${newTokens.accessToken}`,
+                };
+                this._doRequest(method, path, retryHeaders, body, resolve, reject, true);
+                return;
               }
-            } catch (e) {
-              reject(e);
             }
-          });
-        },
-      );
-      req.on('error', reject);
-      if (body) req.write(body);
-      req.end();
-    });
+
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(parsed as T);
+            } else {
+              reject(parsed);
+            }
+          } catch (e) {
+            reject(e);
+          }
+        });
+      },
+    );
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
   }
 }
 

@@ -85,6 +85,14 @@ export function activate(context: vscode.ExtensionContext) {
             await api.recordClick(ad.impressionToken);
           }
           await api.recordImpressionEnd(ad.impressionToken, 5000);
+
+          // Signal wait-state end after ad interaction completes
+          await api.waitStateEnd({
+            waitStateId: event.waitStateId,
+            durationMs: Date.now() - now,
+            idempotencyKey: `ws-end-${event.waitStateId}`,
+          });
+
           panel.hide();
           status.showIdle();
         });

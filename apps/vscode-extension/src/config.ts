@@ -55,6 +55,32 @@ export class ConfigurationManager {
     );
   }
 
+  async getTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
+    try {
+      const raw = await this.secrets.get('waitlayer.authTokens');
+      if (raw) return JSON.parse(raw);
+    } catch {
+      /* tokens not stored yet */
+    }
+    return null;
+  }
+
+  async storeTokens(tokens: { accessToken: string; refreshToken: string }): Promise<void> {
+    try {
+      await this.secrets.store('waitlayer.authTokens', JSON.stringify(tokens));
+    } catch {
+      /* storage not available */
+    }
+  }
+
+  async clearTokens(): Promise<void> {
+    try {
+      await this.secrets.delete('waitlayer.authTokens');
+    } catch {
+      /* storage not available */
+    }
+  }
+
   async getDeviceFingerprint(): Promise<string> {
     try {
       const id = await this.secrets.get(this.deviceKey);

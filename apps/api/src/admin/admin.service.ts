@@ -1,12 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { PayoutService } from '../payout/payout.service';
 
 @Injectable()
 export class AdminService {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
+    private payoutService: PayoutService,
   ) {}
 
   async getOverview() {
@@ -76,10 +78,10 @@ export class AdminService {
   }
 
   async markPayoutPaid(payoutId: string, data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string }) {
-    return this.prisma.$transaction([
-      this.prisma.payoutRequest.update({ where: { id: payoutId }, data: { status: 'paid', paidAt: new Date(data.paidAt) } }),
-      this.prisma.payoutTransaction.create({ data: { payoutRequestId: payoutId, provider: 'manual', providerTxId: data.providerTxId, status: 'paid', paidAt: new Date(data.paidAt) } }),
-    ]);
+    return this.payoutService.markPayoutPaid(payoutId, {
+      providerTxId: data.providerTxId,
+      paidAt: data.paidAt,
+    });
   }
 
   async getFraudFlags(params: { status?: string; severity?: string }) {

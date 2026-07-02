@@ -9,7 +9,7 @@ const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
   submitted: ['approved', 'rejected'] as CampaignStatus[],
   approved: ['active', 'rejected'] as CampaignStatus[],
   active: ['paused'] as CampaignStatus[],
-  paused: ['approved'] as CampaignStatus[],
+  paused: ['active'] as CampaignStatus[],
   rejected: ['draft'] as CampaignStatus[],
   archived: [] as CampaignStatus[],
 };
@@ -154,10 +154,10 @@ export class AdvertiserService {
   async resumeCampaign(campaignId: string, advertiserId: string) {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
-    this.validateTransition(campaign.status, 'approved');
+    this.validateTransition(campaign.status, 'active');
     return this.prisma.campaign.update({
       where: { id: campaignId },
-      data: { status: 'approved', pausedAt: null },
+      data: { status: 'active', pausedAt: null, activatedAt: new Date() },
     });
   }
 

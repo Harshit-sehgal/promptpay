@@ -84,7 +84,7 @@ export default function LoginPage() {
             size: 'large',
             text: 'continue_with',
             shape: 'rectangular',
-            width: btn.clientWidth || 320,
+            width: 320,
             logo_alignment: 'left',
           });
         }
@@ -131,30 +131,6 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">Welcome back</h1>
           <p className="text-surface-500 text-[14px] mb-8">Sign in to your account</p>
 
-          {/* Google Sign-In */}
-          {googleEnabled ? (
-            <>
-              <div
-                id="google-signin-btn"
-                className="flex justify-center w-full mb-6"
-                data-auto_select="false"
-              />
-              <div className="flex items-center gap-3 mb-6">
-                <div className="flex-1 h-px bg-surface-200" />
-                <span className="text-surface-400 text-[12px] font-medium uppercase tracking-wider">or</span>
-                <div className="flex-1 h-px bg-surface-200" />
-              </div>
-            </>
-          ) : (
-            <div className="mb-6 p-4 bg-surface-50 border border-surface-200 rounded-xl text-center">
-              <div className="flex items-center justify-center gap-2 text-surface-400 text-[13px]">
-                <GoogleG size={18} />
-                <span>Continue with Google</span>
-                <span className="text-surface-300 text-[11px]">(set NEXT_PUBLIC_GOOGLE_CLIENT_ID to enable)</span>
-              </div>
-            </div>
-          )}
-
           {error && (
             <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5">
               <p className="text-red-600 text-[14px]">{error}</p>
@@ -192,6 +168,31 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+
+          <div className="flex items-center gap-3 my-6">
+            <div className="flex-1 h-px bg-surface-200" />
+            <span className="text-surface-400 text-[11px] font-semibold uppercase tracking-wider">or</span>
+            <div className="flex-1 h-px bg-surface-200" />
+          </div>
+
+          {/* Google Sign-In */}
+          {googleEnabled ? (
+            <div
+              id="google-signin-btn"
+              className="flex justify-center w-full min-h-[44px]"
+              data-auto_select="false"
+            />
+          ) : (
+            <button
+              disabled
+              type="button"
+              className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-400 font-medium py-3 rounded-xl text-[14px] opacity-75 cursor-not-allowed"
+            >
+              <GoogleG size={18} />
+              <span>Continue with Google</span>
+              <span className="text-[10px] text-surface-300 font-normal">(disabled: client ID missing)</span>
+            </button>
+          )}
 
           <p className="text-surface-500 text-[14px] text-center mt-7">
             Don't have an account?{' '}

@@ -65,10 +65,10 @@ Last updated: 2026-07-02
 - Token rotation: each refresh revokes the old session and creates a new one in the same family
 - Replay detection: if a revoked session token is reused, all sessions for that user are revoked
 - Password hashing via bcryptjs with proper salt rounds
+- Stateless JWT-based email verification flow (`verify-email/request` and `verify-email/confirm`) with automatic trust score recalculation (+10 points)
 
 **Known limitations:**
 - Google OAuth requires a valid `GOOGLE_CLIENT_ID` environment variable set in `apps/web/.env.local` as `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, and in docker-compose for both `api` and `web` services
-- No email verification flow (stub only)
 
 ---
 
@@ -139,9 +139,9 @@ Last updated: 2026-07-02
 - Idempotency keys prevent double-crediting (`imp-{impressionId}-{bucket}`)
 - Impression qualified at minimum 5000ms visible duration
 - Fraud rate limit checked before ledger write; blocked impressions marked non-billable
+- Periodically scheduled estimated earnings maturation check (every 10 minutes) and automatic bootstrap maturation run via `LedgerCronService`
 
 **Known limitations:**
-- `matureEarnings()` is a batch cron job; not automatically triggered on schedule (needs cron setup)
 - CPC campaign clicks also generate earnings entries (developer credit + advertiser debit)
 
 ---
@@ -158,9 +158,10 @@ Last updated: 2026-07-02
 - `getAvailableForPayout` correctly subtracts already-allocated earnings from confirmed total
 - `markPayoutPaid` processes all allocated earnings entries in a single transaction (double-payout prevention)
 - Trust score influences payout approval priority
+- Admin updates route via `PayoutService.markPayoutPaid` ensuring proper allocation tracking and prevention of double payouts
+- Payout provider stub classes implemented and registered for Stripe Connect, Payoneer, Wise, and Razorpay to allow testing all providers
 
 **Known limitations:**
-- Payout providers beyond PayPal and manual are stub implementations
 - No automatic payout scheduling (requires admin manual approval flow)
 - Payout provider configuration (e.g., PayPal API keys) must be set via env vars
 
@@ -294,11 +295,8 @@ pnpm --filter @waitlayer/web dev
 |-----------------|----------|--------|
 | Google OAuth requires env var | Medium | `GOOGLE_CLIENT_ID` must be set in docker-compose or `.env` for Google sign-in to work |
 | Port 4000 conflict | Low | Docker maps API port 4002 (host) to 4000 (container), so `localhost:4002` must be used |
-| Payout providers are stubs | Medium | Only PayPal and Manual providers are functional; Stripe, Payoneer, Wise, Razorpay are stub implementations |
-| Email verification not implemented | Low | `emailVerified` flag exists on User but no verification flow |
-| `matureEarnings()` not scheduled | Medium | Requires cron job or scheduler to transition estimated earnings to confirmed |
+| Payout providers are stubs | Low | All providers (Stripe, Payoneer, Wise, Razorpay, PayPal, Manual) have functional/testable stub handlers registered. |
 | No real-time WebSocket | Low | Dashboard metrics are request-time, not push-based |
-| Admin `markPayoutPaid` bypasses PayoutService | Medium | Admin controller marks payout paid directly; should route through PayoutService for allocation-aware processing |
 | Rate limits are in-memory only | Low | No Redis or distributed rate limiter; per-process only |
 | No end-to-end HTTP tests | Low | E2E tests use services directly with mocked Prisma, not real HTTP/DB |
 | Secrets in docker-compose are dev-only | High | `JWT_SECRET=change-me-in-production`, `EXTENSION_HMAC_SECRET=dev-secret-change-me` must be rotated for production |

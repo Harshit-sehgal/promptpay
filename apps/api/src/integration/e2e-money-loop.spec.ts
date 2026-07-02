@@ -6,6 +6,7 @@ import { CampaignService } from '../campaign/campaign.service';
 import { AdvertiserService } from '../advertiser/advertiser.service';
 import { AdminService } from '../admin/admin.service';
 import { AuditService } from '../audit/audit.service';
+import { PayoutService } from '../payout/payout.service';
 
 // ── Shared signing utility (no mocking needed — it's pure crypto) ──
 import { signPayload } from '@waitlayer/shared';
@@ -258,6 +259,7 @@ interface TestFixtures {
   advertiser: AdvertiserService;
   admin: AdminService;
   audit: AuditService;
+  payout: PayoutService;
 }
 
 function makeServices(): TestFixtures {
@@ -287,10 +289,13 @@ function makeServices(): TestFixtures {
   // AdvertiserService — real instance with mocked prisma and real campaign service
   const advertiser = new AdvertiserService(prismaRef, campaign);
 
-  // AdminService — real instance with mocked prisma and real audit service
-  const admin = new AdminService(prismaRef, audit);
+  // PayoutService — real instance with mocked prisma, real ledger and dummy paypal payouts provider
+  const payout = new PayoutService(prismaRef, ledger, {} as any);
 
-  return { extension, ledger, fraud, campaign, advertiser, admin, audit };
+  // AdminService — real instance with mocked prisma and real audit service and payout service
+  const admin = new AdminService(prismaRef, audit, payout);
+
+  return { extension, ledger, fraud, campaign, advertiser, admin, audit, payout };
 }
 
 // ── ID helpers ──

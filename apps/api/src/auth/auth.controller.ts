@@ -11,7 +11,7 @@ import {
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators';
-import { SignUpDto, LoginDto, RefreshDto, GoogleOAuthDto } from './dto';
+import { SignUpDto, LoginDto, RefreshDto, GoogleOAuthDto, VerifyEmailConfirmDto } from './dto';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 
 @Controller('auth')
@@ -74,5 +74,18 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   getMe(@CurrentUser('id') userId: string) {
     return this.authService.getMe(userId);
+  }
+
+  @Post('verify-email/request')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  requestEmailVerification(@CurrentUser('id') userId: string) {
+    return this.authService.requestEmailVerification(userId);
+  }
+
+  @Post('verify-email/confirm')
+  @HttpCode(HttpStatus.OK)
+  confirmEmailVerification(@Body() dto: VerifyEmailConfirmDto) {
+    return this.authService.confirmEmailVerification(dto.token);
   }
 }

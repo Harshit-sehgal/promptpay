@@ -743,6 +743,7 @@ model TrustScore {
   accountAgePoints  Int        @default(0)
   emailVerifiedPts  Int        @default(0)
   githubVerifiedPts Int        @default(0)
+  googleVerifiedPts Int        @default(0)
   deviceConsistPts  Int        @default(0)
   activityPatternPts Int      @default(0)
   payoutHistoryPts  Int        @default(0)

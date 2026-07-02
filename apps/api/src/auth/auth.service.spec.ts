@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException, ConflictException } from '@nestjs/common';
+import { UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 
 // ── Prisma mock ──
 const mockPrisma = {
@@ -41,10 +41,19 @@ function makeService(overrides?: Record<string, string>) {
     }),
   } as unknown as ConfigService;
 
+  const googleVerifier = {
+    verify: vi.fn(),
+  } as any;
+  const fraud = {
+    computeTrustScore: vi.fn().mockResolvedValue(40),
+  } as any;
+
   return {
-    service: new AuthService(prismaRef, jwt, config),
+    service: new AuthService(prismaRef, jwt, config, googleVerifier, fraud),
     jwt,
     config,
+    googleVerifier,
+    fraud,
     createAccessToken: (sub: string, role: string, ttl = '15m') =>
       jwt.signAsync({ sub, role }, { expiresIn: ttl } as any),
     createRefreshToken: (sub: string, role: string, family: string, ttl = '30d') =>
@@ -269,6 +278,46 @@ describe('AuthService', () => {
       expect(mockPrisma.session.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { userId: 'u-6' } }),
       );
+    });
+  });
+
+  describe('email verification flow', () => {
+    it('should generate verification token if not already verified', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-verify', email: 'test@verify.com', emailVerified: false });
+
+      const res = await service.requestEmailVerification('u-verify');
+      expect(res.token).toBeDefined();
+      expect(res.message).toBe('Verification token generated successfully');
+    });
+
+    it('should throw BadRequestException on request if already verified', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-verify', email: 'test@verify.com', emailVerified: true });
+
+      await expect(service.requestEmailVerification('u-verify')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should confirm verification, update flag, and recalculate trust score', async () => {
+      const { service, fraud } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-verify', email: 'test@verify.com', emailVerified: false });
+      mockPrisma.user.update.mockResolvedValue({ id: 'u-verify', emailVerified: true });
+
+      const reqRes = await service.requestEmailVerification('u-verify');
+      const confirmRes = await service.confirmEmailVerification(reqRes.token);
+
+      expect(confirmRes.message).toBe('Email verified successfully');
+      expect(confirmRes.email).toBe('test@verify.com');
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u-verify' },
+        data: { emailVerified: true },
+      });
+      expect(fraud.computeTrustScore).toHaveBeenCalledWith('u-verify');
+    });
+
+    it('should throw BadRequestException if token is invalid or expired', async () => {
+      const { service } = makeService();
+      await expect(service.confirmEmailVerification('invalid-token')).rejects.toThrow(BadRequestException);
     });
   });
 });

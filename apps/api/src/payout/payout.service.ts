@@ -36,6 +36,46 @@ class PayPalEmailPayoutProvider implements PayoutProviderHandler {
   }
 }
 
+/** Stripe Connect payout provider stub */
+class StripeConnectPayoutProvider implements PayoutProviderHandler {
+  async initiate(params: { payoutRequestId: string }) {
+    return { providerTxId: `stripe_${params.payoutRequestId}`, status: 'processing' };
+  }
+  async checkStatus(providerTxId: string) {
+    return { status: 'processing' };
+  }
+}
+
+/** Payoneer payout provider stub */
+class PayoneerPayoutProvider implements PayoutProviderHandler {
+  async initiate(params: { payoutRequestId: string }) {
+    return { providerTxId: `payoneer_${params.payoutRequestId}`, status: 'processing' };
+  }
+  async checkStatus(providerTxId: string) {
+    return { status: 'processing' };
+  }
+}
+
+/** Wise payout provider stub */
+class WisePayoutProvider implements PayoutProviderHandler {
+  async initiate(params: { payoutRequestId: string }) {
+    return { providerTxId: `wise_${params.payoutRequestId}`, status: 'processing' };
+  }
+  async checkStatus(providerTxId: string) {
+    return { status: 'processing' };
+  }
+}
+
+/** Razorpay payout provider stub */
+class RazorpayPayoutProvider implements PayoutProviderHandler {
+  async initiate(params: { payoutRequestId: string }) {
+    return { providerTxId: `razorpay_${params.payoutRequestId}`, status: 'processing' };
+  }
+  async checkStatus(providerTxId: string) {
+    return { status: 'processing' };
+  }
+}
+
 @Injectable()
 export class PayoutService {
   private providers: Record<string, PayoutProviderHandler>;
@@ -49,6 +89,10 @@ export class PayoutService {
       manual: new ManualPayoutProvider(),
       paypal_email: new PayPalEmailPayoutProvider(),
       paypal_payouts: this.paypalPayouts,
+      stripe_connect: new StripeConnectPayoutProvider(),
+      payoneer: new PayoneerPayoutProvider(),
+      wise: new WisePayoutProvider(),
+      razorpay: new RazorpayPayoutProvider(),
     };
   }
 
@@ -376,7 +420,10 @@ export class PayoutService {
   }) {
     const payout = await this.prisma.payoutRequest.findUnique({
       where: { id: payoutId },
-      include: { allocations: { include: { earningsEntry: true } } },
+      include: {
+        payoutAccount: true,
+        allocations: { include: { earningsEntry: true } },
+      },
     });
     if (!payout) throw new BadRequestException('Payout not found');
 
@@ -426,7 +473,7 @@ export class PayoutService {
       await tx.payoutTransaction.create({
         data: {
           payoutRequestId: payoutId,
-          provider: 'manual',
+          provider: payout.payoutAccount.provider,
           providerTxId: data.providerTxId,
           status: 'paid',
           paidAt: paidAtDate,

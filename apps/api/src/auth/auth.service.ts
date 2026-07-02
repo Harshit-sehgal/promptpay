@@ -7,6 +7,7 @@ import { PrismaService } from '../config/prisma.service';
 import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
 import { UserRole, UserStatus } from '@waitlayer/shared';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
+import { FraudService } from '../fraud/fraud.service';
 
 interface TokenPayload {
   sub: string;
@@ -32,6 +33,7 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private googleVerifier: GoogleTokenVerifier,
+    private fraud: FraudService,
   ) {
     this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
     this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d');
@@ -342,6 +344,59 @@ export class AuthService {
       case 'd': return value * 24 * 60 * 60 * 1000;
       default: return 30 * 24 * 60 * 60 * 1000;
     }
+  }
+
+  async requestEmailVerification(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    if (user.emailVerified) {
+      throw new BadRequestException('Email is already verified');
+    }
+
+    // Stateless token: contains userId, email, and action. Valid for 24 hours.
+    const token = await this.jwt.signAsync(
+      { sub: user.id, email: user.email, action: 'email-verification' },
+      { secret: this.jwtSecret, expiresIn: '24h' },
+    );
+
+    console.log(`[Email Verification] Verification token requested for ${user.email}. Token: ${token}`);
+    return {
+      message: 'Verification token generated successfully',
+      token,
+    };
+  }
+
+  async confirmEmailVerification(token: string) {
+    let payload: any;
+    try {
+      payload = await this.jwt.verifyAsync(token, { secret: this.jwtSecret });
+    } catch (err) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    if (payload.action !== 'email-verification') {
+      throw new BadRequestException('Invalid token action');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user) throw new BadRequestException('User not found');
+    if (user.emailVerified) {
+      return { message: 'Email is already verified', email: user.email };
+    }
+
+    // Update user to verified
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true },
+    });
+
+    // Recompute trust score to account for email verification (+10 points)
+    await this.fraud.computeTrustScore(user.id);
+
+    return {
+      message: 'Email verified successfully',
+      email: user.email,
+    };
   }
 
   private sanitizeUser(user: any) {

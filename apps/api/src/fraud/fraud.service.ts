@@ -137,6 +137,10 @@ export class FraudService {
     const githubVerifiedPts = user.githubVerified ? 15 : 0;
     score += githubVerifiedPts;
 
+    // Google verified: +15
+    const googleVerifiedPts = user.googleVerified ? 15 : 0;
+    score += googleVerifiedPts;
+
     // Device consistency: +5 for single device, +3 for 2-3, 0 for 4+
     const deviceCount = await this.prisma.device.count({ where: { userId } });
     const deviceConsistPts = deviceCount === 1 ? 10 : deviceCount <= 3 ? 5 : 0;
@@ -193,6 +197,7 @@ export class FraudService {
         accountAgePoints,
         emailVerifiedPts,
         githubVerifiedPts,
+        googleVerifiedPts,
         deviceConsistPts,
         activityPatternPts,
         payoutHistoryPts,
@@ -204,6 +209,7 @@ export class FraudService {
         accountAgePoints,
         emailVerifiedPts,
         githubVerifiedPts,
+        googleVerifiedPts,
         deviceConsistPts,
         activityPatternPts,
         payoutHistoryPts,
