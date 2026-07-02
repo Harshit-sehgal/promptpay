@@ -66,9 +66,10 @@ Last updated: 2026-07-02
 - Replay detection: if a revoked session token is reused, all sessions for that user are revoked
 - Password hashing via bcryptjs with proper salt rounds
 - Stateless JWT-based email verification flow (`verify-email/request` and `verify-email/confirm`) with automatic trust score recalculation (+10 points)
+- Mock Google OAuth verification support in non-production environments to allow offline local testing (tokens starting with `mock-google-token-`)
 
 **Known limitations:**
-- Google OAuth requires a valid `GOOGLE_CLIENT_ID` environment variable set in `apps/web/.env.local` as `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, and in docker-compose for both `api` and `web` services
+- Google OAuth in production requires a valid `GOOGLE_CLIENT_ID` environment variable; mock verification is restricted to development/test modes
 
 ---
 
@@ -293,7 +294,7 @@ pnpm --filter @waitlayer/web dev
 
 | Risk/Limitation | Severity | Detail |
 |-----------------|----------|--------|
-| Google OAuth requires env var | Medium | `GOOGLE_CLIENT_ID` must be set in docker-compose or `.env` for Google sign-in to work |
+| Google OAuth requires env var | Low | Real Google OAuth in production requires `GOOGLE_CLIENT_ID`; local development works offline using mock tokens |
 | Port 4000 conflict | Low | Docker maps API port 4002 (host) to 4000 (container), so `localhost:4002` must be used |
 | Payout providers are stubs | Low | All providers (Stripe, Payoneer, Wise, Razorpay, PayPal, Manual) have functional/testable stub handlers registered. |
 | No real-time WebSocket | Low | Dashboard metrics are request-time, not push-based |

@@ -78,3 +78,12 @@ export const PROHIBITED_DATA_FIELDS = [
 
 /** Maximum ad message length */
 export const MAX_AD_MESSAGE_LENGTH = 80;
+
+/** Referral program */
+export const REFERRAL = {
+  /** Reward paid to the referrer once the referred user qualifies */
+  REWARD_AMOUNT_MINOR: 5_00,         // $5 in cents
+  CURRENCY: 'USD',
+  /** Minimum first payout amount (in cents) the referred user must receive before reward triggers */
+  FIRST_PAYOUT_THRESHOLD_MINOR: 10_00, // $10 in cents
+} as const;

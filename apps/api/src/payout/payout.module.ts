@@ -3,10 +3,11 @@ import { PayoutController } from './payout.controller';
 import { PayoutService } from './payout.service';
 import { LedgerModule } from '../ledger/ledger.module';
 import { PayPalPayoutsProvider, StripeProvider } from './providers';
+import { StripeWebhookController } from './stripe-webhook.controller';
 
 @Module({
   imports: [LedgerModule],
-  controllers: [PayoutController],
+  controllers: [PayoutController, StripeWebhookController],
   providers: [PayoutService, PayPalPayoutsProvider, StripeProvider],
   exports: [PayoutService, StripeProvider],
 })

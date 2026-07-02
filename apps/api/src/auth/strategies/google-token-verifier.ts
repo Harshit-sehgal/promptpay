@@ -42,6 +42,23 @@ export class GoogleTokenVerifier {
 
   /** Verify a Google ID token and return the decoded payload */
   async verify(idToken: string): Promise<GoogleIdTokenPayload> {
+    if (idToken.startsWith('mock-google-token-') && process.env.NODE_ENV !== 'production') {
+      const parts = idToken.split('-');
+      const identifier = parts[3] || 'user';
+      const email = `${identifier}@mock-google.com`;
+      const name = parts.slice(3).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ') || 'Mock User';
+      const sub = `mock-google-sub-${identifier}`;
+      return {
+        sub,
+        email,
+        email_verified: true,
+        name,
+        picture: 'https://lh3.googleusercontent.com/a/default-user',
+        aud: this.clientId || 'mock-client-id',
+        iss: 'accounts.google.com',
+      };
+    }
+
     if (!this.enabled) {
       throw new UnauthorizedException('Google Sign-In is not configured');
     }

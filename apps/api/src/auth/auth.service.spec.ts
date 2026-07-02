@@ -320,4 +320,57 @@ describe('AuthService', () => {
       await expect(service.confirmEmailVerification('invalid-token')).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('googleOAuth flow', () => {
+    it('should log in existing user by googleId', async () => {
+      const { service, googleVerifier } = makeService();
+      googleVerifier.verify.mockResolvedValue({
+        sub: 'google-123',
+        email: 'google@test.com',
+        email_verified: true,
+        name: 'Google User',
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-google',
+        email: 'google@test.com',
+        googleId: 'google-123',
+        role: 'developer',
+        status: 'active',
+      });
+
+      const res = await service.googleOAuth({ idToken: 'some-token' });
+      expect(res.user.id).toBe('u-google');
+      expect(res.accessToken).toBeDefined();
+    });
+
+    it('should create a new developer profile and return tokens if new user signs up via Google', async () => {
+      const { service, googleVerifier } = makeService();
+      googleVerifier.verify.mockResolvedValue({
+        sub: 'google-456',
+        email: 'new-google@test.com',
+        email_verified: true,
+        name: 'New Google User',
+      });
+      // Mock findUnique to return null (user doesn't exist)
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'u-new-google',
+        email: 'new-google@test.com',
+        googleId: 'google-456',
+        role: 'developer',
+        status: 'active',
+      });
+      mockPrisma.user.update.mockResolvedValue({
+        id: 'u-new-google',
+        email: 'new-google@test.com',
+        googleId: 'google-456',
+        role: 'developer',
+        status: 'active',
+      });
+
+      const res = await service.googleOAuth({ idToken: 'some-token', role: 'developer' as any });
+      expect(res.user.id).toBe('u-new-google');
+      expect(res.accessToken).toBeDefined();
+    });
+  });
 });

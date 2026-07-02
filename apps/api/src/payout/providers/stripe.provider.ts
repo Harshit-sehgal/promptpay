@@ -82,14 +82,15 @@ export class StripeProvider {
   }
 
   /**
-   * Process a completed checkout session — record the deposit in the advertiser ledger.
-   * Call this when the `checkout.session.completed` webhook fires.
+   * Process a completed or async-payment-succeeded checkout session.
+   * Returns payment details including the Stripe customer ID for wiring.
    */
   async handleCheckoutComplete(sessionId: string): Promise<{
     advertiserId: string;
     amountMinor: number;
     currency: string;
     paymentIntentId: string;
+    stripeCustomerId: string | null;
   }> {
     if (!this.stripe) throw new Error('Stripe is not configured');
 
@@ -98,9 +99,60 @@ export class StripeProvider {
     const amountMinor = session.amount_total ?? 0;
     const currency = session.currency ?? 'usd';
     const paymentIntentId = session.payment_intent as string;
+    const stripeCustomerId = (session.customer as string) ?? null;
 
     this.logger.log(`Checkout completed: advertiser=${advertiserId}, amount=${amountMinor}`);
 
-    return { advertiserId, amountMinor, currency, paymentIntentId };
+    return { advertiserId, amountMinor, currency, paymentIntentId, stripeCustomerId };
+  }
+
+  /**
+   * Retrieve details about a refunded charge for ledger reversal.
+   */
+  async getRefundDetails(refund: Stripe.Refund): Promise<{
+    paymentIntentId: string;
+    amountMinor: number;
+    currency: string;
+  }> {
+    if (!this.stripe) throw new Error('Stripe is not configured');
+
+    const paymentIntentId =
+      typeof refund.payment_intent === 'string'
+        ? refund.payment_intent
+        : refund.payment_intent?.id ?? '';
+
+    const amountMinor = refund.amount;
+    const currency = refund.currency;
+
+    this.logger.log(`Refund processed: paymentIntent=${paymentIntentId}, amount=${amountMinor}`);
+
+    return { paymentIntentId, amountMinor, currency };
+  }
+
+  /**
+   * Retrieve dispute details for fraud flagging.
+   */
+  async getDisputeDetails(dispute: Stripe.Dispute): Promise<{
+    paymentIntentId: string;
+    amountMinor: number;
+    currency: string;
+    reason: string;
+    status: string;
+  }> {
+    if (!this.stripe) throw new Error('Stripe is not configured');
+
+    const paymentIntentId =
+      typeof dispute.payment_intent === 'string'
+        ? dispute.payment_intent
+        : dispute.payment_intent?.id ?? '';
+
+    const amountMinor = dispute.amount;
+    const currency = dispute.currency;
+    const reason = dispute.reason ?? '';
+    const status = dispute.status;
+
+    this.logger.log(`Dispute created: paymentIntent=${paymentIntentId}, amount=${amountMinor}, reason=${reason}`);
+
+    return { paymentIntentId, amountMinor, currency, reason, status };
   }
 }

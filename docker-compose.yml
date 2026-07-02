@@ -28,7 +28,7 @@ services:
       JWT_REFRESH_TTL: 30d
       EXTENSION_HMAC_SECRET: dev-secret-change-me
       API_PORT: "4000"
-      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_ID: "53592884041-e9p0dourqq40frinppg13no2f1lob8bg.apps.googleusercontent.com"
       WEB_BASE_URL: http://localhost:3000
       NODE_ENV: production
     depends_on:
@@ -43,7 +43,7 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ""
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "53592884041-e9p0dourqq40frinppg13no2f1lob8bg.apps.googleusercontent.com"
       NODE_ENV: production
     depends_on:
       - api
