@@ -88,181 +88,188 @@ export default function DevSettingsPage() {
   };
 
   return (
-<>
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white mb-1">Settings</h1>
-          <p className="text-ink-300 text-sm">
-            Control ad display, quiet hours, and data export
-          </p>
+    <div className="max-w-6xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Settings</h1>
+        <p className="text-surface-500 text-[15px]">
+          Control ad display, quiet hours, and data export
+        </p>
+      </div>
+
+      {loading && (
+        <div className="flex justify-center py-12">
+          <LoadingSpinner />
         </div>
+      )}
 
-        {loading && <LoadingSpinner />}
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-        {success && (
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 mb-6">
-            <p className="text-emerald-400 text-sm">Settings saved.</p>
-          </div>
-        )}
+      {error && (
+        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
+          <p className="text-red-600 text-sm">{error}</p>
+        </div>
+      )}
 
-        {settings && (
-          <form onSubmit={handleSave} className="space-y-8">
-            {/* Ad preferences */}
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-              <h2 className="text-white font-semibold mb-4">Ad preferences</h2>
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-medium">Show ads while waiting</p>
-                    <p className="text-ink-400 text-xs mt-0.5">
-                      Turn off to stop earning — no ads will appear in your IDE
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={adsEnabled}
-                    onClick={() => setAdsEnabled(!adsEnabled)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      adsEnabled ? 'bg-brand-500' : 'bg-ink-600'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        adsEnabled ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+      {success && (
+        <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4 mb-6">
+          <p className="text-emerald-600 text-sm">Settings saved successfully.</p>
+        </div>
+      )}
+
+      {settings && (
+        <form onSubmit={handleSave} className="space-y-8">
+          {/* Ad preferences */}
+          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Ad preferences</h2>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-surface-900 font-semibold text-[14px]">Show ads while waiting</p>
+                  <p className="text-surface-500 text-xs mt-0.5">
+                    Turn off to stop earning — no ads will appear in your IDE
+                  </p>
                 </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-medium">Quiet mode</p>
-                    <p className="text-ink-400 text-xs mt-0.5">
-                      Suppress ads during set hours
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={quietMode}
-                    onClick={() => setQuietMode(!quietMode)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      quietMode ? 'bg-brand-500' : 'bg-ink-600'
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={adsEnabled}
+                  onClick={() => setAdsEnabled(!adsEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    adsEnabled ? 'bg-brand-500' : 'bg-surface-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      adsEnabled ? 'translate-x-6' : 'translate-x-1'
                     }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        quietMode ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                </div>
+                  />
+                </button>
+              </div>
 
-                {quietMode && (
-                  <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-ink-600/50">
-                    <div>
-                      <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                        Quiet start
-                      </label>
-                      <input
-                        type="time"
-                        value={quietModeStart}
-                        onChange={(e) => setQuietModeStart(e.target.value)}
-                        className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                        Quiet end
-                      </label>
-                      <input
-                        type="time"
-                        value={quietModeEnd}
-                        onChange={(e) => setQuietModeEnd(e.target.value)}
-                        className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand-500"
-                      />
-                    </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-surface-900 font-semibold text-[14px]">Quiet mode</p>
+                  <p className="text-surface-500 text-xs mt-0.5">
+                    Suppress ads during set hours
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={quietMode}
+                  onClick={() => setQuietMode(!quietMode)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    quietMode ? 'bg-brand-500' : 'bg-surface-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      quietMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {quietMode && (
+                <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-surface-200">
+                  <div>
+                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
+                      Quiet start
+                    </label>
+                    <input
+                      type="time"
+                      value={quietModeStart}
+                      onChange={(e) => setQuietModeStart(e.target.value)}
+                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
+                      Quiet end
+                    </label>
+                    <input
+                      type="time"
+                      value={quietModeEnd}
+                      onChange={(e) => setQuietModeEnd(e.target.value)}
+                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-surface-700 text-sm font-medium mb-1.5 block">
+                  Max ads per hour
+                </label>
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  value={maxAdsPerHour}
+                  onChange={(e) => setMaxAdsPerHour(Number(e.target.value))}
+                  className="w-full accent-brand-500"
+                />
+                <div className="flex justify-between text-surface-400 text-xs mt-1.5 font-medium">
+                  <span>1</span>
+                  <span className="text-brand-600 font-mono font-bold">{maxAdsPerHour} / hr</span>
+                  <span>12</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Account info */}
+          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Account</h2>
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Email</p>
+                  <p className="text-surface-900 font-medium text-[15px]">{settings.email}</p>
+                </div>
+                {settings.displayName && (
+                  <div>
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Name</p>
+                    <p className="text-surface-900 font-medium text-[15px]">{settings.displayName}</p>
                   </div>
                 )}
-
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 border-t border-surface-100 pt-4">
+                {settings.referralCode && (
+                  <div>
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Referral code</p>
+                    <p className="text-surface-900 font-mono font-bold text-[15px] tracking-wider">{settings.referralCode}</p>
+                  </div>
+                )}
                 <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Max ads per hour
-                  </label>
-                  <input
-                    type="range"
-                    min={1}
-                    max={12}
-                    value={maxAdsPerHour}
-                    onChange={(e) => setMaxAdsPerHour(Number(e.target.value))}
-                    className="w-full accent-brand-500"
-                  />
-                  <div className="flex justify-between text-ink-500 text-xs mt-1">
-                    <span>1</span>
-                    <span className="text-white font-mono">{maxAdsPerHour}</span>
-                    <span>12</span>
-                  </div>
+                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">GitHub</p>
+                  {settings.githubLinked ? (
+                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">Linked</span>
+                  ) : (
+                    <span className="bg-surface-100 border border-surface-200 text-surface-500 text-xs font-semibold px-2.5 py-1 rounded-full">Not linked</span>
+                  )}
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Account */}
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-              <h2 className="text-white font-semibold mb-4">Account</h2>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Email</p>
-                    <p className="text-white">{settings.email}</p>
-                  </div>
-                  {settings.displayName && (
-                    <div>
-                      <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Name</p>
-                      <p className="text-white">{settings.displayName}</p>
-                    </div>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {settings.referralCode && (
-                    <div>
-                      <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Referral code</p>
-                      <p className="text-white font-mono">{settings.referralCode}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">GitHub</p>
-                    <p className={settings.githubLinked ? 'text-emerald-400' : 'text-ink-400'}>
-                      {settings.githubLinked ? 'Linked' : 'Not linked'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-4">
-              <button
-                type="submit"
-                disabled={saving}
-                className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
-              >
-                {saving ? 'Saving...' : 'Save settings'}
-              </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors border border-ink-600/50"
-              >
-                Export my data
-              </button>
-            </div>
-          </form>
-        )}
-      
-</>
-);
+          {/* Actions */}
+          <div className="flex items-center gap-4">
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-colors"
+            >
+              {saving ? 'Saving...' : 'Save settings'}
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              className="bg-surface-50 border border-surface-200 text-surface-600 hover:bg-surface-100/50 hover:text-surface-900 font-medium px-6 py-2.5 rounded-xl text-[14px] transition-colors"
+            >
+              Export my data
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
 }

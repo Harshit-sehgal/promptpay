@@ -45,24 +45,28 @@ export default function ReferralPage() {
 
   const statusBadge = (status: string) => {
     switch (status) {
-      case 'rewarded': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-      case 'pending': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-      default: return 'bg-ink-700 text-ink-300 border-ink-600/20';
+      case 'rewarded': return 'bg-emerald-50 border-emerald-200/60 text-emerald-600';
+      case 'pending': return 'bg-amber-50 border-amber-200/60 text-amber-600';
+      default: return 'bg-surface-50 border-surface-200/60 text-surface-500';
     }
   };
 
   return (
-    <>
+    <div className="max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1">Referrals</h1>
-        <p className="text-ink-300 text-sm">Invite developers and earn rewards when they get their first payout</p>
+        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Referrals</h1>
+        <p className="text-surface-500 text-[15px]">Invite developers and earn rewards when they get their first payout</p>
       </div>
 
-      {loading && <LoadingSpinner />}
+      {loading && (
+        <div className="flex justify-center py-12">
+          <LoadingSpinner />
+        </div>
+      )}
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
+          <p className="text-red-600 text-sm">{error}</p>
         </div>
       )}
 
@@ -70,75 +74,75 @@ export default function ReferralPage() {
         <>
           {/* Referral stats grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-              <p className="text-ink-300 text-sm mb-1">Your referral code</p>
+            <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
+              <p className="text-surface-500 text-sm mb-1.5 font-medium">Your referral code</p>
               {data.referralCode ? (
                 <p className="text-2xl font-mono font-bold text-brand-500 tracking-widest">{data.referralCode}</p>
               ) : (
-                <p className="text-ink-400 text-sm">No code generated yet</p>
+                <p className="text-surface-400 text-sm">No code generated yet</p>
               )}
             </div>
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-              <p className="text-ink-300 text-sm mb-1">Total referrals</p>
-              <p className="text-3xl font-bold text-white">{data.referralCount}</p>
+            <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
+              <p className="text-surface-500 text-sm mb-1.5 font-medium">Total referrals</p>
+              <p className="text-3xl font-bold text-surface-900">{data.referralCount}</p>
             </div>
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-              <p className="text-ink-300 text-sm mb-1">Rewards earned</p>
-              <p className="text-3xl font-bold text-emerald-400">{formatCurrency(data.rewardsEarnedMinor)}</p>
+            <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
+              <p className="text-surface-500 text-sm mb-1.5 font-medium">Rewards earned</p>
+              <p className="text-3xl font-bold text-emerald-600">{formatCurrency(data.rewardsEarnedMinor)}</p>
             </div>
           </div>
 
           {/* Referral link + copy */}
           {data.referralLink && (
-            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
-              <h2 className="text-white font-semibold mb-3">Your referral link</h2>
+            <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
+              <h2 className="text-surface-900 font-bold text-[16px] mb-4">Your referral link</h2>
               <div className="flex items-center gap-3">
-                <code className="flex-1 bg-ink-900 border border-ink-600/30 rounded-lg px-4 py-2 text-ink-200 text-sm break-all">
+                <code className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-800 text-[14px] break-all font-mono">
                   {data.referralLink}
                 </code>
                 <button
                   onClick={handleCopy}
-                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+                  className="px-5 py-3 bg-brand-500 hover:bg-brand-600 text-white text-[14px] font-semibold rounded-xl shadow-sm shadow-brand-500/10 transition-colors shrink-0"
                 >
-                  {copied ? 'Copied!' : 'Copy'}
+                  {copied ? 'Copied!' : 'Copy link'}
                 </button>
               </div>
-              <p className="text-ink-400 text-xs mt-2">
-                Share this link — when someone signs up and gets their first payout ($10+), you earn $5.
+              <p className="text-surface-500 text-[13px] mt-3">
+                Share this link — when someone signs up and gets their first payout ($10+), you earn <span className="text-emerald-600 font-semibold">$5</span>.
               </p>
             </div>
           )}
 
           {/* Referral history */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
-            <h2 className="text-white font-semibold mb-4">Referral history</h2>
+          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm overflow-hidden">
+            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Referral history</h2>
             {data.referrals.length === 0 ? (
-              <p className="text-ink-400 text-sm">No referrals yet. Share your link to start earning.</p>
+              <p className="text-surface-400 text-sm py-8 text-center">No referrals yet. Share your link to start earning.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-ink-300 border-b border-ink-600/30">
-                      <th className="text-left py-3 pr-4">Referred user</th>
-                      <th className="text-left py-3 pr-4">Status</th>
-                      <th className="text-left py-3 pr-4">Date</th>
-                      <th className="text-right py-3">Reward</th>
+                    <tr className="bg-surface-50/50 border-b border-surface-200/80 text-surface-500 font-semibold">
+                      <th className="text-left px-5 py-3.5">Referred user</th>
+                      <th className="text-left px-5 py-3.5">Status</th>
+                      <th className="text-left px-5 py-3.5">Date</th>
+                      <th className="text-right px-5 py-3.5">Reward</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-surface-100">
                     {data.referrals.map((r) => (
-                      <tr key={r.id} className="border-b border-ink-600/10 last:border-0">
-                        <td className="py-3 pr-4">
-                          <p className="text-white">{r.referredName || r.referredEmail}</p>
-                          <p className="text-ink-400 text-xs">{r.referredEmail}</p>
+                      <tr key={r.id} className="hover:bg-surface-50/30 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <p className="text-surface-900 font-semibold">{r.referredName || r.referredEmail}</p>
+                          <p className="text-surface-400 text-xs font-mono mt-0.5">{r.referredEmail}</p>
                         </td>
-                        <td className="py-3 pr-4">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${statusBadge(r.status)}`}>
+                        <td className="px-5 py-3.5">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusBadge(r.status)}`}>
                             {r.status}
                           </span>
                         </td>
-                        <td className="py-3 pr-4 text-ink-300">{formatDate(r.createdAt)}</td>
-                        <td className="py-3 text-right text-emerald-400">
+                        <td className="px-5 py-3.5 text-surface-500">{formatDate(r.createdAt)}</td>
+                        <td className="px-5 py-3.5 text-right text-emerald-600 font-mono font-bold">
                           {r.rewards.length > 0
                             ? formatCurrency(r.rewards.reduce((s, rw) => s + rw.amountMinor, 0))
                             : '$0.00'}
@@ -152,6 +156,6 @@ export default function ReferralPage() {
           </div>
         </>
       )}
-    </>
+    </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
-import { developerApi, ledgerApi } from '@/lib/api/services';
+import { ledgerApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
 interface EarningsEntry {
@@ -46,110 +46,118 @@ export default function DevEarningsPage() {
   }, {}) || {};
 
   return (
-<>
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white mb-1">Earnings ledger</h1>
-          <p className="text-ink-300 text-sm">Every earning entry with status and availability date</p>
-        </div>
+    <div className="max-w-6xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Earnings ledger</h1>
+        <p className="text-surface-500 text-[15px]">Every earning entry with status and availability date</p>
+      </div>
 
-        {/* Status summary */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <StatCard
-            label="Estimated"
-            value={formatCurrency(totalsByStatus.estimated || 0)}
-            subtitle="Pending hold period"
-          />
-          <StatCard
-            label="Pending"
-            value={formatCurrency(totalsByStatus.pending || 0)}
-            subtitle="Awaiting confirmation"
-          />
-          <StatCard
-            label="Confirmed"
-            value={formatCurrency(totalsByStatus.confirmed || 0)}
-            valueColor="text-emerald-400"
-            subtitle="Available for payout"
-          />
-          <StatCard
-            label="Held"
-            value={formatCurrency(totalsByStatus.held || 0)}
-            valueColor="text-amber-400"
-            subtitle="Under review"
-          />
-        </div>
+      {/* Status summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <StatCard
+          label="Estimated"
+          value={formatCurrency(totalsByStatus.estimated || 0)}
+          subtitle="Pending hold period"
+          variant="light"
+        />
+        <StatCard
+          label="Pending"
+          value={formatCurrency(totalsByStatus.pending || 0)}
+          subtitle="Awaiting confirmation"
+          valueColor="text-amber-600"
+          variant="light"
+        />
+        <StatCard
+          label="Confirmed"
+          value={formatCurrency(totalsByStatus.confirmed || 0)}
+          valueColor="text-emerald-600"
+          subtitle="Available for payout"
+          variant="light"
+        />
+        <StatCard
+          label="Held"
+          value={formatCurrency(totalsByStatus.held || 0)}
+          valueColor="text-rose-600"
+          subtitle="Under review"
+          variant="light"
+        />
+      </div>
 
-        {/* Filter */}
-        <div className="mb-6 flex items-center gap-2">
-          <span className="text-ink-400 text-sm">Filter:</span>
-          {['', 'estimated', 'pending', 'confirmed', 'held', 'paid', 'reversed'].map(
-            (status) => (
-              <button
-                key={status || 'all'}
-                onClick={() => setStatusFilter(status)}
-                className={`px-3 py-1 rounded-lg text-xs transition-colors ${
-                  statusFilter === status
-                    ? 'bg-brand-500 text-white'
-                    : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
-                }`}
-              >
-                {status || 'All'}
-              </button>
-            ),
+      {/* Filter */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="text-surface-500 text-sm font-medium mr-1">Filter:</span>
+        {['', 'estimated', 'pending', 'confirmed', 'held', 'paid', 'reversed'].map(
+          (status) => (
+            <button
+              key={status || 'all'}
+              onClick={() => setStatusFilter(status)}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                statusFilter === status
+                  ? 'bg-brand-50 border-brand-200 text-brand-600 font-bold'
+                  : 'bg-surface-50 border-surface-200/80 text-surface-500 hover:bg-surface-100/50 hover:text-surface-900'
+              }`}
+            >
+              {status ? status.charAt(0).toUpperCase() + status.slice(1) : 'All'}
+            </button>
+          ),
+        )}
+      </div>
+
+      {loading && (
+        <div className="flex justify-center py-12">
+          <LoadingSpinner />
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
+          <p className="text-red-600 text-sm">{error}</p>
+        </div>
+      )}
+
+      {data && (
+        <div className="bg-white border border-surface-200/80 rounded-2xl shadow-sm overflow-hidden">
+          {data.entries.length === 0 ? (
+            <div className="text-surface-400 text-sm py-16 text-center">
+              No earnings yet. Install the WaitLayer VS Code extension to start tracking wait
+              states.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-surface-50/50 border-b border-surface-200/80">
+                <tr>
+                  <th className="text-left px-5 py-3.5 text-surface-500 font-semibold tracking-tight">Date</th>
+                  <th className="text-left px-5 py-3.5 text-surface-500 font-semibold tracking-tight">Description</th>
+                  <th className="text-left px-5 py-3.5 text-surface-500 font-semibold tracking-tight">Status</th>
+                  <th className="text-right px-5 py-3.5 text-surface-500 font-semibold tracking-tight">Amount</th>
+                  <th className="text-right px-5 py-3.5 text-surface-500 font-semibold tracking-tight">Available</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-100">
+                {data.entries.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-surface-50/30 transition-colors">
+                    <td className="px-5 py-3.5 text-surface-500">{formatRelativeTime(entry.createdAt)}</td>
+                    <td className="px-5 py-3.5 text-surface-900 font-medium">
+                      {entry.description || `${entry.entryType} entry`}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <StatusBadge status={entry.status} />
+                    </td>
+                    <td className="px-5 py-3.5 text-right font-mono text-surface-900 font-semibold">
+                      {formatCurrency(entry.amountMinor, entry.currency)}
+                    </td>
+                    <td className="px-5 py-3.5 text-right text-surface-500 text-xs">
+                      {entry.availableAt
+                        ? formatRelativeTime(entry.availableAt)
+                        : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
-
-        {loading && <LoadingSpinner />}
-
-        {error && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-            <p className="text-red-400 text-sm">{error}</p>
-          </div>
-        )}
-
-        {data && (
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
-            {data.entries.length === 0 ? (
-              <div className="text-ink-400 text-sm py-12 text-center">
-                No earnings yet. Install the WaitLayer VS Code extension to start tracking wait
-                states.
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead className="bg-ink-700/50 border-b border-ink-600/30">
-                  <tr>
-                    <th className="text-left px-4 py-3 text-ink-300 font-medium">Date</th>
-                    <th className="text-left px-4 py-3 text-ink-300 font-medium">Description</th>
-                    <th className="text-left px-4 py-3 text-ink-300 font-medium">Status</th>
-                    <th className="text-right px-4 py-3 text-ink-300 font-medium">Amount</th>
-                    <th className="text-right px-4 py-3 text-ink-300 font-medium">Available</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-ink-600/20">
-                  {data.entries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-ink-700/30 transition-colors">
-                      <td className="px-4 py-3 text-ink-300">{formatRelativeTime(entry.createdAt)}</td>
-                      <td className="px-4 py-3 text-white">
-                        {entry.description || `${entry.entryType} entry`}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={entry.status} />
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-white">
-                        {formatCurrency(entry.amountMinor, entry.currency)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-ink-400 text-xs">
-                        {entry.availableAt
-                          ? formatRelativeTime(entry.availableAt)
-                          : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-      
-</>
-);
+      )}
+    </div>
+  );
 }
