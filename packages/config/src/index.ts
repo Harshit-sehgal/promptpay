@@ -24,6 +24,11 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('30d'),
+  EXTENSION_HMAC_SECRET: z
+    .string()
+    .min(32)
+    .optional()
+    .default('dev-secret-change-me-do-not-use-in-production'),
 
   // Stripe (advertiser deposits)
   STRIPE_PUBLIC_KEY: z.string().optional(),

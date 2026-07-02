@@ -13,7 +13,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { signPayload } from '@waitlayer/shared';
 
 // HMAC secret must match what ExtensionService uses
-const HMAC_SECRET = 'dev-secret-change-me';
+const HMAC_SECRET = 'dev-secret-change-me-do-not-use-in-production';
 
 // ── Helpers ──
 function hmacSign(payload: Record<string, unknown>): string {

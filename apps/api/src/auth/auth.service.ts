@@ -9,6 +9,7 @@ import { UserRole, UserStatus } from '@waitlayer/shared';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { FraudService } from '../fraud/fraud.service';
 import { EmailService } from '../email/email.service';
+import { AuditService } from '../audit/audit.service';
 
 interface TokenPayload {
   sub: string;
@@ -52,6 +53,7 @@ export class AuthService {
     private googleVerifier: GoogleTokenVerifier,
     private fraud: FraudService,
     private email: EmailService,
+    private audit: AuditService,
   ) {
     this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
     this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d');
@@ -119,6 +121,17 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokenPair(user.id, user.role);
+
+    // Audit log: new user registration
+    this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'signup',
+      targetType: 'user',
+      targetId: user.id,
+      afterSnap: { email: user.email, role: user.role },
+    }).catch(() => {});
+
     return {
       user: this.sanitizeUser(user),
       ...tokens,
@@ -128,14 +141,36 @@ export class AuthService {
   /** ── Login ── */
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      // Audit: login attempt for unknown email
+      this.audit.log({
+        actorId: 'anonymous',
+        actorRole: 'anonymous',
+        action: 'login_failed',
+        targetType: 'user',
+        targetId: dto.email,
+        afterSnap: { reason: 'unknown_email' },
+      }).catch(() => {});
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     if (!user.passwordHash) {
       throw new UnauthorizedException('Account uses social login — sign in with Google');
     }
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    if (!valid) {
+      // Audit: failed password attempt
+      this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'login_failed',
+        targetType: 'user',
+        targetId: user.id,
+        afterSnap: { reason: 'bad_password' },
+      }).catch(() => {});
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
       throw new UnauthorizedException('Account is not active');
@@ -308,6 +343,15 @@ export class AuthService {
   /** ── Logout ── */
   async logout(userId: string) {
     await this.revokeAllSessions(userId);
+    // Log who logged out (requires fetching role — fetch user briefly here)
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    this.audit.log({
+      actorId: userId,
+      actorRole: user?.role ?? 'unknown',
+      action: 'logout',
+      targetType: 'session',
+      targetId: userId,
+    }).catch(() => {});
   }
 
   /** ── Get Current User ── */
@@ -519,6 +563,15 @@ export class AuthService {
 
     // Best-effort notification — never fail the reset because of email delivery
     void this.email.sendPasswordChanged(user.email).catch(() => undefined);
+
+    // Audit log: password reset completed
+    this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'password_reset',
+      targetType: 'user',
+      targetId: user.id,
+    }).catch(() => {});
 
     return { message: 'Password reset successfully. Please sign in with your new password.' };
   }

@@ -16,6 +16,7 @@ import { CampaignModule } from './campaign/campaign.module';
 import { AuditModule } from './audit/audit.module';
 import { ReferralModule } from './referral/referral.module';
 import { PrismaModule } from './config/prisma.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { PrismaModule } from './config/prisma.module';
       { ttl: 60_000, limit: 200, name: 'default' },      // everything else: 200 req/min
     ]),
     PrismaModule,
+    HealthModule,
     AuditModule,
     AuthModule,
     DeveloperModule,

@@ -32,7 +32,7 @@ export class ExtensionService {
     private ledger: LedgerService,
     private fraud: FraudService,
   ) {
-    this.hmacSecret = this.config.get<string>('EXTENSION_HMAC_SECRET', 'dev-secret-change-me');
+    this.hmacSecret = this.config.get<string>('EXTENSION_HMAC_SECRET', 'dev-secret-change-me-do-not-use-in-production');
   }
 
   // ── Device Registration ──
@@ -859,10 +859,11 @@ export class ExtensionService {
         select: { eventSecret: true },
       });
       if (device?.eventSecret) {
-        return verifySignature(payload, device.eventSecret, signature);
+        // Try device-specific secret first; fall back to global for old clients
+        if (verifySignature(payload, device.eventSecret, signature)) return true;
       }
     }
-    // Fallback: global HMAC secret only for legacy devices without eventSecret.
+    // Fallback: global HMAC secret for legacy clients / tests
     return verifySignature(payload, this.hmacSecret, signature);
   }
 

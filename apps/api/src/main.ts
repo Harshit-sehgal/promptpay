@@ -1,12 +1,21 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 import { raw } from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { loadEnv } from '@waitlayer/config';
 
 async function bootstrap() {
+  // Validate env on startup. Non-production environments allow
+  // shorter secrets during iterative development.
+  loadEnv(process.env);
+
   const app = await NestFactory.create(AppModule);
+
+  // ── Security headers (Helmet) ──────────────────────────────────
+  app.use(helmet());
 
   // Raw body parsing for Stripe webhook routes — Stripe needs the raw
   // request body for signature verification. Applied BEFORE global prefix
@@ -33,7 +42,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = process.env.API_PORT || 4000;
+  const port = process.env.API_PORT || 4002;
   await app.listen(port);
   console.log(`🚀 WaitLayer API running on http://localhost:${port}`);
 }

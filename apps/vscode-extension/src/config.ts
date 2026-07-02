@@ -23,7 +23,7 @@ export class ConfigurationManager {
   getSecretKey(): string {
     return (
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('extensionSecret') ||
-      'dev-secret-change-me'
+      'dev-secret-change-me-do-not-use-in-production'
     );
   }
 

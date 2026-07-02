@@ -52,9 +52,12 @@ function makeService(overrides?: Record<string, string>) {
     sendPasswordReset: vi.fn().mockResolvedValue({ delivered: true, driver: 'console' }),
     sendPasswordChanged: vi.fn().mockResolvedValue({ delivered: true, driver: 'console' }),
   } as any;
+  const audit = {
+    log: vi.fn().mockResolvedValue(undefined),
+  } as any;
 
   return {
-    service: new AuthService(prismaRef, jwt, config, googleVerifier, fraud, email),
+    service: new AuthService(prismaRef, jwt, config, googleVerifier, fraud, email, audit),
     jwt,
     config,
     googleVerifier,
@@ -419,7 +422,7 @@ describe('AuthService', () => {
     });
 
     it('rejects reset for banned accounts', async () => {
-      const { service, jwt } = makeService();
+      const { service } = makeService();
       mockPrisma.user.findUnique.mockResolvedValue(resetUser);
       const reqRes = await service.requestPasswordReset('reset@test.com');
 
