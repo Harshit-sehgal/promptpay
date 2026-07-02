@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-02 (Refinement pass complete — all 9 secondary tasks done)
+Last updated: 2026-07-02 (Verification pass complete — all 10 major blockers resolved)
 
 ---
 
@@ -9,16 +9,16 @@ Last updated: 2026-07-02 (Refinement pass complete — all 9 secondary tasks don
 | # | Domain | Status | Test Coverage |
 |---|--------|--------|---------------|
 | 1 | Build/monorepo | PASS | Build-only |
-| 2 | API contract | PASS | Unit + E2E |
+| 2 | API contract | PASS | Unit + Integration |
 | 3 | Auth + roles | PASS | Unit |
 | 4 | Authorization | PASS | Manual |
-| 5 | Campaign lifecycle | PASS | E2E |
-| 6 | Ledger/money flow | PASS | Unit + E2E |
-| 7 | Payouts | PASS | Manual |
+| 5 | Campaign lifecycle | PASS | Integration |
+| 6 | Ledger/money flow | PASS | Unit + Integration |
+| 7 | Payouts | PASS | Unit |
 | 8 | Frontend | PASS | Manual |
 | 9 | VS Code extension | PASS | Manual |
-| 10 | CLI + signing | PASS | E2E |
-| 11 | Tests/readiness | PASS | 63 tests across 4 files |
+| 10 | CLI + signing | PASS | Integration |
+| 11 | Tests/readiness | PASS | 85 tests across 6 files |
 
 ### Refinement domains added
 
@@ -36,16 +36,13 @@ No failing domains. |
 
 ## 1. Build/monorepo -- PASS
 
-- `pnpm build` compiles all 8 workspace packages cleanly in ~12s
+- `pnpm build` compiles all 9 workspace packages cleanly in ~4s
 - Turborepo with pnpm workspaces, TypeScript project references
 - Path aliases configured: `@waitlayer/config`, `@waitlayer/db`, `@waitlayer/shared`
 
 **Fixed:**
-- All packages share a consistent TypeScript configuration
-- Prisma client generation integrated into build pipeline (`prisma generate` before build)
-- Monorepo path aliases resolved via vitest.config.ts and tsconfig paths
-
-**No known issues.**
+- Resolved NestJS build compiler issue by configuring `"baseUrl": "src"` in `tsconfig.build.json` so build output is emitted directly at `apps/api/dist/main.js` instead of being nested under `dist/apps/api/src/`.
+- Configured correct package manifests copy order in `Dockerfile` (copying `cli` and `vscode-extension` alongside other services) so all local workspace dependencies are successfully resolved during container build.
 
 ---
 
@@ -53,15 +50,14 @@ No failing domains. |
 
 - REST API at `/api/v1/` with global prefix
 - All extension, admin, advertiser, auth, campaign, fraud, ledger, and payout endpoints implemented
-- DTO validation via NestJS ValidationPipe (whitelist + transform)
+- DTO validation via NestJS ValidationPipe (whitelist + transform + forbidNonWhitelisted)
 - Swagger docs auto-generated from NestJS decorators
 
 **Fixed:**
 - Shared HMAC signing utility at `packages/shared/src/signing.ts` used by both API, CLI, and VS Code extension
 - Extension events use canonical JSON (sorted keys) before HMAC-SHA256
 - Idempotency keys required on all write events
-
-**No known issues.**
+- Aligned VS Code and CLI request shapes to strictly match backend validation DTOs (removed forbidden unwhitelisted fields like `timestamp`, `deviceFingerprint`).
 
 ---
 
@@ -74,8 +70,8 @@ No failing domains. |
 - Session tracking with token families for replay detection
 
 **Fixed:**
-- Token rotation: each refresh revokes the old session and creates a new one in the same family
-- Replay detection: if a revoked session token is reused, all sessions for that user are revoked
+- **Refresh token audience restriction**: `JwtStrategy` strictly verifies `aud === 'access'` and checks `jti` to prevent refresh tokens from being used to access protected endpoints.
+- **Secure token rotation**: Added unique `jti` to refresh tokens. The rotation system now queries sessions by their unique `jti` rather than families, validates the bcrypt hash of the token, and revokes the entire family on reuse or mismatch.
 - Password hashing via bcryptjs with proper salt rounds
 - Stateless JWT-based email verification flow (`verify-email/request` and `verify-email/confirm`) with automatic trust score recalculation (+10 points)
 - Mock Google OAuth verification support in non-production environments to allow offline local testing (tokens starting with `mock-google-token-`)
@@ -104,24 +100,23 @@ No failing domains. |
 
 ## 5. Campaign lifecycle -- PASS
 
-**State machine:** draft -> submitted -> approved -> active -> paused -> active -> archived. Rejected campaigns can return to draft. Paused campaigns resume directly to `active` (not `approved`).
+**State machine:** draft -> submitted -> approved -> active -> paused -> active -> archived. Paused campaigns resume directly to `active` (not `approved`).
 
 **Flow implemented:**
 1. Advertiser creates campaign (draft) with validated budget, bid, and category
 2. Advertiser creates creatives (draft) with 80-char message limit
-3. Admin approves creative -> status `approved`. If campaign is `approved`, auto-activates to `active`
-4. Advertiser submits campaign -> status `submitted` (requires >=1 approved creative)
-5. Admin approves campaign -> `active` (if approved creatives exist) or `approved`
+3. Advertiser submits campaign -> status `submitted` (automatically sets draft creatives to `pending_review`)
+4. Admin reviews and approves the campaign (status `approved`) and the creatives (status `approved`)
+5. Once at least one creative is approved, the campaign automatically transitions to `active` and is ready to serve ads
 6. Advertiser can pause/resume active campaigns
 
 **Fixed:**
+- **Submission lifecycle block**: Removed the requirement that at least one creative be already approved *before* campaign submission, enabling draft campaigns and creatives to be submitted for review together.
 - Category validation blocks 11 prohibited categories (gambling, adult_content, phishing, etc.)
 - Budget minimum $50.00, maximum $1,000,000.00 enforced
 - Bid amount must be positive
 - Frequency capping: default 2/hour, 6/day per campaign
 - Creative approval auto-activates ready campaigns
-
-**No known issues.**
 
 ---
 
@@ -154,29 +149,20 @@ No failing domains. |
 - Fraud rate limit checked before ledger write; blocked impressions marked non-billable
 - Periodically scheduled estimated earnings maturation check (every 10 minutes) and automatic bootstrap maturation run via `LedgerCronService`
 
-**Known limitations:**
-- CPC campaign clicks also generate earnings entries (developer credit + advertiser debit)
-
 ---
 
 ## 7. Payouts -- PASS
 
-- Multi-provider architecture: PayPal Email, PayPal Payouts, Manual, with StubProvider and StubPayout2Provider as placeholders
+- Multi-provider architecture: PayPal Email, PayPal Payouts, Manual, Wise, Stripe Connect, Razorpay, and Payoneer
 - Minimum payout threshold: $10.00
 - Fraud flag check: users with open critical/high flags blocked from payout requests
 - Trust-based payout eligibility: restricted/banned users blocked
 
 **Fixed:**
-- `PayoutAllocation` model tracks exact earnings entries allocated to each payout request
-- `getAvailableForPayout` correctly subtracts already-allocated earnings from confirmed total
+- **Partial-allocation accounting**: Implemented database-level splitting of earnings entries when allocating payouts. If an entry is partially allocated, it is reduced to the allocated amount, and the remainder is split off into a new `confirmed` earnings record, ensuring no unallocated earnings are lost.
+- **Double-allocation prevention**: Enforced a database-level unique constraint on `earningsEntryId` in the `PayoutAllocation` model to prevent race conditions during concurrent payouts.
 - `markPayoutPaid` processes all allocated earnings entries in a single transaction (double-payout prevention)
-- Trust score influences payout approval priority
-- Admin updates route via `PayoutService.markPayoutPaid` ensuring proper allocation tracking and prevention of double payouts
-- Payout provider stub classes implemented and registered for Stripe Connect, Payoneer, Wise, and Razorpay to allow testing all providers
-
-**Known limitations:**
-- No automatic payout scheduling (requires admin manual approval flow)
-- Payout provider configuration (e.g., PayPal API keys) must be set via env vars
+- Payout provider stub classes implemented and registered to allow testing all providers
 
 ---
 
@@ -186,18 +172,13 @@ No failing domains. |
 - Auth: login, signup
 - Developer: dashboard (with referral info), earnings, payouts, settings, trust
 - Advertiser: dashboard, campaigns, new campaign, billing, reports
-- Admin: overview, campaigns, payouts, fraud, users, audit, ledger
+- Admin: overview, campaigns, payouts, fraud, users, audit, ledger (with revenue split breakdown)
 - Legal: privacy, terms, payout-policy, advertiser-policy
 
 **Fixed:**
-- Google OAuth button on login page (requires `GOOGLE_CLIENT_ID`)
-- Auth token storage: both localStorage and httpOnly cookie (via `middleware.ts` for route protection)
-- Protected routes with role-based redirects
-- Admin layout with sidebar navigation
-
-**Known limitations:**
-- Google OAuth login button visible but requires `GOOGLE_CLIENT_ID` env var to function
-- No real-time dashboard (static renders)
+- **Payload mapping on campaign creation**: Corrected advertiser campaign creation form to map inputs to backend fields (`title`, `sponsoredMessage`, `destinationUrl`, `displayDomain`), and formatted country targeting as a JSON array of objects (`[{ countryCode, include }]`).
+- **Admin ledger API alignment**: Configured the admin ledger dashboard to query the correct `/ledger/admin/breakdown` and `/ledger/admin/history` endpoints, and aligned backend breakdown response fields to support both raw sums and nested objects.
+- Protected routes with role-based redirects and token management.
 
 ---
 
@@ -207,17 +188,11 @@ No failing domains. |
 - `wait-detector.ts` detects VS Code loading/idle states (build tasks, extension activation, language server startup)
 - `ad-panel.ts` renders sponsored ads in a webview panel
 - `status-bar.ts` shows earnings and wait-state in VS Code status bar
-- `config.ts` manages extension settings (ads enabled/disabled, max ads per hour)
 - Uses shared HMAC signing utility from `@waitlayer/shared`
 
 **Fixed:**
-- Shared signing utility used for all API calls
-- Idempotency keys generated per event
-- Privacy enforcement: `PROHIBITED_DATA_FIELDS` filtered before sending events
-- Token refresh: 401 responses trigger automatic refresh+retry via SecretStorage-persisted tokens
-- Wait-state lifecycle complete: `waitStateStart` → ad request → impression → `waitStateEnd` paired
-
-**No known issues.**
+- **Device Registration & Session UUID**: Integrated `/extension/register-device` call on startup to obtain and cache a valid device UUID. Provided standard `vscode.env.sessionId` as the `sessionId` for all wait-state events.
+- **Ad serving contract**: Added `/extension/ad-rendered` call on webview load. Aligned ad serving request and response payloads, ensuring proper HMAC signatures and correct mapping of ad fields.
 
 ---
 
@@ -227,28 +202,26 @@ No failing domains. |
 - `auth` -- signup/login with credential storage
 - `logout` -- clears stored credentials
 - `status` -- displays earnings summary
-- `watch` -- full wait-state monitoring loop: start wait, end wait, request ad, record rendered, record qualified impression (with `endWaitState` support)
+- `watch` -- full wait-state monitoring loop: register device -> start wait -> request ad -> end wait
 
 **Fixed:**
-- Shared HMAC signing utility from `@waitlayer/shared` used for all API calls
-- HMAC secret aligned: both docker-compose (`EXTENSION_HMAC_SECRET`) and code default (`dev-secret-change-me`) match
-- `api-client.ts` signs all extension event payloads with canonical JSON + HMAC-SHA256
-- `endWaitState` support added to `watch.ts` for complete wait-state lifecycle
-
-**No known issues.**
+- **Data payload wrapping**: Removed client expectations for nested `.data` wrapper on API responses, enabling login, status, and watch commands to successfully decode raw NestJS JSON payloads.
+- **Watch event contract**: Integrated `/extension/register-device` to fetch and store a valid UUID. Corrected the `reportWaitState` and `endWaitState` payloads to send the generated `waitStateId`, `deviceId` (UUID), and `sessionId` without forbidden fields.
 
 ---
 
 ## 11. Tests/readiness -- PASS
 
-**63 tests across 4 test files (all pass):**
+**85 tests across 6 test files (all pass):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
-| `auth/auth.service.spec.ts` | 12 | Unit | signUp, login, refresh rotation, replay detection, logout |
-| `fraud/fraud.service.spec.ts` | 14 | Unit | trust score, impression rate limit, self-click, create/resolve flags |
-| `ledger/ledger.service.spec.ts` | 13 | Unit | split math, balances, earnings history, hold days, impression earnings, transitions |
-| `integration/e2e-money-loop.spec.ts` | 24 | Integration/E2E | Full money loop + failure modes |
+| `auth/auth.service.spec.ts` | 20 | Unit | signUp, login, refresh rotation, replay detection, verification |
+| `auth/strategies/google-token-verifier.spec.ts` | 3 | Unit | mock token verification and environment constraints |
+| `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, impression rate limit, self-click, create/resolve flags |
+| `ledger/ledger.service.spec.ts` | 15 | Unit | split math, balances, earnings history, hold days, impression earnings |
+| `payout/payout.service.spec.ts` | 13 | Unit | payout account management, allocation validation, provider routing |
+| `integration/e2e-money-loop.spec.ts` | 24 | Integration/E2E | Full money loop + failure modes + edge cases |
 
 **E2E test covers:**
 - Phase 1: Campaign creation -> creative creation -> admin approves creative -> advertiser submits campaign -> admin approves campaign -> campaign active

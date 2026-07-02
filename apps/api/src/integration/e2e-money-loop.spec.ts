@@ -55,6 +55,7 @@ const mockPrisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   // ── CampaignApproval ──
   campaignApproval: {
@@ -1337,17 +1338,24 @@ describe('E2E Money Loop', () => {
       ).rejects.toThrow(/at least one creative/);
     });
 
-    it('rejects campaign submit when creative exists but is not approved', async () => {
+    it('allows campaign submit when creatives exist and are not approved', async () => {
       const advId = uid('advp');
       const campId = uid('camp');
       mockPrisma.campaign.findUnique.mockResolvedValue({
         id: campId, advertiserId: advId, status: 'draft',
-        creatives: [{ id: uid('cr'), status: 'draft' }], // creative exists but not approved
+        creatives: [{ id: uid('cr'), status: 'draft' }],
+      });
+      mockPrisma.adCreative.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.campaign.update.mockResolvedValue({
+        id: campId, status: 'submitted',
       });
 
-      await expect(
-        svc.advertiser.submitCampaign(campId, advId),
-      ).rejects.toThrow(/at least one approved creative/);
+      const res = await svc.advertiser.submitCampaign(campId, advId);
+      expect(res.status).toBe('submitted');
+      expect(mockPrisma.adCreative.updateMany).toHaveBeenCalledWith({
+        where: { campaignId: campId, status: 'draft' },
+        data: { status: 'pending_review' },
+      });
     });
 
     it('handles idempotent wait-state-start (returns existing record)', async () => {

@@ -54,10 +54,10 @@ function makeService(overrides?: Record<string, string>) {
     config,
     googleVerifier,
     fraud,
-    createAccessToken: (sub: string, role: string, ttl = '15m') =>
-      jwt.signAsync({ sub, role }, { expiresIn: ttl } as any),
-    createRefreshToken: (sub: string, role: string, family: string, ttl = '30d') =>
-      jwt.signAsync({ sub, role, family }, { expiresIn: ttl } as any),
+    createAccessToken: (sub: string, role: string, ttl = '15m', jti = 'access-jti') =>
+      jwt.signAsync({ sub, role, aud: 'access', jti }, { expiresIn: ttl } as any),
+    createRefreshToken: (sub: string, role: string, family: string, ttl = '30d', jti = 'sess-1') =>
+      jwt.signAsync({ sub, role, family, aud: 'refresh', jti }, { expiresIn: ttl } as any),
   };
 }
 
@@ -163,12 +163,13 @@ describe('AuthService', () => {
     it('returns a new token pair with same family', async () => {
       const { service, createRefreshToken } = makeService();
       const family = 'fam-abc';
-      const oldRefresh = await createRefreshToken('u-3', 'developer', family);
+      const oldRefresh = await createRefreshToken('u-3', 'developer', family, '30d', 'sess-1');
 
-      mockPrisma.session.findFirst.mockResolvedValue({
+      mockPrisma.session.findUnique.mockResolvedValue({
         id: 'sess-1',
         userId: 'u-3',
         tokenFamily: family,
+        tokenHash: await (await import('bcryptjs')).hash(oldRefresh, 4),
         revoked: false,
       });
       mockPrisma.session.update.mockResolvedValue({});
@@ -191,20 +192,21 @@ describe('AuthService', () => {
     it('revokes all sessions on token reuse (replay detection)', async () => {
       const { service, createRefreshToken } = makeService();
       const family = 'fam-replay';
-      const oldRefresh = await createRefreshToken('u-4', 'developer', family);
+      const oldRefresh = await createRefreshToken('u-4', 'developer', family, '30d', 'sess-2');
 
       // Session exists but is already revoked → replay detected
-      mockPrisma.session.findFirst.mockResolvedValue({
+      mockPrisma.session.findUnique.mockResolvedValue({
         id: 'sess-2',
         userId: 'u-4',
         tokenFamily: family,
+        tokenHash: await (await import('bcryptjs')).hash(oldRefresh, 4),
         revoked: true,
       });
 
       await expect(service.refresh(oldRefresh)).rejects.toThrow(UnauthorizedException);
       expect(mockPrisma.session.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { userId: 'u-4' },
+          where: expect.objectContaining({ userId: 'u-4' }),
           data: { revoked: true },
         }),
       );
@@ -213,22 +215,23 @@ describe('AuthService', () => {
     it('revoked session cannot refresh — all sessions revoked', async () => {
       const { service, createRefreshToken } = makeService();
       const family = 'fam-revoked';
-      const oldRefresh = await createRefreshToken('u-4b', 'developer', family);
+      const oldRefresh = await createRefreshToken('u-4b', 'developer', family, '30d', 'sess-rev');
 
       // Session already revoked (e.g. user logged out on another device)
-      mockPrisma.session.findFirst.mockResolvedValue({
+      mockPrisma.session.findUnique.mockResolvedValue({
         id: 'sess-rev',
         userId: 'u-4b',
         tokenFamily: family,
+        tokenHash: await (await import('bcryptjs')).hash(oldRefresh, 4),
         revoked: true,
       });
 
       await expect(service.refresh(oldRefresh)).rejects.toThrow(
-        'Token reuse detected — all sessions revoked',
+        'Token reuse detected — family sessions revoked',
       );
       expect(mockPrisma.session.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { userId: 'u-4b' },
+          where: expect.objectContaining({ userId: 'u-4b' }),
           data: { revoked: true },
         }),
       );
@@ -236,13 +239,13 @@ describe('AuthService', () => {
 
     it('revokes all sessions if no session found for token', async () => {
       const { service, createRefreshToken } = makeService();
-      const oldRefresh = await createRefreshToken('u-5', 'developer', 'fam-ghost');
+      const oldRefresh = await createRefreshToken('u-5', 'developer', 'fam-ghost', '30d', 'sess-ghost');
 
-      mockPrisma.session.findFirst.mockResolvedValue(null);
+      mockPrisma.session.findUnique.mockResolvedValue(null);
 
       await expect(service.refresh(oldRefresh)).rejects.toThrow(UnauthorizedException);
       expect(mockPrisma.session.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: 'u-5' } }),
+        expect.objectContaining({ where: expect.objectContaining({ userId: 'u-5' }) }),
       );
     });
 

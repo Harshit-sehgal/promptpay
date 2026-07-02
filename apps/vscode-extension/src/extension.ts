@@ -60,27 +60,47 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     try {
-      // 1. Register wait state start with API
-      const deviceId = await config.getDeviceFingerprint();
+      // 1. Get or register device (obtains UUID)
+      const deviceId = await api.getOrRegisterDevice();
       const idempotencyKey = `ws-start-${event.waitStateId}`;
+
+      // 2. Register wait state start with API
       await api.waitStateStart({
         deviceId,
+        sessionId,
         waitStateId: event.waitStateId,
         toolType: 'vscode',
         idempotencyKey,
       });
 
-      // 2. Request an ad
+      // 3. Request an ad
       const ad = await api.requestAd({
+        deviceId,
+        sessionId,
+        waitStateId: event.waitStateId,
         toolType: 'vscode',
-        waitDurationMs: event.durationMs,
-        deviceFingerprint: deviceId,
+        idempotencyKey: `ad-req-${event.waitStateId}`,
       });
 
       if (ad) {
         adTimestamps.push(now);
         status.showAdServing();
-        panel.show(ad, async (clicked) => {
+
+        // 4. Record that the ad was rendered to the user
+        await api.recordAdRendered({
+          impressionToken: ad.impressionToken,
+          renderedAt: new Date().toISOString(),
+          idempotencyKey: `render-${ad.impressionToken}`,
+        });
+
+        // 5. Show ad in panel
+        panel.show({
+          headline: ad.title,
+          message: ad.message,
+          ctaText: 'Visit site',
+          ctaUrl: ad.destinationUrl,
+          impressionToken: ad.impressionToken,
+        }, async (clicked) => {
           if (clicked) {
             await api.recordClick(ad.impressionToken);
           }

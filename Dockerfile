@@ -11,6 +11,8 @@ COPY packages/config/package.json packages/config/
 COPY packages/ui/package.json packages/ui/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
+COPY apps/cli/package.json apps/cli/
+COPY apps/vscode-extension/package.json apps/vscode-extension/
 
 RUN pnpm install --frozen-lockfile
 

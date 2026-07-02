@@ -80,17 +80,49 @@ export class ApiClient {
     return this._refreshInProgress;
   }
 
+  private deviceUUID: string | null = null;
+
+  async getOrRegisterDevice(): Promise<string> {
+    if (this.deviceUUID) return this.deviceUUID;
+
+    try {
+      const stored = await this.config.getDeviceUUID();
+      if (stored) {
+        this.deviceUUID = stored;
+        return stored;
+      }
+    } catch {}
+
+    const fingerprint = await this.config.getDeviceFingerprint();
+    const res = await this.post<{ id: string }>('/extension/register-device', {
+      toolType: 'vscode',
+      fingerprintHash: fingerprint,
+      extensionVersion: '0.0.1',
+      platform: process.platform || 'unknown',
+    });
+
+    if (res && res.id) {
+      this.deviceUUID = res.id;
+      try {
+        await this.config.storeDeviceUUID(res.id);
+      } catch {}
+      return res.id;
+    }
+    throw new Error('Failed to register device');
+  }
+
   async waitStateStart(input: {
     deviceId: string;
+    sessionId: string;
     waitStateId: string;
     toolType: string;
     idempotencyKey: string;
   }): Promise<void> {
     const payload = {
       deviceId: input.deviceId,
-      waitStateId: input.waitStateId,
+      sessionId: input.sessionId,
       toolType: input.toolType,
-      timestamp: new Date().toISOString(),
+      waitStateId: input.waitStateId,
       idempotencyKey: input.idempotencyKey,
     };
     await this.post('/extension/wait-state/start', {
@@ -116,12 +148,40 @@ export class ApiClient {
   }
 
   async requestAd(input: {
+    deviceId: string;
+    sessionId: string;
+    waitStateId: string;
     toolType: string;
-    waitDurationMs: number;
-    deviceFingerprint: string;
+    idempotencyKey: string;
   }): Promise<Ad | null> {
-    const res = await this.post<ServerAdResponse>('/extension/ad-request', input);
-    return res?.data ?? null;
+    const payload = {
+      deviceId: input.deviceId,
+      sessionId: input.sessionId,
+      waitStateId: input.waitStateId,
+      toolType: input.toolType,
+      idempotencyKey: input.idempotencyKey,
+    };
+    const res = await this.post<ServerAdResponse>('/extension/ad-request', {
+      ...payload,
+      signature: this.sign(payload),
+    });
+    return res?.ad ?? null;
+  }
+
+  async recordAdRendered(input: {
+    impressionToken: string;
+    renderedAt: string;
+    idempotencyKey: string;
+  }): Promise<void> {
+    const payload = {
+      impressionToken: input.impressionToken,
+      renderedAt: input.renderedAt,
+      idempotencyKey: input.idempotencyKey,
+    };
+    await this.post('/extension/ad-rendered', {
+      ...payload,
+      signature: this.sign(payload),
+    });
   }
 
   async recordImpressionEnd(impressionToken: string, visibleDurationMs: number): Promise<void> {

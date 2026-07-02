@@ -27,6 +27,7 @@ const mockPrisma = {
   earningsLedger: {
     findMany: vi.fn(),
     create: vi.fn(),
+    update: vi.fn(),
     updateMany: vi.fn(),
     aggregate: vi.fn(),
   },
@@ -49,6 +50,9 @@ const prismaRef = mockPrisma as any;
 const mockLedger = {
   matureEarnings: vi.fn(),
 } as any;
+const mockReferral = {
+  processReferralRewards: vi.fn().mockResolvedValue(undefined),
+} as any;
 const mockPayPalPayouts = {
   initiate: vi.fn().mockResolvedValue({ providerTxId: 'pp_tx_123', status: 'processing' }),
   checkStatus: vi.fn().mockResolvedValue({ status: 'processing' }),
@@ -59,7 +63,7 @@ describe('PayoutService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new PayoutService(prismaRef, mockLedger, mockPayPalPayouts);
+    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockPayPalPayouts);
   });
 
   describe('addPayoutMethod', () => {
