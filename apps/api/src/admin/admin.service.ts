@@ -43,16 +43,38 @@ export class AdminService {
     // Must have at least one approved creative and remaining budget to activate
     const hasApprovedCreative = campaign.creatives.some((c: any) => c.status === 'approved');
     const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
+    const canActivate = hasApprovedCreative && hasBudget;
 
     // Set status: 'approved' if no approved creatives yet or no budget, 'active' if ready to serve
-    const newStatus = (hasApprovedCreative && hasBudget) ? 'active' : 'approved';
-    return this.prisma.$transaction([
+    const newStatus = canActivate ? 'active' : 'approved';
+
+    // Build human-readable blockers list for the UI
+    const blockers: string[] = [];
+    if (!hasApprovedCreative) {
+      const pendingCount = campaign.creatives.filter((c: any) => c.status === 'pending_review').length;
+      const draftCount = campaign.creatives.filter((c: any) => c.status === 'draft').length;
+      blockers.push(
+        `No approved creatives (${pendingCount} pending review, ${draftCount} draft). Approve at least one creative to activate.`,
+      );
+    }
+    if (!hasBudget) {
+      blockers.push('Campaign budget is fully spent. Add more budget to activate.');
+    }
+
+    const [updatedCampaign] = await this.prisma.$transaction([
       this.prisma.campaign.update({
         where: { id: campaignId },
-        data: { status: newStatus, approvedAt: new Date(), activatedAt: (hasApprovedCreative && hasBudget) ? new Date() : null },
+        data: { status: newStatus, approvedAt: new Date(), activatedAt: canActivate ? new Date() : null },
       }),
       this.prisma.campaignApproval.create({ data: { campaignId, reviewerId, decision: 'approved', reason } }),
     ]);
+
+    return {
+      campaign: updatedCampaign,
+      activated: canActivate,
+      status: newStatus,
+      blockers,
+    };
   }
 
   async rejectCampaign(campaignId: string, reviewerId: string, reason: string) {

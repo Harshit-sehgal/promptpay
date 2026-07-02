@@ -86,6 +86,7 @@ export class CampaignService {
 
     // Check if the campaign is 'approved' and now has at least one approved creative and has budget remaining
     // If so, auto-activate the campaign so it can serve ads
+    let campaignActivated = false;
     const campaign = await this.prisma.campaign.findUnique({
       where: { id: creative.campaignId },
       include: { creatives: { where: { status: 'approved' } } },
@@ -97,10 +98,11 @@ export class CampaignService {
           where: { id: campaign.id },
           data: { status: 'active', activatedAt: new Date() },
         });
+        campaignActivated = true;
       }
     }
 
-    return updated;
+    return { creative: updated, campaignActivated };
   }
 
   /** Reject a creative with a reason */

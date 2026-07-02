@@ -435,8 +435,8 @@ describe('E2E Money Loop', () => {
         creatives: [{ id: creativeId, status: 'approved' }],
       });
 
-      const approvedCreative = await svc.campaign.approveCreative(creativeId);
-      expect(approvedCreative.status).toBe('approved');
+      const approveResult = await svc.campaign.approveCreative(creativeId);
+      expect(approveResult.creative.status).toBe('approved');
 
       // --- Step 5: Advertiser submits campaign ---
       // Reset campaign.findUnique for submitCampaign (must include creatives)
@@ -460,6 +460,8 @@ describe('E2E Money Loop', () => {
       mockPrisma.campaign.findUnique.mockResolvedValue({
         id: campaignId,
         status: 'submitted',
+        budgetSpentMinor: 0,
+        budgetTotalMinor: 50000,
         creatives: [{ id: creativeId, status: 'approved' }],
       });
       mockPrisma.campaign.update.mockResolvedValue({
@@ -485,9 +487,9 @@ describe('E2E Money Loop', () => {
       });
 
       const result = await svc.admin.approveCampaign(campaignId, 'admin-1');
-      // approveCampaign returns the $transaction result array; status is on first element
-      expect(Array.isArray(result)).toBe(true);
-      expect(result[0].status).toBe('active');
+      // approveCampaign now returns { campaign, activated, status, blockers }
+      expect(result.activated).toBe(true);
+      expect(result.campaign.status).toBe('active');
     });
   });
 
@@ -1111,8 +1113,10 @@ describe('E2E Money Loop', () => {
       await svc.advertiser.submitCampaign(campaignId, advProfileId);
 
       // ── Step 6: Admin approves campaign → active ──
-      mockPrisma.campaign.findUnique.mockResolvedValue({
+       mockPrisma.campaign.findUnique.mockResolvedValue({
         id: campaignId, status: 'submitted',
+        budgetSpentMinor: 0,
+        budgetTotalMinor: 50000,
         creatives: [{ id: creativeId, status: 'approved' }],
       });
       mockPrisma.campaignApproval.create.mockResolvedValue({
