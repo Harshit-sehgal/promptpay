@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-02
+Last updated: 2026-07-02 (Refinement pass complete — all 9 secondary tasks done)
 
 ---
 
@@ -19,6 +19,18 @@ Last updated: 2026-07-02
 | 9 | VS Code extension | PASS | Manual |
 | 10 | CLI + signing | PASS | E2E |
 | 11 | Tests/readiness | PASS | 63 tests across 4 files |
+
+### Refinement domains added
+
+| # | Domain | Status | Detail |
+|---|--------|--------|--------|
+| 12 | Stripe/webhooks | PASS | Webhook controller, refund/dispute handling, stripeCustomerId wiring |
+| 13 | Referral system | PASS | ReferralService, code apply, reward processing, frontend |
+| 14 | API keys | PASS | Developer API key management, ApiKeyGuard |
+| 15 | Tool integrations | PASS | Seed + admin toggle |
+| 16 | Webhook events | PASS | Admin audit view |
+
+No failing domains. |
 
 ---
 
@@ -92,7 +104,7 @@ Last updated: 2026-07-02
 
 ## 5. Campaign lifecycle -- PASS
 
-**State machine:** draft -> submitted -> approved -> active -> paused -> (back to approved) -> archived. Rejected campaigns can return to draft.
+**State machine:** draft -> submitted -> approved -> active -> paused -> active -> archived. Rejected campaigns can return to draft. Paused campaigns resume directly to `active` (not `approved`).
 
 **Flow implemented:**
 1. Advertiser creates campaign (draft) with validated budget, bid, and category
@@ -172,7 +184,7 @@ Last updated: 2026-07-02
 
 **34 pages across 4 roles:**
 - Auth: login, signup
-- Developer: dashboard, earnings, payouts, settings, trust
+- Developer: dashboard (with referral info), earnings, payouts, settings, trust
 - Advertiser: dashboard, campaigns, new campaign, billing, reports
 - Admin: overview, campaigns, payouts, fraud, users, audit, ledger
 - Legal: privacy, terms, payout-policy, advertiser-policy
@@ -202,6 +214,8 @@ Last updated: 2026-07-02
 - Shared signing utility used for all API calls
 - Idempotency keys generated per event
 - Privacy enforcement: `PROHIBITED_DATA_FIELDS` filtered before sending events
+- Token refresh: 401 responses trigger automatic refresh+retry via SecretStorage-persisted tokens
+- Wait-state lifecycle complete: `waitStateStart` → ad request → impression → `waitStateEnd` paired
 
 **No known issues.**
 
@@ -256,6 +270,57 @@ Last updated: 2026-07-02
 - Shared HMAC signing via `@waitlayer/shared` (pure crypto, no mocking needed)
 
 ---
+
+## 12. Stripe/webhooks -- PASS
+
+- StripeProvider with `createDepositSession`, `handleCheckoutComplete`, `verifyWebhookSignature`, `getRefundDetails`, `getDisputeDetails`
+- `StripeWebhookController` at `POST /payout/stripe/webhook` — validates Stripe signatures, logs events to `WebhookEvent` table, processes async
+- Handles: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`, `charge.dispute.created`
+- `stripeCustomerId` wired to Advertiser record on checkout completion
+- Refunds create reversal entries in advertiser ledger
+- Disputes create high/critical fraud flags
+- Raw body middleware (`express.raw()`) for Stripe webhook routes
+
+**Known limitations:**
+- Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment variables to function
+
+---
+
+## 13. Referral system -- PASS
+
+- Referral and ReferralReward models in Prisma schema
+- `ReferralService`: `getReferralInfo()`, `applyReferralCode()`, `processReferralRewards()`, `getReferralHistory()`
+- `ReferralController`: `GET /referral`, `POST /referral/apply`, `GET /referral/history`
+- Reward: $5 referral bonus credit to referrer's platformLedger (`bucket: 'referral_bonus'`) on referred user's first payout
+- Auto-check on payout: `PayoutService.markPayoutPaid()` triggers referral reward processing
+- Frontend: referral code, count, and rewards shown on developer dashboard
+- Anti-abuse: self-referral blocked, duplicate referral blocked, code validation
+
+---
+
+## 14. API keys -- PASS
+
+- `ApiKey` model with hashed keys, scopes, expiry
+- `ApiKeyService`: `generateApiKey()`, `validateApiKey()`, `revokeApiKey()`
+- `ApiKeyController`: `POST /developer/api-keys`, `GET /developer/api-keys`, `DELETE /developer/api-keys/:id`
+- `ApiKeyGuard`: validates `X-Api-Key` header for machine-to-machine authentication
+- Keys never returned in plaintext after initial generation
+
+---
+
+## 15. Tool integrations -- PASS
+
+- `ToolIntegration` model seeded with vscode, cli, jetbrains, web
+- Admin endpoints: `GET /admin/tools`, `POST /admin/tools/:slug/toggle`
+- Used for tool registry and enable/disable control
+
+---
+
+## 16. Webhook events -- PASS
+
+- `WebhookEvent` model for logging all incoming Stripe webhook events
+- Admin endpoint: `GET /admin/webhooks` with provider, status, and pagination filters
+- Idempotency via unique `eventId` constraint
 
 ## Build & Run Commands
 

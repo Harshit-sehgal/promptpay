@@ -7,6 +7,7 @@ const DEVELOPER_NAV = [
   { label: 'Overview', href: '/developer' },
   { label: 'Earnings', href: '/developer/earnings' },
   { label: 'Payouts', href: '/developer/payouts' },
+  { label: 'Referrals', href: '/developer/referral' },
   { label: 'Trust & Fraud', href: '/developer/trust' },
   { label: 'Settings', href: '/developer/settings' },
 ];

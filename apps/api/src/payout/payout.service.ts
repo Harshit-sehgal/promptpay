@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, ForbiddenException, Inject } from '@ne
 import { PrismaService } from '../config/prisma.service';
 import { Prisma } from '@waitlayer/db';
 import { LedgerService } from '../ledger/ledger.service';
+import { ReferralService } from '../referral/referral.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 import { PayPalPayoutsProvider } from './providers';
 
@@ -83,6 +84,7 @@ export class PayoutService {
   constructor(
     private prisma: PrismaService,
     private ledger: LedgerService,
+    private referral: ReferralService,
     @Inject(PayPalPayoutsProvider) private paypalPayouts: PayPalPayoutsProvider,
   ) {
     this.providers = {
@@ -487,6 +489,11 @@ export class PayoutService {
           data: { status: 'paid' },
         });
       }
+    });
+
+    // After successfully marking as paid, check referral rewards (fire-and-forget)
+    this.referral.processReferralRewards(payout.userId).catch(() => {
+      // Silently ignore referral reward failures (production would log)
     });
 
     return this.prisma.payoutRequest.findUnique({

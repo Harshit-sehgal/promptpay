@@ -53,6 +53,12 @@ export const ledgerApi = {
   getHistory: (params?: any) => api.get('/ledger/history', { params }),
 };
 
+export const referralApi = {
+  getInfo: () => api.get('/referral'),
+  applyCode: (code: string) => api.post('/referral/apply', { code }),
+  getHistory: () => api.get('/referral/history'),
+};
+
 export const campaignApi = {
   getStats: (id: string) => api.get(`/campaigns/${id}/stats`),
   getCreatives: (id: string) => api.get(`/campaigns/${id}/creatives`),

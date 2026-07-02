@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { developerApi } from '@/lib/api/services';
+import { developerApi, referralApi } from '@/lib/api/services';
 import { LoadingSpinner } from '@/components';
 import { formatCurrency } from '@/lib/format';
 
@@ -25,14 +25,28 @@ interface DashboardData {
   };
 }
 
+interface ReferralSummary {
+  referralCode: string | null;
+  referralCount: number;
+  referralLink: string | null;
+  rewardsEarnedMinor: number;
+}
+
 export default function DeveloperDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [referral, setReferral] = useState<ReferralSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    developerApi.getDashboard()
-      .then((res) => setData(res.data))
+    Promise.all([
+      developerApi.getDashboard(),
+      referralApi.getInfo(),
+    ])
+      .then(([dashboardRes, referralRes]) => {
+        setData(dashboardRes.data);
+        setReferral(referralRes.data);
+      })
       .catch((err) => setError(err.response?.data?.message || 'Failed to load dashboard'))
       .finally(() => setLoading(false));
   }, []);
@@ -112,7 +126,7 @@ export default function DeveloperDashboard() {
           </div>
 
           {/* Payout hold status */}
-          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+          <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
             <h2 className="text-white font-semibold mb-4">Payout hold status</h2>
             {data.payoutHoldStatus.isHeld ? (
               <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
@@ -130,6 +144,36 @@ export default function DeveloperDashboard() {
               </div>
             )}
           </div>
+
+          {/* Referral summary */}
+          {referral && (
+            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
+              <h2 className="text-white font-semibold mb-4">Referrals</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-ink-400 text-xs uppercase tracking-wider">Your code</p>
+                  <p className="text-white font-mono text-lg tracking-widest">{referral.referralCode || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-ink-400 text-xs uppercase tracking-wider">Total referrals</p>
+                  <p className="text-white font-mono text-lg">{referral.referralCount}</p>
+                </div>
+                <div>
+                  <p className="text-ink-400 text-xs uppercase tracking-wider">Rewards earned</p>
+                  <p className="text-emerald-400 font-mono text-lg">{formatCurrency(referral.rewardsEarnedMinor)}</p>
+                </div>
+                {referral.referralLink && (
+                  <div className="md:col-span-2">
+                    <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Referral link</p>
+                    <code className="block bg-ink-900 border border-ink-600/30 rounded-lg px-4 py-2 text-ink-200 text-sm break-all">
+                      {referral.referralLink}
+                    </code>
+                    <p className="text-ink-400 text-xs mt-1">Share this link — earn $5 per referral when they get paid.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
     </>
