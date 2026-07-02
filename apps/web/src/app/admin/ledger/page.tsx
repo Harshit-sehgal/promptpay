@@ -31,8 +31,8 @@ export default function AdminLedgerPage() {
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      ledgerApi.getBreakdown(),
-      ledgerApi.getHistory({ ledgerKind: ledgerKind || undefined, page: 1, limit: 50 }),
+      ledgerApi.getAdminBreakdown(),
+      ledgerApi.getAdminHistory({ ledgerKind: ledgerKind || undefined, page: 1, limit: 50 }),
     ])
       .then(([bdRes, histRes]: any) => {
         setBreakdown(bdRes.data);

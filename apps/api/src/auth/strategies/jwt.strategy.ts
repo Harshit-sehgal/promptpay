@@ -21,7 +21,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; role: string; jti: string }) {
+  async validate(payload: { sub: string; role: string; jti: string; aud?: string }) {
+    if (payload.aud !== 'access') {
+      throw new UnauthorizedException('Invalid token audience');
+    }
+    if (!payload.jti) {
+      throw new UnauthorizedException('Invalid token signature');
+    }
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: { id: true, email: true, role: true, status: true, trustLevel: true },

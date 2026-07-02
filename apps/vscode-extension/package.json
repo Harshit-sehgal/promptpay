@@ -13,7 +13,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "npm run compile"
   },
   "main": "./out/extension.js",
   "dependencies": {

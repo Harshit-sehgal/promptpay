@@ -104,6 +104,20 @@ export class ConfigurationManager {
 
     return fingerprint;
   }
+
+  async getDeviceUUID(): Promise<string | null> {
+    try {
+      const id = await this.secrets.get('waitlayer.deviceUUID');
+      if (id) return id;
+    } catch {}
+    return null;
+  }
+
+  async storeDeviceUUID(uuid: string): Promise<void> {
+    try {
+      await this.secrets.store('waitlayer.deviceUUID', uuid);
+    } catch {}
+  }
 }
 
 class DummySecretStorage {

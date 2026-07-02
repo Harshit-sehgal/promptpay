@@ -51,6 +51,8 @@ export const ledgerApi = {
   getBalance: () => api.get('/ledger/balance'),
   getBreakdown: () => api.get('/ledger/breakdown'),
   getHistory: (params?: any) => api.get('/ledger/history', { params }),
+  getAdminBreakdown: () => api.get('/ledger/admin/breakdown'),
+  getAdminHistory: (params?: any) => api.get('/ledger/admin/history', { params }),
 };
 
 export const referralApi = {

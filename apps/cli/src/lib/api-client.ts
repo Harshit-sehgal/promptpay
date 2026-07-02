@@ -11,53 +11,76 @@ const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/
 const HMAC_SECRET = process.env.EXTENSION_HMAC_SECRET ?? 'dev-secret-change-me';
 
 export class ApiClient {
+  private deviceUUID: string | null = null;
+
   constructor(private creds: Credentials | null = null) {
     if (!this.creds) this.creds = getCredentials();
+    if (this.creds?.deviceUUID) this.deviceUUID = this.creds.deviceUUID;
+  }
+
+  async getOrRegisterDevice(): Promise<string> {
+    if (this.deviceUUID) return this.deviceUUID;
+
+    const hostname = os.hostname();
+    const fingerprint = require('crypto').createHash('sha256').update(`cli-${hostname}`).digest('hex');
+
+    const res = await this.raw<{ id: string }>('POST', '/extension/register-device', {
+      toolType: 'vscode',
+      fingerprintHash: fingerprint,
+      extensionVersion: '0.0.1',
+      platform: os.platform() || 'unknown',
+    });
+
+    if (res && res.id) {
+      this.deviceUUID = res.id;
+      if (this.creds) {
+        this.creds.deviceUUID = res.id;
+        setCredentials(this.creds);
+      }
+      return res.id;
+    }
+    throw new Error('Failed to register CLI device');
   }
 
   async login(input: { email: string; password: string }) {
     const res = await this.raw<{
-      data: {
-        accessToken: string;
-        refreshToken: string;
-        user: { id: string; role: string };
-      };
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string; role: string };
     }>('POST', '/auth/login', input);
-    return res.data;
+    return res;
   }
 
   async getBalance() {
     const res = await this.raw<{
-      data: {
-        availableMinor: number;
-        pendingMinor: number;
-        totalMinor: number;
-        paidOutMinor: number;
-      };
+      availableMinor: number;
+      pendingMinor: number;
+      totalMinor: number;
+      paidOutMinor: number;
     }>('GET', '/ledger/balance', undefined);
-    return res.data;
+    return res;
   }
 
   async getOverview() {
     const res = await this.raw<{
-      data: {
-        impressions: number;
-        clicks: number;
-        estimatedMinor: number;
-      };
+      impressions: number;
+      clicks: number;
+      estimatedMinor: number;
     }>('GET', '/developer/dashboard', undefined);
-    return res.data;
+    return res;
   }
 
   async reportWaitState(input: {
+    deviceId: string;
+    waitStateId: string;
     toolType: string;
-    durationMs: number;
-    deviceFingerprint: string;
   }) {
     const payload = {
-      ...input,
+      deviceId: input.deviceId,
+      waitStateId: input.waitStateId,
+      toolType: input.toolType,
       sessionId: 'cli-' + Date.now(),
-      idempotencyKey: 'cli-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+      idempotencyKey: 'cli-start-' + input.waitStateId,
     };
     const signature = signPayload(payload, HMAC_SECRET);
     return this.raw('POST', '/extension/wait-state/start', {
@@ -73,7 +96,7 @@ export class ApiClient {
     const payload = {
       waitStateId: input.waitStateId,
       duration: String(input.durationMs),
-      idempotencyKey: 'cli-end-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+      idempotencyKey: 'cli-end-' + input.waitStateId,
     };
     const signature = signPayload(payload, HMAC_SECRET);
     return this.raw('POST', '/extension/wait-state/end', {
@@ -128,11 +151,12 @@ export class ApiClient {
                 // Single retry after refresh
                 try {
                   const refresh = await this.raw<{
-                    data: { accessToken: string; refreshToken: string };
+                    accessToken: string;
+                    refreshToken: string;
                   }>('POST', '/auth/refresh', { refreshToken: this.creds.refreshToken });
                   if (this.creds) {
-                    this.creds.accessToken = refresh.data.accessToken;
-                    this.creds.refreshToken = refresh.data.refreshToken;
+                    this.creds.accessToken = refresh.accessToken;
+                    this.creds.refreshToken = refresh.refreshToken;
                     setCredentials(this.creds);
                   }
                   return this.raw<T>(method, path, body).then(resolve, reject);

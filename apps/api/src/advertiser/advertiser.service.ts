@@ -123,15 +123,18 @@ export class AdvertiserService {
     });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
 
-    // Must have at least one creative, and at least one must be approved
+    // Must have at least one creative before submission
     if (campaign.creatives.length === 0) {
       throw new BadRequestException('Campaign must have at least one creative before submission');
     }
-    if (campaign.creatives.filter((c: { status: string }) => c.status === 'approved').length === 0) {
-      throw new BadRequestException('Campaign must have at least one approved creative before submission');
-    }
 
     this.validateTransition(campaign.status, 'submitted');
+
+    // Update campaign status to submitted and set all draft creatives to pending_review
+    await this.prisma.adCreative.updateMany({
+      where: { campaignId, status: 'draft' },
+      data: { status: 'pending_review' },
+    });
 
     return this.prisma.campaign.update({
       where: { id: campaignId },

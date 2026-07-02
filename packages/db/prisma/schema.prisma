@@ -675,8 +675,7 @@ model PayoutAllocation {
   amountMinor      Int
   createdAt        DateTime        @default(now())
 
-  @@unique([payoutRequestId, earningsEntryId])
-  @@index([earningsEntryId])
+  @@unique([earningsEntryId])
   @@map("payout_allocations")
 }
 

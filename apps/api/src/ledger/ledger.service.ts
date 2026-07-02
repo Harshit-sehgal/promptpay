@@ -480,11 +480,29 @@ export class LedgerService {
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: 'reserve' } }),
     ]);
 
+    const earningsMinor = totalEarnings._sum?.amountMinor ?? 0;
+    const advertiserMinor = totalAdvertiserSpend._sum?.amountMinor ?? 0;
+    const platformMinor = totalPlatformFee._sum?.amountMinor ?? 0;
+    const reserveMinor = totalReserve._sum?.amountMinor ?? 0;
+
     return {
-      totalEarnings: totalEarnings._sum?.amountMinor ?? 0,
-      totalAdvertiserSpend: totalAdvertiserSpend._sum?.amountMinor ?? 0,
-      totalPlatformFee: totalPlatformFee._sum?.amountMinor ?? 0,
-      totalReserve: totalReserve._sum?.amountMinor ?? 0,
+      totalEarnings: earningsMinor,
+      totalAdvertiserSpend: advertiserMinor,
+      totalPlatformFee: platformMinor,
+      totalReserve: reserveMinor,
+      // Nested structures for frontend page UI compatibility
+      earningsLedger: {
+        balanceMinor: earningsMinor,
+        pendingMinor: 0,
+        confirmedMinor: earningsMinor,
+      },
+      advertiserLedger: {
+        balanceMinor: advertiserMinor,
+      },
+      platformLedger: {
+        revenueMinor: platformMinor,
+        reserveMinor: reserveMinor,
+      },
     };
   }
 }

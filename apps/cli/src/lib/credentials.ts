@@ -15,6 +15,7 @@ export interface Credentials {
   refreshToken: string;
   userId: string;
   role: string;
+  deviceUUID?: string;
 }
 
 export function getCredentials(): Credentials | null {

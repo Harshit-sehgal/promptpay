@@ -76,10 +76,12 @@ export async function runWatch(opts: { once?: boolean }) {
       // Generate a stable waitStateId for this wait period
       const waitStateId = `cli-${state.startTime}-${state.tool}`;
 
+      const deviceId = await api.getOrRegisterDevice();
+
       await api.reportWaitState({
+        deviceId,
+        waitStateId,
         toolType: state.tool,
-        durationMs,
-        deviceFingerprint: getDeviceFingerprint(),
       });
 
       activeWaitStateId = waitStateId;

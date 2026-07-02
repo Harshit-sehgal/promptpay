@@ -7,11 +7,12 @@ import { ConfigurationManager } from './config';
 export interface Ad {
   impressionToken: string;
   campaignId: string;
-  headline: string;
+  creativeId: string;
+  title: string;
   message: string;
-  ctaText: string;
-  ctaUrl: string;
-  // 5-second minimum visible duration is enforced server-side
+  label: string;
+  displayDomain: string;
+  destinationUrl: string;
 }
 
 export interface Balance {
@@ -22,7 +23,7 @@ export interface Balance {
 }
 
 interface ServerAdResponse {
-  data: Ad | null;
+  ad: Ad | null;
 }
 
 interface ServerBalanceResponse {

@@ -210,7 +210,7 @@ export class PayoutService {
     });
     const excludeIds = allocatedEntryIds.map((a: { earningsEntryId: string }) => a.earningsEntryId);
 
-    let candidateEntries: { id: string; amountMinor: number; status: string }[];
+    let candidateEntries: any[];
 
     if (specificEntryIds && specificEntryIds.length > 0) {
       // Caller specified exact entries — validate they belong to user and are confirmed
@@ -253,6 +253,32 @@ export class PayoutService {
     for (const entry of candidateEntries) {
       if (remaining <= 0) break;
       const allocAmount = Math.min(entry.amountMinor, remaining);
+
+      if (allocAmount < entry.amountMinor) {
+        // Splitting required: reduce the original entry to match allocAmount,
+        // and spawn a new remainder entry in the confirmed state.
+        const remainder = entry.amountMinor - allocAmount;
+        await tx.earningsLedger.update({
+          where: { id: entry.id },
+          data: { amountMinor: allocAmount },
+        });
+
+        await tx.earningsLedger.create({
+          data: {
+            userId: entry.userId,
+            amountMinor: remainder,
+            currency: entry.currency,
+            entryType: entry.entryType,
+            status: 'confirmed',
+            description: entry.description 
+              ? `${entry.description} (split remainder)` 
+              : 'Remaining balance after partial payout allocation',
+            idempotencyKey: `${entry.idempotencyKey || entry.id}-split-${Date.now()}`,
+            createdAt: entry.createdAt, // Preserve original creation timestamp
+          },
+        });
+      }
+
       allocations.push({
         earningsEntryId: entry.id,
         amountMinor: allocAmount,

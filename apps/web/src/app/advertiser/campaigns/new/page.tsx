@@ -63,11 +63,20 @@ export default function NewCampaignPage() {
       const campaignId = campaignRes.data.id;
 
       // Add first creative
+      const finalCtaUrl = ctaUrl || landingUrl;
+      let displayDomain = 'example.com';
+      try {
+        const urlObj = new URL(finalCtaUrl);
+        displayDomain = urlObj.hostname;
+      } catch (e) {
+        // fallback
+      }
+
       await campaignApi.createCreative(campaignId, {
-        headline,
-        message,
-        ctaText,
-        ctaUrl: ctaUrl || landingUrl,
+        title: headline,
+        sponsoredMessage: message,
+        destinationUrl: finalCtaUrl,
+        displayDomain,
       });
 
       // Set country targeting if provided
@@ -77,7 +86,8 @@ export default function NewCampaignPage() {
           .map((c) => c.trim().toUpperCase())
           .filter(Boolean);
         if (countries.length > 0) {
-          await campaignApi.setCountryTargeting(campaignId, { countries });
+          const payload = countries.map((code) => ({ countryCode: code, include: true }));
+          await campaignApi.setCountryTargeting(campaignId, payload);
         }
       }
 

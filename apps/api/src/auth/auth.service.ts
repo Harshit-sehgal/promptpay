@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -13,12 +13,15 @@ interface TokenPayload {
   sub: string;
   role: string;
   family?: string;
+  jti?: string;
+  aud?: string;
 }
 
 interface AccessTokenPayload {
   sub: string;
   role: string;
   jti: string;
+  aud: string;
   family?: string;
 }
 
@@ -230,24 +233,48 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    // Find the session for this token family
-    const session = await this.prisma.session.findFirst({
-      where: { userId: payload.sub, tokenFamily: payload.family },
+    if (payload.aud !== 'refresh' || !payload.jti) {
+      throw new UnauthorizedException('Invalid refresh token payload');
+    }
+
+    // Find the session for this specific token
+    const session = await this.prisma.session.findUnique({
+      where: { id: payload.jti },
     });
 
     if (!session) {
-      // No session found → this is a potential replay. Revoke all sessions.
-      await this.revokeAllSessions(payload.sub);
+      // Replay attack / forged token. Revoke all sessions in the family if family ID is known
+      if (payload.family) {
+        await this.prisma.session.updateMany({
+          where: { userId: payload.sub, tokenFamily: payload.family },
+          data: { revoked: true },
+        });
+      } else {
+        await this.revokeAllSessions(payload.sub);
+      }
       throw new UnauthorizedException('Session not found — all sessions revoked');
     }
 
     if (session.revoked) {
-      // Token reuse detected! Revoke all sessions for this user
-      await this.revokeAllSessions(payload.sub);
-      throw new UnauthorizedException('Token reuse detected — all sessions revoked');
+      // Reuse detected! Revoke all sessions for this token family
+      await this.prisma.session.updateMany({
+        where: { userId: payload.sub, tokenFamily: session.tokenFamily },
+        data: { revoked: true },
+      });
+      throw new UnauthorizedException('Token reuse detected — family sessions revoked');
     }
 
-    // Mark old session as revoked
+    // Verify token hash
+    const isMatch = await bcrypt.compare(refreshToken, session.tokenHash);
+    if (!isMatch) {
+      await this.prisma.session.updateMany({
+        where: { userId: payload.sub, tokenFamily: session.tokenFamily },
+        data: { revoked: true },
+      });
+      throw new UnauthorizedException('Token hash mismatch — family sessions revoked');
+    }
+
+    // Revoke the old session
     await this.prisma.session.update({
       where: { id: session.id },
       data: { revoked: true },
@@ -259,7 +286,7 @@ export class AuthService {
       throw new UnauthorizedException('Account is not active');
     }
 
-    return this.generateTokenPair(user.id, user.role, payload.family);
+    return this.generateTokenPair(user.id, user.role, session.tokenFamily || undefined);
   }
 
   /** ── Logout ── */
@@ -297,9 +324,9 @@ export class AuthService {
   // ── Private Helpers ──
 
   private async generateTokenPair(userId: string, role: string, existingFamily?: string) {
-    const family = existingFamily || crypto.randomUUID();
+    const family = existingFamily || randomUUID();
     // Pre-generate a session ID to use as jti in the access token
-    const jti = crypto.randomUUID();
+    const jti = randomUUID();
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(
@@ -307,7 +334,7 @@ export class AuthService {
         { expiresIn: this.accessTtl as unknown as number },
       ),
       this.jwt.signAsync(
-        { sub: userId, role, family, aud: 'refresh' },
+        { sub: userId, role, family, jti, aud: 'refresh' },
         { expiresIn: this.refreshTtl as unknown as number },
       ),
     ]);
