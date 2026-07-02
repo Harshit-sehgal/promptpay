@@ -111,7 +111,7 @@ export default function DevPayoutsPage() {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Payouts</h1>
-        <p className="text-surface-500 text-[15px]">
+        <p className="text-surface-500 text-[15px] font-normal">
           Available earnings, payout methods, and history
         </p>
       </div>
@@ -124,7 +124,7 @@ export default function DevPayoutsPage() {
 
       {error && !info && (
         <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm">{error}</p>
+          <p className="text-red-600 text-sm font-normal">{error}</p>
         </div>
       )}
 
@@ -155,12 +155,11 @@ export default function DevPayoutsPage() {
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Request payout</h2>
 
             {info.availableBalanceMinor < info.minimumThresholdMinor ? (
-              <div className="bg-amber-50 border border-amber-200/60 rounded-xl p-5 text-amber-700 leading-relaxed text-[14px]">
-                You need at least <span className="font-semibold">${info.minimumThresholdMinor / 100}</span> in confirmed earnings
-                before you can request a payout.
+              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
+                You need at least <span className="font-semibold">${info.minimumThresholdMinor / 100}</span> in confirmed earnings before you can request a payout.
               </div>
             ) : info.payoutAccounts.length === 0 ? (
-              <p className="text-surface-500 text-sm">
+              <p className="text-surface-500 text-sm font-normal">
                 Add a payout method below first.
               </p>
             ) : (
@@ -174,7 +173,7 @@ export default function DevPayoutsPage() {
                       value={selectedAccountId}
                       onChange={(e) => setSelectedAccountId(e.target.value)}
                       required
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
                     >
                       <option value="">Select method...</option>
                       {info.payoutAccounts.map((acc) => (
@@ -197,12 +196,12 @@ export default function DevPayoutsPage() {
                       onChange={(e) => setAmount(e.target.value)}
                       required
                       placeholder={`${(info.minimumThresholdMinor / 100).toFixed(2)}`}
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
                     />
                   </div>
                 </div>
                 {requestError && (
-                  <p className="text-red-600 text-sm">{requestError}</p>
+                  <p className="text-red-600 text-sm font-normal">{requestError}</p>
                 )}
                 <button
                   type="submit"
@@ -227,7 +226,7 @@ export default function DevPayoutsPage() {
             </div>
 
             {showMethodForm && (
-              <form onSubmit={handleAddMethod} className="space-y-4 mb-6 p-5 bg-surface-50 border border-surface-200/60 rounded-xl">
+              <form onSubmit={handleAddMethod} className="space-y-4 mb-6 p-5 bg-slate-50/50 border border-slate-100/85 rounded-xl">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
@@ -236,7 +235,7 @@ export default function DevPayoutsPage() {
                     <select
                       value={provider}
                       onChange={(e) => setProvider(e.target.value)}
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px]"
+                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] font-normal"
                     >
                       <option value="paypal_email">PayPal (email)</option>
                       <option value="manual">Manual</option>
@@ -254,7 +253,7 @@ export default function DevPayoutsPage() {
                       placeholder={
                         provider === 'paypal_email' ? 'you@example.com' : 'Account ID'
                       }
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all"
+                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
                     />
                   </div>
                 </div>
@@ -269,26 +268,21 @@ export default function DevPayoutsPage() {
             )}
 
             {info.payoutAccounts.length === 0 ? (
-              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl">
-                No payout methods yet. Add a PayPal email or manual method to start receiving
-                payouts.
+              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl font-normal">
+                No payout methods yet. Add a PayPal email or manual method to start receiving payouts.
               </div>
             ) : (
               <div className="space-y-3">
                 {info.payoutAccounts.map((acc) => (
-                  <div key={acc.id} className="flex items-center justify-between bg-surface-50/50 border border-surface-200/60 rounded-xl p-4.5">
+                  <div key={acc.id} className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5">
                     <div>
-                      <p className="text-surface-900 font-semibold capitalize text-[14px]">
+                      <p className="text-surface-900 font-medium capitalize text-[14px]">
                         {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider.replace('_', ' ')}
                       </p>
-                      <p className="text-surface-500 text-xs font-mono mt-0.5">{acc.destination}</p>
+                      <p className="text-surface-500 text-xs font-mono mt-0.5 font-normal">{acc.destination}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      {acc.isVerified ? (
-                        <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">Verified</span>
-                      ) : (
-                        <span className="bg-amber-50 border border-amber-200/60 text-amber-600 text-xs font-semibold px-2.5 py-1 rounded-full">Unverified</span>
-                      )}
+                      <StatusBadge status={acc.isVerified ? 'approved' : 'pending'} />
                     </div>
                   </div>
                 ))}
@@ -300,18 +294,18 @@ export default function DevPayoutsPage() {
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Recent payout requests</h2>
             {requests.length === 0 ? (
-              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl">
+              <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl font-normal">
                 No payout requests yet.
               </div>
             ) : (
               <div className="space-y-3">
                 {requests.map((req) => (
-                  <div key={req.id} className="flex items-center justify-between bg-surface-50/50 border border-surface-200/60 rounded-xl p-4.5">
+                  <div key={req.id} className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5">
                     <div>
-                      <p className="text-surface-900 font-mono font-bold text-[15px]">
+                      <p className="text-surface-900 font-mono font-semibold text-[15px]">
                         {formatCurrency(req.requestedAmountMinor, req.currency)}
                       </p>
-                      <p className="text-surface-500 text-xs mt-0.5">Requested {formatRelativeTime(req.createdAt)}</p>
+                      <p className="text-surface-500 text-xs mt-0.5 font-normal">Requested {formatRelativeTime(req.createdAt)}</p>
                     </div>
                     <StatusBadge status={req.status} />
                   </div>

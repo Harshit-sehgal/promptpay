@@ -54,7 +54,7 @@ export default function DevTrustPage() {
         return 'text-amber-600';
       case 'low':
       default:
-        return 'text-red-600';
+        return 'text-rose-600';
     }
   };
 
@@ -62,7 +62,7 @@ export default function DevTrustPage() {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Trust & fraud</h1>
-        <p className="text-surface-500 text-[15px]">
+        <p className="text-surface-500 text-[15px] font-normal">
           How your account is scored for fraud-risk. Higher trust leads to faster payouts.
         </p>
       </div>
@@ -75,7 +75,7 @@ export default function DevTrustPage() {
 
       {error && (
         <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
-          <p className="text-red-600 text-sm">{error}</p>
+          <p className="text-red-600 text-sm font-normal">{error}</p>
         </div>
       )}
 
@@ -92,7 +92,7 @@ export default function DevTrustPage() {
             <StatCard
               label="Open fraud flags"
               value={data.openFlags.length.toString()}
-              valueColor={data.openFlags.length > 0 ? 'text-red-600' : undefined}
+              valueColor={data.openFlags.length > 0 ? 'text-rose-600' : undefined}
               variant="light"
             />
             <StatCard
@@ -112,7 +112,7 @@ export default function DevTrustPage() {
                   <div key={factor.key}>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-surface-800 font-medium text-sm">{factor.label}</span>
-                      <span className="text-surface-900 font-bold font-mono text-sm">
+                      <span className="text-surface-900 font-semibold font-mono text-sm">
                         {factor.points}/{factor.maxPoints}
                       </span>
                     </div>
@@ -122,7 +122,7 @@ export default function DevTrustPage() {
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <p className="text-surface-400 text-xs mt-1.5">{factor.detail}</p>
+                    <p className="text-surface-400 text-xs mt-1.5 font-normal">{factor.detail}</p>
                   </div>
                 );
               })}
@@ -133,7 +133,7 @@ export default function DevTrustPage() {
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Open fraud flags</h2>
             {data.openFlags.length === 0 ? (
-              <p className="text-surface-400 text-sm py-4 text-center">
+              <p className="text-surface-400 text-sm py-4 text-center font-normal">
                 No open flags. Keep your activity clean.
               </p>
             ) : (
@@ -141,11 +141,11 @@ export default function DevTrustPage() {
                 {data.openFlags.map((flag) => (
                   <div
                     key={flag.id}
-                    className="flex items-center justify-between bg-surface-50/50 border border-surface-200/60 rounded-xl p-4.5 border-l-4 border-l-amber-500"
+                    className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-xl p-4.5 border-l-2 border-l-amber-500"
                   >
                     <div>
-                      <p className="text-surface-900 font-semibold text-[14px]">{flag.reason}</p>
-                      <p className="text-surface-500 text-xs mt-0.5">
+                      <p className="text-surface-900 font-medium text-[14px]">{flag.reason}</p>
+                      <p className="text-surface-500 text-xs mt-0.5 font-normal">
                         Detected {formatRelativeTime(flag.createdAt)}
                       </p>
                     </div>
@@ -160,16 +160,16 @@ export default function DevTrustPage() {
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Recent penalties</h2>
             {data.recentPenalties.length === 0 ? (
-              <p className="text-surface-400 text-sm py-4 text-center">
+              <p className="text-surface-400 text-sm py-4 text-center font-normal">
                 No penalty history. Stay active and verified to keep your score high.
               </p>
             ) : (
               <div className="space-y-3">
                 {data.recentPenalties.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between bg-surface-50/50 border border-surface-200/60 rounded-xl p-4.5">
+                  <div key={p.id} className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-xl p-4.5">
                     <div>
-                      <p className="text-surface-900 font-semibold text-[14px]">{p.description}</p>
-                      <p className="text-surface-500 text-xs mt-0.5">
+                      <p className="text-surface-900 font-medium text-[14px]">{p.description}</p>
+                      <p className="text-surface-500 text-xs mt-0.5 font-normal">
                         {formatRelativeTime(p.appliedAt)}
                       </p>
                     </div>
