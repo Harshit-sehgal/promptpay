@@ -290,6 +290,10 @@ export class AuthService {
     return user;
   }
 
+  getGoogleClientId() {
+    return this.config.get<string>('GOOGLE_CLIENT_ID', '');
+  }
+
   // ── Private Helpers ──
 
   private async generateTokenPair(userId: string, role: string, existingFamily?: string) {

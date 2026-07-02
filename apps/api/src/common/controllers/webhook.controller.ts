@@ -33,7 +33,11 @@ export class WebhookController {
     }
 
     try {
-      const rawBody = (req as any).rawBody ?? JSON.stringify(req.body);
+      const rawBody = (req as any).rawBody ?? req.body;
+      if (!rawBody) {
+        this.logger.error('Stripe webhook missing raw body — raw-body middleware may not be configured');
+        return { received: false };
+      }
       const event = this.stripe.verifyWebhookSignature(rawBody, sig);
 
       switch (event.type) {

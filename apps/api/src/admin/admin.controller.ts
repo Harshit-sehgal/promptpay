@@ -13,6 +13,8 @@ import {
   ResolveFraudFlagDto,
   FraudFlagsQueryDto,
   UsersQueryDto,
+  ToggleToolIntegrationDto,
+  WebhookEventsQueryDto,
   AuditLogQueryDto,
 } from './dto';
 
@@ -102,5 +104,27 @@ export class AdminController {
   @Get('audit-log')
   getAuditLog(@Query() query: AuditLogQueryDto) {
     return this.service.getAuditLog(query);
+  }
+
+  // ── Tool Integrations ──
+
+  @Get('tools')
+  getToolIntegrations() {
+    return this.service.getToolIntegrations();
+  }
+
+  @Post('tools/:slug/toggle')
+  toggleToolIntegration(
+    @Param('slug') slug: string,
+    @Body() dto: ToggleToolIntegrationDto,
+  ) {
+    return this.service.toggleToolIntegration(slug, dto.isActive === 'true');
+  }
+
+  // ── Webhook Events ──
+
+  @Get('webhooks')
+  getWebhookEvents(@Query() query: WebhookEventsQueryDto) {
+    return this.service.getWebhookEvents(query);
   }
 }

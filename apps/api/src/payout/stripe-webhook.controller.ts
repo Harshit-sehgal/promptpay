@@ -317,7 +317,7 @@ export class StripeWebhookController {
             disputeStatus: details.status,
             webhookEventId: event.id,
           },
-          description: `Stripe dispute created: ${details.reason} — ${details.amountMinor} ${details.currency}`,
+          reviewNote: `Stripe dispute created: ${details.reason} — ${details.amountMinor} ${details.currency}`,
         },
       });
     } catch (err: any) {

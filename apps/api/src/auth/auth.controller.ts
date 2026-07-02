@@ -88,4 +88,12 @@ export class AuthController {
   confirmEmailVerification(@Body() dto: VerifyEmailConfirmDto) {
     return this.authService.confirmEmailVerification(dto.token);
   }
+
+  @Get('config')
+  @HttpCode(HttpStatus.OK)
+  getConfig() {
+    return {
+      googleClientId: this.authService.getGoogleClientId(),
+    };
+  }
 }

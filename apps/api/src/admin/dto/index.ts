@@ -7,5 +7,7 @@ export {
   ResolveFraudFlagDto,
   FraudFlagsQueryDto,
   UsersQueryDto,
+  ToggleToolIntegrationDto,
+  WebhookEventsQueryDto,
   AuditLogQueryDto,
 } from './admin.dto';

@@ -43,12 +43,33 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleEnabled, setGoogleEnabled] = useState(!!GOOGLE_CLIENT_ID);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const googleInitialized = useRef(false);
 
-  // Initialize Google Identity Services
+  // Fetch Auth Config (Google Client ID) at runtime
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || googleInitialized.current) return;
+    const fetchConfig = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002/api/v1';
+        const res = await fetch(`${apiUrl}/auth/config`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.googleClientId) {
+            setGoogleClientId(data.googleClientId);
+            setGoogleEnabled(true);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load Google Auth config:', err);
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  // Initialize Google Identity Services when Client ID is resolved
+  useEffect(() => {
+    if (!googleClientId || googleInitialized.current) return;
 
     // Load the GIS script
     const script = document.createElement('script');
@@ -58,7 +79,7 @@ export default function LoginPage() {
     script.onload = () => {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: googleClientId,
           callback: async (response: any) => {
             setError('');
             setLoading(true);
@@ -98,7 +119,7 @@ export default function LoginPage() {
         script.parentNode.removeChild(script);
       }
     };
-  }, [googleLogin, router]);
+  }, [googleClientId, googleLogin, router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

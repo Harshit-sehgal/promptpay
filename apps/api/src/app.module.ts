@@ -14,6 +14,7 @@ import { PayoutModule } from './payout/payout.module';
 import { FraudModule } from './fraud/fraud.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { AuditModule } from './audit/audit.module';
+import { ReferralModule } from './referral/referral.module';
 import { PrismaModule } from './config/prisma.module';
 
 @Module({
@@ -36,6 +37,7 @@ import { PrismaModule } from './config/prisma.module';
     PayoutModule,
     FraudModule,
     CampaignModule,
+    ReferralModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: BruteForceGuard },

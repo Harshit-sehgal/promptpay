@@ -86,6 +86,36 @@ export class UsersQueryDto {
   search?: string;
 }
 
+// ── Tool Integrations ──
+
+export class ToggleToolIntegrationDto {
+  @IsIn(['true', 'false'])
+  isActive!: string;
+}
+
+// ── Webhooks ──
+
+export class WebhookEventsQueryDto {
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @IsOptional()
+  @IsString()
+  processingStatus?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
 // ── Audit ──
 
 export class AuditLogQueryDto {

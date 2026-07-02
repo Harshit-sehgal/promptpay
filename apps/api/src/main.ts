@@ -1,11 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { raw } from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Raw body parsing for Stripe webhook routes — Stripe needs the raw
+  // request body for signature verification. Applied BEFORE global prefix
+  // so the path matches the effective route.
+  app.use('/api/v1/payout/stripe/webhook', raw({ type: 'application/json' }));
+  app.use('/api/v1/webhooks/stripe', raw({ type: 'application/json' }));
 
   app.setGlobalPrefix('api/v1');
 

@@ -32,7 +32,8 @@ export default function SignupPage() {
   const [referrerCode, setReferrerCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleEnabled, setGoogleEnabled] = useState(!!GOOGLE_CLIENT_ID);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleEnabled, setGoogleEnabled] = useState(false);
   const googleInitialized = useRef(false);
   const roleRef = useRef(role);
 
@@ -41,9 +42,29 @@ export default function SignupPage() {
     roleRef.current = role;
   }, [role]);
 
-  // Initialize Google Identity Services for signup
+  // Fetch Auth Config (Google Client ID) at runtime
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || googleInitialized.current) return;
+    const fetchConfig = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002/api/v1';
+        const res = await fetch(`${apiUrl}/auth/config`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.googleClientId) {
+            setGoogleClientId(data.googleClientId);
+            setGoogleEnabled(true);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load Google Auth config:', err);
+      }
+    };
+    fetchConfig();
+  }, []);
+
+  // Initialize Google Identity Services for signup when Client ID is resolved
+  useEffect(() => {
+    if (!googleClientId || googleInitialized.current) return;
 
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
@@ -52,7 +73,7 @@ export default function SignupPage() {
     script.onload = () => {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: googleClientId,
           callback: async (response: any) => {
             setError('');
             setLoading(true);
@@ -92,7 +113,7 @@ export default function SignupPage() {
         script.parentNode.removeChild(script);
       }
     };
-  }, [googleLogin, router]);
+  }, [googleClientId, googleLogin, router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
