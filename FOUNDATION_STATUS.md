@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-02 (Truthful pass — blockers from code-audit verified & fixed)
+Last updated: 2026-07-02 (verified after per-device event signing, billing, payout, wait-state, and Docker checks)
 
 ---
 
@@ -10,17 +10,17 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 
 | # | Domain | Status | Verification |
 |---|--------|--------|--------------|
-| 1 | Build/monorepo | PASS | `pnpm build` succeeds; all 8 packages compile |
+| 1 | Build/monorepo | PASS | `pnpm run build` succeeds; all workspace packages compile |
 | 2 | API contract | PASS | Real NestJS Test module + supertest driving HTTP |
 | 3 | Auth + roles | PASS | Real Postgres integration covers signup/login/refresh/replay |
 | 4 | Authorization | PASS | Integration test asserts 403s on cross-tenant access |
 | 5 | Campaign lifecycle | PASS | Real DB end-to-end: draft → submitted → approved → active |
-| 6 | Ledger/money flow | PASS | Integration asserts 60/30/10 split inside single transaction |
-| 7 | Payouts | Partial | Lifecycle tested; partial-allocation splitting verified by reading source |
+| 6 | Ledger/money flow | PASS | Integration asserts CPM and CPC 60/30/10 splits with guarded campaign spend |
+| 7 | Payouts | Partial | Lifecycle and partial-allocation splitting tested; PSP providers are still stubs |
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
-| 9 | VS Code extension | PASS | Builds clean; payload/response shapes verified line-by-line |
+| 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **115 tests across 7 files** (real HTTP+DB + service-level) |
+| 11 | Tests/readiness | PASS | **141 tests across 7 files** (real HTTP+DB + service-level) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
@@ -33,13 +33,14 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 1. Build/monorepo -- PASS
 
-- `pnpm build` compiles all 8 workspace packages cleanly
+- `pnpm run build` compiles all workspace packages cleanly
 - Turborepo with pnpm workspaces, TypeScript project references
 - Path aliases configured and resolved: `@waitlayer/config`, `@waitlayer/db`, `@waitlayer/shared`
-- `pnpm --filter @waitlayer/api build` (i.e. `nest build`) produces `dist/apps/api/src/main.js`
+- `pnpm --filter waitlayer-api build` (i.e. `nest build`) produces `dist/apps/api/src/main.js`
 
 **Notable state:**
 - Because `paths` aliases reach outside `src/` (into `packages/*/src`), TypeScript emits compiled output under a virtual `rootDir` (`dist/apps/api/src/...`) rather than `dist/`. The Dockerfile is aligned to this actual output path.
+- The API Docker image runs `prisma migrate deploy --schema packages/db/prisma/schema.prisma` before starting Nest, so `docker compose up -d` applies pending migrations on startup.
 
 ---
 
@@ -54,6 +55,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 **Verified flow surfaces:**
 - Extension routes require HMAC signature over the canonical payload (excluding the `signature` field itself)
 - Body schemas strictly reject unknown fields, so misnamed payloads (e.g. `headline` vs `title`) fail with 400
+- Device registration issues a per-device `eventSecret`; registered devices with an `eventSecret` must sign events with that secret. The global HMAC fallback remains only for legacy device rows where `eventSecret` is still null.
 
 ---
 
@@ -81,6 +83,9 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 - Campaign ownership enforced: `advertiserId` must match the caller for create/submit/pause/resume/update/creative-modify
 - Device ownership verified before serving ads or recording events
+- Wait-state, ad-rendered, impression-qualified, and click events verify signatures against the owning device's event secret
+- Ad requests must follow an authenticated user's active wait-state start and are rejected after wait-state end
+- Extension idempotency checks run after ownership/signature validation so reused keys cannot bypass authorization
 - Payout account ownership verified before requesting payout
 - `getMe()` is protected by `JwtAuthGuard` and only returns the requesting user's row
 - Admin-only routes use `RolesGuard` with `@Roles('admin', 'super_admin')`
@@ -133,8 +138,14 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Impression qualified at minimum 5000ms visible duration
 - `LedgerCronService.matureEarnings()` runs on bootstrap and every 10 minutes via `setInterval`; flips `estimated → confirmed` once `availableAt` is in the past
 
+**Money moves on CPC click (real DB):**
+- CPC campaign qualification records impression eligibility but creates no ledger rows.
+- Valid CPC click creates advertiser debit, developer credit, platform fee, fraud reserve, and campaign spend increment in one transaction.
+- `ad_clicks.impressionId` is unique, so one impression cannot be double-click-billed under concurrency.
+
 **Verified by integration test:**
 - For a CPM bid of $20.00 and an active campaign, the integration test asserts earningsLedger (1200), advertiserLedger debit (2000), platformLedger platform_fee (600), and platformLedger fraud_reserve (200) all appear after one qualified impression.
+- For a CPC bid of $5.00 and an active campaign, the integration test asserts qualification does not bill, then click creates developer credit (300), advertiser debit (500), platform fee (150), and fraud reserve (50), with earnings/platform rows tied to the click id.
 
 ---
 
@@ -145,10 +156,11 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Fraud flag check (high/critical) blocks payout requests
 - Restricted/banned users blocked from payout
 
-**Allocation accounting (verified by source reading):**
+**Allocation accounting (verified by tests and source):**
 - When a payment allocation is smaller than a ledger entry: the entry is shrunk to the allocated amount and a NEW `confirmed` remainder entry is created with a stable `idempotencyKey`. The `PayoutAllocation.earningsEntryId` references only the shrunken entry.
 - `markPayoutPaid` updates only `earningsEntryId ∈ allocatedEntryIds` from `confirmed → paid`. The split remainder stays `confirmed` and remains selectable for a future payout.
 - Double-payout prevented by checking that no allocated entry is already `paid` before any update.
+- Availability calculations reserve only in-flight payout statuses (`requested`, `under_review`, `approved`, `processing`); already-paid allocations are not subtracted from confirmed availability a second time.
 
 **What changed:**
 - A unique constraint on `PayoutAllocation.earningsEntryId` would prevent the same entry being referenced twice; see prisma schema (verify the actual constraint before relying on it for race protection in concurrent payouts).
@@ -181,13 +193,18 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - `wait-detector.ts` observes VS Code loading/idle states and emits a `WaitStateEvent` per detection
 - `ad-panel.ts` renders the sponsored ad in a webview panel
 - `status-bar.ts` shows earnings and ad-serving state
-- Uses shared HMAC signing utility (`signPayload`) keyed by the extension-side configured secret
+- Uses shared HMAC signing utility (`signPayload`) keyed by the API-issued per-device event secret after registration
+- Device registration stores the returned `eventSecret` in VS Code `SecretStorage`; the configured global extension secret is only a fallback before registration or for legacy device rows without `eventSecret`
+- Login/logout clear stored device registration state so a new authenticated user re-registers and receives a user-scoped device secret
 - Persists access/refresh tokens via `SecretStorage`; refresh interceptor retries once on 401 with a single in-flight refresh
+- Ad webview CSP uses per-render nonces for script/style and does not allow `unsafe-inline`
+- Advertiser CTA clicks are posted through `acquireVsCodeApi().postMessage()`; the extension host opens only the original validated `http`/`https` URL
 - Balance display reads `bal.available.amountMinor / 100` (backend returns `{available: {amountMinor, currency}, pending: {...}, total: {...}, paidOut: {...}}`)
 
 **Verified:**
-- All extension routes (`register-device`, `wait-state/start`, `wait-state/end`, `ad-request`, `ad-rendered`, `impression-qualified`, `click`) send payloads that match the backend DTO fields exactly — `{deviceId, sessionId, toolType, waitStateId, idempotencyKey, signature}` with a HMAC signature over the canonical payload (without the signature field)
+- All extension routes (`register-device`, `wait-state/start`, `wait-state/end`, `ad-request`, `ad-rendered`, `impression-qualified`, `click`) send payloads that match the backend DTO fields exactly, with a per-device HMAC signature over the canonical payload (without the signature field) where applicable
 - Response shapes parsed by the extension match the backend (`{ad: {impressionToken, campaignId, creativeId, title, message, label, displayDomain, destinationUrl}}`)
+- `rg "unsafe-inline" apps/vscode-extension/src` returns no matches after the CSP change
 
 ---
 
@@ -214,17 +231,17 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**115 tests across 7 files (all pass):**
+**141 tests across 7 files (all pass):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
-| `auth/auth.service.spec.ts` | 20 | Unit | signup, login, refresh, replay detection, verification |
+| `auth/auth.service.spec.ts` | 27 | Unit | signup, login, refresh, replay detection, verification, password reset |
 | `auth/strategies/google-token-verifier.spec.ts` | 3 | Unit | env constraints; mock token verifier |
 | `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, rate limit, self-click, flags |
-| `ledger/ledger.service.spec.ts` | 15 | Unit | splits, balances, history, hold days |
-| `payout/payout.service.spec.ts` | 13 | Unit | allocation validation, provider routing |
+| `ledger/ledger.service.spec.ts` | 18 | Unit | splits, guarded spend, balances, history, hold days |
+| `payout/payout.service.spec.ts` | 14 | Unit | allocation validation, partial split, provider routing |
 | `integration/e2e-money-loop.spec.ts` | 27 | Service-level E2E | Campaign through payout via mocked Prisma |
-| `integration/e2e-http-flow.spec.ts` | 27 | **Real HTTP + Postgres** | Full stack from signup to payout |
+| `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
 
 **What the real HTTP integration test actually exercises (with `JWT_SECRET` and `DATABASE_URL` set):**
 - Real NestJS `Test.createTestingModule({imports: [AppModule]})`
@@ -234,7 +251,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Real Prisma against the developer database (`TRUNCATE ... CASCADE` in `beforeAll` to reset state)
 - Phase 1: signup → login → refresh token rotation → token reuse detection (revokes family) → email-checkpoint trust score recompute
 - Phase 2: advertiser profile auto-create → campaign (draft) → creative (draft) → country targeting (US, CA) → submit campaign (creative goes `pending_review`) → admin approves creative → admin approves campaign → campaign auto-`active` → cross-tenant 403s enforced
-- Phase 3: developer registers device → wait-state start (HMAC-signed) → ad request (HMAC-signed) → ad-rendered → qualified impression (asserts the four ledger rows for the 60/30/10 split) → click
+- Phase 3: developer registers device and receives `eventSecret` → wrong device signature is rejected → wait-state start (per-device HMAC-signed) → ad request during active wait state → ad-rendered → CPM qualified impression bills with four ledger rows → CPM click creates no extra charge → CPC qualification creates no ledger rows → CPC click bills with four ledger rows
 - Phase 4: `LedgerCronService.matureEarnings()` flips the entry to `confirmed` → developer adds PayPal email method → requests payout for the exact entry → admin approves → admin marks paid → entry transitions to `paid`
 
 **Test infrastructure:**
@@ -300,30 +317,34 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ```bash
 # Install dependencies
-pnpm install
+pnpm install --frozen-lockfile
 
 # Generate Prisma client (run after schema changes)
-pnpm --filter @waitlayer/db prisma:generate
+pnpm --filter @waitlayer/db generate
 
-# Build all packages
-pnpm build
+# Quality gates
+pnpm run typecheck
+pnpm run lint
+pnpm run test
+pnpm run build
 
 # Run all API tests (requires DATABASE_URL + JWT_SECRET >= 32 chars)
 DATABASE_URL="postgresql://waitlayer:waitlayer-dev@localhost:5432/waitlayer" \
 JWT_SECRET="test-jwt-secret-for-integration-test-runs-only-32+" \
-  pnpm --filter @waitlayer/api test
+  pnpm --filter waitlayer-api test
 
 # Run with coverage
-pnpm --filter @waitlayer/api test:cov
+pnpm --filter waitlayer-api test:cov
 
-# Start the dev stack (PostgreSQL + API + Web)
+# Build and start the Docker stack (PostgreSQL + API + Web)
+docker compose build
 docker compose up -d
 
 # Develop API locally
-pnpm --filter @waitlayer/api dev
+pnpm --filter waitlayer-api dev
 
 # Develop Web locally
-pnpm --filter @waitlayer/web dev
+pnpm --filter waitlayer-web dev
 ```
 
 ---
@@ -338,16 +359,29 @@ pnpm --filter @waitlayer/web dev
 | Rate limits are per-process, in-memory only | Low | No Redis or distributed limiter; multi-instance deploys would each enforce limits independently |
 | No WebSockets / push | Low | Dashboards refresh on user action or polling |
 | Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET=change-me-in-production`, `EXTENSION_HMAC_SECRET=dev-secret-change-me` are placeholders only — must be rotated before production deploy |
+| Legacy global HMAC fallback remains for old device rows | Low | Registered devices with `Device.eventSecret` must use per-device signing; fallback is only for legacy rows where `eventSecret` is null. A production rollout should backfill or force re-registration, then remove the fallback entirely |
+| Docker Compose has orphan one-off containers locally | Low | `docker compose up -d` warned about old `promptpay-api-run-*` containers from prior manual runs; current named services are healthy |
 | Build emits `dist/apps/api/src/main.js` (not `dist/main.js`) | Info | Because path aliases reach outside `src/`, TypeScript's auto-`rootDir` puts output one level deeper. Dockerfile CMD is aligned to the actual path |
 
 ---
 
-## What Was Verified By Source Inspection (this pass)
+## Commands Verified This Pass
 
-- `await tx.earningsLedger.update(...)` followed by `await tx.earningsLedger.create({status: 'confirmed', amountMinor: remainder})` in `PayoutService.allocatePayoutEarnings` — confirmed the split path actually creates a remainder.
-- `updateMany({where: {id: {in: earningsIds}, status: 'confirmed'}, data: {status: 'paid'}})` in `markPayoutPaid` — confirmed only the allocated entries transition; the remainder is not in `earningsIds` and so stays `confirmed`.
-- JwtStrategy `validate()` — confirmed `payload.aud !== 'access'` check is present and `!payload.jti` is rejected.
-- `auth.service.refresh()` — confirmed session lookup by `payload.jti`, bcrypt token-hash check, and family-level revocation.
-- VITEST integration tests — confirmed real `Test.createTestingModule({imports: [AppModule]})` and real `prisma.$executeRawUnsafe('TRUNCATE ... CASCADE')` (not mocked).
-- Docker compose — `docker compose build api web` succeeds and both containers start.
-- CLI & VS Code ext payload/response shapes — verified each call site by reading the file.
+- `pnpm install --frozen-lockfile` — PASS
+- `pnpm --filter @waitlayer/db generate` — PASS
+- `pnpm --filter waitlayer-api typecheck` — PASS
+- `pnpm --filter waitlayer-api test src/ledger/ledger.service.spec.ts src/integration/e2e-money-loop.spec.ts` — PASS
+- `pnpm --filter waitlayer-api test src/integration/e2e-http-flow.spec.ts` — PASS, 42 tests
+- `pnpm --filter waitlayer-api test src/payout/payout.service.spec.ts` — PASS
+- `pnpm --filter waitlayer-vscode typecheck` — PASS
+- `pnpm --filter waitlayer-vscode build` — PASS
+- `rg "unsafe-inline" apps/vscode-extension/src` — PASS, no matches
+- `pnpm --filter waitlayer-api test` — PASS, 141 tests / 7 files
+- `pnpm run typecheck` — PASS
+- `pnpm run lint` — PASS with one existing warning in `apps/api/src/auth/auth.service.spec.ts`
+- `pnpm run test` — PASS, 141 tests / 7 files
+- `pnpm run build` — PASS
+- `docker compose build` — PASS; classic builder warned that buildx is not installed
+- `docker compose up -d` — PASS; `postgres`, `api`, and `web` running
+- `curl http://localhost:4002/api/v1/auth/me` — PASS smoke check, expected `401 Unauthorized`
+- `curl -I http://localhost:3000/` — PASS smoke check, `200 OK`

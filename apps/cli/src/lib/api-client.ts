@@ -8,21 +8,34 @@ import { Credentials, getCredentials, setCredentials } from './credentials';
 const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
 const HMAC_SECRET = process.env.EXTENSION_HMAC_SECRET ?? 'dev-secret-change-me';
 
+interface RegisterDeviceResponse {
+  id: string;
+  eventSecret?: string;
+}
+
 export class ApiClient {
   private deviceUUID: string | null = null;
+  private deviceEventSecret: string | null = null;
 
   constructor(private creds: Credentials | null = null) {
     if (!this.creds) this.creds = getCredentials();
     if (this.creds?.deviceUUID) this.deviceUUID = this.creds.deviceUUID;
+    if (this.creds?.deviceEventSecret) this.deviceEventSecret = this.creds.deviceEventSecret;
+  }
+
+  /** Sign payload with the per-device secret when available; falls back to the
+   *  global HMAC_SECRET for backward compatibility. */
+  private sign(payload: Record<string, unknown>): string {
+    return signPayload(payload, this.deviceEventSecret ?? HMAC_SECRET);
   }
 
   async getOrRegisterDevice(): Promise<string> {
-    if (this.deviceUUID) return this.deviceUUID;
+    if (this.deviceUUID && this.deviceEventSecret) return this.deviceUUID;
 
     const hostname = os.hostname();
     const fingerprint = crypto.createHash('sha256').update(`cli-${hostname}`).digest('hex');
 
-    const res = await this.raw<{ id: string }>('POST', '/extension/register-device', {
+    const res = await this.raw<RegisterDeviceResponse>('POST', '/extension/register-device', {
       toolType: 'terminal',
       fingerprintHash: fingerprint,
       extensionVersion: '0.0.1',
@@ -31,8 +44,10 @@ export class ApiClient {
 
     if (res && res.id) {
       this.deviceUUID = res.id;
+      this.deviceEventSecret = res.eventSecret ?? null;
       if (this.creds) {
         this.creds.deviceUUID = res.id;
+        if (res.eventSecret) this.creds.deviceEventSecret = res.eventSecret;
         setCredentials(this.creds);
       }
       return res.id;
@@ -91,7 +106,7 @@ export class ApiClient {
       sessionId: 'cli-' + Date.now(),
       idempotencyKey: 'cli-start-' + input.waitStateId,
     };
-    const signature = signPayload(payload, HMAC_SECRET);
+    const signature = this.sign(payload);
     return this.raw('POST', '/extension/wait-state/start', {
       ...payload,
       signature,
@@ -107,7 +122,7 @@ export class ApiClient {
       duration: String(input.durationMs),
       idempotencyKey: 'cli-end-' + input.waitStateId,
     };
-    const signature = signPayload(payload, HMAC_SECRET);
+    const signature = this.sign(payload);
     return this.raw('POST', '/extension/wait-state/end', {
       ...payload,
       signature,
@@ -126,7 +141,7 @@ export class ApiClient {
     let headerSignature: string | undefined;
     if (body) {
       const { signature: _, ...payloadForHeader } = body;
-      headerSignature = signPayload(payloadForHeader, HMAC_SECRET);
+      headerSignature = this.sign(payloadForHeader);
     }
 
     return new Promise<T>((resolve, reject) => {

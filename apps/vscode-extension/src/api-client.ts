@@ -32,21 +32,33 @@ interface ServerAdResponse {
   ad: Ad | null;
 }
 
+interface RegisterDeviceResponse {
+  id: string;
+  eventSecret?: string;
+}
+
 export class ApiClient {
   private currentTokens: { accessToken?: string; refreshToken?: string } | null = null;
   private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
   private _initialized: Promise<void>;
+  private deviceEventSecret: string | null = null;
 
   constructor(private config: ConfigurationManager) {
-    // Load persisted tokens from SecretStorage on construction
-    this._initialized = this.config.getTokens().then((tokens) => {
+    // Load persisted auth and device signing state from SecretStorage on construction.
+    this._initialized = Promise.all([
+      this.config.getTokens(),
+      this.config.getDeviceEventSecret(),
+    ]).then(([tokens, eventSecret]) => {
       if (tokens) this.currentTokens = tokens;
+      this.deviceEventSecret = eventSecret;
     });
   }
 
-  /** Sign payload object with HMAC using canonical JSON (sorted keys). */
+  /** Sign payload object with HMAC using canonical JSON (sorted keys).
+   *  Event requests prefer the per-device secret issued at registration.
+   *  The configured global secret remains only as a compatibility fallback. */
   sign(payload: Record<string, unknown>): string {
-    return signPayload(payload, this.config.getSecretKey());
+    return signPayload(payload, this.deviceEventSecret ?? this.config.getSecretKey());
   }
 
   /** Refresh the access token using the stored refresh token.
@@ -85,18 +97,21 @@ export class ApiClient {
   private deviceUUID: string | null = null;
 
   async getOrRegisterDevice(): Promise<string> {
-    if (this.deviceUUID) return this.deviceUUID;
+    await this._initialized;
+    if (this.deviceUUID && this.deviceEventSecret) return this.deviceUUID;
 
     try {
       const stored = await this.config.getDeviceUUID();
-      if (stored) {
+      const storedSecret = await this.config.getDeviceEventSecret();
+      if (stored && storedSecret) {
         this.deviceUUID = stored;
+        this.deviceEventSecret = storedSecret;
         return stored;
       }
     } catch {}
 
     const fingerprint = await this.config.getDeviceFingerprint();
-    const res = await this.post<{ id: string }>('/extension/register-device', {
+    const res = await this.post<RegisterDeviceResponse>('/extension/register-device', {
       toolType: 'vscode',
       fingerprintHash: fingerprint,
       extensionVersion: '0.0.1',
@@ -105,8 +120,12 @@ export class ApiClient {
 
     if (res && res.id) {
       this.deviceUUID = res.id;
+      this.deviceEventSecret = res.eventSecret ?? null;
       try {
         await this.config.storeDeviceUUID(res.id);
+        if (res.eventSecret) {
+          await this.config.storeDeviceEventSecret(res.eventSecret);
+        }
       } catch {}
       return res.id;
     }
@@ -233,8 +252,11 @@ export class ApiClient {
       );
       const tokens = { accessToken: res.accessToken, refreshToken: res.refreshToken };
       this.currentTokens = tokens;
+      this.deviceUUID = null;
+      this.deviceEventSecret = null;
       // Persist tokens so they survive extension restarts
       this.config.storeTokens(tokens).catch(() => {});
+      this.config.clearDeviceRegistration().catch(() => {});
       vscode.window.showInformationMessage('WaitLayer: logged in');
     } catch {
       vscode.window.showErrorMessage('WaitLayer: login failed');
@@ -242,10 +264,17 @@ export class ApiClient {
   }
 
   async logout(): Promise<void> {
-    await this.post('/auth/logout', {});
-    this.currentTokens = null;
-    // Clear persisted tokens
-    this.config.clearTokens().catch(() => {});
+    try {
+      await this.post('/auth/logout', {});
+    } catch {
+      // Local cleanup must still happen if the access token has already expired.
+    } finally {
+      this.currentTokens = null;
+      this.deviceUUID = null;
+      this.deviceEventSecret = null;
+      this.config.clearTokens().catch(() => {});
+      this.config.clearDeviceRegistration().catch(() => {});
+    }
     vscode.window.showInformationMessage('WaitLayer: logged out');
   }
 

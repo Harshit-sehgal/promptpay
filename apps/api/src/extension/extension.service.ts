@@ -50,15 +50,20 @@ export class ExtensionService {
     });
 
     if (existingDevice) {
-      return this.prisma.device.update({
+      // Re-registration rotates the per-device secret. Any leaked token from
+      // the old extension install is invalidated by this one-time reveal.
+      const rotatedSecret = crypto.randomBytes(32).toString('hex');
+      const updated = await this.prisma.device.update({
         where: { id: existingDevice.id },
         data: {
           toolType: dto.toolType as ToolTypeEnum,
           extensionVersion: dto.extensionVersion,
           platform: dto.platform,
+          eventSecret: rotatedSecret,
           lastSeenAt: new Date(),
         },
       });
+      return { ...updated, eventSecret: rotatedSecret };
     }
 
     // Check if this fingerprint is already used by another user
@@ -66,10 +71,19 @@ export class ExtensionService {
       where: { fingerprintHash: dto.fingerprintHash, userId: { not: userId } },
     });
 
+    // Per-device HMAC secret: generated once at registration and revealed to
+    // the client in the registration response. The client must persist it
+    // locally (e.g. SecretStorage) and use it for every event signature.
+    // Server-side verification resolves the device's secret from the lookup
+    // its event belongs to, never from a single global env var. This prevents
+    // a leaked global key from forging events for any device in the fleet.
+    const eventSecret = crypto.randomBytes(32).toString('hex');
+
     const device = await this.prisma.device.create({
       data: {
         userId,
         fingerprintHash: dto.fingerprintHash,
+        eventSecret,
         toolType: dto.toolType as ToolTypeEnum,
         extensionVersion: dto.extensionVersion,
         platform: dto.platform,
@@ -104,7 +118,7 @@ export class ExtensionService {
       });
     }
 
-    return device;
+    return { ...device, eventSecret };
   }
 
   // ── Wait State Events ──
@@ -117,22 +131,32 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    // Idempotency: if we've seen this key, return the existing record
-    const existing = await this.prisma.waitStateEvent.findUnique({
-      where: { idempotencyKey: dto.idempotencyKey },
-    });
-    if (existing) return existing;
-
     // Verify device belongs to this user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
     if (!device || device.userId !== userId) {
       throw new ForbiddenException('Device does not belong to this user');
     }
 
-    // Verify HMAC signature
+    // Verify HMAC signature with device-specific secret
     const { signature: _, ...payload } = dto;
-    if (!this.verifySignature(payload, dto.signature)) {
+    if (!await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature)) {
       throw new ForbiddenException('Invalid request signature');
+    }
+
+    // Idempotency: only return an existing event after ownership/signature pass.
+    const existing = await this.prisma.waitStateEvent.findUnique({
+      where: { idempotencyKey: dto.idempotencyKey },
+    });
+    if (existing) {
+      if (
+        existing.userId !== userId ||
+        existing.deviceId !== dto.deviceId ||
+        existing.waitStateId !== dto.waitStateId ||
+        existing.eventType !== 'wait_state_start'
+      ) {
+        throw new ConflictException('Idempotency key already used');
+      }
+      return existing;
     }
 
     return this.prisma.waitStateEvent.create({
@@ -155,25 +179,35 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    // Idempotency
-    const existing = await this.prisma.waitStateEvent.findUnique({
-      where: { idempotencyKey: dto.idempotencyKey },
-    });
-    if (existing) return existing;
-
-    // Verify HMAC signature
-    const { signature: _, ...payload } = dto;
-    if (!this.verifySignature(payload, dto.signature)) {
-      throw new ForbiddenException('Invalid request signature');
-    }
-
+    // Resolve the start event FIRST so we can verify with the device's secret
     const start = await this.prisma.waitStateEvent.findFirst({
-      where: { waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
+      where: { userId, waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
       orderBy: { createdAt: 'desc' },
     });
     if (!start) throw new BadRequestException('No matching wait state start');
     if (start.userId !== userId) {
       throw new ForbiddenException('You do not own this wait state');
+    }
+
+    // Verify HMAC signature with device-specific secret
+    const { signature: _, ...payload } = dto;
+    if (!await this.verifyDeviceSignature(start.deviceId, payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
+    // Idempotency: only return an existing event after ownership/signature pass.
+    const existing = await this.prisma.waitStateEvent.findUnique({
+      where: { idempotencyKey: dto.idempotencyKey },
+    });
+    if (existing) {
+      if (
+        existing.userId !== userId ||
+        existing.waitStateId !== dto.waitStateId ||
+        existing.eventType !== 'wait_state_end'
+      ) {
+        throw new ConflictException('Idempotency key already used');
+      }
+      return existing;
     }
 
     const duration = typeof dto.duration === 'string' ? parseInt(dto.duration, 10) : dto.duration;
@@ -211,16 +245,16 @@ export class ExtensionService {
     // Enforce privacy: reject payloads containing prohibited data fields
     this.enforcePrivacy(dto as unknown as Record<string, unknown>);
 
-    // Verify HMAC signature
-    const { signature: _, ...payload } = dto;
-    if (!this.verifySignature(payload, dto.signature)) {
-      throw new ForbiddenException('Invalid request signature');
-    }
-
     // Verify device belongs to user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
     if (!device || device.userId !== userId) {
       throw new ForbiddenException('Device does not belong to this user');
+    }
+
+    // Verify HMAC signature with device-specific secret
+    const { signature: _, ...payload } = dto;
+    if (!await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
     }
 
     // Ad requests must happen during an authenticated user's active wait state.
@@ -390,12 +424,6 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    // Verify HMAC signature
-    const { signature: _, ...payload } = dto;
-    if (!this.verifySignature(payload, dto.signature)) {
-      throw new ForbiddenException('Invalid request signature');
-    }
-
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -407,6 +435,13 @@ export class ExtensionService {
     if (impression.userId !== userId) {
       throw new ForbiddenException('You do not own this impression');
     }
+
+    // Verify HMAC signature against the device that requested this impression.
+    const { signature: _, ...payload } = dto;
+    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
     if (impression.renderedAt) return impression; // Already recorded
 
     return this.prisma.adImpression.update({
@@ -425,22 +460,6 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    // Verify HMAC signature
-    const { signature: _, ...payload } = dto;
-    if (!this.verifySignature(payload, dto.signature)) {
-      throw new ForbiddenException('Invalid request signature');
-    }
-
-    // Must meet minimum visible duration
-    if (dto.visibleDurationMs < MINIMUM_VISIBLE_DURATION_MS) {
-      return {
-        qualified: false,
-        reason: 'minimum_duration_not_met',
-        minimumRequired: MINIMUM_VISIBLE_DURATION_MS,
-        actual: dto.visibleDurationMs,
-      };
-    }
-
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -457,6 +476,23 @@ export class ExtensionService {
     if (impression.userId !== userId) {
       throw new ForbiddenException('You do not own this impression');
     }
+
+    // Verify HMAC signature against the device that requested this impression.
+    const { signature: _, ...payload } = dto;
+    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
+    // Must meet minimum visible duration
+    if (dto.visibleDurationMs < MINIMUM_VISIBLE_DURATION_MS) {
+      return {
+        qualified: false,
+        reason: 'minimum_duration_not_met',
+        minimumRequired: MINIMUM_VISIBLE_DURATION_MS,
+        actual: dto.visibleDurationMs,
+      };
+    }
+
     if (impression.qualifiedAt) return { qualified: true, impressionId: impression.id, alreadyQualified: true };
 
     // Fraud check via rate limits
@@ -597,18 +633,6 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    // Verify HMAC signature
-    const { signature: _, ...payload } = dto;
-    if (!this.verifySignature(payload, dto.signature)) {
-      throw new ForbiddenException('Invalid request signature');
-    }
-
-    // Idempotency check
-    const existing = await this.prisma.adClick.findUnique({
-      where: { idempotencyKey: dto.idempotencyKey },
-    });
-    if (existing) return { clicked: true, clickId: existing.id, isDuplicate: true };
-
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -628,6 +652,24 @@ export class ExtensionService {
     if (impression.userId !== userId) {
       throw new ForbiddenException('You do not own this impression');
     }
+
+    // Verify HMAC signature against the device that requested this impression.
+    const { signature: _, ...payload } = dto;
+    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+
+    // Idempotency check: a duplicate is valid only for the same user+impression.
+    const existing = await this.prisma.adClick.findUnique({
+      where: { idempotencyKey: dto.idempotencyKey },
+    });
+    if (existing) {
+      if (existing.userId !== userId || existing.impressionId !== impression.id) {
+        throw new ConflictException('Idempotency key already used');
+      }
+      return { clicked: true, clickId: existing.id, isDuplicate: true };
+    }
+
     if (!impression.qualifiedAt) throw new BadRequestException('Impression not yet qualified');
 
     // Fraud checks: rate + self-click
@@ -805,6 +847,26 @@ export class ExtensionService {
 
   // ── HMAC Signature Verification ──
 
+  /** Verify an event payload signature using the device-specific secret.
+   *  Global HMAC is accepted only for legacy device rows that do not yet have
+   *  an issued eventSecret. Once a device has a secret, global signatures no
+   *  longer authorize events for that device. */
+  async verifyDeviceSignature(deviceId: string | null, payload: Record<string, unknown>, signature: string): Promise<boolean> {
+    // Try device-specific secret first
+    if (deviceId) {
+      const device = await this.prisma.device.findUnique({
+        where: { id: deviceId },
+        select: { eventSecret: true },
+      });
+      if (device?.eventSecret) {
+        return verifySignature(payload, device.eventSecret, signature);
+      }
+    }
+    // Fallback: global HMAC secret only for legacy devices without eventSecret.
+    return verifySignature(payload, this.hmacSecret, signature);
+  }
+
+  /** Deprecated: use verifyDeviceSignature instead. Kept for tests. */
   verifySignature(payload: Record<string, unknown>, signature: string): boolean {
     return verifySignature(payload, this.hmacSecret, signature);
   }

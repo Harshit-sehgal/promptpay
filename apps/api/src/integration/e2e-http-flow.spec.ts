@@ -10,8 +10,6 @@ import { UserRole, BidType, PayoutProvider } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 import { LedgerService } from '../ledger/ledger.service';
 
-const HMAC_SECRET = 'dev-secret-change-me';
-
 async function cleanDb(prisma: PrismaService) {
   // Truncate tables to ensure a clean test run without foreign key violations
   await prisma.$executeRawUnsafe(`
@@ -83,6 +81,7 @@ describe('End-to-End HTTP Integration Flow', () => {
   let cpcCampaignId: string;
   let cpcCreativeId: string;
   let deviceId: string;
+  let deviceEventSecret: string;
   let impressionToken: string;
   let payoutAccountId: string;
   let earningEntryId: string;
@@ -521,7 +520,25 @@ describe('End-to-End HTTP Integration Flow', () => {
         .expect(200);
 
       expect(res.body.id).toBeDefined();
+      expect(res.body.eventSecret).toEqual(expect.any(String));
       deviceId = res.body.id;
+      deviceEventSecret = res.body.eventSecret;
+    });
+
+    it('should reject wait state start signed with the wrong device secret', async () => {
+      const startPayload = {
+        deviceId,
+        sessionId,
+        toolType: 'vscode',
+        waitStateId: 'bad-signature-wait-state',
+        idempotencyKey: 'bad-signature-wait-start',
+      };
+
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/start')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...startPayload, signature: signPayload(startPayload, 'wrong-device-secret') })
+        .expect(403);
     });
 
     it('should log a wait state start', async () => {
@@ -532,7 +549,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId,
         idempotencyKey: `start-${waitStateId}`,
       };
-      const signature = signPayload(startPayload, HMAC_SECRET);
+      const signature = signPayload(startPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -552,7 +569,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         allowedCategories: ['technology'],
         idempotencyKey: `ad-req-${waitStateId}`,
       };
-      const signature = signPayload(adReqPayload, HMAC_SECRET);
+      const signature = signPayload(adReqPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
@@ -573,7 +590,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         visibleSurface: 100,
         idempotencyKey: `render-${waitStateId}`,
       };
-      const signature = signPayload(renderPayload, HMAC_SECRET);
+      const signature = signPayload(renderPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-rendered')
@@ -592,7 +609,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         visibleDurationMs: 6000, // Meets minimum 5000ms duration
         idempotencyKey: `imp-${waitStateId}`,
       };
-      const signature = signPayload(impressionPayload, HMAC_SECRET);
+      const signature = signPayload(impressionPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/impression-qualified')
@@ -638,7 +655,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         clickedAt: new Date().toISOString(),
         idempotencyKey: `click-${waitStateId}`,
       };
-      const signature = signPayload(clickPayload, HMAC_SECRET);
+      const signature = signPayload(clickPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/click')
@@ -660,7 +677,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId: cpcWaitStateId,
         idempotencyKey: `start-${cpcWaitStateId}`,
       };
-      const signature = signPayload(startPayload, HMAC_SECRET);
+      const signature = signPayload(startPayload, deviceEventSecret);
 
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -678,7 +695,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         allowedCategories: ['business'],
         idempotencyKey: `ad-req-${cpcWaitStateId}`,
       };
-      const signature = signPayload(adReqPayload, HMAC_SECRET);
+      const signature = signPayload(adReqPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
@@ -698,7 +715,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         visibleSurface: 100,
         idempotencyKey: `render-${cpcWaitStateId}`,
       };
-      const signature = signPayload(renderPayload, HMAC_SECRET);
+      const signature = signPayload(renderPayload, deviceEventSecret);
 
       await request(app.getHttpServer())
         .post('/api/v1/extension/ad-rendered')
@@ -714,7 +731,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         visibleDurationMs: 6000,
         idempotencyKey: `imp-${cpcWaitStateId}`,
       };
-      const signature = signPayload(impressionPayload, HMAC_SECRET);
+      const signature = signPayload(impressionPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/impression-qualified')
@@ -741,7 +758,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         clickedAt: new Date().toISOString(),
         idempotencyKey: `click-${cpcWaitStateId}`,
       };
-      const signature = signPayload(clickPayload, HMAC_SECRET);
+      const signature = signPayload(clickPayload, deviceEventSecret);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/click')
@@ -803,6 +820,7 @@ describe('End-to-End HTTP Integration Flow', () => {
     // are 403-rejected for the wrong user.
     let dev2Token: string;
     let dev2DeviceId: string;
+    let dev2DeviceEventSecret: string;
     let dev2ImpressionToken: string;
 
     it('should register a second developer', async () => {
@@ -837,6 +855,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         })
         .expect(200);
       dev2DeviceId = devRes.body.id;
+      dev2DeviceEventSecret = devRes.body.eventSecret;
 
       const waitStartPayload = {
         deviceId: dev2DeviceId,
@@ -848,7 +867,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
         .set('Authorization', `Bearer ${dev2Token}`)
-        .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, HMAC_SECRET) })
+        .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, dev2DeviceEventSecret) })
         .expect(200);
 
       const adReqPayload = {
@@ -858,7 +877,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         toolType: 'vscode',
         idempotencyKey: 'dev2-ad-req',
       };
-      const signature = signPayload(adReqPayload, HMAC_SECRET);
+      const signature = signPayload(adReqPayload, dev2DeviceEventSecret);
       const adRes = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
         .set('Authorization', `Bearer ${dev2Token}`)
@@ -873,7 +892,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         renderedAt: new Date().toISOString(),
         idempotencyKey: 'dev2-render',
       };
-      const signature = signPayload(renderPayload, HMAC_SECRET);
+      const signature = signPayload(renderPayload, dev2DeviceEventSecret);
       await request(app.getHttpServer())
         .post('/api/v1/extension/ad-rendered')
         .set('Authorization', `Bearer ${devToken}`) // dev token, dev2 impression — wrong
@@ -888,7 +907,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         visibleDurationMs: 6000,
         idempotencyKey: 'dev2-imp',
       };
-      const signature = signPayload(impPayload, HMAC_SECRET);
+      const signature = signPayload(impPayload, dev2DeviceEventSecret);
       await request(app.getHttpServer())
         .post('/api/v1/extension/impression-qualified')
         .set('Authorization', `Bearer ${devToken}`)
@@ -902,7 +921,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         clickedAt: new Date().toISOString(),
         idempotencyKey: 'dev2-click',
       };
-      const signature = signPayload(clickPayload, HMAC_SECRET);
+      const signature = signPayload(clickPayload, dev2DeviceEventSecret);
       await request(app.getHttpServer())
         .post('/api/v1/extension/click')
         .set('Authorization', `Bearer ${devToken}`)
@@ -927,11 +946,11 @@ describe('End-to-End HTTP Integration Flow', () => {
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, HMAC_SECRET) })
+        .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, deviceEventSecret) })
         .expect(200);
 
       const adReqPayload = { deviceId, sessionId: 'budget-sess', waitStateId: wsId, toolType: 'vscode', idempotencyKey: `ad-budget-${wsId}` };
-      const sig = signPayload(adReqPayload, HMAC_SECRET);
+      const sig = signPayload(adReqPayload, deviceEventSecret);
       const adRes = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
         .set('Authorization', `Bearer ${devToken}`)
@@ -943,13 +962,13 @@ describe('End-to-End HTTP Integration Flow', () => {
       const rp = { impressionToken: tok, renderedAt: new Date().toISOString(), idempotencyKey: `r-budget-${wsId}` };
       await request(app.getHttpServer()).post('/api/v1/extension/ad-rendered')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ ...rp, signature: signPayload(rp, HMAC_SECRET) })
+        .send({ ...rp, signature: signPayload(rp, deviceEventSecret) })
         .expect(200);
 
       const ip = { impressionToken: tok, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: `i-budget-${wsId}` };
       const qRes = await request(app.getHttpServer()).post('/api/v1/extension/impression-qualified')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ ...ip, signature: signPayload(ip, HMAC_SECRET) });
+        .send({ ...ip, signature: signPayload(ip, deviceEventSecret) });
 
       // Should qualify; budget is tracked atomically.
       expect(qRes.body.qualified).toBe(true);

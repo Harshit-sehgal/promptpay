@@ -1407,22 +1407,34 @@ describe('E2E Money Loop', () => {
     });
 
     it('handles idempotent wait-state-start (returns existing record)', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const sessionId = uid('sess');
+      const waitStateId = uid('ws');
+
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: deviceId,
+        userId,
+        eventSecret: null,
+      });
       mockPrisma.waitStateEvent.findUnique.mockResolvedValue({
         id: uid('wse'),
-        userId: uid('u'),
-        deviceId: uid('dev'),
+        userId,
+        deviceId,
+        sessionId,
+        waitStateId,
         eventType: 'wait_state_start',
         idempotencyKey: 'idem-dup',
       });
 
       const payload = {
-        deviceId: uid('dev'), sessionId: uid('sess'),
-        toolType: 'claude_code', waitStateId: uid('ws'),
+        deviceId, sessionId,
+        toolType: 'claude_code', waitStateId,
         idempotencyKey: 'idem-dup',
       };
       const signed = { ...payload, signature: hmacSign(payload) };
 
-      const result = await svc.extension.recordWaitStateStart(uid('u'), signed);
+      const result = await svc.extension.recordWaitStateStart(userId, signed);
       expect(result.eventType).toBe('wait_state_start');
       expect(result.idempotencyKey).toBe('idem-dup');
       // Should not call create

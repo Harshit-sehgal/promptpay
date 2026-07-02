@@ -6,6 +6,8 @@ const CONFIG_SECTION = 'waitlayer';
 export class ConfigurationManager {
   private readonly secrets: vscode.SecretStorage;
   private deviceKey = 'waitlayer.deviceFingerprint';
+  private deviceUuidKey = 'waitlayer.deviceUUID';
+  private deviceEventSecretKey = 'waitlayer.deviceEventSecret';
 
   constructor(secrets?: vscode.SecretStorage) {
     this.secrets = secrets ?? (globalThis as any).extensionContext?.secrets ?? new DummySecretStorage();
@@ -107,7 +109,7 @@ export class ConfigurationManager {
 
   async getDeviceUUID(): Promise<string | null> {
     try {
-      const id = await this.secrets.get('waitlayer.deviceUUID');
+      const id = await this.secrets.get(this.deviceUuidKey);
       if (id) return id;
     } catch {}
     return null;
@@ -115,7 +117,30 @@ export class ConfigurationManager {
 
   async storeDeviceUUID(uuid: string): Promise<void> {
     try {
-      await this.secrets.store('waitlayer.deviceUUID', uuid);
+      await this.secrets.store(this.deviceUuidKey, uuid);
+    } catch {}
+  }
+
+  async getDeviceEventSecret(): Promise<string | null> {
+    try {
+      const secret = await this.secrets.get(this.deviceEventSecretKey);
+      if (secret) return secret;
+    } catch {}
+    return null;
+  }
+
+  async storeDeviceEventSecret(secret: string): Promise<void> {
+    try {
+      await this.secrets.store(this.deviceEventSecretKey, secret);
+    } catch {}
+  }
+
+  async clearDeviceRegistration(): Promise<void> {
+    try {
+      await this.secrets.delete(this.deviceUuidKey);
+    } catch {}
+    try {
+      await this.secrets.delete(this.deviceEventSecretKey);
     } catch {}
   }
 }

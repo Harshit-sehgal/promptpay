@@ -16,6 +16,7 @@ export interface Credentials {
   userId: string;
   role: string;
   deviceUUID?: string;
+  deviceEventSecret?: string;
 }
 
 export function getCredentials(): Credentials | null {
