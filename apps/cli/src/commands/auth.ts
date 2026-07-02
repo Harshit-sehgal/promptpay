@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { prompt } from '../lib/prompt';
 import { setCredentials, getCredentials } from '../lib/credentials';
 import { ApiClient } from '../lib/api-client';
+import { getErrorMessage } from '../lib/errors';
 
 export async function runAuth(opts: { email?: string; password?: string }) {
   const existing = getCredentials();
@@ -41,8 +42,8 @@ export async function runAuth(opts: { email?: string; password?: string }) {
       role: res.user.role,
     });
     console.log(chalk.green(`✓ Signed in as ${email} (role: ${res.user.role})`));
-  } catch (err: any) {
-    const msg = err?.message ?? 'Login failed';
+  } catch (err: unknown) {
+    const msg = getErrorMessage(err, 'Login failed');
     console.error(chalk.red(`✗ ${msg}`));
     process.exit(1);
   }

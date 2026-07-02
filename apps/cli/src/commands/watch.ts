@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import * as fs from 'fs';
 import { getCredentials } from '../lib/credentials';
 import { ApiClient } from '../lib/api-client';
+import { getErrorCode, getErrorMessage } from '../lib/errors';
 
 const STATE_FILE = `${process.cwd()}/.waitlayer-wait`;
 
@@ -53,8 +54,8 @@ export async function runWatch(opts: { once?: boolean }) {
               waitStateId: activeWaitStateId,
               durationMs,
             });
-          } catch (err: any) {
-            console.error(chalk.red(`end wait-state error: ${err.message}`));
+          } catch (err: unknown) {
+            console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
           }
           activeWaitStateId = null;
           activeStartTime = null;
@@ -87,9 +88,9 @@ export async function runWatch(opts: { once?: boolean }) {
       activeWaitStateId = waitStateId;
       activeStartTime = state.startTime;
       lastState = state;
-    } catch (err: any) {
-      if (err.code !== 'ENOENT') {
-        console.error(chalk.red(`watch error: ${err.message}`));
+    } catch (err: unknown) {
+      if (getErrorCode(err) !== 'ENOENT') {
+        console.error(chalk.red(`watch error: ${getErrorMessage(err)}`));
       } else {
         // File disappeared (ENOENT) — treat as wait state end
         if (activeWaitStateId && activeStartTime) {
@@ -100,8 +101,8 @@ export async function runWatch(opts: { once?: boolean }) {
               waitStateId: activeWaitStateId,
               durationMs,
             });
-          } catch (err: any) {
-            console.error(chalk.red(`end wait-state error: ${err.message}`));
+          } catch (err: unknown) {
+            console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
           }
           activeWaitStateId = null;
           activeStartTime = null;
@@ -117,9 +118,4 @@ export async function runWatch(opts: { once?: boolean }) {
   }
 
   setInterval(poll, 3000);
-}
-
-function getDeviceFingerprint(): string {
-  const hostname = require('os').hostname();
-  return require('crypto').createHash('sha256').update(`cli-${hostname}`).digest('hex');
 }

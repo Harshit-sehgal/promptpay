@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import * as crypto from 'crypto';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../config/prisma.service';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
@@ -78,7 +77,6 @@ describe('End-to-End HTTP Integration Flow', () => {
   let advertiserBToken: string;
   let advertiserId: string;
   let adminToken: string;
-  let adminUserId: string;
 
   let campaignId: string;
   let creativeId: string;
@@ -155,7 +153,6 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       expect(res.body.user).toBeDefined();
       expect(res.body.user.role).toBe('admin');
-      adminUserId = res.body.user.id;
     });
 
     let firstDevRefreshToken: string;
@@ -640,4 +637,3 @@ describe('End-to-End HTTP Integration Flow', () => {
     });
   });
 });
-

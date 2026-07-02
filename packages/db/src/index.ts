@@ -24,6 +24,7 @@ export {
   BidType,
   CampaignStatus,
   CreativeStatus,
+  type EarningsLedger,
   EventType,
   FraudFlagStatus,
   FraudFlagType,

@@ -1,7 +1,11 @@
 import { Controller, Post, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { Request } from 'express';
+import Stripe from 'stripe';
+import { getErrorMessage } from '../utils/errors';
 import { StripeProvider } from '../../payout/providers';
 import { PrismaService } from '../../config/prisma.service';
+
+type RawBodyRequest = Request & { rawBody?: Buffer | string };
 
 /**
  * Webhook controller for receiving Stripe events.
@@ -20,7 +24,7 @@ export class WebhookController {
 
   @Post('stripe')
   @HttpCode(HttpStatus.OK)
-  async handleStripeWebhook(@Req() req: Request) {
+  async handleStripeWebhook(@Req() req: RawBodyRequest) {
     if (!this.stripe.isEnabled()) {
       this.logger.warn('Stripe webhook received but Stripe is not configured');
       return { received: false };
@@ -33,7 +37,7 @@ export class WebhookController {
     }
 
     try {
-      const rawBody = (req as any).rawBody ?? req.body;
+      const rawBody = req.rawBody ?? req.body;
       if (!rawBody) {
         this.logger.error('Stripe webhook missing raw body — raw-body middleware may not be configured');
         return { received: false };
@@ -42,7 +46,7 @@ export class WebhookController {
 
       switch (event.type) {
         case 'checkout.session.completed': {
-          const session = event.data.object as any;
+          const session = event.data.object as Stripe.Checkout.Session;
           await this.handleCheckoutComplete(session.id);
           break;
         }
@@ -51,9 +55,10 @@ export class WebhookController {
       }
 
       return { received: true };
-    } catch (err: any) {
-      this.logger.error(`Stripe webhook verification failed: ${err.message}`);
-      return { received: false, error: err.message };
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, 'Stripe webhook verification failed');
+      this.logger.error(`Stripe webhook verification failed: ${message}`);
+      return { received: false, error: message };
     }
   }
 

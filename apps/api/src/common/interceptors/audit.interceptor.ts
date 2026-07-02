@@ -8,7 +8,17 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { AuditService } from '../../audit/audit.service';
-import { Reflector } from '@nestjs/core';
+
+interface AuditedRequest {
+  method?: string;
+  url?: string;
+  route?: { path?: string };
+  params: Record<string, string>;
+  user?: { sub?: string; id?: string; role?: string };
+  ip?: string;
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
 
 /**
  * Interceptor that automatically logs admin mutation actions to the AuditLog table.
@@ -24,8 +34,8 @@ import { Reflector } from '@nestjs/core';
 export class AuditInterceptor implements NestInterceptor {
   constructor(private audit: AuditService) {}
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    const req = context.switchToHttp().getRequest();
+  intercept(context: ExecutionContext, next: CallHandler<unknown>): Observable<unknown> {
+    const req = context.switchToHttp().getRequest<AuditedRequest>();
     const method = req.method;
     const url: string = req.route?.path ?? req.url ?? '';
 
@@ -44,7 +54,6 @@ export class AuditInterceptor implements NestInterceptor {
     //   /admin/fraud/:id/resolve      → action=resolve, target=fraud_flag
     const parsed = parseAdminUrl(url, req.params);
 
-    const now = Date.now();
     return next.handle().pipe(
       tap(() => {
         // Fire-and-forget — don't await, errors handled inside AuditService.log
@@ -101,11 +110,10 @@ function parseAdminUrl(
 }
 
 /** One-way hash of IP for audit storage — no raw IPs persisted. */
-function hashIp(req: Record<string, any>): string | undefined {
-  const ip =
-    req.ip ??
-    req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ??
-    req.connection?.remoteAddress;
+function hashIp(req: AuditedRequest): string | undefined {
+  const forwarded = req.headers?.['x-forwarded-for'];
+  const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const ip = req.ip ?? forwardedIp?.split(',')[0]?.trim() ?? req.connection?.remoteAddress;
   if (!ip || ip === 'unknown') return undefined;
 
   return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);

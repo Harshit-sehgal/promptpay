@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { getCredentials } from '../lib/credentials';
 import { ApiClient } from '../lib/api-client';
+import { getErrorMessage, getErrorStatus } from '../lib/errors';
 import { formatCurrency } from '../lib/format';
 
 export async function runStatus(opts: { period?: string }) {
@@ -11,7 +12,7 @@ export async function runStatus(opts: { period?: string }) {
   }
 
   const api = new ApiClient(creds);
-  const period = opts.period ?? '7d';
+  const _period = opts.period ?? '7d';
 
   try {
     const [balance, overview] = await Promise.all([
@@ -41,11 +42,11 @@ export async function runStatus(opts: { period?: string }) {
     console.log(`  Trust Level:    ${overview.trustLevel}`);
     if (overview.trustScore) console.log(`  Trust Score:    ${overview.trustScore}`);
     console.log();
-  } catch (err: any) {
-    if (err?.status === 401) {
+  } catch (err: unknown) {
+    if (getErrorStatus(err) === 401) {
       console.error(chalk.red('Session expired. Run `waitlayer auth` again.'));
     } else {
-      console.error(chalk.red(`Failed to load status: ${err?.message}`));
+      console.error(chalk.red(`Failed to load status: ${getErrorMessage(err, 'request failed')}`));
     }
     process.exit(1);
   }

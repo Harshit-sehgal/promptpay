@@ -1,10 +1,8 @@
-import * as readline from 'readline';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as crypto from 'crypto';
 import * as os from 'os';
 import * as https from 'https';
 import * as http from 'http';
-import { canonicalJson, signPayload } from '@waitlayer/shared';
+import { signPayload } from '@waitlayer/shared';
 import { Credentials, getCredentials, setCredentials } from './credentials';
 
 const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
@@ -22,7 +20,7 @@ export class ApiClient {
     if (this.deviceUUID) return this.deviceUUID;
 
     const hostname = os.hostname();
-    const fingerprint = require('crypto').createHash('sha256').update(`cli-${hostname}`).digest('hex');
+    const fingerprint = crypto.createHash('sha256').update(`cli-${hostname}`).digest('hex');
 
     const res = await this.raw<{ id: string }>('POST', '/extension/register-device', {
       toolType: 'terminal',
@@ -116,7 +114,7 @@ export class ApiClient {
     });
   }
 
-  private async raw<T>(method: 'GET' | 'POST', path: string, body?: any): Promise<T> {
+  private async raw<T>(method: 'GET' | 'POST', path: string, body?: Record<string, unknown>): Promise<T> {
     const url = new URL(path.startsWith('http') ? path : API_URL + path);
     const bodyStr = body ? JSON.stringify(body) : '';
 
@@ -171,13 +169,14 @@ export class ApiClient {
                     setCredentials(this.creds);
                   }
                   return this.raw<T>(method, path, body).then(resolve, reject);
-                } catch (refreshErr: any) {
+                } catch {
                   reject({ status: 401, message: 'unauthorized' });
                 }
               } else {
                 // NestJS returns { message, error, statusCode }
-                const msg = parsed?.message ?? 'request failed';
-                reject({ status: res.statusCode, message: msg, ...parsed });
+                const parsedObject = isRecord(parsed) ? parsed : {};
+                const msg = typeof parsedObject.message === 'string' ? parsedObject.message : 'request failed';
+                reject({ status: res.statusCode, message: msg, ...parsedObject });
               }
             } catch {
               reject(new Error('Invalid JSON response'));
@@ -190,6 +189,10 @@ export class ApiClient {
       req.end();
     });
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**

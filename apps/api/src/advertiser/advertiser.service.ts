@@ -202,22 +202,32 @@ export class AdvertiserService {
 
   /** Get reports for advertiser campaigns */
   async getReports(advertiserId: string, params: { campaignId?: string; from?: string; to?: string }) {
-    const where: Prisma.AdImpressionWhereInput = {};
-    if (params.campaignId) where.campaignId = params.campaignId;
+    const campaignWhere: Prisma.CampaignWhereInput = { advertiserId };
+    if (params.campaignId) campaignWhere.id = params.campaignId;
+
+    const campaigns = await this.prisma.campaign.findMany({
+      where: campaignWhere,
+      select: { id: true },
+    });
+    const campaignIds = campaigns.map((campaign) => campaign.id);
+
+    const impressionTimeWhere: Pick<Prisma.AdImpressionWhereInput, 'createdAt'> = {};
+    const clickTimeWhere: Pick<Prisma.AdClickWhereInput, 'createdAt'> = {};
     if (params.from || params.to) {
-      where.createdAt = {};
-      if (params.from) where.createdAt.gte = new Date(params.from);
-      if (params.to) where.createdAt.lte = new Date(params.to);
+      const gte = params.from ? new Date(params.from) : undefined;
+      const lte = params.to ? new Date(params.to) : undefined;
+      impressionTimeWhere.createdAt = { gte, lte };
+      clickTimeWhere.createdAt = { gte, lte };
     }
 
     const [impressions, clicks] = await Promise.all([
       this.prisma.adImpression.findMany({
-        where: { ...where, campaign: { advertiserId }, isBillable: true },
+        where: { ...impressionTimeWhere, campaignId: { in: campaignIds }, isBillable: true },
         orderBy: { createdAt: 'desc' },
         take: 500,
       }),
       this.prisma.adClick.findMany({
-        where: { ...where, campaign: { advertiserId }, isValid: true },
+        where: { ...clickTimeWhere, campaignId: { in: campaignIds }, isValid: true },
         orderBy: { createdAt: 'desc' },
         take: 500,
       }),

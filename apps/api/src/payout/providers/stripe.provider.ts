@@ -23,7 +23,7 @@ export class StripeProvider {
   constructor(private config: ConfigService) {
     const secretKey = this.config.get<string>('STRIPE_SECRET_KEY');
     this.enabled = !!secretKey;
-    this.stripe = secretKey ? new Stripe(secretKey, { apiVersion: '2025-06-30.basil' as any }) : null;
+    this.stripe = secretKey ? new Stripe(secretKey, { apiVersion: '2026-06-24.dahlia' }) : null;
   }
 
   /** Whether Stripe is configured */

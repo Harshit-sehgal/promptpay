@@ -1,5 +1,13 @@
 import { Injectable, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
 
+export interface RequestLike {
+  ip?: string;
+  url?: string;
+  route?: { path?: string };
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
 /**
  * Brute-force detection guard — tracks sequential login failures.
  *
@@ -19,7 +27,7 @@ const tracker = new Map<string, { failures: number; lockUntil: number }>();
 @Injectable()
 export class BruteForceGuard {
   canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest();
+    const req = context.switchToHttp().getRequest<RequestLike>();
     const ip = resolveIp(req);
     const key = `${req.route?.path ?? req.url}:${ip}`;
 
@@ -44,7 +52,7 @@ export class BruteForceGuard {
   }
 
   /** Call on login failure */
-  static recordFailure(req: Record<string, any>): void {
+  static recordFailure(req: RequestLike): void {
     const ip = resolveIp(req);
     const path = req.route?.path ?? req.url ?? '';
     if (!isAuthRoute(path)) return;
@@ -61,7 +69,7 @@ export class BruteForceGuard {
   }
 
   /** Call on login success — reset counter */
-  static resetOnSuccess(req: Record<string, any>): void {
+  static resetOnSuccess(req: RequestLike): void {
     const ip = resolveIp(req);
     const path = req.route?.path ?? req.url ?? '';
     if (!isAuthRoute(path)) return;
@@ -84,13 +92,10 @@ export class BruteForceGuard {
 // Periodic cleanup every 5 minutes to prevent unbounded memory growth
 setInterval(() => BruteForceGuard.cleanup(), 5 * 60 * 1000);
 
-function resolveIp(req: Record<string, any>): string {
-  return (
-    req.ip ??
-    req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ??
-    req.connection?.remoteAddress ??
-    'unknown'
-  );
+function resolveIp(req: RequestLike): string {
+  const forwarded = req.headers?.['x-forwarded-for'];
+  const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return req.ip ?? forwardedIp?.split(',')[0]?.trim() ?? req.connection?.remoteAddress ?? 'unknown';
 }
 
 function isAuthRoute(path: string): boolean {

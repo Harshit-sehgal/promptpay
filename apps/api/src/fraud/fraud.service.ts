@@ -1,4 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  FraudFlagStatus as DbFraudFlagStatus,
+  FraudFlagType as DbFraudFlagType,
+  FraudSeverity as DbFraudSeverity,
+  Prisma,
+  TrustLevel,
+} from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { RATE_LIMITS, TRUST_SCORE, FraudSeverity, FraudFlagType } from '@waitlayer/shared';
@@ -182,18 +189,18 @@ export class FraudService {
     score = Math.max(TRUST_SCORE.MIN, Math.min(TRUST_SCORE.MAX, score));
 
     // Determine trust level
-    const level = score >= TRUST_SCORE.THRESHOLDS.HIGH_TRUST ? 'high_trust'
-      : score >= TRUST_SCORE.THRESHOLDS.NORMAL ? 'normal'
-      : score >= TRUST_SCORE.THRESHOLDS.LOW_TRUST ? 'low_trust'
-      : 'new';
+    const level = score >= TRUST_SCORE.THRESHOLDS.HIGH_TRUST ? TrustLevel.high_trust
+      : score >= TRUST_SCORE.THRESHOLDS.NORMAL ? TrustLevel.normal
+      : score >= TRUST_SCORE.THRESHOLDS.LOW_TRUST ? TrustLevel.low_trust
+      : TrustLevel.new;
 
     // Update trust score record
     await this.prisma.trustScore.upsert({
       where: { userId },
       create: {
         userId,
-        score: score as any,
-        level: level as any,
+        score,
+        level,
         accountAgePoints,
         emailVerifiedPts,
         githubVerifiedPts,
@@ -204,8 +211,8 @@ export class FraudService {
         fraudPenaltyPts,
       },
       update: {
-        score: score as any,
-        level: level as any,
+        score,
+        level,
         accountAgePoints,
         emailVerifiedPts,
         githubVerifiedPts,
@@ -221,7 +228,7 @@ export class FraudService {
     // Update user trust level
     await this.prisma.user.update({
       where: { id: userId },
-      data: { trustLevel: level as any },
+      data: { trustLevel: level },
     });
 
     return score;
@@ -245,8 +252,8 @@ export class FraudService {
       const existing = await this.prisma.fraudFlag.findFirst({
         where: {
           userId: params.userId,
-          status: 'open',
-          flagType: params.flagType as any,
+          status: DbFraudFlagStatus.open,
+          flagType: params.flagType as DbFraudFlagType,
         },
       });
       if (existing) return existing;
@@ -259,9 +266,9 @@ export class FraudService {
         campaignId: params.campaignId || undefined,
         impressionId: params.impressionId || undefined,
         clickId: params.clickId || undefined,
-        flagType: params.flagType as any,
-        severity: params.severity as any,
-        evidence: params.evidence as any,
+        flagType: params.flagType as DbFraudFlagType,
+        severity: params.severity as DbFraudSeverity,
+        evidence: params.evidence as Prisma.InputJsonObject,
         scoreDelta: params.scoreDelta ?? 0,
       },
     });
@@ -283,12 +290,12 @@ export class FraudService {
     const flag = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
     if (!flag) throw new NotFoundException('Fraud flag not found');
 
-    const status = isValid ? 'resolved_valid' : 'resolved_invalid';
+    const status = isValid ? DbFraudFlagStatus.resolved_valid : DbFraudFlagStatus.resolved_invalid;
 
     await this.prisma.fraudFlag.update({
       where: { id: flagId },
       data: {
-        status: status as any,
+        status,
         reviewerId,
         reviewNote,
         resolvedAt: new Date(),
@@ -317,8 +324,10 @@ export class FraudService {
   // ── Admin Queries ──
 
   async getOpenFlags(page = 1, limit = 20, severity?: string) {
-    const where: any = { status: { in: ['open', 'reviewing'] } };
-    if (severity) where.severity = severity;
+    const where: Prisma.FraudFlagWhereInput = {
+      status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] },
+    };
+    if (severity) where.severity = severity as DbFraudSeverity;
 
     const [flags, total] = await Promise.all([
       this.prisma.fraudFlag.findMany({

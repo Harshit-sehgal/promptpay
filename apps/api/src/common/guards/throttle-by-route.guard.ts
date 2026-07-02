@@ -1,20 +1,19 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard, ThrottlerRequest } from '@nestjs/throttler';
+import { RequestLike } from './brute-force.guard';
 
 @Injectable()
 export class ThrottleByRouteGuard extends ThrottlerGuard {
-  protected override async getTracker(req: Record<string, any>): Promise<string> {
-    const ip =
-      req.ip ??
-      req.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ??
-      req.connection?.remoteAddress ??
-      'unknown';
+  protected override async getTracker(req: RequestLike): Promise<string> {
+    const forwarded = req.headers?.['x-forwarded-for'];
+    const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    const ip = req.ip ?? forwardedIp?.split(',')[0]?.trim() ?? req.connection?.remoteAddress ?? 'unknown';
     return `ip:${ip}`;
   }
 
   protected override async handleRequest(requestProps: ThrottlerRequest): Promise<boolean> {
     const { context, throttler } = requestProps;
-    const req = context.switchToHttp().getRequest();
+    const req = context.switchToHttp().getRequest<RequestLike>();
     const path = req.route?.path ?? req.url ?? '';
 
     const throttleName = resolveThrottleName(path);

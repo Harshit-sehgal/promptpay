@@ -265,7 +265,7 @@ describe('PayoutService', () => {
 
     it('should atomically update status of request, transaction, and earnings ledger to paid', async () => {
       const nowStr = new Date().toISOString();
-      mockPrisma.payoutRequest.findUnique.mockImplementation((args: any) => {
+      mockPrisma.payoutRequest.findUnique.mockImplementation((_args: any) => {
         // Return allocations with confirmed status first, then paid status on retrieval at the end
         if (mockPrisma.payoutRequest.update.mock.calls.length > 0) {
           return Promise.resolve({ id: 'req_123', status: 'paid', allocations: [] });

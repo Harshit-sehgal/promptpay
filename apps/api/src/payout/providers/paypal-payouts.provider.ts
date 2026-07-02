@@ -2,6 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PayoutProviderHandler } from '../payout.service';
 
+interface PayPalTokenResponse {
+  access_token: string;
+  expires_in: number;
+}
+
+interface PayPalPayoutResponse {
+  items?: Array<{ payout_item_id?: string }>;
+}
+
+interface PayPalPayoutStatusResponse {
+  transaction_status?: string;
+  time_processed?: string;
+}
+
 /**
  * Real PayPal Payouts API provider.
  *
@@ -60,7 +74,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       throw new Error(`PayPal OAuth failed: ${res.status} ${text}`);
     }
 
-    const data = await res.json() as any;
+    const data = await res.json() as PayPalTokenResponse;
     this.accessToken = data.access_token;
     // Refresh 60 seconds before actual expiry
     this.tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
@@ -120,7 +134,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       return { providerTxId: `paypal_failed_${params.payoutRequestId}`, status: 'failed' };
     }
 
-    const data = await res.json() as any;
+    const data = await res.json() as PayPalPayoutResponse;
     const payoutItemId = data.items?.[0]?.payout_item_id ?? `paypal_${params.payoutRequestId}`;
 
     this.logger.log(`PayPal payout initiated: ${payoutItemId} for ${params.destination}`);
@@ -152,7 +166,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       return { status: 'processing' };
     }
 
-    const data = await res.json() as any;
+    const data = await res.json() as PayPalPayoutStatusResponse;
     const paypalStatus = data.transaction_status;
 
     // Map PayPal statuses to our PayoutStatus

@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
-import { Prisma } from '@waitlayer/db';
+import { EarningsLedger, Prisma } from '@waitlayer/db';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
@@ -22,7 +22,7 @@ class ManualPayoutProvider implements PayoutProviderHandler {
   async initiate(params: { payoutRequestId: string }) {
     return { providerTxId: `manual_${params.payoutRequestId}`, status: 'processing' };
   }
-  async checkStatus(providerTxId: string) {
+  async checkStatus(_providerTxId: string) {
     return { status: 'processing' };
   }
 }
@@ -32,7 +32,7 @@ class PayPalEmailPayoutProvider implements PayoutProviderHandler {
   async initiate(params: { payoutRequestId: string; destination: string }) {
     return { providerTxId: `paypal_${params.payoutRequestId}`, status: 'processing' };
   }
-  async checkStatus(providerTxId: string) {
+  async checkStatus(_providerTxId: string) {
     return { status: 'processing' };
   }
 }
@@ -42,7 +42,7 @@ class StripeConnectPayoutProvider implements PayoutProviderHandler {
   async initiate(params: { payoutRequestId: string }) {
     return { providerTxId: `stripe_${params.payoutRequestId}`, status: 'processing' };
   }
-  async checkStatus(providerTxId: string) {
+  async checkStatus(_providerTxId: string) {
     return { status: 'processing' };
   }
 }
@@ -52,7 +52,7 @@ class PayoneerPayoutProvider implements PayoutProviderHandler {
   async initiate(params: { payoutRequestId: string }) {
     return { providerTxId: `payoneer_${params.payoutRequestId}`, status: 'processing' };
   }
-  async checkStatus(providerTxId: string) {
+  async checkStatus(_providerTxId: string) {
     return { status: 'processing' };
   }
 }
@@ -62,7 +62,7 @@ class WisePayoutProvider implements PayoutProviderHandler {
   async initiate(params: { payoutRequestId: string }) {
     return { providerTxId: `wise_${params.payoutRequestId}`, status: 'processing' };
   }
-  async checkStatus(providerTxId: string) {
+  async checkStatus(_providerTxId: string) {
     return { status: 'processing' };
   }
 }
@@ -72,7 +72,7 @@ class RazorpayPayoutProvider implements PayoutProviderHandler {
   async initiate(params: { payoutRequestId: string }) {
     return { providerTxId: `razorpay_${params.payoutRequestId}`, status: 'processing' };
   }
-  async checkStatus(providerTxId: string) {
+  async checkStatus(_providerTxId: string) {
     return { status: 'processing' };
   }
 }
@@ -210,7 +210,7 @@ export class PayoutService {
     });
     const excludeIds = allocatedEntryIds.map((a: { earningsEntryId: string }) => a.earningsEntryId);
 
-    let candidateEntries: any[];
+    let candidateEntries: EarningsLedger[];
 
     if (specificEntryIds && specificEntryIds.length > 0) {
       // Caller specified exact entries — validate they belong to user and are confirmed

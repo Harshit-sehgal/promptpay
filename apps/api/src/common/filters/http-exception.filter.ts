@@ -24,9 +24,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const requestId = crypto.randomUUID();
     response.status(status).json({
       statusCode: status,
-      message: typeof message === 'string' ? message : (message as any).message || message,
+      message: getExceptionMessage(message),
       requestId,
       timestamp: new Date().toISOString(),
     });
   }
+}
+
+function getExceptionMessage(message: unknown): unknown {
+  if (typeof message === 'string') return message;
+  const nested = (message as { message?: unknown })?.message;
+  return nested ?? message;
 }

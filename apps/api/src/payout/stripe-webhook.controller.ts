@@ -1,7 +1,12 @@
 import { Controller, Post, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
 import { Request } from 'express';
+import Stripe from 'stripe';
+import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
 import { StripeProvider } from './providers';
 import { PrismaService } from '../config/prisma.service';
+import { getErrorCode, getErrorMessage } from '../common/utils/errors';
+
+type RawBodyRequest = Request & { rawBody?: Buffer | string };
 
 /**
  * Stripe webhook controller — receives Stripe events for payout/deposit lifecycle.
@@ -25,7 +30,7 @@ export class StripeWebhookController {
 
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  async handleWebhook(@Req() req: Request) {
+  async handleWebhook(@Req() req: RawBodyRequest) {
     if (!this.stripe.isEnabled()) {
       this.logger.warn('Stripe webhook received but Stripe is not configured');
       return { received: false, reason: 'stripe_not_configured' };
@@ -39,17 +44,17 @@ export class StripeWebhookController {
 
     // Stripe requires the raw request body for signature verification.
     // rawBody is populated by the raw-body middleware configured in main.ts.
-    const rawBody = (req as any).rawBody;
+    const rawBody = req.rawBody;
     if (!rawBody) {
       this.logger.error('Stripe webhook missing raw body — raw-body middleware may not be configured');
       return { received: false, reason: 'missing_raw_body' };
     }
 
-    let event: any;
+    let event: Stripe.Event;
     try {
       event = this.stripe.verifyWebhookSignature(rawBody, sig);
-    } catch (err: any) {
-      this.logger.error(`Stripe webhook signature verification failed: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.error(`Stripe webhook signature verification failed: ${getErrorMessage(err)}`);
       return { received: false, reason: 'signature_verification_failed' };
     }
 
@@ -60,23 +65,23 @@ export class StripeWebhookController {
           provider: 'stripe',
           eventId: event.id,
           eventType: event.type,
-          payload: event as any,
+          payload: event as unknown as Prisma.InputJsonValue,
           processingStatus: 'pending',
         },
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // If the event ID is already recorded (unique constraint), it's a replay — skip
-      if (err.code === 'P2002') {
+      if (getErrorCode(err) === 'P2002') {
         this.logger.warn(`Duplicate Stripe event ${event.id} — skipping`);
         return { received: true, reason: 'duplicate_event' };
       }
-      this.logger.error(`Failed to persist webhook event ${event.id}: ${err.message}`);
+      this.logger.error(`Failed to persist webhook event ${event.id}: ${getErrorMessage(err)}`);
       // Continue processing even if logging fails — don't block Stripe
     }
 
     // Process the event asynchronously — return 200 to Stripe immediately
-    this.processEvent(event).catch((err) => {
-      this.logger.error(`Async processing failed for event ${event.id}: ${err.message}`);
+    this.processEvent(event).catch((err: unknown) => {
+      this.logger.error(`Async processing failed for event ${event.id}: ${getErrorMessage(err)}`);
     });
 
     return { received: true };
@@ -86,7 +91,7 @@ export class StripeWebhookController {
    * Process a Stripe event based on its type.
    * All ledger/fraud operations are handled here.
    */
-  private async processEvent(event: any): Promise<void> {
+  private async processEvent(event: Stripe.Event): Promise<void> {
     switch (event.type) {
       case 'checkout.session.completed':
       case 'checkout.session.async_payment_succeeded': {
@@ -107,8 +112,8 @@ export class StripeWebhookController {
   }
 
   /** Record a deposit in the advertiser ledger and wire the Stripe customer ID */
-  private async handlePaymentSuccess(event: any): Promise<void> {
-    const session = event.data.object;
+  private async handlePaymentSuccess(event: Stripe.Event): Promise<void> {
+    const session = event.data.object as Stripe.Checkout.Session;
     const sessionId = session.id;
 
     const result = await this.stripe.handleCheckoutComplete(sessionId);
@@ -152,8 +157,8 @@ export class StripeWebhookController {
           description: `Stripe deposit — session ${sessionId}`,
         },
       });
-    } catch (err: any) {
-      if (err.code === 'P2002') {
+    } catch (err: unknown) {
+      if (getErrorCode(err) === 'P2002') {
         this.logger.warn(`Duplicate deposit for paymentIntent ${result.paymentIntentId} — skipping`);
       } else {
         throw err;
@@ -172,8 +177,8 @@ export class StripeWebhookController {
   }
 
   /** Reverse advertiser ledger entries when a charge is refunded */
-  private async handleRefund(event: any): Promise<void> {
-    const refund = event.data.object;
+  private async handleRefund(event: Stripe.Event): Promise<void> {
+    const refund = event.data.object as Stripe.Refund;
     const details = await this.stripe.getRefundDetails(refund);
 
     if (!details.paymentIntentId) {
@@ -223,8 +228,8 @@ export class StripeWebhookController {
             description: `Refund for Stripe paymentIntent ${details.paymentIntentId} — refund ${refund.id}`,
           },
         });
-      } catch (err: any) {
-        if (err.code === 'P2002') {
+      } catch (err: unknown) {
+        if (getErrorCode(err) === 'P2002') {
           this.logger.warn(`Duplicate refund entry for ${idempotencyKey} — skipping`);
         } else {
           throw err;
@@ -259,8 +264,8 @@ export class StripeWebhookController {
   }
 
   /** Create a fraud flag when a dispute is filed against a charge */
-  private async handleDispute(event: any): Promise<void> {
-    const dispute = event.data.object;
+  private async handleDispute(event: Stripe.Event): Promise<void> {
+    const dispute = event.data.object as Stripe.Dispute;
     const details = await this.stripe.getDisputeDetails(dispute);
 
     if (!details.paymentIntentId) {
@@ -299,14 +304,13 @@ export class StripeWebhookController {
     }
 
     // Create a fraud flag for review
-    const idempotencyKey = `stripe_dispute_${dispute.id}`;
     try {
       await this.prisma.fraudFlag.create({
         data: {
           userId: advertiser.userId,
-          flagType: 'shared_payout_destination',
-          severity: details.status === 'lost' ? 'critical' : 'high',
-          status: 'open',
+          flagType: FraudFlagType.shared_payout_destination,
+          severity: details.status === 'lost' ? FraudSeverity.critical : FraudSeverity.high,
+          status: FraudFlagStatus.open,
           evidence: {
             source: 'stripe_webhook',
             stripeDisputeId: dispute.id,
@@ -320,11 +324,11 @@ export class StripeWebhookController {
           reviewNote: `Stripe dispute created: ${details.reason} — ${details.amountMinor} ${details.currency}`,
         },
       });
-    } catch (err: any) {
-      if (err.code === 'P2002') {
+    } catch (err: unknown) {
+      if (getErrorCode(err) === 'P2002') {
         this.logger.warn(`Duplicate dispute flag for ${dispute.id} — skipping`);
       } else {
-        this.logger.error(`Failed to create fraud flag for dispute ${dispute.id}: ${err.message}`);
+        this.logger.error(`Failed to create fraud flag for dispute ${dispute.id}: ${getErrorMessage(err)}`);
       }
     }
 

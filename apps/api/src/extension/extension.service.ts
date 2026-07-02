@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
+import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
@@ -8,10 +9,21 @@ import { FraudService } from '../fraud/fraud.service';
 import * as crypto from 'crypto';
 import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } from '@waitlayer/shared';
 
+interface ServedAd {
+  impressionToken: string;
+  campaignId: string;
+  creativeId: string;
+  title: string;
+  message: string;
+  label: string;
+  displayDomain: string;
+  destinationUrl: string;
+}
+
 @Injectable()
 export class ExtensionService {
   private readonly hmacSecret: string;
-  private adCache = new Map<string, { ad: any; timestamp: number }>();
+  private adCache = new Map<string, { ad: ServedAd; timestamp: number }>();
 
   constructor(
     private prisma: PrismaService,
@@ -41,7 +53,7 @@ export class ExtensionService {
       return this.prisma.device.update({
         where: { id: existingDevice.id },
         data: {
-          toolType: dto.toolType as any,
+          toolType: dto.toolType as ToolTypeEnum,
           extensionVersion: dto.extensionVersion,
           platform: dto.platform,
           lastSeenAt: new Date(),
@@ -58,7 +70,7 @@ export class ExtensionService {
       data: {
         userId,
         fingerprintHash: dto.fingerprintHash,
-        toolType: dto.toolType as any,
+        toolType: dto.toolType as ToolTypeEnum,
         extensionVersion: dto.extensionVersion,
         platform: dto.platform,
         publicKey: dto.publicKey,
@@ -130,7 +142,7 @@ export class ExtensionService {
         sessionId: dto.sessionId,
         eventType: 'wait_state_start',
         waitStateId: dto.waitStateId,
-        toolType: dto.toolType as any,
+        toolType: dto.toolType as ToolTypeEnum,
         signature: dto.signature,
         idempotencyKey: dto.idempotencyKey,
       },
@@ -282,7 +294,7 @@ export class ExtensionService {
     });
 
     // Filter by budget and category preferences
-    const eligible = campaigns.filter((c: any) => {
+    const eligible = campaigns.filter((c) => {
       if (c.creatives.length === 0) return false;
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
       // Category filter
@@ -296,7 +308,7 @@ export class ExtensionService {
     }
 
     // Simple weighted selection (higher bid = higher chance)
-    const totalBid = eligible.reduce((sum: number, c: any) => sum + c.bidAmountMinor, 0);
+    const totalBid = eligible.reduce((sum, c) => sum + c.bidAmountMinor, 0);
     let random = Math.random() * totalBid;
     let selected = eligible[0];
     for (const c of eligible) {
@@ -572,7 +584,7 @@ export class ExtensionService {
     // Find appropriate click bid (use campaign.cpcBid or default to campaign bid; CPC is the click-specific bid)
     // For CPC campaigns, the campaign.bidAmountMinor is the per-click bid.
     // For CPM campaigns, clicks don't earn — skip the ledger write.
-    const isCpcBid = impression.campaign.bidType === 'cpc';
+    const isCpcBid = impression.campaign.bidType === BidType.cpc;
 
     // Trust level for hold days
     const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
@@ -582,22 +594,21 @@ export class ExtensionService {
     const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const split = isCpcBid ? this.ledger.calculateSplit(impression.campaign.bidAmountMinor) : null;
 
-    const operations: any[] = [
-      // Create the click record
-      this.prisma.adClick.create({
-        data: {
-          impressionId: impression.id,
-          userId: impression.userId,
-          deviceId: impression.deviceId,
-          sessionId: impression.sessionId,
-          campaignId: impression.campaignId,
-          creativeId: impression.creativeId,
-          clickedAt: new Date(dto.clickedAt),
-          targetUrl: '',
-          idempotencyKey: dto.idempotencyKey,
-        },
-      }),
-    ];
+    const createClick = this.prisma.adClick.create({
+      data: {
+        impressionId: impression.id,
+        userId: impression.userId,
+        deviceId: impression.deviceId,
+        sessionId: impression.sessionId,
+        campaignId: impression.campaignId,
+        creativeId: impression.creativeId,
+        clickedAt: new Date(dto.clickedAt),
+        targetUrl: '',
+        idempotencyKey: dto.idempotencyKey,
+      },
+    });
+
+    const operations: [typeof createClick, ...Prisma.PrismaPromise<unknown>[]] = [createClick];
 
     if (isCpcBid && split) {
       const idempotencyBase = `clk-${dto.idempotencyKey}`;
