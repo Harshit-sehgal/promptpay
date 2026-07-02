@@ -98,29 +98,29 @@ export default function DeveloperDashboard() {
 
   const trustConfig = (level: string) => {
     switch (level) {
-      case 'high_trust': return { text: 'High Trust', color: 'text-emerald-400', bg: 'bg-emerald-400/10', border: 'border-emerald-400/20', barColor: 'bg-emerald-400', barWidth: '90%' };
-      case 'normal': return { text: 'Normal', color: 'text-sky-400', bg: 'bg-sky-400/10', border: 'border-sky-400/20', barColor: 'bg-sky-400', barWidth: '60%' };
-      case 'low_trust': return { text: 'Low Trust', color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20', barColor: 'bg-amber-400', barWidth: '30%' };
-      default: return { text: 'New', color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20', barColor: 'bg-amber-400', barWidth: '15%' };
+      case 'high_trust': return { text: 'High Trust', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200/60', barColor: 'bg-emerald-500', barWidth: '90%' };
+      case 'normal': return { text: 'Normal', color: 'text-sky-600', bg: 'bg-sky-50', border: 'border-sky-200/60', barColor: 'bg-sky-500', barWidth: '60%' };
+      case 'low_trust': return { text: 'Low Trust', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200/60', barColor: 'bg-amber-500', barWidth: '30%' };
+      default: return { text: 'New', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200/60', barColor: 'bg-amber-500', barWidth: '15%' };
     }
   };
 
   const trust = data ? trustConfig(data.trustLevel) : trustConfig('new');
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto px-4 py-2">
       {/* ── Hero header ── */}
       <div className="relative mb-10">
-        <div className="absolute -top-20 -left-20 w-[400px] h-[300px] bg-gradient-to-br from-brand-500/8 via-brand-600/5 to-transparent rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -top-20 -left-20 w-[400px] h-[300px] bg-gradient-to-br from-brand-100/30 via-brand-50/15 to-transparent rounded-full blur-3xl pointer-events-none" />
         <div className="relative">
-          <div className="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 rounded-full px-3.5 py-1 text-brand-400 text-[13px] font-medium mb-5">
+          <div className="inline-flex items-center gap-2 bg-brand-50 border border-brand-200/60 rounded-full px-3.5 py-1 text-brand-600 text-[13px] font-medium mb-5">
             <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
             Developer dashboard
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold text-surface-900 tracking-tight mb-2">
             Your <span className="gradient-text">earnings</span> overview
           </h1>
-          <p className="text-ink-300 text-[15px] max-w-lg">
+          <p className="text-surface-500 text-[15px] max-w-lg">
             Track your impressions, monitor payouts, and manage your developer account — all in one place.
           </p>
         </div>
@@ -133,42 +133,42 @@ export default function DeveloperDashboard() {
       )}
 
       {error && (
-        <div className="bg-red-500/8 border border-red-500/15 rounded-xl p-4 mb-8 flex items-center justify-between">
-          <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-300/60 hover:text-red-300 text-xs transition-colors">Dismiss</button>
+        <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-8 flex items-center justify-between">
+          <p className="text-red-600 text-sm">{error}</p>
+          <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700 text-xs transition-colors">Dismiss</button>
         </div>
       )}
 
       {data && (
         <>
           {/* ── Primary stat cards ── */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {/* Estimated earnings */}
-            <div className="group card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-7 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-brand-500/5 to-transparent rounded-bl-full pointer-events-none" />
+            <div className="group card-hover bg-white border border-surface-200/80 rounded-2xl p-7 relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-brand-50/50 to-transparent rounded-bl-full pointer-events-none" />
               <div className="flex items-center gap-2 mb-4">
-                <span className="text-brand-400/60"><IconTrendingUp /></span>
-                <span className="text-ink-400 text-xs font-medium uppercase tracking-wider">Estimated today</span>
+                <span className="text-brand-500/75"><IconTrendingUp /></span>
+                <span className="text-surface-400 text-xs font-semibold uppercase tracking-wider">Estimated today</span>
               </div>
-              <p className="text-4xl font-bold text-white font-mono tracking-tight mb-1">{formatCurrency(data.estimatedEarnings)}</p>
-              <p className="text-ink-400 text-[13px] flex items-center gap-1.5">
-                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+              <p className="text-4xl font-bold text-surface-900 font-mono tracking-tight mb-1">{formatCurrency(data.estimatedEarnings)}</p>
+              <p className="text-surface-400 text-[13px] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Updated in real time
               </p>
             </div>
 
             {/* Available for payout */}
-            <div className="group card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-7 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-emerald-500/5 to-transparent rounded-bl-full pointer-events-none" />
+            <div className="group card-hover bg-white border border-surface-200/80 rounded-2xl p-7 relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-emerald-50/50 to-transparent rounded-bl-full pointer-events-none" />
               <div className="flex items-center gap-2 mb-4">
-                <span className="text-emerald-400/60"><IconWallet /></span>
-                <span className="text-ink-400 text-xs font-medium uppercase tracking-wider">Available for payout</span>
+                <span className="text-emerald-600/75"><IconWallet /></span>
+                <span className="text-surface-400 text-xs font-semibold uppercase tracking-wider">Available for payout</span>
               </div>
-              <p className="text-4xl font-bold text-emerald-400 font-mono tracking-tight mb-1">{formatCurrency(data.availableForPayout)}</p>
+              <p className="text-4xl font-bold text-emerald-600 font-mono tracking-tight mb-1">{formatCurrency(data.availableForPayout)}</p>
               <div className="flex items-center gap-3">
-                <p className="text-ink-400 text-[13px]">Min: $10.00</p>
+                <p className="text-surface-400 text-[13px]">Min: $10.00</p>
                 {data.availableForPayout >= 1000 && (
-                  <Link href="/developer/payouts" className="text-brand-400 hover:text-brand-300 text-[13px] font-medium flex items-center gap-1 transition-colors">
+                  <Link href="/developer/payouts" className="text-brand-600 hover:text-brand-700 text-[13px] font-medium flex items-center gap-1 transition-colors">
                     Request payout <IconArrowRight />
                   </Link>
                 )}
@@ -176,82 +176,82 @@ export default function DeveloperDashboard() {
             </div>
 
             {/* Trust level */}
-            <div className="group card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-7 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-sky-500/5 to-transparent rounded-bl-full pointer-events-none" />
+            <div className="group card-hover bg-white border border-surface-200/80 rounded-2xl p-7 relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-sky-50/50 to-transparent rounded-bl-full pointer-events-none" />
               <div className="flex items-center gap-2 mb-4">
-                <span className={`${trust.color} opacity-60`}><IconShield /></span>
-                <span className="text-ink-400 text-xs font-medium uppercase tracking-wider">Trust level</span>
+                <span className={`${trust.color} opacity-75`}><IconShield /></span>
+                <span className="text-surface-400 text-xs font-semibold uppercase tracking-wider">Trust level</span>
               </div>
               <p className={`text-4xl font-bold ${trust.color} tracking-tight mb-2`}>{trust.text}</p>
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-1.5 bg-ink-700 rounded-full overflow-hidden">
+                <div className="flex-1 h-1.5 bg-surface-100 rounded-full overflow-hidden">
                   <div className={`h-full ${trust.barColor} rounded-full transition-all duration-1000 ease-out`} style={{ width: trust.barWidth }} />
                 </div>
-                <span className="text-ink-400 text-[13px] font-mono">{data.trustScore}/100</span>
+                <span className="text-surface-500 text-[13px] font-mono font-medium">{data.trustScore}/100</span>
               </div>
             </div>
           </div>
 
           {/* ── Earnings breakdown ── */}
-          <div className="card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-7 mb-8">
+          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 mb-8 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-white font-semibold text-[15px] flex items-center gap-2">
-                <span className="text-brand-400/50"><IconDollar /></span>
+              <h2 className="text-surface-900 font-bold text-[15px] flex items-center gap-2">
+                <span className="text-brand-500/75"><IconDollar /></span>
                 Earnings breakdown
               </h2>
-              <Link href="/developer/earnings" className="text-brand-400 hover:text-brand-300 text-[13px] font-medium flex items-center gap-1 transition-colors">
+              <Link href="/developer/earnings" className="text-brand-600 hover:text-brand-700 text-[13px] font-semibold flex items-center gap-1 transition-colors">
                 View history <IconArrowRight />
               </Link>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
               {[
-                { label: 'Estimated', value: data.estimatedEarnings, Icon: IconTrendingUp, accent: 'text-brand-400/40' },
-                { label: 'Pending', value: data.pendingEarnings, Icon: IconClock, accent: 'text-amber-400/40' },
-                { label: 'Confirmed', value: data.confirmedEarnings, Icon: IconCheck, accent: 'text-emerald-400/40' },
-                { label: 'Held', value: data.heldEarnings, Icon: IconLock, accent: 'text-red-400/40' },
-                { label: 'Lifetime', value: data.lifetimeEarnings, Icon: IconStar, accent: 'text-brand-400/40' },
+                { label: 'Estimated', value: data.estimatedEarnings, Icon: IconTrendingUp, accent: 'text-brand-500/60', bg: 'bg-brand-50/30' },
+                { label: 'Pending', value: data.pendingEarnings, Icon: IconClock, accent: 'text-amber-500/60', bg: 'bg-amber-50/30' },
+                { label: 'Confirmed', value: data.confirmedEarnings, Icon: IconCheck, accent: 'text-emerald-500/60', bg: 'bg-emerald-50/30' },
+                { label: 'Held', value: data.heldEarnings, Icon: IconLock, accent: 'text-red-500/60', bg: 'bg-red-50/30' },
+                { label: 'Lifetime', value: data.lifetimeEarnings, Icon: IconStar, accent: 'text-brand-500/60', bg: 'bg-brand-50/30' },
               ].map((item) => (
-                <div key={item.label} className="bg-ink-700/30 border border-ink-600/10 rounded-xl p-4">
+                <div key={item.label} className={`${item.bg} border border-surface-200/40 rounded-xl p-4`}>
                   <div className="flex items-center gap-1.5 mb-2">
                     <span className={item.accent}><item.Icon /></span>
-                    <p className="text-ink-400 text-xs font-medium uppercase tracking-wider">{item.label}</p>
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider">{item.label}</p>
                   </div>
-                  <p className="text-white font-mono text-xl font-semibold">{formatCurrency(item.value)}</p>
+                  <p className="text-surface-900 font-mono text-xl font-bold">{formatCurrency(item.value)}</p>
                 </div>
               ))}
             </div>
           </div>
 
           {/* ── Two-column: Payout status + Quick actions ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             {/* Payout hold status */}
-            <div className="card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-7">
-              <h2 className="text-white font-semibold text-[15px] mb-5 flex items-center gap-2">
-                <span className="text-brand-400/50"><IconWallet /></span>
+            <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+              <h2 className="text-surface-900 font-bold text-[15px] mb-5 flex items-center gap-2">
+                <span className="text-brand-500/75"><IconWallet /></span>
                 Payout status
               </h2>
               {data.payoutHoldStatus.isHeld ? (
                 <div className={`${trust.bg} border ${trust.border} rounded-xl p-5`}>
                   <div className="flex items-start gap-3">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0 animate-pulse" />
                     <div>
-                      <p className="text-amber-400 text-sm font-medium mb-1">Payout hold active</p>
-                      <p className="text-ink-300 text-[13px] leading-relaxed">
+                      <p className="text-amber-700 text-sm font-semibold mb-1">Payout hold active</p>
+                      <p className="text-surface-600 text-[13px] leading-relaxed">
                         {data.payoutHoldStatus.reason || 'New accounts have a 30-day payout hold. Verify your email and GitHub to speed this up.'}
                       </p>
-                      <Link href="/developer/trust" className="text-brand-400 hover:text-brand-300 text-[13px] font-medium mt-3 inline-flex items-center gap-1 transition-colors">
+                      <Link href="/developer/trust" className="text-brand-600 hover:text-brand-700 text-[13px] font-semibold mt-3 inline-flex items-center gap-1 transition-colors">
                         Improve trust score <IconArrowRight />
                       </Link>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="bg-emerald-400/8 border border-emerald-400/15 rounded-xl p-5">
+                <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-5">
                   <div className="flex items-start gap-3">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                     <div>
-                      <p className="text-emerald-400 text-sm font-medium mb-1">All clear</p>
-                      <p className="text-ink-300 text-[13px] leading-relaxed">
+                      <p className="text-emerald-700 text-sm font-semibold mb-1">All clear</p>
+                      <p className="text-surface-600 text-[13px] leading-relaxed">
                         Your account is in good standing — no payout hold active. Earnings are confirmed within 72 hours.
                       </p>
                     </div>
@@ -261,8 +261,8 @@ export default function DeveloperDashboard() {
             </div>
 
             {/* Quick actions */}
-            <div className="card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-7">
-              <h2 className="text-white font-semibold text-[15px] mb-5">Quick actions</h2>
+            <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+              <h2 className="text-surface-900 font-bold text-[15px] mb-5">Quick actions</h2>
               <div className="space-y-2.5">
                 {[
                   { label: 'View earnings history', href: '/developer/earnings', Icon: IconDollar },
@@ -273,13 +273,13 @@ export default function DeveloperDashboard() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="flex items-center justify-between bg-ink-700/30 hover:bg-ink-700/60 border border-ink-600/10 rounded-xl px-4 py-3 text-sm transition-all group"
+                    className="flex items-center justify-between bg-surface-50/50 hover:bg-surface-100/50 border border-surface-200/60 rounded-xl px-4 py-3 text-sm transition-all group"
                   >
-                    <span className="flex items-center gap-3 text-ink-200 group-hover:text-white transition-colors">
-                      <span className="text-brand-400/40 group-hover:text-brand-400/70 transition-colors"><item.Icon /></span>
+                    <span className="flex items-center gap-3 text-surface-700 group-hover:text-surface-900 transition-colors font-medium">
+                      <span className="text-brand-500/50 group-hover:text-brand-500/90 transition-colors"><item.Icon /></span>
                       {item.label}
                     </span>
-                    <span className="text-ink-400 group-hover:text-ink-200 transition-colors"><IconArrowRight /></span>
+                    <span className="text-surface-400 group-hover:text-surface-600 transition-colors"><IconArrowRight /></span>
                   </Link>
                 ))}
               </div>
@@ -288,51 +288,51 @@ export default function DeveloperDashboard() {
 
           {/* ── Referral card ── */}
           {referral && (
-            <div className="card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-7 relative overflow-hidden">
-              <div className="absolute bottom-0 right-0 w-64 h-48 bg-gradient-to-tl from-brand-500/5 to-transparent rounded-tl-full pointer-events-none" />
+            <div className="bg-white border border-surface-200/80 rounded-2xl p-7 relative overflow-hidden shadow-sm mb-8">
+              <div className="absolute bottom-0 right-0 w-64 h-48 bg-gradient-to-tl from-brand-50/30 to-transparent rounded-tl-full pointer-events-none" />
               <div className="relative">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-white font-semibold text-[15px] flex items-center gap-2">
-                    <span className="text-brand-400/50"><IconGift /></span>
+                  <h2 className="text-surface-900 font-bold text-[15px] flex items-center gap-2">
+                    <span className="text-brand-500/75"><IconGift /></span>
                     Referral program
                   </h2>
-                  <Link href="/developer/referral" className="text-brand-400 hover:text-brand-300 text-[13px] font-medium flex items-center gap-1 transition-colors">
+                  <Link href="/developer/referral" className="text-brand-600 hover:text-brand-700 text-[13px] font-semibold flex items-center gap-1 transition-colors">
                     View details <IconArrowRight />
                   </Link>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-                  <div className="bg-ink-700/30 border border-ink-600/10 rounded-xl p-4">
-                    <p className="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1.5">Your code</p>
-                    <p className="text-white font-mono text-xl font-semibold tracking-widest">{referral.referralCode || 'N/A'}</p>
+                  <div className="bg-surface-50/50 border border-surface-200/60 rounded-xl p-4">
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Your code</p>
+                    <p className="text-surface-950 font-mono text-xl font-bold tracking-widest">{referral.referralCode || 'N/A'}</p>
                   </div>
-                  <div className="bg-ink-700/30 border border-ink-600/10 rounded-xl p-4">
-                    <p className="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1.5">Total referrals</p>
-                    <p className="text-white font-mono text-xl font-semibold">{referral.referralCount}</p>
+                  <div className="bg-surface-50/50 border border-surface-200/60 rounded-xl p-4">
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Total referrals</p>
+                    <p className="text-surface-950 font-mono text-xl font-bold">{referral.referralCount}</p>
                   </div>
-                  <div className="bg-ink-700/30 border border-ink-600/10 rounded-xl p-4">
-                    <p className="text-ink-400 text-xs font-medium uppercase tracking-wider mb-1.5">Rewards earned</p>
-                    <p className="text-emerald-400 font-mono text-xl font-semibold">{formatCurrency(referral.rewardsEarnedMinor)}</p>
+                  <div className="bg-surface-50/50 border border-surface-200/60 rounded-xl p-4">
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Rewards earned</p>
+                    <p className="text-emerald-600 font-mono text-xl font-bold">{formatCurrency(referral.rewardsEarnedMinor)}</p>
                   </div>
                 </div>
 
                 {referral.referralLink && (
-                  <div className="bg-ink-700/30 border border-ink-600/10 rounded-xl p-4">
-                    <p className="text-ink-400 text-xs font-medium uppercase tracking-wider mb-2">Referral link</p>
+                  <div className="bg-surface-50 border border-surface-200/60 rounded-xl p-4">
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-2">Referral link</p>
                     <div className="flex items-center gap-2">
-                      <code className="flex-1 bg-ink-900/50 border border-ink-600/20 rounded-lg px-4 py-2.5 text-ink-200 text-sm break-all font-mono">
+                      <code className="flex-1 bg-white border border-surface-200/80 rounded-lg px-4 py-2.5 text-surface-800 text-sm break-all font-mono">
                         {referral.referralLink}
                       </code>
                       <button
                         onClick={copyReferral}
-                        className="bg-brand-500/15 hover:bg-brand-500/25 border border-brand-500/20 text-brand-400 px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 shrink-0"
+                        className="bg-brand-500 hover:bg-brand-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 shrink-0 shadow-sm shadow-brand-500/10"
                       >
                         <IconCopy />
-                        {copied ? 'Copied!' : 'Copy'}
+                        {copied ? 'Copied!' : 'Copy link'}
                       </button>
                     </div>
-                    <p className="text-ink-400 text-[13px] mt-2.5">
-                      Share this link — earn <span className="text-emerald-400 font-medium">$5</span> per referral when they receive their first payout.
+                    <p className="text-surface-500 text-[13px] mt-2.5">
+                      Share this link — earn <span className="text-emerald-600 font-semibold">$5</span> per referral when they receive their first payout.
                     </p>
                   </div>
                 )}
@@ -341,26 +341,26 @@ export default function DeveloperDashboard() {
           )}
 
           {/* ── Revenue split showcase (matching landing page) ── */}
-          <div className="mt-10 mb-4">
+          <div className="mt-12 mb-4">
             <div className="text-center mb-8">
-              <h2 className="text-xl font-bold text-white tracking-tight mb-2">How your earnings work</h2>
-              <p className="text-ink-400 text-[14px]">Every impression is split transparently. No hidden fees.</p>
+              <h2 className="text-2xl font-bold text-surface-900 tracking-tight mb-2">How your earnings work</h2>
+              <p className="text-surface-500 text-[14px]">Every impression is split transparently. No hidden fees.</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-6 text-center">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white border border-surface-200/80 rounded-2xl p-6 text-center card-hover shadow-sm">
                 <div className="text-4xl font-bold gradient-text mb-2">60%</div>
-                <div className="text-white font-semibold text-[14px] mb-1">You earn</div>
-                <p className="text-ink-400 text-[13px] leading-relaxed">The majority goes directly to you for your attention.</p>
+                <div className="text-surface-900 font-bold text-[14px] mb-1">You earn</div>
+                <p className="text-surface-500 text-[13px] leading-relaxed">The majority goes directly to you for your attention.</p>
               </div>
-              <div className="card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-6 text-center">
-                <div className="text-4xl font-bold text-white mb-2">30%</div>
-                <div className="text-white font-semibold text-[14px] mb-1">Platform</div>
-                <p className="text-ink-400 text-[13px] leading-relaxed">Infrastructure, fraud detection, and payment processing.</p>
+              <div className="bg-white border border-surface-200/80 rounded-2xl p-6 text-center card-hover shadow-sm">
+                <div className="text-4xl font-bold text-surface-900 mb-2">30%</div>
+                <div className="text-surface-900 font-bold text-[14px] mb-1">Platform</div>
+                <p className="text-surface-500 text-[13px] leading-relaxed">Infrastructure, fraud detection, and payment processing.</p>
               </div>
-              <div className="card-hover bg-ink-800/80 border border-ink-600/20 rounded-2xl p-6 text-center">
-                <div className="text-4xl font-bold text-ink-300 mb-2">10%</div>
-                <div className="text-white font-semibold text-[14px] mb-1">Reserve</div>
-                <p className="text-ink-400 text-[13px] leading-relaxed">Fraud disputes, chargebacks, and payout failure buffer.</p>
+              <div className="bg-white border border-surface-200/80 rounded-2xl p-6 text-center card-hover shadow-sm">
+                <div className="text-4xl font-bold text-surface-400 mb-2">10%</div>
+                <div className="text-surface-900 font-bold text-[14px] mb-1">Reserve</div>
+                <p className="text-surface-500 text-[13px] leading-relaxed">Fraud disputes, chargebacks, and payout failure buffer.</p>
               </div>
             </div>
           </div>

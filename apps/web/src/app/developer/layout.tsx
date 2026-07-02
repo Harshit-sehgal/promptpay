@@ -15,8 +15,8 @@ const DEVELOPER_NAV = [
 export default function DeveloperLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute allowedRoles={['developer']}>
-      <div className="dark min-h-screen bg-ink-900 flex">
-        <Sidebar navItems={DEVELOPER_NAV} />
+      <div className="min-h-screen bg-white flex">
+        <Sidebar navItems={DEVELOPER_NAV} variant="light" />
         <main className="flex-1 p-8">
           {children}
         </main>
