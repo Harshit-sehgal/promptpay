@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { LedgerService } from '../ledger/ledger.service';
 import { FraudService } from '../fraud/fraud.service';
 import * as crypto from 'crypto';
-import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS } from '@waitlayer/shared';
+import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } from '@waitlayer/shared';
 
 @Injectable()
 export class ExtensionService {
@@ -651,17 +651,7 @@ export class ExtensionService {
   // ── HMAC Signature Verification ──
 
   verifySignature(payload: Record<string, unknown>, signature: string): boolean {
-    // Sort payload keys for deterministic signing
-    const canonical = JSON.stringify(payload, Object.keys(payload).sort());
-    const expected = crypto
-      .createHmac('sha256', this.hmacSecret)
-      .update(canonical)
-      .digest('hex');
-    // timingSafeEqual requires equal-length buffers; pad or compare safely
-    const sigBuf = Buffer.from(signature);
-    const expBuf = Buffer.from(expected);
-    if (sigBuf.length !== expBuf.length) return false;
-    return crypto.timingSafeEqual(sigBuf, expBuf);
+    return verifySignature(payload, this.hmacSecret, signature);
   }
 
   // ── Privacy Enforcement ──

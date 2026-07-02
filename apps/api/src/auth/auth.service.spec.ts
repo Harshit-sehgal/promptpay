@@ -26,14 +26,15 @@ const mockPrisma = {
 };
 const prismaRef = mockPrisma as any;
 
-function makeService() {
+function makeService(overrides?: Record<string, string>) {
+  const secret = overrides?.JWT_SECRET ?? 'test-secret-at-least-32-characters-long';
   const jwt = new JwtService({
-    secret: 'test-secret-42',
+    secret,
     signOptions: { expiresIn: '15m' },
   });
   const config = {
     get: vi.fn((key: string, fallback?: string) => {
-      if (key === 'JWT_SECRET') return 'test-secret-42';
+      if (key === 'JWT_SECRET') return secret;
       if (key === 'JWT_ACCESS_TTL') return '15m';
       if (key === 'JWT_REFRESH_TTL') return '30d';
       return fallback ?? null;
@@ -54,6 +55,18 @@ function makeService() {
 describe('AuthService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('constructor — JWT secret validation', () => {
+    it('rejects JWT_SECRET shorter than 32 characters', () => {
+      expect(
+        () => makeService({ JWT_SECRET: 'too-short' }),
+      ).toThrow('JWT_SECRET must be defined and at least 32 characters');
+    });
+
+    it('accepts JWT_SECRET of 32+ characters', () => {
+      expect(() => makeService()).not.toThrow();
+    });
   });
 
   describe('signUp', () => {
@@ -167,7 +180,7 @@ describe('AuthService', () => {
     });
 
     it('revokes all sessions on token reuse (replay detection)', async () => {
-      const { service, createRefreshToken } = makeService({ JWT_SECRET: 'test-secret-42' });
+      const { service, createRefreshToken } = makeService();
       const family = 'fam-replay';
       const oldRefresh = await createRefreshToken('u-4', 'developer', family);
 
@@ -188,8 +201,32 @@ describe('AuthService', () => {
       );
     });
 
+    it('revoked session cannot refresh — all sessions revoked', async () => {
+      const { service, createRefreshToken } = makeService();
+      const family = 'fam-revoked';
+      const oldRefresh = await createRefreshToken('u-4b', 'developer', family);
+
+      // Session already revoked (e.g. user logged out on another device)
+      mockPrisma.session.findFirst.mockResolvedValue({
+        id: 'sess-rev',
+        userId: 'u-4b',
+        tokenFamily: family,
+        revoked: true,
+      });
+
+      await expect(service.refresh(oldRefresh)).rejects.toThrow(
+        'Token reuse detected — all sessions revoked',
+      );
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'u-4b' },
+          data: { revoked: true },
+        }),
+      );
+    });
+
     it('revokes all sessions if no session found for token', async () => {
-      const { service, createRefreshToken } = makeService({ JWT_SECRET: 'test-secret-42' });
+      const { service, createRefreshToken } = makeService();
       const oldRefresh = await createRefreshToken('u-5', 'developer', 'fam-ghost');
 
       mockPrisma.session.findFirst.mockResolvedValue(null);
@@ -201,8 +238,26 @@ describe('AuthService', () => {
     });
 
     it('throws on malformed jwt', async () => {
-      const { service } = makeService({ JWT_SECRET: 'test-secret-42' });
+      const { service } = makeService();
       await expect(service.refresh('not-a-valid-jwt')).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('access token — jti (session tracking)', () => {
+    it('includes jti in the access token payload', async () => {
+      const { service, jwt } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-jti',
+        email: 'jti@test.com',
+        role: 'developer',
+        status: 'active',
+        passwordHash: await (await import('bcryptjs')).hash('pw', 12),
+      });
+
+      const result = await service.login({ email: 'jti@test.com', password: 'pw' });
+      const decoded = await jwt.verifyAsync(result.accessToken);
+      expect(decoded.jti).toBeDefined();
+      expect(typeof decoded.jti).toBe('string');
     });
   });
 

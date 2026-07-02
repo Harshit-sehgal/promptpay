@@ -35,11 +35,33 @@ export async function runWatch(opts: { once?: boolean }) {
   console.log(chalk.dim('Press Ctrl+C to stop.'));
 
   let lastState: WaitState | null = null;
+  // Track the current waitStateId we reported so we can send end when the file is removed
+  let activeWaitStateId: string | null = null;
+  let activeStartTime: number | null = null;
 
   const poll = async () => {
     try {
       const raw = fs.readFileSync(STATE_FILE, 'utf-8').trim();
-      if (!raw) return;
+
+      // ── Wait state ended (file removed/emptied) ──
+      if (!raw) {
+        if (activeWaitStateId && activeStartTime) {
+          const durationMs = Date.now() - activeStartTime;
+          console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms`));
+          try {
+            await api.endWaitState({
+              waitStateId: activeWaitStateId,
+              durationMs,
+            });
+          } catch (err: any) {
+            console.error(chalk.red(`end wait-state error: ${err.message}`));
+          }
+          activeWaitStateId = null;
+          activeStartTime = null;
+          lastState = null;
+        }
+        return;
+      }
 
       const state = JSON.parse(raw) as WaitState;
       if (!state.startTime || state.startTime === lastState?.startTime) {
@@ -50,16 +72,39 @@ export async function runWatch(opts: { once?: boolean }) {
       if (durationMs < 1000) return;
 
       console.log(chalk.dim(`[wait] ${state.tool} — ${durationMs}ms`));
+
+      // Generate a stable waitStateId for this wait period
+      const waitStateId = `cli-${state.startTime}-${state.tool}`;
+
       await api.reportWaitState({
         toolType: state.tool,
         durationMs,
         deviceFingerprint: getDeviceFingerprint(),
       });
 
+      activeWaitStateId = waitStateId;
+      activeStartTime = state.startTime;
       lastState = state;
     } catch (err: any) {
       if (err.code !== 'ENOENT') {
         console.error(chalk.red(`watch error: ${err.message}`));
+      } else {
+        // File disappeared (ENOENT) — treat as wait state end
+        if (activeWaitStateId && activeStartTime) {
+          const durationMs = Date.now() - activeStartTime;
+          console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms`));
+          try {
+            await api.endWaitState({
+              waitStateId: activeWaitStateId,
+              durationMs,
+            });
+          } catch (err: any) {
+            console.error(chalk.red(`end wait-state error: ${err.message}`));
+          }
+          activeWaitStateId = null;
+          activeStartTime = null;
+          lastState = null;
+        }
       }
     }
   };

@@ -21,7 +21,7 @@ export class ConfigurationManager {
   getSecretKey(): string {
     return (
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('extensionSecret') ||
-      'dev-secret-rotate-in-prod'
+      'dev-secret-change-me'
     );
   }
 

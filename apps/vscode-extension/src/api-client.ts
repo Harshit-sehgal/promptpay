@@ -1,7 +1,7 @@
 import * as https from 'https';
 import * as http from 'http';
-import * as crypto from 'crypto';
 import * as vscode from 'vscode';
+import { signPayload } from '@waitlayer/shared';
 import { ConfigurationManager } from './config';
 
 export interface Ad {
@@ -34,12 +34,9 @@ export class ApiClient {
 
   constructor(private config: ConfigurationManager) {}
 
-  /** Sign payload with HMAC for outgoing extension events */
-  signPayload(body: string): string {
-    return crypto
-      .createHmac('sha256', this.config.getSecretKey())
-      .update(body)
-      .digest('hex');
+  /** Sign payload object with HMAC using canonical JSON (sorted keys). */
+  sign(payload: Record<string, unknown>): string {
+    return signPayload(payload, this.config.getSecretKey());
   }
 
   async waitStateStart(input: {
@@ -57,7 +54,23 @@ export class ApiClient {
     };
     await this.post('/extension/wait-state/start', {
       ...payload,
-      signature: this.signPayload(JSON.stringify(payload)),
+      signature: this.sign(payload),
+    });
+  }
+
+  async waitStateEnd(input: {
+    waitStateId: string;
+    durationMs: number;
+    idempotencyKey: string;
+  }): Promise<void> {
+    const payload = {
+      waitStateId: input.waitStateId,
+      duration: String(input.durationMs),
+      idempotencyKey: input.idempotencyKey,
+    };
+    await this.post('/extension/wait-state/end', {
+      ...payload,
+      signature: this.sign(payload),
     });
   }
 
@@ -71,30 +84,27 @@ export class ApiClient {
   }
 
   async recordImpressionEnd(impressionToken: string, visibleDurationMs: number): Promise<void> {
-    await this.post('/extension/impression-qualified', {
+    const payload = {
       impressionToken,
       qualifiedAt: new Date().toISOString(),
       visibleDurationMs,
       idempotencyKey: `imp-${impressionToken}`,
-      signature: this.signPayload(JSON.stringify({
-        impressionToken,
-        qualifiedAt: new Date().toISOString(),
-        visibleDurationMs,
-        idempotencyKey: `imp-${impressionToken}`,
-      })),
+    };
+    await this.post('/extension/impression-qualified', {
+      ...payload,
+      signature: this.sign(payload),
     });
   }
 
   async recordClick(impressionToken: string): Promise<void> {
-    await this.post('/extension/click', {
+    const payload = {
       impressionToken,
       clickedAt: new Date().toISOString(),
       idempotencyKey: `click-${impressionToken}`,
-      signature: this.signPayload(JSON.stringify({
-        impressionToken,
-        clickedAt: new Date().toISOString(),
-        idempotencyKey: `click-${impressionToken}`,
-      })),
+    };
+    await this.post('/extension/click', {
+      ...payload,
+      signature: this.sign(payload),
     });
   }
 
@@ -136,10 +146,22 @@ export class ApiClient {
     return `${this.config.getApiUrl()}${path}`;
   }
 
-  private async post<T>(path: string, body: any): Promise<T> {
+  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
     const bodyStr = JSON.stringify(body);
-    const signature = this.signPayload(bodyStr);
-    return this.request<T>('POST', path, headers(path, bodyStr, signature), bodyStr);
+
+    // Compute header signature from canonical form WITHOUT the signature field
+    let headerSignature: string | undefined;
+    if (body) {
+      const { signature: _, ...payloadForHeader } = body;
+      headerSignature = this.sign(payloadForHeader);
+    }
+
+    return this.request<T>(
+      'POST',
+      path,
+      headers(path, bodyStr, headerSignature),
+      bodyStr,
+    );
   }
 
   private async get<T>(path: string): Promise<T> {
@@ -192,12 +214,19 @@ export class ApiClient {
   }
 }
 
-function headers(path: string, bodyStr: string, signature: string): Record<string, string> {
-  return {
+function headers(
+  path: string,
+  bodyStr: string,
+  headerSignature?: string,
+): Record<string, string> {
+  const base: Record<string, string> = {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(bodyStr).toString(),
-    'X-WaitLayer-Signature': signature,
     'X-Extension-Version': '0.0.1',
     'X-Tool-Type': 'vscode',
   };
+  if (headerSignature) {
+    base['X-WaitLayer-Signature'] = headerSignature;
+  }
+  return base;
 }

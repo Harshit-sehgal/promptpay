@@ -4,10 +4,11 @@ import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
 import * as http from 'http';
-import * as crypto from 'crypto';
+import { canonicalJson, signPayload } from '@waitlayer/shared';
 import { Credentials, getCredentials, setCredentials } from './credentials';
 
 const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
+const HMAC_SECRET = process.env.EXTENSION_HMAC_SECRET ?? 'dev-secret-change-me';
 
 export class ApiClient {
   constructor(private creds: Credentials | null = null) {
@@ -53,24 +54,48 @@ export class ApiClient {
     durationMs: number;
     deviceFingerprint: string;
   }) {
-    return this.raw('POST', '/extension/wait-state/start', {
+    const payload = {
       ...input,
       sessionId: 'cli-' + Date.now(),
       idempotencyKey: 'cli-' + Date.now() + '-' + Math.random().toString(36).slice(2),
-      signature: crypto
-        .createHmac('sha256', process.env.WAITLAYER_SECRET ?? 'dev-secret')
-        .update(JSON.stringify(input))
-        .digest('hex'),
+    };
+    const signature = signPayload(payload, HMAC_SECRET);
+    return this.raw('POST', '/extension/wait-state/start', {
+      ...payload,
+      signature,
+    });
+  }
+
+  async endWaitState(input: {
+    waitStateId: string;
+    durationMs: number;
+  }) {
+    const payload = {
+      waitStateId: input.waitStateId,
+      duration: String(input.durationMs),
+      idempotencyKey: 'cli-end-' + Date.now() + '-' + Math.random().toString(36).slice(2),
+    };
+    const signature = signPayload(payload, HMAC_SECRET);
+    return this.raw('POST', '/extension/wait-state/end', {
+      ...payload,
+      signature,
     });
   }
 
   private async raw<T>(method: 'GET' | 'POST', path: string, body?: any): Promise<T> {
     const url = new URL(path.startsWith('http') ? path : API_URL + path);
     const bodyStr = body ? JSON.stringify(body) : '';
-    const signature = crypto
-      .createHmac('sha256', process.env.WAITLAYER_SECRET ?? 'dev-secret')
-      .update(bodyStr)
-      .digest('hex');
+
+    // Compute header signature from canonical form BEFORE signature field is in body.
+    // For extension routes, the body already carries its own signature field;
+    // the header signature is an additional layer signing the full body as-sent.
+    // We strip the signature field for header HMAC so it matches the
+    // canonical payload the backend verifies against.
+    let headerSignature: string | undefined;
+    if (body) {
+      const { signature: _, ...payloadForHeader } = body;
+      headerSignature = signPayload(payloadForHeader, HMAC_SECRET);
+    }
 
     return new Promise<T>((resolve, reject) => {
       const transport = url.protocol === 'https:' ? https : http;
@@ -83,7 +108,9 @@ export class ApiClient {
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(bodyStr).toString(),
-            'X-WaitLayer-Signature': signature,
+            ...(headerSignature
+              ? { 'X-WaitLayer-Signature': headerSignature }
+              : {}),
             ...(this.creds?.accessToken
               ? { Authorization: `Bearer ${this.creds.accessToken}` }
               : {}),

@@ -14,6 +14,13 @@ interface TokenPayload {
   family?: string;
 }
 
+interface AccessTokenPayload {
+  sub: string;
+  role: string;
+  jti: string;
+  family?: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly accessTtl: string;
@@ -28,7 +35,13 @@ export class AuthService {
   ) {
     this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
     this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d');
-    this.jwtSecret = this.config.get<string>('JWT_SECRET')!;
+    const secret = this.config.get<string>('JWT_SECRET');
+    if (!secret || secret.length < 32) {
+      throw new Error(
+        'JWT_SECRET must be defined and at least 32 characters. Set a strong secret in your environment (e.g. `openssl rand -base64 48`).',
+      );
+    }
+    this.jwtSecret = secret;
   }
 
   /** ── Sign Up ── */
@@ -279,14 +292,16 @@ export class AuthService {
 
   private async generateTokenPair(userId: string, role: string, existingFamily?: string) {
     const family = existingFamily || crypto.randomUUID();
+    // Pre-generate a session ID to use as jti in the access token
+    const jti = crypto.randomUUID();
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(
-        { sub: userId, role },
+        { sub: userId, role, jti, aud: 'access' } satisfies AccessTokenPayload & { aud: string },
         { expiresIn: this.accessTtl as unknown as number },
       ),
       this.jwt.signAsync(
-        { sub: userId, role, family },
+        { sub: userId, role, family, aud: 'refresh' },
         { expiresIn: this.refreshTtl as unknown as number },
       ),
     ]);
@@ -297,6 +312,7 @@ export class AuthService {
 
     await this.prisma.session.create({
       data: {
+        id: jti,
         userId,
         tokenHash: refreshHash,
         tokenFamily: family,
