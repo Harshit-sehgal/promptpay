@@ -35,7 +35,7 @@ const IconGift = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
 );
 const IconCopy = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
 );
 const IconArrowRight = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -161,7 +161,7 @@ export default function DeveloperDashboard() {
               <div className="flex items-center gap-3">
                 <p className="text-surface-400 text-[13px] font-normal">Min: $10.00</p>
                 {data.availableForPayout >= 1000 && (
-                  <Link href="/developer/payouts" className="text-brand-600 hover:text-brand-700 text-[13px] font-medium flex items-center gap-1 transition-colors">
+                  <Link href="/developer/payouts" className="text-brand-600 hover:text-brand-700 text-[13px] font-semibold flex items-center gap-1 transition-colors">
                     Request payout <IconArrowRight />
                   </Link>
                 )}
@@ -195,7 +195,7 @@ export default function DeveloperDashboard() {
                 View history <IconArrowRight />
               </Link>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
               {[
                 { label: 'Estimated', value: data.estimatedEarnings, Icon: IconTrendingUp },
                 { label: 'Pending', value: data.pendingEarnings, Icon: IconClock },
@@ -203,8 +203,8 @@ export default function DeveloperDashboard() {
                 { label: 'Held', value: data.heldEarnings, Icon: IconLock },
                 { label: 'Lifetime', value: data.lifetimeEarnings, Icon: IconStar },
               ].map((item) => (
-                <div key={item.label} className="py-1">
-                  <div className="flex items-center gap-1.5 mb-1.5">
+                <div key={item.label} className="bg-slate-50/50 border border-slate-100/80 rounded-xl p-4 transition-all duration-200 hover:bg-slate-50">
+                  <div className="flex items-center gap-1.5 mb-2">
                     <span className="text-surface-400"><item.Icon /></span>
                     <p className="text-surface-500 text-xs font-medium uppercase tracking-wider">{item.label}</p>
                   </div>
@@ -219,21 +219,21 @@ export default function DeveloperDashboard() {
             {/* Payout hold status */}
             <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm flex flex-col justify-between">
               <div>
-                <h2 className="text-surface-900 font-bold text-[15px] mb-4 flex items-center gap-2">
+                <h2 className="text-surface-900 font-bold text-[15px] mb-5 flex items-center gap-2">
                   <span className="text-surface-400"><IconWallet /></span>
                   Payout status
                 </h2>
                 {data.payoutHoldStatus.isHeld ? (
-                  <div>
-                    <p className="text-surface-900 font-semibold text-[14px] mb-1">Payout Hold Active</p>
-                    <p className="text-surface-500 text-[13px] leading-relaxed font-normal">
+                  <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-4.5">
+                    <p className="text-amber-850 font-semibold text-[13px] mb-1">Payout Hold Active</p>
+                    <p className="text-surface-600 text-[13px] leading-relaxed font-normal">
                       {data.payoutHoldStatus.reason || 'New accounts have a 30-day payout hold. Verify your email and GitHub to speed this up.'}
                     </p>
                   </div>
                 ) : (
-                  <div>
-                    <p className="text-surface-900 font-semibold text-[14px] mb-1">All Clear</p>
-                    <p className="text-surface-500 text-[13px] leading-relaxed font-normal">
+                  <div className="bg-emerald-50/30 border border-emerald-100/60 rounded-xl p-4.5">
+                    <p className="text-emerald-805 font-semibold text-[13px] mb-1">All Clear</p>
+                    <p className="text-surface-600 text-[13px] leading-relaxed font-normal">
                       Your account is in good standing — no active payout hold. Earnings are confirmed within 72 hours.
                     </p>
                   </div>
@@ -288,16 +288,16 @@ export default function DeveloperDashboard() {
                   </Link>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+                  <div className="bg-slate-50/50 border border-slate-100/80 rounded-xl p-4">
                     <p className="text-surface-500 text-xs font-medium uppercase tracking-wider mb-1.5">Your code</p>
                     <p className="text-surface-950 font-mono text-xl font-semibold tracking-widest">{referral.referralCode || 'N/A'}</p>
                   </div>
-                  <div>
+                  <div className="bg-slate-50/50 border border-slate-100/80 rounded-xl p-4">
                     <p className="text-surface-500 text-xs font-medium uppercase tracking-wider mb-1.5">Total referrals</p>
                     <p className="text-surface-950 text-xl font-semibold">{referral.referralCount}</p>
                   </div>
-                  <div>
+                  <div className="bg-slate-50/50 border border-slate-100/80 rounded-xl p-4">
                     <p className="text-surface-500 text-xs font-medium uppercase tracking-wider mb-1.5">Rewards earned</p>
                     <p className="text-emerald-600 font-mono text-xl font-semibold">{formatCurrency(referral.rewardsEarnedMinor)}</p>
                   </div>
@@ -306,16 +306,15 @@ export default function DeveloperDashboard() {
                 {referral.referralLink && (
                   <div className="pt-5 border-t border-surface-100">
                     <p className="text-surface-500 text-xs font-medium uppercase tracking-wider mb-2">Referral link</p>
-                    <div className="flex items-center gap-3">
-                      <code className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-2.5 text-surface-700 text-sm break-all font-mono">
+                    <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl p-1.5 pl-4">
+                      <code className="flex-1 text-surface-700 text-sm break-all font-mono select-all bg-transparent">
                         {referral.referralLink}
                       </code>
                       <button
                         onClick={copyReferral}
-                        className="bg-brand-500 hover:bg-brand-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 shrink-0 shadow-sm shadow-brand-500/10"
+                        className="bg-brand-500 hover:bg-brand-600 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shrink-0 shadow-sm shadow-brand-500/10"
                       >
-                        <IconCopy />
-                        {copied ? 'Copied' : 'Copy link'}
+                        {copied ? 'Copied' : 'Copy'}
                       </button>
                     </div>
                     <p className="text-surface-500 text-[13px] mt-2.5 font-normal leading-relaxed">
