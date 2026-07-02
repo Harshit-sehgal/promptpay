@@ -348,7 +348,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .set('Authorization', `Bearer ${advertiserToken}`)
         .send({
           name: 'E2E CPC Campaign',
-          category: 'technology',
+          category: 'business',
           bidType: BidType.CPC,
           currency: 'USD',
           bidAmountMinor: 500, // $5.00 per click
@@ -549,6 +549,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         sessionId,
         waitStateId,
         toolType: 'vscode',
+        allowedCategories: ['technology'],
         idempotencyKey: `ad-req-${waitStateId}`,
       };
       const signature = signPayload(adReqPayload, HMAC_SECRET);
@@ -561,8 +562,7 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       expect(res.body.ad).toBeDefined();
       expect(res.body.ad.impressionToken).toBeDefined();
-      // Either CPM or CPC campaign may be selected (weighted random).
-      expect([campaignId, cpcCampaignId]).toContain(res.body.ad.campaignId);
+      expect(res.body.ad.campaignId).toBe(campaignId);
       impressionToken = res.body.ad.impressionToken;
     });
 
@@ -675,6 +675,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         sessionId,
         waitStateId: cpcWaitStateId,
         toolType: 'vscode',
+        allowedCategories: ['business'],
         idempotencyKey: `ad-req-${cpcWaitStateId}`,
       };
       const signature = signPayload(adReqPayload, HMAC_SECRET);
@@ -749,6 +750,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .expect(200);
 
       expect(res.body.clicked).toBe(true);
+      const clickId = res.body.clickId;
 
       // CPC bid = $5.00 (500 minor). Split: dev=60%=300, platform=30%=150, reserve=10%=50
       const newDevEarnings = await prisma.earningsLedger.findMany({
@@ -758,6 +760,8 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       const cpcEarning = newDevEarnings.find(e => !oldDevEarnings.map(o => o.id).includes(e.id));
       expect(cpcEarning?.amountMinor).toBe(300);
+      expect(cpcEarning?.campaignId).toBe(cpcCampaignId);
+      expect(cpcEarning?.clickId).toBe(clickId);
 
       // Advertiser debit for CPC click
       const advDebits = await prisma.advertiserLedger.findMany({
@@ -769,6 +773,28 @@ describe('End-to-End HTTP Integration Flow', () => {
         where: { advertiserId, entryType: 'debit', amountMinor: 500 },
       });
       expect(cpcDebit).toBeDefined();
+
+      const cpcPlatformFee = await prisma.platformLedger.findFirst({
+        where: {
+          campaignId: cpcCampaignId,
+          entryType: 'credit',
+          bucket: 'platform_fee',
+          amountMinor: 150,
+          referenceId: clickId,
+        },
+      });
+      expect(cpcPlatformFee).toBeDefined();
+
+      const cpcReserve = await prisma.platformLedger.findFirst({
+        where: {
+          campaignId: cpcCampaignId,
+          entryType: 'credit',
+          bucket: 'fraud_reserve',
+          amountMinor: 50,
+          referenceId: clickId,
+        },
+      });
+      expect(cpcReserve).toBeDefined();
     });
   });
 
@@ -776,7 +802,6 @@ describe('End-to-End HTTP Integration Flow', () => {
     // Register a second developer, get an impression, verify ad-rendered/qualified/click
     // are 403-rejected for the wrong user.
     let dev2Token: string;
-    let dev2UserId: string;
     let dev2DeviceId: string;
     let dev2ImpressionToken: string;
 
@@ -791,7 +816,7 @@ describe('End-to-End HTTP Integration Flow', () => {
           country: 'US',
         })
         .expect(201);
-      dev2UserId = res.body.user.id;
+      expect(res.body.user.id).toBeDefined();
 
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
@@ -812,6 +837,19 @@ describe('End-to-End HTTP Integration Flow', () => {
         })
         .expect(200);
       dev2DeviceId = devRes.body.id;
+
+      const waitStartPayload = {
+        deviceId: dev2DeviceId,
+        sessionId: 'dev2-session',
+        waitStateId: 'dev2-wait',
+        toolType: 'vscode',
+        idempotencyKey: 'dev2-wait-start',
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/start')
+        .set('Authorization', `Bearer ${dev2Token}`)
+        .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, HMAC_SECRET) })
+        .expect(200);
 
       const adReqPayload = {
         deviceId: dev2DeviceId,
@@ -879,6 +917,19 @@ describe('End-to-End HTTP Integration Flow', () => {
       // The atomic guard (UPDATE with WHERE) is tested indirectly: if the
       // SQL guard fails, ledger writes are skipped and qualified=false.
       const wsId = 'budget-test-ws';
+      const waitStartPayload = {
+        deviceId,
+        sessionId: 'budget-sess',
+        waitStateId: wsId,
+        toolType: 'vscode',
+        idempotencyKey: `start-${wsId}`,
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/start')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, HMAC_SECRET) })
+        .expect(200);
+
       const adReqPayload = { deviceId, sessionId: 'budget-sess', waitStateId: wsId, toolType: 'vscode', idempotencyKey: `ad-budget-${wsId}` };
       const sig = signPayload(adReqPayload, HMAC_SECRET);
       const adRes = await request(app.getHttpServer())

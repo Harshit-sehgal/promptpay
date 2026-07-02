@@ -6,6 +6,13 @@ import { ReferralService } from '../referral/referral.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 import { PayPalPayoutsProvider } from './providers';
 
+const RESERVED_PAYOUT_STATUSES = [
+  PayoutStatus.REQUESTED,
+  PayoutStatus.UNDER_REVIEW,
+  PayoutStatus.APPROVED,
+  PayoutStatus.PROCESSING,
+] as PayoutStatus[];
+
 /** Payout provider interface — each provider implements this */
 export interface PayoutProviderHandler {
   initiate(params: {
@@ -138,7 +145,7 @@ export class PayoutService {
         where: {
           payoutRequest: {
             userId,
-            status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+            status: { in: RESERVED_PAYOUT_STATUSES },
           },
         },
         _sum: { amountMinor: true },
@@ -163,7 +170,7 @@ export class PayoutService {
       where: {
         payoutRequest: {
           userId,
-          status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+          status: { in: RESERVED_PAYOUT_STATUSES },
         },
       },
       select: { earningsEntryId: true },
@@ -203,7 +210,7 @@ export class PayoutService {
       where: {
         payoutRequest: {
           userId,
-          status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+          status: { in: RESERVED_PAYOUT_STATUSES },
         },
       },
       select: { earningsEntryId: true },
@@ -254,11 +261,32 @@ export class PayoutService {
       if (remaining <= 0) break;
       const allocAmount = Math.min(entry.amountMinor, remaining);
 
-      // Immutable allocation: do NOT mutate EarningsLedger.amountMinor.
-      // The PayoutAllocation row tracks how much was drawn from this entry.
-      // Future allocations skip this entry (excludeIds already guards it).
-      // Partial allocations are allowed — the user's remaining earnings are
-      // just the next confirmed entries in the pool. No remainder splitting.
+      if (allocAmount < entry.amountMinor) {
+        const remainder = entry.amountMinor - allocAmount;
+
+        // Split partial allocations so the allocated row can be marked paid
+        // exactly, while the remaining confirmed row stays available later.
+        await tx.earningsLedger.update({
+          where: { id: entry.id },
+          data: { amountMinor: allocAmount },
+        });
+
+        await tx.earningsLedger.create({
+          data: {
+            userId: entry.userId,
+            campaignId: entry.campaignId,
+            impressionId: entry.impressionId,
+            clickId: entry.clickId,
+            entryType: entry.entryType,
+            status: entry.status,
+            amountMinor: remainder,
+            currency: entry.currency,
+            availableAt: entry.availableAt,
+            idempotencyKey: `payout-remainder-${payoutRequestId}-${entry.id}`,
+            description: entry.description,
+          },
+        });
+      }
 
       allocations.push({
         earningsEntryId: entry.id,
@@ -315,7 +343,7 @@ export class PayoutService {
         where: {
           payoutRequest: {
             userId,
-            status: { in: ['paid', 'approved', 'processing', 'requested'] as PayoutStatus[] },
+            status: { in: RESERVED_PAYOUT_STATUSES },
           },
         },
         _sum: { amountMinor: true },

@@ -156,8 +156,32 @@ describe('PayoutService', () => {
       mockPrisma.payoutRequest.create.mockResolvedValue({ id: 'req_123', requestedAmountMinor: 2000 });
       mockPrisma.payoutAllocation.findMany.mockResolvedValue([]); // no other allocations
       mockPrisma.earningsLedger.findMany.mockResolvedValue([
-        { id: 'earn_1', amountMinor: 1500, status: 'confirmed' },
-        { id: 'earn_2', amountMinor: 1000, status: 'confirmed' },
+        {
+          id: 'earn_1',
+          userId: 'user_123',
+          campaignId: 'camp_1',
+          impressionId: 'imp_1',
+          clickId: null,
+          entryType: 'credit',
+          amountMinor: 1500,
+          status: 'confirmed',
+          currency: 'USD',
+          availableAt: new Date('2026-01-01T00:00:00.000Z'),
+          description: 'full entry',
+        },
+        {
+          id: 'earn_2',
+          userId: 'user_123',
+          campaignId: 'camp_2',
+          impressionId: 'imp_2',
+          clickId: null,
+          entryType: 'credit',
+          amountMinor: 1000,
+          status: 'confirmed',
+          currency: 'USD',
+          availableAt: new Date('2026-01-02T00:00:00.000Z'),
+          description: 'partial entry',
+        },
       ]);
       mockPrisma.payoutRequest.findUnique.mockResolvedValue({
         id: 'req_123',
@@ -173,6 +197,43 @@ describe('PayoutService', () => {
 
       expect(res.status).toBe('requested');
       expect(mockPrisma.payoutAllocation.create).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.earningsLedger.update).toHaveBeenCalledWith({
+        where: { id: 'earn_2' },
+        data: { amountMinor: 500 },
+      });
+      expect(mockPrisma.earningsLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user_123',
+          campaignId: 'camp_2',
+          impressionId: 'imp_2',
+          amountMinor: 500,
+          status: 'confirmed',
+          idempotencyKey: 'payout-remainder-req_123-earn_2',
+          description: 'partial entry',
+        }),
+      });
+    });
+  });
+
+  describe('getPayoutInfo', () => {
+    it('does not subtract already-paid allocations from confirmed availability', async () => {
+      mockPrisma.payoutAccount.findMany.mockResolvedValue([]);
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([]);
+      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 1000 } });
+      mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 0 } });
+
+      const result = await service.getPayoutInfo('user_123');
+
+      expect(result.availableBalanceMinor).toBe(1000);
+      expect(mockPrisma.payoutAllocation.aggregate).toHaveBeenCalledWith({
+        where: {
+          payoutRequest: {
+            userId: 'user_123',
+            status: { in: ['requested', 'under_review', 'approved', 'processing'] },
+          },
+        },
+        _sum: { amountMinor: true },
+      });
     });
   });
 

@@ -217,6 +217,41 @@ export class ExtensionService {
       throw new ForbiddenException('Invalid request signature');
     }
 
+    // Verify device belongs to user
+    const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
+    if (!device || device.userId !== userId) {
+      throw new ForbiddenException('Device does not belong to this user');
+    }
+
+    // Ad requests must happen during an authenticated user's active wait state.
+    const waitStart = await this.prisma.waitStateEvent.findFirst({
+      where: {
+        userId,
+        deviceId: dto.deviceId,
+        sessionId: dto.sessionId,
+        waitStateId: dto.waitStateId,
+        eventType: 'wait_state_start',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!waitStart) {
+      throw new BadRequestException('No matching active wait state start');
+    }
+
+    const waitEnd = await this.prisma.waitStateEvent.findFirst({
+      where: {
+        userId,
+        deviceId: dto.deviceId,
+        sessionId: dto.sessionId,
+        waitStateId: dto.waitStateId,
+        eventType: 'wait_state_end',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (waitEnd && waitEnd.createdAt >= waitStart.createdAt) {
+      throw new BadRequestException('Wait state has already ended');
+    }
+
     // Check user settings
     const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
     if (settings && !settings.adsEnabled) {
@@ -231,12 +266,6 @@ export class ExtensionService {
       )
     ) {
       return { ad: null, reason: 'quiet_mode' };
-    }
-
-    // Verify device belongs to user
-    const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
-    if (!device || device.userId !== userId) {
-      throw new ForbiddenException('Device does not belong to this user');
     }
 
     // Idempotency: return same ad if we already served one for this key/waitStateId
@@ -474,9 +503,9 @@ export class ExtensionService {
     // The spend guard uses raw SQL UPDATE…WHERE so two concurrent CPM impressions
     // cannot both pass the JS pre-flight check and exceed budgetTotalMinor.
     // $executeRaw returns row count: 0 means the WHERE rejected (budget full).
-    const billed = await this.prisma.$transaction(async (tx) => {
+    const billed = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // (0) Atomic spend increment — rejects when budget would overflow.
-      const spent: number = await (tx as any).$executeRawUnsafe(
+      const spent: number = await tx.$executeRawUnsafe(
         `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
         impression.campaign.bidAmountMinor,
         impression.campaignId,
@@ -630,107 +659,98 @@ export class ExtensionService {
     const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const split = isCpcBid ? this.ledger.calculateSplit(impression.campaign.bidAmountMinor) : null;
 
-    const createClick = this.prisma.adClick.create({
-      data: {
-        impressionId: impression.id,
-        userId: impression.userId,
-        deviceId: impression.deviceId,
-        sessionId: impression.sessionId,
-        campaignId: impression.campaignId,
-        creativeId: impression.creativeId,
-        clickedAt: new Date(dto.clickedAt),
-        targetUrl: '',
-        idempotencyKey: dto.idempotencyKey,
-      },
-    });
-
-    const operations: [typeof createClick, ...Prisma.PrismaPromise<unknown>[]] = [createClick];
-
-    const click = await this.prisma.$transaction(async (tx) => {
-      if (isCpcBid && split) {
-        // Atomic budget guard for CPC clicks — same pattern as CPM above.
-        const spent: number = await (tx as any).$executeRawUnsafe(
-          `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
-          impression.campaign.bidAmountMinor,
-          impression.campaignId,
-        );
-        if (spent === 0) {
-          throw new ConflictException('Campaign budget exhausted');
-        }
-      }
-
-      const click = await tx.adClick.create({
-        data: {
-          impressionId: impression.id,
-          userId: impression.userId,
-          deviceId: impression.deviceId,
-          sessionId: impression.sessionId,
-          campaignId: impression.campaignId,
-          creativeId: impression.creativeId,
-          clickedAt: new Date(dto.clickedAt),
-          targetUrl: '',
-          idempotencyKey: dto.idempotencyKey,
-        },
-      });
-
-      if (isCpcBid && split) {
-        const idempotencyBase = `clk-${dto.idempotencyKey}`;
-        await tx.advertiserLedger.create({
+    let click: { id: string };
+    try {
+      click = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const click = await tx.adClick.create({
           data: {
-            advertiserId: impression.campaign.advertiserId,
-            campaignId: impression.campaignId,
-            entryType: 'debit',
-            status: 'confirmed',
-            amountMinor: impression.campaign.bidAmountMinor,
-            currency: impression.campaign.currency,
-            idempotencyKey: `${idempotencyBase}-adv`,
-            description: `Click charge - campaign ${impression.campaignId}`,
-          },
-        });
-        await tx.earningsLedger.create({
-          data: {
-            userId: impression.userId,
-            campaignId: impression.campaignId,
             impressionId: impression.id,
-            entryType: 'credit',
-            status: 'estimated',
-            amountMinor: split.userShare,
-            currency: impression.campaign.currency,
-            availableAt,
-            idempotencyKey: `${idempotencyBase}-usr`,
-            description: 'Earnings from ad click',
-          },
-        });
-        await tx.platformLedger.create({
-          data: {
+            userId: impression.userId,
+            deviceId: impression.deviceId,
+            sessionId: impression.sessionId,
             campaignId: impression.campaignId,
-            entryType: 'credit',
-            status: 'confirmed',
-            amountMinor: split.platformShare,
-            currency: impression.campaign.currency,
-            bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
-            referenceId: impression.id,
-            idempotencyKey: `${idempotencyBase}-plt`,
-            description: 'Platform fee from ad click',
+            creativeId: impression.creativeId,
+            clickedAt: new Date(dto.clickedAt),
+            targetUrl: '',
+            idempotencyKey: dto.idempotencyKey,
           },
         });
-        await tx.platformLedger.create({
-          data: {
-            campaignId: impression.campaignId,
-            entryType: 'credit',
-            status: 'confirmed',
-            amountMinor: split.reserveShare,
-            currency: impression.campaign.currency,
-            bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
-            referenceId: impression.id,
-            idempotencyKey: `${idempotencyBase}-res`,
-            description: 'Fraud/payment reserve from ad click',
-          },
-        });
-      }
 
-      return click;
-    }) as any;
+        if (isCpcBid && split) {
+          // Atomic budget guard for CPC clicks — same pattern as CPM above.
+          const spent: number = await tx.$executeRawUnsafe(
+            `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+            impression.campaign.bidAmountMinor,
+            impression.campaignId,
+          );
+          if (spent === 0) {
+            throw new ConflictException('Campaign budget exhausted');
+          }
+
+          const idempotencyBase = `clk-${click.id}`;
+          await tx.advertiserLedger.create({
+            data: {
+              advertiserId: impression.campaign.advertiserId,
+              campaignId: impression.campaignId,
+              entryType: 'debit',
+              status: 'confirmed',
+              amountMinor: impression.campaign.bidAmountMinor,
+              currency: impression.campaign.currency,
+              idempotencyKey: `${idempotencyBase}-adv`,
+              description: `Click charge - campaign ${impression.campaignId}`,
+            },
+          });
+          await tx.earningsLedger.create({
+            data: {
+              userId: impression.userId,
+              campaignId: impression.campaignId,
+              impressionId: impression.id,
+              clickId: click.id,
+              entryType: 'credit',
+              status: 'estimated',
+              amountMinor: split.userShare,
+              currency: impression.campaign.currency,
+              availableAt,
+              idempotencyKey: `${idempotencyBase}-usr`,
+              description: 'Earnings from ad click',
+            },
+          });
+          await tx.platformLedger.create({
+            data: {
+              campaignId: impression.campaignId,
+              entryType: 'credit',
+              status: 'confirmed',
+              amountMinor: split.platformShare,
+              currency: impression.campaign.currency,
+              bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
+              referenceId: click.id,
+              idempotencyKey: `${idempotencyBase}-plt`,
+              description: 'Platform fee from ad click',
+            },
+          });
+          await tx.platformLedger.create({
+            data: {
+              campaignId: impression.campaignId,
+              entryType: 'credit',
+              status: 'confirmed',
+              amountMinor: split.reserveShare,
+              currency: impression.campaign.currency,
+              bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
+              referenceId: click.id,
+              idempotencyKey: `${idempotencyBase}-res`,
+              description: 'Fraud/payment reserve from ad click',
+            },
+          });
+        }
+
+        return click;
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintViolation(error)) {
+        return { clicked: false, reason: 'duplicate_click' };
+      }
+      throw error;
+    }
 
     return { clicked: true, clickId: click.id };
   }
@@ -745,6 +765,9 @@ export class ExtensionService {
       where: { impressionTokenHash: hash },
     });
     if (!impression) throw new NotFoundException('Impression not found');
+    if (impression.userId !== userId) {
+      throw new ForbiddenException('You do not own this impression');
+    }
 
     // Create report and invalidate the impression
     const [report] = await this.prisma.$transaction([
@@ -807,5 +830,14 @@ export class ExtensionService {
       return now >= start && now <= end;
     }
     return now >= start || now <= end;
+  }
+
+  private isUniqueConstraintViolation(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    );
   }
 }

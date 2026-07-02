@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { REVENUE_SPLIT, LAUNCH_INCENTIVE_SPLIT, PAYOUT_HOLD_DAYS } from '@waitlayer/shared';
 import { PLATFORM_BUCKETS } from './ledger.constants';
@@ -77,9 +77,18 @@ export class LedgerService {
     const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const idempotencyBase = `imp-${impressionId}`;
 
-    return this.prisma.$transaction([
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const spent: number = await tx.$executeRawUnsafe(
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+        bidAmountMinor,
+        campaignId,
+      );
+      if (spent === 0) {
+        throw new ConflictException('Campaign budget exhausted');
+      }
+
       // Debit advertiser
-      this.prisma.advertiserLedger.create({
+      await tx.advertiserLedger.create({
         data: {
           advertiserId,
           campaignId,
@@ -90,9 +99,9 @@ export class LedgerService {
           idempotencyKey: `${idempotencyBase}-adv`,
           description: `Impression charge - campaign ${campaignId}`,
         },
-      }),
+      });
       // Credit developer (estimated until matured)
-      this.prisma.earningsLedger.create({
+      await tx.earningsLedger.create({
         data: {
           userId,
           campaignId,
@@ -105,9 +114,9 @@ export class LedgerService {
           idempotencyKey: `${idempotencyBase}-usr`,
           description: 'Earnings from qualified impression',
         },
-      }),
+      });
       // Credit platform fee
-      this.prisma.platformLedger.create({
+      await tx.platformLedger.create({
         data: {
           campaignId,
           entryType: 'credit',
@@ -119,9 +128,9 @@ export class LedgerService {
           idempotencyKey: `${idempotencyBase}-plt`,
           description: 'Platform fee from impression',
         },
-      }),
+      });
       // Credit fraud/payment reserve
-      this.prisma.platformLedger.create({
+      await tx.platformLedger.create({
         data: {
           campaignId,
           entryType: 'credit',
@@ -133,8 +142,10 @@ export class LedgerService {
           idempotencyKey: `${idempotencyBase}-res`,
           description: 'Fraud/payment reserve from impression',
         },
-      }),
-    ]);
+      });
+
+      return { billed: true, split };
+    });
   }
 
   /** Record click earnings (on top of impression) */
@@ -162,9 +173,18 @@ export class LedgerService {
     const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const idempotencyBase = `clk-${clickId}`;
 
-    return this.prisma.$transaction([
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const spent: number = await tx.$executeRawUnsafe(
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+        clickBidMinor,
+        campaignId,
+      );
+      if (spent === 0) {
+        throw new ConflictException('Campaign budget exhausted');
+      }
+
       // Debit advertiser for click
-      this.prisma.advertiserLedger.create({
+      await tx.advertiserLedger.create({
         data: {
           advertiserId,
           campaignId,
@@ -175,9 +195,9 @@ export class LedgerService {
           idempotencyKey: `${idempotencyBase}-adv`,
           description: `Click charge - campaign ${campaignId}`,
         },
-      }),
+      });
       // Credit developer for click
-      this.prisma.earningsLedger.create({
+      await tx.earningsLedger.create({
         data: {
           userId,
           campaignId,
@@ -190,8 +210,38 @@ export class LedgerService {
           idempotencyKey: `${idempotencyBase}-usr`,
           description: 'Earnings from ad click',
         },
-      }),
-    ]);
+      });
+      // Credit platform fee
+      await tx.platformLedger.create({
+        data: {
+          campaignId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: split.platformShare,
+          currency,
+          bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
+          referenceId: clickId,
+          idempotencyKey: `${idempotencyBase}-plt`,
+          description: 'Platform fee from ad click',
+        },
+      });
+      // Credit fraud/payment reserve
+      await tx.platformLedger.create({
+        data: {
+          campaignId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: split.reserveShare,
+          currency,
+          bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
+          referenceId: clickId,
+          idempotencyKey: `${idempotencyBase}-res`,
+          description: 'Fraud/payment reserve from ad click',
+        },
+      });
+
+      return { billed: true, split };
+    });
   }
 
   // ── State Transitions ──

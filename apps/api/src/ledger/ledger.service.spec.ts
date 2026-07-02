@@ -39,6 +39,7 @@ const mockPrisma = {
   fraudFlag: {
     create: vi.fn(),
   },
+  $executeRawUnsafe: vi.fn(async (_sql: string, ..._params: any[]) => 1),
   $transaction: vi.fn(async (arg: any) => {
     // The real service passes either array of functions OR an async callback
     if (typeof arg === 'function') return arg(mockPrisma);
@@ -189,6 +190,42 @@ describe('LedgerService', () => {
 
       // $transaction was invoked
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "campaigns"'),
+        2_00,
+        'c-1',
+      );
+      expect(mockPrisma.advertiserLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          advertiserId: 'a-1',
+          campaignId: 'c-1',
+          entryType: 'debit',
+          amountMinor: 2_00,
+        }),
+      });
+      expect(mockPrisma.earningsLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'u-1',
+          campaignId: 'c-1',
+          impressionId: 'imp-1',
+          amountMinor: 120,
+        }),
+      });
+      expect(mockPrisma.platformLedger.create).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.platformLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bucket: 'platform_fee',
+          amountMinor: 60,
+          referenceId: 'imp-1',
+        }),
+      });
+      expect(mockPrisma.platformLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bucket: 'fraud_reserve',
+          amountMinor: 20,
+          referenceId: 'imp-1',
+        }),
+      });
     });
 
     it('sets hold days based on trust level', async () => {
@@ -209,6 +246,96 @@ describe('LedgerService', () => {
       });
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('creates no impression ledger entries when campaign budget is exhausted', async () => {
+      mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(0);
+
+      await expect(
+        service.recordImpressionEarnings({
+          userId: 'u-1',
+          campaignId: 'c-1',
+          impressionId: 'imp-3',
+          bidAmountMinor: 2_00,
+          currency: 'USD',
+          advertiserId: 'a-1',
+          trustLevel: 'normal',
+        }),
+      ).rejects.toThrow('Campaign budget exhausted');
+
+      expect(mockPrisma.advertiserLedger.create).not.toHaveBeenCalled();
+      expect(mockPrisma.earningsLedger.create).not.toHaveBeenCalled();
+      expect(mockPrisma.platformLedger.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('recordClickEarnings', () => {
+    it('creates CPC click entries across all ledgers and increments campaign spend', async () => {
+      await service.recordClickEarnings({
+        userId: 'u-1',
+        campaignId: 'c-1',
+        clickId: 'clk-1',
+        clickBidMinor: 5_00,
+        currency: 'USD',
+        advertiserId: 'a-1',
+        trustLevel: 'normal',
+      });
+
+      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "campaigns"'),
+        5_00,
+        'c-1',
+      );
+      expect(mockPrisma.advertiserLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          advertiserId: 'a-1',
+          campaignId: 'c-1',
+          entryType: 'debit',
+          amountMinor: 5_00,
+        }),
+      });
+      expect(mockPrisma.earningsLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'u-1',
+          campaignId: 'c-1',
+          clickId: 'clk-1',
+          amountMinor: 300,
+        }),
+      });
+      expect(mockPrisma.platformLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bucket: 'platform_fee',
+          amountMinor: 150,
+          referenceId: 'clk-1',
+        }),
+      });
+      expect(mockPrisma.platformLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bucket: 'fraud_reserve',
+          amountMinor: 50,
+          referenceId: 'clk-1',
+        }),
+      });
+    });
+
+    it('creates no CPC click ledger entries when campaign budget is exhausted', async () => {
+      mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(0);
+
+      await expect(
+        service.recordClickEarnings({
+          userId: 'u-1',
+          campaignId: 'c-1',
+          clickId: 'clk-2',
+          clickBidMinor: 5_00,
+          currency: 'USD',
+          advertiserId: 'a-1',
+          trustLevel: 'normal',
+        }),
+      ).rejects.toThrow('Campaign budget exhausted');
+
+      expect(mockPrisma.advertiserLedger.create).not.toHaveBeenCalled();
+      expect(mockPrisma.earningsLedger.create).not.toHaveBeenCalled();
+      expect(mockPrisma.platformLedger.create).not.toHaveBeenCalled();
     });
   });
 

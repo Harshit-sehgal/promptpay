@@ -602,6 +602,20 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
       });
 
+      mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
+        if (where.eventType === 'wait_state_start') {
+          return Promise.resolve({
+            userId: DEV_USER_ID,
+            deviceId: DEVICE_ID,
+            sessionId: SESSION_ID,
+            waitStateId: WAIT_STATE_ID,
+            eventType: 'wait_state_start',
+            createdAt: new Date(Date.now() - 1000),
+          });
+        }
+        return Promise.resolve(null);
+      });
+
       // No existing impression (no idempotency cache)
       mockPrisma.adImpression.findFirst.mockResolvedValue(null);
 
@@ -927,8 +941,9 @@ describe('E2E Money Loop', () => {
 
       const result = await svc.extension.recordClick(DEV_USER_ID, signed);
       expect(result.clicked).toBe(true);
+      const clickId = result.clickId;
 
-      // CPC campaigns generate advertiser debit + developer credit
+      // CPC campaigns generate advertiser debit + developer credit + platform fee + reserve
       const advDebit = recordedLedgerEntries.advertiser.find((e: any) => e.entryType === 'debit');
       expect(advDebit).toBeDefined();
       expect(advDebit.amountMinor).toBe(3_00);
@@ -937,6 +952,17 @@ describe('E2E Money Loop', () => {
       expect(devCredit).toBeDefined();
       expect(devCredit.status).toBe('estimated');
       expect(devCredit.amountMinor).toBe(180); // 60% of 300
+      expect(devCredit.clickId).toBe(clickId);
+
+      const platformEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'platform_fee');
+      expect(platformEntry).toBeDefined();
+      expect(platformEntry.amountMinor).toBe(90); // 30% of 300
+      expect(platformEntry.referenceId).toBe(clickId);
+
+      const reserveEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'fraud_reserve');
+      expect(reserveEntry).toBeDefined();
+      expect(reserveEntry.amountMinor).toBe(30); // 10% of 300
+      expect(reserveEntry.referenceId).toBe(clickId);
     });
   });
 
@@ -1167,6 +1193,19 @@ describe('E2E Money Loop', () => {
       mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: devUserId, adsEnabled: true });
       mockPrisma.device.findUnique.mockResolvedValue({
         id: deviceId, userId: devUserId,
+      });
+      mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
+        if (where.eventType === 'wait_state_start') {
+          return Promise.resolve({
+            userId: devUserId,
+            deviceId,
+            sessionId,
+            waitStateId,
+            eventType: 'wait_state_start',
+            createdAt: new Date(Date.now() - 1000),
+          });
+        }
+        return Promise.resolve(null);
       });
       mockPrisma.adImpression.findFirst.mockResolvedValue(null);
       mockPrisma.adImpression.findMany.mockResolvedValue([]);
@@ -1482,6 +1521,7 @@ describe('E2E Money Loop', () => {
 
       const clickResult = await svc.extension.recordClick(cpcDevUserId, signedClickPayload);
       expect(clickResult.clicked).toBe(true);
+      const clickId = clickResult.clickId;
 
       // Verify CPC click charged advertiser & credited user & platform & reserve
       const advDebit = recordedLedgerEntries.advertiser.find((e: any) => e.entryType === 'debit');
@@ -1491,20 +1531,36 @@ describe('E2E Money Loop', () => {
       const devCredit = recordedLedgerEntries.earnings.find((e: any) => e.entryType === 'credit');
       expect(devCredit).toBeDefined();
       expect(devCredit.amountMinor).toBe(300); // 60% of 5_00
+      expect(devCredit.clickId).toBe(clickId);
 
       const platformEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'platform_fee');
       expect(platformEntry).toBeDefined();
       expect(platformEntry.amountMinor).toBe(150); // 30% of 5_00
+      expect(platformEntry.referenceId).toBe(clickId);
 
       const reserveEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'fraud_reserve');
       expect(reserveEntry).toBeDefined();
       expect(reserveEntry.amountMinor).toBe(50); // 10% of 5_00
+      expect(reserveEntry.referenceId).toBe(clickId);
     });
 
     it('ad-request idempotency with same idempotencyKey or waitStateId returns cached ad with token', async () => {
       // Setup device check
       mockPrisma.device.findUnique.mockResolvedValue({ id: 'dev-1', userId: 'usr-1' });
       mockPrisma.userSettings.findUnique.mockResolvedValue({ adsEnabled: true });
+      mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
+        if (where.eventType === 'wait_state_start') {
+          return Promise.resolve({
+            userId: 'usr-1',
+            deviceId: 'dev-1',
+            sessionId: 'sess-1',
+            waitStateId: 'wait-1',
+            eventType: 'wait_state_start',
+            createdAt: new Date(Date.now() - 1000),
+          });
+        }
+        return Promise.resolve(null);
+      });
       mockPrisma.adImpression.findFirst.mockResolvedValue(null);
 
       mockPrisma.campaign.findMany.mockResolvedValue([
