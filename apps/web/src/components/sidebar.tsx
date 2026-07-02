@@ -24,7 +24,7 @@ export function Sidebar({
   brandColor = 'bg-brand-500',
   navItems,
   backHref = '/',
-  backLabel = '← Back to home',
+  backLabel = 'Back to home',
   variant = 'dark',
 }: SidebarProps) {
   const pathname = usePathname();

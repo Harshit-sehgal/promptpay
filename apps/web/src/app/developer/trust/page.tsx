@@ -63,7 +63,7 @@ export default function DevTrustPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Trust & fraud</h1>
         <p className="text-surface-500 text-[15px]">
-          How your account is scored for fraud-risk. Higher trust → higher payouts.
+          How your account is scored for fraud-risk. Higher trust leads to faster payouts.
         </p>
       </div>
 
