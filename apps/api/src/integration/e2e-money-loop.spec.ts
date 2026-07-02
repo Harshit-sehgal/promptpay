@@ -1199,7 +1199,7 @@ describe('E2E Money Loop', () => {
 
       // ── Step 10: Record rendered ──
       mockPrisma.adImpression.findUnique.mockResolvedValue({
-        id: impressionId, impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
+        id: impressionId, userId: devUserId, impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
         renderedAt: null,
       });
       mockPrisma.adImpression.update.mockResolvedValue({
