@@ -82,10 +82,14 @@ export class ApiClient {
     waitStateId: string;
     toolType: string;
   }) {
+    // Normalize tool name to a valid ToolType enum value.
+    // Common tool names map to enum values; unrecognized ones default to 'terminal'.
+    const normalizedTool = normalizeToolType(input.toolType);
+
     const payload = {
       deviceId: input.deviceId,
       waitStateId: input.waitStateId,
-      toolType: input.toolType,
+      toolType: normalizedTool,
       sessionId: 'cli-' + Date.now(),
       idempotencyKey: 'cli-start-' + input.waitStateId,
     };
@@ -171,7 +175,8 @@ export class ApiClient {
                   reject({ status: 401, message: 'unauthorized' });
                 }
               } else {
-                const msg = parsed?.error?.message ?? parsed?.message ?? 'request failed';
+                // NestJS returns { message, error, statusCode }
+                const msg = parsed?.message ?? 'request failed';
                 reject({ status: res.statusCode, message: msg, ...parsed });
               }
             } catch {

@@ -97,3 +97,7 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 html.dark .glass-nav {
   background: rgba(10 14 26, 0.85);
 }
+
+html.dark .card-hover:hover {
+  box-shadow: 0 8px 30px rgba(15 118 110 / 0.08), 0 0 0 1px rgba(15 118 110 / 0.06);
+}

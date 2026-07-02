@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { getCredentials } from '../lib/credentials';
 import { ApiClient } from '../lib/api-client';
-import { formatCurrency, formatNumber } from '../lib/format';
+import { formatCurrency } from '../lib/format';
 
 export async function runStatus(opts: { period?: string }) {
   const creds = getCredentials();
@@ -27,16 +27,19 @@ export async function runStatus(opts: { period?: string }) {
     console.log(`${chalk.dim('Role:')}           ${creds.role}`);
     console.log();
     console.log(chalk.bold('Earnings'));
-    console.log(`  Available:  ${chalk.green.bold(formatCurrency(balance.availableMinor))}`);
-    console.log(`  Pending:    ${chalk.yellow(formatCurrency(balance.pendingMinor))}`);
-    console.log(`  Lifetime:   ${formatCurrency(balance.totalMinor)}`);
-    console.log(`  Paid out:   ${formatCurrency(balance.paidOutMinor)}`);
+    console.log(`  Available:  ${chalk.green.bold(formatCurrency(balance.available.amountMinor))}`);
+    console.log(`  Pending:    ${chalk.yellow(formatCurrency(balance.pending.amountMinor))}`);
+    console.log(`  Lifetime:   ${formatCurrency(balance.total.amountMinor)}`);
+    console.log(`  Paid out:   ${formatCurrency(balance.paidOut.amountMinor)}`);
     console.log();
 
-    console.log(chalk.bold(`Last ${period}`));
-    console.log(`  Impressions:  ${chalk.cyan(formatNumber(overview.impressions))}`);
-    console.log(`  Clicks:       ${chalk.cyan(formatNumber(overview.clicks))}`);
-    console.log(`  Estimated:    ${chalk.cyan(formatCurrency(overview.estimatedMinor))}`);
+    console.log(chalk.bold(`Account Summary`));
+    console.log(`  Est. Earnings:  ${chalk.green.bold(formatCurrency(overview.estimatedEarnings))}`);
+    console.log(`  Confirmed:      ${chalk.yellow(formatCurrency(overview.confirmedEarnings))}`);
+    console.log(`  Pending:        ${chalk.yellow(formatCurrency(overview.pendingEarnings))}`);
+    console.log(`  Lifetime:       ${formatCurrency(overview.lifetimeEarnings)}`);
+    console.log(`  Trust Level:    ${overview.trustLevel}`);
+    if (overview.trustScore) console.log(`  Trust Score:    ${overview.trustScore}`);
     console.log();
   } catch (err: any) {
     if (err?.status === 401) {
