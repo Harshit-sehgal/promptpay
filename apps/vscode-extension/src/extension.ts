@@ -7,7 +7,7 @@ import { AdPanel } from './ad-panel';
 import { StatusBar } from './status-bar';
 
 export function activate(context: vscode.ExtensionContext) {
-  const config = new ConfigurationManager();
+  const config = new ConfigurationManager(context.secrets);
   const api = new ApiClient(config);
   const detector = new WaitStateDetector();
   const panel = new AdPanel(context, api);
@@ -28,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         const bal = await api.getBalance();
         vscode.window.showInformationMessage(
-          `WaitLayer: $${(bal.availableMinor / 100).toFixed(2)} available (pending $${(bal.pendingMinor / 100).toFixed(2)})`,
+          `WaitLayer: $${(bal.available.amountMinor / 100).toFixed(2)} available (pending $${(bal.pending.amountMinor / 100).toFixed(2)})`,
         );
       } catch (err) {
         vscode.window.showErrorMessage(`WaitLayer: failed to fetch balance`);
@@ -131,7 +131,7 @@ export function activate(context: vscode.ExtensionContext) {
   api
     .getBalance()
     .then((bal) => {
-      status.setEarnings(bal.availableMinor / 100);
+      status.setEarnings(bal.available.amountMinor / 100);
     })
     .catch(() => {
       status.setLoggedOut();

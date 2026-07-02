@@ -50,10 +50,10 @@ export class AdPanel {
 
 function escapeHtml(s: string): string {
   return s
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
 
@@ -67,9 +67,7 @@ function renderHtml(
   webview: vscode.Webview,
 ): string {
   const csp = webview.cspSource;
-  // Use webview.asWebviewUri for any local resources if needed
   const safeCtaUrl = escapeHtml(ad.ctaUrl);
-  // Validate URL scheme — only allow http/https
   const isSafeUrl = /^https?:\/\//i.test(ad.ctaUrl);
 
   return `
@@ -89,14 +87,15 @@ function renderHtml(
       <div class="ad" id="ad">
         <h2 id="headline"></h2>
         <p id="message"></p>
-        ${isSafeUrl ? `<a id="cta">${escapeHtml(ad.ctaText)}</a>` : `<span class="cta">${escapeHtml(ad.ctaText)}</span>`}
+        ${isSafeUrl ? `<a id="cta" href="${safeCtaUrl}" target="_blank">${escapeHtml(ad.ctaText)}</a>` : `<span class="cta">${escapeHtml(ad.ctaText)}</span>`}
       </div>
       <div class="meta">Sponsored — wait state detected</div>
       <script>
+        const vscode = acquireVsCodeApi();
         // Use safe DOM text injection — never innerHTML with advertiser content
         document.getElementById('headline').textContent = ${JSON.stringify(ad.headline)};
         document.getElementById('message').textContent = ${JSON.stringify(ad.message)};
-        ${isSafeUrl ? `document.getElementById('cta').addEventListener('click', () => { postMessage({ type: 'click' }); });` : ''}
+        ${isSafeUrl ? `document.getElementById('cta').addEventListener('click', () => { vscode.postMessage({ type: 'click' }); });` : ''}
       </script>
     </body>
   </html>`;

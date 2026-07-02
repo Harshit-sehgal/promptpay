@@ -17,18 +17,26 @@ export class CampaignController {
   ) {}
 
   @Get(':id/stats')
-  getCampaignStats(
+  async getCampaignStats(
     @Param('id') campaignId: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
   ) {
+    if (role !== 'admin' && role !== 'super_admin') {
+      await this.verifyOwnership(campaignId, userId);
+    }
     return this.campaignService.getCampaignStats(campaignId);
   }
 
   @Get(':id/creatives')
-  getCreatives(
+  async getCreatives(
     @Param('id') campaignId: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
   ) {
+    if (role !== 'admin' && role !== 'super_admin') {
+      await this.verifyOwnership(campaignId, userId);
+    }
     return this.campaignService.getCreatives(campaignId);
   }
 
@@ -44,11 +52,21 @@ export class CampaignController {
   }
 
   @Patch('creatives/:creativeId')
-  updateCreative(
+  async updateCreative(
     @Param('creativeId') creativeId: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
     @Body() dto: UpdateCreativeDto,
   ) {
+    if (role !== 'admin' && role !== 'super_admin') {
+      const creative = await this.prisma.adCreative.findUnique({
+        where: { id: creativeId },
+        select: { campaignId: true },
+      });
+      if (creative) {
+        await this.verifyOwnership(creative.campaignId, userId);
+      }
+    }
     return this.campaignService.updateCreative(creativeId, dto);
   }
 

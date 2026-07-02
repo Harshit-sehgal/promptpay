@@ -66,4 +66,6 @@ export const campaignApi = {
   getCreatives: (id: string) => api.get(`/campaigns/${id}/creatives`),
   createCreative: (id: string, data: any) => api.post(`/campaigns/${id}/creatives`, data),
   setCountryTargeting: (id: string, data: any) => api.post(`/campaigns/${id}/targeting/countries`, data),
+  approveCreative: (creativeId: string) => api.post(`/campaigns/creatives/${creativeId}/approve`),
+  rejectCreative: (creativeId: string, reason: string) => api.post(`/campaigns/creatives/${creativeId}/reject`, { reason }),
 };

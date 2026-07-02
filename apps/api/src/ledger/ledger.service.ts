@@ -477,7 +477,7 @@ export class LedgerService {
       this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true } }),
       this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: 'reserve' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: 'fraud_reserve' } }),
     ]);
 
     const earningsMinor = totalEarnings._sum?.amountMinor ?? 0;

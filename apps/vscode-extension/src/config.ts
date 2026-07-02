@@ -14,7 +14,7 @@ export class ConfigurationManager {
   getApiUrl(): string {
     return (
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('apiUrl') ||
-      'http://localhost:4001/api/v1'
+      'http://localhost:4002/api/v1'
     );
   }
 

@@ -31,7 +31,7 @@ export class AdminService {
   }
 
   async getPendingCampaigns() {
-    return this.prisma.campaign.findMany({ where: { status: 'submitted' }, include: { advertiser: { select: { companyName: true } } }, orderBy: { submittedAt: 'asc' } });
+    return this.prisma.campaign.findMany({ where: { status: { in: ['submitted', 'approved'] } }, include: { advertiser: { select: { companyName: true } }, creatives: true }, orderBy: { submittedAt: 'asc' } });
   }
 
   async approveCampaign(campaignId: string, reviewerId: string, reason?: string) {

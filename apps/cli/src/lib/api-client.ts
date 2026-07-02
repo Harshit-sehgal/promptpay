@@ -52,20 +52,27 @@ export class ApiClient {
   }
 
   async getBalance() {
+    // Backend returns { available: { amountMinor, currency }, pending: {...}, total: {...}, paidOut: {...} }
     const res = await this.raw<{
-      availableMinor: number;
-      pendingMinor: number;
-      totalMinor: number;
-      paidOutMinor: number;
+      available: { amountMinor: number; currency: string };
+      pending: { amountMinor: number; currency: string };
+      total: { amountMinor: number; currency: string };
+      paidOut: { amountMinor: number; currency: string };
     }>('GET', '/ledger/balance', undefined);
     return res;
   }
 
   async getOverview() {
+    // Backend returns full dashboard: { estimatedEarnings, confirmedEarnings, pendingEarnings, heldEarnings, availableForPayout, lifetimeEarnings, trustLevel, trustScore, settings }
     const res = await this.raw<{
-      impressions: number;
-      clicks: number;
-      estimatedMinor: number;
+      estimatedEarnings: number;
+      confirmedEarnings: number;
+      pendingEarnings: number;
+      heldEarnings: number;
+      availableForPayout: number;
+      lifetimeEarnings: number;
+      trustLevel: string;
+      trustScore?: number;
     }>('GET', '/developer/dashboard', undefined);
     return res;
   }

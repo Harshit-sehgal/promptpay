@@ -15,19 +15,21 @@ export interface Ad {
   destinationUrl: string;
 }
 
+interface AmountEntry {
+  amountMinor: number;
+  currency: string;
+}
+
+/** Backend returns { available, pending, total, paidOut } each as { amountMinor, currency }. */
 export interface Balance {
-  availableMinor: number;
-  pendingMinor: number;
-  totalMinor: number;
-  paidOutMinor: number;
+  available: AmountEntry;
+  pending: AmountEntry;
+  total: AmountEntry;
+  paidOut: AmountEntry;
 }
 
 interface ServerAdResponse {
   ad: Ad | null;
-}
-
-interface ServerBalanceResponse {
-  data: Balance;
 }
 
 export class ApiClient {
@@ -57,12 +59,12 @@ export class ApiClient {
 
     this._refreshInProgress = (async () => {
       try {
-        const res = await this.post<{ data: { accessToken: string; refreshToken: string } }>(
+        // Backend returns flat { accessToken, refreshToken } — no data wrapper
+        const tokens = await this.post<{ accessToken: string; refreshToken: string }>(
           '/auth/refresh',
           { refreshToken: this.currentTokens!.refreshToken },
           true, // skipAuth: don't attach Authorization header for refresh itself
         );
-        const tokens = res.data;
         // Update in-memory and persist
         this.currentTokens = tokens;
         this.config.storeTokens(tokens).catch(() => {});
@@ -210,8 +212,8 @@ export class ApiClient {
   }
 
   async getBalance(): Promise<Balance> {
-    const res = await this.get<ServerBalanceResponse>('/ledger/balance');
-    return res.data;
+    // Backend returns flat { available, pending, total, paidOut } (no data wrapper)
+    return this.get<Balance>('/ledger/balance');
   }
 
   async promptLogin(): Promise<void> {
@@ -224,13 +226,15 @@ export class ApiClient {
     if (!password) return;
 
     try {
-      const res = await this.post<{ data: { accessToken: string; refreshToken: string } }>(
+      // Backend returns flat { user, accessToken, refreshToken } — no data wrapper
+      const res = await this.post<{ accessToken: string; refreshToken: string }>(
         '/auth/login',
         { email, password },
       );
-      this.currentTokens = res.data;
+      const tokens = { accessToken: res.accessToken, refreshToken: res.refreshToken };
+      this.currentTokens = tokens;
       // Persist tokens so they survive extension restarts
-      this.config.storeTokens(res.data).catch(() => {});
+      this.config.storeTokens(tokens).catch(() => {});
       vscode.window.showInformationMessage('WaitLayer: logged in');
     } catch {
       vscode.window.showErrorMessage('WaitLayer: login failed');
