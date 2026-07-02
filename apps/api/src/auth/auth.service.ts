@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -8,6 +8,7 @@ import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
 import { UserRole, UserStatus } from '@waitlayer/shared';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { FraudService } from '../fraud/fraud.service';
+import { EmailService } from '../email/email.service';
 
 interface TokenPayload {
   sub: string;
@@ -31,6 +32,13 @@ interface EmailVerificationPayload {
   action: string;
 }
 
+interface PasswordResetPayload {
+  sub: string;
+  action: string;
+  /** Fingerprint of the password hash at issue time — invalidates the token once the password changes */
+  fp: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly accessTtl: string;
@@ -43,6 +51,7 @@ export class AuthService {
     private config: ConfigService,
     private googleVerifier: GoogleTokenVerifier,
     private fraud: FraudService,
+    private email: EmailService,
   ) {
     this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
     this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d');
@@ -397,10 +406,13 @@ export class AuthService {
       { secret: this.jwtSecret, expiresIn: '24h' },
     );
 
-    console.log(`[Email Verification] Verification token requested for ${user.email}. Token: ${token}`);
+    await this.email.sendEmailVerification(user.email, token);
+
+    // Expose the raw token outside production for dev flows and integration tests
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     return {
-      message: 'Verification token generated successfully',
-      token,
+      message: 'Verification email sent',
+      ...(isProduction ? {} : { token }),
     };
   }
 
@@ -435,6 +447,88 @@ export class AuthService {
       message: 'Email verified successfully',
       email: user.email,
     };
+  }
+
+  /** ── Password Reset: Request ──
+   *  Always returns a generic message to prevent account enumeration.
+   *  The stateless token embeds a fingerprint of the current password hash,
+   *  so it self-invalidates as soon as the password changes (single-use).
+   */
+  async requestPasswordReset(email: string) {
+    const generic = {
+      message: 'If an account exists for that email, a password reset link has been sent',
+    };
+
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user || user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+      return generic;
+    }
+
+    const token = await this.jwt.signAsync(
+      {
+        sub: user.id,
+        action: 'password-reset',
+        fp: this.passwordFingerprint(user.passwordHash),
+      },
+      { secret: this.jwtSecret, expiresIn: '1h' },
+    );
+
+    await this.email.sendPasswordReset(user.email, token);
+
+    // Expose the raw token outside production for dev flows and integration tests
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    return { ...generic, ...(isProduction ? {} : { token }) };
+  }
+
+  /** ── Password Reset: Confirm ──
+   *  Verifies the token, checks the password-hash fingerprint (single-use),
+   *  sets the new password, and revokes ALL sessions.
+   */
+  async resetPassword(token: string, newPassword: string) {
+    let payload: PasswordResetPayload;
+    try {
+      payload = await this.jwt.verifyAsync<PasswordResetPayload>(token, { secret: this.jwtSecret });
+    } catch {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    if (payload.action !== 'password-reset' || !payload.fp) {
+      throw new BadRequestException('Invalid token action');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user) throw new BadRequestException('Invalid or expired reset token');
+
+    if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    // Single-use: if the password changed since the token was issued, reject
+    if (this.passwordFingerprint(user.passwordHash) !== payload.fp) {
+      throw new BadRequestException('Reset token is no longer valid');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    // Security: sign out everywhere after a password change
+    await this.revokeAllSessions(user.id);
+
+    // Best-effort notification — never fail the reset because of email delivery
+    void this.email.sendPasswordChanged(user.email).catch(() => undefined);
+
+    return { message: 'Password reset successfully. Please sign in with your new password.' };
+  }
+
+  /** Stable fingerprint of the current password hash (or its absence) */
+  private passwordFingerprint(passwordHash: string | null): string {
+    return createHash('sha256')
+      .update(passwordHash ?? 'no-password')
+      .digest('hex')
+      .slice(0, 16);
   }
 
   private sanitizeUser<T extends { passwordHash?: unknown }>(user: T): Omit<T, 'passwordHash'> {

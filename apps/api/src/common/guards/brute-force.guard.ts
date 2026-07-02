@@ -99,5 +99,10 @@ function resolveIp(req: RequestLike): string {
 }
 
 function isAuthRoute(path: string): boolean {
-  return path.includes('/auth/login') || path.includes('/auth/signup') || path.includes('/auth/google');
+  return (
+    path.includes('/auth/login') ||
+    path.includes('/auth/signup') ||
+    path.includes('/auth/google') ||
+    path.includes('/auth/password')
+  );
 }

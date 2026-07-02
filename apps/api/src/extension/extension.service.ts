@@ -477,7 +477,7 @@ export class ExtensionService {
     const billed = await this.prisma.$transaction(async (tx) => {
       // (0) Atomic spend increment — rejects when budget would overflow.
       const spent: number = await (tx as any).$executeRawUnsafe(
-        `UPDATE "Campaign" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
         impression.campaign.bidAmountMinor,
         impression.campaignId,
       );
@@ -650,7 +650,7 @@ export class ExtensionService {
       if (isCpcBid && split) {
         // Atomic budget guard for CPC clicks — same pattern as CPM above.
         const spent: number = await (tx as any).$executeRawUnsafe(
-          `UPDATE "Campaign" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+          `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
           impression.campaign.bidAmountMinor,
           impression.campaignId,
         );

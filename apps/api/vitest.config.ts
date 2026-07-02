@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Integration tests share one Postgres database (TRUNCATE in setup),
+    // so test files must not run in parallel against it.
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

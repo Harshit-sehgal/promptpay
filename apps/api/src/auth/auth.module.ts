@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { FraudModule } from '../fraud/fraud.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { FraudModule } from '../fraud/fraud.module';
       },
     }),
     FraudModule,
+    EmailModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, GoogleTokenVerifier],

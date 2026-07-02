@@ -12,7 +12,9 @@
     "migrate": "prisma migrate dev",
     "push": "prisma db push",
     "studio": "prisma studio",
-    "seed-tools": "tsx prisma/seed-tools.ts"
+    "seed-tools": "tsx prisma/seed-tools.ts",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:status": "prisma migrate status"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3"

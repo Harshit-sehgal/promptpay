@@ -10,6 +10,9 @@ export const authApi = {
   refresh: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),
   logout: () => api.post('/auth/logout'),
   getMe: () => api.get('/auth/me'),
+  forgotPassword: (email: string) => api.post('/auth/password/forgot', { email }),
+  resetPassword: (token: string, newPassword: string) => api.post('/auth/password/reset', { token, newPassword }),
+  confirmEmailVerification: (token: string) => api.post('/auth/verify-email/confirm', { token }),
 };
 
 export const developerApi = {

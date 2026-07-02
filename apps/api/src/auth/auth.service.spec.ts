@@ -47,13 +47,19 @@ function makeService(overrides?: Record<string, string>) {
   const fraud = {
     computeTrustScore: vi.fn().mockResolvedValue(40),
   } as any;
+  const email = {
+    sendEmailVerification: vi.fn().mockResolvedValue({ delivered: true, driver: 'console' }),
+    sendPasswordReset: vi.fn().mockResolvedValue({ delivered: true, driver: 'console' }),
+    sendPasswordChanged: vi.fn().mockResolvedValue({ delivered: true, driver: 'console' }),
+  } as any;
 
   return {
-    service: new AuthService(prismaRef, jwt, config, googleVerifier, fraud),
+    service: new AuthService(prismaRef, jwt, config, googleVerifier, fraud, email),
     jwt,
     config,
     googleVerifier,
     fraud,
+    email,
     createAccessToken: (sub: string, role: string, ttl = '15m', jti = 'access-jti') =>
       jwt.signAsync({ sub, role, aud: 'access', jti }, { expiresIn: ttl } as any),
     createRefreshToken: (sub: string, role: string, family: string, ttl = '30d', jti = 'sess-1') =>
@@ -285,13 +291,14 @@ describe('AuthService', () => {
   });
 
   describe('email verification flow', () => {
-    it('should generate verification token if not already verified', async () => {
-      const { service } = makeService();
+    it('should generate verification token and send email if not already verified', async () => {
+      const { service, email } = makeService();
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-verify', email: 'test@verify.com', emailVerified: false });
 
       const res = await service.requestEmailVerification('u-verify');
       expect(res.token).toBeDefined();
-      expect(res.message).toBe('Verification token generated successfully');
+      expect(res.message).toBe('Verification email sent');
+      expect(email.sendEmailVerification).toHaveBeenCalledWith('test@verify.com', res.token);
     });
 
     it('should throw BadRequestException on request if already verified', async () => {
@@ -321,6 +328,105 @@ describe('AuthService', () => {
     it('should throw BadRequestException if token is invalid or expired', async () => {
       const { service } = makeService();
       await expect(service.confirmEmailVerification('invalid-token')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('password reset flow', () => {
+    const resetUser = {
+      id: 'u-reset',
+      email: 'reset@test.com',
+      role: 'developer',
+      status: 'active',
+      passwordHash: '$2a$12$original-hash',
+    };
+
+    it('returns a generic message and does not send email for unknown accounts', async () => {
+      const { service, email } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      const res = await service.requestPasswordReset('nobody@test.com');
+      expect(res.message).toContain('If an account exists');
+      expect((res as any).token).toBeUndefined();
+      expect(email.sendPasswordReset).not.toHaveBeenCalled();
+    });
+
+    it('returns a generic message and does not send email for banned accounts', async () => {
+      const { service, email } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({ ...resetUser, status: 'banned' });
+
+      const res = await service.requestPasswordReset('reset@test.com');
+      expect(res.message).toContain('If an account exists');
+      expect(email.sendPasswordReset).not.toHaveBeenCalled();
+    });
+
+    it('issues a token and sends the reset email for a valid account', async () => {
+      const { service, email } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(resetUser);
+
+      const res = await service.requestPasswordReset('reset@test.com');
+      expect((res as any).token).toBeDefined();
+      expect(email.sendPasswordReset).toHaveBeenCalledWith('reset@test.com', (res as any).token);
+    });
+
+    it('resets the password, revokes all sessions, and sends a notification', async () => {
+      const { service, email } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(resetUser);
+
+      const reqRes = await service.requestPasswordReset('reset@test.com');
+      const res = await service.resetPassword((reqRes as any).token, 'new-password-123');
+
+      expect(res.message).toContain('Password reset successfully');
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'u-reset' },
+          data: { passwordHash: expect.stringMatching(/^\$2[aby]\$/) },
+        }),
+      );
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'u-reset' } }),
+      );
+      expect(email.sendPasswordChanged).toHaveBeenCalledWith('reset@test.com');
+    });
+
+    it('rejects a reset token after the password has changed (single-use)', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(resetUser);
+
+      const reqRes = await service.requestPasswordReset('reset@test.com');
+
+      // Password changed since the token was issued → fingerprint mismatch
+      mockPrisma.user.findUnique.mockResolvedValue({ ...resetUser, passwordHash: '$2a$12$different-hash' });
+
+      await expect(
+        service.resetPassword((reqRes as any).token, 'new-password-123'),
+      ).rejects.toThrow('Reset token is no longer valid');
+    });
+
+    it('rejects invalid tokens and tokens with the wrong action', async () => {
+      const { service, jwt } = makeService();
+
+      await expect(service.resetPassword('garbage-token', 'new-password-123')).rejects.toThrow(
+        BadRequestException,
+      );
+
+      const wrongAction = await jwt.signAsync(
+        { sub: 'u-reset', action: 'email-verification', fp: 'abc' },
+        { expiresIn: '1h' } as any,
+      );
+      await expect(service.resetPassword(wrongAction, 'new-password-123')).rejects.toThrow(
+        'Invalid token action',
+      );
+    });
+
+    it('rejects reset for banned accounts', async () => {
+      const { service, jwt } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(resetUser);
+      const reqRes = await service.requestPasswordReset('reset@test.com');
+
+      mockPrisma.user.findUnique.mockResolvedValue({ ...resetUser, status: 'banned' });
+      await expect(
+        service.resetPassword((reqRes as any).token, 'new-password-123'),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 

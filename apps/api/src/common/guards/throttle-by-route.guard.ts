@@ -30,7 +30,7 @@ export class ThrottleByRouteGuard extends ThrottlerGuard {
 }
 
 function resolveThrottleName(path: string): string {
-  if (path.includes('/auth/login') || path.includes('/auth/signup')) {
+  if (path.includes('/auth/login') || path.includes('/auth/signup') || path.includes('/auth/password')) {
     return 'auth-short';
   }
   if (path.includes('/auth/refresh')) {

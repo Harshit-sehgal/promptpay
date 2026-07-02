@@ -12,7 +12,15 @@ import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators';
-import { SignUpDto, LoginDto, RefreshDto, GoogleOAuthDto, VerifyEmailConfirmDto } from './dto';
+import {
+  SignUpDto,
+  LoginDto,
+  RefreshDto,
+  GoogleOAuthDto,
+  VerifyEmailConfirmDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+} from './dto';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 
 @Controller('auth')
@@ -88,6 +96,25 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   confirmEmailVerification(@Body() dto: VerifyEmailConfirmDto) {
     return this.authService.confirmEmailVerification(dto.token);
+  }
+
+  @Post('password/forgot')
+  @HttpCode(HttpStatus.OK)
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.requestPasswordReset(dto.email);
+  }
+
+  @Post('password/reset')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    try {
+      const result = await this.authService.resetPassword(dto.token, dto.newPassword);
+      BruteForceGuard.resetOnSuccess(req);
+      return result;
+    } catch (err: unknown) {
+      BruteForceGuard.recordFailure(req);
+      throw err;
+    }
   }
 
   @Get('config')
