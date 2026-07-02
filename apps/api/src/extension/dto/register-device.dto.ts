@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsUUID, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsEnum, IsOptional, MinLength, MaxLength } from 'class-validator';
 import { ToolType } from '@waitlayer/shared';
 
 export class RegisterDeviceDto {

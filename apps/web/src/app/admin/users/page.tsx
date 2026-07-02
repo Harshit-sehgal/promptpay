@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
 
@@ -15,6 +16,12 @@ interface User {
   createdAt: string;
 }
 
+type UsersResponse = User[] | { users?: User[] };
+
+function normalizeUsers(data: UsersResponse): User[] {
+  return Array.isArray(data) ? data : data.users || [];
+}
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,8 +32,8 @@ export default function AdminUsersPage() {
   useEffect(() => {
     setLoading(true);
     adminApi.getUsers({ search: search || undefined, role: roleFilter || undefined })
-      .then((res: any) => setUsers(res.data.users || res.data || []))
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load users'))
+      .then((res: { data: UsersResponse }) => setUsers(normalizeUsers(res.data)))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load users')))
       .finally(() => setLoading(false));
   }, [search, roleFilter]);
 

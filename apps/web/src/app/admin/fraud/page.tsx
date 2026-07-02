@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
 
@@ -12,9 +13,15 @@ interface FraudFlag {
   severity: 'low' | 'medium' | 'high' | 'critical';
   flagType: string;
   reason: string;
-  evidence?: Record<string, any>;
+  evidence?: Record<string, unknown>;
   status: 'open' | 'resolved_valid' | 'resolved_invalid';
   createdAt: string;
+}
+
+type FraudFlagsResponse = FraudFlag[] | { flags?: FraudFlag[] };
+
+function normalizeFraudFlags(data: FraudFlagsResponse): FraudFlag[] {
+  return Array.isArray(data) ? data : data.flags || [];
 }
 
 export default function AdminFraudPage() {
@@ -24,25 +31,25 @@ export default function AdminFraudPage() {
   const [severityFilter, setSeverityFilter] = useState<string>('');
   const [resolving, setResolving] = useState<string | null>(null);
 
-  const fetchFlags = () => {
+  const fetchFlags = useCallback(() => {
     setLoading(true);
     adminApi.getFraudFlags({ severity: severityFilter || undefined })
-      .then((res: any) => setFlags(res.data.flags || res.data || []))
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load fraud flags'))
+      .then((res: { data: FraudFlagsResponse }) => setFlags(normalizeFraudFlags(res.data)))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load fraud flags')))
       .finally(() => setLoading(false));
-  };
+  }, [severityFilter]);
 
   useEffect(() => {
     fetchFlags();
-  }, [severityFilter]);
+  }, [fetchFlags]);
 
   const handleResolve = async (id: string, decision: 'confirmed' | 'invalid') => {
     setResolving(id);
     try {
       await adminApi.resolveFraudFlag(id, decision, decision === 'confirmed' ? 'Confirmed via admin review' : 'False positive');
       fetchFlags();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Resolve failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Resolve failed'));
     } finally {
       setResolving(null);
     }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { ledgerApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
@@ -21,6 +22,16 @@ interface BillingData {
   entries: LedgerEntry[];
 }
 
+interface BalanceResponse {
+  balance?: number;
+  balanceMinor?: number;
+  currency?: string;
+}
+
+interface LedgerHistoryResponse {
+  entries?: LedgerEntry[];
+}
+
 export default function AdvertiserBillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,15 +43,16 @@ export default function AdvertiserBillingPage() {
       ledgerApi.getBalance(),
       ledgerApi.getHistory({ page: 1, limit: 30 }),
     ])
-      .then(([balRes, histRes]: any) => {
+      .then(([balRes, histRes]: [{ data: BalanceResponse }, { data: LedgerHistoryResponse }]) => {
+        const balanceMinor = balRes.data.balanceMinor ?? 0;
         setData({
-          balance: balRes.data.balance ?? balRes.data.balanceMinor / 100,
-          balanceMinor: balRes.data.balanceMinor ?? 0,
+          balance: balRes.data.balance ?? balanceMinor / 100,
+          balanceMinor,
           currency: balRes.data.currency ?? 'USD',
           entries: histRes.data.entries || [],
         });
       })
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load billing'))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load billing')))
       .finally(() => setLoading(false));
   }, []);
 

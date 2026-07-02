@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { LoadingSpinner, StatusBadge } from '@/components';
+import { useCallback, useEffect, useState } from 'react';
+import { LoadingSpinner } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
@@ -15,6 +16,12 @@ interface PendingPayout {
   createdAt: string;
 }
 
+type PendingPayoutsResponse = PendingPayout[] | { payouts?: PendingPayout[] };
+
+function normalizePayouts(data: PendingPayoutsResponse): PendingPayout[] {
+  return Array.isArray(data) ? data : data.payouts || [];
+}
+
 export default function AdminPayoutsPage() {
   const [payouts, setPayouts] = useState<PendingPayout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,25 +30,25 @@ export default function AdminPayoutsPage() {
   const [rejectModalFor, setRejectModalFor] = useState<PendingPayout | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  const fetchPayouts = () => {
+  const fetchPayouts = useCallback(() => {
     setLoading(true);
     adminApi.getPendingPayouts()
-      .then((res: any) => setPayouts(res.data.payouts || res.data || []))
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load payouts'))
+      .then((res: { data: PendingPayoutsResponse }) => setPayouts(normalizePayouts(res.data)))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load payouts')))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     fetchPayouts();
-  }, []);
+  }, [fetchPayouts]);
 
   const handleApprove = async (id: string) => {
     setProcessing(id);
     try {
       await adminApi.approvePayout(id);
       fetchPayouts();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Approve failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Approve failed'));
     } finally {
       setProcessing(null);
     }
@@ -55,8 +62,8 @@ export default function AdminPayoutsPage() {
       setRejectModalFor(null);
       setRejectReason('');
       fetchPayouts();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Reject failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Reject failed'));
     } finally {
       setProcessing(null);
     }

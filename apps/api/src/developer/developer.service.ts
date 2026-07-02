@@ -2,10 +2,22 @@ import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../config/prisma.service';
 import { Prisma } from '@waitlayer/db';
 import { LedgerStatus } from '@waitlayer/shared';
+import { FraudService } from '../fraud/fraud.service';
+
+interface DeveloperSettingsUpdate {
+  adsEnabled?: boolean;
+  quietMode?: boolean;
+  quietModeStart?: string;
+  quietModeEnd?: string;
+  maxAdsPerHour?: number;
+}
 
 @Injectable()
 export class DeveloperService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private fraud: FraudService,
+  ) {}
 
   async getDashboard(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { trustLevel: true, status: true, role: true } });
@@ -13,7 +25,7 @@ export class DeveloperService {
     if (user.role !== 'developer') throw new ForbiddenException('Not a developer account');
     const earnings = await this.getEarningsSummary(userId);
     const trustScore = await this.prisma.trustScore.findUnique({ where: { userId } });
-    const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
+    const settings = await this.ensureSettings(userId);
     const isHeld = user.trustLevel === 'new' || user.trustLevel === 'restricted' || user.trustLevel === 'banned';
     return { ...earnings, trustLevel: user.trustLevel, payoutHoldStatus: { isHeld, reason: isHeld ? `Account trust level: ${user.trustLevel}` : undefined }, settings, trustScore: trustScore?.score ?? 40 };
   }
@@ -49,10 +61,162 @@ export class DeveloperService {
     return { entries, total, page, limit };
   }
 
-  async getSettings(userId: string) { return this.prisma.userSettings.findUnique({ where: { userId } }); }
+  async getSettings(userId: string) {
+    const [user, settings] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          email: true,
+          name: true,
+          referralCode: true,
+          emailVerified: true,
+          googleVerified: true,
+          githubVerified: true,
+        },
+      }),
+      this.ensureSettings(userId),
+    ]);
 
-  async updateSettings(userId: string, dto: { adsEnabled?: boolean; quietMode?: boolean; maxAdsPerHour?: number }) {
-    return this.prisma.userSettings.upsert({ where: { userId }, update: dto, create: { userId, ...dto } });
+    if (!user) throw new NotFoundException('User not found');
+
+    return {
+      ...settings,
+      email: user.email,
+      displayName: user.name,
+      referralCode: user.referralCode,
+      emailVerified: user.emailVerified,
+      googleVerified: user.googleVerified,
+      githubLinked: user.githubVerified,
+    };
+  }
+
+  async updateSettings(userId: string, dto: DeveloperSettingsUpdate) {
+    const data: DeveloperSettingsUpdate = {};
+
+    if (dto.adsEnabled !== undefined) data.adsEnabled = dto.adsEnabled;
+    if (dto.quietMode !== undefined) data.quietMode = dto.quietMode;
+    if (dto.quietModeStart !== undefined) data.quietModeStart = dto.quietModeStart;
+    if (dto.quietModeEnd !== undefined) data.quietModeEnd = dto.quietModeEnd;
+    if (dto.maxAdsPerHour !== undefined) data.maxAdsPerHour = dto.maxAdsPerHour;
+
+    return this.prisma.userSettings.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data },
+    });
+  }
+
+  async getTrust(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'developer') throw new ForbiddenException('Not a developer account');
+
+    await this.fraud.computeTrustScore(userId);
+
+    const [trustScore, openFlags, recentPenalties] = await Promise.all([
+      this.prisma.trustScore.findUnique({ where: { userId } }),
+      this.prisma.fraudFlag.findMany({
+        where: { userId, status: { in: ['open', 'reviewing'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.fraudFlag.findMany({
+        where: { userId, status: { in: ['resolved_valid', 'escalated'] } },
+        orderBy: { updatedAt: 'desc' },
+        take: 10,
+      }),
+    ]);
+
+    const score = trustScore?.score ?? 40;
+    const fraudPenaltyPts = trustScore?.fraudPenaltyPts ?? 0;
+
+    return {
+      score,
+      level: trustScore?.level ?? 'new',
+      band: this.getTrustBand(score),
+      computedAt: trustScore?.computedAt,
+      factors: [
+        {
+          key: 'baseline',
+          label: 'Baseline',
+          points: 40,
+          maxPoints: 40,
+          detail: 'Starting score for a new developer account.',
+        },
+        {
+          key: 'account_age',
+          label: 'Account age',
+          points: trustScore?.accountAgePoints ?? 0,
+          maxPoints: 15,
+          detail: 'Older accounts build trust gradually.',
+        },
+        {
+          key: 'email_verified',
+          label: 'Email verified',
+          points: trustScore?.emailVerifiedPts ?? 0,
+          maxPoints: 10,
+          detail: 'Verified email improves account confidence.',
+        },
+        {
+          key: 'github_verified',
+          label: 'GitHub verified',
+          points: trustScore?.githubVerifiedPts ?? 0,
+          maxPoints: 15,
+          detail: 'Linked developer identity improves payout trust.',
+        },
+        {
+          key: 'google_verified',
+          label: 'Google verified',
+          points: trustScore?.googleVerifiedPts ?? 0,
+          maxPoints: 15,
+          detail: 'Verified Google sign-in strengthens identity checks.',
+        },
+        {
+          key: 'device_consistency',
+          label: 'Device consistency',
+          points: trustScore?.deviceConsistPts ?? 0,
+          maxPoints: 10,
+          detail: 'Stable device usage lowers fraud risk.',
+        },
+        {
+          key: 'activity_pattern',
+          label: 'Activity pattern',
+          points: trustScore?.activityPatternPts ?? 0,
+          maxPoints: 10,
+          detail: 'Consistent usage patterns improve confidence.',
+        },
+        {
+          key: 'payout_history',
+          label: 'Payout history',
+          points: trustScore?.payoutHistoryPts ?? 0,
+          maxPoints: 20,
+          detail: 'Successful payouts increase account maturity.',
+        },
+        {
+          key: 'fraud_record',
+          label: 'Fraud record',
+          points: Math.max(0, 20 - fraudPenaltyPts),
+          maxPoints: 20,
+          detail: `${fraudPenaltyPts} point${fraudPenaltyPts === 1 ? '' : 's'} deducted from active flags.`,
+        },
+      ],
+      openFlags: openFlags.map((flag) => ({
+        id: flag.id,
+        severity: flag.severity,
+        reason: flag.flagType.replace(/_/g, ' '),
+        createdAt: flag.createdAt,
+      })),
+      recentPenalties: recentPenalties.map((flag) => ({
+        id: flag.id,
+        severity: flag.severity,
+        type: flag.flagType,
+        description: flag.reviewNote || flag.flagType.replace(/_/g, ' '),
+        appliedAt: flag.resolvedAt || flag.updatedAt,
+      })),
+    };
   }
 
   async exportData(userId: string) {
@@ -93,5 +257,20 @@ export class DeveloperService {
         data: { revoked: true },
       }),
     ]);
+  }
+
+  private ensureSettings(userId: string) {
+    return this.prisma.userSettings.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+  }
+
+  private getTrustBand(score: number) {
+    if (score >= 90) return 'excellent';
+    if (score >= 75) return 'high';
+    if (score >= 50) return 'medium';
+    return 'low';
   }
 }

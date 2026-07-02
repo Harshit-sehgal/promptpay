@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +11,7 @@ import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } 
 @Injectable()
 export class ExtensionService {
   private readonly hmacSecret: string;
+  private adCache = new Map<string, { ad: any; timestamp: number }>();
 
   constructor(
     private prisma: PrismaService,
@@ -136,7 +137,7 @@ export class ExtensionService {
     });
   }
 
-  async recordWaitStateEnd(dto: {
+  async recordWaitStateEnd(userId: string, dto: {
     waitStateId: string;
     duration: string | number;
     idempotencyKey: string;
@@ -159,6 +160,9 @@ export class ExtensionService {
       orderBy: { createdAt: 'desc' },
     });
     if (!start) throw new BadRequestException('No matching wait state start');
+    if (start.userId !== userId) {
+      throw new ForbiddenException('You do not own this wait state');
+    }
 
     const duration = typeof dto.duration === 'string' ? parseInt(dto.duration, 10) : dto.duration;
     if (isNaN(duration) || duration < 0) {
@@ -206,6 +210,16 @@ export class ExtensionService {
     if (settings && !settings.adsEnabled) {
       return { ad: null, reason: 'ads_disabled' };
     }
+    if (
+      settings?.quietMode &&
+      this.isTimeInRange(
+        this.currentTimeHHMM(),
+        settings.quietModeStart || '22:00',
+        settings.quietModeEnd || '08:00',
+      )
+    ) {
+      return { ad: null, reason: 'quiet_mode' };
+    }
 
     // Verify device belongs to user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
@@ -213,27 +227,24 @@ export class ExtensionService {
       throw new ForbiddenException('Device does not belong to this user');
     }
 
-    // Idempotency: return same ad if we already served one for this key
-    // (we track by looking for an impression with this sessionId)
+    // Idempotency: return same ad if we already served one for this key/waitStateId
+    const cached = this.adCache.get(dto.idempotencyKey) || this.adCache.get(dto.waitStateId);
+    if (cached && Date.now() - cached.timestamp < 60_000) {
+      return { ad: cached.ad };
+    }
+
+    // DB fallback check (e.g. process restarted)
     const existingImpression = await this.prisma.adImpression.findFirst({
-      where: { userId, sessionId: dto.sessionId },
-      include: { campaign: true, creative: true },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        userId,
+        OR: [
+          { idempotencyKey: dto.idempotencyKey },
+          { waitStateId: dto.waitStateId }
+        ]
+      }
     });
-    if (existingImpression && Date.now() - existingImpression.createdAt.getTime() < 60_000) {
-      // Return cached ad (don't count as new impression)
-      const token = existingImpression.impressionTokenHash; // already hashed, can't return original
-      return {
-        ad: {
-          campaignId: existingImpression.campaignId,
-          creativeId: existingImpression.creativeId,
-          message: existingImpression.creative?.sponsoredMessage,
-          label: 'Sponsored',
-          displayDomain: existingImpression.creative?.displayDomain,
-          destinationUrl: existingImpression.creative?.destinationUrl,
-          isCached: true,
-        },
-      };
+    if (existingImpression) {
+      throw new ConflictException('Ad already requested for this wait state');
     }
 
     // Build campaign query with frequency capping
@@ -247,6 +258,10 @@ export class ExtensionService {
       },
       select: { campaignId: true },
     });
+
+    if (recentImpressions.length >= maxPerHour) {
+      return { ad: null, reason: 'user_hourly_cap_reached' };
+    }
 
     const recentCampaignIds = [...new Set(recentImpressions.map((i: { campaignId: string }) => i.campaignId))];
 
@@ -293,6 +308,17 @@ export class ExtensionService {
     const impressionToken = crypto.randomUUID();
     const impressionTokenHash = crypto.createHash('sha256').update(impressionToken).digest('hex');
 
+    const ad = {
+      impressionToken,
+      campaignId: selected.id,
+      creativeId: creative.id,
+      title: creative.title,
+      message: creative.sponsoredMessage,
+      label: 'Sponsored',
+      displayDomain: creative.displayDomain,
+      destinationUrl: creative.destinationUrl,
+    };
+
     // Create impression record
     await this.prisma.adImpression.create({
       data: {
@@ -302,21 +328,16 @@ export class ExtensionService {
         deviceId: dto.deviceId,
         sessionId: dto.sessionId,
         impressionTokenHash,
+        waitStateId: dto.waitStateId,
+        idempotencyKey: dto.idempotencyKey,
       },
     });
 
-    return {
-      ad: {
-        impressionToken,
-        campaignId: selected.id,
-        creativeId: creative.id,
-        title: creative.title,
-        message: creative.sponsoredMessage,
-        label: 'Sponsored',
-        displayDomain: creative.displayDomain,
-        destinationUrl: creative.destinationUrl,
-      },
-    };
+    // Save to cache for immediate retries
+    this.adCache.set(dto.idempotencyKey, { ad, timestamp: Date.now() });
+    this.adCache.set(dto.waitStateId, { ad, timestamp: Date.now() });
+
+    return { ad };
   }
 
   // ── Ad Event Tracking ──
@@ -402,6 +423,18 @@ export class ExtensionService {
         },
       });
       return { qualified: false, impressionId: impression.id, reason: rateCheck.reason || 'fraud_detected' };
+    }
+
+    if (impression.campaign.bidType === 'cpc') {
+      const updated = await this.prisma.adImpression.update({
+        where: { id: impression.id },
+        data: {
+          qualifiedAt: new Date(dto.qualifiedAt),
+          visibleDurationMs: dto.visibleDurationMs,
+          isBillable: true,
+        },
+      });
+      return { qualified: true, impressionId: updated.id };
     }
 
     // Look up the user's trust level for hold days
@@ -596,6 +629,36 @@ export class ExtensionService {
             description: 'Earnings from ad click',
           },
         }),
+        this.prisma.platformLedger.create({
+          data: {
+            campaignId: impression.campaignId,
+            entryType: 'credit',
+            status: 'confirmed',
+            amountMinor: split.platformShare,
+            currency: impression.campaign.currency,
+            bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
+            referenceId: impression.id,
+            idempotencyKey: `${idempotencyBase}-plt`,
+            description: 'Platform fee from ad click',
+          },
+        }),
+        this.prisma.platformLedger.create({
+          data: {
+            campaignId: impression.campaignId,
+            entryType: 'credit',
+            status: 'confirmed',
+            amountMinor: split.reserveShare,
+            currency: impression.campaign.currency,
+            bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
+            referenceId: impression.id,
+            idempotencyKey: `${idempotencyBase}-res`,
+            description: 'Fraud/payment reserve from ad click',
+          },
+        }),
+        this.prisma.campaign.update({
+          where: { id: impression.campaignId },
+          data: { budgetSpentMinor: { increment: impression.campaign.bidAmountMinor } },
+        }),
       );
     }
 
@@ -664,5 +727,17 @@ export class ExtensionService {
         throw new ForbiddenException(`Prohibited field detected: ${field}. Privacy violation.`);
       }
     }
+  }
+
+  private currentTimeHHMM(): string {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  }
+
+  private isTimeInRange(now: string, start: string, end: string): boolean {
+    if (start <= end) {
+      return now >= start && now <= end;
+    }
+    return now >= start || now <= end;
   }
 }

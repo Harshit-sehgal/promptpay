@@ -1,4 +1,5 @@
 import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { BidType, Prisma } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { CampaignService } from '../campaign/campaign.service';
 import { CampaignStatus, AD_SERVING } from '@waitlayer/shared';
@@ -109,7 +110,7 @@ export class AdvertiserService {
         advertiserId,
         name: dto.name,
         category: dto.category,
-        bidType: dto.bidType as any,
+        bidType: dto.bidType as BidType,
         bidAmountMinor: dto.bidAmountMinor,
         budgetTotalMinor: dto.budgetTotalMinor,
         currency: dto.currency || 'USD',
@@ -165,7 +166,7 @@ export class AdvertiserService {
     });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
 
-    const hasApprovedCreative = campaign.creatives.some((c: any) => c.status === 'approved');
+    const hasApprovedCreative = campaign.creatives.some((c) => c.status === 'approved');
     if (!hasApprovedCreative) {
       throw new BadRequestException('Cannot resume campaign: at least one approved creative is required');
     }
@@ -201,7 +202,7 @@ export class AdvertiserService {
 
   /** Get reports for advertiser campaigns */
   async getReports(advertiserId: string, params: { campaignId?: string; from?: string; to?: string }) {
-    const where: any = {};
+    const where: Prisma.AdImpressionWhereInput = {};
     if (params.campaignId) where.campaignId = params.campaignId;
     if (params.from || params.to) {
       where.createdAt = {};

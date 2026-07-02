@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
+import type { AxiosResponse } from 'axios';
 import { LoadingSpinner } from '@/components';
 import { developerApi } from '@/lib/api/services';
 
@@ -16,12 +17,43 @@ interface DevSettings {
   githubLinked?: boolean;
 }
 
+interface DeveloperApiKey {
+  id: string;
+  keyPrefix: string;
+  scopes: string[];
+  isActive: boolean;
+  lastUsedAt?: string | null;
+  createdAt: string;
+  expiresAt?: string | null;
+}
+
+interface CreateApiKeyResponse extends DeveloperApiKey {
+  plainKey: string;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  const candidate = error as {
+    response?: { data?: { message?: unknown } };
+    message?: unknown;
+  };
+  const message = candidate.response?.data?.message ?? candidate.message;
+
+  if (Array.isArray(message)) return message.join(', ');
+  if (typeof message === 'string') return message;
+  return fallback;
+}
+
 export default function DevSettingsPage() {
   const [settings, setSettings] = useState<DevSettings | null>(null);
+  const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [apiKeyBusy, setApiKeyBusy] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [copiedApiKey, setCopiedApiKey] = useState(false);
 
   // Editable copies
   const [adsEnabled, setAdsEnabled] = useState(false);
@@ -32,17 +64,21 @@ export default function DevSettingsPage() {
 
   const fetchSettings = () => {
     setLoading(true);
-    developerApi.getSettings()
-      .then((res: any) => {
-        const s = res.data;
+    Promise.all([
+      developerApi.getSettings() as Promise<AxiosResponse<DevSettings>>,
+      developerApi.listApiKeys() as Promise<AxiosResponse<DeveloperApiKey[]>>,
+    ])
+      .then(([settingsRes, apiKeysRes]) => {
+        const s = settingsRes.data;
         setSettings(s);
+        setApiKeys(apiKeysRes.data || []);
         setAdsEnabled(s.adsEnabled ?? true);
         setQuietMode(s.quietMode ?? false);
         setQuietModeStart(s.quietModeStart ?? '22:00');
         setQuietModeEnd(s.quietModeEnd ?? '08:00');
         setMaxAdsPerHour(s.maxAdsPerHour ?? 6);
       })
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load settings'))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load settings')))
       .finally(() => setLoading(false));
   };
 
@@ -65,8 +101,8 @@ export default function DevSettingsPage() {
       });
       setSuccess(true);
       fetchSettings();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to save settings');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to save settings'));
     } finally {
       setSaving(false);
     }
@@ -74,7 +110,7 @@ export default function DevSettingsPage() {
 
   const handleExport = async () => {
     try {
-      const res: any = await developerApi.exportData();
+      const res = await developerApi.exportData();
       const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -82,9 +118,50 @@ export default function DevSettingsPage() {
       a.download = 'waitlayer-export.json';
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Export failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Export failed'));
     }
+  };
+
+  const handleCreateApiKey = async () => {
+    setApiKeyBusy(true);
+    setApiKeyError(null);
+    setNewApiKey(null);
+
+    try {
+      const res = (await developerApi.createApiKey({
+        scopes: ['extension:write', 'ledger:read'],
+      })) as AxiosResponse<CreateApiKeyResponse>;
+      setNewApiKey(res.data.plainKey);
+      const keysRes = (await developerApi.listApiKeys()) as AxiosResponse<DeveloperApiKey[]>;
+      setApiKeys(keysRes.data || []);
+    } catch (err: unknown) {
+      setApiKeyError(getErrorMessage(err, 'Failed to create API key'));
+    } finally {
+      setApiKeyBusy(false);
+    }
+  };
+
+  const handleRevokeApiKey = async (id: string) => {
+    setApiKeyBusy(true);
+    setApiKeyError(null);
+
+    try {
+      await developerApi.revokeApiKey(id);
+      const keysRes = (await developerApi.listApiKeys()) as AxiosResponse<DeveloperApiKey[]>;
+      setApiKeys(keysRes.data || []);
+    } catch (err: unknown) {
+      setApiKeyError(getErrorMessage(err, 'Failed to revoke API key'));
+    } finally {
+      setApiKeyBusy(false);
+    }
+  };
+
+  const copyNewApiKey = () => {
+    if (!newApiKey) return;
+    navigator.clipboard.writeText(newApiKey);
+    setCopiedApiKey(true);
+    setTimeout(() => setCopiedApiKey(false), 2000);
   };
 
   return (
@@ -249,6 +326,98 @@ export default function DevSettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* API keys */}
+          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+              <div>
+                <h2 className="text-surface-900 font-bold text-[16px]">API keys</h2>
+                <p className="text-surface-500 text-xs mt-1">Manage keys for extension and CLI integrations.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateApiKey}
+                disabled={apiKeyBusy}
+                className="bg-surface-900 hover:bg-surface-800 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+              >
+                {apiKeyBusy ? 'Working...' : 'New key'}
+              </button>
+            </div>
+
+            {apiKeyError && (
+              <div className="bg-red-50 border border-red-200/60 rounded-lg p-3 mb-4">
+                <p className="text-red-600 text-sm">{apiKeyError}</p>
+              </div>
+            )}
+
+            {newApiKey && (
+              <div className="bg-emerald-50 border border-emerald-200/70 rounded-lg p-4 mb-5">
+                <p className="text-emerald-700 text-xs font-semibold uppercase tracking-wider mb-2">New API key</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 min-w-0 bg-white border border-emerald-200/70 rounded-md px-3 py-2 text-surface-900 text-xs break-all font-mono">
+                    {newApiKey}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={copyNewApiKey}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-3 py-2 rounded-md text-xs transition-colors shrink-0"
+                  >
+                    {copiedApiKey ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {apiKeys.length === 0 ? (
+              <div className="border border-dashed border-surface-200 rounded-lg py-8 text-center">
+                <p className="text-surface-500 text-sm">No API keys yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-surface-200/80 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-50/70 border-b border-surface-200/80">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Key</th>
+                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Scopes</th>
+                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Created</th>
+                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Last used</th>
+                      <th className="px-4 py-3 text-right text-surface-500 font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-100">
+                    {apiKeys.map((key) => (
+                      <tr key={key.id}>
+                        <td className="px-4 py-3 font-mono text-surface-900">{key.keyPrefix}...</td>
+                        <td className="px-4 py-3 text-surface-600">
+                          {key.scopes.join(', ')}
+                        </td>
+                        <td className="px-4 py-3 text-surface-500">
+                          {new Date(key.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-surface-500">
+                          {key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : 'Never'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {key.isActive ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRevokeApiKey(key.id)}
+                              disabled={apiKeyBusy}
+                              className="text-rose-600 hover:text-rose-700 disabled:opacity-50 font-medium text-xs transition-colors"
+                            >
+                              Revoke
+                            </button>
+                          ) : (
+                            <span className="text-surface-400 text-xs">Revoked</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Actions */}

@@ -3,9 +3,12 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+interface GoogleCredentialResponse {
+  credential: string;
+}
 
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
@@ -17,8 +20,8 @@ async function handleGoogleCredential(
     // credential from GIS is the ID token itself
     await googleLoginFn(credential, role);
     return null;
-  } catch (err: any) {
-    return err.response?.data?.message || err.message || 'Google sign-in failed';
+  } catch (err: unknown) {
+    return getErrorMessage(err, 'Google sign-in failed');
   }
 }
 
@@ -37,6 +40,14 @@ export default function SignupPage() {
   const googleInitialized = useRef(false);
   const roleRef = useRef(role);
 
+  useEffect(() => {
+    const referralFromUrl = new URLSearchParams(window.location.search).get('ref');
+    if (referralFromUrl) {
+      setReferrerCode(referralFromUrl.trim().toUpperCase());
+      setRole('developer');
+    }
+  }, []);
+
   // Keep roleRef in sync with role state
   useEffect(() => {
     roleRef.current = role;
@@ -49,8 +60,8 @@ export default function SignupPage() {
       await googleLogin('mock-google-token-developer', role);
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Mock Google signup failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Mock Google signup failed'));
     } finally {
       setLoading(false);
     }
@@ -88,7 +99,7 @@ export default function SignupPage() {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
           client_id: googleClientId,
-          callback: async (response: any) => {
+          callback: async (response: GoogleCredentialResponse) => {
             setError('');
             setLoading(true);
             // Use roleRef.current to avoid stale closure
@@ -138,9 +149,8 @@ export default function SignupPage() {
       await signup({ email, password, role, name, referrerCode: referrerCode || undefined });
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Signup failed';
-      setError(msg);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Signup failed'));
     } finally {
       setLoading(false);
     }

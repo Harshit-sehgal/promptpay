@@ -1,9 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { LoadingSpinner } from '@/components';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
+
+interface CreativeSummary {
+  status: string;
+}
+
+interface DashboardCampaign {
+  id: string;
+  name: string;
+  status: string;
+  bidType: string;
+  bidAmountMinor: number;
+  budgetTotalMinor: number;
+  budgetSpentMinor: number;
+  currency: string;
+  createdAt: string;
+  creatives?: CreativeSummary[];
+}
 
 interface AdvertiserData {
   totalSpendMinor: number;
@@ -12,17 +30,7 @@ interface AdvertiserData {
   ctr: number;
   activeCampaigns: number;
   totalCampaigns: number;
-  campaigns: Array<{
-    id: string;
-    name: string;
-    status: string;
-    bidType: string;
-    bidAmountMinor: number;
-    budgetTotalMinor: number;
-    budgetSpentMinor: number;
-    currency: string;
-    createdAt: string;
-  }>;
+  campaigns: DashboardCampaign[];
 }
 
 const statusBadge = (status: string) => {
@@ -38,6 +46,10 @@ const statusBadge = (status: string) => {
   return colors[status] || 'bg-ink-600 text-ink-200';
 };
 
+function hasApprovedCreative(campaign: DashboardCampaign): boolean {
+  return campaign.creatives?.some((creative) => creative.status === 'approved') ?? false;
+}
+
 export default function AdvertisersPage() {
   const [data, setData] = useState<AdvertiserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,8 +57,8 @@ export default function AdvertisersPage() {
 
   useEffect(() => {
     advertiserApi.getDashboard()
-      .then((res) => setData(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Failed to load dashboard'))
+      .then((res: { data: AdvertiserData }) => setData(res.data))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load dashboard')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -102,12 +114,12 @@ export default function AdvertisersPage() {
                         {campaign.status}
                       </span>
                       <p className="text-white font-medium">{campaign.name}</p>
-                      {campaign.status === 'approved' && !(campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && (
+                      {campaign.status === 'approved' && !hasApprovedCreative(campaign) && (
                         <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] px-2 py-0.5 rounded font-medium">
                           Needs Approved Creative
                         </span>
                       )}
-                      {campaign.status === 'approved' && (campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
+                      {campaign.status === 'approved' && hasApprovedCreative(campaign) && campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
                         <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] px-2 py-0.5 rounded font-medium">
                           Insufficient Budget
                         </span>

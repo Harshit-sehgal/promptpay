@@ -1,4 +1,4 @@
-import { IsEmail, IsString, IsEnum, MinLength, MaxLength, IsOptional, IsUUID } from 'class-validator';
+import { IsEmail, IsString, IsEnum, MinLength, MaxLength, IsOptional } from 'class-validator';
 import { UserRole } from '@waitlayer/shared';
 
 export class SignUpDto {

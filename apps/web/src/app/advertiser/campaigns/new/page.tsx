@@ -3,11 +3,15 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { LoadingSpinner } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
-import { formatCurrency } from '@/lib/format';
 
 const BID_TYPES = ['cpm', 'cpc'] as const;
 const CATEGORIES = ['developer_tools', 'ai_ml', 'cloud_infra', 'saas', 'education', 'other'] as const;
+
+interface CampaignCreateResponse {
+  id: string;
+}
 
 export default function NewCampaignPage() {
   const router = useRouter();
@@ -50,7 +54,7 @@ export default function NewCampaignPage() {
     }
 
     try {
-      const campaignRes: any = await advertiserApi.createCampaign({
+      const campaignRes: { data: CampaignCreateResponse } = await advertiserApi.createCampaign({
         name,
         bidType,
         bidAmountMinor,
@@ -68,7 +72,7 @@ export default function NewCampaignPage() {
       try {
         const urlObj = new URL(finalCtaUrl);
         displayDomain = urlObj.hostname;
-      } catch (e) {
+      } catch {
         // fallback
       }
 
@@ -96,8 +100,8 @@ export default function NewCampaignPage() {
 
       setSuccess(true);
       setTimeout(() => router.push('/advertiser/campaigns'), 1500);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create campaign');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to create campaign'));
     } finally {
       setSubmitting(false);
     }

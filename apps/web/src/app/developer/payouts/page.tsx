@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, FormEvent } from 'react';
+import type { AxiosResponse } from 'axios';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
 import { payoutApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
@@ -30,6 +31,25 @@ interface PayoutRequest {
   paidAt?: string;
 }
 
+interface PayoutHistoryResponse {
+  payouts: PayoutRequest[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  const candidate = error as {
+    response?: { data?: { message?: unknown } };
+    message?: unknown;
+  };
+  const message = candidate.response?.data?.message ?? candidate.message;
+
+  if (Array.isArray(message)) return message.join(', ');
+  if (typeof message === 'string') return message;
+  return fallback;
+}
+
 export default function DevPayoutsPage() {
   const [info, setInfo] = useState<PayoutInfo | null>(null);
   const [requests, setRequests] = useState<PayoutRequest[]>([]);
@@ -49,12 +69,15 @@ export default function DevPayoutsPage() {
 
   const fetchData = () => {
     setLoading(true);
-    Promise.all([payoutApi.getInfo(), payoutApi.getHistory({ page: 1, limit: 20 })])
-      .then(([infoRes, historyRes]: any) => {
+    Promise.all([
+      payoutApi.getInfo() as Promise<AxiosResponse<PayoutInfo>>,
+      payoutApi.getHistory({ page: 1, limit: 20 }) as Promise<AxiosResponse<PayoutHistoryResponse>>,
+    ])
+      .then(([infoRes, historyRes]) => {
         setInfo(infoRes.data);
         setRequests(historyRes.data.payouts || []);
       })
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load payout info'))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load payout info')))
       .finally(() => setLoading(false));
   };
 
@@ -70,8 +93,8 @@ export default function DevPayoutsPage() {
       setDestination('');
       setShowMethodForm(false);
       fetchData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to add payout method');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to add payout method'));
     } finally {
       setSubmitting(false);
     }
@@ -102,8 +125,8 @@ export default function DevPayoutsPage() {
       });
       setAmount('');
       fetchData();
-    } catch (err: any) {
-      setRequestError(err.response?.data?.message || 'Payout request failed');
+    } catch (err: unknown) {
+      setRequestError(getErrorMessage(err, 'Payout request failed'));
     }
   };
 

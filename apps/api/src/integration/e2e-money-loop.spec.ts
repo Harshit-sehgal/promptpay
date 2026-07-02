@@ -7,6 +7,7 @@ import { AdvertiserService } from '../advertiser/advertiser.service';
 import { AdminService } from '../admin/admin.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
+import { ForbiddenException } from '@nestjs/common';
 
 // ── Shared signing utility (no mocking needed — it's pure crypto) ──
 import { signPayload } from '@waitlayer/shared';
@@ -1383,6 +1384,183 @@ describe('E2E Money Loop', () => {
       expect(result.idempotencyKey).toBe('idem-dup');
       // Should not call create
       expect(mockPrisma.waitStateEvent.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Phase 11: Extra MVP Hardening & Security Checks', () => {
+    it('CPC Campaign qualification does not bill, click does bill and splits correctly', async () => {
+      // 1. Qualified impression (CPC)
+      const impId = uid('imp-cpc');
+      const token = 'token-cpc-123';
+      const hash = require('crypto').createHash('sha256').update(token).digest('hex');
+
+      mockPrisma.adImpression.findUnique.mockResolvedValue({
+        id: impId,
+        campaignId: uid('c'),
+        creativeId: uid('cr'),
+        userId: uid('u'),
+        deviceId: uid('dev'),
+        sessionId: uid('sess'),
+        impressionTokenHash: hash,
+        campaign: {
+          id: uid('c'),
+          bidAmountMinor: 5_00,
+          currency: 'USD',
+          advertiserId: uid('adv'),
+          bidType: 'cpc',
+        },
+      });
+
+      // Fraud checks allowed
+      mockPrisma.adClick.count.mockResolvedValue(0);
+      mockPrisma.adImpression.count.mockResolvedValue(0);
+
+      // Setup ledger capture
+      installLedgerCapture();
+
+      mockPrisma.adImpression.update.mockResolvedValue({ id: impId });
+
+      const signedImp = {
+        impressionToken: token,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'idem-cpc-imp',
+      };
+      const signedImpPayload = { ...signedImp, signature: hmacSign(signedImp) };
+
+      const impResult = await svc.extension.recordQualifiedImpression(signedImpPayload);
+      expect(impResult.qualified).toBe(true);
+
+      // Verify NO ledger entries were created during qualification
+      expect(recordedLedgerEntries.advertiser.length).toBe(0);
+      expect(recordedLedgerEntries.earnings.length).toBe(0);
+      expect(recordedLedgerEntries.platform.length).toBe(0);
+
+      // 2. Click (CPC)
+      // Mock trust level
+      mockPrisma.trustScore.findUnique.mockResolvedValue({
+        userId: uid('u'),
+        score: 60,
+        level: 'normal',
+      });
+      mockPrisma.campaign.findUnique.mockResolvedValue({
+        id: uid('c'),
+        advertiser: { userId: 'diff' },
+      });
+      mockPrisma.adClick.create.mockResolvedValue({ id: uid('clk') });
+
+      // Before click, mock the impression lookup as already qualified
+      mockPrisma.adImpression.findUnique.mockResolvedValue({
+        id: impId,
+        campaignId: uid('c'),
+        creativeId: uid('cr'),
+        userId: uid('u'),
+        deviceId: uid('dev'),
+        sessionId: uid('sess'),
+        impressionTokenHash: hash,
+        qualifiedAt: new Date(), // Now qualified!
+        campaign: {
+          id: uid('c'),
+          bidAmountMinor: 5_00,
+          currency: 'USD',
+          advertiserId: uid('adv'),
+          bidType: 'cpc',
+        },
+      });
+
+      const signedClick = {
+        impressionToken: token,
+        clickedAt: new Date().toISOString(),
+        idempotencyKey: 'idem-cpc-clk',
+      };
+      const signedClickPayload = { ...signedClick, signature: hmacSign(signedClick) };
+
+      const clickResult = await svc.extension.recordClick(signedClickPayload);
+      expect(clickResult.clicked).toBe(true);
+
+      // Verify CPC click charged advertiser & credited user & platform & reserve
+      const advDebit = recordedLedgerEntries.advertiser.find((e: any) => e.entryType === 'debit');
+      expect(advDebit).toBeDefined();
+      expect(advDebit.amountMinor).toBe(5_00);
+
+      const devCredit = recordedLedgerEntries.earnings.find((e: any) => e.entryType === 'credit');
+      expect(devCredit).toBeDefined();
+      expect(devCredit.amountMinor).toBe(300); // 60% of 5_00
+
+      const platformEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'platform_fee');
+      expect(platformEntry).toBeDefined();
+      expect(platformEntry.amountMinor).toBe(150); // 30% of 5_00
+
+      const reserveEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'fraud_reserve');
+      expect(reserveEntry).toBeDefined();
+      expect(reserveEntry.amountMinor).toBe(50); // 10% of 5_00
+    });
+
+    it('ad-request idempotency with same idempotencyKey or waitStateId returns cached ad with token', async () => {
+      // Setup device check
+      mockPrisma.device.findUnique.mockResolvedValue({ id: 'dev-1', userId: 'usr-1' });
+      mockPrisma.userSettings.findUnique.mockResolvedValue({ adsEnabled: true });
+      mockPrisma.adImpression.findFirst.mockResolvedValue(null);
+
+      mockPrisma.campaign.findMany.mockResolvedValue([
+        {
+          id: 'camp-1',
+          status: 'active',
+          bidAmountMinor: 100,
+          creatives: [{ id: 'cr-1', title: 'Ad Title', sponsoredMessage: 'Ad msg', displayDomain: 'domain.com', destinationUrl: 'url.com', status: 'approved' }],
+        }
+      ]);
+
+      const reqPayload = {
+        deviceId: 'dev-1',
+        sessionId: 'sess-1',
+        waitStateId: 'wait-1',
+        toolType: 'vscode',
+        idempotencyKey: 'idem-ad-req-1',
+      };
+      const signed = { ...reqPayload, signature: hmacSign(reqPayload) };
+
+      // First request serves ad and caches it
+      const res1 = await svc.extension.requestAd('usr-1', signed);
+      expect(res1.ad).toBeDefined();
+      expect(res1.ad.impressionToken).toBeDefined();
+      expect(res1.ad.title).toBe('Ad Title');
+
+      // Second request with same idempotencyKey returns cached ad
+      const res2 = await svc.extension.requestAd('usr-1', signed);
+      expect(res2.ad).toBeDefined();
+      expect(res2.ad.impressionToken).toBe(res1.ad.impressionToken); // Match same token!
+      expect(res2.ad.title).toBe('Ad Title');
+
+      // Second request with same waitStateId but diff idempotencyKey returns cached ad
+      const reqPayloadDiffIdem = { ...reqPayload, idempotencyKey: 'idem-ad-req-2' };
+      const signedDiffIdem = { ...reqPayloadDiffIdem, signature: hmacSign(reqPayloadDiffIdem) };
+      const res3 = await svc.extension.requestAd('usr-1', signedDiffIdem);
+      expect(res3.ad).toBeDefined();
+      expect(res3.ad.impressionToken).toBe(res1.ad.impressionToken);
+    });
+
+    it('wait-state/end verifies caller owns wait state', async () => {
+      mockPrisma.waitStateEvent.findUnique.mockResolvedValue(null);
+      mockPrisma.waitStateEvent.findFirst.mockResolvedValue({
+        userId: 'usr-owner', // owned by different user
+        deviceId: 'dev-1',
+        sessionId: 'sess-1',
+        eventType: 'wait_state_start',
+        waitStateId: 'wait-1',
+        toolType: 'vscode',
+      });
+
+      const endPayload = {
+        waitStateId: 'wait-1',
+        duration: 3000,
+        idempotencyKey: 'idem-end-1',
+      };
+      const signed = { ...endPayload, signature: hmacSign(endPayload) };
+
+      await expect(
+        svc.extension.recordWaitStateEnd('usr-hacker', signed)
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 });

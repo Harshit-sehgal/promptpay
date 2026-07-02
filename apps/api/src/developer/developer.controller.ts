@@ -27,6 +27,10 @@ export class DeveloperController {
     return this.service.getSettings(userId);
   }
 
+  @Get('trust') getTrust(@CurrentUser('id') userId: string) {
+    return this.service.getTrust(userId);
+  }
+
   @Patch('settings')
   updateSettings(
     @CurrentUser('id') userId: string,

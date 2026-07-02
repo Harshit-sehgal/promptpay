@@ -38,8 +38,11 @@ export class ExtensionController {
 
   @Post('wait-state/end')
   @HttpCode(HttpStatus.OK)
-  recordWaitStateEnd(@Body() dto: WaitStateEndDto) {
-    return this.service.recordWaitStateEnd(dto);
+  recordWaitStateEnd(
+    @CurrentUser('id') userId: string,
+    @Body() dto: WaitStateEndDto,
+  ) {
+    return this.service.recordWaitStateEnd(userId, dto);
   }
 
   @Post('ad-request')

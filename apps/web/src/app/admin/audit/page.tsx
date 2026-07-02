@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 
 interface AuditEntry {
   id: string;
@@ -10,9 +11,14 @@ interface AuditEntry {
   action: string;
   targetType?: string;
   targetId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   ip?: string;
   createdAt: string;
+}
+
+interface AuditLogResponse {
+  entries?: AuditEntry[];
+  logs?: AuditEntry[];
 }
 
 export default function AdminAuditPage() {
@@ -35,12 +41,12 @@ export default function AdminAuditPage() {
           action: actionFilter || undefined,
         });
       })
-      .then((res: any) => {
+      .then((res: { data?: AuditLogResponse }) => {
         if (!res) return;
         setEntries(res.data?.entries || res.data?.logs || []);
       })
-      .catch(() => {
-        // endpoint may not be wired yet — keep page interactive
+      .catch((err: unknown) => {
+        setError(getErrorMessage(err, 'Failed to load audit log'));
       })
       .finally(() => setLoading(false));
   }, [actorFilter, actionFilter]);

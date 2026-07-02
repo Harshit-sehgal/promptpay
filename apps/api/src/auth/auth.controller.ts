@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators';
@@ -20,12 +21,12 @@ export class AuthController {
 
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
-  async signUp(@Body() dto: SignUpDto, @Req() req: any) {
+  async signUp(@Body() dto: SignUpDto, @Req() req: Request) {
     try {
       const result = await this.authService.signUp(dto);
       BruteForceGuard.resetOnSuccess(req);
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       BruteForceGuard.recordFailure(req);
       throw err;
     }
@@ -33,12 +34,12 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() dto: LoginDto, @Req() req: any) {
+  async login(@Body() dto: LoginDto, @Req() req: Request) {
     try {
       const result = await this.authService.login(dto);
       BruteForceGuard.resetOnSuccess(req);
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       BruteForceGuard.recordFailure(req);
       throw err;
     }
@@ -46,12 +47,12 @@ export class AuthController {
 
   @Post('google')
   @HttpCode(HttpStatus.OK)
-  async googleOAuth(@Body() dto: GoogleOAuthDto, @Req() req: any) {
+  async googleOAuth(@Body() dto: GoogleOAuthDto, @Req() req: Request) {
     try {
       const result = await this.authService.googleOAuth(dto);
       BruteForceGuard.resetOnSuccess(req);
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       BruteForceGuard.recordFailure(req);
       throw err;
     }

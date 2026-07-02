@@ -23,12 +23,21 @@ interface User {
   referralCode?: string;
 }
 
+interface SignupPayload {
+  email: string;
+  password: string;
+  role: string;
+  name?: string;
+  country?: string;
+  referrerCode?: string;
+}
+
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<User>;
-  signup: (data: any) => Promise<User>;
+  signup: (data: SignupPayload) => Promise<User>;
   googleLogin: (idToken: string, role?: string) => Promise<User>;
   logout: () => void;
 }
@@ -73,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return userData;
   }, []);
 
-  const signup = useCallback(async (data: any) => {
+  const signup = useCallback(async (data: SignupPayload) => {
     const res = await authApi.signup(data);
     const { accessToken, refreshToken, user: userData } = res.data;
     localStorage.setItem('accessToken', accessToken);

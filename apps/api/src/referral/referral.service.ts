@@ -49,7 +49,7 @@ export class ReferralService {
     return {
       referralCode: code,
       referralCount,
-      referralLink: `${process.env.WEB_BASE_URL || 'http://localhost:3000'}/signup?ref=${code}`,
+      referralLink: `${process.env.WEB_BASE_URL || 'http://localhost:3000'}/auth/signup?ref=${code}`,
       rewardsEarnedMinor: rewardsAgg._sum.amountMinor || 0,
       referrals: referrals.map((r) => ({
         id: r.id,

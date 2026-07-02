@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi, campaignApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
@@ -31,6 +32,12 @@ interface PendingCampaign {
   creatives: Creative[];
 }
 
+type PendingCampaignsResponse = PendingCampaign[] | { campaigns?: PendingCampaign[] };
+
+function normalizeCampaigns(data: PendingCampaignsResponse): PendingCampaign[] {
+  return Array.isArray(data) ? data : data.campaigns || [];
+}
+
 export default function AdminCampaignsPage() {
   const [campaigns, setCampaigns] = useState<PendingCampaign[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,25 +47,25 @@ export default function AdminCampaignsPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
 
-  const fetchCampaigns = () => {
+  const fetchCampaigns = useCallback(() => {
     setLoading(true);
     adminApi.getPendingCampaigns()
-      .then((res: any) => setCampaigns(res.data.campaigns || res.data || []))
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load campaigns'))
+      .then((res: { data: PendingCampaignsResponse }) => setCampaigns(normalizeCampaigns(res.data)))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load campaigns')))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     fetchCampaigns();
-  }, []);
+  }, [fetchCampaigns]);
 
   const handleApprove = async (id: string) => {
     setProcessing(id);
     try {
       await adminApi.approveCampaign(id);
       fetchCampaigns();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Approve failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Approve failed'));
     } finally {
       setProcessing(null);
     }
@@ -72,8 +79,8 @@ export default function AdminCampaignsPage() {
       setRejectModalFor(null);
       setRejectReason('');
       fetchCampaigns();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Reject failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Reject failed'));
     } finally {
       setProcessing(null);
     }
@@ -84,8 +91,8 @@ export default function AdminCampaignsPage() {
     try {
       await campaignApi.approveCreative(creativeId);
       fetchCampaigns();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Creative approve failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Creative approve failed'));
     } finally {
       setProcessing(null);
     }
@@ -96,8 +103,8 @@ export default function AdminCampaignsPage() {
     try {
       await campaignApi.rejectCreative(creativeId, 'Rejected by admin');
       fetchCampaigns();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Creative reject failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Creative reject failed'));
     } finally {
       setProcessing(null);
     }

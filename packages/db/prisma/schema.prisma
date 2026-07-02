@@ -276,6 +276,8 @@ model UserSettings {
   user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   adsEnabled    Boolean @default(true)
   quietMode     Boolean @default(false)
+  quietModeStart String @default("22:00")
+  quietModeEnd   String @default("08:00")
   maxAdsPerHour Int     @default(6)
 
   createdAt DateTime @default(now())
@@ -485,6 +487,8 @@ model AdImpression {
   deviceId            String
   device              Device      @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   sessionId           String
+  waitStateId         String?
+  idempotencyKey      String?     @unique
   impressionTokenHash String      @unique
   renderedAt          DateTime?
   qualifiedAt         DateTime?

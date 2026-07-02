@@ -1,8 +1,11 @@
 import api from './client';
 
+type ApiPayload = object;
+type QueryParams = object;
+
 export const authApi = {
-  signup: (data: any) => api.post('/auth/signup', data),
-  login: (data: any) => api.post('/auth/login', data),
+  signup: (data: ApiPayload) => api.post('/auth/signup', data),
+  login: (data: ApiPayload) => api.post('/auth/login', data),
   googleLogin: (data: { idToken: string; role?: string }) => api.post('/auth/google', data),
   refresh: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),
   logout: () => api.post('/auth/logout'),
@@ -11,48 +14,52 @@ export const authApi = {
 
 export const developerApi = {
   getDashboard: () => api.get('/developer/dashboard'),
-  getEarnings: (params?: any) => api.get('/developer/earnings', { params }),
+  getEarnings: (params?: QueryParams) => api.get('/developer/earnings', { params }),
   getSettings: () => api.get('/developer/settings'),
-  updateSettings: (data: any) => api.patch('/developer/settings', data),
+  getTrust: () => api.get('/developer/trust'),
+  updateSettings: (data: ApiPayload) => api.patch('/developer/settings', data),
   exportData: () => api.post('/developer/export-data'),
+  listApiKeys: () => api.get('/developer/api-keys'),
+  createApiKey: (data: { scopes: string[]; advertiserId?: string; expiresAt?: string }) => api.post('/developer/api-keys', data),
+  revokeApiKey: (id: string) => api.delete(`/developer/api-keys/${id}`),
 };
 
 export const advertiserApi = {
   getDashboard: () => api.get('/advertiser/dashboard'),
-  createCampaign: (data: any) => api.post('/advertiser/campaigns', data),
+  createCampaign: (data: ApiPayload) => api.post('/advertiser/campaigns', data),
   submitCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/submit`),
   pauseCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/pause`),
   resumeCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/resume`),
-  getReports: (params?: any) => api.get('/advertiser/reports', { params }),
+  getReports: (params?: QueryParams) => api.get('/advertiser/reports', { params }),
 };
 
 export const adminApi = {
   getOverview: () => api.get('/admin/overview'),
-  getUsers: (params?: any) => api.get('/admin/users', { params }),
+  getUsers: (params?: QueryParams) => api.get('/admin/users', { params }),
   getPendingCampaigns: () => api.get('/admin/campaigns/pending'),
   approveCampaign: (id: string, reason?: string) => api.post(`/admin/campaigns/${id}/approve`, { reason }),
   rejectCampaign: (id: string, reason: string) => api.post(`/admin/campaigns/${id}/reject`, { reason }),
   getPendingPayouts: () => api.get('/admin/payouts/pending'),
   approvePayout: (id: string, note?: string) => api.post(`/admin/payouts/${id}/approve`, { note }),
   rejectPayout: (id: string, reason: string) => api.post(`/admin/payouts/${id}/reject`, { reason }),
-  getFraudFlags: (params?: any) => api.get('/admin/fraud', { params }),
+  getFraudFlags: (params?: QueryParams) => api.get('/admin/fraud', { params }),
   resolveFraudFlag: (id: string, decision: 'confirmed' | 'invalid', note?: string) => api.post(`/admin/fraud/${id}/resolve`, { decision, note }),
-  getAuditLog: (params?: any) => api.get('/admin/audit-log', { params }),
+  getAuditLog: (params?: QueryParams) => api.get('/admin/audit-log', { params }),
 };
 
 export const payoutApi = {
-  addMethod: (data: any) => api.post('/payout/method', data),
+  addMethod: (data: ApiPayload) => api.post('/payout/method', data),
   getInfo: () => api.get('/payout/info'),
-  requestPayout: (data: any) => api.post('/payout/request', data),
-  getHistory: (params?: any) => api.get('/payout/history', { params }),
+  requestPayout: (data: ApiPayload) => api.post('/payout/request', data),
+  getHistory: (params?: QueryParams) => api.get('/payout/history', { params }),
 };
 
 export const ledgerApi = {
   getBalance: () => api.get('/ledger/balance'),
   getBreakdown: () => api.get('/ledger/breakdown'),
-  getHistory: (params?: any) => api.get('/ledger/history', { params }),
+  getHistory: (params?: QueryParams) => api.get('/ledger/history', { params }),
   getAdminBreakdown: () => api.get('/ledger/admin/breakdown'),
-  getAdminHistory: (params?: any) => api.get('/ledger/admin/history', { params }),
+  getAdminHistory: (params?: QueryParams) => api.get('/ledger/admin/history', { params }),
 };
 
 export const referralApi = {
@@ -64,8 +71,8 @@ export const referralApi = {
 export const campaignApi = {
   getStats: (id: string) => api.get(`/campaigns/${id}/stats`),
   getCreatives: (id: string) => api.get(`/campaigns/${id}/creatives`),
-  createCreative: (id: string, data: any) => api.post(`/campaigns/${id}/creatives`, data),
-  setCountryTargeting: (id: string, data: any) => api.post(`/campaigns/${id}/targeting/countries`, data),
+  createCreative: (id: string, data: ApiPayload) => api.post(`/campaigns/${id}/creatives`, data),
+  setCountryTargeting: (id: string, data: ApiPayload) => api.post(`/campaigns/${id}/targeting/countries`, data),
   approveCreative: (creativeId: string) => api.post(`/campaigns/creatives/${creativeId}/approve`),
   rejectCreative: (creativeId: string, reason: string) => api.post(`/campaigns/creatives/${creativeId}/reject`, { reason }),
 };

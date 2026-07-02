@@ -225,6 +225,7 @@ export class WaitStateDetector {
 
     // Emit signal for external listeners (extension.ts uses onWaitStateStart)
     this.emitSignal({ type: 'wait_start', event });
+    this.notify(event);
 
     return this.waitStateId;
   }
@@ -245,7 +246,6 @@ export class WaitStateDetector {
       };
 
       this.emitSignal({ type: 'wait_end', event });
-      this.notify(event);
     }
 
     this.waitStart = 0;

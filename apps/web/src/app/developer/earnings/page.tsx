@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { AxiosResponse } from 'axios';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
 import { ledgerApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
@@ -25,6 +26,18 @@ interface EarningsResponse {
   totalPages: number;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  const candidate = error as {
+    response?: { data?: { message?: unknown } };
+    message?: unknown;
+  };
+  const message = candidate.response?.data?.message ?? candidate.message;
+
+  if (Array.isArray(message)) return message.join(', ');
+  if (typeof message === 'string') return message;
+  return fallback;
+}
+
 export default function DevEarningsPage() {
   const [data, setData] = useState<EarningsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,9 +46,9 @@ export default function DevEarningsPage() {
 
   useEffect(() => {
     setLoading(true);
-    ledgerApi.getHistory({ status: statusFilter || undefined, page: 1, limit: 50 })
-      .then((res: any) => setData(res.data))
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load earnings'))
+    (ledgerApi.getHistory({ status: statusFilter || undefined, page: 1, limit: 50 }) as Promise<AxiosResponse<EarningsResponse>>)
+      .then((res) => setData(res.data))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load earnings')))
       .finally(() => setLoading(false));
   }, [statusFilter]);
 

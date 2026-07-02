@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { AxiosResponse } from 'axios';
 import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
 import { developerApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
@@ -32,15 +33,27 @@ interface TrustInfo {
   }>;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  const candidate = error as {
+    response?: { data?: { message?: unknown } };
+    message?: unknown;
+  };
+  const message = candidate.response?.data?.message ?? candidate.message;
+
+  if (Array.isArray(message)) return message.join(', ');
+  if (typeof message === 'string') return message;
+  return fallback;
+}
+
 export default function DevTrustPage() {
   const [data, setData] = useState<TrustInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    developerApi.getSettings()
-      .then((res: any) => setData(res.data.trust))
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load trust info'))
+    (developerApi.getTrust() as Promise<AxiosResponse<TrustInfo>>)
+      .then((res) => setData(res.data))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load trust info')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -76,6 +89,12 @@ export default function DevTrustPage() {
       {error && (
         <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
           <p className="text-red-600 text-sm font-normal">{error}</p>
+        </div>
+      )}
+
+      {!loading && !error && !data && (
+        <div className="bg-white border border-surface-200/80 rounded-lg p-8 text-center shadow-sm">
+          <p className="text-surface-500 text-sm font-normal">Trust details are not available yet.</p>
         </div>
       )}
 
@@ -141,7 +160,7 @@ export default function DevTrustPage() {
                 {data.openFlags.map((flag) => (
                   <div
                     key={flag.id}
-                    className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-xl p-4.5 border-l-2 border-l-amber-500"
+                    className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-lg p-5 border-l-2 border-l-amber-500"
                   >
                     <div>
                       <p className="text-surface-900 font-medium text-[14px]">{flag.reason}</p>
@@ -166,7 +185,7 @@ export default function DevTrustPage() {
             ) : (
               <div className="space-y-3">
                 {data.recentPenalties.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-xl p-4.5">
+                  <div key={p.id} className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-lg p-5">
                     <div>
                       <p className="text-surface-900 font-medium text-[14px]">{p.description}</p>
                       <p className="text-surface-500 text-xs mt-0.5 font-normal">

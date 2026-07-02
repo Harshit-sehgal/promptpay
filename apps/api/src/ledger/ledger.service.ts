@@ -477,7 +477,7 @@ export class LedgerService {
     ] = await Promise.all([
       this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true } }),
       this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
     ]);
 

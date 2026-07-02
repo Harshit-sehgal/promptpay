@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
-import { ledgerApi, adminApi } from '@/lib/api/services';
-import { formatCurrency, formatNumber, formatRelativeTime } from '@/lib/format';
+import { getErrorMessage } from '@/lib/api/errors';
+import { ledgerApi } from '@/lib/api/services';
+import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
 interface Breakdown {
   earningsLedger: { balanceMinor: number; pendingMinor: number; confirmedMinor: number };
@@ -21,6 +22,10 @@ interface LedgerEntry {
   createdAt: string;
 }
 
+interface LedgerHistoryResponse {
+  entries?: LedgerEntry[];
+}
+
 export default function AdminLedgerPage() {
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null);
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
@@ -34,11 +39,11 @@ export default function AdminLedgerPage() {
       ledgerApi.getAdminBreakdown(),
       ledgerApi.getAdminHistory({ ledgerKind: ledgerKind || undefined, page: 1, limit: 50 }),
     ])
-      .then(([bdRes, histRes]: any) => {
+      .then(([bdRes, histRes]: [{ data: Breakdown }, { data: LedgerHistoryResponse }]) => {
         setBreakdown(bdRes.data);
         setEntries(histRes.data.entries || []);
       })
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load ledger'))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load ledger')))
       .finally(() => setLoading(false));
   }, [ledgerKind]);
 

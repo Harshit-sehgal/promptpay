@@ -25,6 +25,12 @@ interface AccessTokenPayload {
   family?: string;
 }
 
+interface EmailVerificationPayload {
+  sub: string;
+  email: string;
+  action: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly accessTtl: string;
@@ -88,8 +94,9 @@ export class AuthService {
 
     // Handle referral if provided
     if (dto.referrerCode) {
+      const normalizedReferrerCode = dto.referrerCode.trim().toUpperCase();
       const referrer = await this.prisma.user.findUnique({
-        where: { referralCode: dto.referrerCode },
+        where: { referralCode: normalizedReferrerCode },
       });
       if (referrer) {
         await this.prisma.referral.create({
@@ -398,10 +405,10 @@ export class AuthService {
   }
 
   async confirmEmailVerification(token: string) {
-    let payload: any;
+    let payload: EmailVerificationPayload;
     try {
       payload = await this.jwt.verifyAsync(token, { secret: this.jwtSecret });
-    } catch (err) {
+    } catch {
       throw new BadRequestException('Invalid or expired verification token');
     }
 
@@ -430,8 +437,8 @@ export class AuthService {
     };
   }
 
-  private sanitizeUser(user: any) {
-    const { passwordHash, ...safe } = user;
+  private sanitizeUser<T extends { passwordHash?: unknown }>(user: T): Omit<T, 'passwordHash'> {
+    const { passwordHash: _passwordHash, ...safe } = user;
     return safe;
   }
 

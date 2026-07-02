@@ -1,10 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
+
+interface CreativeSummary {
+  status: string;
+}
 
 interface Campaign {
   id: string;
@@ -18,11 +23,21 @@ interface Campaign {
   impressions: number;
   clicks: number;
   createdAt: string;
+  creatives?: CreativeSummary[];
 }
 
 interface CampaignsData {
   campaigns: Campaign[];
   total: number;
+}
+
+interface AdvertiserDashboardResponse {
+  campaigns?: Campaign[];
+  totalCampaigns?: number;
+}
+
+function hasApprovedCreative(campaign: Campaign): boolean {
+  return campaign.creatives?.some((creative) => creative.status === 'approved') ?? false;
 }
 
 export default function AdvertiserCampaignsPage() {
@@ -32,32 +47,33 @@ export default function AdvertiserCampaignsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const refresh = () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
-    advertiserApi.getDashboard()
-      .then((res: any) => {
-        let campaigns = (res.data.campaigns || []) as Campaign[];
-        if (statusFilter) {
-          campaigns = campaigns.filter((c) => c.status === statusFilter);
-        }
-        setData({ campaigns, total: res.data.totalCampaigns || campaigns.length });
-      })
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load campaigns'))
-      .finally(() => setLoading(false));
-  };
+    try {
+      const res: { data: AdvertiserDashboardResponse } = await advertiserApi.getDashboard();
+      let campaigns = res.data.campaigns || [];
+      if (statusFilter) {
+        campaigns = campaigns.filter((c) => c.status === statusFilter);
+      }
+      setData({ campaigns, total: res.data.totalCampaigns || campaigns.length });
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load campaigns'));
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter]);
 
   useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+    void refresh();
+  }, [refresh]);
 
   const handlePause = async (id: string) => {
     setActionLoading(id);
     try {
       await advertiserApi.pauseCampaign(id);
       await refresh();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to pause campaign');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to pause campaign'));
     } finally {
       setActionLoading(null);
     }
@@ -68,8 +84,8 @@ export default function AdvertiserCampaignsPage() {
     try {
       await advertiserApi.resumeCampaign(id);
       await refresh();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to resume campaign');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to resume campaign'));
     } finally {
       setActionLoading(null);
     }
@@ -156,12 +172,12 @@ export default function AdvertiserCampaignsPage() {
                         <StatusBadge status={campaign.status} />
                         <h3 className="text-white font-medium">{campaign.name}</h3>
                         <span className="text-ink-500 text-xs uppercase">{campaign.bidType}</span>
-                        {campaign.status === 'approved' && !(campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && (
+                        {campaign.status === 'approved' && !hasApprovedCreative(campaign) && (
                           <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] px-2 py-0.5 rounded-md font-medium">
                             Needs Approved Creative
                           </span>
                         )}
-                        {campaign.status === 'approved' && (campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
+                        {campaign.status === 'approved' && hasApprovedCreative(campaign) && campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
                           <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] px-2 py-0.5 rounded-md font-medium">
                             Insufficient Budget
                           </span>

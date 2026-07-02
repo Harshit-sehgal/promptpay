@@ -3,9 +3,12 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
 
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+interface GoogleCredentialResponse {
+  credential: string;
+}
 
 /**
  * Thick SVGs for the Google "G" mark — rendered inline to avoid fetch.
@@ -31,8 +34,8 @@ async function handleGoogleCredential(
     // credential from GIS is the ID token itself
     await googleLoginFn(credential);
     return null;
-  } catch (err: any) {
-    return err.response?.data?.message || err.message || 'Google sign-in failed';
+  } catch (err: unknown) {
+    return getErrorMessage(err, 'Google sign-in failed');
   }
 }
 
@@ -54,8 +57,8 @@ export default function LoginPage() {
       await googleLogin('mock-google-token-developer');
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Mock Google login failed');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Mock Google login failed'));
     } finally {
       setLoading(false);
     }
@@ -94,7 +97,7 @@ export default function LoginPage() {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.initialize({
           client_id: googleClientId,
-          callback: async (response: any) => {
+          callback: async (response: GoogleCredentialResponse) => {
             setError('');
             setLoading(true);
             const errorMsg = await handleGoogleCredential(response.credential, googleLogin);
@@ -141,12 +144,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const user = await login(email, password);
+      await login(email, password);
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Login failed';
-      setError(msg);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Login failed'));
     } finally {
       setLoading(false);
     }

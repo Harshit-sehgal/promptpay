@@ -15,10 +15,10 @@ Last updated: 2026-07-02 (Verification pass complete — all 10 major blockers r
 | 5 | Campaign lifecycle | PASS | Integration |
 | 6 | Ledger/money flow | PASS | Unit + Integration |
 | 7 | Payouts | PASS | Unit |
-| 8 | Frontend | PASS | Manual |
+| 8 | Frontend | PASS | Build + live smoke |
 | 9 | VS Code extension | PASS | Manual |
 | 10 | CLI + signing | PASS | Integration |
-| 11 | Tests/readiness | PASS | 85 tests across 6 files |
+| 11 | Tests/readiness | PASS | 115 tests across 7 files |
 
 ### Refinement domains added
 
@@ -26,7 +26,7 @@ Last updated: 2026-07-02 (Verification pass complete — all 10 major blockers r
 |---|--------|--------|--------|
 | 12 | Stripe/webhooks | PASS | Webhook controller, refund/dispute handling, stripeCustomerId wiring |
 | 13 | Referral system | PASS | ReferralService, code apply, reward processing, frontend |
-| 14 | API keys | PASS | Developer API key management, ApiKeyGuard |
+| 14 | API keys | PASS | Developer API key management UI, ApiKeyGuard |
 | 15 | Tool integrations | PASS | Seed + admin toggle |
 | 16 | Webhook events | PASS | Admin audit view |
 
@@ -41,7 +41,7 @@ No failing domains. |
 - Path aliases configured: `@waitlayer/config`, `@waitlayer/db`, `@waitlayer/shared`
 
 **Fixed:**
-- Resolved NestJS build compiler issue by configuring `"baseUrl": "src"` in `tsconfig.build.json` so build output is emitted directly at `apps/api/dist/main.js` instead of being nested under `dist/apps/api/src/`.
+- Configured API dev/start scripts and Dockerfile CMD to use the correct Nest entry point for this workspace layout, aligning watch mode and compiled output paths across environment configurations.
 - Configured correct package manifests copy order in `Dockerfile` (copying `cli` and `vscode-extension` alongside other services) so all local workspace dependencies are successfully resolved during container build.
 
 ---

@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { FraudFlagStatus, FraudSeverity, Prisma, UserRole, UserStatus } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
@@ -23,9 +24,9 @@ export class AdminService {
   }
 
   async getUsers(params: { status?: string; role?: string; search?: string }) {
-    const where: any = {};
-    if (params.status) where.status = params.status;
-    if (params.role) where.role = params.role;
+    const where: Prisma.UserWhereInput = {};
+    if (params.status) where.status = params.status as UserStatus;
+    if (params.role) where.role = params.role as UserRole;
     if (params.search) where.OR = [{ email: { contains: params.search, mode: 'insensitive' } }, { name: { contains: params.search, mode: 'insensitive' } }];
     return this.prisma.user.findMany({ where, select: { id: true, email: true, name: true, role: true, status: true, trustLevel: true, country: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 50 });
   }
@@ -41,7 +42,7 @@ export class AdminService {
     }
 
     // Must have at least one approved creative and remaining budget to activate
-    const hasApprovedCreative = campaign.creatives.some((c: any) => c.status === 'approved');
+    const hasApprovedCreative = campaign.creatives.some((c) => c.status === 'approved');
     const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
     const canActivate = hasApprovedCreative && hasBudget;
 
@@ -51,8 +52,8 @@ export class AdminService {
     // Build human-readable blockers list for the UI
     const blockers: string[] = [];
     if (!hasApprovedCreative) {
-      const pendingCount = campaign.creatives.filter((c: any) => c.status === 'pending_review').length;
-      const draftCount = campaign.creatives.filter((c: any) => c.status === 'draft').length;
+      const pendingCount = campaign.creatives.filter((c) => c.status === 'pending_review').length;
+      const draftCount = campaign.creatives.filter((c) => c.status === 'draft').length;
       blockers.push(
         `No approved creatives (${pendingCount} pending review, ${draftCount} draft). Approve at least one creative to activate.`,
       );
@@ -108,15 +109,15 @@ export class AdminService {
   }
 
   async getFraudFlags(params: { status?: string; severity?: string }) {
-    const where: any = {};
-    if (params.status) where.status = params.status;
-    if (params.severity) where.severity = params.severity;
+    const where: Prisma.FraudFlagWhereInput = {};
+    if (params.status) where.status = params.status as FraudFlagStatus;
+    if (params.severity) where.severity = params.severity as FraudSeverity;
     return this.prisma.fraudFlag.findMany({ where, orderBy: { createdAt: 'desc' }, take: 100 });
   }
 
   async resolveFraudFlag(flagId: string, reviewerId: string, decision: string, note?: string) {
-    const status = decision === 'confirmed' ? 'resolved_valid' : 'resolved_invalid';
-    return this.prisma.fraudFlag.update({ where: { id: flagId }, data: { status: status as any, reviewerId, reviewNote: note, resolvedAt: new Date() } });
+    const status = decision === 'confirmed' ? FraudFlagStatus.resolved_valid : FraudFlagStatus.resolved_invalid;
+    return this.prisma.fraudFlag.update({ where: { id: flagId }, data: { status, reviewerId, reviewNote: note, resolvedAt: new Date() } });
   }
 
   async getAuditLog(params: { actorId?: string; actorRole?: string; targetType?: string; from?: string; to?: string; page?: number; limit?: number }) {
@@ -143,7 +144,7 @@ export class AdminService {
   // ── Webhooks ──
 
   async getWebhookEvents(params: { provider?: string; processingStatus?: string; page?: number; limit?: number }) {
-    const where: any = {};
+    const where: Prisma.WebhookEventWhereInput = {};
     if (params.provider) where.provider = params.provider;
     if (params.processingStatus) where.processingStatus = params.processingStatus;
     const page = params.page ?? 1;

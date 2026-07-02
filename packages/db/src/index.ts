@@ -17,7 +17,25 @@ if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
 
-// Re-export the `Prisma` namespace (types like InputJsonValue, *WhereInput,
-// TransactionClient) so app packages can consume them without depending on
-// @prisma/client directly.
-export { PrismaClient, Prisma } from '@prisma/client';
+// Re-export generated Prisma types/enums so app packages consume the DB
+// contract through this package instead of depending on @prisma/client.
+export {
+  ApprovalDecision,
+  BidType,
+  CampaignStatus,
+  CreativeStatus,
+  EventType,
+  FraudFlagStatus,
+  FraudFlagType,
+  FraudSeverity,
+  LedgerEntryType,
+  LedgerStatus,
+  PayoutProvider,
+  PayoutStatus,
+  Prisma,
+  PrismaClient,
+  ToolTypeEnum,
+  TrustLevel,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';

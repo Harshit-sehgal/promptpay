@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 
@@ -35,8 +36,8 @@ export default function AdvertiserReportsPage() {
   useEffect(() => {
     setLoading(true);
     advertiserApi.getReports({ period })
-      .then((res: any) => setData(res.data))
-      .catch((err: any) => setError(err.response?.data?.message || 'Failed to load reports'))
+      .then((res: { data: ReportsData }) => setData(res.data))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load reports')))
       .finally(() => setLoading(false));
   }, [period]);
 

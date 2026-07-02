@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, IsIn, MinLength, MaxLength } from 'class-validator';
+import { IsArray, IsOptional, IsString, MinLength, MaxLength } from 'class-validator';
 
 export class CreateApiKeyDto {
   @IsArray()

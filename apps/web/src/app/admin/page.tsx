@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { LoadingSpinner, StatCard } from '@/components';
 import { formatCurrency, formatNumber } from '@/lib/format';
@@ -22,9 +23,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     adminApi.getOverview()
-      .then((res: any) => setData(res.data))
-      .catch((err: any) => {
-        setError(err.response?.data?.message || 'Failed to load admin overview');
+      .then((res: { data: AdminOverview }) => setData(res.data))
+      .catch((err: unknown) => {
+        setError(getErrorMessage(err, 'Failed to load admin overview'));
       })
       .finally(() => setLoading(false));
   }, []);
