@@ -31,6 +31,7 @@ services:
       GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
       WEB_BASE_URL: http://localhost:3000
       NODE_ENV: production
+      ALLOW_MOCK_GOOGLE: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,6 +46,7 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
       NODE_ENV: production
+      NEXT_PUBLIC_ALLOW_MOCK_AUTH: "true"
     depends_on:
       - api
 

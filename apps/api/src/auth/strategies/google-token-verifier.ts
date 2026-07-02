@@ -42,7 +42,10 @@ export class GoogleTokenVerifier {
 
   /** Verify a Google ID token and return the decoded payload */
   async verify(idToken: string): Promise<GoogleIdTokenPayload> {
-    if (idToken.startsWith('mock-google-token-') && process.env.NODE_ENV !== 'production') {
+    if (
+      idToken.startsWith('mock-google-token-') &&
+      (process.env.NODE_ENV !== 'production' || process.env.ALLOW_MOCK_GOOGLE === 'true')
+    ) {
       const parts = idToken.split('-');
       const identifier = parts[3] || 'user';
       const email = `${identifier}@mock-google.com`;

@@ -47,6 +47,20 @@ export default function LoginPage() {
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const googleInitialized = useRef(false);
 
+  const handleMockGoogleLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await googleLogin('mock-google-token-developer');
+      const dashboard = localStorage.getItem('lastDashboard') || '/developer';
+      router.push(dashboard);
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Mock Google login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch Auth Config (Google Client ID) at runtime
   useEffect(() => {
     const fetchConfig = async () => {
@@ -212,6 +226,17 @@ export default function LoginPage() {
               <GoogleG size={18} />
               <span>Continue with Google</span>
               <span className="text-[10px] text-surface-300 font-normal">(disabled: client ID missing)</span>
+            </button>
+          )}
+
+          {(process.env.NEXT_PUBLIC_ALLOW_MOCK_AUTH === 'true' || process.env.NODE_ENV !== 'production') && (
+            <button
+              onClick={handleMockGoogleLogin}
+              type="button"
+              className="w-full flex items-center justify-center gap-3 bg-surface-50 hover:bg-surface-100/80 border border-surface-200 text-surface-700 font-semibold py-3 rounded-xl text-[14px] mt-3 transition-all"
+            >
+              <GoogleG size={18} />
+              <span>Continue with Mock Google</span>
             </button>
           )}
 
