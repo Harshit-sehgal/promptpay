@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-02 (verified after per-device event signing, billing, payout, wait-state, and Docker checks)
+Last updated: 2026-07-03 (verified after Phase B completion: per-device secrets, zod contracts, security hardening, and Docker build)
 
 ---
 
@@ -10,9 +10,9 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 
 | # | Domain | Status | Verification |
 |---|--------|--------|--------------|
-| 1 | Build/monorepo | PASS | `pnpm run build` succeeds; all workspace packages compile |
-| 2 | API contract | PASS | Real NestJS Test module + supertest driving HTTP |
-| 3 | Auth + roles | PASS | Real Postgres integration covers signup/login/refresh/replay |
+| 1 | Build/monorepo | PASS | `pnpm run build` / `pnpm run typecheck` succeeds; all workspace packages compile |
+| 2 | API contract | PASS | **Zod 3.25 schemas** integrated via `contract-tests.spec.ts` verifying live HTTP responses |
+| 3 | Auth + roles | PASS | Real Postgres integration covers signup/login/refresh/replay/password-reset |
 | 4 | Authorization | PASS | Integration test asserts 403s on cross-tenant access |
 | 5 | Campaign lifecycle | PASS | Real DB end-to-end: draft → submitted → approved → active |
 | 6 | Ledger/money flow | PASS | Integration asserts CPM and CPC 60/30/10 splits with guarded campaign spend |
@@ -20,7 +20,7 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
 | 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **141 tests across 7 files** (real HTTP+DB + service-level) |
+| 11 | Tests/readiness | PASS | **168 tests across 8 files** (real HTTP+DB + service-level) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
@@ -33,7 +33,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 1. Build/monorepo -- PASS
 
-- `pnpm run build` compiles all workspace packages cleanly
+- `pnpm run build` and `pnpm run typecheck` compile all workspace packages cleanly
 - Turborepo with pnpm workspaces, TypeScript project references
 - Path aliases configured and resolved: `@waitlayer/config`, `@waitlayer/db`, `@waitlayer/shared`
 - `pnpm --filter waitlayer-api build` (i.e. `nest build`) produces `dist/apps/api/src/main.js`
@@ -49,6 +49,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - REST API at `/api/v1/` (set as global prefix in `main.ts`)
 - All extension, admin, advertiser, auth, campaign, fraud, ledger, payout, referral, api-keys, tool, and webhook endpoints implemented
 - DTO validation via NestJS `ValidationPipe` (whitelist + transform + `forbidNonWhitelisted: true`)
+- **Contract Validation:** 14+ Zod schemas in `@waitlayer/shared` (SignupResponse, LoginResponse, etc.) verify that API responses match the expected structural shapes in `contract-tests.spec.ts`
 - Shared HMAC signing utility at `packages/shared/src/signing.ts` (canonical JSON, sorted keys → HMAC-SHA256) used by API, CLI, and VS Code extension
 - Idempotency keys required on all extension write events
 
@@ -69,6 +70,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Session table tracks `tokenFamily` and `tokenHash` per token
 - Password hashing via bcryptjs with salt rounds 12
 - Stateless JWT-based email verification flow (`verify-email/request` and `verify-email/confirm`) with automatic trust score recalculation
+- Full password reset flow (forgotten $\rightarrow$ token $\rightarrow$ reset $\rightarrow$ session revocation)
 
 **What changed:**
 - JwtStrategy strictly verifies `aud === 'access'` and that `jti` is set, so refresh tokens cannot be used to access protected endpoints
@@ -231,7 +233,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**141 tests across 7 files (all pass):**
+**168 tests across 8 files (all pass):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
@@ -242,6 +244,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 | `payout/payout.service.spec.ts` | 14 | Unit | allocation validation, partial split, provider routing |
 | `integration/e2e-money-loop.spec.ts` | 27 | Service-level E2E | Campaign through payout via mocked Prisma |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
+| `integration/contract-tests.spec.ts` | 27 | **Contract** | Zod validation of API response shapes |
 
 **What the real HTTP integration test actually exercises (with `JWT_SECRET` and `DATABASE_URL` set):**
 - Real NestJS `Test.createTestingModule({imports: [AppModule]})`
@@ -329,8 +332,8 @@ pnpm run test
 pnpm run build
 
 # Run all API tests (requires DATABASE_URL + JWT_SECRET >= 32 chars)
-DATABASE_URL="postgresql://waitlayer:waitlayer-dev@localhost:5432/waitlayer" \
-JWT_SECRET="test-jwt-secret-for-integration-test-runs-only-32+" \
+DATABASE_URL="postgresql://waitlayer:waitlayer-dev@localhost:5432/waitlayer" \\
+JWT_SECRET="test-jwt-secret-for-integration-test-runs-only-32+" \\
   pnpm --filter waitlayer-api test
 
 # Run with coverage
@@ -358,7 +361,7 @@ pnpm --filter waitlayer-web dev
 | Real Google OAuth requires env | Low | `GOOGLE_CLIENT_ID` required for production; offline mock-token verifier is dev/test only |
 | Rate limits are per-process, in-memory only | Low | No Redis or distributed limiter; multi-instance deploys would each enforce limits independently |
 | No WebSockets / push | Low | Dashboards refresh on user action or polling |
-| Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET=change-me-in-production`, `EXTENSION_HMAC_SECRET=dev-secret-change-me` are placeholders only — must be rotated before production deploy |
+| Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET=change-me-in-production`, `EXTENSION_HMAC_SECRET=dev-secret-change-me-do-not-use-in-production` are placeholders only — must be rotated before production deploy |
 | Legacy global HMAC fallback remains for old device rows | Low | Registered devices with `Device.eventSecret` must use per-device signing; fallback is only for legacy rows where `eventSecret` is null. A production rollout should backfill or force re-registration, then remove the fallback entirely |
 | Docker Compose has orphan one-off containers locally | Low | `docker compose up -d` warned about old `promptpay-api-run-*` containers from prior manual runs; current named services are healthy |
 | Build emits `dist/apps/api/src/main.js` (not `dist/main.js`) | Info | Because path aliases reach outside `src/`, TypeScript's auto-`rootDir` puts output one level deeper. Dockerfile CMD is aligned to the actual path |
@@ -369,19 +372,10 @@ pnpm --filter waitlayer-web dev
 
 - `pnpm install --frozen-lockfile` — PASS
 - `pnpm --filter @waitlayer/db generate` — PASS
-- `pnpm --filter waitlayer-api typecheck` — PASS
-- `pnpm --filter waitlayer-api test src/ledger/ledger.service.spec.ts src/integration/e2e-money-loop.spec.ts` — PASS
-- `pnpm --filter waitlayer-api test src/integration/e2e-http-flow.spec.ts` — PASS, 42 tests
-- `pnpm --filter waitlayer-api test src/payout/payout.service.spec.ts` — PASS
-- `pnpm --filter waitlayer-vscode typecheck` — PASS
-- `pnpm --filter waitlayer-vscode build` — PASS
-- `rg "unsafe-inline" apps/vscode-extension/src` — PASS, no matches
-- `pnpm --filter waitlayer-api test` — PASS, 141 tests / 7 files
-- `pnpm run typecheck` — PASS
-- `pnpm run lint` — PASS with one existing warning in `apps/api/src/auth/auth.service.spec.ts`
-- `pnpm run test` — PASS, 141 tests / 7 files
+- `pnpm run typecheck` — PASS (13/13 tasks)
+- `pnpm run lint` — PASS (12/12 tasks)
 - `pnpm run build` — PASS
-- `docker compose build` — PASS; classic builder warned that buildx is not installed
-- `docker compose up -d` — PASS; `postgres`, `api`, and `web` running
+- `pnpm --filter waitlayer-api test` — PASS, 168 tests / 8 files
+- `docker compose build api` — PASS
 - `curl http://localhost:4002/api/v1/auth/me` — PASS smoke check, expected `401 Unauthorized`
 - `curl -I http://localhost:3000/` — PASS smoke check, `200 OK`
