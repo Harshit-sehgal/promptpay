@@ -4,12 +4,12 @@ import * as crypto from 'crypto';
 const CONFIG_SECTION = 'waitlayer';
 
 export class ConfigurationManager {
+  private readonly secrets: vscode.SecretStorage;
   private deviceKey = 'waitlayer.deviceFingerprint';
 
-  constructor(
-    private readonly secrets: vscode.SecretStorage = (globalThis as any).extensionContext
-      ?.secrets ?? new DummySecretStorage(),
-  ) {}
+  constructor(secrets?: vscode.SecretStorage) {
+    this.secrets = secrets ?? (globalThis as any).extensionContext?.secrets ?? new DummySecretStorage();
+  }
 
   getApiUrl(): string {
     return (

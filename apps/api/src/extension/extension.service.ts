@@ -3,6 +3,7 @@ import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
 import { LedgerService } from '../ledger/ledger.service';
+import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { FraudService } from '../fraud/fraud.service';
 import * as crypto from 'crypto';
 import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } from '@waitlayer/shared';
@@ -459,7 +460,7 @@ export class ExtensionService {
           status: 'confirmed',
           amountMinor: split.platformShare,
           currency: impression.campaign.currency,
-          bucket: 'platform_fee',
+          bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
           referenceId: impression.id,
           idempotencyKey: `${idempotencyBase}-plt`,
           description: 'Platform fee from impression',
@@ -473,7 +474,7 @@ export class ExtensionService {
           status: 'confirmed',
           amountMinor: split.reserveShare,
           currency: impression.campaign.currency,
-          bucket: 'fraud_reserve',
+          bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
           referenceId: impression.id,
           idempotencyKey: `${idempotencyBase}-res`,
           description: 'Fraud/payment reserve from impression',

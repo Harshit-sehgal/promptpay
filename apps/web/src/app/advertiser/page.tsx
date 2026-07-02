@@ -97,11 +97,21 @@ export default function AdvertisersPage() {
               <div className="space-y-2">
                 {data.campaigns.map((campaign) => (
                   <div key={campaign.id} className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${statusBadge(campaign.status)}`}>
                         {campaign.status}
                       </span>
                       <p className="text-white font-medium">{campaign.name}</p>
+                      {campaign.status === 'approved' && !(campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && (
+                        <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] px-2 py-0.5 rounded font-medium">
+                          Needs Approved Creative
+                        </span>
+                      )}
+                      {campaign.status === 'approved' && (campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
+                        <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] px-2 py-0.5 rounded font-medium">
+                          Insufficient Budget
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-6 text-sm">
                       <span className="text-ink-300">

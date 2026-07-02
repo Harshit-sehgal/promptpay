@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { REVENUE_SPLIT, LAUNCH_INCENTIVE_SPLIT, PAYOUT_HOLD_DAYS } from '@waitlayer/shared';
+import { PLATFORM_BUCKETS } from './ledger.constants';
 import { LedgerStatus } from '@waitlayer/shared';
 import { Prisma } from '@waitlayer/db';
 
@@ -113,7 +114,7 @@ export class LedgerService {
           status: 'confirmed',
           amountMinor: split.platformShare,
           currency,
-          bucket: 'platform_fee',
+          bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
           referenceId: impressionId,
           idempotencyKey: `${idempotencyBase}-plt`,
           description: 'Platform fee from impression',
@@ -127,7 +128,7 @@ export class LedgerService {
           status: 'confirmed',
           amountMinor: split.reserveShare,
           currency,
-          bucket: 'fraud_reserve',
+          bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
           referenceId: impressionId,
           idempotencyKey: `${idempotencyBase}-res`,
           description: 'Fraud/payment reserve from impression',
@@ -477,7 +478,7 @@ export class LedgerService {
       this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true } }),
       this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: 'fraud_reserve' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
     ]);
 
     const earningsMinor = totalEarnings._sum?.amountMinor ?? 0;

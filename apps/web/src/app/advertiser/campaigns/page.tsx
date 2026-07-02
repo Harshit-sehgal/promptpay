@@ -152,11 +152,22 @@ export default function AdvertiserCampaignsPage() {
                     className="bg-ink-800 border border-ink-600/30 rounded-xl p-5 hover:border-ink-600/60 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <StatusBadge status={campaign.status} />
                         <h3 className="text-white font-medium">{campaign.name}</h3>
                         <span className="text-ink-500 text-xs uppercase">{campaign.bidType}</span>
+                        {campaign.status === 'approved' && !(campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && (
+                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] px-2 py-0.5 rounded-md font-medium">
+                            Needs Approved Creative
+                          </span>
+                        )}
+                        {campaign.status === 'approved' && (campaign as any).creatives?.some((cr: any) => cr.status === 'approved') && campaign.budgetSpentMinor >= campaign.budgetTotalMinor && (
+                          <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[11px] px-2 py-0.5 rounded-md font-medium">
+                            Insufficient Budget
+                          </span>
+                        )}
                       </div>
+
                       <div className="flex items-center gap-3">
                         {campaign.status === 'draft' && (
                           <button

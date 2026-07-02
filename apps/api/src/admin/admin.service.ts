@@ -40,15 +40,16 @@ export class AdminService {
       throw new BadRequestException('Campaign must be in submitted status to approve');
     }
 
-    // Must have at least one approved creative to activate
+    // Must have at least one approved creative and remaining budget to activate
     const hasApprovedCreative = campaign.creatives.some((c: any) => c.status === 'approved');
+    const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
 
-    // Set status: 'approved' if no approved creatives yet, 'active' if ready to serve
-    const newStatus = hasApprovedCreative ? 'active' : 'approved';
+    // Set status: 'approved' if no approved creatives yet or no budget, 'active' if ready to serve
+    const newStatus = (hasApprovedCreative && hasBudget) ? 'active' : 'approved';
     return this.prisma.$transaction([
       this.prisma.campaign.update({
         where: { id: campaignId },
-        data: { status: newStatus, approvedAt: new Date(), activatedAt: hasApprovedCreative ? new Date() : null },
+        data: { status: newStatus, approvedAt: new Date(), activatedAt: (hasApprovedCreative && hasBudget) ? new Date() : null },
       }),
       this.prisma.campaignApproval.create({ data: { campaignId, reviewerId, decision: 'approved', reason } }),
     ]);

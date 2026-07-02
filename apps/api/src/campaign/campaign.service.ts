@@ -84,17 +84,20 @@ export class CampaignService {
       data: { status: 'approved', rejectionReason: null },
     });
 
-    // Check if the campaign is 'approved' and now has at least one approved creative
+    // Check if the campaign is 'approved' and now has at least one approved creative and has budget remaining
     // If so, auto-activate the campaign so it can serve ads
     const campaign = await this.prisma.campaign.findUnique({
       where: { id: creative.campaignId },
       include: { creatives: { where: { status: 'approved' } } },
     });
     if (campaign && campaign.status === 'approved' && campaign.creatives.length > 0) {
-      await this.prisma.campaign.update({
-        where: { id: campaign.id },
-        data: { status: 'active', activatedAt: new Date() },
-      });
+      const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
+      if (hasBudget) {
+        await this.prisma.campaign.update({
+          where: { id: campaign.id },
+          data: { status: 'active', activatedAt: new Date() },
+        });
+      }
     }
 
     return updated;

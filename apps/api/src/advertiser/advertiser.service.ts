@@ -48,7 +48,11 @@ export class AdvertiserService {
 
     const campaigns = await this.prisma.campaign.findMany({
       where: { advertiserId },
-      select: { id: true, name: true, status: true, bidType: true, bidAmountMinor: true, budgetTotalMinor: true, budgetSpentMinor: true, currency: true, createdAt: true },
+      include: {
+        creatives: {
+          select: { id: true, status: true }
+        }
+      },
     });
 
     const totalImpressions = await this.prisma.adImpression.count({
@@ -155,8 +159,20 @@ export class AdvertiserService {
 
   /** Resume a paused campaign */
   async resumeCampaign(campaignId: string, advertiserId: string) {
-    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      include: { creatives: true },
+    });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
+
+    const hasApprovedCreative = campaign.creatives.some((c: any) => c.status === 'approved');
+    if (!hasApprovedCreative) {
+      throw new BadRequestException('Cannot resume campaign: at least one approved creative is required');
+    }
+    if (campaign.budgetSpentMinor >= campaign.budgetTotalMinor) {
+      throw new BadRequestException('Cannot resume campaign: budget has been fully spent');
+    }
+
     this.validateTransition(campaign.status, 'active');
     return this.prisma.campaign.update({
       where: { id: campaignId },

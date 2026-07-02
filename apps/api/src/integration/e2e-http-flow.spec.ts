@@ -75,6 +75,7 @@ describe('End-to-End HTTP Integration Flow', () => {
   let devToken: string;
   let devUserId: string;
   let advertiserToken: string;
+  let advertiserBToken: string;
   let advertiserId: string;
   let adminToken: string;
   let adminUserId: string;
@@ -85,6 +86,7 @@ describe('End-to-End HTTP Integration Flow', () => {
   let impressionToken: string;
   let payoutAccountId: string;
   let earningEntryId: string;
+  let payoutId: string;
 
   describe('1. Authentication & Onboarding', () => {
     it('should successfully register a developer user', async () => {
@@ -122,6 +124,23 @@ describe('End-to-End HTTP Integration Flow', () => {
       advertiserToken = res.body.accessToken;
     });
 
+    it('should successfully register a second advertiser user (B)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/signup')
+        .send({
+          email: 'adv-b@waitlayer.com',
+          password: 'password123',
+          role: UserRole.ADVERTISER,
+          name: 'Alternative Advertiser',
+          country: 'US',
+        })
+        .expect(201);
+
+      expect(res.body.user).toBeDefined();
+      expect(res.body.user.role).toBe('advertiser');
+      advertiserBToken = res.body.accessToken;
+    });
+
     it('should successfully register an admin user', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
@@ -139,6 +158,8 @@ describe('End-to-End HTTP Integration Flow', () => {
       adminUserId = res.body.user.id;
     });
 
+    let firstDevRefreshToken: string;
+
     it('should authenticate registered users to obtain tokens', async () => {
       // Developer Login
       const devRes = await request(app.getHttpServer())
@@ -146,6 +167,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ email: 'dev@waitlayer.com', password: 'password123' })
         .expect(200);
       devToken = devRes.body.accessToken;
+      firstDevRefreshToken = devRes.body.refreshToken;
 
       // Admin Login
       const adminRes = await request(app.getHttpServer())
@@ -153,6 +175,58 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ email: 'admin@waitlayer.com', password: 'password123' })
         .expect(200);
       adminToken = adminRes.body.accessToken;
+
+      // Advertiser B Login
+      const advBRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: 'adv-b@waitlayer.com', password: 'password123' })
+        .expect(200);
+      advertiserBToken = advBRes.body.accessToken;
+    });
+
+    it('should rotate refresh token and reject reuse of old refresh token', async () => {
+      // 1. Rotate token
+      const rotateRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: firstDevRefreshToken })
+        .expect(200);
+
+      const newAccessToken = rotateRes.body.accessToken;
+      const newRefreshToken = rotateRes.body.refreshToken;
+      expect(newAccessToken).toBeDefined();
+      expect(newRefreshToken).toBeDefined();
+
+      // Verify new access token works
+      await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${newAccessToken}`)
+        .expect(200);
+
+      // 2. Attempt to reuse old refresh token -> should be rejected with 401
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: firstDevRefreshToken })
+        .expect(401);
+
+      // 3. Verify that the new access token is ALSO revoked now because family sessions were revoked on reuse detection
+      await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${newAccessToken}`)
+        .expect(401);
+
+      // Login again to refresh devToken for subsequent tests
+      const loginRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: 'dev@waitlayer.com', password: 'password123' })
+        .expect(200);
+      devToken = loginRes.body.accessToken;
+    });
+
+    it('should create advertiser B profile automatically', async () => {
+      await request(app.getHttpServer())
+        .get('/api/v1/advertiser/profile')
+        .set('Authorization', `Bearer ${advertiserBToken}`)
+        .expect(200);
     });
 
     it('should verify developer email and recalculate trust score', async () => {
@@ -280,6 +354,50 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Campaign should transition to active as it has an approved creative
       const updatedCampaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
       expect(updatedCampaign?.status).toBe('active');
+    });
+
+    it('should prevent unauthorized users from accessing campaign stats', async () => {
+      // Advertiser B stats check -> should be 403 Forbidden
+      await request(app.getHttpServer())
+        .get(`/api/v1/campaigns/${campaignId}/stats`)
+        .set('Authorization', `Bearer ${advertiserBToken}`)
+        .expect(403);
+
+      // Developer stats check -> should be 403 Forbidden
+      await request(app.getHttpServer())
+        .get(`/api/v1/campaigns/${campaignId}/stats`)
+        .set('Authorization', `Bearer ${devToken}`)
+        .expect(403);
+    });
+
+    it('should prevent unauthorized users from listing campaign creatives', async () => {
+      // Advertiser B creatives check -> should be 403 Forbidden
+      await request(app.getHttpServer())
+        .get(`/api/v1/campaigns/${campaignId}/creatives`)
+        .set('Authorization', `Bearer ${advertiserBToken}`)
+        .expect(403);
+
+      // Developer creatives check -> should be 403 Forbidden
+      await request(app.getHttpServer())
+        .get(`/api/v1/campaigns/${campaignId}/creatives`)
+        .set('Authorization', `Bearer ${devToken}`)
+        .expect(403);
+    });
+
+    it('should prevent unauthorized users from updating campaign creatives', async () => {
+      // Advertiser B creative update -> should be 403 Forbidden
+      await request(app.getHttpServer())
+        .patch(`/api/v1/campaigns/creatives/${creativeId}`)
+        .set('Authorization', `Bearer ${advertiserBToken}`)
+        .send({ title: 'Hacked Title' })
+        .expect(403);
+
+      // Developer creative update -> should be 403 Forbidden
+      await request(app.getHttpServer())
+        .patch(`/api/v1/campaigns/creatives/${creativeId}`)
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ title: 'Hacked Title' })
+        .expect(403);
     });
   });
 
@@ -487,10 +605,39 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       expect(res.body.status).toBe('requested');
       expect(res.body.requestedAmountMinor).toBe(1200);
+      payoutId = res.body.id;
 
       // Earning entries status should remain confirmed after payout request, before admin processes it
       const entry = await prisma.earningsLedger.findUnique({ where: { id: earningEntryId } });
       expect(entry?.status).toBe('confirmed');
     });
+
+    it('should allow admin to approve and mark payout as paid', async () => {
+      // 1. Approve payout request (moves status to approved)
+      await request(app.getHttpServer())
+        .post(`/api/v1/admin/payouts/${payoutId}/approve`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ note: 'Approving for payout' })
+        .expect(201);
+
+      // 2. Mark payout as paid (executes ledger status change to paid)
+      const markPaidRes = await request(app.getHttpServer())
+        .post(`/api/v1/admin/payouts/${payoutId}/mark-paid`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          providerTxId: 'tx-paypal-12345',
+          paidAt: new Date().toISOString(),
+          amountMinor: 1200,
+          currency: 'USD',
+        })
+        .expect(201);
+
+      expect(markPaidRes.body.status).toBe('paid');
+
+      // 3. Verify developer earnings entry transitions to status paid
+      const entry = await prisma.earningsLedger.findUnique({ where: { id: earningEntryId } });
+      expect(entry?.status).toBe('paid');
+    });
   });
 });
+
