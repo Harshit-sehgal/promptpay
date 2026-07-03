@@ -22,7 +22,7 @@ export interface RequestLike {
 const MAX_FAILURES = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
-const tracker = new Map<string, { failures: number; lockUntil: number }>();
+const tracker = new Map<string, { failures: number; lockUntil: number; lastFailure: number }>();
 
 @Injectable()
 export class BruteForceGuard {
@@ -65,7 +65,7 @@ export class BruteForceGuard {
 
     const failures = (entry?.failures ?? 0) + 1;
     const lockUntil = failures >= MAX_FAILURES ? now + LOCK_DURATION_MS : 0;
-    tracker.set(key, { failures, lockUntil });
+    tracker.set(key, { failures, lockUntil, lastFailure: now });
   }
 
   /** Call on login success — reset counter */
@@ -82,15 +82,19 @@ export class BruteForceGuard {
     const now = Date.now();
     for (const [key, entry] of tracker.entries()) {
       // Remove entries where lock has expired or where there's no lock and no recent activity
-      if (entry.lockUntil && entry.lockUntil <= now) {
+      if (
+        (entry.lockUntil && entry.lockUntil <= now) ||
+        (!entry.lockUntil && now - entry.lastFailure > LOCK_DURATION_MS)
+      ) {
         tracker.delete(key);
       }
     }
   }
 }
 
-// Periodic cleanup every 5 minutes to prevent unbounded memory growth
-setInterval(() => BruteForceGuard.cleanup(), 5 * 60 * 1000);
+// Periodic cleanup every 5 minutes to prevent unbounded memory growth.
+// .unref() prevents the interval from keeping the process alive during shutdown.
+setInterval(() => BruteForceGuard.cleanup(), 5 * 60 * 1000).unref();
 
 function resolveIp(req: RequestLike): string {
   const forwarded = req.headers?.['x-forwarded-for'];
