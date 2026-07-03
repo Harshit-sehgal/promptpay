@@ -42,7 +42,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = process.env.API_PORT || 4002;
+  const port = process.env.API_PORT || 4000;
   await app.listen(port);
   console.log(`🚀 WaitLayer API running on http://localhost:${port}`);
 }

@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottleByRouteGuard } from './common/guards/throttle-by-route.guard';
 import { BruteForceGuard } from './common/guards/brute-force.guard';
+import { ApiKeyGuard } from './common/guards/api-key.guard';
 import { AuthModule } from './auth/auth.module';
 import { DeveloperModule } from './developer/developer.module';
 import { AdvertiserModule } from './advertiser/advertiser.module';
@@ -42,6 +43,10 @@ import { HealthModule } from './health/health.module';
     ReferralModule,
   ],
   providers: [
+    // ApiKeyGuard first: it's a no-op unless `x-api-key` is present AND the
+    // route opted in via @AllowApiKey(). Otherwise it passes through and lets
+    // JwtAuthGuard authenticate the request normally.
+    { provide: APP_GUARD, useClass: ApiKeyGuard },
     { provide: APP_GUARD, useClass: BruteForceGuard },
     { provide: APP_GUARD, useClass: ThrottleByRouteGuard },
   ],

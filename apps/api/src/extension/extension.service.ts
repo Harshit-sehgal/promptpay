@@ -848,9 +848,11 @@ export class ExtensionService {
   // ── HMAC Signature Verification ──
 
   /** Verify an event payload signature using the device-specific secret.
-   *  Global HMAC is accepted only for legacy device rows that do not yet have
-   *  an issued eventSecret. Once a device has a secret, global signatures no
-   *  longer authorize events for that device. */
+   *  Global HMAC is accepted ONLY when the device does not yet have
+   *  an issued eventSecret. Once a device has a per-device secret the global
+   *  key no longer authorizes events for that device — even if the device
+   *  secret fails to match. This prevents the global-secret bypass where
+   *  knowing the fallback key forges events for every device. */
   async verifyDeviceSignature(deviceId: string | null, payload: Record<string, unknown>, signature: string): Promise<boolean> {
     // Try device-specific secret first
     if (deviceId) {
@@ -859,11 +861,15 @@ export class ExtensionService {
         select: { eventSecret: true },
       });
       if (device?.eventSecret) {
-        // Try device-specific secret first; fall back to global for old clients
-        if (verifySignature(payload, device.eventSecret, signature)) return true;
+        // Device has a dedicated secret — ONLY accept the device secret.
+        // The global fallback is NEVER accepted for a device that has its
+        // own secret. Return the result directly (true or false), no
+        // further fallback.
+        return verifySignature(payload, device.eventSecret, signature);
       }
     }
-    // Fallback: global HMAC secret for legacy clients / tests
+    // Fallback: global HMAC secret for legacy device rows that never
+    // received an eventSecret, or for anonymous (no device) calls.
     return verifySignature(payload, this.hmacSecret, signature);
   }
 

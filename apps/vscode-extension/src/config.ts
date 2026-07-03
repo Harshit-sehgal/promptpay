@@ -21,10 +21,27 @@ export class ConfigurationManager {
   }
 
   getSecretKey(): string {
-    return (
-      vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('extensionSecret') ||
-      'dev-secret-change-me-do-not-use-in-production'
-    );
+    // ONLY fall back to a hardcoded secret in development (no VS Code config).
+    // In a production install we MUST refuse to sign events with a default
+    // published secret that an attacker can read from the public repo.
+    const configured =
+      vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('extensionSecret');
+
+    if (configured) return configured;
+
+    // During iterative extension development (Extension Host launched by F5)
+    // the `waitlayer.extensionSecret` setting may not be present; a harmless
+    // default unlocks the local dev loop. In distributed `.vsix` or CI, the
+    // default is NOT acceptable — warn prominently.
+    const vsix = typeof (process.env as Record<string, unknown>).VSCODE_PID === 'undefined' && process.env.NODE_ENV !== 'development';
+    if (vsix) {
+      vscode.window.showErrorMessage(
+        'WaitLayer: waitlayer.extensionSecret is not configured — events will NOT be signed. Set the VS Code workspace setting or launch from the dev extension host.',
+      );
+      throw new Error('waitlayer.extensionSecret is required for production extension installs');
+    }
+
+    return 'dev-secret-for-local-extension-host-only-never-ship-in-vsix';
   }
 
   async adsEnabled(): Promise<boolean> {

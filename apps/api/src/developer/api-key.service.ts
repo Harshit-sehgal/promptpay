@@ -1,6 +1,7 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../config/prisma.service';
+import { ALLOWED_API_KEY_SCOPES } from './dto/api-key.dto';
 
 @Injectable()
 export class ApiKeyService {
@@ -12,6 +13,44 @@ export class ApiKeyService {
    * The database stores only the SHA-256 hash of the key.
    */
   async generateApiKey(userId: string, scopes: string[], advertiserId?: string, expiresAt?: string) {
+    // Reject unknown scopes at the service layer too — defense-in-depth on top
+    // of the DTO enum check (scopes flow as `string[]` from the DTO).
+    const allowed = new Set<string>(ALLOWED_API_KEY_SCOPES);
+    for (const scope of scopes) {
+      if (!allowed.has(scope)) {
+        throw new BadRequestException(`Unknown scope: ${scope}`);
+      }
+    }
+
+    // Defensive date validation: if `expiresAt` is provided but not a valid
+    // date, `new Date(...)` would silently produce `Invalid Date` and the
+    // key would never expire (the `expiresAt < new Date()` check would be
+    // false for an Invalid Date). Reject malformed dates up front.
+    let parsedExpiresAt: Date | null = null;
+    if (expiresAt !== undefined && expiresAt !== null && expiresAt !== '') {
+      const parsed = new Date(expiresAt);
+      if (Number.isNaN(parsed.getTime())) {
+        throw new BadRequestException('expiresAt must be a valid ISO 8601 date');
+      }
+      if (parsed.getTime() < Date.now()) {
+        throw new BadRequestException('expiresAt must be in the future');
+      }
+      parsedExpiresAt = parsed;
+    }
+
+    // Ownership: `advertiserId` must belong to the requesting user. Without
+    // this check a developer could mint an API key claiming ANY advertiser's
+    // id and authenticate machine-to-machine calls as that advertiser.
+    if (advertiserId) {
+      const adv = await this.prisma.advertiser.findUnique({
+        where: { id: advertiserId },
+        select: { userId: true },
+      });
+      if (!adv || adv.userId !== userId) {
+        throw new ForbiddenException('advertiserId does not belong to the requesting user');
+      }
+    }
+
     const plainKey = `wl_${randomBytes(32).toString('hex')}`;
     const keyHash = this.hashKey(plainKey);
     const keyPrefix = plainKey.slice(0, 10); // first 10 chars for display/identification
@@ -24,7 +63,7 @@ export class ApiKeyService {
         keyPrefix,
         scopes,
         isActive: true,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        expiresAt: parsedExpiresAt,
       },
     });
 
@@ -45,7 +84,10 @@ export class ApiKeyService {
    */
   async validateApiKey(keyPlain: string) {
     if (!keyPlain || typeof keyPlain !== 'string') {
-      throw new BadRequestException('Invalid API key format');
+      // Single opaque message — never disclose whether the key exists, is
+      // revoked, or expired (those distinctions would let an attacker
+      // enumerate key liveness).
+      throw new BadRequestException('Invalid API key');
     }
 
     const keyHash = this.hashKey(keyPlain);
@@ -53,16 +95,12 @@ export class ApiKeyService {
       where: { keyHash },
     });
 
-    if (!apiKey) {
+    if (!apiKey || !apiKey.isActive) {
       throw new BadRequestException('Invalid API key');
     }
 
-    if (!apiKey.isActive) {
-      throw new BadRequestException('API key has been revoked');
-    }
-
     if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-      throw new BadRequestException('API key has expired');
+      throw new BadRequestException('Invalid API key');
     }
 
     // Update lastUsedAt asynchronously — don't block the request on this
@@ -108,7 +146,7 @@ export class ApiKeyService {
     }
 
     if (apiKey.ownerId !== userId) {
-      throw new BadRequestException('You can only revoke your own API keys');
+      throw new ForbiddenException('You can only revoke your own API keys');
     }
 
     return this.prisma.apiKey.update({

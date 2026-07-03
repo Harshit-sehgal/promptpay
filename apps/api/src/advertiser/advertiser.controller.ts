@@ -5,7 +5,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
 import { AdvertiserService } from './advertiser.service';
 import { StripeProvider } from '../payout/providers';
-import { CreateProfileDto, CreateCampaignDto, UpdateCampaignDto } from './dto';
+import { CreateProfileDto, CreateCampaignDto, UpdateCampaignDto, CreateDepositSessionDto } from './dto';
 
 @Controller('advertiser')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -82,14 +82,14 @@ export class AdvertiserController {
   @Post('deposit-session')
   async createDepositSession(
     @CurrentUser('id') userId: string,
-    @Body() body: { amountMinor: number; currency?: string },
+    @Body() dto: CreateDepositSessionDto,
   ) {
     const advertiser = await this.service.getOrCreateProfile(userId);
     const webBaseUrl = this.config.get<string>('WEB_BASE_URL', 'http://localhost:3000');
     return this.stripe.createDepositSession({
       advertiserId: advertiser.id,
-      amountMinor: body.amountMinor,
-      currency: body.currency ?? 'usd',
+      amountMinor: dto.amountMinor,
+      currency: dto.currency ?? 'usd',
       successUrl: `${webBaseUrl}/advertiser?deposit=success`,
       cancelUrl: `${webBaseUrl}/advertiser?deposit=cancelled`,
     });

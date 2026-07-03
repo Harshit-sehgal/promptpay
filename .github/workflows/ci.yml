@@ -12,6 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: waitlayer
+          POSTGRES_USER: waitlayer
+          POSTGRES_PASSWORD: waitlayer-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +48,14 @@ jobs:
         run: pnpm run lint
 
       - name: Test
+        env:
+          DATABASE_URL: postgresql://waitlayer:waitlayer-ci@localhost:5432/waitlayer
+          JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long-ok
+          EXTENSION_HMAC_SECRET: ci-test-hmac-secret-at-least-32-chars-long-ok
+          NODE_ENV: test
+          REDIS_URL: redis://localhost:6379
+          EMAIL_DRIVER: console
+          EMAIL_FROM: noreply@ci.local
         run: pnpm run test
 
       - name: Build
