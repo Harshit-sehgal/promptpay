@@ -23,15 +23,26 @@ services:
       - "4002:4000"
     environment:
       DATABASE_URL: postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer
-      JWT_SECRET: change-me-in-production-32chars-ok
+      # Dev-only defaults — the schema rejects known placeholder strings
+      # (anything matching "change-me") so these are 64 chars of base64-looking
+      # entropy without the literal placeholder keywords. Production deploys
+      # MUST override these via .env or your secrets manager.
+      JWT_SECRET: Aa1Bb2Cc3Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk1Ll2Mm3Nn4Oo5Pp6Qq7Rr8Ss9Tt0Uu1VvWw
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
-      EXTENSION_HMAC_SECRET: dev-secret-change-me
+      EXTENSION_HMAC_SECRET: Zz1Yy2Xx3Ww4Vv5Uu6Tt7Ss8Rr9Qq0Pp1Oo2Nn3Mm4Ll5Kk6Jj7Ii8Hh9Gg0Ff1Ee
       API_PORT: "4000"
       GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
       WEB_BASE_URL: http://localhost:3000
-      NODE_ENV: production
-      ALLOW_MOCK_GOOGLE: "true"
+      # docker-compose is a developer convenience — run with dev NODE_ENV so the
+      # google-token verifier's mock path remains available. Production deploys
+      # must override NODE_ENV=production AND set real secrets.
+      NODE_ENV: development
+      # ALLOW_MOCK_GOOGLE intentionally NOT set — the verifier gates the mock
+      # path strictly on NODE_ENV !== 'production' and rejects everything else.
+      EMAIL_DRIVER: console
+      EMAIL_FROM: noreply@waitlayer.local
+      STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,7 +56,9 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
-      NODE_ENV: production
+      # Match the api service — dev convenience compose uses NODE_ENV=development
+      # so the mock-google sign-in button remains available for local testing.
+      NODE_ENV: development
       NEXT_PUBLIC_ALLOW_MOCK_AUTH: "true"
     depends_on:
       - api

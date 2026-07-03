@@ -154,6 +154,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // ── Order matters: check account status BEFORE running the
+    // bcrypt.compare, so a banned/deleted account's password is never
+    // disclosed via the "Account is not active" oracle that previously
+    // fired only after a successful compare. ──
+    if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+      // Always throw the same generic message to avoid status enumeration.
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
     if (!user.passwordHash) {
       throw new UnauthorizedException('Account uses social login — sign in with Google');
     }
@@ -170,10 +179,6 @@ export class AuthService {
         afterSnap: { reason: 'bad_password' },
       }).catch(() => {});
       throw new UnauthorizedException('Invalid credentials');
-    }
-
-    if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
-      throw new UnauthorizedException('Account is not active');
     }
 
     const tokens = await this.generateTokenPair(user.id, user.role);
@@ -212,23 +217,27 @@ export class AuthService {
       return { user: this.sanitizeUser(user), ...tokens };
     }
 
-    // 2. Find by email → link Google account
-    user = await this.prisma.user.findUnique({ where: { email } });
-
-    if (user) {
-      if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
-        throw new UnauthorizedException('Account is not active');
-      }
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          googleId,
-          googleVerified: true,
-          emailVerified: true,
-        },
-      });
-      const tokens = await this.generateTokenPair(user.id, user.role);
-      return { user: this.sanitizeUser(user), ...tokens };
+    // 2. Find by email — REFUSE silent email-link to prevent account takeover.
+    //    If an attacker registers a Google account with a victim's email and
+    //    presents its ID token, linking by email alone would silently grant
+    //    them tokens for the victim's pre-existing password account. The
+    //    user must explicitly link Google from inside the existing account
+    //    (see /auth/link/google) after proving ownership via password or a
+    //    fresh signed email-link request.
+    const existingByEmail = await this.prisma.user.findUnique({ where: { email } });
+    if (existingByEmail) {
+      // Audit the attempted takeover so the real owner can detect it.
+      this.audit.log({
+        actorId: 'anonymous',
+        actorRole: 'anonymous',
+        action: 'google_link_blocked_existing_email',
+        targetType: 'user',
+        targetId: existingByEmail.id,
+        afterSnap: { email, googleSub: googleId },
+      }).catch(() => {});
+      throw new ConflictException(
+        'An account with this email already exists. Sign in with your password and link Google from your account settings.',
+      );
     }
 
     // 3. Create new user
@@ -288,34 +297,52 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token payload');
     }
 
-    // Find the session for this specific token
-    const session = await this.prisma.session.findUnique({
-      where: { id: payload.jti },
+    // ── Atomic refresh rotation with concurrency hardening ──
+    // 1) Revoke the old session via a conditional UPDATE keyed on
+    //    `revoked = false`. This is the DB-level CAS: if two concurrent
+    //    refreshes land, exactly one wins (count === 1).
+    // 2) Only AFTER the old session is atomically revoked do we re-verify
+    //    the token hash and load the user. If the CAS fails, another
+    //    refresh won the race — invalidate the whole token family.
+    const revokeResult = await this.prisma.session.updateMany({
+      where: { id: payload.jti, revoked: false },
+      data: { revoked: true },
     });
 
-    if (!session) {
-      // Replay attack / forged token. Revoke all sessions in the family if family ID is known
-      if (payload.family) {
+    if (revokeResult.count === 0) {
+      // Lost the race OR a prior refresh already revoked this session.
+      // Load the session to learn its family, then revoke everything in it.
+      const racedSession = await this.prisma.session.findUnique({
+        where: { id: payload.jti },
+        select: { tokenFamily: true, revoked: true },
+      });
+      if (payload.family || racedSession?.tokenFamily) {
         await this.prisma.session.updateMany({
-          where: { userId: payload.sub, tokenFamily: payload.family },
+          where: {
+            userId: payload.sub,
+            tokenFamily: racedSession?.tokenFamily ?? payload.family!,
+          },
           data: { revoked: true },
         });
       } else {
         await this.revokeAllSessions(payload.sub);
       }
-      throw new UnauthorizedException('Session not found — all sessions revoked');
-    }
-
-    if (session.revoked) {
-      // Reuse detected! Revoke all sessions for this token family
-      await this.prisma.session.updateMany({
-        where: { userId: payload.sub, tokenFamily: session.tokenFamily },
-        data: { revoked: true },
-      });
       throw new UnauthorizedException('Token reuse detected — family sessions revoked');
     }
 
-    // Verify token hash
+    // CAS succeeded — now load the session to verify the token hash and
+    // get the family. If the row was deleted between updateMany and this
+    // read, treat as forged token.
+    const session = await this.prisma.session.findUnique({
+      where: { id: payload.jti },
+    });
+    if (!session) {
+      // Should not happen since we just successfully revoked it. Be safe.
+      throw new UnauthorizedException('Session not found');
+    }
+
+    // Verify token hash. A mismatch means the JWT was tampered or belongs
+    // to a different family — invalidate the family.
     const isMatch = await bcrypt.compare(refreshToken, session.tokenHash);
     if (!isMatch) {
       await this.prisma.session.updateMany({
@@ -324,12 +351,6 @@ export class AuthService {
       });
       throw new UnauthorizedException('Token hash mismatch — family sessions revoked');
     }
-
-    // Revoke the old session
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: { revoked: true },
-    });
 
     // Rotate: issue new token pair
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
@@ -452,11 +473,14 @@ export class AuthService {
 
     await this.email.sendEmailVerification(user.email, token);
 
-    // Expose the raw token outside production for dev flows and integration tests
-    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    // Fail-closed: expose the raw token only when explicitly in dev/test.
+    // Anything other than 'development' | 'test' (including unset, 'staging',
+    // 'production') returns a generic success only — never the token.
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const expose = nodeEnv === 'development' || nodeEnv === 'test';
     return {
       message: 'Verification email sent',
-      ...(isProduction ? {} : { token }),
+      ...(expose ? { token } : {}),
     };
   }
 
@@ -519,9 +543,12 @@ export class AuthService {
 
     await this.email.sendPasswordReset(user.email, token);
 
-    // Expose the raw token outside production for dev flows and integration tests
-    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
-    return { ...generic, ...(isProduction ? {} : { token }) };
+    // Fail-closed: expose the raw token only when explicitly in dev/test.
+    // The reset token grants full account takeover — it must NEVER leak in
+    // any staging/preview/production environment.
+    const nodeEnv = this.config.get<string>('NODE_ENV');
+    const expose = nodeEnv === 'development' || nodeEnv === 'test';
+    return { ...generic, ...(expose ? { token } : {}) };
   }
 
   /** ── Password Reset: Confirm ──

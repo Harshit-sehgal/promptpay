@@ -1,3 +1,5 @@
+import { UserRole } from './enums';
+
 /** Revenue split defaults */
 export const REVENUE_SPLIT = {
   USER: 0.6,         // 60% to developer
@@ -78,6 +80,16 @@ export const PROHIBITED_DATA_FIELDS = [
 
 /** Maximum ad message length */
 export const MAX_AD_MESSAGE_LENGTH = 80;
+
+/** Roles a user is permitted to self-assign at signup / OAuth registration.
+ *  Privileged roles (admin, support, super_admin) must NEVER be reachable from
+ *  self-service signup — they are granted only via an admin escalation path. */
+export const SIGNUP_ALLOWED_ROLES = [
+  UserRole.DEVELOPER,
+  UserRole.ADVERTISER,
+] as const;
+
+export type SignupAllowedRole = (typeof SIGNUP_ALLOWED_ROLES)[number];
 
 /** Referral program */
 export const REFERRAL = {

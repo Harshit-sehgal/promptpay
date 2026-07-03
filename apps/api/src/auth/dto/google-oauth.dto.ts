@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsEnum, MaxLength } from 'class-validator';
-import { UserRole } from '@waitlayer/shared';
+import { UserRole, SIGNUP_ALLOWED_ROLES } from '@waitlayer/shared';
 
 export class GoogleOAuthDto {
   @IsString()
@@ -7,6 +7,8 @@ export class GoogleOAuthDto {
   idToken!: string;
 
   @IsOptional()
-  @IsEnum(UserRole)
+  @IsEnum(SIGNUP_ALLOWED_ROLES, {
+    message: 'Role must be developer or advertiser — privileged roles cannot be self-assigned',
+  })
   role?: UserRole;
 }

@@ -858,6 +858,10 @@ model Referral {
 
   rewards ReferralReward[]
 
+  // DB-level guard: a user can only be referred once. The service-layer
+  // check-then-create is racy; this unique index closes that race.
+  @@unique([referredId])
+
   @@index([referrerId])
   @@index([referredId])
   @@map("referrals")

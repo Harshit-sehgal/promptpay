@@ -42,10 +42,11 @@ export class GoogleTokenVerifier {
 
   /** Verify a Google ID token and return the decoded payload */
   async verify(idToken: string): Promise<GoogleIdTokenPayload> {
-    if (
-      idToken.startsWith('mock-google-token-') &&
-      (process.env.NODE_ENV !== 'production' || process.env.ALLOW_MOCK_GOOGLE === 'true')
-    ) {
+    // Mock path is intentionally narrow: ONLY when NODE_ENV is explicitly
+    // non-production. There is no env flag override — shipping a misconfigured
+    // prod deployment must NOT silently accept `mock-google-token-*` and grant
+    // verified Google identity for any email of the form `<id>@mock-google.com`.
+    if (idToken.startsWith('mock-google-token-') && process.env.NODE_ENV !== 'production') {
       const parts = idToken.split('-');
       const identifier = parts[3] || 'user';
       const email = `${identifier}@mock-google.com`;
@@ -76,6 +77,13 @@ export class GoogleTokenVerifier {
     }
 
     const payload = (await response.json()) as GoogleIdTokenPayload;
+
+    // Google's tokeninfo endpoint returns `email_verified` as the STRING
+    // "true"/"false" (not a JSON boolean). The earlier interface typed it
+    // as `boolean` and the audit check `if (!payload.email_verified)` then
+    // incorrectly passed the truthy string "false" — silently treating
+    // unverified Google emails as verified. Coerce here at the boundary.
+    payload.email_verified = String(payload.email_verified) === 'true';
 
     // Verify the token was issued for our app
     if (payload.aud !== this.clientId) {

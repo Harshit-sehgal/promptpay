@@ -37,6 +37,7 @@ function makeService(overrides?: Record<string, string>) {
       if (key === 'JWT_SECRET') return secret;
       if (key === 'JWT_ACCESS_TTL') return '15m';
       if (key === 'JWT_REFRESH_TTL') return '30d';
+      if (key === 'NODE_ENV') return 'test';
       return fallback ?? null;
     }),
   } as unknown as ConfigService;
@@ -174,6 +175,8 @@ describe('AuthService', () => {
       const family = 'fam-abc';
       const oldRefresh = await createRefreshToken('u-3', 'developer', family, '30d', 'sess-1');
 
+      // First updateMany (CAS) succeeds
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.session.findUnique.mockResolvedValue({
         id: 'sess-1',
         userId: 'u-3',
@@ -181,7 +184,6 @@ describe('AuthService', () => {
         tokenHash: await (await import('bcryptjs')).hash(oldRefresh, 4),
         revoked: false,
       });
-      mockPrisma.session.update.mockResolvedValue({});
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'u-3',
         status: 'active',
@@ -192,8 +194,11 @@ describe('AuthService', () => {
       const result = await service.refresh(oldRefresh);
       expect(result.accessToken).toBeDefined();
       expect(result.refreshToken).toBeDefined();
-      expect(mockPrisma.session.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'sess-1' }, data: { revoked: true } }),
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'sess-1' }),
+          data: { revoked: true },
+        }),
       );
       expect(mockPrisma.session.create).toHaveBeenCalled();
     });
@@ -203,7 +208,8 @@ describe('AuthService', () => {
       const family = 'fam-replay';
       const oldRefresh = await createRefreshToken('u-4', 'developer', family, '30d', 'sess-2');
 
-      // Session exists but is already revoked → replay detected
+      // CAS fails (session already revoked) → load raced session to get family
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.session.findUnique.mockResolvedValue({
         id: 'sess-2',
         userId: 'u-4',
@@ -226,7 +232,8 @@ describe('AuthService', () => {
       const family = 'fam-revoked';
       const oldRefresh = await createRefreshToken('u-4b', 'developer', family, '30d', 'sess-rev');
 
-      // Session already revoked (e.g. user logged out on another device)
+      // CAS fails (session already revoked) → load raced session to get family
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.session.findUnique.mockResolvedValue({
         id: 'sess-rev',
         userId: 'u-4b',
@@ -250,6 +257,7 @@ describe('AuthService', () => {
       const { service, createRefreshToken } = makeService();
       const oldRefresh = await createRefreshToken('u-5', 'developer', 'fam-ghost', '30d', 'sess-ghost');
 
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.session.findUnique.mockResolvedValue(null);
 
       await expect(service.refresh(oldRefresh)).rejects.toThrow(UnauthorizedException);
