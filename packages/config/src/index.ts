@@ -24,11 +24,10 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('30d'),
-  EXTENSION_HMAC_SECRET: z
-    .string()
-    .min(32)
-    .optional()
-    .default('dev-secret-change-me-do-not-use-in-production'),
+  // EXTENSION_HMAC_SECRET is required — no insecure default. A missing secret
+  // must fail fast at startup rather than silently falling back to a known value
+  // that would let anyone forge extension events.
+  EXTENSION_HMAC_SECRET: z.string().min(32),
 
   // Stripe (advertiser deposits)
   STRIPE_PUBLIC_KEY: z.string().optional(),

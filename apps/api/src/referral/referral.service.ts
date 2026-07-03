@@ -163,7 +163,10 @@ export class ReferralService {
           currency: REFERRAL.CURRENCY,
           bucket: 'referral_bonus',
           referenceId: referral.id,
-          idempotencyKey: `ref-rew-${referral.id}-${Date.now()}`,
+          // Deterministic key: a retry of the same referral reward must not
+          // create a duplicate ledger entry. Including Date.now() would defeat
+          // idempotency by generating a new key on every attempt.
+          idempotencyKey: `ref-rew-${referral.id}`,
           description: `Referral reward for referring user ${referredUserId}`,
         },
       }),

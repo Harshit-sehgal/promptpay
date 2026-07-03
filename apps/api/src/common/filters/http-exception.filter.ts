@@ -5,11 +5,14 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(HttpExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -22,6 +25,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getResponse()
         : 'Internal server error';
     const requestId = crypto.randomUUID();
+
+    // Log 5xx errors with the full stack — these are unexpected failures that
+    // need investigation. 4xx errors are client mistakes and are already logged
+    // by the LoggingInterceptor.
+    if (status >= 500) {
+      this.logger.error(
+        `Unhandled exception (requestId=${requestId}): ${exception instanceof Error ? exception.stack : String(exception)}`,
+      );
+    }
+
+    // If headers were already sent (e.g. streaming response), we can't write
+    // a JSON body — delegate to Express's default error handler.
+    if (response.headersSent) {
+      response.end();
+      return;
+    }
+
     response.status(status).json({
       statusCode: status,
       message: getExceptionMessage(message),
