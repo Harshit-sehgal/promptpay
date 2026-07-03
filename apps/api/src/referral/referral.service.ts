@@ -84,7 +84,9 @@ export class ReferralService {
       throw new BadRequestException('You cannot refer yourself');
     }
 
-    // Prevent re-referral — user already referred
+    // Prevent re-referral — user already referred. The schema's @@unique([referredId])
+    // is the authoritative guard (closes the TOCTOU race between findFirst and create);
+    // we check here for a clean error message in the no-race case.
     const existingReferred = await this.prisma.referral.findFirst({
       where: { referredId: userId },
     });
@@ -92,20 +94,34 @@ export class ReferralService {
       throw new BadRequestException('You have already used a referral code');
     }
 
-    // Create the referral record
-    const referral = await this.prisma.referral.create({
-      data: {
-        referrerId: referrer.id,
-        referredId: userId,
-        code: `ref_${userId.slice(0, 8)}_${Date.now()}`,
-        status: 'pending',
-      },
-    });
+    // Create the referral record — catch DB-level unique-constraint violation
+    // (P2002 on @@unique([referredId]) for the concurrent race window).
+    try {
+      const referral = await this.prisma.referral.create({
+        data: {
+          referrerId: referrer.id,
+          referredId: userId,
+          code: `ref_${userId.slice(0, 8)}_${Date.now()}`,
+          status: 'pending',
+        },
+      });
 
-    return {
-      referralId: referral.id,
-      referrerEmail: referrer.email,
-    };
+      return {
+        referralId: referral.id,
+        referrerEmail: referrer.email,
+      };
+    } catch (err: unknown) {
+      if (this.isUniqueConstraintViolation(err)) {
+        throw new BadRequestException('You have already used a referral code');
+      }
+      throw err;
+    }
+  }
+
+  private isUniqueConstraintViolation(err: unknown): boolean {
+    // Prisma's P2002 error code is documented but the surface is loosely typed.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return Boolean((err as any)?.code === 'P2002');
   }
 
   /** Process referral reward when referred user meets criteria (first payout completed) */
