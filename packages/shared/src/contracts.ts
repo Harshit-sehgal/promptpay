@@ -94,7 +94,7 @@ export const RegisterDeviceResponse = z.object({
   userId: z.string(),
   fingerprintHash: z.string(),
   toolType: z.string(),
-  publicKey: z.string().optional(),
+  publicKey: z.string().nullable().optional(),
   extensionVersion: z.string().optional(),
   platform: z.string().optional(),
   eventSecret: z.string().optional(),
@@ -197,9 +197,9 @@ export const PayoutMethodResponse = z.object({
 export const PayoutAllocationResponse = z.object({
   id: z.string(),
   earningsEntryId: z.string(),
-  payoutRequestId: z.string(),
+  payoutRequestId: z.string().optional(),
   amountMinor: z.number().nonnegative(),
-  createdAt: z.string(),
+  createdAt: z.string().optional(),
 });
 
 export const PayoutRequestResponse = z.object({
