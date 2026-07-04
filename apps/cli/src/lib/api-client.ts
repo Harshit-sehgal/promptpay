@@ -3,10 +3,35 @@ import * as os from 'os';
 import * as https from 'https';
 import * as http from 'http';
 import { signPayload } from '@waitlayer/shared';
-import { Credentials, getCredentials, setCredentials } from './credentials';
+import { Credentials, getCredentials, setCredentials, storeDeviceEventSecret, getDeviceEventSecret } from './credentials';
 
 const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
-const HMAC_SECRET = process.env.EXTENSION_HMAC_SECRET ?? 'dev-secret-change-me';
+
+/**
+ * HMAC secret for signing extension events.
+ *
+ * In development (no env var set) a hardcoded fallback is used so the CLI
+ * works without configuration. In production this MUST be set via the
+ * EXTENSION_HMAC_SECRET environment variable — the fallback is insecure
+ * and will be rejected by the server in production deployments.
+ */
+const HMAC_SECRET: string = (() => {
+  const envSecret = process.env.EXTENSION_HMAC_SECRET;
+  if (envSecret) return envSecret;
+
+  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+  if (!isDev) {
+    throw new Error(
+      'EXTENSION_HMAC_SECRET environment variable is required in production. ' +
+      'Set it to the same value configured on the WaitLayer API server.',
+    );
+  }
+  console.warn(
+    '[WaitLayer CLI] EXTENSION_HMAC_SECRET not set — using dev-only fallback. ' +
+    'Set the env var for production use.',
+  );
+  return 'dev-secret-cli-fallback-only-never-for-production';
+})();
 
 interface RegisterDeviceResponse {
   id: string;
@@ -20,7 +45,9 @@ export class ApiClient {
   constructor(private creds: Credentials | null = null) {
     if (!this.creds) this.creds = getCredentials();
     if (this.creds?.deviceUUID) this.deviceUUID = this.creds.deviceUUID;
-    if (this.creds?.deviceEventSecret) this.deviceEventSecret = this.creds.deviceEventSecret;
+    // Event secret is NOT in the JSON credential file (it's in a separate
+    // obfuscated file). Fetch from the dedicated helper.
+    this.deviceEventSecret = getDeviceEventSecret();
   }
 
   /** Sign payload with the per-device secret when available; falls back to the
@@ -47,9 +74,10 @@ export class ApiClient {
       this.deviceEventSecret = res.eventSecret ?? null;
       if (this.creds) {
         this.creds.deviceUUID = res.id;
-        if (res.eventSecret) this.creds.deviceEventSecret = res.eventSecret;
         setCredentials(this.creds);
       }
+      // Persist the event secret separately (not in the main credential JSON).
+      if (res.eventSecret) storeDeviceEventSecret(res.eventSecret);
       return res.id;
     }
     throw new Error('Failed to register CLI device');
@@ -129,7 +157,17 @@ export class ApiClient {
     });
   }
 
-  private async raw<T>(method: 'GET' | 'POST', path: string, body?: Record<string, unknown>): Promise<T> {
+  private async raw<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: Record<string, unknown>,
+    /** Internal: when true, this call IS the refresh attempt — never recurse
+     *  into another refresh on 401. Without this guard, an expired/invalid
+     *  refresh token (server returns 401 on /auth/refresh) would cause unbounded
+     *  recursion → stack overflow, because the inner raw() 401-branch would
+     *  call raw('POST', '/auth/refresh', …) again, forever. */
+    _isRefreshAttempt = false,
+  ): Promise<T> {
     const url = new URL(path.startsWith('http') ? path : API_URL + path);
     const bodyStr = body ? JSON.stringify(body) : '';
 
@@ -171,13 +209,17 @@ export class ApiClient {
               const parsed = data.length ? JSON.parse(data) : {};
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 resolve(parsed as T);
-              } else if (res.statusCode === 401 && this.creds?.refreshToken) {
-                // Single retry after refresh
+              } else if (res.statusCode === 401 && this.creds?.refreshToken && !_isRefreshAttempt) {
+                // Single retry after refresh. _isRefreshAttempt bounds this to
+                // ONE refresh attempt; if /auth/refresh itself returns 401
+                // (expired/revoked refresh token) the inner call takes the
+                // 401 branch with _isRefreshAttempt=true → reject cleanly
+                // instead of recursing.
                 try {
                   const refresh = await this.raw<{
                     accessToken: string;
                     refreshToken: string;
-                  }>('POST', '/auth/refresh', { refreshToken: this.creds.refreshToken });
+                  }>('POST', '/auth/refresh', { refreshToken: this.creds.refreshToken }, true);
                   if (this.creds) {
                     this.creds.accessToken = refresh.accessToken;
                     this.creds.refreshToken = refresh.refreshToken;

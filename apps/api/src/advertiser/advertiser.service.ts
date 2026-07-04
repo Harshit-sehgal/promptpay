@@ -2,17 +2,17 @@ import { Injectable, ForbiddenException, NotFoundException, BadRequestException 
 import { BidType, Prisma } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { CampaignService } from '../campaign/campaign.service';
-import { CampaignStatus, AD_SERVING } from '@waitlayer/shared';
+import { CampaignStatus, AD_SERVING, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 
 /** Valid campaign status transitions */
 const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
-  draft: ['submitted'] as CampaignStatus[],
-  submitted: ['approved', 'rejected'] as CampaignStatus[],
-  approved: ['active', 'rejected'] as CampaignStatus[],
-  active: ['paused'] as CampaignStatus[],
-  paused: ['active'] as CampaignStatus[],
-  rejected: ['draft'] as CampaignStatus[],
-  archived: [] as CampaignStatus[],
+  draft: [CampaignStatus.SUBMITTED],
+  submitted: [CampaignStatus.APPROVED, CampaignStatus.REJECTED],
+  approved: [CampaignStatus.ACTIVE, CampaignStatus.REJECTED],
+  active: [CampaignStatus.PAUSED],
+  paused: [CampaignStatus.ACTIVE],
+  rejected: [CampaignStatus.DRAFT],
+  archived: [],
 };
 
 @Injectable()
@@ -29,8 +29,16 @@ export class AdvertiserService {
     if (user.role !== 'advertiser') throw new ForbiddenException('Not an advertiser account');
 
     return this.prisma.advertiser.create({
-      data: { userId, companyName: user.name || 'Unnamed Company', billingEmail: user.email },
+      data: { userId, companyName: user.name || DEFAULT_COMPANY_NAME, billingEmail: user.email },
     });
+  }
+
+  /** Resolve an advertiser by raw id — used by API-key auth where the key is
+   *  scoped to a specific advertiser (no UserId lookup available). */
+  async getProfileById(advertiserId: string) {
+    const advertiser = await this.prisma.advertiser.findUnique({ where: { id: advertiserId } });
+    if (!advertiser) throw new NotFoundException('Advertiser not found');
+    return advertiser;
   }
 
   async createProfile(userId: string, dto: { companyName: string; billingEmail: string; websiteUrl?: string }) {
@@ -194,6 +202,19 @@ export class AdvertiserService {
     if (campaign.status !== 'draft') {
       throw new BadRequestException('Campaign can only be edited in DRAFT status');
     }
+    // Re-validate inputs — the createCampaign path enforces bounds, but
+    // an update can be used to bypass them. Mirror the same checks.
+    if (dto.budgetTotalMinor !== undefined) {
+      if (dto.budgetTotalMinor < AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR) {
+        throw new BadRequestException(`Minimum budget is $${AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100}`);
+      }
+      if (dto.budgetTotalMinor > AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR) {
+        throw new BadRequestException(`Maximum budget is $${AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100}`);
+      }
+    }
+    if (dto.bidAmountMinor !== undefined && dto.bidAmountMinor <= 0) {
+      throw new BadRequestException('Bid amount must be positive');
+    }
     return this.prisma.campaign.update({
       where: { id: campaignId },
       data: dto,
@@ -216,6 +237,16 @@ export class AdvertiserService {
     if (params.from || params.to) {
       const gte = params.from ? new Date(params.from) : undefined;
       const lte = params.to ? new Date(params.to) : undefined;
+      // Reject malformed date strings up-front — `new Date("not a date")`
+      // returns Invalid Date, which silently widens the query to "no lower
+      // bound" or "no upper bound" depending on the field. The HTTP
+      // controller already catches this; this guards non-HTTP callers.
+      if (gte && Number.isNaN(gte.getTime())) {
+        throw new BadRequestException(`Invalid 'from' date: ${params.from}`);
+      }
+      if (lte && Number.isNaN(lte.getTime())) {
+        throw new BadRequestException(`Invalid 'to' date: ${params.to}`);
+      }
       impressionTimeWhere.createdAt = { gte, lte };
       clickTimeWhere.createdAt = { gte, lte };
     }

@@ -17,8 +17,9 @@ describe('GoogleTokenVerifier', () => {
     verifier = new GoogleTokenVerifier(mockConfig);
   });
 
-  it('should verify mock tokens in non-production environments', async () => {
+  it('should verify mock tokens in non-production environments with flag set', async () => {
     process.env.NODE_ENV = 'development';
+    process.env.ALLOW_MOCK_GOOGLE = 'true';
     const payload = await verifier.verify('mock-google-token-john-doe');
     
     expect(payload.email).toBe('john@mock-google.com');

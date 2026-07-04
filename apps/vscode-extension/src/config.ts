@@ -9,8 +9,16 @@ export class ConfigurationManager {
   private deviceUuidKey = 'waitlayer.deviceUUID';
   private deviceEventSecretKey = 'waitlayer.deviceEventSecret';
 
-  constructor(secrets?: vscode.SecretStorage) {
-    this.secrets = secrets ?? (globalThis as any).extensionContext?.secrets ?? new DummySecretStorage();
+  /**
+   * Secrets is required — it carries the VS Code SecretStorage instance from
+   * `context.secrets`. There is no globalThis or DummySecretStorage fallback;
+   * the DummySecretStorage was removed because it leaks secrets to in-memory
+   * storage visible to any extension debugging session. When SecretStorage is
+   * not available during unit tests, the test harness must inject its own
+   * mock — the ConfigurationManager itself won't paper over the gap.
+   */
+  constructor(secrets: vscode.SecretStorage) {
+    this.secrets = secrets;
   }
 
   getApiUrl(): string {
@@ -21,22 +29,23 @@ export class ConfigurationManager {
   }
 
   getSecretKey(): string {
-    // ONLY fall back to a hardcoded secret in development (no VS Code config).
-    // In a production install we MUST refuse to sign events with a default
-    // published secret that an attacker can read from the public repo.
+    // ONLY fall back to a hardcoded secret in development. In a production
+    // install we MUST refuse to sign events with a default published secret
+    // that an attacker can read from the public repo.
     const configured =
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('extensionSecret');
 
     if (configured) return configured;
 
-    // During iterative extension development (Extension Host launched by F5)
-    // the `waitlayer.extensionSecret` setting may not be present; a harmless
-    // default unlocks the local dev loop. In distributed `.vsix` or CI, the
-    // default is NOT acceptable — warn prominently.
-    const vsix = typeof (process.env as Record<string, unknown>).VSCODE_PID === 'undefined' && process.env.NODE_ENV !== 'development';
-    if (vsix) {
+    // `VSCODE_PID` is set for the Extension Development Host (F5) AND for
+    // normal installs, so it cannot distinguish dev from prod. The reliable
+    // dev-only signal is an explicit opt-in env var set by the dev launch
+    // config (.vscode/launch.json). Absent that, treat every install as
+    // production and refuse — never silently fall back to the published secret.
+    const isDevHost = process.env.WAITLAYER_DEV_EXTENSION === '1' || process.env.NODE_ENV === 'development';
+    if (!isDevHost) {
       vscode.window.showErrorMessage(
-        'WaitLayer: waitlayer.extensionSecret is not configured — events will NOT be signed. Set the VS Code workspace setting or launch from the dev extension host.',
+        'WaitLayer: waitlayer.extensionSecret is not configured — events will NOT be signed. Set the VS Code workspace setting `waitlayer.extensionSecret` to the value configured on the WaitLayer API server.',
       );
       throw new Error('waitlayer.extensionSecret is required for production extension installs');
     }
@@ -78,7 +87,9 @@ export class ConfigurationManager {
     try {
       const raw = await this.secrets.get('waitlayer.authTokens');
       if (raw) return JSON.parse(raw);
-    } catch {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
       /* tokens not stored yet */
     }
     return null;
@@ -87,7 +98,9 @@ export class ConfigurationManager {
   async storeTokens(tokens: { accessToken: string; refreshToken: string }): Promise<void> {
     try {
       await this.secrets.store('waitlayer.authTokens', JSON.stringify(tokens));
-    } catch {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
       /* storage not available */
     }
   }
@@ -95,7 +108,9 @@ export class ConfigurationManager {
   async clearTokens(): Promise<void> {
     try {
       await this.secrets.delete('waitlayer.authTokens');
-    } catch {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
       /* storage not available */
     }
   }
@@ -104,7 +119,9 @@ export class ConfigurationManager {
     try {
       const id = await this.secrets.get(this.deviceKey);
       if (id) return id;
-    } catch {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
       /* fall through to fingerprint generation */
     }
 
@@ -117,7 +134,9 @@ export class ConfigurationManager {
     // Persist in SecretStorage so it's stable across restarts
     try {
       await this.secrets.store(this.deviceKey, fingerprint);
-    } catch {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
       /* storage not available — fingerprint regenerated each session */
     }
 
@@ -128,59 +147,52 @@ export class ConfigurationManager {
     try {
       const id = await this.secrets.get(this.deviceUuidKey);
       if (id) return id;
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
     return null;
   }
 
   async storeDeviceUUID(uuid: string): Promise<void> {
     try {
       await this.secrets.store(this.deviceUuidKey, uuid);
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
   }
 
   async getDeviceEventSecret(): Promise<string | null> {
     try {
       const secret = await this.secrets.get(this.deviceEventSecretKey);
       if (secret) return secret;
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
     return null;
   }
 
   async storeDeviceEventSecret(secret: string): Promise<void> {
     try {
       await this.secrets.store(this.deviceEventSecretKey, secret);
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
   }
 
   async clearDeviceRegistration(): Promise<void> {
     try {
       await this.secrets.delete(this.deviceUuidKey);
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
     try {
       await this.secrets.delete(this.deviceEventSecretKey);
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
   }
 }
 
-class DummySecretStorage {
-  private map = new Map<string, string>();
-  constructor() {
-    console.warn(
-      '[WaitLayer] SecretStorage not available. Falling back to insecure in-memory storage. This should only happen in development or tests.',
-    );
-  }
-  async get(k: string): Promise<string | undefined> {
-    return Promise.resolve(this.map.get(k));
-  }
-  async store(k: string, v: string): Promise<void> {
-    this.map.set(k, v);
-    return Promise.resolve();
-  }
-  async delete(k: string): Promise<void> {
-    this.map.delete(k);
-    return Promise.resolve();
-  }
-}
 
 function currentTimeHHMM(): string {
   const now = new Date();

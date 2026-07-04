@@ -13,6 +13,7 @@
     "@waitlayer/shared": "workspace:*",
     "@waitlayer/ui": "workspace:*",
     "axios": "^1.18.1",
+    "jose": "^6.2.3",
     "lucide-react": "^0.525.0",
     "next": "^15.3.0",
     "react": "^19.1.0",

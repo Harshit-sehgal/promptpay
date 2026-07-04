@@ -12,7 +12,10 @@ export class AdPanel {
 
   constructor(
     private context: vscode.ExtensionContext,
-    private api: any,
+    private api: {
+      recordClick: (impressionToken: string) => Promise<void>;
+      recordImpressionEnd: (impressionToken: string, visibleDurationMs: number) => Promise<void>;
+    },
   ) {}
 
   show(
@@ -77,6 +80,22 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/** Serialize a value for safe embedding inside a `<script>` block.
+ *  `JSON.stringify` does NOT escape `<` or `/`, so an advertiser-controlled
+ *  string like `</script><svg onload=...>` would close the nonce-gated script
+ *  tag and run the payload with webview privileges (postMessage to the host,
+ *  exfiltrate the impression token). Replace the HTML-significant characters
+ *  with JS Unicode escapes that decode back to the original character inside
+ *  the JS string literal — the runtime value is unchanged but the serialized
+ *  source contains no parseable `</script>`. */
+function jsonForScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\//g, '\\u002f');
+}
+
 function nonce(): string {
   return crypto.randomBytes(16).toString('base64');
 }
@@ -129,9 +148,11 @@ function renderHtml(
       <div class="meta">Sponsored — wait state detected</div>
       <script nonce="${scriptNonce}">
         const vscode = acquireVsCodeApi();
-        // Use safe DOM text injection — never innerHTML with advertiser content
-        document.getElementById('headline').textContent = ${JSON.stringify(ad.headline)};
-        document.getElementById('message').textContent = ${JSON.stringify(ad.message)};
+        // Use safe DOM text injection — never innerHTML with advertiser content.
+        // jsonForScript escapes HTML-significant characters into JS unicode
+        // escapes so an advertiser-controlled payload cannot close this script tag.
+        document.getElementById('headline').textContent = ${jsonForScript(ad.headline)};
+        document.getElementById('message').textContent = ${jsonForScript(ad.message)};
         ${hasSafeCtaUrl ? `document.getElementById('cta').addEventListener('click', () => { vscode.postMessage({ type: 'click' }); });` : ''}
       </script>
     </body>

@@ -301,21 +301,47 @@ export class PayoutService {
       );
     }
 
-    // Create allocation records
+    // Create allocation records. The `@@unique([earningsEntryId])` index is the
+    // DB floor that prevents two concurrent requestPayout calls from allocating
+    // the same earnings entry: the loser re-read eligible entries inside the tx
+    // but under READ COMMITTED the allocations table read happens before the
+    // winner commits, so it only learns of the collision from the unique
+    // constraint. Catch P2002 and surface a clean BadRequestException instead
+    // of leaking a raw Prisma error (→ opaque 500) to the client.
     for (const alloc of allocations) {
-      await tx.payoutAllocation.create({
-        data: {
-          payoutRequestId,
-          earningsEntryId: alloc.earningsEntryId,
-          amountMinor: alloc.amountMinor,
-        },
-      });
+      try {
+        await tx.payoutAllocation.create({
+          data: {
+            payoutRequestId,
+            earningsEntryId: alloc.earningsEntryId,
+            amountMinor: alloc.amountMinor,
+          },
+        });
+      } catch (err: unknown) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new BadRequestException(
+            'These earnings were just allocated to another payout. Please retry.',
+          );
+        }
+        throw err;
+      }
     }
 
     return allocations;
   }
 
-  /** Request a payout */
+  /** Request a payout.
+   *
+   *  The availability computation, fraud check, and account validation happen
+   *  **both** outside AND inside the transaction. The outer pass acts as a
+   *  pre-filter (avoiding expensive tx work when the user is clearly blocked),
+   *  but the authoritative re-check inside the $transaction closes the TOCTOU
+   *  window between the outer balance snapshot and the allocation. Two concurrent
+   *  requestPayout calls that both read the same outer-available will race inside
+   *  the tx; the call that allocates first exhausts capacity and causes the
+   *  second to fail `Insufficient confirmed earnings to allocate` inside
+   *  allocatePayoutEarnings (which re-reads eligible entries inside the tx).
+   */
   async requestPayout(userId: string, dto: {
     payoutAccountId: string;
     amountMinor: number;
@@ -333,8 +359,8 @@ export class PayoutService {
       throw new BadRequestException(`Minimum payout is $${PAYOUT.MINIMUM_THRESHOLD_MINOR / 100}`);
     }
 
-    // Balance check using precise allocation totals (not requestedAmountMinor)
-    const [confirmedEarnings, allocatedTotal] = await Promise.all([
+    // ── Outer pre-checks (fast rejection) ──
+    const [confirmedEarnings, allocatedTotal, openFlags, account] = await Promise.all([
       this.prisma.earningsLedger.aggregate({
         where: { userId, status: 'confirmed', entryType: 'credit' },
         _sum: { amountMinor: true },
@@ -348,29 +374,29 @@ export class PayoutService {
         },
         _sum: { amountMinor: true },
       }),
+      this.prisma.fraudFlag.count({
+        where: { userId, status: 'open', severity: { in: ['high', 'critical'] } },
+      }),
+      this.prisma.payoutAccount.findUnique({
+        where: { id: dto.payoutAccountId },
+      }),
     ]);
     const available = (confirmedEarnings._sum.amountMinor || 0) - (allocatedTotal._sum.amountMinor || 0);
     if (dto.amountMinor > available) {
       throw new BadRequestException('Insufficient available earnings');
     }
-
-    // Fraud check
-    const openFlags = await this.prisma.fraudFlag.count({
-      where: { userId, status: 'open', severity: { in: ['high', 'critical'] } },
-    });
     if (openFlags > 0) {
       throw new ForbiddenException('Payout blocked due to pending fraud review');
     }
-
-    // Validate payout account
-    const account = await this.prisma.payoutAccount.findUnique({
-      where: { id: dto.payoutAccountId },
-    });
     if (!account || account.userId !== userId) {
       throw new BadRequestException('Invalid payout account');
     }
 
-    // Create payout request + allocations atomically
+    // ── Authoritative allocation inside a transaction ──
+    // allocatePayoutEarnings re-reads eligible entries inside the tx (with
+    // allocated-entry exclusions bound to RESERVED_PAYOUT_STATUSES), so two
+    // concurrent payouts cannot double-allocate the same entry. The unique
+    // index on `payout_allocations.earningsEntryId` is the DB floor.
     return this.prisma.$transaction(async (tx) => {
       const payoutRequest = await tx.payoutRequest.create({
         data: {
@@ -450,7 +476,23 @@ export class PayoutService {
   }
 
   /** Mark a payout as paid (called by admin or webhook).
-   *  Marks only the exact allocated earnings entries as paid, inside a single transaction. */
+   *
+   *  **State-machine guard:** Only `approved` or `processing` payouts may be
+   *  marked paid. A `requested`/`under_review` payout has not been authorized
+   *  via `processPayout`; a `rejected`/`cancelled`/`failed` payout has been
+   *  explicitly terminated. Accepting any non-`paid` status here would let a
+   *  webhook (or admin) pay out a rejected request, bypassing provider
+   *  initiation and the allocation-reconciliation in `processPayout`.
+   *
+   *  **TOCTOU hardening:** The outer read is an optimization (skip the tx for
+   *  already-paid). The authoritative guard runs **inside** the transaction:
+   *  an atomic conditional `updateMany where status in ('approved','processing')`
+   *  ensures at most one caller flips to `paid`. Two concurrent callers both
+   *  read a non-terminal status and both enter the tx; only one wins the
+   *  conditional UPDATE (count === 1), the loser sees count === 0 and re-reads
+   *  the row — if it is now `paid` it returns idempotently, otherwise it
+   *  throws (a concurrent transition to a *different* terminal state).
+   */
   async markPayoutPaid(payoutId: string, data: {
     providerTxId: string;
     paidAt: string;
@@ -464,7 +506,7 @@ export class PayoutService {
     });
     if (!payout) throw new BadRequestException('Payout not found');
 
-    // Idempotency: already paid
+    // Idempotency fast-path: if already paid, return immediately
     if (payout.status === 'paid') {
       return this.prisma.payoutRequest.findUnique({
         where: { id: payoutId },
@@ -472,39 +514,56 @@ export class PayoutService {
       });
     }
 
+    // Reject non- payable states up front with a clear error. `approved` and
+    // `processing` are the only legal pre-states; anything else is either not
+    // yet authorized or already terminally closed.
+    if (payout.status !== 'approved' && payout.status !== 'processing') {
+      throw new BadRequestException(
+        `Payout cannot be marked paid from status '${payout.status}' (must be approved or processing)`,
+      );
+    }
+
     const paidAtDate = new Date(data.paidAt);
 
-    // Collect the earnings entry IDs from allocations, but only those still in 'confirmed' status
+    // Collect the earnings entry IDs from allocations, but only those still in
+    // 'confirmed' status. This snapshot is a best-guess — the inner tx will
+    // re-check via `updateMany where status: 'confirmed'`.
     const confirmedAllocations = payout.allocations.filter(
       (a: { earningsEntry: { status: string } }) => a.earningsEntry.status === 'confirmed',
     );
-
-    if (confirmedAllocations.length === 0 && payout.allocations.length > 0) {
-      // All allocated entries already paid or not confirmed — nothing to do for earnings
-      // but still mark the payout itself
-    }
 
     const earningsIds = confirmedAllocations.map(
       (a: { earningsEntryId: string }) => a.earningsEntryId,
     );
 
-    // Double-payout prevention: verify no allocated entry is already 'paid'
-    const alreadyPaid = payout.allocations.filter(
-      (a: { earningsEntry: { status: string } }) => a.earningsEntry.status === 'paid',
-    );
-    if (alreadyPaid.length > 0) {
-      throw new BadRequestException(
-        `Payout ${payoutId} has ${alreadyPaid.length} earnings entries already marked as paid — possible double payout`,
-      );
-    }
-
-    // Single atomic transaction: mark payout paid + mark allocated earnings paid + record tx
-    await this.prisma.$transaction(async (tx) => {
-      // 1. Mark payout as paid
-      await tx.payoutRequest.update({
-        where: { id: payoutId },
+    // Single atomic transaction with an authoritative TOCTOU guard.
+    // The payout-row conditional `update where status in ('approved','processing')`
+    // ensures that at most one caller flips the state from a legal pre-state;
+    // the loser (count === 0) re-reads to decide idempotent-return vs. throw.
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Atomic conditional flip: only from a payable pre-state.
+      const paidUpdate = await tx.payoutRequest.updateMany({
+        where: { id: payoutId, status: { in: ['approved', 'processing'] } },
         data: { status: 'paid', paidAt: paidAtDate },
       });
+
+      if (paidUpdate.count === 0) {
+        // Lost the race. Re-read to distinguish:
+        //  (a) another caller already set it to `paid` → idempotent return,
+        //  (b) a concurrent transition moved it to a different terminal
+        //      state (rejected/cancelled/failed) → throw so the caller knows
+        //      the payout was not paid by this call.
+        const current = await tx.payoutRequest.findUnique({
+          where: { id: payoutId },
+          include: { allocations: true },
+        });
+        if (current?.status === 'paid') {
+          return current;
+        }
+        throw new BadRequestException(
+          `Payout ${payoutId} is no longer in a payable state (now '${current?.status ?? 'missing'}')`,
+        );
+      }
 
       // 2. Record payout transaction
       await tx.payoutTransaction.create({
@@ -517,21 +576,33 @@ export class PayoutService {
         },
       });
 
-      // 3. Mark only the allocated earnings entries as paid
+      // 3. Mark only the allocated / confirmed earnings as paid.
+      // `updateMany where status: 'confirmed'` is the per-row TOCTOU guard:
+      // an entry that was already paid by a concurrent caller won't match.
       if (earningsIds.length > 0) {
         await tx.earningsLedger.updateMany({
           where: { id: { in: earningsIds }, status: 'confirmed' },
           data: { status: 'paid' },
         });
       }
+
+      return tx.payoutRequest.findUnique({
+        where: { id: payoutId },
+        include: { allocations: true },
+      });
     });
 
-    // After successfully marking as paid, check referral rewards (fire-and-forget)
-    this.referral.processReferralRewards(payout.userId).catch(() => {
-      // Silently ignore referral reward failures (production would log)
-    });
+    // After successfully marking as paid, check referral rewards (fire-and-forget).
+    // Use the transaction result, not the stale outer `payout` snapshot — if the
+    // tx found the payout already paid (count === 0), don't re-fire the reward.
+    const paidPayout = result;
+    if (paidPayout?.status === 'paid') {
+      this.referral.processReferralRewards(paidPayout.userId).catch(() => {
+        // Silently ignore referral reward failures (production would log)
+      });
+    }
 
-    return this.prisma.payoutRequest.findUnique({
+    return paidPayout ?? this.prisma.payoutRequest.findUnique({
       where: { id: payoutId },
       include: { allocations: true },
     });

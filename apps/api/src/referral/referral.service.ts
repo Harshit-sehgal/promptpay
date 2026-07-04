@@ -1,14 +1,20 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { REFERRAL } from '@waitlayer/shared';
 
 @Injectable()
 export class ReferralService {
+  private readonly webBaseUrl: string;
+
   constructor(
     private prisma: PrismaService,
     private ledger: LedgerService,
-  ) {}
+    private config: ConfigService,
+  ) {
+    this.webBaseUrl = this.config.get<string>('WEB_BASE_URL', 'http://localhost:3000');
+  }
 
   /** Get the user's own referral info: code, count, link, rewards earned */
   async getReferralInfo(userId: string) {
@@ -49,7 +55,7 @@ export class ReferralService {
     return {
       referralCode: code,
       referralCount,
-      referralLink: `${process.env.WEB_BASE_URL || 'http://localhost:3000'}/auth/signup?ref=${code}`,
+      referralLink: `${this.webBaseUrl}/auth/signup?ref=${code}`,
       rewardsEarnedMinor: rewardsAgg._sum.amountMinor || 0,
       referrals: referrals.map((r) => ({
         id: r.id,
@@ -120,8 +126,12 @@ export class ReferralService {
 
   private isUniqueConstraintViolation(err: unknown): boolean {
     // Prisma's P2002 error code is documented but the surface is loosely typed.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return Boolean((err as any)?.code === 'P2002');
+    return (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code?: string }).code === 'P2002'
+    );
   }
 
   /** Process referral reward when referred user meets criteria (first payout completed) */

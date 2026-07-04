@@ -168,6 +168,20 @@ describe('LedgerService', () => {
       expect(service.getHoldDays('new')).toBe(30);
       expect(service.getHoldDays('low_trust')).toBe(30);
     });
+
+    it('returns -1 (indefinite) for restricted trust', () => {
+      expect(service.getHoldDays('restricted')).toBe(-1);
+    });
+
+    // TrustLevel.BANNED must NOT fall through to the default 30-day branch.
+    // A banned user must never have their earnings mature for payout.
+    it('returns -1 (indefinite) for banned trust', () => {
+      expect(service.getHoldDays('banned')).toBe(-1);
+    });
+
+    it('returns 30 for unknown states (defensive default)', () => {
+      expect(service.getHoldDays('mystery-state')).toBe(30);
+    });
   });
 
   describe('recordImpressionEarnings', () => {

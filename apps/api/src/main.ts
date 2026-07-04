@@ -10,12 +10,25 @@ import { loadEnv } from '@waitlayer/config';
 async function bootstrap() {
   // Validate env on startup. Non-production environments allow
   // shorter secrets during iterative development.
-  loadEnv(process.env);
+  const env = loadEnv(process.env);
 
   const app = await NestFactory.create(AppModule);
 
   // ── Security headers (Helmet) ──────────────────────────────────
   app.use(helmet());
+
+  // ── Trust proxy — resolve client IP from x-forwarded-for ──────
+  // Behind NGINX/LB, `req.ip` returns the proxy IP unless we tell
+  // Express how many hops to trust. Set TRUST_PROXY_HOPS in env
+  // (default 1 — correct for a single reverse proxy).
+  // Express also accepts `true` / IP / CIDR / arrays; a single
+  // integer hop-count is the simplest secure default.
+  // This powers per-IP brute-force tracking and rate limiting.
+  const trustProxy = process.env.TRUST_PROXY_HOPS;
+  app.getHttpAdapter().getInstance().set(
+    'trust proxy',
+    trustProxy ? parseInt(trustProxy, 10) || 1 : 1,
+  );
 
   // Raw body parsing for Stripe webhook routes — Stripe needs the raw
   // request body for signature verification. Applied BEFORE global prefix
@@ -38,13 +51,12 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   app.enableCors({
-    origin: process.env.WEB_BASE_URL || 'http://localhost:3000',
+    origin: env.WEB_BASE_URL,
     credentials: true,
   });
 
-  const port = process.env.API_PORT || 4000;
-  await app.listen(port);
-  console.log(`🚀 WaitLayer API running on http://localhost:${port}`);
+  await app.listen(env.API_PORT);
+  console.log(`🚀 WaitLayer API running on http://localhost:${env.API_PORT}`);
 }
 
 bootstrap();

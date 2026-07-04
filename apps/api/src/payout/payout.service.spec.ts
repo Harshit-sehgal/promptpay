@@ -14,6 +14,7 @@ const mockPrisma = {
     findUnique: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     count: vi.fn(),
   },
   payoutAllocation: {
@@ -307,33 +308,66 @@ describe('PayoutService', () => {
 
       const res = await service.markPayoutPaid('req_123', { providerTxId: 'tx_123', paidAt: new Date().toISOString() });
       expect(res.status).toBe('paid');
-      expect(mockPrisma.payoutRequest.update).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
     });
 
-    it('should throw BadRequestException if any allocated earnings entry is already marked as paid (double payout prevention)', async () => {
+    it('should not throw for already-paid earnings entries — updateMany silently skips them', async () => {
+      // First call (outer read): pre-paid snapshot. Second call (inside tx after update):
+      // paid state.
+      let findCalled = false;
+      mockPrisma.payoutRequest.findUnique.mockImplementation(() => {
+        if (findCalled) {
+          return Promise.resolve({ id: 'req_123', status: 'paid', allocations: [] });
+        }
+        findCalled = true;
+        return Promise.resolve({
+          id: 'req_123',
+          status: 'processing',
+          userId: 'user_123',
+          payoutAccount: { provider: 'wise' },
+          allocations: [
+            { earningsEntry: { status: 'paid' }, earningsEntryId: 'earn_1' },
+          ],
+        });
+      });
+
+      const nowStr = new Date().toISOString();
+      const res = await service.markPayoutPaid('req_123', { providerTxId: 'tx_123', paidAt: nowStr });
+
+      expect(res.status).toBe('paid');
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 'req_123', status: { in: ['approved', 'processing'] } },
+        data: { status: 'paid', paidAt: new Date(nowStr) },
+      });
+    });
+
+    it('should reject marking a payout paid from a non-payable state (e.g. rejected)', async () => {
       mockPrisma.payoutRequest.findUnique.mockResolvedValue({
         id: 'req_123',
-        status: 'processing',
-        allocations: [
-          { earningsEntry: { status: 'paid' }, earningsEntryId: 'earn_1' },
-        ],
+        status: 'rejected',
+        userId: 'user_123',
+        payoutAccount: { provider: 'wise' },
+        allocations: [],
       });
 
       await expect(
         service.markPayoutPaid('req_123', { providerTxId: 'tx_123', paidAt: new Date().toISOString() })
       ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
     });
 
     it('should atomically update status of request, transaction, and earnings ledger to paid', async () => {
       const nowStr = new Date().toISOString();
       mockPrisma.payoutRequest.findUnique.mockImplementation((_args: any) => {
         // Return allocations with confirmed status first, then paid status on retrieval at the end
-        if (mockPrisma.payoutRequest.update.mock.calls.length > 0) {
-          return Promise.resolve({ id: 'req_123', status: 'paid', allocations: [] });
+        if (vi.isMockFunction(mockPrisma.payoutRequest.updateMany) &&
+            mockPrisma.payoutRequest.updateMany.mock.calls.length > 0) {
+          return Promise.resolve({ id: 'req_123', status: 'paid', userId: 'user_123', allocations: [] });
         }
         return Promise.resolve({
           id: 'req_123',
           status: 'processing',
+          userId: 'user_123',
           payoutAccount: { provider: 'wise' },
           allocations: [
             { earningsEntry: { status: 'confirmed' }, earningsEntryId: 'earn_1' },
@@ -343,8 +377,8 @@ describe('PayoutService', () => {
 
       const res = await service.markPayoutPaid('req_123', { providerTxId: 'tx_wise_abc', paidAt: nowStr });
 
-      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledWith({
-        where: { id: 'req_123' },
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 'req_123', status: { in: ['approved', 'processing'] } },
         data: { status: 'paid', paidAt: new Date(nowStr) },
       });
       expect(mockPrisma.payoutTransaction.create).toHaveBeenCalledWith({

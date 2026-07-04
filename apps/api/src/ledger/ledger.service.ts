@@ -6,14 +6,14 @@ import { LedgerStatus } from '@waitlayer/shared';
 import { Prisma } from '@waitlayer/db';
 
 /** Valid earning state transitions */
-const EARNING_TRANSITIONS: Record<string, LedgerStatus[]> = {
-  estimated: ['pending', 'confirmed', 'held', 'reversed', 'void'] as LedgerStatus[],
-  pending: ['confirmed', 'held', 'reversed', 'void'] as LedgerStatus[],
-  confirmed: ['held', 'paid', 'reversed', 'void'] as LedgerStatus[],
-  held: ['confirmed', 'reversed', 'void'] as LedgerStatus[],
-  paid: [] as LedgerStatus[],
-  reversed: [] as LedgerStatus[],
-  void: [] as LedgerStatus[],
+const EARNING_TRANSITIONS: Partial<Record<LedgerStatus, LedgerStatus[]>> = {
+  [LedgerStatus.ESTIMATED]: [LedgerStatus.PENDING, LedgerStatus.CONFIRMED, LedgerStatus.HELD, LedgerStatus.REVERSED, LedgerStatus.VOID],
+  [LedgerStatus.PENDING]: [LedgerStatus.CONFIRMED, LedgerStatus.HELD, LedgerStatus.REVERSED, LedgerStatus.VOID],
+  [LedgerStatus.CONFIRMED]: [LedgerStatus.HELD, LedgerStatus.PAID, LedgerStatus.REVERSED, LedgerStatus.VOID],
+  [LedgerStatus.HELD]: [LedgerStatus.CONFIRMED, LedgerStatus.REVERSED, LedgerStatus.VOID],
+  [LedgerStatus.PAID]: [],
+  [LedgerStatus.REVERSED]: [],
+  [LedgerStatus.VOID]: [],
 };
 
 @Injectable()
@@ -22,13 +22,38 @@ export class LedgerService {
 
   // ── Revenue Split ──
 
-  /** Calculate revenue split with optional launch incentive */
+  /**
+   * Calculate revenue split with optional launch incentive.
+   *
+   * Money is integer minor units; floating-point multiplication + Math.floor on
+   * the cents yields platform/reserve shares that can be off-by-one relative to
+   * the intended basis-point split (e.g. `0.3 * 101 = 30.2999...`). The remainder
+   * was previously dumped into userShare, which silently funnelled rounding loss
+   * to/from platform and reserve. We compute in integer basis points instead.
+   */
   calculateSplit(bidAmountMinor: number, useLaunchIncentive = false) {
-    const split = useLaunchIncentive ? LAUNCH_INCENTIVE_SPLIT : REVENUE_SPLIT;
-    const userShare = Math.floor(bidAmountMinor * split.USER);
-    const platformShare = Math.floor(bidAmountMinor * split.PLATFORM);
-    const reserveShare = Math.floor(bidAmountMinor * split.RESERVE);
-    // Remainder goes to user to avoid rounding loss
+    // Split percentages expressed as basis points (1 bps = 0.01%). Sum to 10000
+    // (100.00%) for both REVENUE_SPLIT and LAUNCH_INCENTIVE_SPLIT at the source —
+    // no float round-trip through the constants.
+    const USER_BPS = 6000;
+    const PLATFORM_BPS = 3000;
+    const RESERVE_BPS = 1000;
+    const LAUNCH_USER_BPS = 8000;
+    const LAUNCH_PLATFORM_BPS = 1000;
+    const LAUNCH_RESERVE_BPS = 1000;
+
+    const userBps = useLaunchIncentive ? LAUNCH_USER_BPS : USER_BPS;
+    const platformBps = useLaunchIncentive ? LAUNCH_PLATFORM_BPS : PLATFORM_BPS;
+    const reserveBps = useLaunchIncentive ? LAUNCH_RESERVE_BPS : RESERVE_BPS;
+
+    // Integer partition: largest-share-first convention absorbs any rounding
+    // remainder deterministically. With bidAmountMinor * any_bps deterministic
+    // and 10000 dividing bidAmountMinor * 10000 exactly, only off-by-one from
+    // floor() across the three shares can occur; we route it to user (largest)
+    // so platform/reserve never get under-credited.
+    const userShare = Math.floor((bidAmountMinor * userBps) / 10000);
+    const platformShare = Math.floor((bidAmountMinor * platformBps) / 10000);
+    const reserveShare = Math.floor((bidAmountMinor * reserveBps) / 10000);
     const remainder = bidAmountMinor - userShare - platformShare - reserveShare;
     return {
       userShare: userShare + remainder,
@@ -45,6 +70,13 @@ export class LedgerService {
       case 'new':
       case 'low_trust':
         return PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+      // `RESTRICTED = -1` and `BANNED = -1` are the contract for "indefinite
+      // hold — never mature". Falling through to the default here would
+      // silently give restricted/banned users a 30-day hold, defeating the
+      // policy. Keep the explicit cases.
+      case 'restricted':
+      case 'banned':
+        return PAYOUT_HOLD_DAYS.RESTRICTED;
       default:
         return PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
     }
@@ -74,7 +106,11 @@ export class LedgerService {
 
     const split = this.calculateSplit(bidAmountMinor);
     const holdDays = this.getHoldDays(trustLevel);
-    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    // A negative hold-day (PAYOUT_HOLD_DAYS.RESTRICTED = -1) means "indefinite hold,
+    // never mature". Storing availableAt:null keeps matureEarnings()'s `<= new Date()`
+    // filter from ever advancing the row. New Date() with a negative offset would
+    // land in the past and falsely match.
+    const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const idempotencyBase = `imp-${impressionId}`;
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -170,7 +206,9 @@ export class LedgerService {
 
     const split = this.calculateSplit(clickBidMinor);
     const holdDays = this.getHoldDays(trustLevel);
-    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    // Negative hold-day => indefinite hold (restricted trust level). See rationale on
+    // recordImpressionEarnings; same handling here.
+    const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const idempotencyBase = `clk-${clickId}`;
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {

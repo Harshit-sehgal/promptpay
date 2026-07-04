@@ -91,6 +91,9 @@ export const SIGNUP_ALLOWED_ROLES = [
 
 export type SignupAllowedRole = (typeof SIGNUP_ALLOWED_ROLES)[number];
 
+/** Default company name used when creating an advertiser profile without one */
+export const DEFAULT_COMPANY_NAME = 'Unnamed Company';
+
 /** Referral program */
 export const REFERRAL = {
   /** Reward paid to the referrer once the referred user qualifies */

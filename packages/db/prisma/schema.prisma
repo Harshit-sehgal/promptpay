@@ -213,7 +213,7 @@ model User {
 model AdminUser {
   id          String   @id @default(uuid())
   userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   adminRole   UserRole
   permissions String[]
 
@@ -232,7 +232,7 @@ model Session {
   tokenHash   String
   tokenFamily String?
   revoked     Boolean  @default(false)
-  expiresAt   DateTime
+  expiresAt   DateTime @db.Timestamptz
 
   createdAt DateTime @default(now())
 
@@ -262,6 +262,12 @@ model Device {
   fraudFlags      FraudFlag[]
 
   @@unique([userId, fingerprintHash])
+  // Cross-user uniqueness — without this constraint two users could
+  // register the same physical machine's fingerprint simultaneously, and
+  // the JS-level duplicate check would race (TOCTOU). The DB-level
+  // constraint enforces it atomically: P2002 is caught and treated as a
+  // duplicate-detected fraud event.
+  @@unique([fingerprintHash])
   @@index([fingerprintHash])
   @@index([userId])
   @@map("devices")
@@ -317,7 +323,7 @@ model PayoutAccount {
 model Advertiser {
   id               String     @id @default(uuid())
   userId           String     @unique
-  user             User       @relation(fields: [userId], references: [id])
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName      String
   billingEmail     String
   stripeCustomerId String?
@@ -492,7 +498,7 @@ model AdImpression {
   idempotencyKey      String?     @unique
   impressionTokenHash String      @unique
   renderedAt          DateTime?
-  qualifiedAt         DateTime?
+  qualifiedAt         DateTime?       @db.Timestamptz
   visibleDurationMs   Int?
   visibleSurface      Float?
   isBillable          Boolean     @default(false)
@@ -557,7 +563,7 @@ model AdReport {
   reason       String
   details      String?
   resolution   String?
-  resolvedAt   DateTime?
+  resolvedAt   DateTime?       @db.Timestamptz
   resolvedBy   String?
 
   createdAt DateTime @default(now())
@@ -576,16 +582,16 @@ model EarningsLedger {
   userId         String
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   campaignId     String?
-  campaign       Campaign?       @relation(fields: [campaignId], references: [id])
+  campaign       Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   impressionId   String?
-  impression     AdImpression?    @relation(fields: [impressionId], references: [id])
+  impression     AdImpression?    @relation(fields: [impressionId], references: [id], onDelete: SetNull)
   clickId        String?
-  click          AdClick?        @relation(fields: [clickId], references: [id])
+  click          AdClick?        @relation(fields: [clickId], references: [id], onDelete: SetNull)
   entryType      LedgerEntryType
   status         LedgerStatus
   amountMinor    Int
   currency       String          @default("USD")
-  availableAt    DateTime?
+  availableAt    DateTime?       @db.Timestamptz
   idempotencyKey String          @unique
   description    String?
 
@@ -708,15 +714,15 @@ model PayoutTransaction {
 model FraudFlag {
   id           String          @id @default(uuid())
   userId       String?
-  user         User?           @relation(fields: [userId], references: [id])
+  user         User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   deviceId     String?
-  device       Device?         @relation(fields: [deviceId], references: [id])
+  device       Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   campaignId   String?
-  campaign     Campaign?       @relation(fields: [campaignId], references: [id])
+  campaign     Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   impressionId String?
-  impression   AdImpression?   @relation(fields: [impressionId], references: [id])
+  impression   AdImpression?   @relation(fields: [impressionId], references: [id], onDelete: SetNull)
   clickId      String?
-  click        AdClick?        @relation(fields: [clickId], references: [id])
+  click        AdClick?        @relation(fields: [clickId], references: [id], onDelete: SetNull)
   flagType     FraudFlagType
   severity     FraudSeverity   @default(medium)
   status       FraudFlagStatus @default(open)
@@ -793,7 +799,7 @@ model ApiKey {
   lastUsedAt   DateTime?
 
   createdAt DateTime @default(now())
-  expiresAt DateTime?
+  expiresAt DateTime? @db.Timestamptz
 
   @@index([ownerId])
   @@index([keyHash])
@@ -879,6 +885,10 @@ model ReferralReward {
 
   createdAt DateTime @default(now())
 
+  // DB-level guard: at most one reward per referral. The service-layer check-then-create
+  // in processReferralRewards is racy when markPayoutPaid is invoked concurrently or
+  // retried by a webhook; a unique index here is the authoritative floor.
+  @@unique([referralId])
   @@index([referralId])
   @@index([userId])
   @@map("referral_rewards")

@@ -3,6 +3,7 @@ import { FraudFlagStatus, FraudSeverity, Prisma, UserRole, UserStatus } from '@w
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
+import { FraudService } from '../fraud/fraud.service';
 
 @Injectable()
 export class AdminService {
@@ -10,6 +11,7 @@ export class AdminService {
     private prisma: PrismaService,
     private audit: AuditService,
     private payoutService: PayoutService,
+    private fraudService: FraudService,
   ) {}
 
   async getOverview() {
@@ -94,11 +96,44 @@ export class AdminService {
   }
 
   async approvePayout(payoutId: string, reviewerId: string, note?: string) {
-    return this.prisma.payoutRequest.update({ where: { id: payoutId }, data: { status: 'approved', reviewerId, reviewNote: note, processedAt: new Date() } });
+    // Conditional update: only approve from a reviewable state. This prevents
+    // an admin (or a compromised admin token) from re-approving a payout that
+    // is already `paid`/`processing` (destroying the payment audit trail) or
+    // resurrecting a `rejected`/`cancelled`/`failed` payout. `count === 0`
+    // means the payout is missing or not in a reviewable state — surface that
+    // rather than silently no-op.
+    const result = await this.prisma.payoutRequest.updateMany({
+      where: { id: payoutId, status: { in: ['requested', 'under_review'] } },
+      data: { status: 'approved', reviewerId, reviewNote: note, processedAt: new Date() },
+    });
+    if (result.count === 0) {
+      const existing = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId }, select: { status: true } });
+      throw new BadRequestException(
+        existing
+          ? `Payout cannot be approved from status '${existing.status}'`
+          : 'Payout not found',
+      );
+    }
+    return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
   }
 
   async rejectPayout(payoutId: string, reviewerId: string, reason: string) {
-    return this.prisma.payoutRequest.update({ where: { id: payoutId }, data: { status: 'rejected', reviewerId, reviewNote: reason } });
+    // Only reject from a pre-payment state. Rejecting an already-`paid` payout
+    // would contradict the ledger (earnings are already `paid`); rejecting a
+    // `processing` payout risks a stuck provider call with no DB record.
+    const result = await this.prisma.payoutRequest.updateMany({
+      where: { id: payoutId, status: { in: ['requested', 'under_review', 'approved'] } },
+      data: { status: 'rejected', reviewerId, reviewNote: reason },
+    });
+    if (result.count === 0) {
+      const existing = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId }, select: { status: true } });
+      throw new BadRequestException(
+        existing
+          ? `Payout cannot be rejected from status '${existing.status}'`
+          : 'Payout not found',
+      );
+    }
+    return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
   }
 
   async markPayoutPaid(payoutId: string, data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string }) {
@@ -116,8 +151,12 @@ export class AdminService {
   }
 
   async resolveFraudFlag(flagId: string, reviewerId: string, decision: string, note?: string) {
-    const status = decision === 'confirmed' ? FraudFlagStatus.resolved_valid : FraudFlagStatus.resolved_invalid;
-    return this.prisma.fraudFlag.update({ where: { id: flagId }, data: { status, reviewerId, reviewNote: note, resolvedAt: new Date() } });
+    // Delegate to FraudService.resolveFlag so admin and non-admin paths share
+    // the same earnings reversal / release + trust recompute logic.
+    // decision: 'confirmed' = fraud was valid (reverse earnings)
+    //           'rejected' = false positive (release held earnings)
+    const isValid = decision === 'confirmed';
+    return this.fraudService.resolveFlag(flagId, reviewerId, isValid, note);
   }
 
   async getAuditLog(params: { actorId?: string; actorRole?: string; targetType?: string; from?: string; to?: string; page?: number; limit?: number }) {

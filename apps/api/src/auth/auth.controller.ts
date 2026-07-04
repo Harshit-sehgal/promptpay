@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -35,7 +36,12 @@ export class AuthController {
       BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
-      BruteForceGuard.recordFailure(req);
+      // Only count against the brute-force guard for actual auth failures;
+      // Conflict (email taken) or BadRequest (validation) are not
+      // credential-stuffing events.
+      if (err instanceof UnauthorizedException) {
+        BruteForceGuard.recordFailure(req, dto.email);
+      }
       throw err;
     }
   }
@@ -48,7 +54,9 @@ export class AuthController {
       BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
-      BruteForceGuard.recordFailure(req);
+      if (err instanceof UnauthorizedException) {
+        BruteForceGuard.recordFailure(req, dto.email);
+      }
       throw err;
     }
   }
@@ -61,7 +69,12 @@ export class AuthController {
       BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
-      BruteForceGuard.recordFailure(req);
+      // Google OAuth failures may include ConflictException (account-link reject),
+      // UnauthorizedException (invalid token), or BadRequestException (validation).
+      // Only the auth-failure branch increments the counter.
+      if (err instanceof UnauthorizedException) {
+        BruteForceGuard.recordFailure(req);
+      }
       throw err;
     }
   }
@@ -112,7 +125,9 @@ export class AuthController {
       BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
-      BruteForceGuard.recordFailure(req);
+      if (err instanceof UnauthorizedException) {
+        BruteForceGuard.recordFailure(req);
+      }
       throw err;
     }
   }

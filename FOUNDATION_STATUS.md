@@ -368,13 +368,58 @@ pnpm --filter waitlayer-web dev
 
 ---
 
+## Quality Improvements (2026-07-04)
+
+Three rounds of code quality improvements were applied across 16 files (178 insertions, 70 deletions), targeting type safety, maintainability, and developer experience.
+
+### Type Safety
+
+| Change | Files | Impact |
+|--------|-------|--------|
+| Replaced `(request as any)` with typed `RequestWithOptionalUser` interface | `api-key.guard.ts` | Eliminated 2 lint warnings, improved IDE support |
+| Replaced `(err as any)?.code` with proper type-narrowed Prisma error check | `referral.service.ts` | Removed eslint-disable, type-safe error handling |
+| Replaced `(globalThis as any)` with typed `Record<string, unknown>` access | `vscode/config.ts` | Type-safe global access |
+| Replaced `private api: any` with accurate method-signature interface | `vscode/ad-panel.ts` | Full type checking on API calls |
+| `EARNING_TRANSITIONS` typed as `Partial<Record<LedgerStatus, LedgerStatus[]>>` with enum keys | `ledger.service.ts` | Compile-time validation of state transition maps |
+| `CAMPAIGN_TRANSITIONS` uses `CampaignStatus` enum values in arrays | `advertiser.service.ts` | Consistent enum usage across transition maps |
+
+### Code Quality & Maintainability
+
+| Change | Files | Impact |
+|--------|-------|--------|
+| Extracted `DEFAULT_COMPANY_NAME` to `@waitlayer/shared` | `constants.ts`, `auth.service.ts`, `advertiser.service.ts` | Eliminated 3 duplicated `'Unnamed Company'` string literals |
+| Refactored module-level `setInterval` into `startCleanup()`/`stopCleanup()` | `brute-force.guard.ts` | Testable interval with cleanup support |
+| Injected `ConfigService` instead of reading `process.env.WEB_BASE_URL` | `referral.service.ts` | Proper NestJS DI pattern, validated config |
+| Replaced `console.error()` with `Logger.error()` | `audit.service.ts` | Structured NestJS logging |
+| Uses validated `loadEnv()` return value instead of raw `process.env` | `main.ts` | Config validated before use |
+| Added production guard + dev warning for `EXTENSION_HMAC_SECRET` | `cli/api-client.ts` | Fails fast in production when secret missing; warns in dev |
+
+### Developer Experience & DevOps
+
+| Change | Impact |
+|--------|--------|
+| Added `.prettierrc` with sensible defaults | Consistent formatting across the project |
+| Rewrote `.env.example` with current config keys, `change-me` placeholders, clearer documentation | Faster developer onboarding |
+| Replaced hardcoded base64-looking secrets with recognizable dev-only placeholders in `docker-compose.yml` | No ambiguity about production vs dev secrets |
+| Added healthcheck and `depends_on: condition: service_healthy` to API + web services | Proper container orchestration in Docker Compose |
+| Added `.js` extension to `start:api` script | Consistent with Dockerfile CMD |
+
+### Verification
+
+All quality gates pass cleanly:
+- Typecheck: 13/13 tasks — PASS
+- Lint: 12/12 tasks, 0 errors, 0 warnings — PASS
+- Build: 9/9 packages (full turbo cache) — PASS
+
+---
+
 ## Commands Verified This Pass
 
 - `pnpm install --frozen-lockfile` — PASS
 - `pnpm --filter @waitlayer/db generate` — PASS
 - `pnpm run typecheck` — PASS (13/13 tasks)
-- `pnpm run lint` — PASS (12/12 tasks)
-- `pnpm run build` — PASS
+- `pnpm run lint` — PASS (12/12 tasks, 0 warnings)
+- `pnpm run build` — PASS (9/9 packages, full turbo cache)
 - `pnpm --filter waitlayer-api test` — PASS, 168 tests / 8 files
 - `docker compose build api` — PASS
 - `curl http://localhost:4002/api/v1/auth/me` — PASS smoke check, expected `401 Unauthorized`

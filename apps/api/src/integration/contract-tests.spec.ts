@@ -2,11 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
+import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../config/prisma.service';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
-import { UserRole, PayoutProvider, BidType } from '@waitlayer/shared';
+import { UserRole, PayoutProvider, BidType, canonicalJson, verifySignature } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 import {
   SignupResponse,
@@ -27,8 +28,6 @@ import {
   CreateCampaignResponse,
   CreativeResponse,
 } from '@waitlayer/shared';
-
-const HMAC_SECRET = 'dev-secret-change-me-do-not-use-in-production';
 
 async function cleanDb(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(`
@@ -72,6 +71,22 @@ describe('API Contract Tests', () => {
     await app.init();
     prisma = app.get(PrismaService);
     await cleanDb(prisma);
+
+    // Seed an admin directly in the DB. Public self-service signup rejects
+    // privileged roles (SIGNUP_ALLOWED_ROLES = developer, advertiser); the
+    // contract test exercises the (forbidden) admin signup below purely to
+    // assert that control returns 400, then logs in with this seeded admin.
+    const adminPasswordHash = await bcrypt.hash('password123', 12);
+    await prisma.user.create({
+      data: {
+        email: 'contract-admin@test.com',
+        passwordHash: adminPasswordHash,
+        name: 'Contract Admin',
+        role: UserRole.ADMIN,
+        country: 'US',
+        status: 'active',
+      },
+    });
   });
 
   afterAll(async () => {
@@ -86,6 +101,7 @@ describe('API Contract Tests', () => {
   let campaignId: string;
   let creativeId: string;
   let deviceId: string;
+  let deviceEventSecret: string;
   let impressionToken: string;
 
   // ══════════════════════════════════════════════════════
@@ -131,10 +147,17 @@ describe('API Contract Tests', () => {
 
     // ── Admin + Advertiser (needed for campaign creation before ad-serving) ──
     it('registers admin and advertiser for downstream flows', async () => {
-      const adminRes = await request(app.getHttpServer())
+      // Admin self-service signup must be rejected — the admin was seeded in
+      // beforeAll. Login with the seeded admin to obtain a token.
+      await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-admin@test.com', password: 'password123', role: UserRole.ADMIN, name: 'Contract Admin', country: 'US' });
-      adminToken = adminRes.body.accessToken;
+        .send({ email: 'contract-admin@test.com', password: 'password123', role: UserRole.ADMIN, name: 'Contract Admin', country: 'US' })
+        .expect(400);
+      const adminLogin = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: 'contract-admin@test.com', password: 'password123' })
+        .expect(200);
+      adminToken = adminLogin.body.accessToken;
 
       const advRes = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
@@ -200,11 +223,12 @@ describe('API Contract Tests', () => {
       expect(() => RegisterDeviceResponse.parse(res.body)).not.toThrow();
       expect(res.body.eventSecret).toBeDefined(); // per-device secret issued
       deviceId = res.body.id;
+      deviceEventSecret = res.body.eventSecret; // sign extension events with the per-device secret
     });
 
     it('POST /extension/wait-state/start → matches WaitStateStartResponse schema', async () => {
       const payload = { deviceId, sessionId: 'contract-session', toolType: 'vscode', waitStateId: 'contract-ws', idempotencyKey: 'contract-ws-start' };
-      const sig = signPayload(payload, HMAC_SECRET);
+      const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
         .set('Authorization', `Bearer ${devToken}`)
@@ -214,8 +238,8 @@ describe('API Contract Tests', () => {
     });
 
     it('POST /extension/wait-state/end → matches WaitStateEndResponse schema', async () => {
-      const payload = { waitStateId: 'contract-ws', duration: '5000', idempotencyKey: 'contract-ws-end' };
-      const sig = signPayload(payload, HMAC_SECRET);
+      const payload = { waitStateId: 'contract-ws', duration: '1', idempotencyKey: 'contract-ws-end' };
+      const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/end')
         .set('Authorization', `Bearer ${devToken}`)
@@ -230,11 +254,11 @@ describe('API Contract Tests', () => {
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ ...wsPayload, signature: signPayload(wsPayload, HMAC_SECRET) })
+        .send({ ...wsPayload, signature: signPayload(wsPayload, deviceEventSecret) })
         .expect(200);
 
       const payload = { deviceId, sessionId: 'contract-session', waitStateId: 'contract-ad-ws', toolType: 'vscode', idempotencyKey: 'contract-ad-req' };
-      const sig = signPayload(payload, HMAC_SECRET);
+      const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
         .set('Authorization', `Bearer ${devToken}`)
@@ -246,7 +270,7 @@ describe('API Contract Tests', () => {
 
     it('POST /extension/ad-rendered → matches AdRenderedResponse schema', async () => {
       const payload = { impressionToken, renderedAt: new Date().toISOString(), idempotencyKey: 'contract-render' };
-      const sig = signPayload(payload, HMAC_SECRET);
+      const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-rendered')
         .set('Authorization', `Bearer ${devToken}`)
@@ -257,7 +281,7 @@ describe('API Contract Tests', () => {
 
     it('POST /extension/impression-qualified → matches QualifiedImpressionResponse schema', async () => {
       const payload = { impressionToken, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'contract-qual' };
-      const sig = signPayload(payload, HMAC_SECRET);
+      const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/impression-qualified')
         .set('Authorization', `Bearer ${devToken}`)
@@ -268,7 +292,7 @@ describe('API Contract Tests', () => {
 
     it('POST /extension/click → matches AdClickResponse schema', async () => {
       const payload = { impressionToken, clickedAt: new Date().toISOString(), idempotencyKey: 'contract-click' };
-      const sig = signPayload(payload, HMAC_SECRET);
+      const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/click')
         .set('Authorization', `Bearer ${devToken}`)
@@ -367,6 +391,55 @@ describe('API Contract Tests', () => {
 
     it('RefreshResponse rejects object missing accessToken', () => {
       expect(() => RefreshResponse.parse({ refreshToken: 'r' })).toThrow();
+    });
+  });
+
+  describe('shared signing module — canonicalJson & verifySignature regression', () => {
+    const secret = 'test-256bit-secret-aaaa-bbbb-32ch';
+
+    it('canonicalJson sorts nested keys (deep sort)', () => {
+      const payload = { z: 1, a: { b: 2, c: { d: 3, a: 4 } } };
+      const json = canonicalJson(payload);
+      const parsed = JSON.parse(json);
+      // Top-level: 'a' before 'z'
+      expect(Object.keys(parsed)).toEqual(['a', 'z']);
+      // Nested level 1: 'b' before 'c'
+      expect(Object.keys(parsed.a)).toEqual(['b', 'c']);
+      // Nested level 2 (inside c): 'a' before 'd'
+      expect(Object.keys(parsed.a.c)).toEqual(['a', 'd']);
+    });
+
+    it('canonicalJson produces identical output for different key insertion order', () => {
+      const payload1: Record<string, unknown> = {};
+      payload1['bbb'] = 2;
+      payload1['aaa'] = 1;
+      const payload2 = { aaa: 1, bbb: 2 };
+      expect(canonicalJson(payload1)).toEqual(canonicalJson(payload2));
+    });
+
+    it('sign + verify round-trip works', () => {
+      const payload = { event: 'test', duration: 10, deep: { x: 'y', inner: { zz: 1, aa: 2 } } };
+      const signature = signPayload(payload, secret);
+      // Different insertion order still verifies (canonicalJson handles it)
+      const payload2: Record<string, unknown> = {};
+      payload2['duration'] = 10;
+      payload2['deep'] = { inner: { aa: 2, zz: 1 }, x: 'y' };
+      payload2['event'] = 'test';
+      expect(verifySignature(payload2, secret, signature)).toBe(true);
+    });
+
+    it('verifySignature rejects tampered payload', () => {
+      const payload = { amount: 100 };
+      const signature = signPayload(payload, secret);
+      expect(verifySignature({ amount: 101 }, secret, signature)).toBe(false);
+    });
+
+    it('verifySignature rejects hex-injected non-hex characters', () => {
+      const payload = { ok: true };
+      const signature = signPayload(payload, secret);
+      // Replace two hex characters with 'xx' — buffer decoding must be safe
+      const broken = signature.slice(0, -2) + 'xx';
+      expect(verifySignature(payload, secret, broken)).toBe(false);
     });
   });
 });

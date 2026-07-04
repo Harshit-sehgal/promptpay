@@ -5,8 +5,11 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, from, defer, of } from 'rxjs';
+import { tap, catchError, switchMap } from 'rxjs/operators';
+import { throwError } from 'rxjs';
+import type { Prisma } from '@waitlayer/db';
+import { PrismaService } from '../../config/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 
 interface AuditedRequest {
@@ -17,6 +20,7 @@ interface AuditedRequest {
   user?: { sub?: string; id?: string; role?: string };
   ip?: string;
   headers?: Record<string, string | string[] | undefined>;
+  body?: Record<string, unknown>;
   connection?: { remoteAddress?: string };
 }
 
@@ -27,12 +31,23 @@ interface AuditedRequest {
  * Reads the authenticated user id/role from the request (set by JwtAuthGuard)
  * and extracts the target type and id from the URL pattern.
  *
+ * Before the handler executes, the interceptor fetches the target entity's
+ * pre-mutation state from the database — the result is stored as
+ * `beforeSnap: { body: <scrubbed request>, entity: <pre-state> }`. On
+ * success, the audit log records the actor + action + before-state; on
+ * failure, `afterSnap` captures the error.
+ *
+ * Sensitive admin mutations (approve/reject/mark-paid/resolve/toggle) are
+ * logged on BOTH success and failure paths: an attempted-but-rejected
+ * approval is itself a security-relevant event (an actor tried to bypass a
+ * state machine) and must be visible in the audit timeline.
+ *
  * Usage: @UseInterceptors(AuditInterceptor) on individual handler methods,
  *        or apply class-wide on AdminController.
  */
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
-  constructor(private audit: AuditService) {}
+  constructor(private audit: AuditService, private prisma: PrismaService) {}
 
   intercept(context: ExecutionContext, next: CallHandler<unknown>): Observable<unknown> {
     const req = context.switchToHttp().getRequest<AuditedRequest>();
@@ -47,26 +62,93 @@ export class AuditInterceptor implements NestInterceptor {
     const actorId = req.user?.sub ?? req.user?.id ?? 'unknown';
     const actorRole = req.user?.role ?? 'admin';
 
-    // Derive action and target from URL
-    // URL patterns:
-    //   /admin/campaigns/:id/approve  → action=approve, target=campaign
-    //   /admin/payouts/:id/reject     → action=reject, target=payout
-    //   /admin/fraud/:id/resolve      → action=resolve, target=fraud_flag
     const parsed = parseAdminUrl(url, req.params);
 
-    return next.handle().pipe(
-      tap(() => {
-        // Fire-and-forget — don't await, errors handled inside AuditService.log
-        this.audit.log({
+    // Fetch the entity's pre-mutation DB state asynchronously, then chain
+    // into the handler.
+    return from(fetchEntityPreState(this.prisma, parsed.targetType, parsed.targetId)).pipe(
+      switchMap((entitySnap) => {
+        const actor = {
           actorId,
           actorRole,
           action: parsed.action,
           targetType: parsed.targetType,
           targetId: parsed.targetId,
           ipHash: hashIp(req),
-        });
+          // beforeSnap now carries both the scrubbed request body AND the
+          // entity's current DB state — solving the "what did they change
+          // from?" question that a body-only snapshot can't answer.
+          beforeSnap: buildBeforeSnap(req.body, entitySnap) as Prisma.InputJsonValue,
+        };
+
+        return next.handle().pipe(
+          tap(() => {
+            // Successful mutation — fire-and-forget. Errors handled inside
+            // AuditService.log.
+            this.audit.log(actor);
+          }),
+          catchError((err) => {
+            // Failed mutation — sensitive admin attempts that errored
+            // (state-machine rejections, validation, auth) are themselves
+            // a security signal. Record with the same action but tag
+            // `afterSnap.error` so the timeline shows the attempt rather
+            // than silently dropping it.
+            this.audit.log({
+              ...actor,
+              afterSnap: { error: (err && (err.message || String(err))) ?? 'error' } as Prisma.InputJsonValue,
+            });
+            return throwError(() => err);
+          }),
+        );
       }),
     );
+  }
+}
+
+/**
+ * Build the beforeSnap payload: scrubbed request body + pre-mutation entity
+ * state from the DB. Both are captured so the audit reader sees what was
+ * requested AND what the entity looked like before the mutation.
+ */
+function buildBeforeSnap(
+  body: Record<string, unknown> | undefined,
+  entitySnap: Record<string, unknown> | null,
+): Record<string, unknown> | undefined {
+  const scrubbed = scrubBody(body);
+  if (!scrubbed && !entitySnap) return undefined;
+  const snap: Record<string, unknown> = {};
+  if (scrubbed) snap.body = scrubbed;
+  if (entitySnap) snap.entity = entitySnap;
+  return snap;
+}
+
+/**
+ * Fetch the current DB state of the entity being mutated by an admin
+ * mutation. Mirrors the mapping in `parseAdminUrl` — queries the relevant
+ * Prisma model by id/slug so the audit log can carry the full pre-state.
+ *
+ * Returns `null` when the entity cannot be found (e.g. mis-targeted
+ * mutation — the handler will throw, capturing the attempt is still
+ * valuable) or the model mapping doesn't exist.
+ */
+async function fetchEntityPreState(
+  prisma: PrismaService,
+  targetType: string,
+  targetId: string,
+): Promise<Record<string, unknown> | null> {
+  if (!targetId) return null;
+
+  switch (targetType) {
+    case 'campaign':
+      return prisma.campaign.findUnique({ where: { id: targetId } }) as Promise<Record<string, unknown> | null>;
+    case 'payout':
+      return prisma.payoutRequest.findUnique({ where: { id: targetId } }) as Promise<Record<string, unknown> | null>;
+    case 'fraud_flag':
+      return prisma.fraudFlag.findUnique({ where: { id: targetId } }) as Promise<Record<string, unknown> | null>;
+    case 'tool_integration':
+      return prisma.toolIntegration.findUnique({ where: { slug: targetId } }) as Promise<Record<string, unknown> | null>;
+    default:
+      return null;
   }
 }
 
@@ -99,6 +181,12 @@ function parseAdminUrl(
   if (url.includes('/fraud/') && url.endsWith('/resolve')) {
     return { action: 'resolve_fraud_flag', targetType: 'fraud_flag', targetId: params['id'] ?? '' };
   }
+  if (url.includes('/tools/') && url.endsWith('/toggle')) {
+    // Sensitive: tool integrations (an attacker with admin could disable
+    // ad-blocking/fraud-detection tools). Surface the slug as the targetId
+    // instead of dropping it on the generic fallback.
+    return { action: 'toggle_tool_integration', targetType: 'tool_integration', targetId: params['slug'] ?? '' };
+  }
 
   // Fallback: derive from last two segments
   const segments = url.replace(/\/$/, '').split('/').filter(Boolean);
@@ -109,7 +197,9 @@ function parseAdminUrl(
   };
 }
 
-/** One-way hash of IP for audit storage — no raw IPs persisted. */
+/**
+ * One-way hash of IP for audit storage — no raw IPs persisted.
+ */
 function hashIp(req: AuditedRequest): string | undefined {
   const forwarded = req.headers?.['x-forwarded-for'];
   const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
@@ -117,4 +207,26 @@ function hashIp(req: AuditedRequest): string | undefined {
   if (!ip || ip === 'unknown') return undefined;
 
   return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);
+}
+
+/**
+ * Capture the request body for the audit `beforeSnap` field. Strip known
+ * secret/password fields — passwords and tokens must never appear in the
+ * audit log, even though they shouldn't be in admin routes on principle.
+ * Returns `undefined` when the body is empty (logging undefined diffs is
+ * cheap and JSON keeps the field absent rather than storing an empty
+ * object).
+ */
+function scrubBody(body: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const REDACT = new Set(['password', 'token', 'accessToken', 'refreshToken', 'signature']);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (REDACT.has(k)) {
+      out[k] = '[redacted]';
+    } else {
+      out[k] = v;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }

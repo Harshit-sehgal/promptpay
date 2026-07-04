@@ -58,7 +58,24 @@ export class StripeWebhookController {
       return { received: false, reason: 'signature_verification_failed' };
     }
 
-    // Log the webhook event to the database for audit/idempotency
+    // ── Idempotency: insert-or-detect-replay then atomic claim ──
+    //
+    // 1. New event        → insert row (status='pending') → atomic claim
+    //                        (updateMany pending→processing) → process.
+    // 2. Retry / past processed → insert P2002 → read existing row:
+    //    - status='processed' → return immediately.
+    //    - status='processing' & stall timeout expired → reclaim & reprocess.
+    //    - status='processing' & recent → skip (concurrent processor active).
+    //    - status='pending' → claim now.
+    //
+    // We process synchronously inside the request (rather than fire-and-forget)
+    // so that a crash leaves the row in 'processing' instead of 'pending'
+    // (which could never be reclaimed). Stripe's retry interval is long enough
+    // (minutes→hours) that the sync latency is unnoticeable to the stripe
+    // event-sender.
+    const PROCESSING_TIMEOUT_MS = 30 * 60 * 1000;
+
+    // 1. Insert or detect replay
     try {
       await this.prisma.webhookEvent.create({
         data: {
@@ -70,19 +87,63 @@ export class StripeWebhookController {
         },
       });
     } catch (err: unknown) {
-      // If the event ID is already recorded (unique constraint), it's a replay — skip
-      if (getErrorCode(err) === 'P2002') {
-        this.logger.warn(`Duplicate Stripe event ${event.id} — skipping`);
-        return { received: true, reason: 'duplicate_event' };
+      if (getErrorCode(err) !== 'P2002') {
+        this.logger.error(`Failed to persist webhook event ${event.id}: ${getErrorMessage(err)}`);
+        throw err;
       }
-      this.logger.error(`Failed to persist webhook event ${event.id}: ${getErrorMessage(err)}`);
-      // Continue processing even if logging fails — don't block Stripe
     }
 
-    // Process the event asynchronously — return 200 to Stripe immediately
-    this.processEvent(event).catch((err: unknown) => {
-      this.logger.error(`Async processing failed for event ${event.id}: ${getErrorMessage(err)}`);
+    // 2. Read existing row (fresh or replay) and decide action
+    const existing = await this.prisma.webhookEvent.findUnique({
+      where: { eventId: event.id },
     });
+    if (!existing) {
+      this.logger.error(`Webhook event ${event.id} vanished after insert — aborting`);
+      return { received: false, reason: 'persistence_race' };
+    }
+
+    if (existing.processingStatus === 'processed') {
+      return { received: true, reason: 'already_processed' };
+    }
+
+    if (existing.processingStatus === 'processing') {
+      const claimedAt = existing.processedAt; // populated at claim time as the processing-start marker
+      const stalledMs = claimedAt ? Date.now() - claimedAt.getTime() : 0;
+      if (stalledMs < PROCESSING_TIMEOUT_MS) {
+        this.logger.warn(`Stripe event ${event.id} currently being processed by another worker`);
+        return { received: true, reason: 'currently_processing' };
+      }
+      this.logger.warn(`Stripe event ${event.id} stalled in processing for ${Math.round(stalledMs / 1000)}s — reclaiming`);
+    }
+
+    // 3. Atomic claim: pending (or stalled processing) → processing
+    const claimed = await this.prisma.webhookEvent.updateMany({
+      where: {
+        eventId: event.id,
+        processingStatus: { in: ['pending', 'processing'] },
+      },
+      data: {
+        processingStatus: 'processing',
+        processedAt: new Date(),
+      },
+    });
+    if (claimed.count === 0) {
+      // Lost the claim race — another worker claimed it between read and update
+      return { received: true, reason: 'claimed_by_other' };
+    }
+
+    // 4. Process event
+    try {
+      await this.processEvent(event);
+    } catch (err: unknown) {
+      this.logger.error(`Processing failed for Stripe event ${event.id}: ${getErrorMessage(err)}`);
+      // Reset to 'pending' so the next retry can reclaim
+      await this.prisma.webhookEvent.updateMany({
+        where: { eventId: event.id, processingStatus: 'processing' },
+        data: { processingStatus: 'pending' },
+      });
+      return { received: true, reason: 'processing_failed_will_retry' };
+    }
 
     return { received: true };
   }

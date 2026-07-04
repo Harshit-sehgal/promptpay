@@ -116,4 +116,8 @@ export class ReportAdDto {
   @IsString()
   @MaxLength(1024)
   details?: string;
+
+  @IsString()
+  @MinLength(1)
+  signature!: string;
 }

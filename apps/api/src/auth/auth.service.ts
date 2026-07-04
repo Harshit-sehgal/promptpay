@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../config/prisma.service';
 import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
-import { UserRole, UserStatus } from '@waitlayer/shared';
+import { UserRole, UserStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { FraudService } from '../fraud/fraud.service';
 import { EmailService } from '../email/email.service';
@@ -99,7 +99,7 @@ export class AuthService {
     // Advertiser onboarding: create advertiser profile stub
     if (dto.role === UserRole.ADVERTISER) {
       await this.prisma.advertiser.create({
-        data: { userId: user.id, companyName: dto.name || 'Unnamed Company', billingEmail: dto.email },
+        data: { userId: user.id, companyName: dto.name || DEFAULT_COMPANY_NAME, billingEmail: dto.email },
       });
     }
 
@@ -270,7 +270,7 @@ export class AuthService {
     // Advertiser onboarding: create advertiser profile stub
     if (role === UserRole.ADVERTISER) {
       await this.prisma.advertiser.create({
-        data: { userId: user.id, companyName: name || 'Unnamed Company', billingEmail: email },
+        data: { userId: user.id, companyName: name || DEFAULT_COMPANY_NAME, billingEmail: email },
       });
     }
 

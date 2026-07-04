@@ -23,14 +23,17 @@ services:
       - "4002:4000"
     environment:
       DATABASE_URL: postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer
-      # Dev-only defaults — the schema rejects known placeholder strings
-      # (anything matching "change-me") so these are 64 chars of base64-looking
-      # entropy without the literal placeholder keywords. Production deploys
-      # MUST override these via .env or your secrets manager.
-      JWT_SECRET: Aa1Bb2Cc3Dd4Ee5Ff6Gg7Hh8Ii9Jj0Kk1Ll2Mm3Nn4Oo5Pp6Qq7Rr8Ss9Tt0Uu1VvWw
+      # ── WARNING: Dev-only secrets ──
+      # These are visible to anyone who can read this file. Production deploys
+      # MUST override EVERY one of these via a .env file, Docker secrets, or
+      # your secrets manager.
+      # The @waitlayer/config refine() rejects keys containing "change-me" or
+      # "replace-with" — placeholders below are crafted to pass validation
+      # while being trivially distinguishable from real secrets.
+      JWT_SECRET: dev-only-docker-compose-jwt-secret-at-least-32-char
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
-      EXTENSION_HMAC_SECRET: Zz1Yy2Xx3Ww4Vv5Uu6Tt7Ss8Rr9Qq0Pp1Oo2Nn3Mm4Ll5Kk6Jj7Ii8Hh9Gg0Ff1Ee
+      EXTENSION_HMAC_SECRET: dev-only-docker-compose-hmac-secret-at-least-32
       API_PORT: "4000"
       GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
       WEB_BASE_URL: http://localhost:3000
@@ -38,14 +41,22 @@ services:
       # google-token verifier's mock path remains available. Production deploys
       # must override NODE_ENV=production AND set real secrets.
       NODE_ENV: development
-      # ALLOW_MOCK_GOOGLE intentionally NOT set — the verifier gates the mock
-      # path strictly on NODE_ENV !== 'production' and rejects everything else.
+      # Enable the mock-google-token path so local dev can sign in without a
+      # real Google account. The verifier requires BOTH NODE_ENV !== 'production'
+      # AND an explicit flag — never set this in staging/production.
+      ALLOW_MOCK_GOOGLE: "true"
       EMAIL_DRIVER: console
       EMAIL_FROM: noreply@waitlayer.local
       STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   web:
     build:
@@ -61,7 +72,8 @@ services:
       NODE_ENV: development
       NEXT_PUBLIC_ALLOW_MOCK_AUTH: "true"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:

@@ -5,9 +5,10 @@ import { RequestLike } from './brute-force.guard';
 @Injectable()
 export class ThrottleByRouteGuard extends ThrottlerGuard {
   protected override async getTracker(req: RequestLike): Promise<string> {
-    const forwarded = req.headers?.['x-forwarded-for'];
-    const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    const ip = req.ip ?? forwardedIp?.split(',')[0]?.trim() ?? req.connection?.remoteAddress ?? 'unknown';
+    // req.ip is Express's resolved client IP (honours the `trust proxy`
+    // setting in main.ts). Avoid reading x-forwarded-for directly — an
+    // attacker can rotate that header per request and defeat the rate limit.
+    const ip = req.ip ?? req.connection?.remoteAddress ?? 'unknown';
     return `ip:${ip}`;
   }
 

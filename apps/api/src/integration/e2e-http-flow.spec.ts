@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
+import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../config/prisma.service';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
@@ -57,6 +58,24 @@ describe('End-to-End HTTP Integration Flow', () => {
     prisma = app.get(PrismaService);
     ledgerService = app.get(LedgerService);
     await cleanDb(prisma);
+
+    // Seed the admin user directly in the DB. Public self-service signup
+    // correctly rejects the `admin` role (SIGNUP_ALLOWED_ROLES = developer,
+    // advertiser) — privileged roles must not be grantable over the public
+    // endpoint. Seeding here mirrors how an admin would actually be created
+    // (escalation path / migration), so the rest of the suite can log in as
+    // admin without exercising the (intentionally forbidden) signup path.
+    const adminPasswordHash = await bcrypt.hash('password123', 12);
+    await prisma.user.create({
+      data: {
+        email: 'admin@waitlayer.com',
+        passwordHash: adminPasswordHash,
+        name: 'Super Admin',
+        role: UserRole.ADMIN,
+        country: 'US',
+        status: 'active',
+      },
+    });
   });
 
   afterAll(async () => {
@@ -140,20 +159,20 @@ describe('End-to-End HTTP Integration Flow', () => {
       advertiserBToken = res.body.accessToken;
     });
 
-    it('should successfully register an admin user', async () => {
-      const res = await request(app.getHttpServer())
+    it('should reject self-service signup with a privileged (admin) role', async () => {
+      // Security control: SIGNUP_ALLOWED_ROLES = [developer, advertiser].
+      // Privileged roles must not be grantable via the public signup endpoint.
+      // The admin user for this suite is seeded directly in beforeAll.
+      await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
         .send({
-          email: 'admin@waitlayer.com',
+          email: 'admin2@waitlayer.com',
           password: 'password123',
           role: UserRole.ADMIN,
           name: 'Super Admin',
           country: 'US',
         })
-        .expect(201);
-
-      expect(res.body.user).toBeDefined();
-      expect(res.body.user.role).toBe('admin');
+        .expect(400);
     });
 
     let firstDevRefreshToken: string;

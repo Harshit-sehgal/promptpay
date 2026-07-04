@@ -1209,6 +1209,12 @@ describe('E2E Money Loop', () => {
       });
       mockPrisma.adImpression.findFirst.mockResolvedValue(null);
       mockPrisma.adImpression.findMany.mockResolvedValue([]);
+      // explicit cap-count: vi.clearAllMocks() does NOT reset prior
+      // mockResolvedValue overrides set elsewhere in the file, and Phase 3
+      // sets adImpression.count(61). Without this, the new transactional
+      // frequency-cap (which uses count under an advisory lock) would see
+      // the stale 61 and short-circuit requestAd as `user_hourly_cap_reached`.
+      mockPrisma.adImpression.count.mockResolvedValue(0);
       mockPrisma.campaign.findMany.mockResolvedValue([
         {
           id: campaignId, advertiserId: advProfileId, name: 'E2E Campaign',

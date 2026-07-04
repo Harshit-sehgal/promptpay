@@ -43,12 +43,15 @@ export default function AdvertiserBillingPage() {
       ledgerApi.getBalance(),
       ledgerApi.getHistory({ page: 1, limit: 30 }),
     ])
-      .then(([balRes, histRes]: [{ data: BalanceResponse }, { data: LedgerHistoryResponse }]) => {
-        const balanceMinor = balRes.data.balanceMinor ?? 0;
+      .then(([balRes, histRes]) => {
+        // LedgerBalanceResponse gives nested {available, pending, total, paidOut}.
+        // Use `available` as the advertiser's usable balance.
+        const avail = balRes.data.available;
+        const balanceMinor = avail.amountMinor ?? 0;
         setData({
-          balance: balRes.data.balance ?? balanceMinor / 100,
+          balance: balanceMinor / 100,
           balanceMinor,
-          currency: balRes.data.currency ?? 'USD',
+          currency: avail.currency ?? 'USD',
           entries: histRes.data.entries || [],
         });
       })

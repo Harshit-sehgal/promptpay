@@ -1,7 +1,18 @@
-import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
 import { ApiKeyService } from '../../developer/api-key.service';
-import { ALLOW_API_KEY } from '../decorators/allow-api-key.decorator';
+import { ALLOW_API_KEY, REQUIRED_API_KEY_SCOPES } from '../decorators/allow-api-key.decorator';
+
+interface RequestWithOptionalUser extends Request {
+  user?: Record<string, unknown>;
+  apiKey?: {
+    id: string;
+    ownerId: string;
+    advertiserId: string | null;
+    scopes: string[];
+  };
+}
 
 /**
  * ApiKeyGuard authenticates requests bearing an `x-api-key` header.
@@ -20,8 +31,10 @@ import { ALLOW_API_KEY } from '../decorators/allow-api-key.decorator';
  *
  * When an `x-api-key` header is present AND the route is opted-in AND the
  * request has no JWT user, the key is validated and `request.apiKey` is
- * populated. The downstream controller can then use `request.apiKey.scopes`
- * or `request.apiKey.advertiserId` to scope operations.
+ * populated. If the route is also marked `@RequiredScopes(...)`, the
+ * resolved key's scopes must cover every required scope — otherwise the
+ * request is rejected with 403 (scope is conceptually an authorization
+ * layer, not authentication).
  */
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
@@ -31,7 +44,7 @@ export class ApiKeyGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<RequestWithOptionalUser>();
     const apiKeyHeader = request.headers['x-api-key'] as string | undefined;
 
     // No API-key header → not our concern; let JwtAuthGuard handle it.
@@ -51,23 +64,41 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     // If the request is already JWT-authenticated, accept the API key as
-    // supplementary metadata but don't gate on it.
-    if ((request as any).user) {
+    // supplementary metadata but don't gate on it. Scopes only apply when
+    // the API key is the *primary* credential for the request.
+    if (request.user) {
       return true;
     }
 
-    try {
-      const apiKey = await this.apiKeyService.validateApiKey(apiKeyHeader);
-      // Attach the resolved API key info to the request for downstream use
-      (request as any).apiKey = {
-        id: apiKey.id,
-        ownerId: apiKey.ownerId,
-        advertiserId: apiKey.advertiserId,
-        scopes: apiKey.scopes,
-      };
-      return true;
-    } catch {
-      return false;
+    const apiKey = await this.apiKeyService.validateApiKey(apiKeyHeader);
+    // Attach the resolved API key info to the request for downstream use
+    request.apiKey = {
+      id: apiKey.id,
+      ownerId: apiKey.ownerId,
+      advertiserId: apiKey.advertiserId,
+      scopes: apiKey.scopes,
+    };
+
+    // Scope enforcement — runs ONLY when the API key is the primary credential.
+    // The handler-side decorator declares the required scopes; the resolved
+    // key's scopes must include all of them (logical AND). Without a scope on
+    // the route, every key pass-through is allowed (the route opts-in via
+    // @AllowApiKey but doesn't restrict which keys; useful for routes that
+    // just need a valid key to be present).
+    const requiredScopes = this.reflector.getAllAndOverride<string[]>(REQUIRED_API_KEY_SCOPES, [
+      handler,
+      cls,
+    ]);
+    if (requiredScopes && requiredScopes.length > 0) {
+      const have = new Set(apiKey.scopes);
+      const missing = requiredScopes.filter((s) => !have.has(s));
+      if (missing.length > 0) {
+        throw new ForbiddenException(
+          `API key missing required scope(s): ${missing.join(', ')}`,
+        );
+      }
     }
+
+    return true;
   }
 }

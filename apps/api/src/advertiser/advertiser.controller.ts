@@ -1,14 +1,46 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, HttpCode, HttpStatus, BadRequestException, ForbiddenException, Req } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
+import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { AdvertiserService } from './advertiser.service';
 import { StripeProvider } from '../payout/providers';
 import { CreateProfileDto, CreateCampaignDto, UpdateCampaignDto, CreateDepositSessionDto } from './dto';
 
+/**
+ * The advertiser routes accept either a JWT (acting user) or an API key
+ * (machine-to-machine). When the request is API-key authenticated the
+ * resolved credentials are on `request.apiKey`; when JWT-authenticated they
+ * are on `request.user`. Helpers below resolve the advertiserId from either
+ * source — keeping handler bodies free of auth-shape branching.
+ */
+function resolveApiContext(req: { user?: { id?: string; sub?: string }; apiKey?: { scopes: string[]; advertiserId: string | null; ownerId: string } }): {
+  userId: string;
+  advertiserId: string | null;
+  auth: 'jwt' | 'apikey';
+} {
+  if (req.apiKey) {
+    // For machine-to-machine the API key MUST be scoped to a specific
+    // advertiser (advertiserId is set at key-creation time and validated
+    // server-side). If it's null, the key is generic and cannot act on
+    // behalf of a particular advertiser — reject.
+    if (!req.apiKey.advertiserId) {
+      throw new ForbiddenException(
+        'This API key is not scoped to an advertiser — create a per-advertiser key to call /advertiser/* routes',
+      );
+    }
+    return { userId: req.apiKey.ownerId, advertiserId: req.apiKey.advertiserId, auth: 'apikey' };
+  }
+  const userId = req.user?.sub ?? req.user?.id;
+  if (!userId) throw new BadRequestException('Missing authenticated principal');
+  return { userId, advertiserId: null, auth: 'jwt' };
+}
+
 @Controller('advertiser')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@AllowApiKey() // allow API-key auth alongside JWT on all routes in this controller
 @Roles('advertiser')
 export class AdvertiserController {
   constructor(
@@ -19,75 +51,113 @@ export class AdvertiserController {
 
   @Post('profile')
   @HttpCode(HttpStatus.OK)
-  createProfile(@CurrentUser('id') userId: string, @Body() dto: CreateProfileDto) {
-    return this.service.createProfile(userId, dto);
+  @RequiredScopes('advertiser:write')
+  async createProfile(@Req() req: Request, @Body() dto: CreateProfileDto) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.createProfile(ctx.userId, dto);
   }
 
   @Get('profile')
-  getProfile(@CurrentUser('id') userId: string) {
-    return this.service.getOrCreateProfile(userId);
+  @RequiredScopes('advertiser:read')
+  async getProfile(@Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    // For API-key auth, return profile of the API key's scoped advertiser,
+    // not any advertiser the owner happens to own (machine-to-machine keys
+    // shouldn't be able to enumerate an owner's all profiles).
+    if (ctx.auth === 'apikey') {
+      return this.service.getProfileById(ctx.advertiserId!);
+    }
+    return this.service.getOrCreateProfile(ctx.userId);
   }
 
   @Get('dashboard')
-  async getDashboard(@CurrentUser('id') userId: string) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
-    return this.service.getDashboard(advertiser.id);
+  @RequiredScopes('advertiser:read')
+  async getDashboard(@Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.getDashboard(advertiserId);
   }
 
   @Post('campaigns')
-  async createCampaign(@CurrentUser('id') userId: string, @Body() dto: CreateCampaignDto) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
-    return this.service.createCampaign(advertiser.id, dto);
+  @RequiredScopes('campaigns:write')
+  async createCampaign(@Req() req: Request, @Body() dto: CreateCampaignDto) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.createCampaign(advertiserId, dto);
   }
 
   @Patch('campaigns/:id')
+  @RequiredScopes('campaigns:write')
   async updateCampaign(
     @Param('id') id: string,
-    @CurrentUser('id') userId: string,
+    @Req() req: Request,
     @Body() dto: UpdateCampaignDto,
   ) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
-    return this.service.updateCampaign(id, advertiser.id, dto);
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.updateCampaign(id, advertiserId, dto);
   }
 
   @Post('campaigns/:id/submit')
-  async submitCampaign(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
-    return this.service.submitCampaign(id, advertiser.id);
+  @RequiredScopes('campaigns:write')
+  async submitCampaign(@Param('id') id: string, @Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.submitCampaign(id, advertiserId);
   }
 
   @Post('campaigns/:id/pause')
-  async pauseCampaign(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
-    return this.service.pauseCampaign(id, advertiser.id);
+  @RequiredScopes('campaigns:write')
+  async pauseCampaign(@Param('id') id: string, @Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.pauseCampaign(id, advertiserId);
   }
 
   @Post('campaigns/:id/resume')
-  async resumeCampaign(@Param('id') id: string, @CurrentUser('id') userId: string) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
-    return this.service.resumeCampaign(id, advertiser.id);
+  @RequiredScopes('campaigns:write')
+  async resumeCampaign(@Param('id') id: string, @Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.resumeCampaign(id, advertiserId);
   }
 
   @Get('reports')
+  @RequiredScopes('reports:read')
   async getReports(
-    @CurrentUser('id') userId: string,
+    @Req() req: Request,
     @Query('campaignId') campaignId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
-    return this.service.getReports(advertiser.id, { campaignId, from, to });
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    // Reject unparseable date strings up-front (a malformed `from`/`to`
+    // would otherwise be passed to `new Date(...)` and silently widen the
+    // query to "no lower bound" — see getReports in advertiser.service).
+    const parsedFrom = from ? new Date(from) : undefined;
+    if (parsedFrom && Number.isNaN(parsedFrom.getTime())) {
+      throw new BadRequestException(`Invalid 'from' date: ${from}`);
+    }
+    const parsedTo = to ? new Date(to) : undefined;
+    if (parsedTo && Number.isNaN(parsedTo.getTime())) {
+      throw new BadRequestException(`Invalid 'to' date: ${to}`);
+    }
+    return this.service.getReports(advertiserId, { campaignId, from, to });
   }
 
   @Post('deposit-session')
+  @RequiredScopes('advertiser:write')
   async createDepositSession(
-    @CurrentUser('id') userId: string,
+    @Req() req: Request,
     @Body() dto: CreateDepositSessionDto,
   ) {
-    const advertiser = await this.service.getOrCreateProfile(userId);
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     const webBaseUrl = this.config.get<string>('WEB_BASE_URL', 'http://localhost:3000');
     return this.stripe.createDepositSession({
-      advertiserId: advertiser.id,
+      advertiserId,
       amountMinor: dto.amountMinor,
       currency: dto.currency ?? 'usd',
       successUrl: `${webBaseUrl}/advertiser?deposit=success`,

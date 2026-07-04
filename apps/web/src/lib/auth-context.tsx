@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { authApi } from '@/lib/api/services';
+import type { SignupRequest } from '@waitlayer/shared';
 
 /** Map user role to their dashboard path */
 function getDashboardPath(role: string): string {
@@ -19,14 +20,16 @@ interface User {
   name?: string;
   role: string;
   status: string;
-  trustLevel: string;
-  referralCode?: string;
+  trustLevel?: string | null;
+  referralCode?: string | null;
 }
+
+type SignupRole = 'developer' | 'advertiser';
 
 interface SignupPayload {
   email: string;
   password: string;
-  role: string;
+  role: SignupRole | string;
   name?: string;
   country?: string;
   referrerCode?: string;
@@ -42,7 +45,26 @@ interface AuthContextValue {
   logout: () => void;
 }
 
-const SESSION_COOKIE = 'session=1; path=/; max-age=2592000; SameSite=Lax';
+/** Max cookie age in seconds (30 days — match JWT refresh TTL). */
+const SESSION_COOKIE_MAX_AGE = 2_592_000;
+
+/**
+ * Set the session cookie to the real JWT access token. The Next.js
+ * middleware verifies this token against JWT_SECRET to gate protected
+ * routes — no static sentinel, no bypass.
+ *
+ * RESTRICTION: max-age≈30 days which mirrors the refresh token TTL;
+ * the access token itself is shorter-lived (15 min), so the middleware
+ * tolerates an expired token by redirecting to login — the client-side
+ * interceptor handles refresh before the redirect completes.
+ */
+function setSessionCookie(accessToken: string) {
+  document.cookie = `session=${accessToken}; path=/; max-age=${SESSION_COOKIE_MAX_AGE}; SameSite=Lax`;
+}
+
+function clearSessionCookie() {
+  clearSessionCookie();
+}
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -58,12 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then((res) => {
           setUser(res.data);
           // Ensure session cookie is set if we have a valid token
-          document.cookie = SESSION_COOKIE;
+          setSessionCookie(token);
         })
         .catch(() => {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
-          document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
+          clearSessionCookie();
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -76,32 +98,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { accessToken, refreshToken, user: userData } = res.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-    localStorage.setItem('lastDashboard', getDashboardPath(userData.role));
-    document.cookie = SESSION_COOKIE;
-    setUser(userData);
-    return userData;
+    setSessionCookie(accessToken);
+    // /auth/login returns a slim user shape; fetch the full profile so the
+    // UI has trustLevel/status/etc. without a second round-trip per page.
+    const me = await authApi.getMe();
+    const fullUser: User = {
+      ...userData,
+      status: me.data.status,
+      trustLevel: me.data.trustLevel ?? 'new',
+      referralCode: me.data.referralCode ?? undefined,
+    };
+    localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+    setUser(fullUser);
+    return fullUser;
   }, []);
 
   const signup = useCallback(async (data: SignupPayload) => {
-    const res = await authApi.signup(data);
+    const res = await authApi.signup({
+      ...data,
+      name: data.name ?? '',
+    } as SignupRequest);
     const { accessToken, refreshToken, user: userData } = res.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-    localStorage.setItem('lastDashboard', getDashboardPath(userData.role));
-    document.cookie = SESSION_COOKIE;
-    setUser(userData);
-    return userData;
+    setSessionCookie(accessToken);
+    const me = await authApi.getMe();
+    const fullUser: User = {
+      ...userData,
+      status: me.data.status,
+      trustLevel: me.data.trustLevel ?? 'new',
+      referralCode: me.data.referralCode ?? undefined,
+    };
+    localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+    setUser(fullUser);
+    return fullUser;
   }, []);
 
   const googleLogin = useCallback(async (idToken: string, role?: string) => {
-    const res = await authApi.googleLogin({ idToken, role });
+    const res = await authApi.googleLogin({ idToken, role: role as 'developer' | 'advertiser' | undefined });
     const { accessToken, refreshToken, user: userData } = res.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-    localStorage.setItem('lastDashboard', getDashboardPath(userData.role));
-    document.cookie = SESSION_COOKIE;
-    setUser(userData);
-    return userData;
+    setSessionCookie(accessToken);
+    const me = await authApi.getMe();
+    const fullUser: User = {
+      ...userData,
+      status: me.data.status,
+      trustLevel: me.data.trustLevel ?? 'new',
+      referralCode: me.data.referralCode ?? undefined,
+    };
+    localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+    setUser(fullUser);
+    return fullUser;
   }, []);
 
   const logout = useCallback(() => {
@@ -109,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('lastDashboard');
-    document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
+    clearSessionCookie();
     setUser(null);
   }, []);
 

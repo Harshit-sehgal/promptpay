@@ -42,11 +42,19 @@ export class GoogleTokenVerifier {
 
   /** Verify a Google ID token and return the decoded payload */
   async verify(idToken: string): Promise<GoogleIdTokenPayload> {
-    // Mock path is intentionally narrow: ONLY when NODE_ENV is explicitly
-    // non-production. There is no env flag override — shipping a misconfigured
-    // prod deployment must NOT silently accept `mock-google-token-*` and grant
-    // verified Google identity for any email of the form `<id>@mock-google.com`.
-    if (idToken.startsWith('mock-google-token-') && process.env.NODE_ENV !== 'production') {
+    // Mock path is intentionally narrow: requires BOTH NODE_ENV not 'production'
+    // AND an explicit opt-in env flag. A deploy that omits the flag (or sets it
+    // to anything other than '1') cannot mock — even with NODE_ENV=development.
+    // This prevents staging/preview/qa environments from silently accepting
+    // mock-google-token-* identities.
+    const mockEnabled =
+      process.env.MOCK_GOOGLE_ENABLED === '1' ||
+      process.env.ALLOW_MOCK_GOOGLE === 'true'; // legacy compat
+    if (
+      idToken.startsWith('mock-google-token-') &&
+      process.env.NODE_ENV !== 'production' &&
+      mockEnabled
+    ) {
       const parts = idToken.split('-');
       const identifier = parts[3] || 'user';
       const email = `${identifier}@mock-google.com`;

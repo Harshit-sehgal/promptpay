@@ -103,12 +103,25 @@ export class ApiKeyService {
       throw new BadRequestException('Invalid API key');
     }
 
-    // Update lastUsedAt asynchronously — don't block the request on this
-    this.prisma.apiKey
-      .update({ where: { id: apiKey.id }, data: { lastUsedAt: new Date() } })
-      .catch(() => {
-        // silently ignore update failures (e.g. key was deleted between validation and update)
-      });
+// Update lastUsedAt asynchronously, throttled to once per 60s — at peak
+    // a service-to-service client can hit the API hundreds of times per
+    // second, and every write is a DB row update on the hot path. A
+    // 60-second granularity gives the audit log a useful freshness signal
+    // without scaling writes linearly with request volume. The non-blocking
+    // `void … .catch(...)` keeps the response unaffected when the throttle
+    // fires (and never bubbles errors to the caller).
+    const now = new Date();
+    const lastWrite = apiKey.lastUsedAt?.getTime() ?? 0;
+    if (now.getTime() - lastWrite > 60_000) {
+      void this.prisma.apiKey
+        .update({
+          where: { id: apiKey.id },
+          data: { lastUsedAt: now },
+        })
+        .catch(() => {
+          // silently ignore update failures (e.g. key was deleted between validation and update)
+        });
+    }
 
     return apiKey;
   }

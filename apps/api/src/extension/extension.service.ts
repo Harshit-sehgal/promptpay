@@ -9,6 +9,21 @@ import { FraudService } from '../fraud/fraud.service';
 import * as crypto from 'crypto';
 import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } from '@waitlayer/shared';
 
+/**
+ * When the extension reports a wait_state_end, its claimed duration must
+ * agree with the server-computed delta from the matching start event.
+ * Network-and-scheduling latency and small clock skew are tolerated; this
+ * constant sets the maximum tolerable drift in seconds. Anything larger is
+ * treated as tampering and the request is rejected.
+ */
+const WAIT_STATE_DURATION_TOLERANCE_SECONDS = 30;
+
+/** Hard cap on a single wait_state duration (24 hours). */
+const WAIT_STATE_MAX_DURATION_SECONDS = 86_400;
+
+/** Max retries on a serializable transaction conflict (PostgreSQL serialization failure). */
+const FREQUENCY_CAP_TXN_MAX_RETRIES = 3;
+
 interface ServedAd {
   impressionToken: string;
   campaignId: string;
@@ -44,7 +59,9 @@ export class ExtensionService {
     platform?: string;
     publicKey?: string;
   }) {
-    // Check for duplicate device (different user, same fingerprint = fraud signal)
+    // Privacy: reject payloads containing prohibited data fields
+    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    // Check for duplicate device (same user + same fingerprint = re-registration).
     const existingDevice = await this.prisma.device.findUnique({
       where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
     });
@@ -66,56 +83,61 @@ export class ExtensionService {
       return { ...updated, eventSecret: rotatedSecret };
     }
 
-    // Check if this fingerprint is already used by another user
-    const otherDevice = await this.prisma.device.findFirst({
-      where: { fingerprintHash: dto.fingerprintHash, userId: { not: userId } },
-    });
-
-    // Per-device HMAC secret: generated once at registration and revealed to
-    // the client in the registration response. The client must persist it
-    // locally (e.g. SecretStorage) and use it for every event signature.
-    // Server-side verification resolves the device's secret from the lookup
-    // its event belongs to, never from a single global env var. This prevents
-    // a leaked global key from forging events for any device in the fleet.
+    // Cross-user instructions: the @@unique([fingerprintHash]) constraint at
+    // the schema level means two different users CANNOT register the same
+    // machine fingerprint concurrently — the second create hits P2002 (unique
+    // violation). We catch that and translate it into a "duplicate_device"
+    // fraud flag + audit entry. This is the DB-level TOCTOU guard that
+    // supersedes the prior JS-level check, which raced between two users
+    // simultaneously registering the same fingerprint.
     const eventSecret = crypto.randomBytes(32).toString('hex');
-
-    const device = await this.prisma.device.create({
-      data: {
-        userId,
-        fingerprintHash: dto.fingerprintHash,
-        eventSecret,
-        toolType: dto.toolType as ToolTypeEnum,
-        extensionVersion: dto.extensionVersion,
-        platform: dto.platform,
-        publicKey: dto.publicKey,
-      },
-    });
-
-    // If same fingerprint used by different user, create a fraud flag
-    if (otherDevice) {
-      await this.prisma.fraudFlag.create({
+    let device;
+    try {
+      device = await this.prisma.device.create({
         data: {
           userId,
-          deviceId: device.id,
-          flagType: 'duplicate_device',
-          severity: 'medium',
-          evidence: {
-            fingerprintHash: dto.fingerprintHash,
-            otherUserId: otherDevice.userId,
-            otherDeviceId: otherDevice.id,
-          },
+          fingerprintHash: dto.fingerprintHash,
+          eventSecret,
+          toolType: dto.toolType as ToolTypeEnum,
+          extensionVersion: dto.extensionVersion,
+          platform: dto.platform,
+          publicKey: dto.publicKey,
         },
       });
-
-      // Audit log for security-sensitive duplicate device detection
-      this.audit.log({
-        actorId: userId,
-        actorRole: 'developer',
-        action: 'duplicate_device_detected',
-        targetType: 'device',
-        targetId: device.id,
-        afterSnap: { otherUserId: otherDevice.userId, fingerprintHash: dto.fingerprintHash },
-      });
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        // Look up the existing owner of this fingerprint to record fraud.
+        const otherDevice = await this.prisma.device.findFirst({
+          where: { fingerprintHash: dto.fingerprintHash },
+        });
+        if (otherDevice) {
+          await this.prisma.fraudFlag.create({
+            data: {
+              userId,
+              deviceId: otherDevice.id,
+              flagType: 'duplicate_device',
+              severity: 'medium',
+              evidence: {
+                fingerprintHash: dto.fingerprintHash,
+                otherUserId: otherDevice.userId,
+                otherDeviceId: otherDevice.id,
+              },
+            },
+          });
+          this.audit.log({
+            actorId: userId,
+            actorRole: 'developer',
+            action: 'duplicate_device_rejected',
+            targetType: 'device',
+            targetId: otherDevice.id,
+            afterSnap: { otherUserId: otherDevice.userId, fingerprintHash: dto.fingerprintHash },
+          });
+        }
+        throw new ForbiddenException(
+          'This device fingerprint is already registered to another account. Each device may only be linked to one WaitLayer account.',
+        );
+      }
+      throw err;
     }
 
     return { ...device, eventSecret };
@@ -131,6 +153,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
     // Verify device belongs to this user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
     if (!device || device.userId !== userId) {
@@ -179,6 +202,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
     // Resolve the start event FIRST so we can verify with the device's secret
     const start = await this.prisma.waitStateEvent.findFirst({
       where: { userId, waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
@@ -210,10 +234,30 @@ export class ExtensionService {
       return existing;
     }
 
-    const duration = typeof dto.duration === 'string' ? parseInt(dto.duration, 10) : dto.duration;
-    if (isNaN(duration) || duration < 0) {
+    const claimedDuration = typeof dto.duration === 'string' ? parseInt(dto.duration, 10) : dto.duration;
+    if (
+      Number.isNaN(claimedDuration) ||
+      claimedDuration < 0 ||
+      claimedDuration > WAIT_STATE_MAX_DURATION_SECONDS
+    ) {
       throw new BadRequestException('Invalid duration value');
     }
+
+    // Server-compute the duration from the start event's createdAt to now.
+    // The client-claimed duration is allowed only within a small
+    // tolerance window — this blocks attempts to extend
+    // earnings-credit-eligible time on a session that actually ended long
+    // ago, while still tolerating clock skew and event-delivery latency on
+    // the extension side. The stored duration is the server-computed value
+    // — the claimed value is only used for the consistency check.
+    const serverDuration = Math.floor((Date.now() - start.createdAt.getTime()) / 1000);
+    const drift = Math.abs(serverDuration - claimedDuration);
+    if (drift > WAIT_STATE_DURATION_TOLERANCE_SECONDS) {
+      throw new BadRequestException(
+        `Duration mismatch (claimed=${claimedDuration}s, server=${serverDuration}s, tolerance=${WAIT_STATE_DURATION_TOLERANCE_SECONDS}s)`,
+      );
+    }
+    const duration = serverDuration;
 
     return this.prisma.waitStateEvent.create({
       data: {
@@ -308,43 +352,17 @@ export class ExtensionService {
       return { ad: cached.ad };
     }
 
-    // DB fallback check (e.g. process restarted)
-    const existingImpression = await this.prisma.adImpression.findFirst({
-      where: {
-        userId,
-        OR: [
-          { idempotencyKey: dto.idempotencyKey },
-          { waitStateId: dto.waitStateId }
-        ]
-      }
-    });
-    if (existingImpression) {
-      throw new ConflictException('Ad already requested for this wait state');
-    }
-
     // Build campaign query with frequency capping
     const maxPerHour = settings?.maxAdsPerHour ?? 6;
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-    const recentImpressions = await this.prisma.adImpression.findMany({
-      where: {
-        userId,
-        createdAt: { gte: oneHourAgo },
-      },
-      select: { campaignId: true },
-    });
-
-    if (recentImpressions.length >= maxPerHour) {
-      return { ad: null, reason: 'user_hourly_cap_reached' };
-    }
-
-    const recentCampaignIds = [...new Set(recentImpressions.map((i: { campaignId: string }) => i.campaignId))];
-
-    // Find active campaigns with approved creatives
+    // Find active campaigns with approved creatives (outside the critical
+    // section — read-mostly data, no contention).
+    const recentBillableCampaignIds = await this.recentBillableCampaignIds(userId, oneHourAgo);
     const campaigns = await this.prisma.campaign.findMany({
       where: {
         status: 'active',
-        id: { notIn: recentCampaignIds }, // Frequency cap: don't show same campaign within the hour
+        id: { notIn: recentBillableCampaignIds }, // Frequency cap: don't show same campaign within the hour
       },
       include: {
         creatives: {
@@ -370,13 +388,26 @@ export class ExtensionService {
       return { ad: null, reason: 'no_eligible_campaign' };
     }
 
-    // Simple weighted selection (higher bid = higher chance)
+    // Weighted selection by bid. If every eligible campaign has bid 0 the
+    // weighted RNG collapses to "always pick the first" — which is OK as
+    // long as eligible is non-empty, but falls through here only when
+    // totalBid happens to round to zero. In that case pick uniformly to
+    // avoid deterministic over-serving of the first campaign encountered.
     const totalBid = eligible.reduce((sum, c) => sum + c.bidAmountMinor, 0);
-    let random = Math.random() * totalBid;
-    let selected = eligible[0];
-    for (const c of eligible) {
-      random -= c.bidAmountMinor;
-      if (random <= 0) { selected = c; break; }
+    let selected: (typeof eligible)[number];
+    if (totalBid === 0) {
+      selected = eligible[Math.floor(Math.random() * eligible.length)];
+    } else {
+      let random = Math.random() * totalBid;
+      selected = eligible[0];
+      for (const c of eligible) {
+        random -= c.bidAmountMinor;
+        if (random <= 0) { selected = c; break; }
+      }
+      // Defensive fallback: float-rounding drift in the loop above can
+      // leave `random` slightly above zero for the highest-bid campaign.
+      // Pick it explicitly so we never serve an undefined ad.
+      selected = selected ?? eligible[eligible.length - 1];
     }
 
     const creative = selected.creatives[0];
@@ -394,25 +425,149 @@ export class ExtensionService {
       destinationUrl: creative.destinationUrl,
     };
 
-    // Create impression record
-    await this.prisma.adImpression.create({
-      data: {
-        campaignId: selected.id,
-        creativeId: creative.id,
-        userId,
-        deviceId: dto.deviceId,
-        sessionId: dto.sessionId,
-        impressionTokenHash,
-        waitStateId: dto.waitStateId,
-        idempotencyKey: dto.idempotencyKey,
-      },
-    });
+    // ── Atomic claim ──
+    // The cap-check + impression insert must be atomic against concurrent
+    // ad-requests on the same user. Without a transaction, two in-flight
+    // requests both count "5 so far" and both insert → 7 impressions for a
+    // cap of 6. We use a serializable transaction guarded by a per-user
+    // Postgres advisory lock; the lock short-circuits serialization conflicts
+    // because only one transaction per user runs the critical section at a
+    // time. On a P2034/serialization failure we retry the whole claim.
+    let claim: Awaited<ReturnType<ExtensionService['claimImpression']>>;
+    let attempt = 0;
+    for (;;) {
+      try {
+        claim = await this.claimImpression({
+          userId,
+          deviceId: dto.deviceId,
+          sessionId: dto.sessionId,
+          waitStateId: dto.waitStateId,
+          idempotencyKey: dto.idempotencyKey,
+          campaignId: selected.id,
+          creativeId: creative.id,
+          impressionTokenHash,
+          maxPerHour,
+          oneHourAgo,
+        });
+        break;
+      } catch (err) {
+        if (isSerializationError(err) && ++attempt < FREQUENCY_CAP_TXN_MAX_RETRIES) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (claim.status === 'duplicate') {
+      throw new ConflictException('Ad already requested for this wait state');
+    }
+    if (claim.status === 'cap_reached') {
+      return { ad: null, reason: 'user_hourly_cap_reached' };
+    }
 
     // Save to cache for immediate retries
     this.adCache.set(dto.idempotencyKey, { ad, timestamp: Date.now() });
     this.adCache.set(dto.waitStateId, { ad, timestamp: Date.now() });
 
     return { ad };
+  }
+
+  /**
+   * Read the set of distinct campaigns shown to this user in the last hour,
+   * counting only billable impressions. Non-billable impressions (fraud-flagged,
+   * budget-exhausted) must not consume the cap — otherwise a burst of rejected
+   * impressions blocks the user from earning legitimate ones for the rest of
+   * the hour. Read outside the critical section: it's read-mostly and the
+   * authoritative cap gate lives in claimImpression's transaction.
+   */
+  private async recentBillableCampaignIds(userId: string, oneHourAgo: Date): Promise<string[]> {
+    const recent = await this.prisma.adImpression.findMany({
+      where: { userId, isBillable: true, createdAt: { gte: oneHourAgo } },
+      select: { campaignId: true },
+    });
+    return [...new Set(recent.map((i: { campaignId: string }) => i.campaignId))];
+  }
+
+  /**
+   * Atomically: reject duplicate idempotency/waitState, enforce the hourly
+   * cap, and persist the new impression. Runs under a serializable transaction
+   * + per-user advisory lock so concurrent ad-requests serialize per user —
+   * the cap can never be exceeded by a count-then-insert race.
+   *
+   * Returns one of:
+   *   - { status: 'claimed', impressionId }              (impression created)
+   *   - { status: 'duplicate' }                          (idempotency/waitState already claimed)
+   *   - { status: 'cap_reached' }                        (user_hourly_cap_reached)
+   */
+  private async claimImpression(args: {
+    userId: string;
+    deviceId: string;
+    sessionId: string;
+    waitStateId: string;
+    idempotencyKey: string;
+    campaignId: string;
+    creativeId: string;
+    impressionTokenHash: string;
+    maxPerHour: number;
+    oneHourAgo: Date;
+  }): Promise<
+    | { status: 'claimed'; impressionId: string }
+    | { status: 'duplicate' }
+    | { status: 'cap_reached' }
+  > {
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Per-user advisory lock. Hash the userId (a UUID string) into a
+        // 32-bit bigint key for pg_advisory_xact_lock — collisions are
+        // acceptable; two users hashing to the same key just queue briefly.
+        const lockKey = BigInt('0x' + crypto.createHash('sha256').update(args.userId).digest('hex').slice(0, 8));
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
+
+        // Idempotency check inside the lock — an earlier-arrived request
+        // that INSERTed before we acquired the lock is now visible, so we
+        // detect it here rather than racing the cap.
+        const existing = await tx.adImpression.findFirst({
+          where: {
+            userId: args.userId,
+            OR: [
+              { idempotencyKey: args.idempotencyKey },
+              { waitStateId: args.waitStateId },
+            ],
+          },
+          select: { id: true },
+        });
+        if (existing) return { status: 'duplicate' as const };
+
+        // Authoritative cap count inside the lock — billable impressions in
+        // the last hour. Non-billable impressions don't consume the cap.
+        const recentCount = await tx.adImpression.count({
+          where: {
+            userId: args.userId,
+            isBillable: true,
+            createdAt: { gte: args.oneHourAgo },
+          },
+        });
+        if (recentCount >= args.maxPerHour) {
+          return { status: 'cap_reached' as const };
+        }
+
+        const created = await tx.adImpression.create({
+          data: {
+            campaignId: args.campaignId,
+            creativeId: args.creativeId,
+            userId: args.userId,
+            deviceId: args.deviceId,
+            sessionId: args.sessionId,
+            impressionTokenHash: args.impressionTokenHash,
+            waitStateId: args.waitStateId,
+            idempotencyKey: args.idempotencyKey,
+          },
+          select: { id: true },
+        });
+        return { status: 'claimed' as const, impressionId: created.id };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10_000 },
+    );
   }
 
   // ── Ad Event Tracking ──
@@ -424,6 +579,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -483,13 +639,27 @@ export class ExtensionService {
       throw new ForbiddenException('Invalid request signature');
     }
 
-    // Must meet minimum visible duration
-    if (dto.visibleDurationMs < MINIMUM_VISIBLE_DURATION_MS) {
+    // Must meet minimum visible duration. Also clamp against the elapsed
+    // server time since `renderedAt` to prevent the client from claiming
+    // more visible time than wall-clock could have elapsed. The claim is
+    // accepted when it is within a generous grace window (5s above elapsed)
+    // OR when the elapsed is too small to be meaningful (sub-second render
+    // → qualify timestamps) — in the latter case we trust the claim since
+    // there's no server-side clock to refute it.
+    let effectiveDurationMs = dto.visibleDurationMs;
+    if (impression.renderedAt) {
+      const elapsedServer = Date.now() - impression.renderedAt.getTime();
+      if (elapsedServer > 1_000 && dto.visibleDurationMs > elapsedServer + 5_000) {
+        effectiveDurationMs = elapsedServer;
+      }
+    }
+
+    if (effectiveDurationMs < MINIMUM_VISIBLE_DURATION_MS) {
       return {
         qualified: false,
         reason: 'minimum_duration_not_met',
         minimumRequired: MINIMUM_VISIBLE_DURATION_MS,
-        actual: dto.visibleDurationMs,
+        actual: effectiveDurationMs,
       };
     }
 
@@ -532,7 +702,12 @@ export class ExtensionService {
 
     const split = this.ledger.calculateSplit(impression.campaign.bidAmountMinor);
     const holdDays = this.ledger.getHoldDays(trustLevel);
-    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    // RESTRICTED → holdDays = -1 (indefinite). A negative hold must never
+    // produce an `availableAt` in the past (that would immediately mature the
+    // earnings and make them payout-eligible, the opposite of the restricted
+    // policy). Store null → never matures via matureEarnings (SQL NULL <= date
+    // is false). Mirrors the guard in ledger.service.ts.
+    const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const idempotencyBase = `imp-${impression.id}`;
 
     // Single atomic transaction: impression update + all ledger entries + campaign spend.
@@ -633,6 +808,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
+    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -698,7 +874,9 @@ export class ExtensionService {
     const trustLevel = trustScore?.level || 'new';
 
     const holdDays = this.ledger.getHoldDays(trustLevel);
-    const availableAt = new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
+    // RESTRICTED → holdDays = -1 (indefinite). Never compute a past
+    // `availableAt` for restricted users; null ⇒ never matures. See ledger.service.ts.
+    const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const split = isCpcBid ? this.ledger.calculateSplit(impression.campaign.bidAmountMinor) : null;
 
     let click: { id: string };
@@ -801,7 +979,9 @@ export class ExtensionService {
     impressionToken: string;
     reason: string;
     details?: string;
+    signature: string;
   }) {
+    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -809,6 +989,13 @@ export class ExtensionService {
     if (!impression) throw new NotFoundException('Impression not found');
     if (impression.userId !== userId) {
       throw new ForbiddenException('You do not own this impression');
+    }
+
+    // Verify device signature — otherwise an attacker who learns an impressionToken
+    // could invalidate a legitimate impression and block the owner's earnings.
+    const { signature: _, ...payload } = dto;
+    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+      throw new ForbiddenException('Invalid request signature');
     }
 
     // Create report and invalidate the impression
@@ -909,4 +1096,17 @@ export class ExtensionService {
       (error as { code?: string }).code === 'P2002'
     );
   }
+}
+
+/**
+ * Detect a PostgreSQL/Prisma serialization failure (write-skew or
+ * deadlock during a serializable transaction). Prisma surfaces these
+ * as `PrismaClientKnownRequestError` with code `P2034` (serialization)
+ * or `P2038` (transaction timeout / restart). Both are retryable.
+ */
+function isSerializationError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  if (!('code' in error)) return false;
+  const code = (error as { code?: string }).code;
+  return code === 'P2034' || code === 'P2038';
 }

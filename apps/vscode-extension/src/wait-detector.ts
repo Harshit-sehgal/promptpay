@@ -42,11 +42,16 @@ export class WaitStateDetector {
   // ── Editor inactivity tracking ──
   private inactivityTimer?: NodeJS.Timeout;
   private lastEditTime = 0;
-  private inactivityThresholdMs = 4_000; // 4 seconds of no typing = likely AI wait
+  /** User must be idle this long (with window focused) before we infer a wait. */
+  private readonly inactivityThresholdMs = 15_000;
   private inWait = false;
   private waitStart = 0;
   private waitStateId = '';
   private windowFocused = true;
+  /** Tracks consecutive "human-like" edit count during a wait — a single
+   *  programmatic insertion (AI inline completion) does NOT terminate the
+   *  wait; multiple edits in quick succession (real user typing) do. */
+  private editsDuringWait = 0;
 
   // ── Task monitoring ──
   private activeTaskCount = 0;
@@ -75,12 +80,25 @@ export class WaitStateDetector {
     // ── 1. Editor change tracking ──
     this.lastEditTime = Date.now();
     const editListener = vscode.workspace.onDidChangeTextDocument((e) => {
-      // Only track user-initiated changes (not programmatic)
-      if (e.document.uri.scheme === 'file' || e.document.uri.scheme === 'untitled') {
-        this.lastEditTime = Date.now();
-        if (this.inWait) {
-          // User started typing again — wait state likely ended
+      // Only file/untitled documents — ignore output/terminal schemes.
+      if (!(e.document.uri.scheme === 'file' || e.document.uri.scheme === 'untitled')) return;
+
+      // Update baseline even during a wait — this moves the idle clock.
+      this.lastEditTime = Date.now();
+
+      if (this.inWait) {
+        // A single edit could be an AI inline completion (programmatic).
+        // Require a burst of human edits (~3 or more) in quick succession
+        // before concluding that the user resumed typing. Every edit
+        // increments a counter; when it reaches the burst threshold we
+        // end the wait. The counter decays after a short window so
+        // scattered single insertions don't accumulate.
+        this.editsDuringWait++;
+        if (this.editsDuringWait >= 3) {
           this.endWait();
+        } else {
+          // Extend the wait check — a single edit doesn't cancel it yet.
+          // The next checkInactivity cycle will re-evaluate.
         }
       }
     });
@@ -183,6 +201,9 @@ export class WaitStateDetector {
 
   private scheduleInactivityCheck() {
     if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
+    // Reset the edit-burst counter on each scheduling cycle — any
+    // accumulated edit count from the previous window is stale.
+    this.editsDuringWait = 0;
     this.inactivityTimer = setTimeout(() => {
       this.checkInactivity();
     }, this.inactivityThresholdMs);

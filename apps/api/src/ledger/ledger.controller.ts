@@ -3,16 +3,19 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators';
+import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { LedgerService } from './ledger.service';
 import { LedgerHistoryQueryDto } from './dto';
 
 @Controller('ledger')
 @UseGuards(JwtAuthGuard)
+@AllowApiKey()
 export class LedgerController {
   constructor(private ledgerService: LedgerService) {}
 
   /** Developer: own earnings balance only */
   @Get('balance')
+  @RequiredScopes('ledger:read')
   getBalance(@CurrentUser('id') userId: string) {
     return Promise.all([
       this.ledgerService.getAvailableBalance(userId),
@@ -29,12 +32,14 @@ export class LedgerController {
 
   /** Developer: own earnings breakdown only */
   @Get('breakdown')
+  @RequiredScopes('ledger:read')
   getBreakdown(@CurrentUser('id') userId: string) {
     return this.ledgerService.getEarningsBreakdown(userId);
   }
 
   /** Developer: own earnings history only. Ignores ledgerKind if set (no privilege escalation). */
   @Get('history')
+  @RequiredScopes('ledger:read')
   getHistory(
     @CurrentUser('id') userId: string,
     @Query() query: LedgerHistoryQueryDto,
