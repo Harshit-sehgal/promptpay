@@ -296,7 +296,15 @@ export class LedgerService {
     return { matured: updated.count };
   }
 
-  /** Transition a single earning entry to a new status (with validation) */
+  /** Transition a single earning entry to a new status (with validation).
+   *
+   *  Read-then-update is racy: two concurrent callers could both read an
+   *  `estimated` row and both flip it to `held`, double-applying a hold.
+   *  We validate the transition against the observed status (for a clear
+   *  error message), then apply it with an atomic conditional UPDATE
+   *  (`updateMany where id AND status === observedStatus`). If the row's
+   *  status moved between the read and the write, count === 0 → the caller
+   *  loses the race and we surface a ConflictException so it can retry. */
   async transitionEarning(entryId: string, newStatus: LedgerStatus, reason?: string) {
     const entry = await this.prisma.earningsLedger.findUnique({
       where: { id: entryId },
@@ -310,8 +318,8 @@ export class LedgerService {
       );
     }
 
-    return this.prisma.earningsLedger.update({
-      where: { id: entryId },
+    const result = await this.prisma.earningsLedger.updateMany({
+      where: { id: entryId, status: entry.status },
       data: {
         status: newStatus,
         description: reason
@@ -319,6 +327,15 @@ export class LedgerService {
           : undefined,
       },
     });
+    if (result.count === 0) {
+      // The row's status changed between our read and the conditional
+      // write — a concurrent transition won. Surface as a conflict so the
+      // caller re-reads and decides whether to retry or no-op.
+      throw new ConflictException(
+        `Earning entry ${entryId} was modified by a concurrent transition; retry`,
+      );
+    }
+    return this.prisma.earningsLedger.findUnique({ where: { id: entryId } });
   }
 
   /** Hold all earnings for a user (e.g., during fraud investigation) */
@@ -335,8 +352,27 @@ export class LedgerService {
     });
   }
 
-  /** Release held earnings for a user (after fraud review clears) */
-  async releaseEarnings(userId: string) {
+  /** Release held earnings after a fraud-flag review clears.
+   *
+   *  Two scopes are supported:
+   *  - Per-impression (preferred when the flag links to a specific
+   *    impression): only held earnings tied to that impression are
+   *    flipped to `confirmed`. This avoids leaking legitimate holds
+   *    from concurrent unrelated flags.
+   *  - Bulk user-level fallback: used when the flag has no impressionId
+   *    (e.g. click-pattern fraud without a specific impression). All
+   *    held entries for the user are released — the flag-clear applies
+   *    to the user as a whole.
+   *
+   *  Either way the operation is idempotent (no-op when nothing matches).
+   */
+  async releaseEarnings(userId: string, opts?: { impressionId?: string }) {
+    if (opts?.impressionId) {
+      return this.prisma.earningsLedger.updateMany({
+        where: { userId, impressionId: opts.impressionId, status: 'held' },
+        data: { status: 'confirmed' },
+      });
+    }
     return this.prisma.earningsLedger.updateMany({
       where: { userId, status: 'held' },
       data: { status: 'confirmed' },

@@ -502,6 +502,20 @@ export class AuthService {
       return { message: 'Email is already verified', email: user.email };
     }
 
+    // Bind the token to the user's CURRENT email. Tokens are minted
+    // with `email: user.email` at request time. If the account's email
+    // ever changes between request and confirm, the stale token must
+    // NOT verify the new email — otherwise an attacker who intercepts
+    // (or replays) an outstanding token could silently attach their
+    // own email to the account. No email-change endpoint exists today,
+    // but this is defense-in-depth so adding one in the future
+    // automatically preserves the binding.
+    if (payload.email !== user.email) {
+      throw new BadRequestException(
+        'Verification token does not match the current email on this account — please request a fresh verification email',
+      );
+    }
+
     // Update user to verified
     await this.prisma.user.update({
       where: { id: user.id },
