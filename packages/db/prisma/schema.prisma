@@ -644,6 +644,12 @@ model AdvertiserLedger {
   advertiser            Advertiser      @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
   campaignId            String?
   stripePaymentIntentId String?
+  // The Stripe Dispute id when this row participates in a dispute freeze.
+  // Set on the `hold`/`hold-rev` rows created by the dispute webhook and on
+  // the parent deposit credit row while it's flipped to `held` status. NULL
+  // for ordinary spend rows. Lets the dispute-close handler reliably locate
+  // the rows to release or write off without re-scanning by amount/PI.
+  stripeDisputeId       String?
   entryType             LedgerEntryType
   status                LedgerStatus
   amountMinor           Int
@@ -656,6 +662,8 @@ model AdvertiserLedger {
   @@index([advertiserId, status])
   @@index([campaignId])
   @@index([createdAt])
+  // Dispute lifecycle: the close handler locates held rows by dispute id.
+  @@index([stripeDisputeId])
   @@map("advertiser_ledger")
 }
 

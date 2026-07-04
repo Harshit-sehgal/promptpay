@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
-import { REVENUE_SPLIT, LAUNCH_INCENTIVE_SPLIT, PAYOUT_HOLD_DAYS } from '@waitlayer/shared';
+import { PAYOUT_HOLD_DAYS } from '@waitlayer/shared';
 import { PLATFORM_BUCKETS } from './ledger.constants';
 import { LedgerStatus } from '@waitlayer/shared';
 import { Prisma } from '@waitlayer/db';

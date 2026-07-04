@@ -1,8 +1,9 @@
-import { Injectable, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { BidType, Prisma } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { CampaignService } from '../campaign/campaign.service';
 import { CampaignStatus, AD_SERVING, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
+import { getErrorCode } from '../common/utils/errors';
 
 /** Valid campaign status transitions */
 const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
@@ -17,6 +18,7 @@ const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
 
 @Injectable()
 export class AdvertiserService {
+  private readonly logger = new Logger(AdvertiserService.name);
   constructor(private prisma: PrismaService, private campaignService: CampaignService) {}
 
   /** Get or create advertiser profile for user */
@@ -187,6 +189,110 @@ export class AdvertiserService {
       where: { id: campaignId },
       data: { status: 'active', pausedAt: null, activatedAt: new Date() },
     });
+  }
+
+  /**
+   * Archive a campaign — permanent close that stops all future ad spend and
+   * records the unspent-budget refund obligation.
+   *
+   * Which states can transition to `archived`:
+   *   - `draft` / `submitted` / `approved` (never served) — full budget refundable.
+   *   - `paused` / `active` (partially served) — unspent balance refundable.
+   *   - `rejected` — refundable per above.
+   *   - already `archived` — idempotent return.
+   *
+   * Refund model: an `advertiserLedger` `credit` row tagged with `campaignId`,
+   * status `pending`, amount = `budgetTotalMinor - budgetSpentMinor`. We use
+   * `pending` (not `confirmed`) because the actual Stripe refund has to be
+   * initiated by an admin in the Stripe dashboard — the platform's obligation
+   * to refund is recorded here, the cash movement is completed offline. The
+   * row's `idempotencyKey` is keyed by the campaign id so a re-invoked
+   * archive is a clean P2002 no-op (and an idempotent return for the
+   * already-archived campaign row).
+   *
+   * We do NOT auto-refund via Stripe in this MVP — there's no reliable way to
+   * select which deposit PI to refund against (a campaign's spend isn't 1:1
+   * linked to a specific deposit), and auto-issuing a Stripe refund that the
+   * advertiser didn't request would be a surprising money movement. The
+   * admin reconciles the pending row against the Stripe dashboard and issues
+   * the refund, then flips the row to `confirmed` (a future admin endpoint).
+   */
+  async archiveCampaign(campaignId: string, advertiserId: string) {
+    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
+
+    // Idempotent: already archived → return as-is.
+    if (campaign.status === 'archived') {
+      const existingRefund = await this.prisma.advertiserLedger.findUnique({
+        where: { idempotencyKey: `archive_refund_${campaignId}` },
+      });
+      return { campaign, refundEntry: existingRefund ?? null, archived: false };
+    }
+
+    // Allow archiving from any non-terminal state. `archived` is the only
+    // state we explicitly reject above (idempotent). The CAMPAIGN_TRANSITIONS
+    // table doesn't list archived as a target for any state, so we bypass
+    // validateTransition here — archive is a deliberate "close forever"
+    // action available from every live state.
+    const unspentMinor = Math.max(0, campaign.budgetTotalMinor - campaign.budgetSpentMinor);
+
+    const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // CAS flip: only if not already archived (re-invocation guard).
+      const claimed = await tx.campaign.updateMany({
+        where: { id: campaignId, status: { not: 'archived' } },
+        data: { status: 'archived', archivedAt: new Date() },
+      });
+      if (claimed.count === 0) {
+        // Lost race to another archiver — already archived.
+        return { archived: false as const };
+      }
+
+      // Record the refund obligation row. Idempotent: a retry of the archive
+      // call would P2002 here, but the outer `status === 'archived'` fast-path
+      // already returned before reaching this tx. The CAS above ensures
+      // only one archive owner writes the refund row.
+      let refundEntry: { id: string; amountMinor: number } | null = null;
+      if (unspentMinor > 0) {
+        try {
+          refundEntry = await tx.advertiserLedger.create({
+            data: {
+              advertiserId,
+              campaignId,
+              entryType: 'credit',
+              status: 'pending',
+              amountMinor: unspentMinor,
+              currency: campaign.currency,
+              idempotencyKey: `archive_refund_${campaignId}`,
+              description: `Unspent-budget refund obligation — campaign ${campaignId} archived (${unspentMinor} ${campaign.currency})`,
+            },
+          });
+        } catch (err: unknown) {
+          // P2002 here means a prior archive invocation wrote the row before
+          // the status CAS caught it — shouldn't be reachable given the
+          // outer fast-path, but tolerate it rather than aborting the tx.
+          if (getErrorCode(err) !== 'P2002') throw err;
+          refundEntry = await tx.advertiserLedger.findUnique({
+            where: { idempotencyKey: `archive_refund_${campaignId}` },
+          });
+        }
+      }
+
+      return { archived: true as const, refundEntry };
+    });
+
+    if (!result.archived) {
+      // Mirror the idempotent already-archived return shape.
+      const existingRefund = await this.prisma.advertiserLedger.findUnique({
+        where: { idempotencyKey: `archive_refund_${campaignId}` },
+      });
+      return { campaign, refundEntry: existingRefund ?? null, archived: false };
+    }
+
+    const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    this.logger.log(
+      `Archived campaign ${campaignId}: unspent refund obligation = ${unspentMinor} ${campaign.currency}`,
+    );
+    return { campaign: updated, refundEntry: result.refundEntry ?? null, archived: true };
   }
 
   /** Update campaign details (only in DRAFT status) */

@@ -94,7 +94,7 @@ export default function AdvertisersPage() {
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
               <p className="text-ink-300 text-sm mb-1">CTR</p>
-              <p className="text-3xl font-bold text-white font-mono">{formatPercent(data.ctr)}</p>
+              <p className="text-3xl font-bold text-white font-mono">{formatPercent(data.ctr * 100, 2)}</p>
             </div>
           </div>
 

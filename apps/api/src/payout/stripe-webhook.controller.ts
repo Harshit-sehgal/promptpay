@@ -183,6 +183,32 @@ export class StripeWebhookController {
         await this.handleDispute(event);
         break;
       }
+      case 'charge.dispute.closed': {
+        await this.handleDisputeClosed(event);
+        break;
+      }
+      case 'charge.dispute.funds_withdrawn': {
+        // Stripe posts funds_withdrawn_after the dispute is closed and the
+        // disputed amount leaves our account. There is no further ledger
+        // action: by the time we reach this event, the close handler has
+        // already either released the hold (won) or written it off (lost).
+        // We acknowledge receipt so the webhook_event row converges to
+        // 'processed' instead of lingering as 'processing'.
+        this.logger.log(`Dispute funds withdrawn for event ${event.id} — already settled at close, acknowledging`);
+        await this.prisma.webhookEvent.updateMany({
+          where: { provider: 'stripe', eventId: event.id },
+          data: { processingStatus: 'processed', processedAt: new Date() },
+        });
+        break;
+      }
+      case 'payout.paid': {
+        await this.handlePayoutPaid(event);
+        break;
+      }
+      case 'payout.failed': {
+        await this.handlePayoutFailed(event);
+        break;
+      }
       default:
         // Mark unhandled events as processed so the webhook_event row
         // converges to a terminal state instead of stuck in 'processing'
@@ -246,6 +272,34 @@ export class StripeWebhookController {
     } catch (err: unknown) {
       if (getErrorCode(err) === 'P2002') {
         this.logger.warn(`Duplicate deposit for paymentIntent ${result.paymentIntentId} — skipping`);
+      } else {
+        throw err;
+      }
+    }
+
+    // ── Platform-side cash double-entry ──
+    // Pair the advertiser credit with a platform `cash` bucket credit so the
+    // platform's books reflect the inbound cash from Stripe. Idempotent by
+    // `stripe_deposit_plat_{pi}` key — a re-delivered checkout.session.completed
+    // P2002's here and the advertiser credit P2002's above, so both sides
+    // stay balanced regardless of which side's duplicate fires first.
+    const platIdempotencyKey = `stripe_deposit_plat_${result.paymentIntentId}`;
+    try {
+      await this.prisma.platformLedger.create({
+        data: {
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: result.amountMinor,
+          currency: result.currency.toUpperCase(),
+          bucket: 'cash',
+          referenceId: result.paymentIntentId,
+          idempotencyKey: platIdempotencyKey,
+          description: `Stripe deposit cash received — session ${sessionId}`,
+        },
+      });
+    } catch (err: unknown) {
+      if (getErrorCode(err) === 'P2002') {
+        this.logger.warn(`Duplicate platform cash entry for paymentIntent ${result.paymentIntentId} — skipping`);
       } else {
         throw err;
       }
@@ -322,6 +376,7 @@ export class StripeWebhookController {
       if (reversalAmount <= 0) continue;
 
       const idempotencyKey = `stripe_refund_${details.paymentIntentId}_${refund.id}_${entry.id}`;
+      const platRefundIdempotencyKey = `stripe_refund_plat_${details.paymentIntentId}_${refund.id}_${entry.id}`;
       await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         try {
           await tx.advertiserLedger.create({
@@ -342,6 +397,28 @@ export class StripeWebhookController {
           // for this entry — idempotent skip, continue to the parent flip.
           if (getErrorCode(err) !== 'P2002') throw err;
           this.logger.warn(`Duplicate refund entry for ${idempotencyKey} — skipping`);
+        }
+
+        // Platform cash side of the refund — debit the cash bucket back so
+        // the platform's books reflect the outbound cash. Idempotent on the
+        // paired key. A re-delivery P2002's on both advertiser + platform
+        // sides symmetrically.
+        try {
+          await tx.platformLedger.create({
+            data: {
+              entryType: 'refund',
+              status: 'confirmed',
+              amountMinor: reversalAmount,
+              currency: details.currency.toUpperCase(),
+              bucket: 'cash',
+              referenceId: details.paymentIntentId,
+              idempotencyKey: platRefundIdempotencyKey,
+              description: `Stripe refund cash returned — refund ${refund.id}`,
+            },
+          });
+        } catch (err: unknown) {
+          if (getErrorCode(err) !== 'P2002') throw err;
+          this.logger.warn(`Duplicate platform refund entry for ${platRefundIdempotencyKey} — skipping`);
         }
 
         // Re-aggregate INSIDE the transaction: the threshold now reflects
@@ -384,7 +461,20 @@ export class StripeWebhookController {
     );
   }
 
-  /** Create a fraud flag when a dispute is filed against a charge */
+  /**
+   * Dispute created — flag for review AND freeze the disputed funds.
+   *
+   * Money-freeze: the disputed amount must not be spendable by the advertiser
+   * during the dispute window. We locate the original deposit credit row(s)
+   * for this paymentIntent and CAS-flip them to `status: 'held'` (gated on
+   * `status: 'confirmed'` so a re-delivery or a second dispute can't double-
+   * hold an already-held row), then write a `hold` ledger entry tying the
+   * freeze to the dispute id. The cron that matures held developer earnings
+   * and any campaign-spend path respect `held` status — held advertiser credit
+   * is excluded from "available balance" computations everywhere.
+   *
+   * `charge.dispute.closed` releases the hold (won) or writes it off (lost).
+   */
   private async handleDispute(event: Stripe.Event): Promise<void> {
     const dispute = event.data.object as Stripe.Dispute;
     const details = await this.stripe.getDisputeDetails(dispute);
@@ -432,6 +522,60 @@ export class StripeWebhookController {
       return;
     }
 
+    // ── Money freeze ──
+    // Locate all confirmed credit rows for this paymentIntent (a single
+    // deposit is one row, but we guard against a future where a deposit may
+    // be split across rows). Flip each that is still `confirmed` to `held`,
+    // tagging it with the dispute id so the close handler can find it. A
+    // re-delivered `charge.dispute.created` (or a second dispute on the same
+    // charge) hits `status: 'held'` already and the CAS reports count === 0 —
+    // the no-op is correct, the hold row write below is idempotent on key.
+    const creditEntries = await this.prisma.advertiserLedger.findMany({
+      where: {
+        stripePaymentIntentId: details.paymentIntentId,
+        entryType: 'credit',
+        status: { in: ['confirmed', 'held'] },
+      },
+    });
+
+    for (const entry of creditEntries) {
+      const holdAmount = Math.min(entry.amountMinor, details.amountMinor);
+      if (holdAmount <= 0) continue;
+
+      const holdIdempotencyKey = `stripe_dispute_hold_${dispute.id}_${entry.id}`;
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // Write the hold entry (idempotent by dispute+entry).
+        try {
+          await tx.advertiserLedger.create({
+            data: {
+              advertiserId: entry.advertiserId,
+              campaignId: entry.campaignId,
+              stripePaymentIntentId: details.paymentIntentId,
+              stripeDisputeId: dispute.id,
+              entryType: 'hold',
+              status: 'held',
+              amountMinor: holdAmount,
+              currency: entry.currency,
+              idempotencyKey: holdIdempotencyKey,
+              description: `Dispute hold — dispute ${dispute.id} on paymentIntent ${details.paymentIntentId}`,
+            },
+          });
+        } catch (err: unknown) {
+          if (getErrorCode(err) !== 'P2002') throw err;
+          this.logger.warn(`Duplicate dispute hold ${holdIdempotencyKey} — skipping create`);
+        }
+
+        // CAS flip the parent credit row to `held`, only if still `confirmed`.
+        // An already-`held` row (re-delivery / second dispute) reports
+        // count === 0 and we proceed — the hold entry write above is also
+        // idempotent, so the whole freeze is safe to re-run.
+        await tx.advertiserLedger.updateMany({
+          where: { id: entry.id, status: 'confirmed' },
+          data: { status: 'held', stripeDisputeId: dispute.id },
+        });
+      });
+    }
+
     // Create a fraud flag for review
     try {
       await this.prisma.fraudFlag.create({
@@ -468,7 +612,208 @@ export class StripeWebhookController {
     });
 
     this.logger.log(
-      `Dispute flagged: paymentIntent=${details.paymentIntentId}, advertiser=${advertiserId}, reason=${details.reason}`,
+      `Dispute flagged + frozen: paymentIntent=${details.paymentIntentId}, advertiser=${advertiserId}, reason=${details.reason}`,
+    );
+  }
+
+  /**
+   * Dispute closed — release the hold (won) or write it off (lost).
+   *
+   * Stripe's `dispute.status` at closure is one of:
+   *   - `won`  → the dispute was resolved in our favor. The held advertiser
+   *     credit is released back to `confirmed` so the advertiser can spend
+   *     it again. The `hold` ledger row is matched by a `release` row.
+   *   - `lost` → the disputed amount was debited from our Stripe account.
+   *     The held credit is written off (`reversed`) — the advertiser's
+   *     balance is reduced by the disputed amount because the cash left the
+   *     platform. The `hold` row is matched by a `reversal` row. We do NOT
+   *     auto-issue an advertiser-facing refund here; the deposit already
+   *     left via Stripe's debit.
+   *
+   * Idempotency: every row write is keyed by the dispute id, so a re-delivered
+   * `charge.dispute.closed` is a clean P2002 no-op on the writes; the parent
+   * CAS flip is gated on `status: 'held'` so re-processing already-settled
+   * rows reports count === 0.
+   */
+  private async handleDisputeClosed(event: Stripe.Event): Promise<void> {
+    const dispute = event.data.object as Stripe.Dispute;
+    const details = await this.stripe.getDisputeDetails(dispute);
+    const won = dispute.status === 'won';
+
+    if (!details.paymentIntentId) {
+      this.logger.warn(`Dispute-closed event ${event.id} has no payment_intent — skipping`);
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
+      return;
+    }
+
+    // Locate the held credit rows for this dispute.
+    const heldEntries = await this.prisma.advertiserLedger.findMany({
+      where: {
+        stripeDisputeId: dispute.id,
+        status: 'held',
+      },
+    });
+
+    for (const entry of heldEntries) {
+      const settleIdempotencyKey = `stripe_dispute_${won ? 'release' : 'reversal'}_${dispute.id}_${entry.id}`;
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // Write the offsetting entry (`release` on won, `reversal` on lost) —
+        // idempotent by dispute+entry so re-deliveries are clean no-ops.
+        try {
+          await tx.advertiserLedger.create({
+            data: {
+              advertiserId: entry.advertiserId,
+              campaignId: entry.campaignId,
+              stripePaymentIntentId: details.paymentIntentId,
+              stripeDisputeId: dispute.id,
+              entryType: won ? 'release' : 'reversal',
+              status: won ? 'confirmed' : 'reversed',
+              amountMinor: entry.amountMinor,
+              currency: entry.currency,
+              idempotencyKey: settleIdempotencyKey,
+              description: won
+                ? `Dispute won — released hold ${dispute.id}`
+                : `Dispute lost — written off ${dispute.id}`,
+            },
+          });
+        } catch (err: unknown) {
+          if (getErrorCode(err) !== 'P2002') throw err;
+          this.logger.warn(`Duplicate dispute settlement ${settleIdempotencyKey} — skipping create`);
+        }
+
+        // CAS flip the parent held row:
+        //   won  → back to `confirmed` (re-spendable)
+        //   lost → `reversed`           (balance reduced)
+        // Gated on `status: 'held'` so a re-delivered close event sees the
+        // already-flipped row and reports count === 0 (clean no-op).
+        await tx.advertiserLedger.updateMany({
+          where: { id: entry.id, status: 'held' },
+          data: { status: won ? 'confirmed' : 'reversed' },
+        });
+      });
+    }
+
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
+    });
+
+    this.logger.log(
+      `Dispute closed (${dispute.status}): dispute=${dispute.id}, entries=${heldEntries.length}`,
+    );
+  }
+
+  /**
+   * Stripe `payout.paid` — a Stripe Connect payout to a connected account
+   * succeeded. The MVP developer-payout flow uses PayPal/manual providers,
+   * so this handler is a forward-compatible hook for when Stripe Connect is
+   * wired up. We look up the matching `PayoutTransaction` by `providerTxId`
+   * (the Stripe payout id) and, if found, CAS-flip the parent `PayoutRequest`
+   * from `approved`/`processing` → `paid`. Idempotent: an already-`paid`
+   * request is a no-op.
+   *
+   * If no matching transaction is found ( Stripe Connect not yet enabled ),
+   * we simply acknowledge receipt — Stripe might legitimately send payout
+   * events for platform-level payouts unrelated to per-developer payouts.
+   */
+  private async handlePayoutPaid(event: Stripe.Event): Promise<void> {
+    const payout = event.data.object as Stripe.Payout;
+    const providerTxId = payout.id;
+
+    const tx = await this.prisma.payoutTransaction.findFirst({
+      where: { provider: 'stripe_connect', providerTxId },
+      include: { payoutRequest: true },
+    });
+
+    if (!tx) {
+      this.logger.log(
+        `Stripe payout.paid for ${providerTxId} — no matching PayoutTransaction (likely platform-level payout), acknowledging`,
+      );
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
+      return;
+    }
+
+    // CAS flip payout_request from approved/processing → paid. Idempotent:
+    // an already-paid row is untouched (count === 0) — and that's fine.
+    const paidAt = payout.arrival_date ? new Date(payout.arrival_date * 1000) : new Date();
+    const claimed = await this.prisma.payoutRequest.updateMany({
+      where: { id: tx.payoutRequestId, status: { in: ['approved', 'processing'] } },
+      data: { status: 'paid', paidAt },
+    });
+
+    // Mark the per-provider transaction row too — its own terminal state.
+    await this.prisma.payoutTransaction.updateMany({
+      where: { id: tx.id, status: { in: ['approved', 'processing'] } },
+      data: { status: 'paid', paidAt },
+    });
+
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
+    });
+
+    this.logger.log(
+      `Stripe payout.paid: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId}, claimed=${claimed.count}`,
+    );
+  }
+
+  /**
+   * Stripe `payout.failed` — a Stripe Connect payout failed. Forward-
+   * compatible hook (see handlePayoutPaid). When a matching PayoutTransaction
+   * is found, flip the parent `PayoutRequest` to `failed` (gated on
+   * `approved`/`processing`) and record the failure reason on the
+   * `PayoutTransaction`. The held developer earnings allocations remain
+   * 'confirmed' on the earnings ledger — the payout can be retried by an
+   * admin via `processPayout` after correcting the destination account.
+   */
+  private async handlePayoutFailed(event: Stripe.Event): Promise<void> {
+    const payout = event.data.object as Stripe.Payout;
+    const providerTxId = payout.id;
+
+    const tx = await this.prisma.payoutTransaction.findFirst({
+      where: { provider: 'stripe_connect', providerTxId },
+      include: { payoutRequest: true },
+    });
+
+    if (!tx) {
+      this.logger.log(
+        `Stripe payout.failed for ${providerTxId} — no matching PayoutTransaction, acknowledging`,
+      );
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
+      return;
+    }
+
+    // The Stripe `Payout` resource surfaces failure detail only on expanded
+    // sub-resources; for the webhook we record the payout id + status as the
+    // failure reason so an admin can correlate to the Stripe dashboard. The
+    // authoritative terminal state lives on the row, not this string.
+    const failureReason = `Stripe payout ${payout.id} failed (status=${payout.status})`;
+    const claimed = await this.prisma.payoutRequest.updateMany({
+      where: { id: tx.payoutRequestId, status: { in: ['approved', 'processing'] } },
+      data: { status: 'failed' },
+    });
+
+    await this.prisma.payoutTransaction.updateMany({
+      where: { id: tx.id, status: { in: ['approved', 'processing'] } },
+      data: { status: 'failed', failureReason: `Stripe payout failed: ${failureReason}` },
+    });
+
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
+    });
+
+    this.logger.log(
+      `Stripe payout.failed: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId}, reason=${failureReason}, claimed=${claimed.count}`,
     );
   }
 }

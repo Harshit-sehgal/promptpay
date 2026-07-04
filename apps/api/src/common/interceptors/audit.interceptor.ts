@@ -5,7 +5,7 @@ import {
   ExecutionContext,
   CallHandler,
 } from '@nestjs/common';
-import { Observable, from, defer, of } from 'rxjs';
+import { Observable, from } from 'rxjs';
 import { tap, catchError, switchMap } from 'rxjs/operators';
 import { throwError } from 'rxjs';
 import type { Prisma } from '@waitlayer/db';

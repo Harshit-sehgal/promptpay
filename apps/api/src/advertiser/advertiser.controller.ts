@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles, CurrentUser } from '../common/decorators';
+import { Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { AdvertiserService } from './advertiser.service';
 import { StripeProvider } from '../payout/providers';
@@ -54,7 +54,8 @@ export class AdvertiserController {
   @RequiredScopes('advertiser:write')
   async createProfile(@Req() req: Request, @Body() dto: CreateProfileDto) {
     const ctx = resolveApiContext(req);
-    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    // Ensures the advertiser profile exists before creating/updating
+    ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     return this.service.createProfile(ctx.userId, dto);
   }
 
@@ -121,6 +122,14 @@ export class AdvertiserController {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     return this.service.resumeCampaign(id, advertiserId);
+  }
+
+  @Post('campaigns/:id/archive')
+  @RequiredScopes('campaigns:write')
+  async archiveCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.archiveCampaign(id, advertiserId);
   }
 
   @Get('reports')

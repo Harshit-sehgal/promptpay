@@ -22,16 +22,6 @@ interface BillingData {
   entries: LedgerEntry[];
 }
 
-interface BalanceResponse {
-  balance?: number;
-  balanceMinor?: number;
-  currency?: string;
-}
-
-interface LedgerHistoryResponse {
-  entries?: LedgerEntry[];
-}
-
 export default function AdvertiserBillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);

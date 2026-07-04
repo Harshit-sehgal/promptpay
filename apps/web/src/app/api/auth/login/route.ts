@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiBaseUrl, applyAuthCookies, stripAuthTokens, getRequestHost } from '../_lib/cookies';
+import { apiBaseUrl, applyAuthCookies, stripAuthTokens } from '../_lib/cookies';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const host = getRequestHost(req.headers);
 
     // 1. Call the API login endpoint
     const loginRes = await fetch(`${apiBaseUrl()}/auth/login`, {
@@ -36,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Set httpOnly cookies + return user (NOT tokens) to browser
     const response = NextResponse.json(stripAuthTokens({ ...loginData, user: fullUser }), { status: 200 });
-    return applyAuthCookies(response, { accessToken, refreshToken, requestHost: host });
+    return applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers });
   } catch {
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }

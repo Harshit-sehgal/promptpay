@@ -23,6 +23,19 @@ interface User {
   referralCode?: string | null;
 }
 
+/** Construct a User from the raw API response data. */
+function mapUser(raw: Record<string, unknown>): User {
+  return {
+    id: raw.id as string,
+    email: raw.email as string,
+    name: raw.name as string | undefined,
+    role: raw.role as string,
+    status: (raw.status as string) || 'active',
+    trustLevel: (raw.trustLevel as string | null) ?? 'new',
+    referralCode: (raw.referralCode as string | null) ?? undefined,
+  };
+}
+
 type SignupRole = 'developer' | 'advertiser';
 
 interface SignupPayload {
@@ -82,15 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const data = (await authFetch('/auth/login', { email, password })) as { user: Record<string, unknown> };
     // The Route Handler already merged /auth/me into the user profile
-    const fullUser: User = {
-      id: data.user.id as string,
-      email: data.user.email as string,
-      name: data.user.name as string | undefined,
-      role: data.user.role as string,
-      status: (data.user.status as string) || 'active',
-      trustLevel: (data.user.trustLevel as string | null) ?? 'new',
-      referralCode: (data.user.referralCode as string | null) ?? undefined,
-    };
+    const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
     setUser(fullUser);
     return fullUser;
@@ -101,15 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...payload,
       name: payload.name ?? '',
     })) as { user: Record<string, unknown> };
-    const fullUser: User = {
-      id: data.user.id as string,
-      email: data.user.email as string,
-      name: data.user.name as string | undefined,
-      role: data.user.role as string,
-      status: (data.user.status as string) || 'active',
-      trustLevel: (data.user.trustLevel as string | null) ?? 'new',
-      referralCode: (data.user.referralCode as string | null) ?? undefined,
-    };
+    const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
     setUser(fullUser);
     return fullUser;
@@ -120,15 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       idToken,
       role: role as 'developer' | 'advertiser' | undefined,
     })) as { user: Record<string, unknown> };
-    const fullUser: User = {
-      id: data.user.id as string,
-      email: data.user.email as string,
-      name: data.user.name as string | undefined,
-      role: data.user.role as string,
-      status: (data.user.status as string) || 'active',
-      trustLevel: (data.user.trustLevel as string | null) ?? 'new',
-      referralCode: (data.user.referralCode as string | null) ?? undefined,
-    };
+    const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
     setUser(fullUser);
     return fullUser;

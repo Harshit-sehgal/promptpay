@@ -6,12 +6,11 @@ export function LoadingSpinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   };
 
   return (
-    <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
+    <div className="flex items-center justify-center py-20" role="status" aria-live="polite" aria-busy="true">
       <div
         className={`animate-spin ${sizeClasses[size]} border-brand-500 border-t-transparent rounded-full`}
-        aria-label="Loading content"
       />
-      <span className="sr-only">Loading, please wait...</span>
+      <span className="sr-only">Loading {size === 'sm' ? 'content' : size === 'lg' ? 'page, please wait...' : 'data, please wait...'}</span>
     </div>
   );
 }

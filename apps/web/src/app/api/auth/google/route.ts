@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiBaseUrl, applyAuthCookies, stripAuthTokens, getRequestHost } from '../_lib/cookies';
+import { apiBaseUrl, applyAuthCookies, stripAuthTokens } from '../_lib/cookies';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const host = getRequestHost(req.headers);
 
     const googleRes = await fetch(`${apiBaseUrl()}/auth/google`, {
       method: 'POST',
@@ -33,7 +32,7 @@ export async function POST(req: NextRequest) {
     }
 
     const response = NextResponse.json(stripAuthTokens({ ...googleData, user: fullUser }), { status: 200 });
-    return applyAuthCookies(response, { accessToken, refreshToken, requestHost: host });
+    return applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers });
   } catch {
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }

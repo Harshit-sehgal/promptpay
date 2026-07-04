@@ -144,11 +144,3 @@ export function apiBaseUrl(): string {
   // earlier `localhost:4002` default drifted from the actual API port.
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 }
-
-/**
- * Extract the request host from a NextRequest headers bag. Used for the
- * Secure-attribute decision above.
- */
-export function getRequestHost(headers: Headers): string | null {
-  return headers.get('host');
-}

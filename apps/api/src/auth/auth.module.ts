@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { FraudModule } from '../fraud/fraud.module';
 import { EmailModule } from '../email/email.module';
+import { SessionCleanupCron } from './session-cleanup.cron';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { EmailModule } from '../email/email.module';
     EmailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleTokenVerifier],
+  providers: [AuthService, JwtStrategy, GoogleTokenVerifier, SessionCleanupCron],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

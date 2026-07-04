@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiBaseUrl, clearAuthCookies, COOKIE_ACCESS, getRequestHost } from '../_lib/cookies';
+import { apiBaseUrl, clearAuthCookies, COOKIE_ACCESS } from '../_lib/cookies';
 
 export async function POST(req: NextRequest) {
   try {
-    const host = getRequestHost(req.headers);
 
     // Forward the access token to the API's /auth/logout so it can revoke
     // the server-side session row.
@@ -17,7 +16,7 @@ export async function POST(req: NextRequest) {
       // Best-effort — the server might already be down; just clear cookies.
     });
 
-    return clearAuthCookies(NextResponse.json({ ok: true }, { status: 200 }), host);
+    return clearAuthCookies(NextResponse.json({ ok: true }, { status: 200 }), req.headers);
   } catch {
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
