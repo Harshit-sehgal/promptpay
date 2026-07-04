@@ -54,12 +54,15 @@ export const authApi = {
  * includes `role`. The API rejects anything outside the allowed list with
  * 400, but this catches the typo on the client side.
  */
-export function coerceRole(role: string): z.infer<typeof RoleSchema> {
+type SupportedRole = 'developer' | 'advertiser' | 'admin' | 'support' | 'super_admin';
+export function coerceRole(role: string): SupportedRole {
   const parsed = RoleSchema.safeParse(role);
   if (!parsed.success) {
-    throw new Error(`Invalid role '${role}' — must be one of: developer | advertiser | admin | support | super_admin`);
+    throw new Error(
+      `Invalid role '${role}' — must be one of: developer | advertiser | admin | support | super_admin`,
+    );
   }
-  return parsed.data;
+  return parsed.data as SupportedRole;
 }
 
 export const developerApi = {

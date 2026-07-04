@@ -100,7 +100,7 @@ export const RegisterDeviceResponse = z.object({
   eventSecret: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string().optional(),
-  lastSeenAt: z.string(),
+  lastSeenAt: z.string().optional(),
 });
 
 /** POST /api/v1/extension/wait-state/start response — matches WaitStateEvent
@@ -113,7 +113,7 @@ export const WaitStateStartResponse = z.object({
   eventType: z.literal('wait_state_start'),
   waitStateId: z.string(),
   toolType: z.string(),
-  createdAt: z.string(),
+  createdAt: z.string().optional(),
 });
 
 /** POST /api/v1/extension/wait-state/end response */
@@ -205,7 +205,7 @@ export const PayoutAllocationResponse = z.object({
 export const PayoutRequestResponse = z.object({
   id: z.string(),
   userId: z.string(),
-  payoutAccountId: z.string(),
+  payoutAccountId: z.string().optional(),
   status: PayoutStatusSchema,
   requestedAmountMinor: z.number().nonnegative(),
   approvedAmountMinor: z.number().nullable().optional(),
@@ -215,8 +215,8 @@ export const PayoutRequestResponse = z.object({
   processedAt: z.string().nullable().optional(),
   paidAt: z.string().nullable().optional(),
   providerTxId: z.string().nullable().optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
   allocations: z.array(PayoutAllocationResponse).optional(),
 });
 
