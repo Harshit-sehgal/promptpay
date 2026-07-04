@@ -477,13 +477,11 @@ export class LedgerService {
     const skip = (page - 1) * limit;
     const where: Prisma.EarningsLedgerWhereInput = { userId };
     if (filters?.status) where.status = filters.status as LedgerStatus;
-    if (filters?.ledgerKind === 'earnings') {
-      // already constrained to earningsLedger below
-    }
 
-    if (filters?.ledgerKind === 'platform' || filters?.ledgerKind === 'advertiser') {
-      // Admins get all ledgers via getHistoryForAdmin
-      return this.getHistoryForAdmin(filters, page, limit);
+    // This method is strictly for a user's own earnings history.
+    // Admins should use getHistoryForAdmin directly.
+    if (filters?.ledgerKind && filters.ledgerKind !== 'earnings') {
+      throw new BadRequestException('Users can only query the earnings ledger.');
     }
 
     const [entries, total] = await Promise.all([
@@ -599,7 +597,7 @@ export class LedgerService {
       totalPlatformFee,
       totalReserve,
     ] = await Promise.all([
-      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true } }),
+      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
       this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),

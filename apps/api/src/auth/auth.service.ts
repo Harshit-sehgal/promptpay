@@ -241,6 +241,7 @@ export class AuthService {
     }
 
     // 3. Create new user
+    const referralCode = await this.generateReferralCode();
     user = await this.prisma.user.create({
       data: {
         email,
@@ -249,17 +250,10 @@ export class AuthService {
         role,
         googleVerified: true,
         emailVerified: true,
+        referralCode,
         // No passwordHash — social login only
       },
     });
-
-    // Generate referral code for the new user
-    const referralCode = await this.generateReferralCode();
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { referralCode },
-    });
-    user.referralCode = referralCode;
 
     // Developer onboarding: create settings + trust score
     if (role === UserRole.DEVELOPER) {
@@ -412,11 +406,11 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(
         { sub: userId, role, jti, aud: 'access' } satisfies AccessTokenPayload & { aud: string },
-        { expiresIn: this.accessTtl as unknown as number },
+        { expiresIn: this.accessTtl },
       ),
       this.jwt.signAsync(
         { sub: userId, role, family, jti, aud: 'refresh' },
-        { expiresIn: this.refreshTtl as unknown as number },
+        { expiresIn: this.refreshTtl },
       ),
     ]);
 
@@ -585,7 +579,8 @@ export class AuthService {
     if (!user) throw new BadRequestException('Invalid or expired reset token');
 
     if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
-      throw new UnauthorizedException('Account is not active');
+      // Do not disclose account status; treat as invalid token.
+      throw new BadRequestException('Invalid or expired reset token');
     }
 
     // Single-use: if the password changed since the token was issued, reject
