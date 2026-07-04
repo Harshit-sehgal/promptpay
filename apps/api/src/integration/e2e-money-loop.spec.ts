@@ -118,6 +118,11 @@ const mockPrisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    // recordQualifiedImpression's CPM branch now uses a conditional
+    // updateMany CAS (where qualifiedAt IS NULL) to claim the impression
+    // before writing ledger rows. Default to "claim won" ({count:1}) so the
+    // existing happy-path tests proceed to the ledger writes.
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     count: vi.fn(),
   },
   // ── AdClick ──
@@ -1048,6 +1053,13 @@ describe('E2E Money Loop', () => {
         id: 'camp-self',
         advertiser: { userId: 'adv-user-1' },
       });
+      // checkSelfClick → createFlag (CRITICAL self-clicking) → ledger.holdEarnings.
+      // createFlag mock must return an id so `flag.id` doesn't crash before
+      // holdEarnings fires.
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-self-click' });
+      // holdEarnings calls prisma.earningsLedger.updateMany — without a
+      // resolved value the await would throw on `undefined.count`.
+      mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
 
       const result = await svc.fraud.checkSelfClick('adv-user-1', 'camp-self');
       expect(result.allowed).toBe(false);
@@ -1244,7 +1256,8 @@ describe('E2E Money Loop', () => {
 
       // ── Step 10: Record rendered ──
       mockPrisma.adImpression.findUnique.mockResolvedValue({
-        id: impressionId, userId: devUserId, impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
+        id: impressionId, userId: devUserId, deviceId,
+        impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
         renderedAt: null,
       });
       mockPrisma.adImpression.update.mockResolvedValue({

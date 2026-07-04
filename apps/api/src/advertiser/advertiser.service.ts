@@ -251,14 +251,32 @@ export class AdvertiserService {
       clickTimeWhere.createdAt = { gte, lte };
     }
 
+    // Allow-list projections — never return sensitive internal fields
+    // (impressionTokenHash, ipHash, idempotencyKey, deviceId, sessionId)
+    // to advertisers. The report only needs performance metrics.
+    const impressionSelect: Prisma.AdImpressionSelect = {
+      id: true, campaignId: true, creativeId: true, userId: true,
+      createdAt: true, renderedAt: true, qualifiedAt: true,
+      visibleDurationMs: true, visibleSurface: true, isBillable: true,
+      invalidationReason: true, invalidatedAt: true,
+    };
+
+    const clickSelect: Prisma.AdClickSelect = {
+      id: true, impressionId: true, campaignId: true, userId: true,
+      creativeId: true, clickedAt: true, targetUrl: true,
+      isValid: true, invalidationReason: true, createdAt: true,
+    };
+
     const [impressions, clicks] = await Promise.all([
       this.prisma.adImpression.findMany({
         where: { ...impressionTimeWhere, campaignId: { in: campaignIds }, isBillable: true },
+        select: impressionSelect,
         orderBy: { createdAt: 'desc' },
         take: 500,
       }),
       this.prisma.adClick.findMany({
         where: { ...clickTimeWhere, campaignId: { in: campaignIds }, isValid: true },
+        select: clickSelect,
         orderBy: { createdAt: 'desc' },
         take: 500,
       }),

@@ -166,10 +166,17 @@ function resolveIp(req: RequestLike): string {
 }
 
 function isAuthRoute(path: string): boolean {
+  // `/auth/verify-email/*` (request + confirm) carries short random
+  // verification tokens. Without brute-force tracking an attacker could
+  // hammer the confirm endpoint guessing tokens. Treat them as auth
+  // routes so the same per-(route×ip×target) lockout applies. The
+  // `target` for these routes is the user identifier (email) so a
+  // distributed guess attack on one account is tracked across IPs.
   return (
     path.includes('/auth/login') ||
     path.includes('/auth/signup') ||
     path.includes('/auth/google') ||
-    path.includes('/auth/password')
+    path.includes('/auth/password') ||
+    path.includes('/auth/verify-email')
   );
 }

@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
 import { CurrentUser } from '../common/decorators';
 import { FraudService } from './fraud.service';
+import { ResolveFlagDto } from './dto/resolve-flag.dto';
 
 @Controller('fraud')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,16 +34,23 @@ export class FraudController {
   @Post('flags/:id/resolve')
   @Roles('admin', 'super_admin')
   resolveFlag(
-    @Param('id') flagId: string,
+    @Param('id', ParseUUIDPipe) flagId: string,
     @CurrentUser('id') reviewerId: string,
-    @Body() body: { isValid: boolean; reviewNote?: string },
+    @Body() dto: ResolveFlagDto,
   ) {
-    return this.fraudService.resolveFlag(flagId, reviewerId, body.isValid, body.reviewNote);
+    // `decision==='confirmed'` maps to isValid=true (earnings reversed);
+    // `'invalid'` maps to false-positive (held earnings released).
+    // Both branches are money-mutating — proper DTO validation closes the
+    // inline-body bypass (a truthy string like 'yes' previously reached
+    // `resolveFlag` unchanged because inline types carry no validation
+    // metadata for class-validator).
+    const isValid = dto.decision === 'confirmed';
+    return this.fraudService.resolveFlag(flagId, reviewerId, isValid, dto.note);
   }
 
   @Post('compute-trust/:userId')
   @Roles('admin', 'super_admin')
-  computeTrustScore(@Param('userId') userId: string) {
+  computeTrustScore(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.fraudService.computeTrustScore(userId);
   }
 }

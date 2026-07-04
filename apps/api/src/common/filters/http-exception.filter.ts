@@ -7,7 +7,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -16,6 +16,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
@@ -24,11 +25,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof HttpException
         ? exception.getResponse()
         : 'Internal server error';
-    const requestId = crypto.randomUUID();
+    // Reuse the request-scoped id stamped by the requestId middleware in
+    // main.ts so the filter's log line + JSON response match the
+    // LoggingInterceptor's access log — operators can correlate a client's
+    // `requestId` to both the access log and the 5xx stack trace. Fall back
+    // to a fresh UUID if the header is somehow absent (e.g. non-HTTP RPC).
+    const requestId = (request.headers['x-request-id'] as string | undefined) || crypto.randomUUID();
 
     // Log 5xx errors with the full stack — these are unexpected failures that
     // need investigation. 4xx errors are client mistakes and are already logged
-    // by the LoggingInterceptor.
+    // by the LoggingInterceptor (which also echoes the same requestId).
     if (status >= 500) {
       this.logger.error(
         `Unhandled exception (requestId=${requestId}): ${exception instanceof Error ? exception.stack : String(exception)}`,
@@ -41,6 +47,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       response.end();
       return;
     }
+
+    // Always echo the requestId in the response header so the client/upstream
+    // can correlate even when the body is consumed elsewhere.
+    response.setHeader('x-request-id', requestId);
 
     response.status(status).json({
       statusCode: status,

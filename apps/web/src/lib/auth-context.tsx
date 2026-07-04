@@ -1,8 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { authApi } from '@/lib/api/services';
-import type { SignupRequest } from '@waitlayer/shared';
+import api from '@/lib/api/client';
 
 /** Map user role to their dashboard path */
 function getDashboardPath(role: string): string {
@@ -45,89 +44,71 @@ interface AuthContextValue {
   logout: () => void;
 }
 
-/** Max cookie age in seconds (30 days — match JWT refresh TTL). */
-const SESSION_COOKIE_MAX_AGE = 2_592_000;
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 /**
- * Set the session cookie to the real JWT access token. The Next.js
- * middleware verifies this token against JWT_SECRET to gate protected
- * routes — no static sentinel, no bypass.
- *
- * RESTRICTION: max-age≈30 days which mirrors the refresh token TTL;
- * the access token itself is shorter-lived (15 min), so the middleware
- * tolerates an expired token by redirecting to login — the client-side
- * interceptor handles refresh before the redirect completes.
+ * Call the same-origin Route Handler `/api/auth/<action>`.
+ * The handler sets/clears httpOnly cookies server-side, so no token handling
+ * is needed in JavaScript. Returns the parsed JSON body.
  */
-function setSessionCookie(accessToken: string) {
-  document.cookie = `session=${accessToken}; path=/; max-age=${SESSION_COOKIE_MAX_AGE}; SameSite=Lax`;
+async function authFetch(path: string, body: unknown): Promise<unknown> {
+  const res = await api.post(path, body);
+  return res.data;
 }
-
-function clearSessionCookie() {
-  clearSessionCookie();
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check for existing session on mount
+  // On mount, call /auth/me. The httpOnly access_token cookie is sent
+  // automatically (withCredentials: true). If the cookie is valid, we get
+  // the user profile. If 401, the interceptor attempts a refresh; if that
+  // also fails, we fall through to logged-out state.
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      authApi.getMe()
-        .then((res) => {
-          setUser(res.data);
-          // Ensure session cookie is set if we have a valid token
-          setSessionCookie(token);
-        })
-        .catch(() => {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
-          clearSessionCookie();
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+    api
+      .get('/auth/me')
+      .then((res) => {
+        setUser(res.data as User);
+      })
+      .catch(() => {
+        // Not logged in or session expired — stay logged out.
+        // No localStorage to clean up; cookies are httpOnly and cleared
+        // by the Route Handler on refresh failure.
+        setUser(null);
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await authApi.login({ email, password });
-    const { accessToken, refreshToken, user: userData } = res.data;
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
-    setSessionCookie(accessToken);
-    // /auth/login returns a slim user shape; fetch the full profile so the
-    // UI has trustLevel/status/etc. without a second round-trip per page.
-    const me = await authApi.getMe();
+    const data = (await authFetch('/auth/login', { email, password })) as { user: Record<string, unknown> };
+    // The Route Handler already merged /auth/me into the user profile
     const fullUser: User = {
-      ...userData,
-      status: me.data.status,
-      trustLevel: me.data.trustLevel ?? 'new',
-      referralCode: me.data.referralCode ?? undefined,
+      id: data.user.id as string,
+      email: data.user.email as string,
+      name: data.user.name as string | undefined,
+      role: data.user.role as string,
+      status: (data.user.status as string) || 'active',
+      trustLevel: (data.user.trustLevel as string | null) ?? 'new',
+      referralCode: (data.user.referralCode as string | null) ?? undefined,
     };
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
     setUser(fullUser);
     return fullUser;
   }, []);
 
-  const signup = useCallback(async (data: SignupPayload) => {
-    const res = await authApi.signup({
-      ...data,
-      name: data.name ?? '',
-    } as SignupRequest);
-    const { accessToken, refreshToken, user: userData } = res.data;
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
-    setSessionCookie(accessToken);
-    const me = await authApi.getMe();
+  const signup = useCallback(async (payload: SignupPayload) => {
+    const data = (await authFetch('/auth/signup', {
+      ...payload,
+      name: payload.name ?? '',
+    })) as { user: Record<string, unknown> };
     const fullUser: User = {
-      ...userData,
-      status: me.data.status,
-      trustLevel: me.data.trustLevel ?? 'new',
-      referralCode: me.data.referralCode ?? undefined,
+      id: data.user.id as string,
+      email: data.user.email as string,
+      name: data.user.name as string | undefined,
+      role: data.user.role as string,
+      status: (data.user.status as string) || 'active',
+      trustLevel: (data.user.trustLevel as string | null) ?? 'new',
+      referralCode: (data.user.referralCode as string | null) ?? undefined,
     };
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
     setUser(fullUser);
@@ -135,17 +116,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const googleLogin = useCallback(async (idToken: string, role?: string) => {
-    const res = await authApi.googleLogin({ idToken, role: role as 'developer' | 'advertiser' | undefined });
-    const { accessToken, refreshToken, user: userData } = res.data;
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
-    setSessionCookie(accessToken);
-    const me = await authApi.getMe();
+    const data = (await authFetch('/auth/google', {
+      idToken,
+      role: role as 'developer' | 'advertiser' | undefined,
+    })) as { user: Record<string, unknown> };
     const fullUser: User = {
-      ...userData,
-      status: me.data.status,
-      trustLevel: me.data.trustLevel ?? 'new',
-      referralCode: me.data.referralCode ?? undefined,
+      id: data.user.id as string,
+      email: data.user.email as string,
+      name: data.user.name as string | undefined,
+      role: data.user.role as string,
+      status: (data.user.status as string) || 'active',
+      trustLevel: (data.user.trustLevel as string | null) ?? 'new',
+      referralCode: (data.user.referralCode as string | null) ?? undefined,
     };
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
     setUser(fullUser);
@@ -153,11 +135,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    authApi.logout().catch(() => {});
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+    // Best-effort — call the Route Handler to revoke the server-side session
+    // and clear auth cookies.
+    api.post('/auth/logout').catch(() => {});
     localStorage.removeItem('lastDashboard');
-    clearSessionCookie();
     setUser(null);
   }, []);
 

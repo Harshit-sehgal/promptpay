@@ -8,9 +8,37 @@ interface RequestWithOptionalUser extends Request {
   user?: Record<string, unknown>;
   apiKey?: {
     id: string;
-    ownerId: string;
+    ownerId: string | null;
     advertiserId: string | null;
     scopes: string[];
+  };
+}
+
+/**
+ * When an API key is the PRIMARY credential (no JWT), synthesize a minimal
+ * `req.user` so downstream `@CurrentUser('id')` / `@CurrentUser('role')` and
+ * `RolesGuard` resolve the *owner's* identity uniformly — the same shape the
+ * JWT strategy produces. Without this, every `@AllowApiKey` controller that
+ * reads `@CurrentUser('id')` would receive `undefined` (JwtAuthGuard skips jwt
+ * strategy execution when req.apiKey is set, so passport never populates
+ * req.user), and Prisma then omits the `undefined` userId from every WHERE
+ * clause → cross-tenant data leak (earnings/payout/developer exports).
+ *
+ * The synthesized user carries the owner's id and role (resolved in
+ * validateApiKey). `sub` mirrors `id` to match the JWT payload convention
+ * (req.user.sub is what the advertiser controller's resolveApiContext reads
+ * on the JWT path). `advertiserId` from the key stays available on
+ * `req.apiKey` for routes that need the key's *scoped* advertiser rather than
+ * the owner's own profile (advertiser controller).
+ */
+function stampUserFromApiKey(req: RequestWithOptionalUser, apiKey: {
+  ownerId: string;
+  owner: { role: string };
+}): void {
+  req.user = {
+    id: apiKey.ownerId,
+    sub: apiKey.ownerId,
+    role: apiKey.owner.role,
   };
 }
 
@@ -78,6 +106,18 @@ export class ApiKeyGuard implements CanActivate {
       advertiserId: apiKey.advertiserId,
       scopes: apiKey.scopes,
     };
+
+    // Synthesize req.user from the key owner so `@CurrentUser('id')` /
+    // `@CurrentUser('role')` and RolesGuard resolve the owner uniformly.
+    // Without this, handlers reading `@CurrentUser('id')` receive `undefined`
+    // (JwtAuthGuard skips the jwt strategy when req.apiKey is set) and the
+    // undefined filters out of Prisma WHERE clauses → cross-tenant leaks.
+    if (apiKey.ownerId && apiKey.owner) {
+      stampUserFromApiKey(request, {
+        ownerId: apiKey.ownerId,
+        owner: { role: apiKey.owner.role },
+      });
+    }
 
     // Scope enforcement — runs ONLY when the API key is the primary credential.
     // The handler-side decorator declares the required scopes; the resolved

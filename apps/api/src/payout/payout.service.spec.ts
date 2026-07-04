@@ -250,9 +250,15 @@ describe('PayoutService', () => {
     });
 
     it('should route to the correct provider and initiate transaction', async () => {
+      // New processPayout path atomically claims approved → processing
+      // BEFORE calling the provider, to prevent concurrent
+      // `processPayout` calls from firing provider.initiate() twice
+      // (real-money double-pay). The transaction-wrapped re-read sees
+      // the same approved-state row (claim flipped it to processing).
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.payoutRequest.findUnique.mockResolvedValue({
         id: 'req_123',
-        status: 'approved',
+        status: 'processing', // already claimed by the updateMany above
         currency: 'USD',
         approvedAmountMinor: 2000,
         allocations: [{ amountMinor: 2000 }],
@@ -269,8 +275,8 @@ describe('PayoutService', () => {
       });
       expect(result.status).toBe('processing');
       expect(mockPrisma.payoutTransaction.create).toHaveBeenCalled();
-      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledWith({
-        where: { id: 'req_123' },
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 'req_123', status: 'approved' },
         data: { status: 'processing', processedAt: expect.any(Date) },
       });
     });
@@ -374,6 +380,8 @@ describe('PayoutService', () => {
           ],
         });
       });
+      // Post-CAS authoritative re-count: every allocated id now in 'paid'.
+      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _count: { _all: 1 } });
 
       const res = await service.markPayoutPaid('req_123', { providerTxId: 'tx_wise_abc', paidAt: nowStr });
 
@@ -395,6 +403,49 @@ describe('PayoutService', () => {
         data: { status: 'paid' },
       });
       expect(res.status).toBe('paid');
+    });
+
+    it('refuses to mark paid when a fraud hold intervened (allocated entry no longer confirmed)', async () => {
+      // A concurrent critical fraud flag ran `holdEarnings(userId)` between
+      // the snapshot read and the authoritative per-row CAS — flipping the
+      // allocated entry `confirmed` → `held`. The conditional `updateMany
+      // where status: 'confirmed'` silently SKIPS the held row, so the
+      // post-check aggregate sees fewer 'paid' rows than allocated. This MUST
+      // throw and roll back the `payoutRequest → paid` flip + the
+      // `payoutTransaction` row; otherwise the payout succeeds (money leaves)
+      // while the developer's earnings entry is orphaned in `held` — and when
+      // the false-positive flag releases it, the developer can withdraw again
+      // (double-spend).
+      const nowStr = new Date().toISOString();
+      mockPrisma.payoutRequest.findUnique.mockImplementation((_args: any) => {
+        return Promise.resolve({
+          id: 'req_123',
+          status: 'processing',
+          userId: 'user_123',
+          payoutAccount: { provider: 'wise' },
+          allocations: [
+            { earningsEntry: { status: 'confirmed' }, earningsEntryId: 'earn_1' },
+            { earningsEntry: { status: 'confirmed' }, earningsEntryId: 'earn_2' },
+          ],
+        });
+      });
+      // Post-CAS re-count: only earn_1 transitioned to 'paid' (earn_2 was
+      // held by the concurrent fraud flag and skipped by the CAS).
+      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _count: { _all: 1 } });
+
+      await expect(
+        service.markPayoutPaid('req_123', { providerTxId: 'tx_wise_abc', paidAt: nowStr }),
+      ).rejects.toThrow(BadRequestException);
+
+      // The throw rolls back the whole $transaction: payoutRequest never
+      // transitioned to 'paid' (its CAS was inside the same tx), and the
+      // payoutTransaction row was rolled back too.
+      expect(mockPrisma.payoutTransaction.create).toHaveBeenCalled();
+      // The earnings ledger CAS still ran with the 'confirmed' filter.
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['earn_1', 'earn_2'] }, status: 'confirmed' },
+        data: { status: 'paid' },
+      });
     });
   });
 });

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, HttpCode, HttpStatus, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, UseGuards, HttpCode, HttpStatus, ForbiddenException, ParseUUIDPipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -18,42 +18,51 @@ export class CampaignController {
 
   @Get(':id/stats')
   async getCampaignStats(
-    @Param('id') campaignId: string,
+    @Param('id', ParseUUIDPipe) campaignId: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
     if (role !== 'admin' && role !== 'super_admin') {
       await this.verifyOwnership(campaignId, userId);
     }
-    return this.campaignService.getCampaignStats(campaignId);
+    // Pass actor to the service so the service-layer ownership check is
+    // active even for non-controller callers (jobs, internal helpers).
+    return this.campaignService.getCampaignStats(campaignId, { userId, role });
   }
 
   @Get(':id/creatives')
   async getCreatives(
-    @Param('id') campaignId: string,
+    @Param('id', ParseUUIDPipe) campaignId: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
   ) {
     if (role !== 'admin' && role !== 'super_admin') {
       await this.verifyOwnership(campaignId, userId);
     }
-    return this.campaignService.getCreatives(campaignId);
+    return this.campaignService.getCreatives(campaignId, { userId, role });
   }
 
   @Post(':id/creatives')
   @HttpCode(HttpStatus.OK)
   async createCreative(
-    @Param('id') campaignId: string,
+    @Param('id', ParseUUIDPipe) campaignId: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
     @Body() dto: CreateCreativeDto,
   ) {
-    await this.verifyOwnership(campaignId, userId);
+    // Admins/super_admins may manage creatives on any campaign (support
+    // workflows). Non-admin callers must own the campaign via their
+    // advertiser profile. Without this branch an admin is Forbidden'd from
+    // creating a creative — the controller layer had no admin bypass path.
+    if (role !== 'admin' && role !== 'super_admin') {
+      await this.verifyOwnership(campaignId, userId);
+    }
     return this.campaignService.createCreative(campaignId, dto);
   }
 
   @Patch('creatives/:creativeId')
   async updateCreative(
-    @Param('creativeId') creativeId: string,
+    @Param('creativeId', ParseUUIDPipe) creativeId: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
     @Body() dto: UpdateCreativeDto,
@@ -74,7 +83,7 @@ export class CampaignController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
   @Roles('admin', 'super_admin')
-  approveCreative(@Param('creativeId') creativeId: string) {
+  approveCreative(@Param('creativeId', ParseUUIDPipe) creativeId: string) {
     return this.campaignService.approveCreative(creativeId);
   }
 
@@ -83,7 +92,7 @@ export class CampaignController {
   @UseGuards(RolesGuard)
   @Roles('admin', 'super_admin')
   rejectCreative(
-    @Param('creativeId') creativeId: string,
+    @Param('creativeId', ParseUUIDPipe) creativeId: string,
     @Body('reason') reason: string,
   ) {
     return this.campaignService.rejectCreative(creativeId, reason);
@@ -92,11 +101,15 @@ export class CampaignController {
   @Post(':id/targeting/countries')
   @HttpCode(HttpStatus.OK)
   async setCountryTargeting(
-    @Param('id') campaignId: string,
+    @Param('id', ParseUUIDPipe) campaignId: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
     @Body() targets: CreateCountryTargetingDto[],
   ) {
-    await this.verifyOwnership(campaignId, userId);
+    // Admins manage targeting on any campaign; non-admins must own it.
+    if (role !== 'admin' && role !== 'super_admin') {
+      await this.verifyOwnership(campaignId, userId);
+    }
     return this.campaignService.setCountryTargeting(
       campaignId,
       targets.map(t => ({ countryCode: t.countryCode, include: t.include })),

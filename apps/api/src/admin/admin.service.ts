@@ -95,16 +95,70 @@ export class AdminService {
     return this.prisma.payoutRequest.findMany({ where: { status: { in: ['requested', 'under_review'] } }, include: { user: { select: { email: true, name: true, trustLevel: true } }, payoutAccount: true }, orderBy: { createdAt: 'asc' } });
   }
 
-  async approvePayout(payoutId: string, reviewerId: string, note?: string) {
+  async approvePayout(
+    payoutId: string,
+    reviewerId: string,
+    note?: string,
+    approvedAmountMinor?: number,
+  ) {
     // Conditional update: only approve from a reviewable state. This prevents
     // an admin (or a compromised admin token) from re-approving a payout that
     // is already `paid`/`processing` (destroying the payment audit trail) or
     // resurrecting a `rejected`/`cancelled`/`failed` payout. `count === 0`
     // means the payout is missing or not in a reviewable state — surface that
     // rather than silently no-op.
+    //
+    // Amount reconciliation: always set `approvedAmountMinor` authorita-
+    // tively. Previously the column was never written, so the reconciliation
+    // guards in `processPayout` and `markPayoutPaid` (which prefer
+    // `approvedAmountMinor ?? requestedAmountMinor`) silently fell back to
+    // the requested amount — a deliberately-reduced approval would still be
+    // paid at the higher requested figure. Now:
+    //   - partial approval: `approvedAmountMinor` (validated `> 0` and
+    //     `<= requestedAmountMinor`) — the payout is authorised at the
+    //     reduced figure.
+    //   - full approval (omitted): `approvedAmountMinor = requestedAmountMinor`
+    //     — explicit, so the reconciliation prefers the APPROVED value
+    //     rather than the requested one going forward.
+    if (approvedAmountMinor !== undefined) {
+      if (!Number.isInteger(approvedAmountMinor) || approvedAmountMinor <= 0) {
+        throw new BadRequestException('approvedAmountMinor must be a positive integer');
+      }
+    }
+
+    // Read the payout to validate a partial-approval amount against the
+    // requested amount BEFORE the conditional update. The conditional update
+    // below is the authoritative state guard; this read is just the bounds
+    // check (a TOCTOU between this read and the update cannot inflate the
+    // approved amount because requestedAmountMinor is immutable post-request
+    // — see PayoutRequest schema).
+    let resolvedApprovedAmount: number | undefined;
+    if (approvedAmountMinor !== undefined) {
+      const target = await this.prisma.payoutRequest.findUnique({
+        where: { id: payoutId },
+        select: { requestedAmountMinor: true, currency: true, status: true },
+      });
+      if (!target) throw new BadRequestException('Payout not found');
+      if (approvedAmountMinor > target.requestedAmountMinor) {
+        throw new BadRequestException(
+          `approvedAmountMinor (${approvedAmountMinor}) cannot exceed requestedAmountMinor (${target.requestedAmountMinor})`,
+        );
+      }
+      resolvedApprovedAmount = approvedAmountMinor;
+    }
+
     const result = await this.prisma.payoutRequest.updateMany({
       where: { id: payoutId, status: { in: ['requested', 'under_review'] } },
-      data: { status: 'approved', reviewerId, reviewNote: note, processedAt: new Date() },
+      data: {
+        status: 'approved',
+        reviewerId,
+        reviewNote: note,
+        processedAt: new Date(),
+        // Always set: explicit full-approval when no partial amount given,
+        // the validated partial amount otherwise. This neutralises the
+        // silent-null-fallback footgun downstream.
+        approvedAmountMinor: resolvedApprovedAmount ?? undefined,
+      },
     });
     if (result.count === 0) {
       const existing = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId }, select: { status: true } });
@@ -114,6 +168,25 @@ export class AdminService {
           : 'Payout not found',
       );
     }
+
+    // When full approval was requested, fetch the requested amount and set
+    // the column in a second (idempotent) write. We can't do this in the
+    // updateMany above because we don't have the requested amount there
+    // without an extra read; doing the read + conditional write here keeps
+    // the happy path at one round-trip for partial approvals.
+    if (approvedAmountMinor === undefined) {
+      const full = await this.prisma.payoutRequest.findUnique({
+        where: { id: payoutId },
+        select: { requestedAmountMinor: true },
+      });
+      if (full) {
+        await this.prisma.payoutRequest.update({
+          where: { id: payoutId },
+          data: { approvedAmountMinor: full.requestedAmountMinor },
+        });
+      }
+    }
+
     return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
   }
 
@@ -137,9 +210,17 @@ export class AdminService {
   }
 
   async markPayoutPaid(payoutId: string, data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string }) {
+    // The DTO carries amountMinor + currency so the admin's body can be
+    // cross-checked against the payout's stored values before flipping it to
+    // `paid`. Previously these fields were dropped silently — a transposed
+    // digit in the admin's body would still mark the (wrong) payout as paid.
+    // We surface the cross-check inside the payout service so the flip is
+    // atomic with the validation (re-read inside the tx).
     return this.payoutService.markPayoutPaid(payoutId, {
       providerTxId: data.providerTxId,
       paidAt: data.paidAt,
+      expectedAmountMinor: data.amountMinor,
+      expectedCurrency: data.currency,
     });
   }
 

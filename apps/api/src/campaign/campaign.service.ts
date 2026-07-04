@@ -1,6 +1,18 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { MAX_AD_MESSAGE_LENGTH, PROHIBITED_CATEGORIES } from '@waitlayer/shared';
+
+/**
+ * Actor carrying the caller's identity for ownership checks at the service
+ * layer. Controllers pass this in; callers that don't authenticate (admin
+ * jobs, internal callers) should pass `actor.role === 'admin'`.
+ */
+export interface ServiceActor {
+  userId?: string;
+  role?: string;
+  /** Pre-resolved advertiser id for API-key machine-to-machine callers. */
+  advertiserId?: string | null;
+}
 
 @Injectable()
 export class CampaignService {
@@ -65,7 +77,8 @@ export class CampaignService {
     });
   }
 
-  async getCreatives(campaignId: string) {
+  async getCreatives(campaignId: string, actor?: ServiceActor) {
+    await this.assertCampaignOwnership(campaignId, actor);
     return this.prisma.adCreative.findMany({
       where: { campaignId },
       orderBy: { createdAt: 'desc' },
@@ -135,7 +148,8 @@ export class CampaignService {
 
   // ── Stats ──
 
-  async getCampaignStats(campaignId: string) {
+  async getCampaignStats(campaignId: string, actor?: ServiceActor) {
+    await this.assertCampaignOwnership(campaignId, actor);
     const [impressions, clicks, spend, campaign] = await Promise.all([
       this.prisma.adImpression.count({ where: { campaignId, isBillable: true } }),
       this.prisma.adClick.count({ where: { campaignId, isValid: true } }),
@@ -171,6 +185,52 @@ export class CampaignService {
     });
     if (blocked) {
       throw new BadRequestException(`Category "${category}" is blocked: ${blocked.reason}`);
+    }
+  }
+
+  /**
+   * Verify the caller owns the campaign. The controller-level verifier is
+   * the primary gate; this service-layer check is defense-in-depth for any
+   * internal/future caller that bypasses the controller — without it, an
+   * advertiserId leak could be obtained by anyone who knows a campaignId.
+   *
+   * Admins and super_admins bypass the ownership check (support workflows).
+   * For API-key machine-to-machine callers, the actor carries `advertiserId`
+   * pre-resolved by the controller — the campaign's `advertiserId` must
+   * match it exactly.
+   *
+   * When `actor` is omitted it's treated as an internal/system call; we
+   * fail closed (forbid) so the contract is "you must prove who you are
+   * OR be admin" rather than "everyone can read".
+   */
+  private async assertCampaignOwnership(campaignId: string, actor?: ServiceActor): Promise<void> {
+    if (actor?.role === 'admin' || actor?.role === 'super_admin') return;
+
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { advertiserId: true },
+    });
+    if (!campaign) throw new NotFoundException('Campaign not found');
+
+    // API-key path: the actor already has an advertiserId set at key creation.
+    if (actor?.advertiserId) {
+      if (actor.advertiserId !== campaign.advertiserId) {
+        throw new ForbiddenException('You do not own this campaign');
+      }
+      return;
+    }
+
+    // JWT path: resolve the caller's advertiser profile and compare.
+    if (!actor?.userId) {
+      throw new ForbiddenException('You do not own this campaign');
+    }
+
+    const advertiser = await this.prisma.advertiser.findUnique({
+      where: { userId: actor.userId },
+      select: { id: true },
+    });
+    if (!advertiser || advertiser.id !== campaign.advertiserId) {
+      throw new ForbiddenException('You do not own this campaign');
     }
   }
 }

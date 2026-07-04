@@ -23,6 +23,22 @@ export class ApprovePayoutDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  /**
+   * Optional partial-approval amount (minor units). When omitted the
+   * payout is approved at its full `requestedAmountMinor`. When provided
+   * it MUST be `> 0` and `<= requestedAmountMinor` — a partial payout the
+   * admin authorised after fraud review. Setting this writes the
+   * `approvedAmountMinor` column authoritatively so the downstream
+   * `processPayout` / `markPayoutPaid` reconciliation guards compare
+   * against the approved amount rather than silently falling back to the
+   * requested amount (which would let a reduced approval be paid at the
+   * original figure).
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  approvedAmountMinor?: number;
 }
 
 export class RejectPayoutDto {

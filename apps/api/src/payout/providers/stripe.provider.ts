@@ -78,6 +78,17 @@ export class StripeProvider {
   verifyWebhookSignature(payload: string | Buffer, sig: string): Stripe.Event {
     if (!this.stripe) throw new Error('Stripe is not configured');
     const webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET', '');
+    // Fail closed: if Stripe is enabled but the webhook secret is empty,
+    // the Stripe SDK's `constructEvent` would reject every event's
+    // signature with a generic error — silently breaking deposit/refund/
+    // dispute processing. Surface a clear, configuration-named error so
+    // the operator sees the missing secret rather than debugging mysterious
+    // signature failures on every legitimate webhook.
+    if (!webhookSecret) {
+      throw new Error(
+        'STRIPE_WEBHOOK_SECRET is not configured — Stripe webhooks cannot be verified. Set it alongside STRIPE_SECRET_KEY before accepting webhook traffic.',
+      );
+    }
     return this.stripe.webhooks.constructEvent(payload, sig, webhookSecret);
   }
 

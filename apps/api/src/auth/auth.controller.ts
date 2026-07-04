@@ -107,8 +107,21 @@ export class AuthController {
 
   @Post('verify-email/confirm')
   @HttpCode(HttpStatus.OK)
-  confirmEmailVerification(@Body() dto: VerifyEmailConfirmDto) {
-    return this.authService.confirmEmailVerification(dto.token);
+  async confirmEmailVerification(@Body() dto: VerifyEmailConfirmDto, @Req() req: Request) {
+    // Track repeated verification-token failures so a distributed guessing
+    // attack burns through the lockout the same way a password attack does.
+    // The route is in `isAuthRoute` so the guard's pre-check rejects
+    // already-locked keys before reaching the service.
+    try {
+      const result = await this.authService.confirmEmailVerification(dto.token);
+      BruteForceGuard.resetOnSuccess(req);
+      return result;
+    } catch (err: unknown) {
+      if (err instanceof UnauthorizedException) {
+        BruteForceGuard.recordFailure(req);
+      }
+      throw err;
+    }
   }
 
   @Post('password/forgot')

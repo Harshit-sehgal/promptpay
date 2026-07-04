@@ -1,11 +1,15 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../config/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { ALLOWED_API_KEY_SCOPES } from './dto/api-key.dto';
 
 @Injectable()
 export class ApiKeyService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+  ) {}
 
   /**
    * Generate a new API key for the given user.
@@ -67,6 +71,25 @@ export class ApiKeyService {
       },
     });
 
+    // Audit: a long-lived credential issuance event. The plain key is
+    // NOT recorded (only the prefix); future `audit` queries surface
+    // who minted which key and with what scope, so a key minted with a
+    // stolen session can be traced back even though the key itself
+    // outlives the session revoke.
+    this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'api_key_minted',
+      targetType: 'api_key',
+      targetId: apiKey.id,
+      afterSnap: {
+        scopes,
+        advertiserId: advertiserId ?? null,
+        expiresAt: parsedExpiresAt?.toISOString() ?? null,
+        keyPrefix,
+      },
+    });
+
     // Return full details with the plain key — this is the ONLY time it is revealed
     return {
       id: apiKey.id,
@@ -93,6 +116,11 @@ export class ApiKeyService {
     const keyHash = this.hashKey(keyPlain);
     const apiKey = await this.prisma.apiKey.findUnique({
       where: { keyHash },
+      include: {
+        owner: {
+          select: { id: true, status: true, trustLevel: true, role: true },
+        },
+      },
     });
 
     if (!apiKey || !apiKey.isActive) {
@@ -100,6 +128,14 @@ export class ApiKeyService {
     }
 
     if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
+      throw new BadRequestException('Invalid API key');
+    }
+
+    // Reject keys whose owner has been soft-deleted or banned. A deleted
+    // user's keys may have ownerId set to NULL by the FK SET NULL or may
+    // still reference a row with status='deleted'. Either case invalidates
+    // the key — the credential lives as long as the user does.
+    if (!apiKey.owner || apiKey.owner.status === 'banned' || apiKey.owner.status === 'deleted') {
       throw new BadRequestException('Invalid API key');
     }
 
@@ -162,7 +198,7 @@ export class ApiKeyService {
       throw new ForbiddenException('You can only revoke your own API keys');
     }
 
-    return this.prisma.apiKey.update({
+    const revoked = await this.prisma.apiKey.update({
       where: { id: keyId },
       data: { isActive: false },
       select: {
@@ -174,6 +210,20 @@ export class ApiKeyService {
         expiresAt: true,
       },
     });
+
+    // Audit: credential destruction. A revoked key is inert, but the
+    // audit row gives ops the "who revoked which key + when" trail
+    // (matching the mint event).
+    this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'api_key_revoked',
+      targetType: 'api_key',
+      targetId: keyId,
+      afterSnap: { keyPrefix: revoked.keyPrefix },
+    });
+
+    return revoked;
   }
 
   // ── Private helpers ──

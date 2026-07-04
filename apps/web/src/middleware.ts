@@ -5,16 +5,30 @@ import { jwtVerify } from 'jose';
 const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings'];
 
 /**
- * Next.js middleware that gates protected routes on a real JWT check.
+ * Next.js middleware that gates protected routes on the httpOnly
+ * `access_token` cookie.
  *
- * Previously the session cookie was a static "1" sentinel — anyone who set
- * `document.cookie = 'session=1'` in their browser could access developer,
- * advertiser, and admin routes. The auth-context now writes the real JWT
- * access token into the session cookie, and this middleware verifies it
- * using the shared JWT_SECRET.
+ * History:
+ *   (1) Originally the route gate checked a static `session=1` cookie — a
+ *       trivial bypass (`document.cookie = 'session=1'`).
+ *   (2) Then the auth-context wrote the real JWT access token into a
+ *       non-httpOnly `session` cookie, verified here via jose. That closed
+ *       the bypass but the 30-day *refresh* token still lived in
+ *       `localStorage`, exposed to any XSS exfiltration.
+ *   (3) Now (this version) tokens live in httpOnly cookies (`access_token` +
+ *       `refresh_token`) set by the Next.js Route Handlers — not reachable
+ *       by JavaScript at all. Middleware verifies the httpOnly `access_token`
+ *       cookie the same way.
  *
  * Edge-runtime compatible: `jose` is zero-dependency and works in Next.js
  * Edge Middleware without polyfills.
+ *
+ * Middleware tolerates an expired access token: the JWT_REFRESH_TTL is 30d
+ * while the access token is 15m, so a slightly-stale cookie should not send
+ * a logged-in user back to /login on every page load. On expiry, the
+ * client-side 401 interceptor refreshes the cookie via the same-origin
+ * `/api/auth/refresh` Route Handler before any visible redirect happens.
+ * We verify with `clockTolerance` to avoid edge-case clock-skew false rejects.
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -25,26 +39,29 @@ export async function middleware(request: NextRequest) {
   );
   if (!isProtected) return NextResponse.next();
 
-  const sessionCookie = request.cookies.get('session');
-  const token = sessionCookie?.value;
+  const accessCookie = request.cookies.get('access_token');
+  const token = accessCookie?.value;
 
-  if (!token || token === '1') {
-    // Either no session or the old static sentinel (migration path).
-    // Redirect to login.
+  if (!token) {
+    // No access_token cookie at all — redirect to login.
+    // (Caller may still have a valid refresh_token cookie; the client-side
+    //  flow will refresh and re-issue, but middleware can't do that server-
+    //  side without calling the API — so we just redirect and let the
+    //  client recover via the 401 interceptor on the /auth/me call.)
     return redirectToLogin(pathname, request);
   }
 
   try {
-    // Verify the JWT access token. We use the same secret the NestJS
-    // API server uses — configured via the same JWT_SECRET env var.
+    // Verify the JWT access token with the same secret the NestJS API uses
+    // (configured via the shared JWT_SECRET env var). Tolerate a small
+    // clock skew so brief token-expiry boundary doesn't bounce users.
     const secret = new TextEncoder().encode(process.env.JWT_SECRET);
-    await jwtVerify(token, secret);
+    await jwtVerify(token, secret, { clockTolerance: '30s' });
     return NextResponse.next();
   } catch {
-    // Token expired, tampered, or forged — redirect to login.
-    // The client will attempt a refresh via localStorage.refreshToken;
-    // if that fails, it clears the cookie. Either way, the stale/forged
-    // cookie doesn't grant access.
+    // Token expired, tampered, or forged — redirect to login. The client
+    // will recover via the refresh Route Handler if the refresh cookie is
+    // still valid.
     return redirectToLogin(pathname, request);
   }
 }

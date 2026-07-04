@@ -3,6 +3,10 @@ import { Injectable, UnauthorizedException, ConflictException, BadRequestExcepti
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+// `@types/jsonwebtoken` types `expiresIn` as `ms`'s branded `StringValue`,
+// not a bare `string`. ConfigService hands us plain strings, so we brand
+// them at assignment time so the value satisfies the option type.
+import type { StringValue } from 'ms';
 import { PrismaService } from '../config/prisma.service';
 import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
 import { UserRole, UserStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
@@ -42,8 +46,8 @@ interface PasswordResetPayload {
 
 @Injectable()
 export class AuthService {
-  private readonly accessTtl: string;
-  private readonly refreshTtl: string;
+  private readonly accessTtl: StringValue;
+  private readonly refreshTtl: StringValue;
   private readonly jwtSecret: string;
 
   constructor(
@@ -55,8 +59,12 @@ export class AuthService {
     private email: EmailService,
     private audit: AuditService,
   ) {
-    this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m');
-    this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d');
+    // Brand the config strings as `StringValue` so they satisfy jsonwebtoken's
+    // `expiresIn` type. The defaults ('15m', '30d') and any runtime
+    // JWT_*_TTL override are valid `ms` duration strings; an invalid value
+    // would fail at sign time, not typecheck.
+    this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m') as StringValue;
+    this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d') as StringValue;
     const secret = this.config.get<string>('JWT_SECRET');
     if (!secret || secret.length < 32) {
       throw new Error(
@@ -321,6 +329,20 @@ export class AuthService {
       } else {
         await this.revokeAllSessions(payload.sub);
       }
+      // Forensic trail: a refresh-token replay is the canonical theft
+      // signal reuse-detection exists to surface. Audit it so ops can
+      // query `action='refresh_reuse_detected'` for incident response.
+      this.audit.log({
+        actorId: payload.sub,
+        actorRole: 'unknown',
+        action: 'refresh_reuse_detected',
+        targetType: 'session',
+        targetId: payload.jti,
+        afterSnap: {
+          reason: 'cas_lost',
+          family: racedSession?.tokenFamily ?? payload.family ?? null,
+        },
+      });
       throw new UnauthorizedException('Token reuse detected — family sessions revoked');
     }
 
@@ -342,6 +364,19 @@ export class AuthService {
       await this.prisma.session.updateMany({
         where: { userId: payload.sub, tokenFamily: session.tokenFamily },
         data: { revoked: true },
+      });
+      // Hash mismatch = a tampered JWT or a token from a different family
+      // (theft / forgery attempt). Audit so the family-revoke is visible.
+      this.audit.log({
+        actorId: payload.sub,
+        actorRole: 'unknown',
+        action: 'refresh_reuse_detected',
+        targetType: 'session',
+        targetId: payload.jti,
+        afterSnap: {
+          reason: 'hash_mismatch',
+          family: session.tokenFamily,
+        },
       });
       throw new UnauthorizedException('Token hash mismatch — family sessions revoked');
     }

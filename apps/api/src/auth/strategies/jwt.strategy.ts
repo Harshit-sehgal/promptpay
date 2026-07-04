@@ -1,9 +1,28 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
+import { type Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../config/prisma.service';
 import { UserStatus } from '@waitlayer/shared';
+
+/**
+ * Dual-source JWT extraction: Authorization header OR httpOnly `access_token`
+ * cookie. The web app sets `access_token` as an HttpOnly cookie via its
+ * Next.js Route Handlers (cookie-based auth that defeats XSS exfiltration);
+ * the CLI/VSCode-extension clients send a Bearer token in the Authorization
+ * header as usual. Both paths produce the same access JWT.
+ */
+function extractJwtFromRequest(req: Request): string | null {
+  // 1. Authorization: Bearer <token> (CLI / VSCode / external integrations)
+  const headerToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+  if (headerToken) return headerToken;
+
+  // 2. HttpOnly access_token cookie (Next.js web app)
+  if (req.cookies?.access_token) return req.cookies.access_token;
+
+  return null;
+}
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -15,7 +34,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       );
     }
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: extractJwtFromRequest as JwtFromRequestFunction,
       ignoreExpiration: false,
       secretOrKey: secret,
     });

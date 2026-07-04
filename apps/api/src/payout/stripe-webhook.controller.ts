@@ -93,9 +93,11 @@ export class StripeWebhookController {
       }
     }
 
-    // 2. Read existing row (fresh or replay) and decide action
+    // 2. Read existing row (fresh or replay) and decide action.
+    //    Uniqueness is scoped by [provider, eventId] (see schema); the
+    //    composite key is the authoritative idempotency floor.
     const existing = await this.prisma.webhookEvent.findUnique({
-      where: { eventId: event.id },
+      where: { provider_eventId: { provider: 'stripe', eventId: event.id } },
     });
     if (!existing) {
       this.logger.error(`Webhook event ${event.id} vanished after insert — aborting`);
@@ -116,9 +118,13 @@ export class StripeWebhookController {
       this.logger.warn(`Stripe event ${event.id} stalled in processing for ${Math.round(stalledMs / 1000)}s — reclaiming`);
     }
 
-    // 3. Atomic claim: pending (or stalled processing) → processing
+    // 3. Atomic claim: pending (or stalled processing) → processing.
+    //    Scope by provider so the claim never touches another provider's row
+    //    even if an id coincided across providers before the
+    //    provider_eventId composite-unique migration.
     const claimed = await this.prisma.webhookEvent.updateMany({
       where: {
+        provider: 'stripe',
         eventId: event.id,
         processingStatus: { in: ['pending', 'processing'] },
       },
@@ -139,7 +145,7 @@ export class StripeWebhookController {
       this.logger.error(`Processing failed for Stripe event ${event.id}: ${getErrorMessage(err)}`);
       // Reset to 'pending' so the next retry can reclaim
       await this.prisma.webhookEvent.updateMany({
-        where: { eventId: event.id, processingStatus: 'processing' },
+        where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
         data: { processingStatus: 'pending' },
       });
       return { received: true, reason: 'processing_failed_will_retry' };
@@ -228,7 +234,7 @@ export class StripeWebhookController {
 
     // Update webhook event as processed
     await this.prisma.webhookEvent.updateMany({
-      where: { eventId: event.id },
+      where: { provider: 'stripe', eventId: event.id },
       data: { processingStatus: 'processed', processedAt: new Date() },
     });
 
@@ -261,7 +267,7 @@ export class StripeWebhookController {
       );
       // Still mark as processed
       await this.prisma.webhookEvent.updateMany({
-        where: { eventId: event.id },
+        where: { provider: 'stripe', eventId: event.id },
         data: { processingStatus: 'processed', processedAt: new Date() },
       });
       return;
@@ -269,53 +275,80 @@ export class StripeWebhookController {
 
     const totalRefunded = details.amountMinor;
 
-    // Create reversal entries for the refunded amount
+    // Create a reversal entry for each active entry on this payment intent.
+    // Each refund row is idempotent on `stripe_refund_{pi}_{refundId}_{entryId}`
+    // (so a re-delivered webhook for the SAME refund.id is a no-op P2002 skip).
+    //
+    // The parent-row status flip is done via a CAS `updateMany` (status not
+    // already `reversed`/`void`) gated on an aggregate computed INSIDE the
+    // same `$transaction` as the refund create. The previous code computed
+    // the aggregate and flipped the parent as two separate non-transactional
+    // writes — two concurrent `charge.refunded` deliveries on the same
+    // paymentIntent could each read each other's refund rows in the
+    // aggregate and early-flip the same parent; worse, the bare
+    // `update({ where: { id } })` had no status guard so it would re-mark an
+    // already-`reversed` row, masking the contention. The CAS + in-tx
+    // aggregate closes both windows: only one delivery wins the flip and it
+    // wins it atomically with its threshold read.
     for (const entry of entries) {
       const reversalAmount = Math.min(entry.amountMinor, totalRefunded);
       if (reversalAmount <= 0) continue;
 
       const idempotencyKey = `stripe_refund_${details.paymentIntentId}_${refund.id}_${entry.id}`;
-      try {
-        await this.prisma.advertiserLedger.create({
-          data: {
-            advertiserId: entry.advertiserId,
-            campaignId: entry.campaignId,
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        try {
+          await tx.advertiserLedger.create({
+            data: {
+              advertiserId: entry.advertiserId,
+              campaignId: entry.campaignId,
+              stripePaymentIntentId: details.paymentIntentId,
+              entryType: 'refund',
+              status: 'confirmed',
+              amountMinor: reversalAmount,
+              currency: details.currency.toUpperCase(),
+              idempotencyKey,
+              description: `Refund for Stripe paymentIntent ${details.paymentIntentId} — refund ${refund.id}`,
+            },
+          });
+        } catch (err: unknown) {
+          // P2002 = a prior delivery already recorded this same refund row
+          // for this entry — idempotent skip, continue to the parent flip.
+          if (getErrorCode(err) !== 'P2002') throw err;
+          this.logger.warn(`Duplicate refund entry for ${idempotencyKey} — skipping`);
+        }
+
+        // Re-aggregate INSIDE the transaction: the threshold now reflects
+        // every refund row visible at this serializable point, so the
+        // flip decision is consistent with the refund write above.
+        const totalReversed = await tx.advertiserLedger.aggregate({
+          where: {
             stripePaymentIntentId: details.paymentIntentId,
             entryType: 'refund',
-            status: 'confirmed',
-            amountMinor: reversalAmount,
-            currency: details.currency.toUpperCase(),
-            idempotencyKey,
-            description: `Refund for Stripe paymentIntent ${details.paymentIntentId} — refund ${refund.id}`,
           },
+          _sum: { amountMinor: true },
         });
-      } catch (err: unknown) {
-        if (getErrorCode(err) === 'P2002') {
-          this.logger.warn(`Duplicate refund entry for ${idempotencyKey} — skipping`);
-        } else {
-          throw err;
+        if ((totalReversed._sum.amountMinor ?? 0) < entry.amountMinor) {
+          return; // not yet fully reversed — leave parent in its active state
         }
-      }
 
-      // Mark the original entry as reversed if fully reversed
-      const totalReversed = await this.prisma.advertiserLedger.aggregate({
-        where: {
-          stripePaymentIntentId: details.paymentIntentId,
-          entryType: 'refund',
-        },
-        _sum: { amountMinor: true },
-      });
-      if ((totalReversed._sum.amountMinor ?? 0) >= entry.amountMinor) {
-        await this.prisma.advertiserLedger.update({
-          where: { id: entry.id },
+        // CAS flip: only wins if the parent row is still in an active
+        // status. A concurrent delivery that already flipped it sees
+        // count === 0 here and is a clean no-op (no re-mark, no error).
+        const cas = await tx.advertiserLedger.updateMany({
+          where: { id: entry.id, status: { notIn: ['reversed', 'void'] } },
           data: { status: 'reversed' },
         });
-      }
+        if (cas.count === 0) {
+          this.logger.warn(
+            `Parent entry ${entry.id} already reversed/void — refund ${refund.id} recorded but flip skipped`,
+          );
+        }
+      });
     }
 
     // Update webhook event as processed
     await this.prisma.webhookEvent.updateMany({
-      where: { eventId: event.id },
+      where: { provider: 'stripe', eventId: event.id },
       data: { processingStatus: 'processed', processedAt: new Date() },
     });
 
@@ -348,7 +381,7 @@ export class StripeWebhookController {
         `No credit entry found for paymentIntent ${details.paymentIntentId} in dispute ${event.id}`,
       );
       await this.prisma.webhookEvent.updateMany({
-        where: { eventId: event.id },
+        where: { provider: 'stripe', eventId: event.id },
         data: { processingStatus: 'processed', processedAt: new Date() },
       });
       return;
@@ -395,7 +428,7 @@ export class StripeWebhookController {
 
     // Update webhook event as processed
     await this.prisma.webhookEvent.updateMany({
-      where: { eventId: event.id },
+      where: { provider: 'stripe', eventId: event.id },
       data: { processingStatus: 'processed', processedAt: new Date() },
     });
 

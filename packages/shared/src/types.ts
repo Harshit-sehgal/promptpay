@@ -68,6 +68,7 @@ export interface AdResponse {
   impressionToken: string;
   campaignId: string;
   creativeId: string;
+  title: string;
   message: string;
   label: string; // "Sponsored" or "Ad"
   displayDomain: string;
@@ -141,6 +142,9 @@ export interface LedgerEntry {
   advertiserId?: string;
   campaignId?: string;
   impressionId?: string;
+  clickId?: string;
+  description?: string;
+  heldByFlagId?: string;
   entryType: LedgerEntryType;
   status: LedgerStatus;
   amountMinor: number;
@@ -174,6 +178,7 @@ export interface FraudFlagPayload {
 export interface TrustScoreComponents {
   accountAge: number;
   emailVerified: number;
+  googleVerified: number;
   githubVerified: number;
   deviceConsistency: number;
   activityPattern: number;

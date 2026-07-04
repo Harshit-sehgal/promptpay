@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, UseInterceptors, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, UseInterceptors, Query, ParseUUIDPipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -40,7 +40,7 @@ export class AdminController {
 
   @Post('campaigns/:id/approve')
   approveCampaign(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @Body() dto: ApproveCampaignDto,
   ) {
@@ -49,7 +49,7 @@ export class AdminController {
 
   @Post('campaigns/:id/reject')
   rejectCampaign(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @Body() dto: RejectCampaignDto,
   ) {
@@ -62,16 +62,16 @@ export class AdminController {
 
   @Post('payouts/:id/approve')
   approvePayout(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @Body() dto: ApprovePayoutDto,
   ) {
-    return this.service.approvePayout(id, userId, dto.note);
+    return this.service.approvePayout(id, userId, dto.note, dto.approvedAmountMinor);
   }
 
   @Post('payouts/:id/reject')
   rejectPayout(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @Body() dto: RejectPayoutDto,
   ) {
@@ -80,7 +80,7 @@ export class AdminController {
 
   @Post('payouts/:id/mark-paid')
   markPayoutPaid(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @Body() dto: MarkPayoutPaidDto,
   ) {
@@ -94,7 +94,7 @@ export class AdminController {
 
   @Post('fraud/:id/resolve')
   resolveFraudFlag(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @Body() dto: ResolveFraudFlagDto,
   ) {

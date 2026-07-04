@@ -1,20 +1,14 @@
 import api from './client';
 import {
   // Response schemas (runtime + type source)
-  SignupResponse,
-  LoginResponse,
-  RefreshResponse,
-  MeResponse,
   CreateCampaignResponse,
   CreativeResponse,
   PayoutMethodResponse,
   PayoutRequestResponse,
   PayoutAvailableResponse,
   LedgerBalanceResponse,
-  RefreshRequest as RefreshRequestSchema,
   RoleSchema,
 } from '@waitlayer/shared';
-import type { SignupRequest, LoginRequest } from '@waitlayer/shared';
 
 type AxiosLikeResponse<T> = { data: T; status: number };
 
@@ -35,23 +29,20 @@ function ok<T>(parsed: T, status = 200): AxiosLikeResponse<T> {
  * mutation the response is parsed through the matching Zod schema —
  * `parseResponse` throws on a contract drift so it can't silently leak.
  *
+ * Auth flows (login/signup/google/refresh/logout/me) are handled by the
+ * Next.js Route Handlers at app/api/auth/_/route.ts together with
+ * lib/auth-context.tsx — those no longer go through authApi because
+ * their bodies are stripped of tokens by the Route Handlers (the API's
+ * raw accessToken/refreshToken response fields don't reach the browser
+ * anymore, so parsing them against the full Zod contract would throw).
+ * Only the non-token auth endpoints (password reset, email verify) remain
+ * here.
+ *
  * Keep this file in sync with `packages/shared/contracts.ts` — when a
  * request schema changes there, the input type here updates automatically.
  */
 
 export const authApi = {
-  signup: (data: SignupRequest) =>
-    api.post('/auth/signup', data).then((r) => ok(SignupResponse.parse(r.data))),
-  login: (data: LoginRequest) =>
-    api.post('/auth/login', data).then((r) => ok(LoginResponse.parse(r.data))),
-  googleLogin: (data: { idToken: string; role?: 'developer' | 'advertiser' }) =>
-    api.post('/auth/google', data).then((r) => ok(LoginResponse.parse(r.data))),
-  refresh: (refreshToken: string) =>
-    api
-      .post('/auth/refresh', RefreshRequestSchema.parse({ refreshToken }))
-      .then((r) => ok(RefreshResponse.parse(r.data))),
-  logout: () => api.post('/auth/logout'),
-  getMe: () => api.get('/auth/me').then((r) => ok(MeResponse.parse(r.data))),
   forgotPassword: (email: string) => api.post('/auth/password/forgot', { email }),
   resetPassword: (token: string, newPassword: string) =>
     api.post('/auth/password/reset', { token, newPassword }),
@@ -63,13 +54,15 @@ export const authApi = {
  * includes `role`. The API rejects anything outside the allowed list with
  * 400, but this catches the typo on the client side.
  */
-export function coerceRole(role: string): 'developer' | 'advertiser' | 'admin' | 'super_admin' {
+export function coerceRole(role: string): z.infer<typeof RoleSchema> {
   const parsed = RoleSchema.safeParse(role);
   if (!parsed.success) {
-    throw new Error(`Invalid role '${role}' — must be one of: developer | advertiser | admin | super_admin`);
+    throw new Error(`Invalid role '${role}' — must be one of: developer | advertiser | admin | support | super_admin`);
   }
   return parsed.data;
-}export const developerApi = {
+}
+
+export const developerApi = {
   getDashboard: () => api.get('/developer/dashboard'),
   getEarnings: (params?: Record<string, unknown>) => api.get('/developer/earnings', { params }),
   getSettings: () => api.get('/developer/settings'),

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   FraudFlagStatus as DbFraudFlagStatus,
   FraudFlagType as DbFraudFlagType,
@@ -120,6 +120,21 @@ export class FraudService {
   // ── Trust Score Computation ──
 
   async computeTrustScore(userId: string): Promise<number> {
+    // Optimistic-concurrency guard against the trust-recompute race.
+    // The function reads inputs, computes a deterministic score/level, then
+    // writes trustScore + user.trustLevel. Two concurrent recomputes can each
+    // read a different snapshot (e.g. one sees a fraud flag the other doesn't
+    // yet). Last-write-wins on user.trustLevel would let a *stale* recompute
+    // (that read its inputs before a fresher one's writes landed) overwrite
+    // the fresher level — reverting a just-applied penalty or promotion.
+    //
+    // We close that by re-reading the `trustScore.updatedAt` we observed at
+    // the top and making the closing `user.trustLevel` write conditional on
+    // the trustScore row being unchanged since our read (`updateMany where`
+    // join on the trustScore's updatedAt). On a first computation (no row
+    // yet) there is no stale-write hazard, so the CAS is skipped. If the CAS
+    // rejects (count === 0), a fresher write landed concurrently — we accept
+    // that fresher level and return our computed score without overwriting.
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -128,6 +143,8 @@ export class FraudService {
       },
     });
     if (!user) return TRUST_SCORE.INITIAL;
+
+    const observedTrustUpdatedAt = user.trustScore?.updatedAt ?? null;
 
     let score: number = TRUST_SCORE.INITIAL;
 
@@ -225,11 +242,32 @@ export class FraudService {
       },
     });
 
-    // Update user trust level
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { trustLevel: level },
-    });
+    // Update user trust level. On a first computation there's no prior
+    // trustScore row, so no stale-write hazard — set unconditionally. On a
+    // subsequent computation, only flip user.trustLevel if the trustScore
+    // row is unchanged since we read it (observedTrustUpdatedAt). A concurrent
+    // recompute that wrote a fresher level changed trustScore.updatedAt, so
+    // this conditional update is rejected (count === 0) and we leave the
+    // user's level to the fresher write rather than reverting it. The
+    // trustScore row itself was upserted above; if a fresher competitor
+    // upserts after us it overwrites our score — deterministic, so the
+    // last writer converges to the correct value.
+    if (observedTrustUpdatedAt === null) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { trustLevel: level },
+      });
+    } else {
+      await this.prisma.$executeRaw`
+        UPDATE "users" SET "trustLevel" = ${level}::"TrustLevel"
+        WHERE "id" = ${userId}
+          AND EXISTS (
+            SELECT 1 FROM "trust_scores" t
+            WHERE t."userId" = ${userId}
+              AND t."updatedAt" = ${observedTrustUpdatedAt}
+          )
+      `;
+    }
 
     return score;
   }
@@ -275,7 +313,14 @@ export class FraudService {
 
     // Auto-escalate: critical flags hold earnings immediately
     if (params.severity === FraudSeverity.CRITICAL && params.userId) {
-      await this.ledger.holdEarnings(params.userId, `Critical fraud flag: ${params.flagType}`);
+      // Stamp heldByFlagId so the later false-positive release scopes to
+      // THIS flag only — releasing F1 must not undo holds from a still-open
+      // F2 (cross-flag money leak).
+      await this.ledger.holdEarnings(
+        params.userId,
+        `Critical fraud flag: ${params.flagType}`,
+        flag.id,
+      );
     }
 
     // Recompute trust score on any new flag
@@ -287,30 +332,76 @@ export class FraudService {
   }
 
   async resolveFlag(flagId: string, reviewerId: string, isValid: boolean, reviewNote?: string) {
+    // First read to verify the flag exists and capture its identity fields
+    // (userId, impressionId, flagType) so they survive a concurrent overwrite.
     const flag = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
     if (!flag) throw new NotFoundException('Fraud flag not found');
 
-    const status = isValid ? DbFraudFlagStatus.resolved_valid : DbFraudFlagStatus.resolved_invalid;
+    // Re-resolution guard: only open/reviewing flags may be resolved.
+    // A concurrent admin resolving the same flag sees count === 0 (already
+    // resolved) and throws. This prevents:
+    //  1. reviewerId/reviewNote overwrite (audit attribution stolen)
+    //  2. Double releaseEarnings() — bulk release of *all* the user's held
+    //     earnings, potentially including NEW holds created under different
+    //     flags between the two resolution attempts.
+    // The authoritative state guard is the conditional updateMany.
+    const newStatus = isValid ? DbFraudFlagStatus.resolved_valid : DbFraudFlagStatus.resolved_invalid;
 
-    await this.prisma.fraudFlag.update({
-      where: { id: flagId },
+    const result = await this.prisma.fraudFlag.updateMany({
+      where: { id: flagId, status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] } },
       data: {
-        status,
+        status: newStatus,
         reviewerId,
         reviewNote,
         resolvedAt: new Date(),
       },
     });
 
-    // If flag was valid (fraud confirmed) and user has held earnings
+    if (result.count === 0) {
+      const existing = await this.prisma.fraudFlag.findUnique({
+        where: { id: flagId },
+        select: { status: true },
+      });
+      throw new BadRequestException(
+        existing
+          ? `Fraud flag cannot be resolved from status '${existing.status}'`
+          : 'Fraud flag not found',
+      );
+    }
+
+    // If flag was valid (fraud confirmed) and user has held earnings,
+    // reverse the matching earnings entries — at the impressionId scope,
+    // the clickId scope, or the user-scope (flag-level fraud without a
+    // specific entity reference). clickId wins over impressionId when
+    // both are populated because click-level money is the finer-grained
+    // movement; the impression's earnings flip still happens because the
+    // click row itself carries the impression FK.
     if (isValid && flag.userId) {
-      // Reverse earnings related to this flag if it's a confirmed fraud
-      if (flag.impressionId) {
-        await this.ledger.reverseEarnings(flag.impressionId, `Fraud confirmed: ${flag.flagType}`);
+      if (flag.clickId || flag.impressionId) {
+        await this.ledger.reverseEarnings(
+          { impressionId: flag.impressionId ?? undefined, clickId: flag.clickId ?? undefined },
+          `Fraud confirmed: ${flag.flagType}`,
+        );
       }
+      // NOTE: a user-level flag (neither impressionId nor clickId) is a
+      // bulk-pattern detection (e.g. SUSPICIOUS_CTR across many
+      // impressions). The matching earnings are held at flag time and
+      // *released* on the !isValid branch below; reversing individual
+      // entries without per-entity context is out of scope and would
+      // require per-impression/click forensic-level resolution. Ops
+      // should treat such flags as "soft fraud" — the user is held but
+      // no specific entry is unwound unless flagged at entity resolution.
     } else if (!isValid && flag.userId) {
-      // False positive — release held earnings
-      await this.ledger.releaseEarnings(flag.userId);
+      // False positive — release the holds scoped to THIS flag. Scope by
+      // impression when the flag links to a specific impression; otherwise
+      // by flagId (matches the `heldByFlagId` stamp set in holdEarnings).
+      // NEVER bulk-release every held entry across the user's flags — that
+      // would undo holds from a still-open, unrelated concurrent flag
+      // (cross-flag money leak).
+      await this.ledger.releaseEarnings(flag.userId, {
+        impressionId: flag.impressionId ?? undefined,
+        flagId: flag.id,
+      });
     }
 
     // Recompute trust score after resolution
@@ -318,7 +409,7 @@ export class FraudService {
       await this.computeTrustScore(flag.userId);
     }
 
-    return { flagId, status, isValid };
+    return { flagId, status: newStatus, isValid };
   }
 
   // ── Admin Queries ──

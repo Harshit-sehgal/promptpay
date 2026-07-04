@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -58,6 +58,7 @@ export class ExtensionService {
     extensionVersion?: string;
     platform?: string;
     publicKey?: string;
+    existingEventSecret?: string;
   }) {
     // Privacy: reject payloads containing prohibited data fields
     this.enforcePrivacy(dto as unknown as Record<string, unknown>);
@@ -69,6 +70,26 @@ export class ExtensionService {
     if (existingDevice) {
       // Re-registration rotates the per-device secret. Any leaked token from
       // the old extension install is invalidated by this one-time reveal.
+      //
+      // CRITICAL: require proof-of-possession of the previously-issued secret
+      // before rotating. Without this gate, ANY authenticated user who
+      // merely knows another user's fingerprintHash could call this endpoint
+      // and rotate the victim's secret out from under them — receiving the
+      // fresh rotated secret in the response and locking out the legitimate
+      // device. A timing-safe comparison avoids leaking whether the secret
+      // matched (which would be the only oracle an attacker needs).
+      if (
+        !existingDevice.eventSecret ||
+        !dto.existingEventSecret ||
+        Buffer.from(dto.existingEventSecret).length !== Buffer.from(existingDevice.eventSecret).length ||
+        !crypto.timingSafeEqual(
+          Buffer.from(dto.existingEventSecret),
+          Buffer.from(existingDevice.eventSecret),
+        )
+      ) {
+        throw new UnauthorizedException('Cannot re-register device without the existing device secret');
+      }
+
       const rotatedSecret = crypto.randomBytes(32).toString('hex');
       const updated = await this.prisma.device.update({
         where: { id: existingDevice.id },
@@ -723,15 +744,30 @@ export class ExtensionService {
       );
       if (spent === 0) return false; // budget exhausted — mark not billable below
 
-      // (1) Mark impression as billable qualified
-      await tx.adImpression.update({
-        where: { id: impression.id },
+      // (1) Atomic CAS: only flip this impression to billable if it has NOT
+      // been qualified concurrently. Two concurrent recordQualifiedImpression
+      // calls for the same impression both pass the outer
+      // `if (impression.qualifiedAt) return` check (neither has written yet).
+      // The conditional UPDATE ensures at most one caller wins the flip;
+      // the loser (claim.count === 0) returns idempotently without writing
+      // any ledger rows — preventing the spend-debit + developer-credit
+      // from being applied twice across a retry / concurrent request. The
+      // idempotencyKey floors would catch the duplicate via P2002, but the
+      // CAS avoids throwing a serialization error in the first place.
+      const claim = await tx.adImpression.updateMany({
+        where: { id: impression.id, qualifiedAt: null },
         data: {
           qualifiedAt: new Date(dto.qualifiedAt),
           visibleDurationMs: dto.visibleDurationMs,
           isBillable: true,
         },
       });
+      if (claim.count === 0) {
+        // Another caller already qualified this impression. The budget
+        // increment we just made is rolled back on tx return → no
+        // double-spend. Return idempotent success with no new ledger rows.
+        return true;
+      }
       // (2) Debit advertiser balance
       await tx.advertiserLedger.create({
         data: {
@@ -1035,28 +1071,52 @@ export class ExtensionService {
   // ── HMAC Signature Verification ──
 
   /** Verify an event payload signature using the device-specific secret.
-   *  Global HMAC is accepted ONLY when the device does not yet have
-   *  an issued eventSecret. Once a device has a per-device secret the global
-   *  key no longer authorizes events for that device — even if the device
-   *  secret fails to match. This prevents the global-secret bypass where
-   *  knowing the fallback key forges events for every device. */
+   *
+   *  Authentication policy:
+   *    1. `deviceId` is REQUIRED. Null/missing device → reject (return false).
+   *       No event is accepted from an anonymous (no-device) caller. Every
+   *       event-recording path in this service resolves a real device row
+   *       (the impression's or start-event's deviceId) before verifying, so
+   *       a null deviceId here means a caller forgot to resolve the device —
+   *       treat it as unauthorized rather than silently authenticating via
+   *       the global fall-back key.
+   *    2. If the device row has an `eventSecret`, ONLY that per-device secret
+   *       is accepted. The global HMAC is rejected even on a device-secret
+   *       mismatch — a known device secret must not be forgeable by the
+   *       global fallback key.
+   *    3. If the device row exists but has no `eventSecret` (a legacy row
+   *       that pre-dates per-device secrets), accept the global HMAC secret.
+   *       This is the only path the global key authorizes, and it applies
+   *       to a vanishing set of legacy device rows; new registrations always
+   *       mint an `eventSecret`.
+   *
+   *  The permanent anonymous (no-device) global-key fallback was removed: a
+   *  null deviceId previously authenticated via the shared global HMAC,
+   *  which would let any party that learns the global key forge events with
+   *  no device binding. Reject instead. */
   async verifyDeviceSignature(deviceId: string | null, payload: Record<string, unknown>, signature: string): Promise<boolean> {
-    // Try device-specific secret first
-    if (deviceId) {
-      const device = await this.prisma.device.findUnique({
-        where: { id: deviceId },
-        select: { eventSecret: true },
-      });
-      if (device?.eventSecret) {
-        // Device has a dedicated secret — ONLY accept the device secret.
-        // The global fallback is NEVER accepted for a device that has its
-        // own secret. Return the result directly (true or false), no
-        // further fallback.
-        return verifySignature(payload, device.eventSecret, signature);
-      }
+    // No device → no authentication. Do not fall back to the global HMAC for
+    // anonymous callers.
+    if (!deviceId) return false;
+
+    const device = await this.prisma.device.findUnique({
+      where: { id: deviceId },
+      select: { eventSecret: true },
+    });
+    if (!device) return false; // unknown device → reject
+
+    if (device.eventSecret) {
+      // Device has a dedicated secret — ONLY accept the device secret. The
+      // global fallback is NEVER accepted for a device that has its own
+      // secret. Return the result directly (true or false), no further
+      // fallback, so a device-secret mismatch is not authenticated by the
+      // global key.
+      return verifySignature(payload, device.eventSecret, signature);
     }
-    // Fallback: global HMAC secret for legacy device rows that never
-    // received an eventSecret, or for anonymous (no device) calls.
+
+    // Legacy device row with no eventSecret — accept the global HMAC. This
+    // path is the only one where the global key authorizes an event, and
+    // only for pre-eventSecret rows; new registrations always mint one.
     return verifySignature(payload, this.hmacSecret, signature);
   }
 

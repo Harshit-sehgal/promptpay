@@ -19,7 +19,10 @@ const mockPrisma = {
     create: vi.fn(),
     aggregate: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
   },
   platformLedger: {
     findMany: vi.fn(),
@@ -27,7 +30,10 @@ const mockPrisma = {
     create: vi.fn(),
     aggregate: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
     findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    upsert: vi.fn(),
   },
   campaign: {
     findUnique: vi.fn(),
@@ -366,20 +372,308 @@ describe('LedgerService', () => {
     });
 
     it('allows valid transitions', async () => {
+      // The read returns the current status; the CAS updateMany wins
+      // (count: 1) and the post-update re-read returns the new status.
+      mockPrisma.earningsLedger.findUnique
+        .mockResolvedValueOnce({ // transitionEarning's initial read
+          id: 'e-2',
+          userId: 'u-1',
+          status: 'confirmed',
+          amountMinor: 100,
+          currency: 'USD',
+        })
+        .mockResolvedValueOnce({ // re-read after the winning CAS write
+          id: 'e-2',
+          status: 'paid',
+        });
+      mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await (service as any).transitionEarning('e-2', 'paid' as any);
+      expect(result.status).toBe('paid');
+      // The CAS guard should have keyed on the observed status.
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'e-2', status: 'confirmed' },
+        }),
+      );
+    });
+
+    it('surfaces a ConflictException when a concurrent transition wins the CAS', async () => {
       mockPrisma.earningsLedger.findUnique.mockResolvedValue({
-        id: 'e-2',
-        userId: 'u-1',
+        id: 'e-3',
         status: 'confirmed',
         amountMinor: 100,
         currency: 'USD',
       });
-      mockPrisma.earningsLedger.update.mockResolvedValue({
-        id: 'e-2',
-        status: 'paid',
+      // count: 0 → the row's status changed between read and write.
+      mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        (service as any).transitionEarning('e-3', 'held' as any),
+      ).rejects.toThrow(/modified by a concurrent transition/);
+    });
+  });
+
+  describe('reverseEarnings (sum-conserving fraud reversal)', () => {
+    /**
+     * Bug the round-6/7 audit found: `reverseEarnings` flipped the developer's
+     * earnings row to `reversed` but never wrote compensating entries on the
+     * `AdvertiserLedger` (refund) or `PlatformLedger` (reversal debit on fee +
+     * reserve). After confirmed fraud the advertiser stayed debited and the
+     * platform kept its fee + reserve for a fraudulent impression — money
+     * stranded. These tests pin the compensating writes by checking each
+     * upsert's idempotency key + entryType.
+     */
+    it('writes the three compensating entries (advertiser refund + 2 platform reversals)', async () => {
+      const impressionId = 'imp-abc';
+      // Pre-flight: read the impression's advertisement debit + platform rows
+      mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
+        id: 'adv-row-1',
+        advertiserId: 'adv-1',
+        campaignId: 'cmp-1',
+        amountMinor: 1000, // full bid
+        currency: 'USD',
+        idempotencyKey: `imp-${impressionId}-adv`,
+      });
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce({
+        id: 'plt-row-1',
+        campaignId: 'cmp-1',
+        amountMinor: 300, // platform fee (30%)
+        currency: 'USD',
+        idempotencyKey: `imp-${impressionId}-plt`,
+      });
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce({
+        id: 'res-row-1',
+        campaignId: 'cmp-1',
+        amountMinor: 100, // fraud reserve (10%)
+        currency: 'USD',
+        idempotencyKey: `imp-${impressionId}-res`,
+      });
+      mockPrisma.earningsLedger.count.mockResolvedValueOnce(0);
+      // Inside the transaction: 1 earnings row flipped.
+      mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 1 });
+      // All three upserts are new (no prior replay).
+      mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
+      mockPrisma.platformLedger.upsert
+        .mockResolvedValueOnce({}) // plt reversal
+        .mockResolvedValueOnce({}); // res reversal
+
+      const result = await service.reverseEarnings({ impressionId }, 'click_abuse');
+
+      expect(result).toEqual({ reversed: 1, paidSkipped: 0 });
+
+      // 1. Earnings row flipped to `reversed` with the reason in description.
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
+        where: {
+          impressionId,
+          status: { in: ['estimated', 'pending', 'confirmed'] },
+        },
+        data: expect.objectContaining({
+          status: 'reversed',
+          description: 'Reversed: click_abuse',
+        }),
       });
 
-      const result = await (service as any).transitionEarning('e-2', 'paid' as any);
-      expect(result.status).toBe('paid');
+      // 2. Advertiser refund with the FULL bid (advertiser must not pay for
+      //    fraud) under the `-rev` idempotency suffix.
+      expect(mockPrisma.advertiserLedger.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { idempotencyKey: `imp-${impressionId}-adv-rev` },
+          create: expect.objectContaining({
+            advertiserId: 'adv-1',
+            campaignId: 'cmp-1',
+            entryType: 'refund',
+            status: 'confirmed',
+            amountMinor: 1000,
+            currency: 'USD',
+            idempotencyKey: `imp-${impressionId}-adv-rev`,
+          }),
+          update: {},
+        }),
+      );
+
+      // 3. Platform fee reversal (debit-side offset; 300 = 30% to undo the
+      //    prior `credit` platform fee).
+      expect(mockPrisma.platformLedger.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { idempotencyKey: `imp-${impressionId}-plt-rev` },
+          create: expect.objectContaining({
+            entryType: 'reversal',
+            bucket: 'platform_fee',
+            amountMinor: 300,
+          }),
+        }),
+      );
+
+      // 4. Fraud-reserve release (100 = 10% reserve bucket released since
+      //    this is exactly what it was set aside for).
+      expect(mockPrisma.platformLedger.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { idempotencyKey: `imp-${impressionId}-res-rev` },
+          create: expect.objectContaining({
+            entryType: 'reversal',
+            bucket: 'fraud_reserve',
+            amountMinor: 100,
+          }),
+        }),
+      );
+    });
+
+    it('is idempotent — a replayed call hits `update: {}` no-op on already-created compensation rows', async () => {
+      const impressionId = 'imp-xyz';
+      mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
+        id: 'adv-row-1', advertiserId: 'adv-1', campaignId: 'cmp-1',
+        amountMinor: 500, currency: 'USD',
+        idempotencyKey: `imp-${impressionId}-adv`,
+      });
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null); // no plt row
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null); // no res row
+      mockPrisma.earningsLedger.count.mockResolvedValueOnce(0);
+      // Replay: earnings already reversed, no rows match the status filter.
+      mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
+
+      const result = await service.reverseEarnings({ impressionId });
+
+      expect(result).toEqual({ reversed: 0, paidSkipped: 0 });
+      // Only the advertiser refund fires (platform rows absent → skipped).
+      // The upsert MUST still be called with `update: {}` so the
+      // `@unique(idempotencyKey)` collision path is harmless (upsert
+      // treats a duplicate id as the no-op `update: {}`). This proves
+      // the idempotency floor: replaying reverseEarnings writes nothing
+      // new and doesn't throw.
+      expect(mockPrisma.advertiserLedger.upsert).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.platformLedger.upsert).not.toHaveBeenCalled();
+    });
+
+    it('reports paidSkipped when the impression has earnings already in `paid` (developer withdrawal)', async () => {
+      const impressionId = 'imp-paid';
+      mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
+        id: 'adv-row-1', advertiserId: 'adv-1', campaignId: 'cmp-1',
+        amountMinor: 200, currency: 'USD',
+        idempotencyKey: `imp-${impressionId}-adv`,
+      });
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null);
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null);
+      // 2 rows already in `paid` — can't be reversed by this method.
+      mockPrisma.earningsLedger.count.mockResolvedValueOnce(2);
+      mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
+
+      const result = await service.reverseEarnings({ impressionId });
+
+      expect(result.paidSkipped).toBe(2);
+      // The caller should surface this gap to ops (claw-back debt flow is
+      // a separate TODO; documented on the method).
+    });
+
+    /**
+     * Round 11 follow-up: `reverseEarnings` previously keyed ONLY on
+     * `impressionId`, so confirmed click-fraud (a flag carrying
+     * `clickId` but no `impressionId`) skipped reversals entirely —
+     * the developer's click-credit stayed `confirmed`, the advertiser
+     * remained debited, the platform's fee + reserve stayed accrued on
+     * a fraudulent click. This test pins the new entity-aware path:
+     * a clickId-only reversal reads `clk-${id}-*` idempotency keys,
+     * writes 3 compensating entries against them, and flips the
+     * developer row keyed on `clickId` (not `impressionId`).
+     */
+    it('writes the 3 compensating entries when called with only a clickId (click-fraud path)', async () => {
+      const clickId = 'clk-fraud-1';
+      // Pre-flight: click-keyed compensation rows.
+      mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
+        id: 'adv-row-click',
+        advertiserId: 'adv-click',
+        campaignId: 'cmp-click',
+        amountMinor: 500, // full CPC click bid
+        currency: 'USD',
+        idempotencyKey: `clk-${clickId}-adv`,
+      });
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce({
+        id: 'plt-row-click',
+        campaignId: 'cmp-click',
+        amountMinor: 150, // 30% platform fee
+        currency: 'USD',
+        idempotencyKey: `clk-${clickId}-plt`,
+      });
+      mockPrisma.platformLedger.findUnique.mockResolvedValueOnce({
+        id: 'res-row-click',
+        campaignId: 'cmp-click',
+        amountMinor: 50, // 10% fraud reserve
+        currency: 'USD',
+        idempotencyKey: `clk-${clickId}-res`,
+      });
+      mockPrisma.earningsLedger.count.mockResolvedValueOnce(0);
+      // Earnings row flipped by clickId, not impressionId.
+      mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
+      mockPrisma.platformLedger.upsert
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+
+      const result = await service.reverseEarnings({ clickId }, 'click_abuse');
+
+      expect(result).toEqual({ reversed: 1, paidSkipped: 0 });
+
+      // 1. Earnings row flipped by clickId (where: { clickId }).
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            clickId,
+            status: { in: ['estimated', 'pending', 'confirmed'] },
+          }),
+        }),
+      );
+      // And NOT keyed on impressionId — proves the discriminator worked.
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.not.objectContaining({ impressionId: clickId }),
+        }),
+      );
+
+      // 2. Advertiser refund keyed on the click prefix.
+      expect(mockPrisma.advertiserLedger.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { idempotencyKey: `clk-${clickId}-adv-rev` },
+          create: expect.objectContaining({
+            advertiserId: 'adv-click',
+            entryType: 'refund',
+            amountMinor: 500,
+          }),
+        }),
+      );
+
+      // 3-4. Platform fee + reserve reversals keyed on the click prefix.
+      expect(mockPrisma.platformLedger.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { idempotencyKey: `clk-${clickId}-plt-rev` },
+          create: expect.objectContaining({
+            entryType: 'reversal',
+            bucket: 'platform_fee',
+            amountMinor: 150,
+          }),
+        }),
+      );
+      expect(mockPrisma.platformLedger.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { idempotencyKey: `clk-${clickId}-res-rev` },
+          create: expect.objectContaining({
+            entryType: 'reversal',
+            bucket: 'fraud_reserve',
+            amountMinor: 50,
+          }),
+        }),
+      );
+    });
+
+    it('returns zero zeros when neither clickId nor impressionId is provided', async () => {
+      const result = await service.reverseEarnings({});
+      expect(result).toEqual({ reversed: 0, paidSkipped: 0 });
+      // No compensation lookup, no $transaction, no ledger writes.
+      expect(mockPrisma.advertiserLedger.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.platformLedger.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.earningsLedger.updateMany).not.toHaveBeenCalled();
     });
   });
 });

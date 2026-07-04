@@ -3,6 +3,7 @@ import { PrismaService } from '../config/prisma.service';
 import { Prisma } from '@waitlayer/db';
 import { LedgerStatus } from '@waitlayer/shared';
 import { FraudService } from '../fraud/fraud.service';
+import { AuditService } from '../audit/audit.service';
 
 interface DeveloperSettingsUpdate {
   adsEnabled?: boolean;
@@ -17,6 +18,7 @@ export class DeveloperService {
   constructor(
     private prisma: PrismaService,
     private fraud: FraudService,
+    private audit: AuditService,
   ) {}
 
   async getDashboard(userId: string) {
@@ -234,12 +236,26 @@ export class DeveloperService {
       this.prisma.adClick.findMany({ where: { userId }, take: 1000 }),
       this.prisma.payoutRequest.findMany({ where: { userId } }),
     ]);
+    // Audit: a full PII export (GDPR-style data dump). Records who pulled
+    // the dump so bulk exfiltration via a compromised token is traceable
+    // even after the data has left the platform. The export body itself
+    // is not snapshotted (too large + sensitive).
+    this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'export_data',
+      targetType: 'user',
+      targetId: userId,
+    });
     return { user, earnings, impressions, clicks, payouts };
   }
 
   async deleteAccount(userId: string) {
-    // Anonymize user data and revoke all sessions
-    return this.prisma.$transaction([
+    // Anonymize user data, revoke all sessions and API keys.
+    // The FK ON DELETE SET NULL on api_keys.ownerId will null the owner
+    // column when the User row is eventually hard-deleted; this explicit
+    // bulk-revoke ensures keys are inert NOW even without a hard-delete.
+    const result = await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
         data: {
@@ -256,7 +272,22 @@ export class DeveloperService {
         where: { userId },
         data: { revoked: true },
       }),
+      this.prisma.apiKey.updateMany({
+        where: { ownerId: userId },
+        data: { isActive: false },
+      }),
     ]);
+    // Audit: account self-deletion is an irreversible destructive action.
+    // Record it so a malicious deletion (compromised token) leaves a
+    // forensic trail separate from the (now-anonymized) row itself.
+    this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'delete_account',
+      targetType: 'user',
+      targetId: userId,
+    });
+    return result;
   }
 
   private ensureSettings(userId: string) {

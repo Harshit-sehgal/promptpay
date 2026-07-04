@@ -71,7 +71,7 @@ export default function SignupPage() {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002/api/v1';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
         const res = await fetch(`${apiUrl}/auth/config`);
         if (res.ok) {
           const data = await res.json();

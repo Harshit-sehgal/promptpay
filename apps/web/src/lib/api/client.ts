@@ -1,31 +1,40 @@
 import axios from 'axios';
 
+/**
+ * Axios instance for same-origin API calls via Next.js Route Handlers.
+ *
+ * The browser calls `/api/...` endpoints (same origin). The catch-all proxy
+ * at `app/api/[...proxy]/route.ts` forwards requests to the upstream
+ * NestJS API, carrying the httpOnly `access_token` cookie in a Bearer
+ * Authorization header. Auth-only routes (`/api/auth/login`, etc.) are
+ * explicit Route Handlers that set/clear httpOnly cookies and strip tokens
+ * from response bodies.
+ *
+ * `withCredentials: true` ensures the httpOnly cookies are sent on every
+ * request (SameSite=Lax, same-origin — no cross-origin transport issue).
+ */
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4002/api/v1',
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true,
 });
 
 // ── Token refresh interceptor ──
-// If a 401 is received, try refreshing the access token with the stored
-// refresh token, then retry the original request once.
+// If a 401 is received, call the same-origin `/api/auth/refresh` Route
+// Handler. The handler reads the httpOnly `refresh_token` cookie server-side,
+// calls the upstream API, and sets new httpOnly `access_token` +
+// `refresh_token` cookies. The interceptor then retries the original request.
+// No tokens in localStorage — XSS can't steal them.
 let isRefreshing = false;
 let pendingRequests: Array<{
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
 }> = [];
 
-function onRefreshed(newToken: string) {
-  pendingRequests.forEach(({ resolve }) => resolve(newToken));
+function onRefreshed() {
+  pendingRequests.forEach(({ resolve }) => resolve(undefined));
   pendingRequests = [];
 }
 
@@ -54,21 +63,12 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const refreshToken = localStorage.getItem('refreshToken');
-    if (!refreshToken) {
-      // No refresh token — clear session and reject
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
-      return Promise.reject(error);
-    }
-
     if (isRefreshing) {
       // Another request is already refreshing — queue this one
       return new Promise((resolve, reject) => {
         pendingRequests.push({ resolve, reject });
-      }).then((newToken) => {
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      }).then(() => {
+        // The cookies are already rotated server-side; just retry
         return api(originalRequest);
       });
     }
@@ -77,26 +77,15 @@ api.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const res = await axios.post(
-        `${api.defaults.baseURL}/auth/refresh`,
-        { refreshToken },
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-
-      const { accessToken: newAccess, refreshToken: newRefresh } = res.data;
-      localStorage.setItem('accessToken', newAccess);
-      localStorage.setItem('refreshToken', newRefresh);
-
-      onRefreshed(newAccess);
-
-      originalRequest.headers.Authorization = `Bearer ${newAccess}`;
+      // Call same-origin Route Handler — the proxy injects the refresh token
+      // from the httpOnly cookie automatically
+      await api.post('/auth/refresh');
+      onRefreshed();
       return api(originalRequest);
     } catch (refreshErr) {
       onRefreshFailed(refreshErr);
-      // Refresh failed — clear session
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      document.cookie = 'session=; path=/; max-age=0; SameSite=Lax';
+      // Refresh failed — the Route Handler cleared auth cookies already;
+      // just reject so callers can redirect to login.
       return Promise.reject(refreshErr);
     } finally {
       isRefreshing = false;

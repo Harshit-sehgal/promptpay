@@ -184,6 +184,14 @@ describe('FraudService', () => {
         id: 'c-1',
         advertiser: { userId: 'u-1' },
       });
+      // checkSelfClick triggers createFlag (CRITICAL self-clicking) which
+      // creates an actual fraud flag row and (since severity=CRITICAL +
+      // userId set) calls ledger.holdEarnings(userId, reason, flagId).
+      // The createFlag mock must return an id so `flag.id` doesn't crash
+      // before holdEarnings fires; ledger.holdEarnings is mocked in this
+      // spec, so the actual id content doesn't matter — only that it's
+      // defined.
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-self-click' });
       const result = await service.checkSelfClick('u-1', 'c-1');
       expect(result.allowed).toBe(false);
     });
@@ -235,7 +243,10 @@ describe('FraudService', () => {
         severity: 'high',
         status: 'open',
       });
-      mockPrisma.fraudFlag.update.mockResolvedValue({ id: 'flag-1' });
+      // New resolveFlag path uses conditional updateMany so a concurrent
+      // second resolution can't overwrite reviewerId/reviewNote or re-run
+      // releaseEarnings twice. Mock returns count=1 (the claim wins).
+      mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.user.findUnique.mockResolvedValue(
         mockUserWithFlags({ emailVerified: true, createdAt: new Date(Date.now() - 90 * 24 * 3600_000) }),
       );
@@ -247,7 +258,7 @@ describe('FraudService', () => {
       const result = await service.resolveFlag('flag-1', 'rev-adm', true, 'Confirmed fraud');
       expect(result.isValid).toBe(true);
       expect(result.status).toBe('resolved_valid');
-      expect(mockPrisma.fraudFlag.update).toHaveBeenCalled();
+      expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalled();
     });
   });
 });

@@ -125,7 +125,16 @@ function buildBeforeSnap(
 /**
  * Fetch the current DB state of the entity being mutated by an admin
  * mutation. Mirrors the mapping in `parseAdminUrl` — queries the relevant
- * Prisma model by id/slug so the audit log can carry the full pre-state.
+ * Prisma model by id/slug so the audit log can carry the pre-state.
+ *
+ * **Allow-list, not full row:** each query selects only the fields an
+ * auditor needs to reason about a state-machine transition — ids, status,
+ * timestamps, reviewer, note — never the full entity. Persisting the full
+ * row would carry sensitive/redundant columns (the payout's
+ * `payoutAccountId` reference, a fraud flag's `evidence` JSON with IP
+ * hashes / userIds, etc.) into an append-only audit table that outlives the
+ * source row. The selected projection is the minimal set that still answers
+ * "what was the state before the mutation?"
  *
  * Returns `null` when the entity cannot be found (e.g. mis-targeted
  * mutation — the handler will throw, capturing the attempt is still
@@ -140,13 +149,49 @@ async function fetchEntityPreState(
 
   switch (targetType) {
     case 'campaign':
-      return prisma.campaign.findUnique({ where: { id: targetId } }) as Promise<Record<string, unknown> | null>;
+      return prisma.campaign.findUnique({
+        where: { id: targetId },
+        select: {
+          id: true,
+          status: true,
+          approvedAt: true,
+          activatedAt: true,
+          pausedAt: true,
+          budgetTotalMinor: true,
+          budgetSpentMinor: true,
+        },
+      }) as Promise<Record<string, unknown> | null>;
     case 'payout':
-      return prisma.payoutRequest.findUnique({ where: { id: targetId } }) as Promise<Record<string, unknown> | null>;
+      return prisma.payoutRequest.findUnique({
+        where: { id: targetId },
+        select: {
+          id: true,
+          status: true,
+          requestedAmountMinor: true,
+          approvedAmountMinor: true,
+          reviewerId: true,
+          reviewNote: true,
+          processedAt: true,
+          paidAt: true,
+        },
+      }) as Promise<Record<string, unknown> | null>;
     case 'fraud_flag':
-      return prisma.fraudFlag.findUnique({ where: { id: targetId } }) as Promise<Record<string, unknown> | null>;
+      return prisma.fraudFlag.findUnique({
+        where: { id: targetId },
+        select: {
+          id: true,
+          status: true,
+          severity: true,
+          reviewerId: true,
+          reviewNote: true,
+          resolvedAt: true,
+        },
+      }) as Promise<Record<string, unknown> | null>;
     case 'tool_integration':
-      return prisma.toolIntegration.findUnique({ where: { slug: targetId } }) as Promise<Record<string, unknown> | null>;
+      return prisma.toolIntegration.findUnique({
+        where: { slug: targetId },
+        select: { slug: true, name: true, isActive: true },
+      }) as Promise<Record<string, unknown> | null>;
     default:
       return null;
   }

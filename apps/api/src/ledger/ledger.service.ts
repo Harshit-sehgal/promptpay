@@ -338,8 +338,18 @@ export class LedgerService {
     return this.prisma.earningsLedger.findUnique({ where: { id: entryId } });
   }
 
-  /** Hold all earnings for a user (e.g., during fraud investigation) */
-  async holdEarnings(userId: string, reason?: string) {
+  /**
+   * Hold all earnings for a user (e.g., during a critical fraud investigation).
+   *
+   *  When a `flagId` is supplied: held entries are stamped
+   *  `heldByFlagId = flagId`. This is what scopes the corresponding
+   *  `releaseEarnings` — releasing a false-positive flag F1 only releases
+   *  the entries THIS flag held, never entries held under a still-open,
+   *  unrelated flag F2 (cross-flag money leak). Without the flagId
+   *  linkage the bulk release had no choice but to release every held
+   *  entry across all of the user's flags.
+   */
+  async holdEarnings(userId: string, reason?: string, flagId?: string) {
     return this.prisma.earningsLedger.updateMany({
       where: {
         userId,
@@ -348,6 +358,7 @@ export class LedgerService {
       data: {
         status: 'held',
         description: reason ? `Held: ${reason}` : undefined,
+        heldByFlagId: flagId ?? null,
       },
     });
   }
@@ -359,45 +370,199 @@ export class LedgerService {
    *    impression): only held earnings tied to that impression are
    *    flipped to `confirmed`. This avoids leaking legitimate holds
    *    from concurrent unrelated flags.
-   *  - Bulk user-level fallback: used when the flag has no impressionId
-   *    (e.g. click-pattern fraud without a specific impression). All
-   *    held entries for the user are released — the flag-clear applies
-   *    to the user as a whole.
+   *  - Per-flag fallback: used when the flag has no impressionId
+   *    (e.g. click-pattern fraud without a specific impression). Released
+   *    entries are scoped to `heldByFlagId = flagId` so the release can
+   *    NEVER undo holds from a still-open concurrent flag — the previous
+   *    bulk `WHERE userId AND status='held'` released every held entry
+   *    across all of the user's flags (cross-flag money leak).
    *
    *  Either way the operation is idempotent (no-op when nothing matches).
    */
-  async releaseEarnings(userId: string, opts?: { impressionId?: string }) {
+  async releaseEarnings(
+    userId: string,
+    opts?: { impressionId?: string; flagId?: string },
+  ) {
     if (opts?.impressionId) {
       return this.prisma.earningsLedger.updateMany({
         where: { userId, impressionId: opts.impressionId, status: 'held' },
-        data: { status: 'confirmed' },
+        data: { status: 'confirmed', heldByFlagId: null },
       });
     }
+    // Bulk user-level path is intentionally GONE. Releasing every held
+    // entry across all flags was the cross-flag money leak. Without a
+    // flagId OR impressionId we cannot scope safely — fail closed
+    // (release nothing) rather than release unrelated holds. Admins can
+    // still release a specific hold by resolving its flag (which carries
+    // a flagId).
+    if (!opts?.flagId) {
+      return { count: 0 } satisfies { count: number };
+    }
     return this.prisma.earningsLedger.updateMany({
-      where: { userId, status: 'held' },
-      data: { status: 'confirmed' },
+      where: { userId, heldByFlagId: opts.flagId, status: 'held' },
+      data: { status: 'confirmed', heldByFlagId: null },
     });
   }
 
-  /** Reverse earnings for a specific impression (fraud or user report) */
-  async reverseEarnings(impressionId: string, reason?: string) {
-    return this.prisma.earningsLedger.updateMany({
-      where: {
-        impressionId,
-        status: { in: ['estimated', 'pending', 'confirmed'] },
-      },
-      data: {
-        status: 'reversed',
-        description: reason ? `Reversed: ${reason}` : undefined,
-      },
-    });
-  }
+  /**
+   * Reverse earnings for a specific impression or click (confirmed fraud
+   * or a legit user-initiated report).
+   *
+   * Sum-conserving: in addition to flipping the developer's earnings rows
+   * to `reversed`, writes compensating entries so the per-entity
+   * accounting reconciles to zero — the advertiser is refunded the full
+   * bid, the platform's fee bucket is debited back, and the fraud/payment
+   * reserve bucket is released. Without these the prior
+   * `recordImpressionEarnings` / `recordClickEarnings` left money stranded
+   * in the advertiser-debit and platform-credit buckets for a confirmed-
+   * fraudulent entity.
+   *
+   * Policy (per the schema's existing `fraud_reserve` bucket — reserved
+   * for fraud and payment claw-backs):
+   *   - Advertiser: full `bidAmountMinor` refund (advertiser must not pay
+   *     for fraud).
+   *   - Platform fee / fraud reserve: full debit-back (the platform did
+   *     not legitimately earn fees on a fraudulent entity).
+   *   - Developer: credit marked `reversed` (the share was never released
+   *     to the developer — the developer's row was in `estimated` /
+   *     `pending` / `confirmed`, not yet `paid`).
+   *
+   * Supports both `impressionId` and `clickId`. When both are provided,
+   * clickId takes precedence (click-level rows are the finer-grained
+   * money movement). The `imp-{id}` / `clk-{id}` base key determines
+   * which compensation rows to look up; the matching `earnings_ledger`
+   * column (`impressionId` or `clickId`) is used for the developer-row
+   * flip.
+   *
+   * Entries already in `paid` status (developer already withdrew) are
+   * OUTSIDE this method's reach — `paid` is a terminal state with no
+   * `EARNING_TRANSITIONS` exit. Reversing a `paid` entry requires a
+   * separate claw-back / debt flow (TODO); this method returns the count
+   * of `paid` entries it deliberately skipped so callers can flag the
+   * gap. All other entries (estimated/pending/confirmed) are reversed
+   * and the matching compensation entries written.
+   *
+   * Idempotent: every compensation entry uses a deterministic
+   * `${base}-rev-${suffix}` idempotency key (`@unique`); a P2002 on any
+   * one of them means a prior reversal already recorded the compensation
+   * — the entry is silently skipped, the earnings flip is intrinsically
+   * idempotent (`status: 'reversed'` is a terminal state).
+   */
+  async reverseEarnings(
+    ref: { impressionId?: string; clickId?: string },
+    reason?: string,
+  ): Promise<{
+    reversed: number;
+    /** Entries left in 'paid' status — money already left, can't be clawed back by this method. */
+    paidSkipped: number;
+  }> {
+    // clickId wins when both are present (finer-grained money movement).
+    const isClick = !!ref.clickId;
+    const entityId = ref.clickId || ref.impressionId;
+    if (!entityId) {
+      return { reversed: 0, paidSkipped: 0 };
+    }
+    const prefix = isClick ? 'clk' : 'imp';
+    // The earnings_ledger column to key the developer-row flip on.
+    const entityCol = isClick ? ('clickId' as const) : ('impressionId' as const);
 
-  /** Mark earnings as paid after successful payout */
-  async markAsPaid(entryIds: string[]) {
-    return this.prisma.earningsLedger.updateMany({
-      where: { id: { in: entryIds }, status: 'confirmed' },
-      data: { status: 'paid' },
+    // Pre-flight: read the entity's advertiser-debit / platform-credit
+    // rows so we know the exact amounts and advertiserId for the
+    // compensation writes. The idempotency-key prefix mirrors the
+    // forward `recordImpressionEarnings` / `recordClickEarnings` writes.
+    const advBase = `${prefix}-${entityId}-adv`;
+    const pltBase = `${prefix}-${entityId}-plt`;
+    const resBase = `${prefix}-${entityId}-res`;
+
+    const [advDebit, pltCredit, resCredit, paidCount] = await Promise.all([
+      this.prisma.advertiserLedger.findUnique({ where: { idempotencyKey: advBase } }),
+      this.prisma.platformLedger.findUnique({ where: { idempotencyKey: pltBase } }),
+      this.prisma.platformLedger.findUnique({ where: { idempotencyKey: resBase } }),
+      this.prisma.earningsLedger.count({
+        where: { [entityCol]: entityId, status: 'paid' },
+      }),
+    ]);
+
+    const entityLabel = prefix === 'clk' ? 'click' : 'impression';
+
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // 1. Flip the developer's earnings rows to `reversed` — intrinsically
+      //    idempotent: rows already `reversed` simply don't match the
+      //    `status in (...)` filter.
+      const reversed = await tx.earningsLedger.updateMany({
+        where: {
+          [entityCol]: entityId,
+          status: { in: ['estimated', 'pending', 'confirmed'] },
+        },
+        data: {
+          status: 'reversed',
+          description: reason ? `Reversed: ${reason}` : undefined,
+        },
+      });
+
+      // 2. Advertiser refund — full bid back to the advertiser.
+      //    Skipped when the original row never recorded a matching
+      //    advertiser debit (e.g. a hypothetical entry without a spend,
+      //    or pre-existing data predating the schema).
+      if (advDebit) {
+        await tx.advertiserLedger.upsert({
+          where: { idempotencyKey: `${advBase}-rev` },
+          create: {
+            advertiserId: advDebit.advertiserId,
+            campaignId: advDebit.campaignId,
+            entryType: 'refund',
+            status: 'confirmed',
+            amountMinor: advDebit.amountMinor,
+            currency: advDebit.currency,
+            idempotencyKey: `${advDebit.idempotencyKey}-rev`,
+            description: `Refund — ${entityLabel} ${entityId} reversed${reason ? `: ${reason}` : ''}`,
+          },
+          update: {}, // idempotent: do nothing on a replay
+        });
+      }
+
+      // 3. Platform fee reversal — debit the platform_fee bucket back.
+      //    `entryType: 'reversal'` posts a debit-side offset to the prior
+      //    `credit` (the platform marks the fee as never earned).
+      if (pltCredit) {
+        await tx.platformLedger.upsert({
+          where: { idempotencyKey: `${pltBase}-rev` },
+          create: {
+            campaignId: pltCredit.campaignId,
+            entryType: 'reversal',
+            status: 'confirmed',
+            amountMinor: pltCredit.amountMinor,
+            currency: pltCredit.currency,
+            bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
+            referenceId: entityId,
+            idempotencyKey: `${pltCredit.idempotencyKey}-rev`,
+            description: `Platform-fee reversal — ${entityLabel} ${entityId} reversed${reason ? `: ${reason}` : ''}`,
+          },
+          update: {},
+        });
+      }
+
+      // 4. Fraud-reserve reversal — release the reserve bucket (it was set
+      //    aside for exactly this purpose).
+      if (resCredit) {
+        await tx.platformLedger.upsert({
+          where: { idempotencyKey: `${resBase}-rev` },
+          create: {
+            campaignId: resCredit.campaignId,
+            entryType: 'reversal',
+            status: 'confirmed',
+            amountMinor: resCredit.amountMinor,
+            currency: resCredit.currency,
+            bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
+            referenceId: entityId,
+            idempotencyKey: `${resCredit.idempotencyKey}-rev`,
+            description: `Fraud-reserve release — ${entityLabel} ${entityId} reversed${reason ? `: ${reason}` : ''}`,
+          },
+          update: {},
+        });
+      }
+
+      return { reversed: reversed.count, paidSkipped: paidCount };
     });
   }
 

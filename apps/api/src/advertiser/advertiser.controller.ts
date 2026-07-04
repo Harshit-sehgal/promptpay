@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, HttpCode, HttpStatus, BadRequestException, ForbiddenException, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, HttpCode, HttpStatus, BadRequestException, ForbiddenException, Req, ParseUUIDPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -90,7 +90,7 @@ export class AdvertiserController {
   @Patch('campaigns/:id')
   @RequiredScopes('campaigns:write')
   async updateCampaign(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request,
     @Body() dto: UpdateCampaignDto,
   ) {
@@ -101,7 +101,7 @@ export class AdvertiserController {
 
   @Post('campaigns/:id/submit')
   @RequiredScopes('campaigns:write')
-  async submitCampaign(@Param('id') id: string, @Req() req: Request) {
+  async submitCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     return this.service.submitCampaign(id, advertiserId);
@@ -109,7 +109,7 @@ export class AdvertiserController {
 
   @Post('campaigns/:id/pause')
   @RequiredScopes('campaigns:write')
-  async pauseCampaign(@Param('id') id: string, @Req() req: Request) {
+  async pauseCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     return this.service.pauseCampaign(id, advertiserId);
@@ -117,7 +117,7 @@ export class AdvertiserController {
 
   @Post('campaigns/:id/resume')
   @RequiredScopes('campaigns:write')
-  async resumeCampaign(@Param('id') id: string, @Req() req: Request) {
+  async resumeCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     return this.service.resumeCampaign(id, advertiserId);

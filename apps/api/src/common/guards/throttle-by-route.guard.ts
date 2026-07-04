@@ -31,7 +31,19 @@ export class ThrottleByRouteGuard extends ThrottlerGuard {
 }
 
 function resolveThrottleName(path: string): string {
-  if (path.includes('/auth/login') || path.includes('/auth/signup') || path.includes('/auth/password')) {
+  // All credential-bearing auth routes share the tightest bucket (10/min).
+  // `/auth/google` was previously falling through to `default` (200/min) —
+  // a credential-stuffing vector where many OAuth token attempts could be
+  // replayed against the verifier without throttling. `/auth/verify-email/*`
+  // was also uncovered — verification tokens are short random strings that
+  // must not be brute-forced.
+  if (
+    path.includes('/auth/login') ||
+    path.includes('/auth/signup') ||
+    path.includes('/auth/password') ||
+    path.includes('/auth/google') ||
+    path.includes('/auth/verify-email')
+  ) {
     return 'auth-short';
   }
   if (path.includes('/auth/refresh')) {

@@ -73,7 +73,38 @@ const envSchema = z.object({
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
-});
+})
+.refine(
+  (env) => {
+    // If Stripe is enabled (secret key present) the webhook signing secret
+    // MUST also be set. An empty STRIPE_WEBHOOK_SECRET with a live secret key
+    // causes the Stripe SDK to reject every legitimate webhook's signature
+    // — silently breaking deposit/refund/dispute processing. Fail fast at
+    // startup rather than at the first webhook. (When Stripe is entirely
+    // off, the webhook controller short-circuits with `stripe_not_configured`
+    // and never reaches signature verification.)
+    if (env.STRIPE_SECRET_KEY && !env.STRIPE_WEBHOOK_SECRET) return false;
+    return true;
+  },
+  {
+    message:
+      'STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is set — Stripe webhooks cannot be verified without it.',
+    path: ['STRIPE_WEBHOOK_SECRET'],
+  },
+)
+.refine(
+  (env) => {
+    // PayPal live mode requires credentials. sandbox is OK without them
+    // (the PayPal provider stubs/falls-back gracefully in dev).
+    if (env.PAYPAL_MODE === 'live' && (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET)) return false;
+    return true;
+  },
+  {
+    message:
+      'PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required when PAYPAL_MODE is "live"',
+    path: ['PAYPAL_CLIENT_ID'],
+  },
+);
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
   const result = envSchema.safeParse(source);

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
@@ -27,7 +27,7 @@ export class ApiKeyController {
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   revokeApiKey(
-    @Param('id') keyId: string,
+    @Param('id', ParseUUIDPipe) keyId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.service.revokeApiKey(keyId, userId);

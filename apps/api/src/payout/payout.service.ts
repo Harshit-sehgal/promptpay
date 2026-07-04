@@ -423,33 +423,68 @@ export class PayoutService {
     });
   }
 
-  /** Process an approved payout via the configured provider */
+  /** Process an approved payout via the configured provider.
+   *
+   *  **TOCTOU hardening**: Two concurrent `processPayout` calls both read
+   *  `status === 'approved'` and could both fire `provider.initiate()` — a
+   *  real-money double-pay. The safe fix is to atomically flip `approved →
+   *  processing` INSIDE a transaction BEFORE calling the provider; only the
+   *  winner proceeds. The loser sees count === 0 (already claimed) and
+   *  throws. The provider-call + tx-record creation happen AFTER the claim
+   *  is secured, so at most one real transfer fires.
+   */
   async processPayout(payoutId: string) {
-    const payout = await this.prisma.payoutRequest.findUnique({
-      where: { id: payoutId },
-      include: { payoutAccount: true, allocations: true },
+    // Atomic claim: flip approved → processing. This is a CAS (compare-and-swap)
+    // at the DB row level — at most one call wins. The flip _precedes_ the
+    // provider call so the provider is never fired twice for the same payout.
+    const claim = await this.prisma.payoutRequest.updateMany({
+      where: { id: payoutId, status: 'approved' },
+      data: { status: 'processing', processedAt: new Date() },
     });
-    if (!payout) throw new BadRequestException('Payout request not found');
-    if (payout.status !== 'approved') {
-      throw new BadRequestException('Payout must be approved before processing');
+
+    if (claim.count === 0) {
+      const existing = await this.prisma.payoutRequest.findUnique({
+        where: { id: payoutId },
+        select: { status: true },
+      });
+      if (!existing) throw new BadRequestException('Payout request not found');
+      throw new BadRequestException(
+        `Payout cannot be processed from status '${existing.status}'` +
+        (existing.status === 'processing' ? ' (already claimed by a concurrent process)' : ''),
+      );
     }
+
+    // Re-read inside a transaction to get allocations + payoutAccount safely.
+    // The claim above already owns the row; this read won't race with another
+    // processPayout.  Use a tx for consistency with the provider tx-row insert.
+    const payout = await this.prisma.$transaction(async (tx) => {
+      const pkt = await tx.payoutRequest.findUnique({
+        where: { id: payoutId },
+        include: { payoutAccount: true, allocations: true },
+      });
+      if (!pkt) throw new BadRequestException('Payout request not found');
+
+      // Reconcile: verify the allocated sum matches approvedAmountMinor (or requestedAmountMinor)
+      const allocatedSum = pkt.allocations.reduce(
+        (sum: number, a: { amountMinor: number }) => sum + a.amountMinor,
+        0,
+      );
+      const expectedAmount = pkt.approvedAmountMinor ?? pkt.requestedAmountMinor;
+      if (allocatedSum !== expectedAmount) {
+        throw new BadRequestException(
+          `Allocation mismatch: allocated ${allocatedSum} but expected ${expectedAmount}`,
+        );
+      }
+
+      return pkt;
+    });
 
     const provider = this.providers[payout.payoutAccount.provider];
     if (!provider) {
       throw new BadRequestException(`Payout provider "${payout.payoutAccount.provider}" not implemented`);
     }
 
-    // Reconcile: verify the allocated sum matches approvedAmountMinor (or requestedAmountMinor)
-    const allocatedSum = payout.allocations.reduce(
-      (sum: number, a: { amountMinor: number }) => sum + a.amountMinor,
-      0,
-    );
     const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
-    if (allocatedSum !== expectedAmount) {
-      throw new BadRequestException(
-        `Allocation mismatch: allocated ${allocatedSum} but expected ${expectedAmount}`,
-      );
-    }
 
     const result = await provider.initiate({
       payoutRequestId: payout.id,
@@ -465,11 +500,6 @@ export class PayoutService {
         providerTxId: result.providerTxId,
         status: 'processing',
       },
-    });
-
-    await this.prisma.payoutRequest.update({
-      where: { id: payoutId },
-      data: { status: 'processing', processedAt: new Date() },
     });
 
     return { payoutId, providerTxId: result.providerTxId, status: 'processing' };
@@ -496,6 +526,14 @@ export class PayoutService {
   async markPayoutPaid(payoutId: string, data: {
     providerTxId: string;
     paidAt: string;
+    // Optional cross-check fields supplied by the admin body (MarkPayoutPaidDto).
+    // When present, the stored approved/requested amountMinor AND currency MUST
+    // match — this catches a transposed digit / wrong-currency mark-paid before
+    // the payout is irreversibly flipped. When absent (e.g. path callers that
+    // only have providerTxId + paidAt), the cross-check is skipped, preserving
+    // the prior behavior so webhook/automated callers don't break.
+    expectedAmountMinor?: number;
+    expectedCurrency?: string;
   }) {
     const payout = await this.prisma.payoutRequest.findUnique({
       where: { id: payoutId },
@@ -505,6 +543,27 @@ export class PayoutService {
       },
     });
     if (!payout) throw new BadRequestException('Payout not found');
+
+    // Cross-check the admin-supplied amount/currency against the authoritative
+    // stored values before transitioning. The paid amount of record is the
+    // approved amount (or requested when not yet approved); the currency is
+    // the payout's own currency. A mismatch is a client-side data error and
+    // must surface as a 400 rather than silently marking the wrong payout.
+    if (data.expectedAmountMinor !== undefined) {
+      const authoritativeAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
+      if (data.expectedAmountMinor !== authoritativeAmount) {
+        throw new BadRequestException(
+          `Payout amount mismatch: mark-paid body says ${data.expectedAmountMinor} but the payout is ${authoritativeAmount}`,
+        );
+      }
+    }
+    if (data.expectedCurrency !== undefined) {
+      if (data.expectedCurrency.toUpperCase() !== payout.currency.toUpperCase()) {
+        throw new BadRequestException(
+          `Payout currency mismatch: mark-paid body says ${data.expectedCurrency} but the payout is ${payout.currency}`,
+        );
+      }
+    }
 
     // Idempotency fast-path: if already paid, return immediately
     if (payout.status === 'paid') {
@@ -584,6 +643,31 @@ export class PayoutService {
           where: { id: { in: earningsIds }, status: 'confirmed' },
           data: { status: 'paid' },
         });
+
+        // Authoritative post-check: a concurrent fraud `holdEarnings` could have
+        // flipped one or more allocated entries from `confirmed` → `held`
+        // between the snapshot read (line 590) and the CAS above. The
+        // conditional `updateMany` silently SKIPS those rows (no matching
+        // `confirmed` row), so without this check the payout would be marked
+        // `paid` while the held entries stay `held` — money left the platform
+        // but the developer's earnings entry is orphaned in `held`. When the
+        // flag later resolves as a false positive, `releaseEarnings` flips the
+        // held entry back to `confirmed` and the developer can withdraw it
+        // AGAIN (double-spend). Refuse the paid transition when any allocated
+        // entry was held out — the admin re-runs `markPayoutPaid` after the
+        // hold clears, or cancels the payout.
+        const paidCount = await tx.earningsLedger.aggregate({
+          where: { id: { in: earningsIds }, status: 'paid' },
+          _count: { _all: true },
+        });
+        if (paidCount._count._all !== earningsIds.length) {
+          // Throw inside the transaction → rolls back the payoutRequest → paid
+          // flip AND the payoutTransaction row. The payout stays in its prior
+          // state ('approved'/'processing') so the operation can be retried.
+          throw new BadRequestException(
+            `Payout ${payoutId} cannot be marked paid: ${earningsIds.length - paidCount._count._all} allocated earnings entry/entries are no longer in 'confirmed' status (likely held by a fraud investigation). Resolve the fraud flag and retry.`,
+          );
+        }
       }
 
       return tx.payoutRequest.findUnique({

@@ -435,9 +435,13 @@ describe('AuthService', () => {
       const reqRes = await service.requestPasswordReset('reset@test.com');
 
       mockPrisma.user.findUnique.mockResolvedValue({ ...resetUser, status: 'banned' });
+      // Security: a banned/deleted account must NOT be distinguishable from an
+      // invalid/expired token — that would let an attacker enumerate account
+      // status via the reset flow. Both branches return the identical
+      // BadRequestException "Invalid or expired reset token".
       await expect(
         service.resetPassword((reqRes as any).token, 'new-password-123'),
-      ).rejects.toThrow(UnauthorizedException);
+      ).rejects.toThrow('Invalid or expired reset token');
     });
   });
 

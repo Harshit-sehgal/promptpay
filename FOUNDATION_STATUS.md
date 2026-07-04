@@ -267,7 +267,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 ## 12. Stripe/webhooks -- Partial
 
 - `StripeProvider` stub: `createDepositSession`, `handleCheckoutComplete`, `verifyWebhookSignature`, `getRefundDetails`, `getDisputeDetails` — methods exist but require `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` env vars to do meaningful work; real network calls are not enabled
-- `StripeWebhookController` exists at `POST /payout/stripe/webhook` and `POST /webhooks/stripe`; both are wired through `express.raw()` middleware so Stripe signature verification has access to the raw body
+- `StripeWebhookController` exists at `POST /payout/stripe/webhook` (single authoritative Stripe webhook endpoint) and is wired through `express.raw()` middleware so Stripe signature verification has access to the raw body. A duplicate orphan controller at `POST /webhooks/stripe` was removed (it only handled `checkout.session.completed` and silently dropped refunds/disputes).
 - All incoming events are logged to the `WebhookEvent` table with idempotency via unique `eventId`
 - `stripeCustomerId` is wired to the `Advertiser` record on `checkout.session.completed`
 
