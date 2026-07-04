@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { AxiosResponse } from 'axios';
 import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
 import { developerApi } from '@/lib/api/services';
+import { getErrorMessage } from '@/lib/api/errors';
 import { formatRelativeTime } from '@/lib/format';
 
 interface TrustFactor {
@@ -33,17 +34,6 @@ interface TrustInfo {
   }>;
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  const candidate = error as {
-    response?: { data?: { message?: unknown } };
-    message?: unknown;
-  };
-  const message = candidate.response?.data?.message ?? candidate.message;
-
-  if (Array.isArray(message)) return message.join(', ');
-  if (typeof message === 'string') return message;
-  return fallback;
-}
 
 export default function DevTrustPage() {
   const [data, setData] = useState<TrustInfo | null>(null);

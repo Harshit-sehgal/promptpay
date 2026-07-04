@@ -350,10 +350,21 @@ export class LedgerService {
    *  entry across all of the user's flags.
    */
   async holdEarnings(userId: string, reason?: string, flagId?: string) {
+    // CAS: only hold entries that aren't already stamped by another flag.
+    // Without the heldByFlagId: null guard in the WHERE clause, two
+    // concurrent critical fraud flags on the same user would both call
+    // holdEarnings — F1 stamps everything, F2 arrives a millisecond later
+    // and overwrites F1's heldByFlagId stamps with its own flagId. Later
+    // when F1 is resolved as false-positive, releaseEarnings(scoped to F1)
+    // finds zero matching entries (F2 overwrote all the stamps) → the
+    // innocent user's earnings stay held forever (silent permanent freeze).
+    // With this guard F2's updateMany returns count=0 for already-held
+    // entries — it only holds the subset still unheld.
     return this.prisma.earningsLedger.updateMany({
       where: {
         userId,
         status: { in: ['estimated', 'pending', 'confirmed'] },
+        heldByFlagId: null,
       },
       data: {
         status: 'held',

@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import type { AxiosResponse } from 'axios';
 import { LoadingSpinner } from '@/components';
 import { developerApi } from '@/lib/api/services';
+import { getErrorMessage } from '@/lib/api/errors';
 
 interface DevSettings {
   adsEnabled: boolean;
@@ -29,18 +30,6 @@ interface DeveloperApiKey {
 
 interface CreateApiKeyResponse extends DeveloperApiKey {
   plainKey: string;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  const candidate = error as {
-    response?: { data?: { message?: unknown } };
-    message?: unknown;
-  };
-  const message = candidate.response?.data?.message ?? candidate.message;
-
-  if (Array.isArray(message)) return message.join(', ');
-  if (typeof message === 'string') return message;
-  return fallback;
 }
 
 export default function DevSettingsPage() {

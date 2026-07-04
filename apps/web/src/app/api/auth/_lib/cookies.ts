@@ -36,17 +36,39 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 /**
  * Are we running over HTTPS? In production the Next.js proxy terminates TLS,
- * so we must trust X-Forwarded-Proto to mark cookies Secure. In dev (http://
+ * so we trust X-Forwarded-Proto to mark cookies Secure. In dev (http://
  * localhost) we keep them non-Secure so the browser actually accepts them
  * for the dev host.
+ *
+ * Decision order:
+ *   1. NODE_ENV=production → always Secure (canonical deploy path).
+ *   2. COOKIE_SECURE='true'/'false' → honour explicit override.
+ *   3. X-Forwarded-Proto header (if present) → Secure if it contains 'https'.
+ *      This is the correct signal when a reverse proxy/LB terminates TLS
+ *      and the Node process itself sees only HTTP. Reading the actual Host
+ *      header is unreliable because HTTP staging backends with non-localhost
+ *      hostnames (e.g. `staging.example.com`) would otherwise be flagged
+ *      as HTTPS and have the browser silently drop Secure cookies.
+ *   4. Localhost / 127.* hosts → NOT Secure (browser will reject on plain
+ *      HTTP localhost even when Secure is set).
+ *   5. Fallback: assume non-HTTPS (Safe default — DOESN'T expose auth cookies
+ *      to the wrong protocol; if the deploy is HTTPS the proxy will set
+ *      X-Forwarded-Proto upstream).
  */
-function isSecure(requestHost: string | null): boolean {
+function isSecure(headers: Headers): boolean {
   if (process.env.NODE_ENV === 'production') return true;
-  // Honour the explicit override for staging over TLS even in non-prod.
   if (process.env.COOKIE_SECURE === 'true') return true;
-  // Default: localhost dev hosts are not TLS.
-  if (!requestHost) return false;
-  return !/(^|\.)localhost(:\d+)?$/.test(requestHost) && !requestHost.startsWith('127.');
+  if (process.env.COOKIE_SECURE === 'false') return false;
+  // Trust X-Forwarded-Proto above all else — a TLS-terminating proxy sets
+  // this. Without this check, the prior Host-based heuristic would mark
+  // HTTP staging backends as Secure-suitable and break login silently.
+  const xfp = headers.get('x-forwarded-proto');
+  if (xfp) return xfp.toLowerCase().split(',')[0].trim() === 'https';
+  const host = headers.get('host') || '';
+  if (!host) return false;
+  // Localhost / 127.* are never Secure (browser denies Secure on plain
+  // HTTP localhost).
+  return !/(^|\.)localhost(:\d+)?$/.test(host) && !host.startsWith('127.');
 }
 
 /**
@@ -64,14 +86,14 @@ export function stripAuthTokens<T extends Record<string, unknown>>(body: T): Omi
  * Apply the auth cookies to a NextResponse. Used by every Route Handler
  * that created or rotated tokens (login / signup / google / refresh).
  *
- * `requestHost` is the `Host` header from the original request — used
- * to decide whether to set the Secure attribute.
+ * Pass the request headers so isSecure can read X-Forwarded-Proto when a
+ * reverse proxy terminates TLS.
  */
 export function applyAuthCookies(
   response: NextResponse,
-  args: { accessToken: string; refreshToken: string; requestHost: string | null },
+  args: { accessToken: string; refreshToken: string; headers: Headers },
 ): NextResponse {
-  const secure = isSecure(args.requestHost);
+  const secure = isSecure(args.headers);
   response.cookies.set(COOKIE_ACCESS, args.accessToken, {
     httpOnly: true,
     secure: secure,
@@ -93,8 +115,8 @@ export function applyAuthCookies(
  * Clear the auth cookies on a Response. Used by logout and on refresh failure
  * so a stale cookie can't impersonate the user after a server-side revocation.
  */
-export function clearAuthCookies(response: NextResponse, requestHost: string | null): NextResponse {
-  const secure = isSecure(requestHost);
+export function clearAuthCookies(response: NextResponse, headers: Headers): NextResponse {
+  const secure = isSecure(headers);
   response.cookies.set(COOKIE_ACCESS, '', {
     httpOnly: true,
     secure: secure,

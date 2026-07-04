@@ -93,11 +93,12 @@ export function activate(context: vscode.ExtensionContext) {
           idempotencyKey: `render-${ad.impressionToken}`,
         });
 
-        // 5. Show ad in panel.
-        // Order: qualify (CPM/billboard) FIRST, then click (CPC charge). The server already
-        // rejects un-qualified clicks (recordClick throws "Impression not yet qualified"),
-        // so this client order means CPC double-billing is impossible: we never fire a
-        // click record until the impression is qualified.
+        // 5. Show ad in panel. Track when the impression became visible so we
+        // report actual measured duration rather than a constant — sending the
+        // MINIMUM_VISIBLE_DURATION_MS constant unconditionally defeats the
+        // server-side qualify gate. If the panel closes after the tappable
+        // window expires, the server still rejects below-threshold durations.
+        const impressionShownAt = Date.now();
         panel.show({
           headline: ad.title,
           message: ad.message,
@@ -106,7 +107,8 @@ export function activate(context: vscode.ExtensionContext) {
           impressionToken: ad.impressionToken,
         }, async (clicked) => {
           // Always qualify first — CPM bills here; CPC uses qualifiedAt as a gate.
-          await api.recordImpressionEnd(ad.impressionToken, 5000);
+          const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
+          await api.recordImpressionEnd(ad.impressionToken, visibleDurationMs);
           if (clicked) {
             await api.recordClick(ad.impressionToken);
           }
@@ -122,8 +124,13 @@ export function activate(context: vscode.ExtensionContext) {
         });
       }
     } catch (err) {
-      // Silent fail — never disrupt the IDE
-      console.warn('WaitLayer: ad request failed', err);
+      // Don't disrupt the IDE with a modal, but make the failure visible in
+      // the extension's output channel so the developer can see WHY ads
+      // stopped serving (auth expiry, 429, fraud rejection, etc.). Logging
+      // only the message string avoids leaking arbitrary server-side error
+      // payloads into the output channel.
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`WaitLayer: ad request failed — ${msg}`);
     }
   });
 

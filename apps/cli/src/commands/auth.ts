@@ -4,7 +4,7 @@ import { setCredentials, getCredentials } from '../lib/credentials';
 import { ApiClient } from '../lib/api-client';
 import { getErrorMessage } from '../lib/errors';
 
-export async function runAuth(opts: { email?: string; password?: string }) {
+export async function runAuth(opts: { email?: string }) {
   const existing = getCredentials();
   if (existing) {
     console.log(chalk.green(`Already logged in as ${existing.email}`));
@@ -21,13 +21,12 @@ export async function runAuth(opts: { email?: string; password?: string }) {
     }
   }
 
-  let password = opts.password;
+  // Password is always prompted interactively — never accepted as a CLI
+  // argument so it cannot leak into shell history or /proc/<pid>/cmdline.
+  const password = await prompt('Password:', { silent: true });
   if (!password) {
-    password = await prompt('Password:', { silent: true });
-    if (!password) {
-      console.error(chalk.red('Password required'));
-      process.exit(1);
-    }
+    console.error(chalk.red('Password required'));
+    process.exit(1);
   }
 
   console.log(chalk.dim('Signing in...'));

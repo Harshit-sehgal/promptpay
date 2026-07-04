@@ -25,7 +25,12 @@ export class CampaignService {
     sponsoredMessage: string;
     destinationUrl: string;
     displayDomain: string;
-  }) {
+  }, actor?: ServiceActor) {
+    // Defense-in-depth ownership check — the controller is the primary gate,
+    // but this service-layer check prevents internal/future callers from
+    // creating creatives on any campaign without proving ownership.
+    await this.assertCampaignOwnership(campaignId, actor);
+
     // Validate message length
     if (dto.sponsoredMessage.length > MAX_AD_MESSAGE_LENGTH) {
       throw new BadRequestException(
@@ -33,7 +38,7 @@ export class CampaignService {
       );
     }
 
-    // Verify campaign exists and is in draft
+    // Verify campaign exists and is in draft/rejected
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign) throw new NotFoundException('Campaign not found');
     if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
@@ -56,9 +61,12 @@ export class CampaignService {
     sponsoredMessage?: string;
     destinationUrl?: string;
     displayDomain?: string;
-  }) {
+  }, actor?: ServiceActor) {
     const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
     if (!creative) throw new NotFoundException('Creative not found');
+
+    // Defense-in-depth ownership check via the creative's parent campaign
+    await this.assertCampaignOwnership(creative.campaignId, actor);
 
     if (dto.sponsoredMessage && dto.sponsoredMessage.length > MAX_AD_MESSAGE_LENGTH) {
       throw new BadRequestException(
@@ -131,7 +139,8 @@ export class CampaignService {
 
   // ── Country Targeting ──
 
-  async setCountryTargeting(campaignId: string, targets: Array<{ countryCode: string; include: boolean }>) {
+  async setCountryTargeting(campaignId: string, targets: Array<{ countryCode: string; include: boolean }>, actor?: ServiceActor) {
+    await this.assertCampaignOwnership(campaignId, actor);
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign) throw new NotFoundException('Campaign not found');
 

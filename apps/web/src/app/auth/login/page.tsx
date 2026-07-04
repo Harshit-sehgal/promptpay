@@ -77,8 +77,9 @@ export default function LoginPage() {
             setGoogleEnabled(true);
           }
         }
-      } catch (err) {
-        console.error('Failed to load Google Auth config:', err);
+      } catch {
+        // Silently degrade — Google sign-in button will show as disabled.
+        // Logging in dev only to avoid leaking config-fetch errors in production.
       }
     };
     fetchConfig();
@@ -239,7 +240,7 @@ export default function LoginPage() {
             </button>
           )}
 
-          {(process.env.NEXT_PUBLIC_ALLOW_MOCK_AUTH === 'true' || process.env.NODE_ENV !== 'production') && (
+          {(process.env.NEXT_PUBLIC_ALLOW_MOCK_AUTH === 'true' || process.env.NODE_ENV === 'development') && (
             <button
               onClick={handleMockGoogleLogin}
               type="button"

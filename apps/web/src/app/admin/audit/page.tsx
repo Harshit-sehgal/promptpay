@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
+import { adminApi } from '@/lib/api/services';
 
 interface AuditEntry {
   id: string;
@@ -32,14 +33,12 @@ export default function AdminAuditPage() {
     setLoading(true);
     setError(null);
 
-    // Use adminApi (already configured via services). The audit endpoint
-    // returns paginated entries; we render a flat list when present.
-    import('@/lib/api/services')
-      .then(({ adminApi }) => {
-        return adminApi.getAuditLog({
-          actorRole: actorFilter || undefined,
-          action: actionFilter || undefined,
-        });
+    // The audit endpoint returns paginated entries; we render a flat list
+    // when present.
+    adminApi
+      .getAuditLog({
+        actorRole: actorFilter || undefined,
+        action: actionFilter || undefined,
       })
       .then((res: { data?: AuditLogResponse }) => {
         if (!res) return;

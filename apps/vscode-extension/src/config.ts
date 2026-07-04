@@ -31,26 +31,54 @@ export class ConfigurationManager {
     );
   }
 
-  getSecretKey(): string {
-    // ONLY fall back to a hardcoded secret in development. In a production
-    // install we MUST refuse to sign events with a default published secret
-    // that an attacker can read from the public repo.
-    const configured =
-      vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('extensionSecret');
+  /**
+   * Read the HMAC signing key. Sources, in priority order:
+   *
+   *  1. `waitlayer.signingKey` from VS Code's secure SecretStorage (set by the
+   *     activation hook — never visible to other extensions or to a leaked
+   *     settings.json).
+   *  2. `waitlayer.extensionSecret` from workspace settings — kept for backward
+   *     compatibility with existing installations, but printed with a warning
+   *     because plaintext settings are readable by any other extension via
+   *     `workspace.getConfiguration()`. Production should migrate to (1).
+   *  3. If neither is configured AND we're explicitly in a development
+   *     Extension Development Host (`WAITLAYER_DEV_EXTENSION=1` or
+   *     `NODE_ENV=development`), use the published dev fallback so
+   *     local testing remains friction-free.
+   *  4. Otherwise THROW — never silently sign with a known public secret.
+   *
+   * SecretStorage takes priority because it's the only store not visible to
+   * other VS Code extensions through the public workspace API.
+   */
+  async getSecretKey(): Promise<string> {
+    try {
+      const stored = await this.secrets.get('waitlayer.signingKey');
+      if (stored) return stored;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
+    }
 
-    if (configured) return configured;
+    const configured = vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<string>('extensionSecret');
+    if (configured) {
+      vscode.window.showWarningMessage(
+        'WaitLayer: HMAC signing key is stored in plaintext workspace settings. ' +
+          'Migrate it to VS Code SecretStorage for production.',
+      );
+      return configured;
+    }
 
-    // `VSCODE_PID` is set for the Extension Development Host (F5) AND for
-    // normal installs, so it cannot distinguish dev from prod. The reliable
-    // dev-only signal is an explicit opt-in env var set by the dev launch
-    // config (.vscode/launch.json). Absent that, treat every install as
-    // production and refuse — never silently fall back to the published secret.
-    const isDevHost = process.env.WAITLAYER_DEV_EXTENSION === '1' || process.env.NODE_ENV === 'development';
+    const isDevHost =
+      process.env.WAITLAYER_DEV_EXTENSION === '1' || process.env.NODE_ENV === 'development';
     if (!isDevHost) {
       vscode.window.showErrorMessage(
-        'WaitLayer: waitlayer.extensionSecret is not configured — events will NOT be signed. Set the VS Code workspace setting `waitlayer.extensionSecret` to the value configured on the WaitLayer API server.',
+        'WaitLayer: waitlayer.signingKey (or waitlayer.extensionSecret) is not configured — ' +
+          'events will NOT be signed. Set the VS Code workspace setting to the value configured ' +
+          'on the WaitLayer API server.',
       );
-      throw new Error('waitlayer.extensionSecret is required for production extension installs');
+      throw new Error('waitlayer.signingKey is required for production extension installs');
     }
 
     return 'dev-secret-for-local-extension-host-only-never-ship-in-vsix';

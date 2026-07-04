@@ -134,7 +134,16 @@ export class ReferralService {
     );
   }
 
-  /** Process referral reward when referred user meets criteria (first payout completed) */
+  /** Process referral reward when referred user meets criteria (first payout completed).
+   *
+   *  This is a money-mutation path called by the payout service after a payout is
+   *  marked paid. It must be idempotent and race-safe:
+   *  - The `referralReward` table has `@@unique([referralId])` on the underlying DB
+   *    schema, so a duplicate reward create throws P2002 and is caught.
+   *  - The existence check + create are wrapped inside `$transaction` so two
+   *    concurrent calls cannot both pass the check and only one create survives.
+   *  - The referral status update uses CAS (`status !== 'rewarded'`) so the
+   *    right-wins pattern is clean. */
   async processReferralRewards(referredUserId: string) {
     // Find the referral for this user
     const referral = await this.prisma.referral.findFirst({
@@ -144,7 +153,8 @@ export class ReferralService {
 
     if (!referral) return null;
 
-    // Check if reward already issued for this referral
+    // Pre-flight checks outside the transaction — cheap filters that reject
+    // the vast majority of calls before opening a tx.
     const existingReward = referral.rewards.find(
       (r) => r.status !== 'reversed' && r.status !== 'void',
     );
@@ -152,13 +162,8 @@ export class ReferralService {
 
     // Check that this is indeed the referred user's first payout
     const paidPayouts = await this.prisma.payoutRequest.count({
-      where: {
-        userId: referredUserId,
-        status: 'paid',
-      },
+      where: { userId: referredUserId, status: 'paid' },
     });
-
-    // Only reward on the first payout
     if (paidPayouts > 1) return null;
 
     // Verify the payout amount meets the threshold
@@ -167,53 +172,77 @@ export class ReferralService {
       orderBy: { createdAt: 'asc' },
       include: { allocations: true },
     });
-
     if (!firstPaidPayout) return null;
 
     const totalPaidMinor = firstPaidPayout.allocations.reduce(
       (sum, a) => sum + a.amountMinor,
       0,
     );
-
     if (totalPaidMinor < REFERRAL.FIRST_PAYOUT_THRESHOLD_MINOR) return null;
 
     const rewardAmount = REFERRAL.REWARD_AMOUNT_MINOR;
 
-    // Create both the platformLedger credit and the ReferralReward record atomically
-    const [platformEntry, reward] = await this.prisma.$transaction([
-      this.prisma.platformLedger.create({
-        data: {
-          entryType: 'credit',
-          status: 'confirmed',
-          amountMinor: rewardAmount,
-          currency: REFERRAL.CURRENCY,
-          bucket: 'referral_bonus',
-          referenceId: referral.id,
-          // Deterministic key: a retry of the same referral reward must not
-          // create a duplicate ledger entry. Including Date.now() would defeat
-          // idempotency by generating a new key on every attempt.
-          idempotencyKey: `ref-rew-${referral.id}`,
-          description: `Referral reward for referring user ${referredUserId}`,
-        },
-      }),
-      this.prisma.referralReward.create({
-        data: {
-          referralId: referral.id,
-          userId: referral.referrerId,
-          amountMinor: rewardAmount,
-          currency: REFERRAL.CURRENCY,
-          status: 'confirmed',
-        },
-      }),
-    ]);
+    // Create both the platformLedger credit and the ReferralReward record
+    // atomically, with a CAS check on the referral status to prevent two
+    // concurrent calls from both creating rewards.
+    const result = await this.prisma.$transaction(async (tx) => {
+      // CAS: only proceed if the referral is still 'pending' — two concurrent
+      // calls to processReferralRewards will race; the loser exits cleanly.
+      const casReferral = await tx.referral.findFirst({
+        where: { id: referral.id, status: 'pending' },
+      });
+      if (!casReferral) return null;
 
-    // Update referral status
-    await this.prisma.referral.update({
-      where: { id: referral.id },
-      data: { status: 'rewarded' },
+      // Double-check inside the transaction — the TOCTOU window is now closed.
+      const insideReward = await tx.referralReward.findFirst({
+        where: {
+          referralId: referral.id,
+          status: { notIn: ['reversed', 'void'] },
+        },
+      });
+      if (insideReward) return null;
+
+      try {
+        const [platformEntry, reward] = await Promise.all([
+          tx.platformLedger.create({
+            data: {
+              entryType: 'credit',
+              status: 'confirmed',
+              amountMinor: rewardAmount,
+              currency: REFERRAL.CURRENCY,
+              bucket: 'referral_bonus',
+              referenceId: referral.id,
+              idempotencyKey: `ref-rew-${referral.id}`,
+              description: `Referral reward for referring user ${referredUserId}`,
+            },
+          }),
+          tx.referralReward.create({
+            data: {
+              referralId: referral.id,
+              userId: referral.referrerId,
+              amountMinor: rewardAmount,
+              currency: REFERRAL.CURRENCY,
+              status: 'confirmed',
+            },
+          }),
+        ]);
+
+        // Update referral status inside the transaction so it's atomic
+        await tx.referral.update({
+          where: { id: referral.id },
+          data: { status: 'rewarded' },
+        });
+
+        return { reward, platformEntry };
+      } catch (err: unknown) {
+        if (this.isUniqueConstraintViolation(err)) {
+          return null; // Already rewarded — idempotent
+        }
+        throw err;
+      }
     });
 
-    return { reward, platformEntry };
+    return result;
   }
 
   /** Get referral history: list of referrals made by the user with status */

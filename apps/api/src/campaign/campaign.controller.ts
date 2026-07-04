@@ -57,7 +57,7 @@ export class CampaignController {
     if (role !== 'admin' && role !== 'super_admin') {
       await this.verifyOwnership(campaignId, userId);
     }
-    return this.campaignService.createCreative(campaignId, dto);
+    return this.campaignService.createCreative(campaignId, dto, { userId, role });
   }
 
   @Patch('creatives/:creativeId')
@@ -76,7 +76,7 @@ export class CampaignController {
         await this.verifyOwnership(creative.campaignId, userId);
       }
     }
-    return this.campaignService.updateCreative(creativeId, dto);
+    return this.campaignService.updateCreative(creativeId, dto, { userId, role });
   }
 
   @Post('creatives/:creativeId/approve')
@@ -113,6 +113,7 @@ export class CampaignController {
     return this.campaignService.setCountryTargeting(
       campaignId,
       targets.map(t => ({ countryCode: t.countryCode, include: t.include })),
+      { userId, role },
     );
   }
 

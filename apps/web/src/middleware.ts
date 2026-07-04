@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings'];
+const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', '/dashboard'];
 
 /**
  * Next.js middleware that gates protected routes on the httpOnly
@@ -75,12 +75,18 @@ function redirectToLogin(pathname: string, request: NextRequest): NextResponse {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files (robots.txt, manifest.json, etc.)
+     * Match only protected prefix paths so middleware (including jose JWT
+     * verification) is loaded in Edge runtime only for auth-gated pages, not
+     * for every public page (homepage, login, signup, etc.). Public pages
+     * pass through without the Edge runtime cost.
+     *
+     * Matches: /developer, /developer/*, /advertiser, /advertiser/*, /admin,
+     *          /admin/*, /settings, /settings/*, /dashboard, /dashboard/*
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/developer/:path*',
+    '/advertiser/:path*',
+    '/admin/:path*',
+    '/settings/:path*',
+    '/dashboard/:path*',
   ],
 };

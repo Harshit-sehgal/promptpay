@@ -57,7 +57,7 @@ const mockPrisma = {
   waitStateEvent: {
     groupBy: vi.fn(),
   },
-  $transaction: vi.fn((args: any[]) => {
+  $transaction: vi.fn((...args: any[]) => {
     if (typeof args[0] === 'function') return args[0](mockPrisma);
     return Promise.all(args.map((fn: Function) => fn()));
   }),

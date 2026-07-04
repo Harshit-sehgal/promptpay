@@ -4,6 +4,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import type { AxiosResponse } from 'axios';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
 import { payoutApi } from '@/lib/api/services';
+import { getErrorMessage } from '@/lib/api/errors';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
 interface PayoutAccount {
@@ -36,18 +37,6 @@ interface PayoutHistoryResponse {
   total: number;
   page: number;
   limit: number;
-}
-
-function getErrorMessage(error: unknown, fallback: string): string {
-  const candidate = error as {
-    response?: { data?: { message?: unknown } };
-    message?: unknown;
-  };
-  const message = candidate.response?.data?.message ?? candidate.message;
-
-  if (Array.isArray(message)) return message.join(', ');
-  if (typeof message === 'string') return message;
-  return fallback;
 }
 
 export default function DevPayoutsPage() {

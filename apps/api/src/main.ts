@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
-import { raw } from 'express';
+import { raw, json, urlencoded } from 'express';
 import cookieParser from 'cookie-parser';
 import * as crypto from 'crypto';
 import { AppModule } from './app.module';
@@ -15,6 +15,18 @@ async function bootstrap() {
   const env = loadEnv(process.env);
 
   const app = await NestFactory.create(AppModule);
+
+  // ── Body-parser size limits ─────────────────────────────────────────
+  //    NestJS's default body-parser caps JSON at 100kb, but that default
+  //    is implicit and the Stripe webhook `raw()` mount (below) had no
+  //    limit (potentially unbounded). An attacker submitting a large JSON
+  //    body to any non-webhook route could amplify IO/CPU before the
+  //    throttle guard reacts. Pin explicit limits so the cap is enforced
+  //    and visible: 100kb for general JSON, 256kb for Stripe webhooks,
+  //    100kb for urlencoded. These mount before Nest's own body-parser
+  //    would otherwise engage with the implicit default.
+  app.use(json({ limit: '100kb' }));
+  app.use(urlencoded({ limit: '100kb', extended: true }));
 
   // ── Cookie parser — needed for httpOnly access_token cookie from the
   //    web app's Next.js Route Handlers (express middleware). Place BEFORE
@@ -54,7 +66,7 @@ async function bootstrap() {
   // prefix so the path matches the effective route. Only one Stripe webhook
   // controller exists (POST /api/v1/payout/stripe/webhook) — the duplicate
   // orphan controller at /api/v1/webhooks/stripe was removed.
-  app.use('/api/v1/payout/stripe/webhook', raw({ type: 'application/json' }));
+  app.use('/api/v1/payout/stripe/webhook', raw({ type: 'application/json', limit: '256kb' }));
 
   app.setGlobalPrefix('api/v1');
 

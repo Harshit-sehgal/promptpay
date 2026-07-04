@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
 import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -39,6 +39,7 @@ interface ServedAd {
 export class ExtensionService {
   private readonly hmacSecret: string;
   private adCache = new Map<string, { ad: ServedAd; timestamp: number }>();
+  private readonly logger = new Logger(ExtensionService.name);
 
   constructor(
     private prisma: PrismaService,
@@ -1034,7 +1035,18 @@ export class ExtensionService {
       throw new ForbiddenException('Invalid request signature');
     }
 
-    // Create report and invalidate the impression
+    // Create report and invalidate the impression. If the impression was
+    // already billed (isBillable=true), we must also reverse the ledger
+    // entries — otherwise the advertiser stays debited, the developer keeps
+    // earnings, and platform keeps fee + fraud_reserve for an impression we
+    // now believe was invalid (3-way money orphan). reverseEarnings is
+    // idempotent (deterministic `-rev` idempotency keys with upsert no-op),
+    // so calling it when no ledger rows exist yet (impression reported
+    // before qualification billed it) is a safe no-op. Guard on the prior
+    // isBillable value so we don't reverse twice for a re-report (a second
+    // report on an already-invalidated impression sees isBillable=false and
+    // skips the reverse — the first report already did it).
+    const wasBillable = impression.isBillable;
     const [report] = await this.prisma.$transaction([
       this.prisma.adReport.create({
         data: {
@@ -1054,6 +1066,24 @@ export class ExtensionService {
         },
       }),
     ]);
+
+    // Reverse the money only if this impression had been billed. A
+    // reported-but-not-yet-qualified impression has no ledger rows to
+    // reverse. reverseEarnings leaves 'paid' developer entries in place
+    // (matureEarnings already moved them past reversal) — those require a
+    // separate claw-back flow documented in the ledger; the surface here
+    // reports `paidSkipped` so the caller/operator knows money already left.
+    if (wasBillable) {
+      const result = await this.ledger.reverseEarnings(
+        { impressionId: impression.id },
+        `User-reported ad: ${dto.reason}`,
+      );
+      if (result.paidSkipped > 0) {
+        this.logger.warn(
+          `reportAd: ${result.paidSkipped} paid earnings entry(ies) for impression ${impression.id} could not be reversed (already paid out)`,
+        );
+      }
+    }
 
     // Audit log for ad report (security-relevant: impression invalidated)
     this.audit.log({

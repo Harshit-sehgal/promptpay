@@ -285,30 +285,38 @@ export class FraudService {
     evidence: Record<string, unknown>;
     scoreDelta?: number;
   }) {
-    // Deduplicate: don't create duplicate open flags for same user + type
-    if (params.userId) {
-      const existing = await this.prisma.fraudFlag.findFirst({
-        where: {
-          userId: params.userId,
-          status: DbFraudFlagStatus.open,
+    // Deduplicate: don't create duplicate open flags for same user + type.
+    // The findFirst + create are wrapped in a single $transaction so two
+    // concurrent calls for the same user+type can't both pass the existence
+    // check and create duplicate open flags. (Previously the findFirst and
+    // create were separate statements — a classic TOCTOU window where two
+    // concurrent rate-limit breaches would each see "no existing flag" and
+    // both insert duplicate open flags.)
+    const flag = await this.prisma.$transaction(async (tx) => {
+      if (params.userId) {
+        const existing = await tx.fraudFlag.findFirst({
+          where: {
+            userId: params.userId,
+            status: DbFraudFlagStatus.open,
+            flagType: params.flagType as DbFraudFlagType,
+          },
+        });
+        if (existing) return existing;
+      }
+
+      return tx.fraudFlag.create({
+        data: {
+          userId: params.userId || undefined,
+          deviceId: params.deviceId || undefined,
+          campaignId: params.campaignId || undefined,
+          impressionId: params.impressionId || undefined,
+          clickId: params.clickId || undefined,
           flagType: params.flagType as DbFraudFlagType,
+          severity: params.severity as DbFraudSeverity,
+          evidence: params.evidence as Prisma.InputJsonObject,
+          scoreDelta: params.scoreDelta ?? 0,
         },
       });
-      if (existing) return existing;
-    }
-
-    const flag = await this.prisma.fraudFlag.create({
-      data: {
-        userId: params.userId || undefined,
-        deviceId: params.deviceId || undefined,
-        campaignId: params.campaignId || undefined,
-        impressionId: params.impressionId || undefined,
-        clickId: params.clickId || undefined,
-        flagType: params.flagType as DbFraudFlagType,
-        severity: params.severity as DbFraudSeverity,
-        evidence: params.evidence as Prisma.InputJsonObject,
-        scoreDelta: params.scoreDelta ?? 0,
-      },
     });
 
     // Auto-escalate: critical flags hold earnings immediately

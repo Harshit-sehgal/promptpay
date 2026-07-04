@@ -206,7 +206,8 @@ model User {
   referralRewards ReferralReward[]
   apiKeys         ApiKey[]
 
-  @@index([email])
+  // The `email` @unique (above) already serves equality/like scans on
+  // email; a separate @@index duplicates storage and write cost.
   @@index([role, status])
   @@map("users")
 }
@@ -327,7 +328,10 @@ model Advertiser {
   user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   companyName      String
   billingEmail     String
-  stripeCustomerId String?
+  // Globally unique per-Stripe-account. Without this, two advertisers could
+  // be wired to the same Stripe customer via a TOCTOU race on the webhook
+  // `advertiser.stripeCustomerId` first-time-set path.
+  stripeCustomerId String?  @unique
   websiteUrl       String?
   trustStatus      TrustLevel @default(new)
 
@@ -371,6 +375,7 @@ model Campaign {
 
   creatives        AdCreative[]
   impressions      AdImpression[]
+  clicks           AdClick[]
   countryTargeting CountryTargeting[]
   approvals        CampaignApproval[]
   fraudFlags       FraudFlag[]
@@ -397,6 +402,7 @@ model AdCreative {
   updatedAt DateTime @updatedAt
 
   impressions AdImpression[]
+  clicks      AdClick[]
   adReports   AdReport[]
 
   @@index([campaignId])
@@ -520,6 +526,9 @@ model AdImpression {
   @@index([ipHash, qualifiedAt])
   @@index([isBillable, createdAt])
   @@index([userId, sessionId])
+  // FK back-reference scan: AdCreative.impressions 1:N — creativeId scan used
+  // for creative-performance dashboard queries and re-render of same creative.
+  @@index([creativeId])
   @@map("ad_impressions")
 }
 
@@ -532,9 +541,16 @@ model AdClick {
   deviceId           String
   device             Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   sessionId          String
+  // Click-level billing evidence — must not cascade-delete when the parent
+  // Campaign or AdCreative is removed (keep audit trail). RESTRICT is explicit
+  // here; the prior schema had NO relation declared at all (also RESTRICT per
+  // DB default), but no FK was ever created — here the FK is created as part
+  // of the accompanying migration.
   campaignId         String
+  campaign           Campaign     @relation(fields: [campaignId], references: [id], onDelete: Restrict)
   creativeId         String
-  clickedAt          DateTime
+  creative           AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Restrict)
+  clickedAt          DateTime     @db.Timestamptz
   targetUrl          String
   isValid            Boolean      @default(true)
   invalidationReason String?
@@ -707,6 +723,10 @@ model PayoutAllocation {
   createdAt       DateTime       @default(now())
 
   @@unique([earningsEntryId])
+  // FK back-reference scan: listing allocations for a specific payout
+  // (payout detail screen, admin review) — without this index the FK
+  // join on payoutRequestId does a seq scan.
+  @@index([payoutRequestId])
   @@map("payout_allocations")
 }
 
@@ -834,7 +854,8 @@ model ApiKey {
   expiresAt DateTime? @db.Timestamptz
 
   @@index([ownerId])
-  @@index([keyHash])
+  // The `keyHash` @unique (above) already serves equality lookups — a
+  // separate @@index duplicates storage/write cost.
   @@map("api_keys")
 }
 

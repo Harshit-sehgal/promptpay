@@ -1,7 +1,6 @@
 import * as crypto from 'crypto';
 import * as os from 'os';
 import * as https from 'https';
-import * as http from 'http';
 import { signPayload } from '@waitlayer/shared';
 import { Credentials, getCredentials, setCredentials, storeDeviceEventSecret, getDeviceEventSecret } from './credentials';
 
@@ -19,10 +18,9 @@ const HMAC_SECRET: string = (() => {
   const envSecret = process.env.EXTENSION_HMAC_SECRET;
   if (envSecret) return envSecret;
 
-  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-  if (!isDev) {
+  if (process.env.NODE_ENV !== 'development') {
     throw new Error(
-      'EXTENSION_HMAC_SECRET environment variable is required in production. ' +
+      'EXTENSION_HMAC_SECRET environment variable is required. ' +
       'Set it to the same value configured on the WaitLayer API server.',
     );
   }
@@ -183,12 +181,18 @@ export class ApiClient {
     }
 
     return new Promise<T>((resolve, reject) => {
-      const transport = url.protocol === 'https:' ? https : http;
+      if (url.protocol !== 'https:') {
+        throw new Error(
+          `CLI refuses to send credentials over ${url.protocol}. ` +
+          'Set WAITLAYER_API_URL to an https:// endpoint.',
+        );
+      }
+      const transport = https;
       const req = transport.request(
         {
           method,
           hostname: url.hostname,
-          port: url.port || (url.protocol === 'https:' ? 443 : 80),
+          port: url.port || 443,
           path: url.pathname + url.search,
           headers: {
             'Content-Type': 'application/json',
@@ -242,6 +246,9 @@ export class ApiClient {
         },
       );
       req.on('error', reject);
+      req.setTimeout(30_000, () => {
+        req.destroy(new Error('Request timed out after 30s'));
+      });
       if (body) req.write(bodyStr);
       req.end();
     });

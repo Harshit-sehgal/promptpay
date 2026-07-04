@@ -42,23 +42,33 @@ export class ApiClient {
   private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
   private _initialized: Promise<void>;
   private deviceEventSecret: string | null = null;
+  /** Cached signing secret. Refreshed whenever `deviceEventSecret` changes
+   *  (after device registration). Set in the constructor's init promise so
+   *  the sign() method can stay synchronous. */
+  private _signingSecret: string | null = null;
 
   constructor(private config: ConfigurationManager) {
     // Load persisted auth and device signing state from SecretStorage on construction.
     this._initialized = Promise.all([
       this.config.getTokens(),
       this.config.getDeviceEventSecret(),
-    ]).then(([tokens, eventSecret]) => {
+      this.config.getSecretKey(),
+    ]).then(([tokens, eventSecret, signingKey]) => {
       if (tokens) this.currentTokens = tokens;
       this.deviceEventSecret = eventSecret;
+      this._signingSecret = signingKey;
     });
   }
 
   /** Sign payload object with HMAC using canonical JSON (sorted keys).
    *  Event requests prefer the per-device secret issued at registration.
-   *  The configured global secret remains only as a compatibility fallback. */
+   *  The configured global secret remains only as a compatibility fallback.
+   *  If neither is available yet (init still in-flight), sign with an empty
+   *  placeholder so callers don't throw — the server will reject any signature
+   *  mismatch with 401, leaving the request fail-closed rather than fail-open. */
   sign(payload: Record<string, unknown>): string {
-    return signPayload(payload, this.deviceEventSecret ?? this.config.getSecretKey());
+    const secret = this.deviceEventSecret ?? this._signingSecret ?? '';
+    return signPayload(payload, secret);
   }
 
   /** Refresh the access token using the stored refresh token.

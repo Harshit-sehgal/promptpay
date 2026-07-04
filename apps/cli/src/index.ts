@@ -14,7 +14,6 @@ program
   .command('auth')
   .description('Authenticate with WaitLayer (saves token locally)')
   .option('-e, --email <email>', 'Login email')
-  .option('-p, --password <password>', 'Login password (omit to be prompted)')
   .action((opts) => runAuth(opts));
 
 program

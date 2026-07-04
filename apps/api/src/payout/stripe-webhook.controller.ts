@@ -165,7 +165,17 @@ export class StripeWebhookController {
         await this.handlePaymentSuccess(event);
         break;
       }
-      case 'charge.refunded': {
+      case 'refund.created': {
+        // Use refund.created (data.object IS a Stripe.Refund), NOT
+        // charge.refunded (whose data.object is a Stripe.Charge). The
+        // previous handler cast the Charge as a Refund: refund.id was the
+        // CHARGE id (so two partial refunds on the same charge collapsed to
+        // the same idempotency key and the second was silently P2002-dropped),
+        // and refund.amount was the full charge amount (so a $5 partial
+        // refund on a $100 charge reversed $100 from the advertiser). Both
+        // are money-loss bugs. refund.created is fired once per individual
+        // refund with the specific Refund object — refund.id and refund.amount
+        // are the per-refund values we need.
         await this.handleRefund(event);
         break;
       }
@@ -174,7 +184,16 @@ export class StripeWebhookController {
         break;
       }
       default:
+        // Mark unhandled events as processed so the webhook_event row
+        // converges to a terminal state instead of stuck in 'processing'
+        // (which the 30-min stall-reclaim would otherwise re-pull forever,
+        // and Stripe would re-deliver on top of that). We deliberately do
+        // NOT process the payload — just acknowledge receipt.
         this.logger.log(`Unhandled Stripe event type: ${event.type}`);
+        await this.prisma.webhookEvent.updateMany({
+          where: { provider: 'stripe', eventId: event.id },
+          data: { processingStatus: 'processed', processedAt: new Date() },
+        });
     }
   }
 
@@ -253,10 +272,18 @@ export class StripeWebhookController {
       return;
     }
 
-    // Find all advertiser ledger entries tied to this payment intent that are not yet reversed
+    // Find the original deposit CREDITS tied to this payment intent that
+    // are not yet reversed. Scope to entryType: 'credit' so we don't pick
+    // up prior 'refund' rows (also keyed by stripePaymentIntentId, status
+    // 'confirmed') — without this filter, a retried charge.refunded delivery
+    // would iterate the prior refund rows too and create NEW refund rows
+    // reversing them, double-counting the refund against the advertiser.
+    // (Campaign debits never carry stripePaymentIntentId, so they're never
+    // picked up here — already-served ad spend is correctly not refunded.)
     const entries = await this.prisma.advertiserLedger.findMany({
       where: {
         stripePaymentIntentId: details.paymentIntentId,
+        entryType: 'credit',
         status: { notIn: ['reversed', 'void'] },
       },
     });
@@ -364,6 +391,10 @@ export class StripeWebhookController {
 
     if (!details.paymentIntentId) {
       this.logger.warn(`Dispute event ${event.id} has no payment_intent — cannot flag`);
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
       return;
     }
 
@@ -394,6 +425,10 @@ export class StripeWebhookController {
     });
     if (!advertiser) {
       this.logger.warn(`Advertiser ${advertiserId} not found for dispute ${event.id}`);
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
       return;
     }
 

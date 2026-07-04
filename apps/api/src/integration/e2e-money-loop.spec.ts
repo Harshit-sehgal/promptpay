@@ -421,7 +421,7 @@ describe('E2E Money Loop', () => {
         sponsoredMessage: 'Try our AI-powered code completion — free for 30 days!',
         destinationUrl: 'https://example.com/ai-tools',
         displayDomain: 'example.com',
-      });
+      }, { role: 'admin' });
       expect(creative.id).toBe(creativeId);
 
       // --- Step 4: Admin approves creative ---
@@ -1130,7 +1130,7 @@ describe('E2E Money Loop', () => {
       await svc.campaign.createCreative(campaignId, {
         title: 'E2E Ad', sponsoredMessage: 'E2E test ad message',
         destinationUrl: 'https://e2e.example.com', displayDomain: 'e2e.example.com',
-      });
+      }, { role: 'admin' });
 
       // ── Step 4: Admin approves creative ──
       mockPrisma.adCreative.findUnique.mockResolvedValue({
