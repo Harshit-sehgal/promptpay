@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
 import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
+import { LRUCache } from 'lru-cache';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
@@ -38,7 +39,25 @@ interface ServedAd {
 @Injectable()
 export class ExtensionService {
   private readonly hmacSecret: string;
-  private adCache = new Map<string, { ad: ServedAd; timestamp: number }>();
+  // LRU-bounded cache of served ads keyed by `(idempotencyKey, waitStateId)`.
+  //
+  // The previous implementation used a Map<String, ...> with a 60-second
+  // read-side TTL but NO upper bound on size. Every ad served seeded two
+  // new entries (one per key alias) and stale entries were only read-thrown
+  // away on access — never actively evicted. A long-running API process
+  // accumulated every idempotencyKey × waitStateId it ever served, growing
+  // the heap unboundedly until the process was OOM-killed. This is a slow
+  // in-memory DoS: even a single attacker hitting /extension/ad-request
+  // with unique keys every minute would force an API restart within hours.
+  //
+  // The bounded LRU caps memory at `AD_CACHE_MAX` entries (10k) and evicts
+  // the least-recently-used. The TTL is still 60s — older than that the
+  // server already considers the inserted impression closed and a cache
+  // hit would let the caller bypass "no eligible ad right now" responses.
+  private adCache = new LRUCache<string, { ad: ServedAd }>({
+    max: 10_000,
+    ttl: 60_000,
+  });
   private readonly logger = new Logger(ExtensionService.name);
 
   constructor(
@@ -48,7 +67,22 @@ export class ExtensionService {
     private ledger: LedgerService,
     private fraud: FraudService,
   ) {
-    this.hmacSecret = this.config.get<string>('EXTENSION_HMAC_SECRET', 'dev-secret-change-me-do-not-use-in-production');
+    const hmacSecret = this.config.get<string>('EXTENSION_HMAC_SECRET', 'dev-secret-change-me-do-not-use-in-production');
+    // Fail-closed in production: an unset/known-public HMAC secret would let
+    // anyone with the source code (or a leaky .env.example) forge signed
+    // extension events. The constant `'dev-secret-change-me-do-not-use-in-production'`
+    // is publicly visible in the repo and must never enable real auth.
+    if (
+      process.env.NODE_ENV === 'production' &&
+      (!process.env.EXTENSION_HMAC_SECRET ||
+        process.env.EXTENSION_HMAC_SECRET === 'dev-secret-change-me-do-not-use-in-production')
+    ) {
+      throw new Error(
+        'EXTENSION_HMAC_SECRET must be set in production and must not equal the ' +
+          'documented dev fallback. Refusing to start with forgeable HMAC verification.',
+      );
+    }
+    this.hmacSecret = hmacSecret;
   }
 
   // ── Device Registration ──
@@ -369,8 +403,8 @@ export class ExtensionService {
     }
 
     // Idempotency: return same ad if we already served one for this key/waitStateId
-    const cached = this.adCache.get(dto.idempotencyKey) || this.adCache.get(dto.waitStateId);
-    if (cached && Date.now() - cached.timestamp < 60_000) {
+    const cached = this.adCache.get(dto.idempotencyKey) ?? this.adCache.get(dto.waitStateId);
+    if (cached) {
       return { ad: cached.ad };
     }
 
@@ -487,9 +521,11 @@ export class ExtensionService {
       return { ad: null, reason: 'user_hourly_cap_reached' };
     }
 
-    // Save to cache for immediate retries
-    this.adCache.set(dto.idempotencyKey, { ad, timestamp: Date.now() });
-    this.adCache.set(dto.waitStateId, { ad, timestamp: Date.now() });
+    // Save to LRU cache for immediate retries. Both keys map to the same ad
+    // so a retry on either lookup hits the bounded cache. LRU's TTL evicts
+    // these after 60s — older than that there's no valid request anyway.
+    this.adCache.set(dto.idempotencyKey, { ad });
+    this.adCache.set(dto.waitStateId, { ad });
 
     return { ad };
   }

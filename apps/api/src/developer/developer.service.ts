@@ -34,13 +34,27 @@ export class DeveloperService {
 
   async getEarningsSummary(userId: string) {
     const entries = await this.prisma.earningsLedger.findMany({ where: { userId }, select: { status: true, amountMinor: true } });
-    const summary = { estimatedEarnings: 0, confirmedEarnings: 0, pendingEarnings: 0, heldEarnings: 0, availableForPayout: 0, lifetimeEarnings: 0 };
+    const summary = {
+      estimatedEarnings: 0,
+      confirmedEarnings: 0,
+      pendingEarnings: 0,
+      heldEarnings: 0,
+      reversedEarnings: 0,
+      availableForPayout: 0,
+      lifetimeEarnings: 0,
+    };
     for (const entry of entries) {
-      summary.lifetimeEarnings += entry.amountMinor;
+      // reversed entries are NOT credited toward lifetime — they represent
+      // money that was earned but then clawed back (fraud reversal). Adding
+      // them back into the displayed lifetime total inflates the metric.
+      if (entry.status !== 'reversed') {
+        summary.lifetimeEarnings += entry.amountMinor;
+      }
       if (entry.status === 'estimated') summary.estimatedEarnings += entry.amountMinor;
       else if (entry.status === 'pending') summary.pendingEarnings += entry.amountMinor;
       else if (entry.status === 'confirmed') summary.confirmedEarnings += entry.amountMinor;
       else if (entry.status === 'held') summary.heldEarnings += entry.amountMinor;
+      else if (entry.status === 'reversed') summary.reversedEarnings += entry.amountMinor;
     }
     summary.availableForPayout = summary.confirmedEarnings;
     return summary;

@@ -41,9 +41,38 @@ export class EmailService {
       this.logger.warn('EMAIL_DRIVER=resend but RESEND_API_KEY is not set — falling back to console driver');
       this.driver = 'console';
     }
+
+    // Production fail-closed: the console driver logs full email bodies to
+    // stdout/server-log aggregation. For password resets and email-verify
+    // links this is an instant account-takeover vector — anyone with log
+    // access would capture live reset tokens and verify any account. Refuse
+    // to silently fall back to console-logging in a production deploy.
+    //
+    // Note: we do NOT consult `this.driver === 'console'` because the
+    // resend-misconfigured branch above may have just downgraded us there.
+    // The intent check is explicit: in production, only explicitly-non-console
+    // drivers contribute password-reset/verify code flows.
+    if (process.env.NODE_ENV === 'production' && this.driver === 'console') {
+      throw new Error(
+        'EMAIL_DRIVER=console is not allowed in production — it logs email bodies ' +
+          '(including password-reset and email-verify tokens) to stdout. Set ' +
+          'EMAIL_DRIVER=resend with RESEND_API_KEY, or EMAIL_DRIVER to another ' +
+          'non-console transport.',
+      );
+    }
   }
 
   async send(msg: EmailMessage): Promise<EmailSendResult> {
+    // Final defensive check — even if a future misconfiguration slipped past
+    // the constructor (e.g. ENV toggled at runtime via a test), never log a
+    // production email body. Use delivered=false so callers can react.
+    if (process.env.NODE_ENV === 'production' && this.driver === 'console') {
+      this.logger.error(
+        `Refusing to send production email via console driver to=${msg.to} subject="${msg.subject}". ` +
+          'This would log password-reset/verify tokens to stdout.',
+      );
+      return { delivered: false, driver: 'console' };
+    }
     try {
       switch (this.driver) {
         case 'resend':

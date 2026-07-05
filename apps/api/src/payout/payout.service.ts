@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { EarningsLedger, Prisma } from '@waitlayer/db';
 import { LedgerService } from '../ledger/ledger.service';
@@ -86,6 +86,7 @@ class RazorpayPayoutProvider implements PayoutProviderHandler {
 
 @Injectable()
 export class PayoutService {
+  private readonly logger = new Logger(PayoutService.name);
   private providers: Record<string, PayoutProviderHandler>;
 
   constructor(
@@ -676,13 +677,20 @@ export class PayoutService {
       });
     });
 
-    // After successfully marking as paid, check referral rewards (fire-and-forget).
+    // After successfully marking as paid, check referral rewards.
     // Use the transaction result, not the stale outer `payout` snapshot — if the
     // tx found the payout already paid (count === 0), don't re-fire the reward.
     const paidPayout = result;
     if (paidPayout?.status === 'paid') {
-      this.referral.processReferralRewards(paidPayout.userId).catch(() => {
-        // Silently ignore referral reward failures (production would log)
+      this.referral.processReferralRewards(paidPayout.userId).catch((err) => {
+        // A failed referral reward has two possible paths:
+        //  (a) transient DB error — log + operator can retry; or
+        //  (b) referrer pair already credited (idempotent-P2002 catch = no-op).
+        //  Log both so the first-payout-referral path isn't silent in its log.
+        this.logger.error(
+          `Referral reward processing failed for userId=${paidPayout.userId}: ` +
+          `${err instanceof Error ? err.message : err}`,
+        );
       });
     }
 

@@ -8,6 +8,7 @@ import * as bcrypt from 'bcryptjs';
 // them at assignment time so the value satisfies the option type.
 import type { StringValue } from 'ms';
 import { PrismaService } from '../config/prisma.service';
+import { Prisma } from '@waitlayer/db';
 import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
 import { UserRole, UserStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
@@ -76,21 +77,39 @@ export class AuthService {
 
   /** ── Sign Up ── */
   async signUp(dto: SignUpDto) {
+    // Optimistic pre-check: catch sequential duplicate signups with a cheap
+    // read before paying the bcrypt.hash cost on a doomed insert. Concurrent
+    // signups race past this check; the P2002 catch below translates the
+    // unique-constraint failure into the same ConflictException so the
+    // loser always sees a clean 409 instead of a 500.
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('Email already registered');
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const referralCode = await this.generateReferralCode();
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash,
-        name: dto.name,
-        role: dto.role,
-        country: dto.country,
-        referralCode,
-      },
-    });
+
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          passwordHash,
+          name: dto.name,
+          role: dto.role,
+          country: dto.country,
+          referralCode,
+        },
+      });
+    } catch (err: unknown) {
+      // Concurrent signups with the same email race past the pre-check
+      // above. The `email @unique` constraint is THE authoritative source of
+      // truth — translate P2002 into ConflictException so the loser doesn't
+      // see a raw Prisma error (500) leak past the API surface.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Email already registered');
+      }
+      throw err;
+    }
 
     // Developer onboarding: create settings + trust score
     if (dto.role === UserRole.DEVELOPER) {
