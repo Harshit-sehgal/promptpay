@@ -204,6 +204,16 @@ export class AuthService {
     }
 
     const tokens = await this.generateTokenPair(user.id, user.role);
+
+    // Audit: successful login
+    this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'login_success',
+      targetType: 'user',
+      targetId: user.id,
+    }).catch(() => {});
+
     return {
       user: this.sanitizeUser(user),
       ...tokens,
@@ -567,6 +577,15 @@ export class AuthService {
 
     // Recompute trust score to account for email verification (+10 points)
     await this.fraud.computeTrustScore(user.id);
+
+    // Audit: email verified — key identity signal
+    this.audit.log({
+      actorId: user.id,
+      actorRole: user.role,
+      action: 'email_verified',
+      targetType: 'user',
+      targetId: user.id,
+    }).catch(() => {});
 
     return {
       message: 'Email verified successfully',

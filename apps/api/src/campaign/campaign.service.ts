@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { MAX_AD_MESSAGE_LENGTH, PROHIBITED_CATEGORIES } from '@waitlayer/shared';
 
 /**
@@ -16,7 +17,7 @@ export interface ServiceActor {
 
 @Injectable()
 export class CampaignService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private audit: AuditService) {}
 
   // ── Creative Management ──
 
@@ -45,7 +46,7 @@ export class CampaignService {
       throw new BadRequestException('Creatives can only be added to draft/rejected campaigns');
     }
 
-    return this.prisma.adCreative.create({
+    const creative = await this.prisma.adCreative.create({
       data: {
         campaignId,
         title: dto.title,
@@ -54,6 +55,17 @@ export class CampaignService {
         displayDomain: dto.displayDomain,
       },
     });
+
+    this.audit.log({
+      actorId: actor?.userId ?? 'unknown',
+      actorRole: actor?.role ?? 'advertiser',
+      action: 'create_creative',
+      targetType: 'creative',
+      targetId: creative.id,
+      beforeSnap: { campaignId },
+    }).catch(() => {});
+
+    return creative;
   }
 
   async updateCreative(creativeId: string, dto: {
@@ -75,7 +87,7 @@ export class CampaignService {
     }
 
     // Updating a creative resets it to draft status for re-review
-    return this.prisma.adCreative.update({
+    const updated = await this.prisma.adCreative.update({
       where: { id: creativeId },
       data: {
         ...dto,
@@ -83,6 +95,17 @@ export class CampaignService {
         rejectionReason: null,
       },
     });
+
+    this.audit.log({
+      actorId: actor?.userId ?? 'unknown',
+      actorRole: actor?.role ?? 'advertiser',
+      action: 'update_creative',
+      targetType: 'creative',
+      targetId: creativeId,
+      beforeSnap: { campaignId: creative.campaignId },
+    }).catch(() => {});
+
+    return updated;
   }
 
   async getCreatives(campaignId: string, actor?: ServiceActor) {
@@ -123,6 +146,17 @@ export class CampaignService {
       }
     }
 
+    // Admin creative approval/rejection — actorId flows from controller in
+    // the future; for now fall back to 'admin' so the audit row is well-formed.
+    this.audit.log({
+      actorId: 'admin',
+      actorRole: 'admin',
+      action: 'approve_creative',
+      targetType: 'creative',
+      targetId: creativeId,
+      beforeSnap: { campaignId: creative.campaignId, oldStatus: creative.status },
+    }).catch(() => {});
+
     return { creative: updated, campaignActivated };
   }
 
@@ -131,10 +165,21 @@ export class CampaignService {
     const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
     if (!creative) throw new NotFoundException('Creative not found');
 
-    return this.prisma.adCreative.update({
+    const rejected = await this.prisma.adCreative.update({
       where: { id: creativeId },
       data: { status: 'rejected', rejectionReason: reason },
     });
+
+    this.audit.log({
+      actorId: 'admin',
+      actorRole: 'admin',
+      action: 'reject_creative',
+      targetType: 'creative',
+      targetId: creativeId,
+      beforeSnap: { campaignId: creative.campaignId, reason },
+    }).catch(() => {});
+
+    return rejected;
   }
 
   // ── Country Targeting ──
@@ -151,6 +196,15 @@ export class CampaignService {
         data: targets.map(t => ({ campaignId, countryCode: t.countryCode, include: t.include })),
       }),
     ]);
+
+    this.audit.log({
+      actorId: actor?.userId ?? 'unknown',
+      actorRole: actor?.role ?? 'advertiser',
+      action: 'set_country_targeting',
+      targetType: 'campaign',
+      targetId: campaignId,
+      beforeSnap: { countryCount: targets.length },
+    }).catch(() => {});
 
     return this.prisma.countryTargeting.findMany({ where: { campaignId } });
   }

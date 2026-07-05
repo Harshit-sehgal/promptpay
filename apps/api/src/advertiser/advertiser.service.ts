@@ -2,6 +2,7 @@ import { Injectable, ForbiddenException, NotFoundException, BadRequestException,
 import { BidType, Prisma } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { CampaignService } from '../campaign/campaign.service';
+import { AuditService } from '../audit/audit.service';
 import { CampaignStatus, AD_SERVING, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 import { getErrorCode } from '../common/utils/errors';
 
@@ -19,7 +20,7 @@ const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
 @Injectable()
 export class AdvertiserService {
   private readonly logger = new Logger(AdvertiserService.name);
-  constructor(private prisma: PrismaService, private campaignService: CampaignService) {}
+  constructor(private prisma: PrismaService, private campaignService: CampaignService, private audit: AuditService) {}
 
   /** Get or create advertiser profile for user */
   async getOrCreateProfile(userId: string) {
@@ -69,7 +70,17 @@ export class AdvertiserService {
     // catches the loser. Translate P2002 to ConflictException so the second caller
     // sees a clean 409, not a raw Prisma error leaked as a 500.
     try {
-      return await this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl: dto.websiteUrl } });
+      const profile = await this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl: dto.websiteUrl } });
+
+      this.audit.log({
+        actorId: userId,
+        actorRole: 'advertiser',
+        action: 'create_advertiser_profile',
+        targetType: 'advertiser',
+        targetId: profile.id,
+      }).catch(() => {});
+
+      return profile;
     } catch (err: unknown) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         throw new BadRequestException('Advertiser profile already exists');
@@ -141,7 +152,7 @@ export class AdvertiserService {
     // Validate campaign category (blocks prohibited categories)
     await this.campaignService.validateCampaignCategory(dto.category);
 
-    return this.prisma.campaign.create({
+    const campaign = await this.prisma.campaign.create({
       data: {
         advertiserId,
         name: dto.name,
@@ -154,6 +165,17 @@ export class AdvertiserService {
         frequencyCapPerDay: dto.frequencyCapPerDay ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_DAY,
       },
     });
+
+    this.audit.log({
+      actorId: advertiserId,
+      actorRole: 'advertiser',
+      action: 'create_campaign',
+      targetType: 'campaign',
+      targetId: campaign.id,
+      beforeSnap: { name: dto.name, category: dto.category, bidType: dto.bidType, budgetTotalMinor: dto.budgetTotalMinor },
+    }).catch(() => {});
+
+    return campaign;
   }
 
   /** Submit a draft campaign for review */
@@ -177,10 +199,21 @@ export class AdvertiserService {
       data: { status: 'pending_review' },
     });
 
-    return this.prisma.campaign.update({
+    const submitted = await this.prisma.campaign.update({
       where: { id: campaignId },
       data: { status: 'submitted', submittedAt: new Date() },
     });
+
+    this.audit.log({
+      actorId: advertiserId,
+      actorRole: 'advertiser',
+      action: 'submit_campaign',
+      targetType: 'campaign',
+      targetId: campaignId,
+      beforeSnap: { oldStatus: campaign.status },
+    }).catch(() => {});
+
+    return submitted;
   }
 
   /** Pause an active campaign */
@@ -188,10 +221,20 @@ export class AdvertiserService {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
     this.validateTransition(campaign.status, 'paused');
-    return this.prisma.campaign.update({
+    const paused = await this.prisma.campaign.update({
       where: { id: campaignId },
       data: { status: 'paused', pausedAt: new Date() },
     });
+
+    this.audit.log({
+      actorId: advertiserId,
+      actorRole: 'advertiser',
+      action: 'pause_campaign',
+      targetType: 'campaign',
+      targetId: campaignId,
+    }).catch(() => {});
+
+    return paused;
   }
 
   /** Resume a paused campaign */
@@ -211,10 +254,20 @@ export class AdvertiserService {
     }
 
     this.validateTransition(campaign.status, 'active');
-    return this.prisma.campaign.update({
+    const resumed = await this.prisma.campaign.update({
       where: { id: campaignId },
       data: { status: 'active', pausedAt: null, activatedAt: new Date() },
     });
+
+    this.audit.log({
+      actorId: advertiserId,
+      actorRole: 'advertiser',
+      action: 'resume_campaign',
+      targetType: 'campaign',
+      targetId: campaignId,
+    }).catch(() => {});
+
+    return resumed;
   }
 
   /**
@@ -349,6 +402,16 @@ export class AdvertiserService {
     this.logger.log(
       `Archived campaign ${campaignId}: unspent refund obligation = ${result.unspentMinor} ${result.currency}`,
     );
+
+    this.audit.log({
+      actorId: advertiserId,
+      actorRole: 'advertiser',
+      action: 'archive_campaign',
+      targetType: 'campaign',
+      targetId: campaignId,
+      beforeSnap: { oldStatus: campaign.status, refundObligationMinor: result.unspentMinor, currency: result.currency },
+    }).catch(() => {});
+
     return { campaign: updated, refundEntry: result.refundEntry ?? null, archived: true };
   }
 
@@ -378,10 +441,21 @@ export class AdvertiserService {
     if (dto.bidAmountMinor !== undefined && dto.bidAmountMinor <= 0) {
       throw new BadRequestException('Bid amount must be positive');
     }
-    return this.prisma.campaign.update({
+    const updated = await this.prisma.campaign.update({
       where: { id: campaignId },
       data: dto,
     });
+
+    this.audit.log({
+      actorId: advertiserId,
+      actorRole: 'advertiser',
+      action: 'update_campaign',
+      targetType: 'campaign',
+      targetId: campaignId,
+      beforeSnap: { changes: dto },
+    }).catch(() => {});
+
+    return updated;
   }
 
   /** Get reports for advertiser campaigns */

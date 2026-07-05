@@ -295,11 +295,11 @@ function makeServices(): TestFixtures {
   // ExtensionService — real instance with all mocked deps
   const extension = new ExtensionService(prismaRef, audit, config, ledger, fraud);
 
-  // CampaignService — real instance with mocked prisma
-  const campaign = new CampaignService(prismaRef);
+  // CampaignService — real instance with mocked prisma + real audit (audit is fire-and-forget; safe to share)
+  const campaign = new CampaignService(prismaRef, audit);
 
-  // AdvertiserService — real instance with mocked prisma and real campaign service
-  const advertiser = new AdvertiserService(prismaRef, campaign);
+  // AdvertiserService — real instance with mocked prisma and real campaign service + audit
+  const advertiser = new AdvertiserService(prismaRef, campaign, audit);
 
   // PayoutService — real instance with mocked prisma, real ledger and dummy paypal payouts provider
   const payout = new PayoutService(prismaRef, ledger, {} as any);
@@ -468,13 +468,24 @@ describe('E2E Money Loop', () => {
       expect(submitted.status).toBe('submitted');
 
       // --- Step 6: Admin approves campaign (→ active because approved creative exists) ---
-      mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: campaignId,
-        status: 'submitted',
-        budgetSpentMinor: 0,
-        budgetTotalMinor: 50000,
-        creatives: [{ id: creativeId, status: 'approved' }],
-      });
+      // approveCampaign fetches once (status guard) then re-reads inside the
+      // tx after the CAS flip. The second findUnique must reflect the flipped
+      // status='active' (the mock is a queue — last queued wins).
+      mockPrisma.campaign.findUnique
+        .mockResolvedValueOnce({
+          id: campaignId,
+          status: 'submitted',
+          budgetSpentMinor: 0,
+          budgetTotalMinor: 50000,
+          creatives: [{ id: creativeId, status: 'approved' }],
+        })
+        .mockResolvedValueOnce({
+          id: campaignId,
+          status: 'active',
+          approvedAt: new Date(),
+          activatedAt: new Date(),
+          creatives: [{ id: creativeId, status: 'approved' }],
+        });
       mockPrisma.campaign.update.mockResolvedValue({
         id: campaignId,
         status: 'active',
@@ -488,13 +499,18 @@ describe('E2E Money Loop', () => {
         decision: 'approved',
       });
 
-      // $transaction for approveCampaign — must return [updatedCampaign, approval]
+      // approveCampaign transactions: callback returns { campaign: freshCampaign }
+      // matching the post-CAS findUnique re-read.
       mockPrisma.$transaction.mockImplementationOnce(async (arg: any) => {
         if (typeof arg === 'function') return arg(mockPrisma);
-        return [
-          { id: campaignId, status: 'active', approvedAt: new Date(), activatedAt: new Date() },
-          { id: uid('ca'), campaignId, reviewerId: 'admin-1', decision: 'approved' },
-        ];
+        return {
+          campaign: {
+            id: campaignId,
+            status: 'active',
+            approvedAt: new Date(),
+            activatedAt: new Date(),
+          },
+        };
       });
 
       const result = await svc.admin.approveCampaign(campaignId, 'admin-1');
