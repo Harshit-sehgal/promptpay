@@ -432,7 +432,12 @@ model Category {
 model BlockedCategory {
   id         String   @id @default(uuid())
   categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
+  // BlockedCategory rows are user-generated spam flags — when the underlying
+  // Category row is removed by an admin, the blocks linger as a historical
+  // reference (per record of "what was blocked when"), so SetNull lets the
+  // audit row survive; the API layer filters out rows where category is null
+  // for display purposes.
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   blockedBy  String
   reason     String
 
@@ -497,10 +502,20 @@ model WaitStateEvent {
 model AdImpression {
   id                  String     @id @default(uuid())
   campaignId          String
-  campaign            Campaign   @relation(fields: [campaignId], references: [id])
+  // Impressions are the platform's permanent audit trail for an ad served.
+  // Hard-deleting a Campaign row would cascade-delete every impression ever
+  // served against it (millions of rows in production). RESTRICT prevents
+  // silent cascades and forces a deliberate archival/retention decision
+  // before deletion — same intent as the explicit AdClick/AdReport rules
+  // documented below.
+  campaign            Campaign   @relation(fields: [campaignId], references: [id], onDelete: Restrict)
   creativeId          String
-  creative            AdCreative @relation(fields: [creativeId], references: [id])
+  creative            AdCreative @relation(fields: [creativeId], references: [id], onDelete: Restrict)
   userId              String
+  // Soft-delete policy: the platform never hard-deletes User rows — the
+  // deleteAccount path sets status='deleted' and anonymizes PII. The
+  // Cascade here is the legacy schema's safety net for any future
+  // hard-delete, but the policy above makes it deliberately unreachable.
   user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   deviceId            String
   device              Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
@@ -578,7 +593,11 @@ model AdReport {
   impressionId String
   impression   AdImpression @relation(fields: [impressionId], references: [id], onDelete: Cascade)
   creativeId   String
-  creative     AdCreative   @relation(fields: [creativeId], references: [id])
+  // AdReports are user-generated complaints — keep audit trail intact when
+  // the underlying creative is removed. RESTRICT prevents cascading a clean
+  // delete of an abusive creative from overwriting the historical record
+  // of what users reported against it.
+  creative     AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Restrict)
   userId       String
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   reason       String

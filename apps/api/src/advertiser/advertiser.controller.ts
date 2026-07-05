@@ -164,7 +164,16 @@ export class AdvertiserController {
   ) {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
-    const webBaseUrl = this.config.get<string>('WEB_BASE_URL', 'http://localhost:3000');
+    const webBaseUrl = this.config.get<string>('WEB_BASE_URL');
+    // Fail-closed: if WEB_BASE_URL is unset in production, refuse to generate
+    // Stripe checkout links with a broken redirect URL. The default
+    // `http://localhost:3000` would silently strand the user's browser
+    // on an unreachable host after real money changes hands.
+    if (!webBaseUrl) {
+      throw new BadRequestException(
+        'Platform is not configured. Please contact support.',
+      );
+    }
     return this.stripe.createDepositSession({
       advertiserId,
       amountMinor: dto.amountMinor,

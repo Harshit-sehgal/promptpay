@@ -64,16 +64,40 @@ export class AdminService {
       blockers.push('Campaign budget is fully spent. Add more budget to activate.');
     }
 
-    const [updatedCampaign] = await this.prisma.$transaction([
-      this.prisma.campaign.update({
+    // CAS-gated status flip: `updateMany` where `{ id, status: 'submitted' }`
+    // returns count===0 when the campaign was concurrently approved/rejected.
+    // Without this gate, two concurrent admin approvals would both insert
+    // duplicate CampaignApproval rows, overwrite each other's approvedAt
+    // timestamps, and the result would depend on commit order — neither
+    // "always safe", both wrong in a different way.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const flip = await tx.campaign.updateMany({
+        where: { id: campaignId, status: 'submitted' },
+        data: {
+          status: newStatus,
+          approvedAt: new Date(),
+          activatedAt: canActivate ? new Date() : null,
+        },
+      });
+      if (flip.count === 0) {
+        throw new BadRequestException(
+          'Campaign was just approved or rejected by another reviewer. Reload the page to see the current state.',
+        );
+      }
+
+      await tx.campaignApproval.create({
+        data: { campaignId, reviewerId, decision: 'approved', reason },
+      });
+
+      const freshCampaign = await tx.campaign.findUnique({
         where: { id: campaignId },
-        data: { status: newStatus, approvedAt: new Date(), activatedAt: canActivate ? new Date() : null },
-      }),
-      this.prisma.campaignApproval.create({ data: { campaignId, reviewerId, decision: 'approved', reason } }),
-    ]);
+        include: { creatives: true },
+      });
+      return { campaign: freshCampaign };
+    });
 
     return {
-      campaign: updatedCampaign,
+      campaign: result.campaign,
       activated: canActivate,
       status: newStatus,
       blockers,
@@ -85,10 +109,21 @@ export class AdminService {
     if (!campaign || campaign.status !== 'submitted') {
       throw new BadRequestException('Campaign must be in submitted status to reject');
     }
-    return this.prisma.$transaction([
-      this.prisma.campaign.update({ where: { id: campaignId }, data: { status: 'rejected' } }),
-      this.prisma.campaignApproval.create({ data: { campaignId, reviewerId, decision: 'rejected', reason } }),
-    ]);
+    return this.prisma.$transaction(async (tx) => {
+      const flip = await tx.campaign.updateMany({
+        where: { id: campaignId, status: 'submitted' },
+        data: { status: 'rejected' },
+      });
+      if (flip.count === 0) {
+        throw new BadRequestException(
+          'Campaign was just approved or rejected by another reviewer. Reload the page to see the current state.',
+        );
+      }
+      await tx.campaignApproval.create({
+        data: { campaignId, reviewerId, decision: 'rejected', reason },
+      });
+      return flip;
+    });
   }
 
   async getPendingPayouts() {

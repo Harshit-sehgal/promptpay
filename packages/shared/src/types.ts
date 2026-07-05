@@ -152,6 +152,35 @@ export interface LedgerEntry {
   availableAt?: string;
   idempotencyKey: string;
   createdAt: string;
+  // Stripe tracking columns — added in the R16 dispute-freeze migration.
+  // The AdvertiserLedger model (whose read-path serves the admin dashboard
+  // and the advertiser portal) carries these fields; consumers may want to
+  // reconciliate them against Stripe events in their UI. Nullable for
+  // legacy rows and rows unrelated to Stripe billing (spend entries from
+  // impressions, fraud holds, payouts, etc.).
+  stripePaymentIntentId?: string | null;
+  stripeDisputeId?: string | null;
+}
+
+// ── Session (server-managed auth — mirrored from the Prisma Session model) ──
+export interface Session {
+  id: string;
+  userId: string;
+  /** SHA-256 of the JWT token (NOT the raw token) — always present for
+   *  active rows. Nullable in the type for forward compat. */
+  tokenHash: string;
+  /** Token family string for refresh-rotation tracking — nullable for
+   *  legacy rows that predate family tracking. */
+  tokenFamily?: string | null;
+  deviceHash?: string | null;
+  ipHash?: string | null;
+  /** Boolean flag — true when the session is revoked by server-side
+   *  action (e.g. logout, password change, admin revoke). Not a DateTime. */
+  revoked: boolean;
+  /** Same instant as the refresh JWT `exp` — drives the 7d-grace-window
+   *  deleteMany in the session-cleanup cron (indexed on this column). */
+  expiresAt: string;
+  createdAt: string;
 }
 
 // ── Payout ──

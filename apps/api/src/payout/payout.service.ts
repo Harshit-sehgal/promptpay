@@ -265,12 +265,34 @@ export class PayoutService {
       if (allocAmount < entry.amountMinor) {
         const remainder = entry.amountMinor - allocAmount;
 
-        // Split partial allocations so the allocated row can be marked paid
-        // exactly, while the remaining confirmed row stays available later.
-        await tx.earningsLedger.update({
-          where: { id: entry.id },
-          data: { amountMinor: allocAmount },
+        // Split partial allocations: shrink the original row to the
+        // allocated slice and persist the remainder as a fresh confirmed
+        // row so future payouts can still allocate against it.
+        //
+        // The `update` is gated by `amountMinor: entry.amountMinor` — a
+        // CAS pin against the row-state snapshot we read at the top of the
+        // tx. Without it, two concurrent requestPayout calls passing the
+        // SAME entry id would both pass the row-update where-uniqueness
+        // check, both shrink the row, and double-allocation would result.
+        // UpdateMany returns count===0 when the predicate doesn't match
+        // (concurrent split by another tx) — translate to BadRequest so
+        // the caller retries against fresh state instead of seeing a 500
+        // and silently losing allocation.
+        const updateResult = await tx.earningsLedger.updateMany({
+          where: { id: entry.id, amountMinor: entry.amountMinor },
+          data: {
+            amountMinor: allocAmount,
+            // Carry the immutable fields through so the original row stays
+            // a valid sibling of the remainder row.
+            entryType: entry.entryType,
+            status: entry.status,
+          },
         });
+        if (updateResult.count === 0) {
+          throw new BadRequestException(
+            `Earnings entry ${entry.id} changed during allocation — please retry.`,
+          );
+        }
 
         await tx.earningsLedger.create({
           data: {

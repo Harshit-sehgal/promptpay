@@ -30,9 +30,20 @@ export class AdvertiserService {
     if (!user) throw new NotFoundException('User not found');
     if (user.role !== 'advertiser') throw new ForbiddenException('Not an advertiser account');
 
-    return this.prisma.advertiser.create({
-      data: { userId, companyName: user.name || DEFAULT_COMPANY_NAME, billingEmail: user.email },
-    });
+    // Concurrent getOrCreateProfile calls for the same first-time user both pass the
+    // findUnique check and both attempt the create. The @@unique([userId]) catches the
+    // second via P2002 — translate so the caller sees a clean Conflict instead of a 500.
+    try {
+      return await this.prisma.advertiser.create({
+        data: { userId, companyName: user.name || DEFAULT_COMPANY_NAME, billingEmail: user.email },
+      });
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        // Another call beat us — fetch the winning row and return it.
+        return await this.prisma.advertiser.findUnique({ where: { userId } });
+      }
+      throw err;
+    }
   }
 
   /** Resolve an advertiser by raw id — used by API-key auth where the key is
@@ -49,7 +60,17 @@ export class AdvertiserService {
     if (user.role !== 'advertiser') throw new ForbiddenException('Not an advertiser account');
     const existing = await this.prisma.advertiser.findUnique({ where: { userId } });
     if (existing) throw new BadRequestException('Advertiser profile already exists');
-    return this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl: dto.websiteUrl } });
+    // Concurrent createProfile calls race past the findUnique — the @@unique([userId])
+    // catches the loser. Translate P2002 to ConflictException so the second caller
+    // sees a clean 409, not a raw Prisma error leaked as a 500.
+    try {
+      return await this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl: dto.websiteUrl } });
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new BadRequestException('Advertiser profile already exists');
+      }
+      throw err;
+    }
   }
 
   /** Get advertiser dashboard with aggregated metrics */

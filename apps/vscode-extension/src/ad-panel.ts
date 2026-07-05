@@ -103,7 +103,13 @@ function nonce(): string {
 function safeExternalUri(url: string): vscode.Uri | null {
   try {
     const uri = vscode.Uri.parse(url);
-    if (uri.scheme === 'https' || uri.scheme === 'http') return uri;
+    // Only `https:` is allowed. A `http:` URL on an ad CTA is at best
+    // mixed-content downgrade and at worst stripping the impression-token
+    // linkage in the host page (which we don't own); both warrant rejecting
+    // the click rather than dropping the user into a plain HTTP context.
+    // The hasSafeCtaUrl call site already gates the button enable, but a
+    // defensive check here keeps `openExternal` itself fail-closed.
+    if (uri.scheme === 'https') return uri;
   } catch {
     /* invalid advertiser URL */
   }

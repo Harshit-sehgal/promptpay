@@ -527,6 +527,28 @@ export class ExtensionService {
     this.adCache.set(dto.idempotencyKey, { ad });
     this.adCache.set(dto.waitStateId, { ad });
 
+    // Audit log on every billable ad served. This is the platform's most
+    // sensitive money-flow and forensics here directly supports fraud
+    // detection (burst-detection on a single device/user) plus dispute
+    // resolution. claim.impressionId is the FK into ad_impression, the
+    // authoritative record linking the served ad to a downstream click /
+    // impression-qualified outcome. Fire-and-forget via audit.log().
+    if (claim.status === 'claimed' && claim.impressionId) {
+      void this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'ad_served',
+        targetType: 'impression',
+        targetId: claim.impressionId,
+        afterSnap: {
+          campaignId: selected.id,
+          creativeId: creative.id,
+          deviceId: dto.deviceId,
+          waitStateId: dto.waitStateId,
+        },
+      });
+    }
+
     return { ad };
   }
 
@@ -1173,21 +1195,59 @@ export class ExtensionService {
   async verifyDeviceSignature(deviceId: string | null, payload: Record<string, unknown>, signature: string): Promise<boolean> {
     // No device → no authentication. Do not fall back to the global HMAC for
     // anonymous callers.
-    if (!deviceId) return false;
+    if (!deviceId) {
+      // Audit-log null-device attempts: a misconfigured client would hit this
+      // path constantly (no-ops), but a forge / replay attempt by an attacker
+      // who learned deviceIds but no secrets would also fail here. Sampling
+      // keeps noise low while preserving the signal.
+      void this.audit.log({
+        actorId: 'anonymous',
+        actorRole: 'anonymous',
+        action: 'device_signature_rejected',
+        targetType: 'device',
+        // We deliberately do NOT include the payload here — it can carry
+        // first-party user-controlled fields, and the audit log's job is to
+        // count rejections, not store them.
+        targetId: 'null',
+        afterSnap: { reason: 'null_device_id' },
+      });
+      return false;
+    }
 
     const device = await this.prisma.device.findUnique({
       where: { id: deviceId },
-      select: { eventSecret: true },
+      select: { eventSecret: true, userId: true },
     });
-    if (!device) return false; // unknown device → reject
+    if (!device) {
+      void this.audit.log({
+        actorId: 'anonymous',
+        actorRole: 'anonymous',
+        action: 'device_signature_rejected',
+        targetType: 'device',
+        targetId: deviceId,
+        afterSnap: { reason: 'unknown_device' },
+      });
+      return false; // unknown device → reject
+    }
 
     if (device.eventSecret) {
-      // Device has a dedicated secret — ONLY accept the device secret. The
-      // global fallback is NEVER accepted for a device that has its own
-      // secret. Return the result directly (true or false), no further
-      // fallback, so a device-secret mismatch is not authenticated by the
-      // global key.
-      return verifySignature(payload, device.eventSecret, signature);
+      const ok = verifySignature(payload, device.eventSecret, signature);
+      if (!ok) {
+        // A device with a known secret submitted an unverifiable signature —
+        // either a stale secret (post-rotation, pre-issuance 「garbage key」)
+        // or an active forgery attempt. Logging the rejection supports
+        // per-device brute-force / replay detection even when the user is
+        // legitimately signed-in elsewhere.
+        void this.audit.log({
+          actorId: device.userId,
+          actorRole: 'developer',
+          action: 'device_signature_rejected',
+          targetType: 'device',
+          targetId: deviceId,
+          afterSnap: { reason: 'device_secret_mismatch' },
+        });
+      }
+      return ok;
     }
 
     // Legacy device row with no eventSecret — accept the global HMAC. This

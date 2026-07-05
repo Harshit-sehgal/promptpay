@@ -29,7 +29,7 @@ const mockPrisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
-    updateMany: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     aggregate: vi.fn(),
   },
   user: {
@@ -198,9 +198,15 @@ describe('PayoutService', () => {
 
       expect(res.status).toBe('requested');
       expect(mockPrisma.payoutAllocation.create).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.earningsLedger.update).toHaveBeenCalledWith({
-        where: { id: 'earn_2' },
-        data: { amountMinor: 500 },
+      // The partial-allocation path uses updateMany gated on the
+      // snapshot amountMinor (a CAS pin — see service code comment) so
+      // concurrent splits return count=0 and the call retries against
+      // fresh state rather than double-allocating. The mock returns
+      // count=1 meaning "row state matched" — exactly what the CAS pin
+      // looks for.
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
+        where: { id: 'earn_2', amountMinor: 1000 },
+        data: expect.objectContaining({ amountMinor: 500 }),
       });
       expect(mockPrisma.earningsLedger.create).toHaveBeenCalledWith({
         data: expect.objectContaining({

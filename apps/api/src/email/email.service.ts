@@ -52,13 +52,43 @@ export class EmailService {
     // resend-misconfigured branch above may have just downgraded us there.
     // The intent check is explicit: in production, only explicitly-non-console
     // drivers contribute password-reset/verify code flows.
-    if (process.env.NODE_ENV === 'production' && this.driver === 'console') {
-      throw new Error(
-        'EMAIL_DRIVER=console is not allowed in production — it logs email bodies ' +
-          '(including password-reset and email-verify tokens) to stdout. Set ' +
-          'EMAIL_DRIVER=resend with RESEND_API_KEY, or EMAIL_DRIVER to another ' +
-          'non-console transport.',
-      );
+    if (process.env.NODE_ENV === 'production') {
+      if (this.driver === 'console') {
+        throw new Error(
+          'EMAIL_DRIVER=console is not allowed in production — it logs email bodies ' +
+            '(including password-reset and email-verify tokens) to stdout. Set ' +
+            'EMAIL_DRIVER=resend with RESEND_API_KEY, or EMAIL_DRIVER to another ' +
+            'non-console transport.',
+        );
+      }
+      // The `EMAIL_FROM` default `WaitLayer <no-reply@waitlayer.dev>` uses a
+      // `.dev` TLD domain that has HSTS preloading enforced by browsers and
+      // most major mail providers. Email sent from this address would be
+      // silently flagged by SPF/DKIM checks for any production domain that
+      // doesn't literally match the `.dev` suffix. Three-hour password-reset
+      // windows burn expensively on this.
+      if (
+        this.from === 'WaitLayer <no-reply@waitlayer.dev>' &&
+        !process.env.EMAIL_FROM
+      ) {
+        throw new Error(
+          'EMAIL_FROM must be set in production — the dev default ' +
+            '"WaitLayer <no-reply@waitlayer.dev>" uses a .dev TLD that breaks ' +
+            'SPF/DKIM for any real production domain. Set EMAIL_FROM to a sender ' +
+            'address on your production apex domain.',
+        );
+      }
+      // Same WEB_BASE_URL guard — a dev default would silently produce
+      // non-functional password-reset and email-verification links.
+      if (
+        this.webBaseUrl === 'http://localhost:3000' &&
+        !process.env.WEB_BASE_URL
+      ) {
+        throw new Error(
+          'WEB_BASE_URL must be set in production — the dev default ' +
+            'http://localhost:3000 produces password-reset and email-verify links that do not function. Set WEB_BASE_URL to your production web URL.',
+        );
+      }
     }
   }
 

@@ -177,6 +177,42 @@ export const AdClickResponse = z.discriminatedUnion('clicked', [
 ]);
 
 // ══════════════════════════════════════════════════════════
+// Ledger API Contracts
+// ══════════════════════════════════════════════════════════
+
+/** Common ledger entry fields reused by both the platform ledger and the
+ *  advertiser ledger response schemas. Stripe-tracking fields
+ *  (`stripePaymentIntentId`, `stripeDisputeId`) are nullable on the Prisma
+ *  models — only deposit/hold rows touch them.
+ */
+const ledgerEntryBase = z.object({
+  id: z.string(),
+  campaignId: z.string().nullable().optional(),
+  entryType: LedgerEntryTypeSchema,
+  status: LedgerStatusSchema,
+  amountMinor: z.number(),
+  currency: z.string(),
+  description: z.string().nullable().optional(),
+  createdAt: z.string(),
+});
+
+/** `AdvertiserLedger` row — returns the platform-relevant columns to the
+ *  admin dashboard and advertiser portal. Includes the Stripe-tracking
+ *  fields added in migration 20260705120000 (dispute freeze columns).
+ */
+export const AdvertiserLedgerResponse = ledgerEntryBase.extend({
+  advertiserId: z.string(),
+  stripePaymentIntentId: z.string().nullable().optional(),
+  stripeDisputeId: z.string().nullable().optional(),
+});
+
+/** `PlatformLedger` row — bucket-based platform cash/refund bookkeeping. */
+export const PlatformLedgerResponse = ledgerEntryBase.extend({
+  bucket: z.string(),
+  referenceId: z.string().nullable().optional(),
+});
+
+// ══════════════════════════════════════════════════════════
 // Payout API Contracts
 // ══════════════════════════════════════════════════════════
 

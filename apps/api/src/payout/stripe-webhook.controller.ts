@@ -243,15 +243,25 @@ export class StripeWebhookController {
       return;
     }
 
-    // Wire the Stripe customer ID to the Advertiser record
-    if (result.stripeCustomerId && !advertiser.stripeCustomerId) {
-      await this.prisma.advertiser.update({
-        where: { id: advertiser.id },
+    // Wire the Stripe customer ID to the Advertiser record. CAS-gated on
+    // `stripeCustomerId: null` so two concurrent checkout.session.completed
+    // deliveries for the same advertiser (possible if the user double-clicks
+    // the deposit button before the first session resolves, or a Stripe
+    // retry delivery races itself) both pass the outer read but only one
+    // wins the flip. The second's update returns count=0 and we leave the
+    // winner's value intact — the field has `@@unique([stripeCustomerId])`
+    // semantics (one Stripe customer = one advertiser), and overwriting a
+    // pre-existing customerId would also violate the unique constraint.
+    if (result.stripeCustomerId) {
+      const wire = await this.prisma.advertiser.updateMany({
+        where: { id: advertiser.id, stripeCustomerId: null },
         data: { stripeCustomerId: result.stripeCustomerId },
       });
-      this.logger.log(
-        `Wired stripeCustomerId=${result.stripeCustomerId} to advertiser ${advertiser.id}`,
-      );
+      if (wire.count > 0) {
+        this.logger.log(
+          `Wired stripeCustomerId=${result.stripeCustomerId} to advertiser ${advertiser.id}`,
+        );
+      }
     }
 
     // Record deposit in advertiser ledger (credit) — idempotent by paymentIntentId

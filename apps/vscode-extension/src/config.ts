@@ -70,6 +70,20 @@ export class ConfigurationManager {
       return configured;
     }
 
+    // Production fail-closed on the LATEST secret-storage path BEFORE the dev
+    // fallback. If NODE_ENV=production the only acceptable outcome is: secret
+    // storage returned a value. The plaintext workspace setting is acceptable
+    // (with a migration warning), but the published dev fallback constant
+    // must NEVER be used in production — knowing the literal value, attackers
+    // could sign forged event payloads and the server would accept them
+    // because `verifySignature` doesn't pair-check the secret length.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'waitlayer.signingKey is required in production. ' +
+        'Configure it via the VS Code SecretStorage API or `waitlayer.signingKey` workspace setting.',
+      );
+    }
+
     const isDevHost =
       process.env.WAITLAYER_DEV_EXTENSION === '1' || process.env.NODE_ENV === 'development';
     if (!isDevHost) {
