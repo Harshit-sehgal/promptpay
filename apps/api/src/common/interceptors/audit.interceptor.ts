@@ -54,8 +54,15 @@ export class AuditInterceptor implements NestInterceptor {
     const method = req.method;
     const url: string = req.route?.path ?? req.url ?? '';
 
-    // Only audit POST mutations on admin routes
-    if (method !== 'POST' || !url.startsWith('/admin/')) {
+    // Only audit POST mutations on admin routes, plus manually opted-in
+    // handlers (FraudController.resolveFlag is not under /admin/ but still
+    // needs auditing). When opted in, the interceptor is class-level or
+    // method-level via @UseInterceptors, so it runs unconditionally — the
+    // guard here ensures we skip GET requests even when opted in.
+    if (method !== 'POST') {
+      return next.handle();
+    }
+    if (!url.startsWith('/admin/') && !url.startsWith('/fraud/')) {
       return next.handle();
     }
 

@@ -524,7 +524,13 @@ export class AuthService {
       { secret: this.jwtSecret, expiresIn: '24h' },
     );
 
-    await this.email.sendEmailVerification(user.email, token);
+    const result = await this.email.sendEmailVerification(user.email, token);
+    if (!result.delivered) {
+      // Email provider is down — don't tell the user the message was sent.
+      // Ops can match audit.log entries to provider outages. The token is
+      // valid for 24h; the user can retry when the provider recovers.
+      return { message: 'Email delivery temporarily unavailable; please try again shortly' };
+    }
 
     // Fail-closed: expose the raw token only when explicitly in dev/test.
     // Anything other than 'development' | 'test' (including unset, 'staging',

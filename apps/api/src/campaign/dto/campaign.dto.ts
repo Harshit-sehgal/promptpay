@@ -10,7 +10,7 @@ export class CreateCreativeDto {
   @MaxLength(MAX_AD_MESSAGE_LENGTH)
   sponsoredMessage!: string;
 
-  @IsUrl()
+  @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(500)
   destinationUrl!: string;
 
@@ -31,7 +31,7 @@ export class UpdateCreativeDto {
   sponsoredMessage?: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(500)
   destinationUrl?: string;
 

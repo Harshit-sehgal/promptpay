@@ -58,13 +58,16 @@ const mockPayPalPayouts = {
   initiate: vi.fn().mockResolvedValue({ providerTxId: 'pp_tx_123', status: 'processing' }),
   checkStatus: vi.fn().mockResolvedValue({ status: 'processing' }),
 } as any;
+const mockAudit = {
+  log: vi.fn().mockResolvedValue(undefined),
+} as any;
 
 describe('PayoutService', () => {
   let service: PayoutService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockPayPalPayouts);
+    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockAudit, mockPayPalPayouts);
   });
 
   describe('addPayoutMethod', () => {

@@ -135,7 +135,10 @@ export const AdRequestResponse = z.object({
       message: z.string(),
       label: z.string(),
       displayDomain: z.string(),
-      destinationUrl: z.string(),
+      destinationUrl: z.string().refine(
+        (v) => typeof v === 'string' && v.startsWith('https://'),
+        { message: 'destinationUrl must be an https:// URL' },
+      ),
     })
     .nullable(),
 });

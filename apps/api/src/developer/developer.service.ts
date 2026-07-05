@@ -245,10 +245,23 @@ export class DeveloperService {
           githubVerified: true, referralCode: true, createdAt: true,
         },
       }),
-      this.prisma.earningsLedger.findMany({ where: { userId } }),
+      // Capped at reasonable limits per entity to prevent OOM/stall on
+      // high-volume developers (1M earnings rows would materialize the
+      // entire ledger in memory).  Impressions/clicks are time-ordered;
+      // the cap captures the most recent activity window.  Full export
+      // requires paginated access via separate endpoints.
+      this.prisma.earningsLedger.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 10000,
+      }),
       this.prisma.adImpression.findMany({ where: { userId }, take: 1000 }),
       this.prisma.adClick.findMany({ where: { userId }, take: 1000 }),
-      this.prisma.payoutRequest.findMany({ where: { userId } }),
+      this.prisma.payoutRequest.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 1000,
+      }),
     ]);
     // Audit: a full PII export (GDPR-style data dump). Records who pulled
     // the dump so bulk exfiltration via a compromised token is traceable

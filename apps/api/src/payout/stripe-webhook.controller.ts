@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
 import { StripeProvider } from './providers';
 import { PrismaService } from '../config/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { getErrorCode, getErrorMessage } from '../common/utils/errors';
 
 type RawBodyRequest = Request & { rawBody?: Buffer | string };
@@ -26,6 +27,7 @@ export class StripeWebhookController {
   constructor(
     private readonly stripe: StripeProvider,
     private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
   ) {}
 
   @Post('webhook')
@@ -324,6 +326,16 @@ export class StripeWebhookController {
     this.logger.log(
       `Recorded Stripe deposit: ${result.amountMinor} ${result.currency} for advertiser ${advertiser.id}`,
     );
+
+    // Audit: Stripe deposit — key money-in event, no actor id (system).
+    void this.audit.log({
+      actorId: 'stripe_webhook',
+      actorRole: 'system',
+      action: 'stripe_deposit',
+      targetType: 'advertiser',
+      targetId: advertiser.id,
+      beforeSnap: { amountMinor: result.amountMinor, currency: result.currency, paymentIntentId: result.paymentIntentId, sessionId },
+    }).catch(() => {});
   }
 
   /** Reverse advertiser ledger entries when a charge is refunded */
@@ -477,6 +489,16 @@ export class StripeWebhookController {
     this.logger.log(
       `Refund processed: paymentIntent=${details.paymentIntentId}, amount=${totalRefunded} ${details.currency}`,
     );
+
+    // Audit: Stripe refund — money out event
+    void this.audit.log({
+      actorId: 'stripe_webhook',
+      actorRole: 'system',
+      action: 'stripe_refund',
+      targetType: 'payment_intent',
+      targetId: details.paymentIntentId ?? '',
+      beforeSnap: { amountMinor: totalRefunded, currency: details.currency, refundId: refund.id },
+    }).catch(() => {});
   }
 
   /**
@@ -657,6 +679,16 @@ export class StripeWebhookController {
     this.logger.log(
       `Dispute flagged + frozen: paymentIntent=${details.paymentIntentId}, advertiser=${advertiserId}, reason=${details.reason}`,
     );
+
+    // Audit: dispute opened — funds frozen, flag created
+    void this.audit.log({
+      actorId: 'stripe_webhook',
+      actorRole: 'system',
+      action: 'stripe_dispute_created',
+      targetType: 'dispute',
+      targetId: dispute.id,
+      beforeSnap: { paymentIntentId: details.paymentIntentId, reason: details.reason, amountMinor: details.amountMinor, advertiserId },
+    }).catch(() => {});
   }
 
   /**
@@ -817,6 +849,16 @@ export class StripeWebhookController {
     this.logger.log(
       `Dispute closed (${dispute.status}): dispute=${dispute.id}, holds_processed=${holdEntries.length}`,
     );
+
+    // Audit: dispute closed — funds released or written off
+    void this.audit.log({
+      actorId: 'stripe_webhook',
+      actorRole: 'system',
+      action: 'stripe_dispute_closed',
+      targetType: 'dispute',
+      targetId: dispute.id,
+      beforeSnap: { status: dispute.status, holdsProcessed: holdEntries.length, paymentIntentId: details.paymentIntentId },
+    }).catch(() => {});
   }
 
   /**
@@ -961,6 +1003,18 @@ export class StripeWebhookController {
     this.logger.log(
       `Stripe payout.paid: payoutRequest=${payoutRequestId}, providerTxId=${providerTxId}, claimed=${claimed}`,
     );
+
+    if (claimed) {
+      // Audit: payout completed
+      void this.audit.log({
+        actorId: 'stripe_webhook',
+        actorRole: 'system',
+        action: 'stripe_payout_paid',
+        targetType: 'payout_request',
+        targetId: payoutRequestId,
+        beforeSnap: { providerTxId },
+      }).catch(() => {});
+    }
   }
 
   /**
@@ -1057,5 +1111,15 @@ export class StripeWebhookController {
     this.logger.log(
       `Stripe payout.failed: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId}, reason=${failureReason}`,
     );
+
+    // Audit: payout failed — needs retry
+    void this.audit.log({
+      actorId: 'stripe_webhook',
+      actorRole: 'system',
+      action: 'stripe_payout_failed',
+      targetType: 'payout_request',
+      targetId: tx.payoutRequestId,
+      beforeSnap: { providerTxId, failureReason },
+    }).catch(() => {});
   }
 }

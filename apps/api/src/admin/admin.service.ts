@@ -19,7 +19,7 @@ export class AdminService {
       this.prisma.user.count({ where: { status: 'active' } }),
       this.prisma.campaign.count({ where: { status: 'active' } }),
       this.prisma.adImpression.count({ where: { isBillable: true } }),
-      this.prisma.earningsLedger.aggregate({ where: { status: 'paid' }, _sum: { amountMinor: true } }),
+      this.prisma.earningsLedger.aggregate({ where: { status: 'paid', entryType: 'credit' }, _sum: { amountMinor: true } }),
       this.prisma.fraudFlag.count({ where: { status: 'open' } }),
     ]);
     return { activeUsers: users, activeCampaigns: campaigns, totalBillableImpressions: impressions, totalPayoutsMinor: payouts._sum.amountMinor || 0, openFraudFlags: fraudFlags };
@@ -161,25 +161,33 @@ export class AdminService {
       }
     }
 
-    // Read the payout to validate a partial-approval amount against the
-    // requested amount BEFORE the conditional update. The conditional update
-    // below is the authoritative state guard; this read is just the bounds
-    // check (a TOCTOU between this read and the update cannot inflate the
-    // approved amount because requestedAmountMinor is immutable post-request
-    // — see PayoutRequest schema).
-    let resolvedApprovedAmount: number | undefined;
+    // Read BEFORE the conditional update to validate a partial-approval amount
+    // AND resolve the full-approval amount (requestedAmountMinor). The
+    // conditional update below is the authoritative state guard; this read is
+    // just the bounds/data check — a TOCTOU between this read and the update
+    // cannot inflate the approved amount because requestedAmountMinor is
+    // immutable post-request (see PayoutRequest schema).
+    const target = await this.prisma.payoutRequest.findUnique({
+      where: { id: payoutId },
+      select: { requestedAmountMinor: true, currency: true },
+    });
+    if (!target) throw new BadRequestException('Payout not found');
+
+    let resolvedApprovedAmount: number;
     if (approvedAmountMinor !== undefined) {
-      const target = await this.prisma.payoutRequest.findUnique({
-        where: { id: payoutId },
-        select: { requestedAmountMinor: true, currency: true, status: true },
-      });
-      if (!target) throw new BadRequestException('Payout not found');
+      // Partial approval — validated against requested
       if (approvedAmountMinor > target.requestedAmountMinor) {
         throw new BadRequestException(
           `approvedAmountMinor (${approvedAmountMinor}) cannot exceed requestedAmountMinor (${target.requestedAmountMinor})`,
         );
       }
       resolvedApprovedAmount = approvedAmountMinor;
+    } else {
+      // Full approval — use the requested amount. We read it now and write
+      // it in the single updateMany below so approvedAmountMinor is
+      // authoritative from the moment the row flips, rather than null
+      // briefly between two writes.
+      resolvedApprovedAmount = target.requestedAmountMinor;
     }
 
     const result = await this.prisma.payoutRequest.updateMany({
@@ -189,10 +197,7 @@ export class AdminService {
         reviewerId,
         reviewNote: note,
         processedAt: new Date(),
-        // Always set: explicit full-approval when no partial amount given,
-        // the validated partial amount otherwise. This neutralises the
-        // silent-null-fallback footgun downstream.
-        approvedAmountMinor: resolvedApprovedAmount ?? undefined,
+        approvedAmountMinor: resolvedApprovedAmount,
       },
     });
     if (result.count === 0) {
@@ -202,24 +207,6 @@ export class AdminService {
           ? `Payout cannot be approved from status '${existing.status}'`
           : 'Payout not found',
       );
-    }
-
-    // When full approval was requested, fetch the requested amount and set
-    // the column in a second (idempotent) write. We can't do this in the
-    // updateMany above because we don't have the requested amount there
-    // without an extra read; doing the read + conditional write here keeps
-    // the happy path at one round-trip for partial approvals.
-    if (approvedAmountMinor === undefined) {
-      const full = await this.prisma.payoutRequest.findUnique({
-        where: { id: payoutId },
-        select: { requestedAmountMinor: true },
-      });
-      if (full) {
-        await this.prisma.payoutRequest.update({
-          where: { id: payoutId },
-          data: { approvedAmountMinor: full.requestedAmountMinor },
-        });
-      }
     }
 
     return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
@@ -290,10 +277,18 @@ export class AdminService {
   async toggleToolIntegration(slug: string, isActive: boolean) {
     const tool = await this.prisma.toolIntegration.findUnique({ where: { slug } });
     if (!tool) throw new BadRequestException(`Tool integration "${slug}" not found`);
-    return this.prisma.toolIntegration.update({
-      where: { slug },
+    // CAS-gated: only succeeds if the current isActive matches what we read.
+    // Concurrent toggles by another admin produce count===0 and a clear error.
+    const result = await this.prisma.toolIntegration.updateMany({
+      where: { slug, isActive: tool.isActive },
       data: { isActive },
     });
+    if (result.count === 0) {
+      throw new BadRequestException(
+        `Tool integration "${slug}" was just toggled by another admin. Reload to see the current state.`,
+      );
+    }
+    return this.prisma.toolIntegration.findUnique({ where: { slug } });
   }
 
   // ── Webhooks ──

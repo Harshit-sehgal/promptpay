@@ -789,20 +789,35 @@ export class LedgerService {
   async getPlatformBreakdown() {
     const [
       totalEarnings,
-      totalAdvertiserSpend,
-      totalPlatformFee,
-      totalReserve,
+      totalAdvertiserDebit,
+      totalAdvertiserRefund,
+      totalPlatformCredit,
+      totalPlatformReversal,
+      totalReserveCredit,
+      totalReserveReversal,
     ] = await Promise.all([
       this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
       this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
+      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'refund' } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
     ]);
 
     const earningsMinor = totalEarnings._sum?.amountMinor ?? 0;
-    const advertiserMinor = totalAdvertiserSpend._sum?.amountMinor ?? 0;
-    const platformMinor = totalPlatformFee._sum?.amountMinor ?? 0;
-    const reserveMinor = totalReserve._sum?.amountMinor ?? 0;
+    // Advertiser spend = gross debits (billed) minus refunds (reversed fraud, archive)
+    const advertiserMinor =
+      (totalAdvertiserDebit._sum?.amountMinor ?? 0) -
+      (totalAdvertiserRefund._sum?.amountMinor ?? 0);
+    // Platform fees = gross credits (billed) minus reversals (reversed fraud)
+    const platformMinor =
+      (totalPlatformCredit._sum?.amountMinor ?? 0) -
+      (totalPlatformReversal._sum?.amountMinor ?? 0);
+    // Fraud reserve = gross credits minus reversals (released on false-positive)
+    const reserveMinor =
+      (totalReserveCredit._sum?.amountMinor ?? 0) -
+      (totalReserveReversal._sum?.amountMinor ?? 0);
 
     return {
       totalEarnings: earningsMinor,

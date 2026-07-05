@@ -65,8 +65,14 @@ export class ApiClient {
    *  The configured global secret remains only as a compatibility fallback.
    *  If neither is available yet (init still in-flight), sign with an empty
    *  placeholder so callers don't throw — the server will reject any signature
-   *  mismatch with 401, leaving the request fail-closed rather than fail-open. */
-  sign(payload: Record<string, unknown>): string {
+   *  mismatch with 401, leaving the request fail-closed rather than fail-open.
+   *
+   *  Async so that callers constructing payload bodies always await the init
+   *  promise — otherwise `waitStateStart`/`requestAd`/etc. call `sign()` during
+   *  synchronous payload construction (lines 161, 177, 197, etc.) before the
+   *  Promise.all in `_initialized` has resolved, signing with an empty secret. */
+  async sign(payload: Record<string, unknown>): Promise<string> {
+    await this._initialized;
     const secret = this.deviceEventSecret ?? this._signingSecret ?? '';
     return signPayload(payload, secret);
   }
@@ -158,7 +164,7 @@ export class ApiClient {
     };
     await this.post('/extension/wait-state/start', {
       ...payload,
-      signature: this.sign(payload),
+      signature: await this.sign(payload),
     });
   }
 
@@ -174,7 +180,7 @@ export class ApiClient {
     };
     await this.post('/extension/wait-state/end', {
       ...payload,
-      signature: this.sign(payload),
+      signature: await this.sign(payload),
     });
   }
 
@@ -194,7 +200,7 @@ export class ApiClient {
     };
     const res = await this.post<ServerAdResponse>('/extension/ad-request', {
       ...payload,
-      signature: this.sign(payload),
+      signature: await this.sign(payload),
     });
     return res?.ad ?? null;
   }
@@ -211,7 +217,7 @@ export class ApiClient {
     };
     await this.post('/extension/ad-rendered', {
       ...payload,
-      signature: this.sign(payload),
+      signature: await this.sign(payload),
     });
   }
 
@@ -224,7 +230,7 @@ export class ApiClient {
     };
     await this.post('/extension/impression-qualified', {
       ...payload,
-      signature: this.sign(payload),
+      signature: await this.sign(payload),
     });
   }
 
@@ -236,7 +242,7 @@ export class ApiClient {
     };
     await this.post('/extension/click', {
       ...payload,
-      signature: this.sign(payload),
+      signature: await this.sign(payload),
     });
   }
 
@@ -301,7 +307,7 @@ export class ApiClient {
     let headerSignature: string | undefined;
     if (body) {
       const { signature: _, ...payloadForHeader } = body;
-      headerSignature = this.sign(payloadForHeader);
+      headerSignature = await this.sign(payloadForHeader);
     }
 
     return this.request<T>(

@@ -384,6 +384,8 @@ model Campaign {
   approvals        CampaignApproval[]
   fraudFlags       FraudFlag[]
   earningsEntries  EarningsLedger[]
+  advertiserLedger AdvertiserLedger[]
+  platformLedger  PlatformLedger[]
 
   @@index([advertiserId])
   @@index([status])
@@ -666,6 +668,12 @@ model AdvertiserLedger {
   advertiserId          String
   advertiser            Advertiser      @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
   campaignId            String?
+  // FK to Campaign with `SetNull` — when a campaign is archived/deleted the
+  // ledger row survives but its `campaignId` becomes NULL. The ledger is the
+  // source of truth for historical accounting and must not be cascade-deleted
+  // with its campaign; nulling the FK keeps referential integrity while
+  // ensuring the row remains queryable by `advertiserId`/`createdAt`/etc.
+  campaign              Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   stripePaymentIntentId String?
   // The Stripe Dispute id when this row participates in a dispute freeze.
   // Set on the `hold`/`hold-rev` rows created by the dispute webhook and on
@@ -693,6 +701,7 @@ model AdvertiserLedger {
 model PlatformLedger {
   id             String          @id @default(uuid())
   campaignId     String?
+  campaign       Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   entryType      LedgerEntryType
   status         LedgerStatus
   amountMinor    Int
@@ -719,7 +728,7 @@ model PayoutRequest {
   userId               String
   user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   payoutAccountId      String
-  payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id])
+  payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Restrict)
   status               PayoutStatus  @default(draft)
   requestedAmountMinor Int
   approvedAmountMinor  Int?
@@ -749,7 +758,7 @@ model PayoutAllocation {
   payoutRequestId String
   payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
   earningsEntryId String
-  earningsEntry   EarningsLedger @relation(fields: [earningsEntryId], references: [id])
+  earningsEntry   EarningsLedger @relation(fields: [earningsEntryId], references: [id], onDelete: Restrict)
   amountMinor     Int
   createdAt       DateTime       @default(now())
 

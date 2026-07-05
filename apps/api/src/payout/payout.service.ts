@@ -3,6 +3,7 @@ import { PrismaService } from '../config/prisma.service';
 import { EarningsLedger, Prisma } from '@waitlayer/db';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
+import { AuditService } from '../audit/audit.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 import { PayPalPayoutsProvider } from './providers';
 
@@ -93,6 +94,7 @@ export class PayoutService {
     private prisma: PrismaService,
     private ledger: LedgerService,
     private referral: ReferralService,
+    private audit: AuditService,
     @Inject(PayPalPayoutsProvider) private paypalPayouts: PayPalPayoutsProvider,
   ) {
     this.providers = {
@@ -118,7 +120,7 @@ export class PayoutService {
       data: { isActive: false },
     });
 
-    return this.prisma.payoutAccount.create({
+    const method = await this.prisma.payoutAccount.create({
       data: {
         userId,
         provider: dto.provider as PayoutProvider,
@@ -126,6 +128,18 @@ export class PayoutService {
         currency: dto.currency || 'USD',
       },
     });
+
+    // Audit: payout method added (destination-change is security-relevant)
+    void this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'add_payout_method',
+      targetType: 'payout_account',
+      targetId: method.id,
+      beforeSnap: { provider: dto.provider, currency: dto.currency || 'USD' },
+    }).catch(() => {});
+
+    return method;
   }
 
   /** Get payout info for a user */
@@ -439,10 +453,27 @@ export class PayoutService {
         dto.earningsEntryIds,
       );
 
-      return tx.payoutRequest.findUnique({
+      const final = await tx.payoutRequest.findUnique({
         where: { id: payoutRequest.id },
         include: { allocations: true },
       });
+
+      // Audit: payout requested — top-tier money-movement event. Fire
+      // post-commit so we don't log an audit event if the tx rolls back.
+      void this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'request_payout',
+        targetType: 'payout_request',
+        targetId: payoutRequest.id,
+        beforeSnap: {
+          requestedAmountMinor: dto.amountMinor,
+          currency: dto.currency,
+          allocationCount: dto.earningsEntryIds?.length ?? 0,
+        },
+      }).catch(() => {});
+
+      return final;
     });
   }
 

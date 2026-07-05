@@ -38,7 +38,7 @@ export class ReferralService {
     const [referralCount, rewardsAgg] = await Promise.all([
       this.prisma.referral.count({ where: { referrerId: userId } }),
       this.prisma.referralReward.aggregate({
-        where: { userId },
+        where: { userId, status: { notIn: ['reversed', 'void'] } },
         _sum: { amountMinor: true },
       }),
     ]);
@@ -82,6 +82,11 @@ export class ReferralService {
       where: { referralCode: normalized },
     });
     if (!referrer) {
+      throw new BadRequestException('Invalid referral code');
+    }
+    // Banned / restricted users cannot earn referral rewards. Their code
+    // stays in the DB but is rejected at apply-time and reward-time.
+    if (referrer.status !== 'active') {
       throw new BadRequestException('Invalid referral code');
     }
 
@@ -148,10 +153,15 @@ export class ReferralService {
     // Find the referral for this user
     const referral = await this.prisma.referral.findFirst({
       where: { referredId: referredUserId },
-      include: { rewards: true },
+      include: { rewards: true, referrer: { select: { status: true } } },
     });
 
     if (!referral) return null;
+
+    // Banned / restricted referrers shouldn't receive rewards. If their
+    // status changed after the referral was created (e.g. suspended for
+    // fraud), skip the reward.
+    if (referral.referrer.status !== 'active') return null;
 
     // Pre-flight checks outside the transaction — cheap filters that reject
     // the vast majority of calls before opening a tx.

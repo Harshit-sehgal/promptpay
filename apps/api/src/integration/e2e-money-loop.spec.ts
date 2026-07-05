@@ -301,8 +301,8 @@ function makeServices(): TestFixtures {
   // AdvertiserService — real instance with mocked prisma and real campaign service + audit
   const advertiser = new AdvertiserService(prismaRef, campaign, audit);
 
-  // PayoutService — real instance with mocked prisma, real ledger and dummy paypal payouts provider
-  const payout = new PayoutService(prismaRef, ledger, {} as any);
+  // PayoutService — real instance with mocked prisma, real ledger + audit, dummy paypal payouts provider
+  const payout = new PayoutService(prismaRef, ledger, {} as any, audit, {} as any);
 
   // AdminService — real instance with mocked prisma and real audit service and payout service
   const admin = new AdminService(prismaRef, audit, payout);

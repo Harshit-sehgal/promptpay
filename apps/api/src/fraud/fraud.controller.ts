@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Query, UseGuards, UseInterceptors, ParseUUIDPipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { Roles } from '../common/decorators';
 import { CurrentUser } from '../common/decorators';
 import { FraudService } from './fraud.service';
@@ -31,8 +32,13 @@ export class FraudController {
     return this.fraudService.getFlagStats();
   }
 
+  // Apply the admin AuditInterceptor so this non-/admin route is also audited
+  // when it triggers a money-mutating resolveFlag call. The interceptor only
+  // fires on /admin/* by default — opt-in needed here. Also include the
+  // `:id` as `id` in params so the interceptor parses it correctly.
   @Post('flags/:id/resolve')
   @Roles('admin', 'super_admin')
+  @UseInterceptors(AuditInterceptor)
   resolveFlag(
     @Param('id', ParseUUIDPipe) flagId: string,
     @CurrentUser('id') reviewerId: string,

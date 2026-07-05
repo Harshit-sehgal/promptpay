@@ -67,12 +67,14 @@ export default function SignupPage() {
     }
   };
 
-  // Fetch Auth Config (Google Client ID) at runtime
+  // Fetch Auth Config (Google Client ID) at runtime. Routed through the
+  // same-origin `/api/auth/config` Route Handler so the fetch stays inside
+  // CSP `connect-src 'self'` — a direct cross-origin fetch to the API origin
+  // would be blocked by CSP in production.
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-        const res = await fetch(`${apiUrl}/auth/config`);
+        const res = await fetch('/api/auth/config');
         if (res.ok) {
           const data = await res.json();
           if (data.googleClientId) {
@@ -292,7 +294,8 @@ export default function SignupPage() {
             </button>
           )}
 
-          {(process.env.NEXT_PUBLIC_ALLOW_MOCK_AUTH === 'true' || process.env.NODE_ENV === 'development') && (
+          {process.env.NODE_ENV === 'development' && (
+
             <button
               onClick={handleMockGoogleSignup}
               type="button"
