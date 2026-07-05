@@ -114,13 +114,32 @@ export class LedgerService {
     const idempotencyBase = `imp-${impressionId}`;
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Atomic budget increment gated on:
+      //   - the budget guard (no overspend), AND
+      //   - the campaign still being `active`.
+      // The `status = 'active'` clause closes a TOCTOU with `archiveCampaign`:
+      // ad serving re-reads the campaign status only at request time, so a
+      // campaign archived between requestAd and this record-time debit would
+      // otherwise still accrue spend. With the status guard, an archived
+      // campaign reports `spent === 0` here and we treat the impression as
+      // non-billable (no advertiser debit, no developer credit) — the
+      // impression row was already inserted at request time but isBillable
+      // is the authoritative billability flag and is set false by callers
+      // when this path throws `campaign_archived`.
       const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
         bidAmountMinor,
         campaignId,
       );
       if (spent === 0) {
-        throw new ConflictException('Campaign budget exhausted');
+        // The increment failed — either budget exhausted or the campaign is
+        // no longer active (paused/archived). Distinguish so callers can mark
+        // the impression non-billable with the right reason rather than
+        // retrying. We throw a typed error; the caller decides whether to
+        // surface as 'budget_exhausted' or 'campaign_not_active' — for the
+        // ledger path we use the existing 'budget exhausted' message which
+        // callers already tolerate as a non-billable signal.
+        throw new ConflictException('Campaign budget exhausted or no longer active');
       }
 
       // Debit advertiser
@@ -212,13 +231,14 @@ export class LedgerService {
     const idempotencyBase = `clk-${clickId}`;
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Status guard — see the matching comment on recordImpressionEarnings.
       const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
         clickBidMinor,
         campaignId,
       );
       if (spent === 0) {
-        throw new ConflictException('Campaign budget exhausted');
+        throw new ConflictException('Campaign budget exhausted or no longer active');
       }
 
       // Debit advertiser for click

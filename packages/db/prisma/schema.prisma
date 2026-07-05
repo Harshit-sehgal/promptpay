@@ -241,6 +241,10 @@ model Session {
   @@index([userId])
   @@index([tokenHash])
   @@index([tokenFamily])
+  // Session cleanup cron prunes rows by `expiresAt < cutoff` — without this
+  // index the `deleteMany` is a seq scan that grows linearly with session
+  // count, every hour, on every API replica.
+  @@index([expiresAt])
   @@map("sessions")
 }
 

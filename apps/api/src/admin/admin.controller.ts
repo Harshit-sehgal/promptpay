@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, UseInterceptors, Query, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, UseInterceptors, Query, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -126,5 +126,26 @@ export class AdminController {
   @Get('webhooks')
   getWebhookEvents(@Query() query: WebhookEventsQueryDto) {
     return this.service.getWebhookEvents(query);
+  }
+
+  // ── Archive Refunds ──
+
+  /**
+   * Confirm an archive refund obligation row after the admin manually issues
+   * the Stripe refund. The body carries the ledger entry id and the Stripe
+   * refund payment_intent id so the platform books the cash outflow.
+   */
+  @Post('refunds/archive/:id/confirm')
+  confirmArchiveRefund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('stripeRefundPaymentIntentId') stripeRefundPaymentIntentId: string,
+  ) {
+    if (!stripeRefundPaymentIntentId) {
+      throw new BadRequestException('stripeRefundPaymentIntentId is required');
+    }
+    return this.service.confirmArchiveRefund({
+      entryId: id,
+      stripeRefundPaymentIntentId,
+    });
   }
 }

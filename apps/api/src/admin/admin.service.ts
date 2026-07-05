@@ -280,4 +280,81 @@ export class AdminService {
     ]);
     return { events, total, page, limit };
   }
+
+  // ── Archive Refunds ──
+
+  /**
+   * Confirm an archived campaign's refund obligation row after the admin has
+   * manually issued the Stripe refund in the Stripe dashboard.
+   *
+   * The archive flow writes a `refund` row with `status: 'pending'` representing
+   * the platform's obligation. This endpoint CAS-flips it to `confirmed`,
+   * records the Stripe refund PI, and writes the matching platform `cash`
+   * bucket debit so the books balance. Idempotent: an already-`confirmed` row
+   * returns the existing row without re-writing the platform entry.
+   */
+  async confirmArchiveRefund(params: {
+    entryId: string;
+    stripeRefundPaymentIntentId: string;
+  }) {
+    const entry = await this.prisma.advertiserLedger.findUnique({
+      where: { id: params.entryId },
+    });
+    if (!entry) throw new BadRequestException('Refund obligation entry not found');
+
+    // Only archive-refund rows (idempotencyKey starts with `archive_refund_`), in
+    // `pending` status, may be confirmed. Other rows or already-confirmed rows
+    // are rejected with a clear error.
+    if (!entry.idempotencyKey.startsWith('archive_refund_')) {
+      throw new BadRequestException('This entry is not an archive refund obligation');
+    }
+
+    // Idempotent: already confirmed → return as-is (no re-write).
+    if (entry.status === 'confirmed') {
+      return { entry, confirmed: false, reason: 'already_confirmed' };
+    }
+
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // CAS flip from pending → confirmed. Only at most one admin succeeds;
+      // a concurrent call sees count === 0 and the outer `already confirmed`
+      // fast-path catches it.
+      const claimed = await tx.advertiserLedger.updateMany({
+        where: { id: params.entryId, status: 'pending' },
+        data: {
+          status: 'confirmed',
+          stripePaymentIntentId: params.stripeRefundPaymentIntentId,
+        },
+      });
+      if (claimed.count === 0) return;
+
+      // Platform cash side: debit the `cash` bucket by the refund amount
+      // so the books reflect the outbound cash (mirroring the inbound
+      // `payment_intent` credit written by the Stripe webhook). Keyed on
+      // the refund PI so a re-delivery is a P2002 no-op.
+      try {
+        await tx.platformLedger.create({
+          data: {
+            entryType: 'refund',
+            status: 'confirmed',
+            amountMinor: entry.amountMinor,
+            currency: entry.currency,
+            bucket: 'cash',
+            referenceId: params.stripeRefundPaymentIntentId,
+            idempotencyKey: `archive_refund_plat_${params.entryId}`,
+            description: `Archive refund confirmed — Stripe refund ${params.stripeRefundPaymentIntentId}`,
+          },
+        });
+      } catch (err: unknown) {
+        // P2002 = already wrote the platform entry via a concurrent call.
+        // The CAS above ensures only one admin's call writes the row; the
+        // tangent path is the same admin re-calling this endpoint.
+        if ((err as any)?.code !== 'P2002') throw err;
+      }
+    });
+
+    const confirmed = await this.prisma.advertiserLedger.findUnique({
+      where: { id: params.entryId },
+    });
+    return { entry: confirmed, confirmed: true };
+  }
 }

@@ -15,8 +15,16 @@ export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestr
   private readonly logger = new Logger(SessionCleanupCron.name);
   private intervalId?: NodeJS.Timeout;
 
-  // Run every hour. Take a 7d grace window beyond `expiresAt` so we never
-  // race an in-flight rotation that just refreshed the session row.
+  // Run every hour. The `expiresAt` of a session row is the same instant the
+  // refresh JWT expires, and the JWT strategy refuses tokens past their own
+  // `exp` before touching the row — so a row whose `expiresAt` has passed is
+  // already inert (no request can present a refresh token that still verifies).
+  // We delete at `expiresAt + GRACE_MS` purely as a conservative retention
+  // buffer for FK-audit / forensic queries (e.g. an admin reviewing an old
+  // session row's `tokenFamily` after a token-reuse detection event). This is
+  // NOT, as an earlier comment claimed, a guard against racing an in-flight
+  // rotation — that race can't occur because the JWT layer rejects the
+  // already-expired refresh token before any DB write.
   private static readonly INTERVAL_MS = 60 * 60 * 1000; // 1 hour
   private static readonly GRACE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -24,8 +32,15 @@ export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestr
 
   async onApplicationBootstrap() {
     this.logger.log('Starting session cleanup cron...');
-    // Run once on startup so an idle deployment doesn't carry stale rows.
-    await this.runCleanup();
+    // Fire-and-forget the startup cleanup: awaiting it here would block
+    // server readiness until the query completes (or the DB hangs), and the
+    // cleanup is purely storage hygiene — delayed by a few seconds it's
+    // invisible to any client path. Errors are already logged inside
+    // runCleanup(), so the void catch is purely for the TS compiler's
+    // unhandled-rejection concern.
+    void this.runCleanup().catch(() => {
+      // runCleanup already logs errors — nothing to add.
+    });
 
     this.intervalId = setInterval(() => {
       this.runCleanup();

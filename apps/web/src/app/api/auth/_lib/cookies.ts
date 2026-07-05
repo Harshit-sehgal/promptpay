@@ -41,8 +41,9 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  * for the dev host.
  *
  * Decision order:
- *   1. NODE_ENV=production → always Secure (canonical deploy path).
- *   2. COOKIE_SECURE='true'/'false' → honour explicit override.
+ *   1. COOKIE_SECURE='true'/'false' → honour explicit override FIRST (even in
+ *      production). Operator escape hatch for staging-over-HTTP deploys.
+ *   2. NODE_ENV=production → always Secure (canonical deploy path).
  *   3. X-Forwarded-Proto header (if present) → Secure if it contains 'https'.
  *      This is the correct signal when a reverse proxy/LB terminates TLS
  *      and the Node process itself sees only HTTP. Reading the actual Host
@@ -56,9 +57,33 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  *      X-Forwarded-Proto upstream).
  */
 function isSecure(headers: Headers): boolean {
-  if (process.env.NODE_ENV === 'production') return true;
+  // Decision order — explicit env override wins over the NODE_ENV default:
+  //   1. `COOKIE_SECURE=true|false` — honour the explicit operator override
+  //      first, including in production. A staging host running with
+  //      `NODE_ENV=production` over plain HTTP (a common choice for code-path
+  //      parity) has no other way to disable `Secure` cookies, and without
+  //      this escape hatch the browser silently drops them and login fails
+  //      with no signal. The override must come first to be a real kill switch.
+  //   2. `NODE_ENV=production` → assume HTTPS by default (the canonical deploy
+  //      path). If a production deploy runs over HTTP without setting
+  //      X-Forwarded-Proto, the cookie is marked Secure and the browser drops
+  //      it — a visible login failure that's debuggable, vs. an insecure
+  //      cookie slipping through. Operators can set `COOKIE_SECURE=false` to
+  //      recover (case 1).
+  //   3. X-Forwarded-Proto header (if present) → Secure if it contains 'https'.
+  //      This is the correct signal when a reverse proxy/LB terminates TLS
+  //      and the Node process itself sees only HTTP. Reading the actual Host
+  //      header is unreliable because HTTP staging backends with non-localhost
+  //      hostnames (e.g. `staging.example.com`) would otherwise be flagged
+  //      as HTTPS and have the browser silently drop Secure cookies.
+  //   4. Localhost / 127.* hosts → NOT Secure (browser will reject Secure on
+  //      plain HTTP localhost even when Secure is set).
+  //   5. Fallback: assume non-HTTPS (Safe default — DOESN'T expose auth cookies
+  //      to the wrong protocol; if the deploy is HTTPS the proxy will set
+  //      X-Forwarded-Proto upstream).
   if (process.env.COOKIE_SECURE === 'true') return true;
   if (process.env.COOKIE_SECURE === 'false') return false;
+  if (process.env.NODE_ENV === 'production') return true;
   // Trust X-Forwarded-Proto above all else — a TLS-terminating proxy sets
   // this. Without this check, the prior Host-based heuristic would mark
   // HTTP staging backends as Secure-suitable and break login silently.

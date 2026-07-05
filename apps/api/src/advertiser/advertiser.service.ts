@@ -218,6 +218,7 @@ export class AdvertiserService {
    * the refund, then flips the row to `confirmed` (a future admin endpoint).
    */
   async archiveCampaign(campaignId: string, advertiserId: string) {
+    // Pre-ownership + existence check (without holding any row locks).
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
 
@@ -234,23 +235,53 @@ export class AdvertiserService {
     // table doesn't list archived as a target for any state, so we bypass
     // validateTransition here — archive is a deliberate "close forever"
     // action available from every live state.
-    const unspentMinor = Math.max(0, campaign.budgetTotalMinor - campaign.budgetSpentMinor);
-
+    //
+    // The `unspentMinor` snapshot is read INSIDE the transaction (not from
+    // the outer `campaign` row) so a concurrent impression that increments
+    // `budgetSpentMinor` either commits before us (we see the new value) or
+    // blocks on the row lock we hold until we commit (it then sees
+    // `status='archived'` and refuses to bill — see the status guard in
+    // recordImpressionEarnings / recordClickEarnings). Either way the refund
+    // amount matches the actual unspent balance at archive time. The
+    // single plain `campaign.updateMany` below functions as the row write
+    // that establishes the lock; the read that determines `unspentMinor`
+    // happens after that write under the same tx so it observes a locked
+    // snapshot of the row.
     const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // CAS flip: only if not already archived (re-invocation guard).
+      // CAS flip: only if not already archived (re-invocation guard). This
+      // UPDATE acquires the row lock; concurrent impression writes to
+      // `budgetSpentMinor` block until we commit.
       const claimed = await tx.campaign.updateMany({
         where: { id: campaignId, status: { not: 'archived' } },
         data: { status: 'archived', archivedAt: new Date() },
       });
       if (claimed.count === 0) {
         // Lost race to another archiver — already archived.
-        return { archived: false as const };
+        return { archived: false as const, refundEntry: null as { id: string; amountMinor: number } | null };
       }
 
-      // Record the refund obligation row. Idempotent: a retry of the archive
-      // call would P2002 here, but the outer `status === 'archived'` fast-path
-      // already returned before reaching this tx. The CAS above ensures
-      // only one archive owner writes the refund row.
+      // Re-read the now-archived row inside the tx to get the authoritative
+      // `budgetSpentMinor` (the outer snapshot may be stale). The row is
+      // already locked by the UPDATE above so this read is consistent with
+      // the status flip and any concurrent impression has been blocked.
+      const locked = await tx.campaign.findUnique({
+        where: { id: campaignId },
+        select: { budgetTotalMinor: true, budgetSpentMinor: true, currency: true },
+      });
+      const unspentMinor = Math.max(
+        0,
+        (locked?.budgetTotalMinor ?? 0) - (locked?.budgetSpentMinor ?? 0),
+      );
+
+      // Record the refund obligation row. Use `entryType: 'refund'` (NOT
+      // 'credit') + `status: 'pending'` so the row is doubly excluded from
+      // any "advertiser available balance" computation: a generic
+      // `entryType:'credit'` sum (which would otherwise absorb a pending
+      // credit into spendable balance) never sees it, and the `pending`
+      // status excludes it from confirmed-balance sums too. The row
+      // represents a platform obligation to the advertiser — the cash
+      // hasn't moved yet. An admin flips it to `confirmed` after manually
+      // issuing the Stripe refund (separate admin endpoint).
       let refundEntry: { id: string; amountMinor: number } | null = null;
       if (unspentMinor > 0) {
         try {
@@ -258,12 +289,12 @@ export class AdvertiserService {
             data: {
               advertiserId,
               campaignId,
-              entryType: 'credit',
+              entryType: 'refund',
               status: 'pending',
               amountMinor: unspentMinor,
-              currency: campaign.currency,
+              currency: locked?.currency ?? campaign.currency,
               idempotencyKey: `archive_refund_${campaignId}`,
-              description: `Unspent-budget refund obligation — campaign ${campaignId} archived (${unspentMinor} ${campaign.currency})`,
+              description: `Unspent-budget refund obligation — campaign ${campaignId} archived (${unspentMinor} ${locked?.currency ?? campaign.currency})`,
             },
           });
         } catch (err: unknown) {
@@ -277,7 +308,7 @@ export class AdvertiserService {
         }
       }
 
-      return { archived: true as const, refundEntry };
+      return { archived: true as const, refundEntry, unspentMinor, currency: locked?.currency ?? campaign.currency };
     });
 
     if (!result.archived) {
@@ -290,7 +321,7 @@ export class AdvertiserService {
 
     const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     this.logger.log(
-      `Archived campaign ${campaignId}: unspent refund obligation = ${unspentMinor} ${campaign.currency}`,
+      `Archived campaign ${campaignId}: unspent refund obligation = ${result.unspentMinor} ${result.currency}`,
     );
     return { campaign: updated, refundEntry: result.refundEntry ?? null, archived: true };
   }

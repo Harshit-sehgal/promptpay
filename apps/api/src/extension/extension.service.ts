@@ -735,15 +735,23 @@ export class ExtensionService {
     // Single atomic transaction: impression update + all ledger entries + campaign spend.
     // The spend guard uses raw SQL UPDATE…WHERE so two concurrent CPM impressions
     // cannot both pass the JS pre-flight check and exceed budgetTotalMinor.
-    // $executeRaw returns row count: 0 means the WHERE rejected (budget full).
+    // $executeRaw returns row count: 0 means the WHERE rejected (budget full
+    // OR campaign no longer active — see the status guard below).
     const billed = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // (0) Atomic spend increment — rejects when budget would overflow.
+      // (0) Atomic spend increment — rejects when budget would overflow OR the
+      // campaign is no longer `active`. The `status = 'active'` clause closes a
+      // TOCTOU with `archiveCampaign`: ad serving re-reads the campaign status
+      // only at request time, so a campaign archived between requestAd and
+      // this record-time debit would otherwise still accrue spend. With the
+      // guard, an archived (or paused) campaign reports `spent === 0` here and
+      // the impression is marked non-billable — no advertiser debit, no
+      // developer credit, no budget increment.
       const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
         impression.campaign.bidAmountMinor,
         impression.campaignId,
       );
-      if (spent === 0) return false; // budget exhausted — mark not billable below
+      if (spent === 0) return false; // budget exhausted / archived / paused — mark not billable below
 
       // (1) Atomic CAS: only flip this impression to billable if it has NOT
       // been qualified concurrently. Two concurrent recordQualifiedImpression
@@ -934,14 +942,16 @@ export class ExtensionService {
         });
 
         if (isCpcBid && split) {
-          // Atomic budget guard for CPC clicks — same pattern as CPM above.
+          // Atomic budget guard for CPC clicks — same pattern as CPM above,
+          // including the `status = 'active'` TOCTOU guard against
+          // concurrent archive/pause.
           const spent: number = await tx.$executeRawUnsafe(
-            `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor"`,
+            `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
             impression.campaign.bidAmountMinor,
             impression.campaignId,
           );
           if (spent === 0) {
-            throw new ConflictException('Campaign budget exhausted');
+            throw new ConflictException('Campaign budget exhausted or no longer active');
           }
 
           const idempotencyBase = `clk-${click.id}`;
