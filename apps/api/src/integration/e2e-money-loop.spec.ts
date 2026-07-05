@@ -47,6 +47,7 @@ const mockPrisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     count: vi.fn(),
   },
   // ── AdCreative ──
@@ -56,7 +57,7 @@ const mockPrisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
-    updateMany: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
   },
   // ── CampaignApproval ──
   campaignApproval: {

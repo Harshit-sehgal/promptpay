@@ -39,8 +39,13 @@ export class AdvertiserService {
       });
     } catch (err: unknown) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        // Another call beat us — fetch the winning row and return it.
-        return await this.prisma.advertiser.findUnique({ where: { userId } });
+        // Another call beat us — fetch and assert the winning row. Null here would
+        // be a transient race after the P2002 (e.g. the winning row was deleted in
+        // the gap), which is extraordinarily unlikely; we throw a clean 404 instead
+        // of returning null and letting the caller `.id` it onto undefined.
+        const winner = await this.prisma.advertiser.findUnique({ where: { userId } });
+        if (!winner) throw new NotFoundException('Advertiser profile not found');
+        return winner;
       }
       throw err;
     }
