@@ -85,7 +85,8 @@ function upstreamUrl(pathname: string): string {
   // `pathname` starts with `/api/...` — strip the `/api` prefix so the
   // upstream gets `/api/v1/...` which is what the API controller paths use
   // (global prefix `api/v1` then the controller path).
-  return `${API_BASE}${pathname}`;
+  const pathWithoutApi = pathname.replace(/^\/api/, '');
+  return `${API_BASE}${pathWithoutApi}`;
 }
 
 export async function GET(req: NextRequest) {
