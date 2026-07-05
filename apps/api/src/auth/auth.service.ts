@@ -80,6 +80,7 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already registered');
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
+    const referralCode = await this.generateReferralCode();
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -87,16 +88,9 @@ export class AuthService {
         name: dto.name,
         role: dto.role,
         country: dto.country,
+        referralCode,
       },
     });
-
-    // Generate referral code for the new user
-    const referralCode = await this.generateReferralCode();
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { referralCode },
-    });
-    user.referralCode = referralCode;
 
     // Developer onboarding: create settings + trust score
     if (dto.role === UserRole.DEVELOPER) {
@@ -172,7 +166,8 @@ export class AuthService {
     }
 
     if (!user.passwordHash) {
-      throw new UnauthorizedException('Account uses social login — sign in with Google');
+      // Do not disclose that the account exists but uses social login.
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
@@ -219,7 +214,7 @@ export class AuthService {
     if (user) {
       // Existing Google user — just login
       if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
-        throw new UnauthorizedException('Account is not active');
+        throw new UnauthorizedException('Invalid credentials');
       }
       const tokens = await this.generateTokenPair(user.id, user.role);
       return { user: this.sanitizeUser(user), ...tokens };

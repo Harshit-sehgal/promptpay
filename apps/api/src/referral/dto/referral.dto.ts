@@ -1,6 +1,7 @@
-import { IsString } from 'class-validator';
+import { IsString, MinLength } from 'class-validator';
 
 export class ApplyReferralDto {
   @IsString()
-  code: string;
+  @MinLength(1)
+  code!: string;
 }

@@ -1,4 +1,5 @@
-import { IsIn, IsInt, IsOptional, IsString, Min, Max, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsInt, IsOptional, IsString, Min, Max } from 'class-validator';
 
 export class LedgerHistoryQueryDto {
   @IsOptional()
@@ -7,15 +8,17 @@ export class LedgerHistoryQueryDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @IsIn(['estimated', 'pending', 'confirmed', 'held', 'reversed', 'paid', 'void'])
   status?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
