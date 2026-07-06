@@ -27,10 +27,12 @@ const mockPrisma = {
   },
   earningsLedger: {
     findMany: vi.fn(),
+    findUnique: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     aggregate: vi.fn(),
+    count: vi.fn().mockResolvedValue(0),
   },
   user: {
     findUnique: vi.fn(),
@@ -306,6 +308,31 @@ describe('PayoutService', () => {
         expect(result.status).toBe('processing');
         expect(result.providerTxId).toBeDefined();
       }
+    });
+
+    it('refuses to call provider when an allocated earnings entry is held by a fraud flag (race vs holdEarnings)', async () => {
+      // Round 23 (HIGH #1) closed the race window where a fraud flag
+      // could flip allocated earnings from `confirmed → held` between
+      // the `approved → processing` claim and the provider call. The
+      // guarantee is that the provider never fires unless every
+      // allocated entry is still `confirmed`.
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+        id: 'req_held',
+        status: 'processing',
+        currency: 'USD',
+        approvedAmountMinor: 5000,
+        allocations: [
+          { amountMinor: 5000, earningsEntryId: 'earn_1' },
+        ],
+        payoutAccount: { provider: 'paypal_email', destination: 'dev@test.com' },
+      });
+      // tx.earningsLedger.count returns 1 → one entry is held (not confirmed).
+      mockPrisma.earningsLedger.count.mockResolvedValueOnce(1);
+
+      await expect(service.processPayout('req_held')).rejects.toThrow(BadRequestException);
+      expect(mockPayPalPayouts.initiate).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutTransaction.create).not.toHaveBeenCalled();
     });
   });
 

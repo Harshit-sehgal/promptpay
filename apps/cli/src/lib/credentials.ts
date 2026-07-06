@@ -60,8 +60,33 @@ export function setCredentials(creds: Credentials) {
   fs.writeFileSync(CRED_FILE, JSON.stringify(safe, null, 2), { mode: 0o600 });
 }
 
-/** Store the per-device event secret separately from the main credential file. */
+/** Store the per-device event secret separately from the main credential file.
+ *
+ * Production fail-closed: when NODE_ENV=production, refuse to use the
+ * local XOR file fallback (which is decryptable from `hostname + username`
+ * alone — see `hashDeviceSecretOnDisk`'s docstring) and require an OS
+ * keychain integration. Today this throws on store. Production deployments
+ * must wire up `keytar` (Linux/GNOME keyring, macOS Keychain, Windows
+ * CredMan) or another platform-appropriate backend before release.
+ */
 export function storeDeviceEventSecret(secret: string): void {
+  if (process.env.NODE_ENV === 'production') {
+    // The local XOR storage is recoverable from `hostname + username` alone
+    // (the key in `hashDeviceSecretOnDisk` derives from those two values,
+    // both fully discoverable to any local code). Shipping that to a
+    // production binary means the per-device HMAC signing key is, in
+    // practice, plaintext on disk to any process running as the same
+    // user. Production binaries must integrate an OS keychain before
+    // releasing — surface that as an explicit failure here, not a silent
+    // security regression. The non-prod path (dev/CI/local-extension-host)
+    // continues to use the local XOR file so iterative development is not
+    // blocked on a keychain binding.
+    throw new Error(
+      'storeDeviceEventSecret does not support NODE_ENV=production — ' +
+      'integrate an OS keychain (keytar / libsecret / macOS Keychain / ' +
+      'Windows CredMan) to ship this credential safely.',
+    );
+  }
   const keyFile = path.join(CRED_DIR, '.event-secret');
   fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(keyFile, hashDeviceSecretOnDisk(secret), { mode: 0o600 });

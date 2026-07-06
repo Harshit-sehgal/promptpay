@@ -81,8 +81,28 @@ function isSecure(headers: Headers): boolean {
   //   5. Fallback: assume non-HTTPS (Safe default — DOESN'T expose auth cookies
   //      to the wrong protocol; if the deploy is HTTPS the proxy will set
   //      X-Forwarded-Proto upstream).
+  // Production fails closed on the insecure override. A misconfigured
+  // production deploy (NODE_ENV=production running over plain HTTP) is
+  // surfaced as a clear login failure ("Set-Cookie with Secure flag was
+  // rejected by the browser") rather than silently shipping 30-day
+  // refresh tokens over cleartext — that's the highest-leverage mistake
+  // the previous decision order enabled.
   if (process.env.COOKIE_SECURE === 'true') return true;
-  if (process.env.COOKIE_SECURE === 'false') return false;
+  if (process.env.COOKIE_SECURE === 'false') {
+    if (process.env.NODE_ENV === 'production') {
+      // Loud warning surfaces immediately in deploy logs — operators who
+      // set this combination have a misconfigured TLS terminus, not a
+      // missing escape hatch.
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[waitlayer] COOKIE_SECURE=false is IGNORED in NODE_ENV=production — refusing to ' +
+        'issue non-Secure auth cookies. Either set COOKIE_SECURE=true, remove the override, ' +
+        'or change NODE_ENV if this really is a staging deploy.',
+      );
+      return true;
+    }
+    return false;
+  }
   if (process.env.NODE_ENV === 'production') return true;
   // Trust X-Forwarded-Proto above all else — a TLS-terminating proxy sets
   // this. Without this check, the prior Host-based heuristic would mark

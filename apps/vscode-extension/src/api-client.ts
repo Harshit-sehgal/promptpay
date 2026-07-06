@@ -1,5 +1,4 @@
 import * as https from 'https';
-import * as http from 'http';
 import * as vscode from 'vscode';
 import { signPayload } from '@waitlayer/shared';
 import { ConfigurationManager } from './config';
@@ -355,7 +354,34 @@ export class ApiClient {
     skipAuth = false,
   ): void {
     const url = new URL(path.startsWith('http') ? path : this.url(path));
-    const transport = url.protocol === 'https:' ? https : http;
+    // ── HTTPS-only enforcement (defense in depth) ───────────────────────────
+    // The Bearer access/refresh tokens, the per-device event secret, and the
+    // global HMAC signing key all travel in the Authorization/X-WaitLayer-* /
+    // request-body envelope. Sending those over plaintext HTTP would let an
+    // on-path attacker recover a long-lived refresh token (30d) and forge
+    // every subsequent event/wait-state/ad payload.
+    //
+    // EXCEPTION: localhost and 127.* hosts are allowed over plain HTTP for
+    // local development (the default apiUrl is 'http://localhost:4000/api/v1').
+    //
+    // Fail closed the moment we discover an http:// origin for a non-local
+    // hostname. If the user (or an attacker with workspace write access —
+    // any other extension can update `waitlayer.apiUrl` to an http URL) has
+    // configured the extension to connect over plain HTTP to a remote host,
+    // reject at the socket-binding decision before any data is written.
+    const hostname = url.hostname.toLowerCase();
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname.startsWith('127.');
+    if (url.protocol !== 'https:' && !isLocalHost) {
+      reject(
+        new Error(
+          `WaitLayer refuses to send credentials over ${url.protocol} to host '${hostname}'. ` +
+          `The apiUrl must be https:// for remote hosts. Set the VS Code setting ` +
+          `'waitlayer.apiUrl' to a secure origin.`,
+        ),
+      );
+      return;
+    }
+    const transport = https;
     const req = transport.request(
       {
         method,
@@ -406,6 +432,16 @@ export class ApiClient {
         });
       },
     );
+    // ── Connection timeout ─────────────────────────────────────────────────
+    // The Node CLI added a 30s guard (apps/cli/src/lib/api-client.ts) so a
+    // stalled TCP connection doesn't hang the entire client indefinitely.
+    // The detector loop here fires ad-request / recordAdRendered /
+    // recordImpressionEnd synchronously; a single hung socket would freeze
+    // ad serving until the user restarts VS Code unless we surface the
+    // failure. Mirror the CLI's behavior with a 30s wall-clock cap.
+    req.setTimeout(30_000, () => {
+      req.destroy(new Error('WaitLayer request timed out after 30s (no response from server)'));
+    });
     req.on('error', reject);
     if (body) req.write(body);
     req.end();
