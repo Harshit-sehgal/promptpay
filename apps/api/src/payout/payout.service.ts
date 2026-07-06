@@ -16,6 +16,7 @@ const RESERVED_PAYOUT_STATUSES = [
 
 /** Payout provider interface — each provider implements this */
 export interface PayoutProviderHandler {
+  readiness?(): { ok: true } | { ok: false; reason: string };
   initiate(params: {
     payoutRequestId: string;
     destination: string;
@@ -45,41 +46,28 @@ class PayPalEmailPayoutProvider implements PayoutProviderHandler {
   }
 }
 
-/** Stripe Connect payout provider stub */
-class StripeConnectPayoutProvider implements PayoutProviderHandler {
-  async initiate(params: { payoutRequestId: string }) {
-    return { providerTxId: `stripe_${params.payoutRequestId}`, status: 'processing' };
-  }
-  async checkStatus(_providerTxId: string) {
-    return { status: 'processing' };
-  }
-}
+class StubPayoutProvider implements PayoutProviderHandler {
+  constructor(
+    private readonly providerName: string,
+    private readonly txPrefix: string,
+  ) {}
 
-/** Payoneer payout provider stub */
-class PayoneerPayoutProvider implements PayoutProviderHandler {
-  async initiate(params: { payoutRequestId: string }) {
-    return { providerTxId: `payoneer_${params.payoutRequestId}`, status: 'processing' };
+  readiness(): { ok: true } | { ok: false; reason: string } {
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        ok: false,
+        reason: `${this.providerName} payout provider is not implemented for production processing. Use manual processing or wire a real PSP integration first.`,
+      };
+    }
+    return { ok: true };
   }
-  async checkStatus(_providerTxId: string) {
-    return { status: 'processing' };
-  }
-}
 
-/** Wise payout provider stub */
-class WisePayoutProvider implements PayoutProviderHandler {
   async initiate(params: { payoutRequestId: string }) {
-    return { providerTxId: `wise_${params.payoutRequestId}`, status: 'processing' };
+    const ready = this.readiness();
+    if (!ready.ok) throw new Error(ready.reason);
+    return { providerTxId: `${this.txPrefix}_${params.payoutRequestId}`, status: 'processing' };
   }
-  async checkStatus(_providerTxId: string) {
-    return { status: 'processing' };
-  }
-}
 
-/** Razorpay payout provider stub */
-class RazorpayPayoutProvider implements PayoutProviderHandler {
-  async initiate(params: { payoutRequestId: string }) {
-    return { providerTxId: `razorpay_${params.payoutRequestId}`, status: 'processing' };
-  }
   async checkStatus(_providerTxId: string) {
     return { status: 'processing' };
   }
@@ -101,10 +89,10 @@ export class PayoutService {
       manual: new ManualPayoutProvider(),
       paypal_email: new PayPalEmailPayoutProvider(),
       paypal_payouts: this.paypalPayouts,
-      stripe_connect: new StripeConnectPayoutProvider(),
-      payoneer: new PayoneerPayoutProvider(),
-      wise: new WisePayoutProvider(),
-      razorpay: new RazorpayPayoutProvider(),
+      stripe_connect: new StubPayoutProvider('Stripe Connect', 'stripe'),
+      payoneer: new StubPayoutProvider('Payoneer', 'payoneer'),
+      wise: new StubPayoutProvider('Wise', 'wise'),
+      razorpay: new StubPayoutProvider('Razorpay', 'razorpay'),
     };
   }
 
@@ -144,7 +132,7 @@ export class PayoutService {
 
   /** Get payout info for a user */
   async getPayoutInfo(userId: string) {
-    const [accounts, payoutHistory, confirmedEarnings, allocatedTotal] = await Promise.all([
+    const [accounts, payoutHistory, confirmedEarnings, confirmedDebits, allocatedTotal] = await Promise.all([
       this.prisma.payoutAccount.findMany({ where: { userId, isActive: true } }),
       this.prisma.payoutRequest.findMany({
         where: { userId },
@@ -154,6 +142,10 @@ export class PayoutService {
       }),
       this.prisma.earningsLedger.aggregate({
         where: { userId, status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: 'confirmed', entryType: 'debit' },
         _sum: { amountMinor: true },
       }),
       this.prisma.payoutAllocation.aggregate({
@@ -167,7 +159,10 @@ export class PayoutService {
       }),
     ]);
 
-    const availableBalance = (confirmedEarnings._sum.amountMinor || 0) - (allocatedTotal._sum.amountMinor || 0);
+    const availableBalance =
+      (confirmedEarnings._sum.amountMinor || 0) -
+      (confirmedDebits._sum.amountMinor || 0) -
+      (allocatedTotal._sum.amountMinor || 0);
 
     return {
       payoutAccounts: accounts,
@@ -192,17 +187,27 @@ export class PayoutService {
     });
     const excludeIds = allocatedEntryIds.map((a: { earningsEntryId: string }) => a.earningsEntryId);
 
-    const available = await this.prisma.earningsLedger.findMany({
-      where: {
-        userId,
-        status: 'confirmed',
-        entryType: 'credit',
-        ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+    const [available, confirmedDebits] = await Promise.all([
+      this.prisma.earningsLedger.findMany({
+        where: {
+          userId,
+          status: 'confirmed',
+          entryType: 'credit',
+          ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: 'confirmed', entryType: 'debit' },
+        _sum: { amountMinor: true },
+      }),
+    ]);
 
-    const totalMinor = available.reduce((sum: number, e: { amountMinor: number }) => sum + e.amountMinor, 0);
+    const totalCreditMinor = available.reduce((sum: number, e: { amountMinor: number }) => sum + e.amountMinor, 0);
+    const totalMinor = Math.max(
+      0,
+      totalCreditMinor - (confirmedDebits._sum.amountMinor || 0),
+    );
 
     return {
       entries: available,
@@ -397,9 +402,13 @@ export class PayoutService {
     }
 
     // ── Outer pre-checks (fast rejection) ──
-    const [confirmedEarnings, allocatedTotal, openFlags, account] = await Promise.all([
+    const [confirmedEarnings, confirmedDebits, allocatedTotal, openFlags, account] = await Promise.all([
       this.prisma.earningsLedger.aggregate({
         where: { userId, status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: 'confirmed', entryType: 'debit' },
         _sum: { amountMinor: true },
       }),
       this.prisma.payoutAllocation.aggregate({
@@ -418,7 +427,10 @@ export class PayoutService {
         where: { id: dto.payoutAccountId },
       }),
     ]);
-    const available = (confirmedEarnings._sum.amountMinor || 0) - (allocatedTotal._sum.amountMinor || 0);
+    const available =
+      (confirmedEarnings._sum.amountMinor || 0) -
+      (confirmedDebits._sum.amountMinor || 0) -
+      (allocatedTotal._sum.amountMinor || 0);
     if (dto.amountMinor > available) {
       throw new BadRequestException('Insufficient available earnings');
     }
@@ -479,77 +491,130 @@ export class PayoutService {
 
   /** Process an approved payout via the configured provider.
    *
-   *  **TOCTOU hardening**: Two concurrent `processPayout` calls both read
-   *  `status === 'approved'` and could both fire `provider.initiate()` — a
-   *  real-money double-pay. The safe fix is to atomically flip `approved →
-   *  processing` INSIDE a transaction BEFORE calling the provider; only the
-   *  winner proceeds. The loser sees count === 0 (already claimed) and
-   *  throws. The provider-call + tx-record creation happen AFTER the claim
-   *  is secured, so at most one real transfer fires.
+   *  **TOCTOU hardening**: The `approved → processing` claim is atomic inside
+   *  the same `$transaction` as the allocation-reconciliation + earnings-status
+   *  checks. If any of those checks fails (partial-approval mismatch, held
+   *  earnings), the entire tx rolls back — the row stays `approved` and the
+   *  admin can re-assess rather than leaving it permanently stuck in `processing`.
+   *
+   *  The provider call happens AFTER the tx commits (outside the DB lock
+   *  window). By the time `provider.initiate()` runs, the claim is irrevocably
+   *  committed and at most one `processPayout` can own the row, preventing
+   *  a real-money double-pay.
    */
   async processPayout(payoutId: string) {
-    // Atomic claim: flip approved → processing. This is a CAS (compare-and-swap)
-    // at the DB row level — at most one call wins. The flip _precedes_ the
-    // provider call so the provider is never fired twice for the same payout.
-    const claim = await this.prisma.payoutRequest.updateMany({
-      where: { id: payoutId, status: 'approved' },
-      data: { status: 'processing', processedAt: new Date() },
+    const preflight = await this.prisma.payoutRequest.findUnique({
+      where: { id: payoutId },
+      include: { payoutAccount: true },
     });
-
-    if (claim.count === 0) {
-      const existing = await this.prisma.payoutRequest.findUnique({
-        where: { id: payoutId },
-        select: { status: true },
-      });
-      if (!existing) throw new BadRequestException('Payout request not found');
-      throw new BadRequestException(
-        `Payout cannot be processed from status '${existing.status}'` +
-        (existing.status === 'processing' ? ' (already claimed by a concurrent process)' : ''),
-      );
+    if (!preflight) throw new BadRequestException('Payout request not found');
+    if (preflight.status === 'approved') {
+      const preflightProvider = this.providers[preflight.payoutAccount.provider];
+      if (!preflightProvider) {
+        throw new BadRequestException(`Payout provider "${preflight.payoutAccount.provider}" not implemented`);
+      }
+      const readiness = preflightProvider.readiness?.();
+      if (readiness && !readiness.ok) {
+        throw new BadRequestException(readiness.reason);
+      }
     }
 
-    // Re-read inside a transaction to get allocations + payoutAccount safely.
-    // The claim above already owns the row; this read won't race with another
-    // processPayout.  Use a tx for consistency with the provider tx-row insert.
+    // Atomic claim + reconciliation inside a single transaction.
+    // The claim flip (`approved -> processing`) is the first write inside the
+    // tx — at most one caller wins per payout row. Every subsequent check
+    // (allocated-sum mismatch, held-entry guard) can throw, and if it does
+    // the flip rolls back with the tx, leaving the row in `approved` for
+    // retry rather than leaving it stuck in `processing` with no admin
+    // recovery path (the Round 23 MED #2 partial-approval dead-end).
     const payout = await this.prisma.$transaction(async (tx) => {
+      // ── CAS claim: flip the row from `approved` to `processing` within the tx ──
+      const claim = await tx.payoutRequest.updateMany({
+        where: { id: payoutId, status: 'approved' },
+        data: { status: 'processing', processedAt: new Date() },
+      });
+      if (claim.count === 0) {
+        // Owned by another caller or not in `approved` status. Re-read to give
+        // a helpful error.
+        const existing = await tx.payoutRequest.findUnique({
+          where: { id: payoutId },
+          select: { status: true },
+        });
+        if (!existing) throw new BadRequestException('Payout request not found');
+        throw new BadRequestException(
+          `Payout cannot be processed from status '${existing.status}'` +
+          (existing.status === 'processing' ? ' (already claimed by a concurrent process)' : ''),
+        );
+      }
+
+      // ── Re-read allocations + earnings entries (row-locked by the updateMany above) ──
       const pkt = await tx.payoutRequest.findUnique({
         where: { id: payoutId },
         include: { payoutAccount: true, allocations: { include: { earningsEntry: true } } },
       });
       if (!pkt) throw new BadRequestException('Payout request not found');
 
-      // Reconcile: verify the allocated sum matches approvedAmountMinor (or requestedAmountMinor)
-      const allocatedSum = pkt.allocations.reduce(
+      const expectedAmount = pkt.approvedAmountMinor ?? pkt.requestedAmountMinor;
+
+      // ── Allocation-sum reconciliation ──────────────────────────
+      // A partial approval (admin set approvedAmountMinor < requestedAmountMinor)
+      // means the existing allocations overshoot the approved amount — we
+      // must trim them here or the recon fails and leaves the payout stuck
+      // in `processing` (formerly the entire recon ran OUTSIDE the tx, so
+      // the flip was already committed).
+      let allocations = [...pkt.allocations];
+      let allocatedSum = allocations.reduce(
         (sum: number, a: { amountMinor: number }) => sum + a.amountMinor,
         0,
       );
-      const expectedAmount = pkt.approvedAmountMinor ?? pkt.requestedAmountMinor;
+
+      if (allocatedSum > expectedAmount) {
+        // Trim the over-allocated slice. We delete the excess allocation
+        // rows (oldest-first to keep the most recently allocated slice)
+        // so the remaining sum matches `expectedAmount`.
+        let overage = allocatedSum - expectedAmount;
+        const removedIds = new Set<string>();
+        for (let i = 0; i < allocations.length && overage > 0; i++) {
+          const entry = allocations[i];
+          if (entry.amountMinor <= overage) {
+            // Entire allocation is excess — delete it
+            await tx.payoutAllocation.delete({ where: { id: entry.id } });
+            overage -= entry.amountMinor;
+            allocatedSum -= entry.amountMinor;
+            removedIds.add(entry.id);
+          } else {
+            // Shrink this allocation
+            const remaining = entry.amountMinor - overage;
+            await tx.payoutAllocation.update({
+              where: { id: entry.id },
+              data: { amountMinor: remaining },
+            });
+            allocatedSum -= overage;
+            overage = 0;
+          }
+        }
+        allocations = allocations.filter((a) => !removedIds.has(a.id));
+      }
+
       if (allocatedSum !== expectedAmount) {
         throw new BadRequestException(
-          `Allocation mismatch: allocated ${allocatedSum} but expected ${expectedAmount}`,
+          `Allocation mismatch after reconciliation: allocated ${allocatedSum} but expected ${expectedAmount}. ` +
+          `The payout had excess allocations that could not be trimmed — retry or reject the payout.`,
         );
       }
 
-      // **Race-safe vs holdEarnings / fraud flags**:
-      // After the `approved -> processing` claim above, a concurrent fraud flag
-      // can flip some allocated earnings from `confirmed` -> `held`. If we
-      // proceed and call `provider.initiate(...)`, real money leaves the
-      // platform against an earnings row the platform has now frozen — money
-      // and earnings are then misaligned. Refuse to call the provider if any
-      // allocated earnings entry is no longer `confirmed`.
-      //
-      // We deliberately exclude this check from the early-return tests: it is
-      // a guard that only fires under concurrent fraud-flag activity.
-      // Round 6 added the symmetric guard inside `markPayoutPaid`; this is
-      // the matching pre-flight before the PSP is contacted.
-      const holdEntryIds = pkt.allocations.map((a: { earningsEntryId: string }) => a.earningsEntryId);
+      // Compute effective allocations after any potential trimming above.
+      const holdEntryIds = allocations.map(
+        (a: { earningsEntryId: string }) => a.earningsEntryId,
+      );
+
+      // ── Race-safe vs holdEarnings / fraud flags ────────────────
       if (holdEntryIds.length > 0) {
         const notConfirmedCount = await tx.earningsLedger.count({
           where: { id: { in: holdEntryIds }, status: { not: 'confirmed' } },
         });
         if (notConfirmedCount > 0) {
           throw new BadRequestException(
-            `Payout cannot be processed: ${notConfirmedCount} allocated earnings entries are no longer in 'confirmed' status (likely held by a fraud flag). The payout must be rejected and the developer may re-request once the entries are released.`,
+            `Payout cannot be processed: ${notConfirmedCount} allocated earnings entries are no longer in 'confirmed' status (likely held by a fraud flag). Reject the payout and the developer may re-request once the entries are released.`,
           );
         }
       }
@@ -570,6 +635,30 @@ export class PayoutService {
       amountMinor: expectedAmount,
       currency: payout.currency,
     });
+
+    if (result.status === PayoutStatus.FAILED) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.payoutTransaction.create({
+          data: {
+            payoutRequestId: payout.id,
+            provider: payout.payoutAccount.provider,
+            providerTxId: result.providerTxId,
+            status: PayoutStatus.FAILED,
+            failureReason: 'Provider initiate returned failed',
+          },
+        });
+        const failed = await tx.payoutRequest.updateMany({
+          where: { id: payout.id, status: PayoutStatus.PROCESSING },
+          data: { status: PayoutStatus.FAILED },
+        });
+        if (failed.count === 0) {
+          throw new BadRequestException('Payout provider failed, but payout request is no longer processing');
+        }
+        await tx.payoutAllocation.deleteMany({ where: { payoutRequestId: payout.id } });
+      });
+
+      return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.FAILED };
+    }
 
     await this.prisma.payoutTransaction.create({
       data: {

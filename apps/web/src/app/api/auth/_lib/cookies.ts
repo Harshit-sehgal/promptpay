@@ -93,7 +93,6 @@ function isSecure(headers: Headers): boolean {
       // Loud warning surfaces immediately in deploy logs — operators who
       // set this combination have a misconfigured TLS terminus, not a
       // missing escape hatch.
-      // eslint-disable-next-line no-console
       console.warn(
         '[waitlayer] COOKIE_SECURE=false is IGNORED in NODE_ENV=production — refusing to ' +
         'issue non-Secure auth cookies. Either set COOKIE_SECURE=true, remove the override, ' +

@@ -4,6 +4,7 @@ import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
 import { FraudService } from '../fraud/fraud.service';
+import { getErrorCode } from '../common/utils/errors';
 
 @Injectable()
 export class AdminService {
@@ -216,11 +217,26 @@ export class AdminService {
     // Only reject from a pre-payment state. Rejecting an already-`paid` payout
     // would contradict the ledger (earnings are already `paid`); rejecting a
     // `processing` payout risks a stuck provider call with no DB record.
-    const result = await this.prisma.payoutRequest.updateMany({
-      where: { id: payoutId, status: { in: ['requested', 'under_review', 'approved'] } },
-      data: { status: 'rejected', reviewerId, reviewNote: reason },
+    //
+    // **Allocation cleanup**: PayoutAllocation rows have a `@@unique([earningsEntryId])`
+    // floor that prevents concurrent double-allocation between racing
+    // `requestPayout` calls. Stale allocations from a now-rejected request
+    // would prevent the developer from re-requesting against those same
+    // earnings (they'd hit the unique-key error in `requestPayout`). Delete
+    // the rejected request's allocations in the SAME transaction so the
+    // earnings entries become re-available for a fresh payout attempt.
+    const result = await this.prisma.$transaction(async (tx) => {
+      const flip = await tx.payoutRequest.updateMany({
+        where: { id: payoutId, status: { in: ['requested', 'under_review', 'approved'] } },
+        data: { status: 'rejected', reviewerId, reviewNote: reason },
+      });
+      if (flip.count === 0) return { flipped: false as const };
+      await tx.payoutAllocation.deleteMany({
+        where: { payoutRequestId: payoutId },
+      });
+      return { flipped: true as const };
     });
-    if (result.count === 0) {
+    if (!result.flipped) {
       const existing = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId }, select: { status: true } });
       throw new BadRequestException(
         existing
@@ -378,7 +394,7 @@ export class AdminService {
         // P2002 = already wrote the platform entry via a concurrent call.
         // The CAS above ensures only one admin's call writes the row; the
         // tangent path is the same admin re-calling this endpoint.
-        if ((err as any)?.code !== 'P2002') throw err;
+        if (getErrorCode(err) !== 'P2002') throw err;
       }
     });
 

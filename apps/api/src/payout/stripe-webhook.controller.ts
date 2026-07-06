@@ -641,32 +641,63 @@ export class StripeWebhookController {
       });
     }
 
-    // Create a fraud flag for review
-    try {
-      await this.prisma.fraudFlag.create({
-        data: {
-          userId: advertiser.userId,
-          flagType: FraudFlagType.shared_payout_destination,
-          severity: details.status === 'lost' ? FraudSeverity.critical : FraudSeverity.high,
-          status: FraudFlagStatus.open,
-          evidence: {
-            source: 'stripe_webhook',
-            stripeDisputeId: dispute.id,
-            paymentIntentId: details.paymentIntentId,
-            amountMinor: details.amountMinor,
-            currency: details.currency,
-            reason: details.reason,
-            disputeStatus: details.status,
-            webhookEventId: event.id,
+    // Create a fraud flag for review.
+    //
+    // Idempotency: a Stripe re-delivery of the same `charge.dispute.created`
+    // event (after a transient write failure earlier in the handler — see
+    // the processingStatus='pending' reset on transient failures) would
+    // otherwise create a SECOND fraud flag pointing at the same dispute,
+    // with separate holds already stamped on the earnings rows. The risk:
+    //   • Multiple flags inflates `openFraudFlags` admin metrics.
+    //   • Each flag independently calls `computeTrustScore`, applying the
+    //     penalty N times.
+    //   • `resolveFlag` resolves one flag at a time — a stale flag for the
+    //     same dispute can leave holds stranded after the legitimate one is
+    //     resolved.
+    //
+    // Round 23 (MED #3) closed this by routing the deduplication through a
+    // pre-check keyed on `evidence.stripeDisputeId`. The FraudFlag model has
+    // no unique constraint on the JSON evidence path (`@@index` only), so
+    // the P2002 catch below (defensive — there for the day someone adds such
+    // a constraint) is the only DB-level guard. The pre-check is the real
+    // safety; the catch is future-proofing.
+    const existingForDispute = await this.prisma.fraudFlag.findFirst({
+      where: {
+        evidence: { path: ['stripeDisputeId'], equals: dispute.id },
+      },
+      select: { id: true },
+    });
+    if (existingForDispute) {
+      this.logger.warn(
+        `Duplicate dispute flag for ${dispute.id} — already flagged as ${existingForDispute.id}, skipping create`,
+      );
+    } else {
+      try {
+        await this.prisma.fraudFlag.create({
+          data: {
+            userId: advertiser.userId,
+            flagType: FraudFlagType.shared_payout_destination,
+            severity: details.status === 'lost' ? FraudSeverity.critical : FraudSeverity.high,
+            status: FraudFlagStatus.open,
+            evidence: {
+              source: 'stripe_webhook',
+              stripeDisputeId: dispute.id,
+              paymentIntentId: details.paymentIntentId,
+              amountMinor: details.amountMinor,
+              currency: details.currency,
+              reason: details.reason,
+              disputeStatus: details.status,
+              webhookEventId: event.id,
+            },
+            reviewNote: `Stripe dispute created: ${details.reason} — ${details.amountMinor} ${details.currency}`,
           },
-          reviewNote: `Stripe dispute created: ${details.reason} — ${details.amountMinor} ${details.currency}`,
-        },
-      });
-    } catch (err: unknown) {
-      if (getErrorCode(err) === 'P2002') {
-        this.logger.warn(`Duplicate dispute flag for ${dispute.id} — skipping`);
-      } else {
-        this.logger.error(`Failed to create fraud flag for dispute ${dispute.id}: ${getErrorMessage(err)}`);
+        });
+      } catch (err: unknown) {
+        if (getErrorCode(err) === 'P2002') {
+          this.logger.warn(`Duplicate dispute flag for ${dispute.id} — skipping`);
+        } else {
+          this.logger.error(`Failed to create fraud flag for dispute ${dispute.id}: ${getErrorMessage(err)}`);
+        }
       }
     }
 

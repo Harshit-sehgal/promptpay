@@ -21,6 +21,9 @@ const mockPrisma = {
     findMany: vi.fn(),
     create: vi.fn(),
     aggregate: vi.fn(),
+    delete: vi.fn(),
+    deleteMany: vi.fn(),
+    update: vi.fn(),
   },
   payoutTransaction: {
     create: vi.fn(),
@@ -57,6 +60,7 @@ const mockReferral = {
   processReferralRewards: vi.fn().mockResolvedValue(undefined),
 } as any;
 const mockPayPalPayouts = {
+  readiness: vi.fn().mockReturnValue({ ok: true }),
   initiate: vi.fn().mockResolvedValue({ providerTxId: 'pp_tx_123', status: 'processing' }),
   checkStatus: vi.fn().mockResolvedValue({ status: 'processing' }),
 } as any;
@@ -125,7 +129,9 @@ describe('PayoutService', () => {
 
     it('should throw BadRequestException if user has insufficient available earnings', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active' });
-      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 5000 } });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 5000 } }) // confirmed credits
+        .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
       mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 4000 } }); // available 1000
 
       await expect(
@@ -139,7 +145,9 @@ describe('PayoutService', () => {
 
     it('should throw ForbiddenException if user has open critical/high fraud flags', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active' });
-      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 5000 } });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 5000 } }) // confirmed credits
+        .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
       mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 1000 } }); // available 4000
       mockPrisma.fraudFlag.count.mockResolvedValue(1); // open critical flag
 
@@ -154,7 +162,9 @@ describe('PayoutService', () => {
 
     it('should allocate earnings and create a payout request successfully', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active' });
-      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 5000 } });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 5000 } }) // confirmed credits
+        .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
       mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 1000 } }); // available 4000
       mockPrisma.fraudFlag.count.mockResolvedValue(0);
       mockPrisma.payoutAccount.findUnique.mockResolvedValue({ id: 'acc_123', userId: 'user_123' });
@@ -231,7 +241,9 @@ describe('PayoutService', () => {
     it('does not subtract already-paid allocations from confirmed availability', async () => {
       mockPrisma.payoutAccount.findMany.mockResolvedValue([]);
       mockPrisma.payoutRequest.findMany.mockResolvedValue([]);
-      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 1000 } });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 1000 } }) // confirmed credits
+        .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
       mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 0 } });
 
       const result = await service.getPayoutInfo('user_123');
@@ -246,6 +258,19 @@ describe('PayoutService', () => {
         },
         _sum: { amountMinor: true },
       });
+    });
+
+    it('subtracts confirmed recovery debits from payout availability', async () => {
+      mockPrisma.payoutAccount.findMany.mockResolvedValue([]);
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([]);
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 1000 } }) // confirmed credits
+        .mockResolvedValueOnce({ _sum: { amountMinor: 250 } }); // recovery debits
+      mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 0 } });
+
+      const result = await service.getPayoutInfo('user_123');
+
+      expect(result.availableBalanceMinor).toBe(750);
     });
   });
 
@@ -308,6 +333,89 @@ describe('PayoutService', () => {
         expect(result.status).toBe('processing');
         expect(result.providerTxId).toBeDefined();
       }
+    });
+
+    it('blocks unimplemented automated stub providers in production before claiming the payout', async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+          id: 'req_wise',
+          status: 'approved',
+          currency: 'USD',
+          approvedAmountMinor: 2000,
+          allocations: [{ amountMinor: 2000 }],
+          payoutAccount: { provider: 'wise', destination: 'dev@test.com' },
+        });
+
+        await expect(service.processPayout('req_wise')).rejects.toThrow(BadRequestException);
+
+        expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
+        expect(mockPrisma.payoutTransaction.create).not.toHaveBeenCalled();
+      } finally {
+        if (originalNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = originalNodeEnv;
+        }
+      }
+    });
+
+    it('blocks unconfigured PayPal Payouts in production before claiming the payout', async () => {
+      mockPayPalPayouts.readiness.mockReturnValueOnce({
+        ok: false,
+        reason: 'PayPal Payouts is not configured',
+      });
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+        id: 'req_paypal',
+        status: 'approved',
+        currency: 'USD',
+        approvedAmountMinor: 2000,
+        allocations: [{ amountMinor: 2000 }],
+        payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
+      });
+
+      await expect(service.processPayout('req_paypal')).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
+      expect(mockPayPalPayouts.initiate).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('marks provider-declared initiate failures as failed and releases allocations', async () => {
+      mockPayPalPayouts.initiate.mockResolvedValueOnce({
+        providerTxId: 'pp_failed_123',
+        status: 'failed',
+      });
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+        id: 'req_failed',
+        status: 'approved',
+        currency: 'USD',
+        approvedAmountMinor: 2000,
+        allocations: [{ amountMinor: 2000, earningsEntryId: 'earn_1' }],
+        payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
+      });
+
+      const result = await service.processPayout('req_failed');
+
+      expect(result.status).toBe('failed');
+      expect(mockPrisma.payoutTransaction.create).toHaveBeenCalledWith({
+        data: {
+          payoutRequestId: 'req_failed',
+          provider: 'paypal_payouts',
+          providerTxId: 'pp_failed_123',
+          status: 'failed',
+          failureReason: 'Provider initiate returned failed',
+        },
+      });
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenLastCalledWith({
+        where: { id: 'req_failed', status: 'processing' },
+        data: { status: 'failed' },
+      });
+      expect(mockPrisma.payoutAllocation.deleteMany).toHaveBeenCalledWith({
+        where: { payoutRequestId: 'req_failed' },
+      });
     });
 
     it('refuses to call provider when an allocated earnings entry is held by a fraud flag (race vs holdEarnings)', async () => {

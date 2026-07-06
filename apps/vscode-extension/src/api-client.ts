@@ -41,39 +41,34 @@ export class ApiClient {
   private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
   private _initialized: Promise<void>;
   private deviceEventSecret: string | null = null;
-  /** Cached signing secret. Refreshed whenever `deviceEventSecret` changes
-   *  (after device registration). Set in the constructor's init promise so
-   *  the sign() method can stay synchronous. */
-  private _signingSecret: string | null = null;
 
   constructor(private config: ConfigurationManager) {
     // Load persisted auth and device signing state from SecretStorage on construction.
     this._initialized = Promise.all([
       this.config.getTokens(),
       this.config.getDeviceEventSecret(),
-      this.config.getSecretKey(),
-    ]).then(([tokens, eventSecret, signingKey]) => {
+    ]).then(([tokens, eventSecret]) => {
       if (tokens) this.currentTokens = tokens;
       this.deviceEventSecret = eventSecret;
-      this._signingSecret = signingKey;
     });
   }
 
   /** Sign payload object with HMAC using canonical JSON (sorted keys).
-   *  Event requests prefer the per-device secret issued at registration.
-   *  The configured global secret remains only as a compatibility fallback.
-   *  If neither is available yet (init still in-flight), sign with an empty
-   *  placeholder so callers don't throw — the server will reject any signature
-   *  mismatch with 401, leaving the request fail-closed rather than fail-open.
-   *
-   *  Async so that callers constructing payload bodies always await the init
-   *  promise — otherwise `waitStateStart`/`requestAd`/etc. call `sign()` during
-   *  synchronous payload construction (lines 161, 177, 197, etc.) before the
-   *  Promise.all in `_initialized` has resolved, signing with an empty secret. */
-  async sign(payload: Record<string, unknown>): Promise<string> {
+   *  Event requests require the per-device secret issued at registration.
+   *  The old global signing key fallback is intentionally not used: the API
+   *  rejects legacy global-HMAC event signatures. */
+  async signEventPayload(payload: Record<string, unknown>): Promise<string> {
     await this._initialized;
-    const secret = this.deviceEventSecret ?? this._signingSecret ?? '';
-    return signPayload(payload, secret);
+    if (!this.deviceEventSecret) {
+      throw new Error('WaitLayer device is not registered with an event secret. Re-run device registration.');
+    }
+    return signPayload(payload, this.deviceEventSecret);
+  }
+
+  private async signHeaderPayload(payload: Record<string, unknown>): Promise<string | undefined> {
+    await this._initialized;
+    if (!this.deviceEventSecret) return undefined;
+    return signPayload(payload, this.deviceEventSecret);
   }
 
   /** Refresh the access token using the stored refresh token.
@@ -134,13 +129,14 @@ export class ApiClient {
     });
 
     if (res && res.id) {
+      if (!res.eventSecret) {
+        throw new Error('Device registration did not return an event secret');
+      }
       this.deviceUUID = res.id;
-      this.deviceEventSecret = res.eventSecret ?? null;
+      this.deviceEventSecret = res.eventSecret;
       try {
         await this.config.storeDeviceUUID(res.id);
-        if (res.eventSecret) {
-          await this.config.storeDeviceEventSecret(res.eventSecret);
-        }
+        await this.config.storeDeviceEventSecret(res.eventSecret);
       } catch {}
       return res.id;
     }
@@ -163,7 +159,7 @@ export class ApiClient {
     };
     await this.post('/extension/wait-state/start', {
       ...payload,
-      signature: await this.sign(payload),
+      signature: await this.signEventPayload(payload),
     });
   }
 
@@ -179,7 +175,7 @@ export class ApiClient {
     };
     await this.post('/extension/wait-state/end', {
       ...payload,
-      signature: await this.sign(payload),
+      signature: await this.signEventPayload(payload),
     });
   }
 
@@ -199,7 +195,7 @@ export class ApiClient {
     };
     const res = await this.post<ServerAdResponse>('/extension/ad-request', {
       ...payload,
-      signature: await this.sign(payload),
+      signature: await this.signEventPayload(payload),
     });
     return res?.ad ?? null;
   }
@@ -216,7 +212,7 @@ export class ApiClient {
     };
     await this.post('/extension/ad-rendered', {
       ...payload,
-      signature: await this.sign(payload),
+      signature: await this.signEventPayload(payload),
     });
   }
 
@@ -229,7 +225,7 @@ export class ApiClient {
     };
     await this.post('/extension/impression-qualified', {
       ...payload,
-      signature: await this.sign(payload),
+      signature: await this.signEventPayload(payload),
     });
   }
 
@@ -241,7 +237,7 @@ export class ApiClient {
     };
     await this.post('/extension/click', {
       ...payload,
-      signature: await this.sign(payload),
+      signature: await this.signEventPayload(payload),
     });
   }
 
@@ -306,7 +302,7 @@ export class ApiClient {
     let headerSignature: string | undefined;
     if (body) {
       const { signature: _, ...payloadForHeader } = body;
-      headerSignature = await this.sign(payloadForHeader);
+      headerSignature = await this.signHeaderPayload(payloadForHeader);
     }
 
     return this.request<T>(
@@ -355,9 +351,9 @@ export class ApiClient {
   ): void {
     const url = new URL(path.startsWith('http') ? path : this.url(path));
     // ── HTTPS-only enforcement (defense in depth) ───────────────────────────
-    // The Bearer access/refresh tokens, the per-device event secret, and the
-    // global HMAC signing key all travel in the Authorization/X-WaitLayer-* /
-    // request-body envelope. Sending those over plaintext HTTP would let an
+    // The Bearer access/refresh tokens and optional per-device event signature
+    // travel in the Authorization/X-WaitLayer-* / request-body envelope.
+    // Sending those over plaintext HTTP would let an
     // on-path attacker recover a long-lived refresh token (30d) and forge
     // every subsequent event/wait-state/ad payload.
     //
