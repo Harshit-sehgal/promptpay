@@ -1,6 +1,7 @@
 import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { CurrentUser, Roles } from '../common/decorators';
 import { ExtensionService } from './extension.service';
 import {
   RegisterDeviceDto,
@@ -14,7 +15,8 @@ import {
 } from './dto';
 
 @Controller('extension')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('developer')
 export class ExtensionController {
   constructor(private service: ExtensionService) {}
 

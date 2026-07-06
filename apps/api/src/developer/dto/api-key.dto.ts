@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, MinLength, MaxLength, IsUUID, IsDateString, ArrayMinSize, ArrayMaxSize } from 'class-validator';
+import { IsArray, IsOptional, IsString, MinLength, MaxLength, IsUUID, IsDateString, ArrayMinSize, ArrayMaxSize, ArrayUnique } from 'class-validator';
 
 const ALLOWED_API_KEY_SCOPES = [
   'campaigns:read',
@@ -8,6 +8,8 @@ const ALLOWED_API_KEY_SCOPES = [
   'ledger:read',
   'advertiser:read',
   'advertiser:write',
+  'developer:read',
+  'developer:write',
   'extension:read',
   'extension:write',
   'payout:read',
@@ -18,6 +20,7 @@ export class CreateApiKeyDto {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(20)
+  @ArrayUnique()
   @IsString({ each: true })
   @MaxLength(64, { each: true })
   scopes!: string[];

@@ -327,10 +327,13 @@ describe('API Contract Tests', () => {
 
     // Payout request requires confirmed earnings — validate schema only (no balance needed)
     it('POST /payout/request schema is structurally valid', () => {
-      // Verify the schema itself parses a valid-looking object
+      // Verify the schema itself parses a valid-looking object. The schema now
+      // marks `payoutAccountId` as required (the database FK is NOT NULL) so
+      // the mock must include it.
       const mock = {
         id: 'req-1',
         userId: 'u-1',
+        payoutAccountId: 'pa-1',
         status: 'requested',
         requestedAmountMinor: 1000,
         currency: 'USD',

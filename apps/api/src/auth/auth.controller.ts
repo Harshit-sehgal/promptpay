@@ -84,8 +84,22 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  refresh(@Body() dto: RefreshDto) {
-    return this.authService.refresh(dto.refreshToken);
+  async refresh(@Body() dto: RefreshDto, @Req() req: Request) {
+    // Track repeated refresh-token failures the same way as password attempts.
+    // Although the token hash itself is the credential (and JWT signature
+    // verification is the canonical check), a refresh-token brute-force would
+    // still consume DB lookup budget and surface as authentication noise.
+    try {
+      await BruteForceGuard.assertCanAttempt(req);
+      const result = await this.authService.refresh(dto.refreshToken);
+      await BruteForceGuard.resetOnSuccess(req);
+      return result;
+    } catch (err: unknown) {
+      if (err instanceof UnauthorizedException) {
+        await BruteForceGuard.recordFailure(req);
+      }
+      throw err;
+    }
   }
 
   @Post('logout')

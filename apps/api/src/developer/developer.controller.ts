@@ -28,7 +28,7 @@ export class DeveloperController {
   }
 
   @Get('settings')
-  @RequiredScopes('advertiser:read')
+  @RequiredScopes('developer:read')
   getSettings(@CurrentUser('id') userId: string) {
     return this.service.getSettings(userId);
   }
@@ -40,7 +40,7 @@ export class DeveloperController {
   }
 
   @Patch('settings')
-  @RequiredScopes('advertiser:write')
+  @RequiredScopes('developer:write')
   updateSettings(
     @CurrentUser('id') userId: string,
     @Body() dto: UpdateSettingsDto,
@@ -50,14 +50,14 @@ export class DeveloperController {
 
   @Post('export-data')
   @HttpCode(HttpStatus.OK)
-  @RequiredScopes('advertiser:write')
+  @RequiredScopes('developer:write')
   exportData(@CurrentUser('id') userId: string) {
     return this.service.exportData(userId);
   }
 
   @Post('delete-account')
   @HttpCode(HttpStatus.OK)
-  @RequiredScopes('advertiser:write')
+  @RequiredScopes('developer:write')
   deleteAccount(@CurrentUser('id') userId: string) {
     return this.service.deleteAccount(userId);
   }

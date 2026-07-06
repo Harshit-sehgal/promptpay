@@ -60,8 +60,12 @@ export const SignupUserSchema = z.object({
   trustLevel: TrustLevelSchema.nullable(),
   country: z.string().nullable().optional(),
   emailVerified: z.boolean(),
-  googleVerified: z.boolean().optional(),
-  githubVerified: z.boolean().optional(),
+  // The Prisma model defaults these to `false` (non-nullable); the contract
+  // previously allowed `undefined`, which would force UI code to defensively
+  // check both `false` and `undefined` for the "verified" badge. Align with
+  // the DB so a missing field is indistinguishable from `false` everywhere.
+  googleVerified: z.boolean(),
+  githubVerified: z.boolean(),
   referralCode: z.string().nullable().optional(),
   createdAt: z.string(),
 });
@@ -244,7 +248,11 @@ export const PayoutAllocationResponse = z.object({
 export const PayoutRequestResponse = z.object({
   id: z.string(),
   userId: z.string(),
-  payoutAccountId: z.string().optional(),
+  // Server-side this is a required FK on PayoutRequest (database NOT NULL).
+  // The shared Zod contract previously marked it optional, which masked
+  // legitimate undefined values on clients that compared against the schema.
+  // Align the contract with the DB and the service's stored value.
+  payoutAccountId: z.string(),
   status: PayoutStatusSchema,
   requestedAmountMinor: z.number().nonnegative(),
   approvedAmountMinor: z.number().nullable().optional(),
@@ -254,6 +262,7 @@ export const PayoutRequestResponse = z.object({
   processedAt: z.string().nullable().optional(),
   paidAt: z.string().nullable().optional(),
   providerTxId: z.string().nullable().optional(),
+  failureReason: z.string().nullable().optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   allocations: z.array(PayoutAllocationResponse).optional(),
