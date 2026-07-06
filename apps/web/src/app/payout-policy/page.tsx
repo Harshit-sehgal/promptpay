@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Payout Policy — WaitLayer',
+  description: 'WaitLayer payout policy — earnings release, payout methods, minimum payout, and revenue split details.',
+};
 
 export default function PayoutPolicyPage() {
   return (

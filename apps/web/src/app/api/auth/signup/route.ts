@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json(stripAuthTokens({ ...signupData, user: fullUser }), { status: 201 });
     return applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers });
-  } catch {
+  } catch (err: unknown) {
+    console.error('Signup Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

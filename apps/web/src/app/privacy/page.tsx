@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Privacy Policy — WaitLayer',
+  description: 'WaitLayer privacy policy — we never collect your source code, AI prompts, or file names.',
+};
 
 export default function PrivacyPage() {
   return (

@@ -30,6 +30,6 @@ import { SessionCleanupCron } from './session-cleanup.cron';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, GoogleTokenVerifier, SessionCleanupCron],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, GoogleTokenVerifier],
 })
 export class AuthModule {}

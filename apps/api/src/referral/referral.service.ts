@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { REFERRAL } from '@waitlayer/shared';
+import { isUniqueConstraintViolation } from '../common/utils/errors';
 
 @Injectable()
 export class ReferralService {
@@ -122,21 +123,11 @@ export class ReferralService {
         referrerEmail: referrer.email,
       };
     } catch (err: unknown) {
-      if (this.isUniqueConstraintViolation(err)) {
+      if (isUniqueConstraintViolation(err)) {
         throw new BadRequestException('You have already used a referral code');
       }
       throw err;
     }
-  }
-
-  private isUniqueConstraintViolation(err: unknown): boolean {
-    // Prisma's P2002 error code is documented but the surface is loosely typed.
-    return (
-      typeof err === 'object' &&
-      err !== null &&
-      'code' in err &&
-      (err as { code?: string }).code === 'P2002'
-    );
   }
 
   /** Process referral reward when referred user meets criteria (first payout completed).
@@ -245,7 +236,7 @@ export class ReferralService {
 
         return { reward, platformEntry };
       } catch (err: unknown) {
-        if (this.isUniqueConstraintViolation(err)) {
+        if (isUniqueConstraintViolation(err)) {
           return null; // Already rewarded — idempotent
         }
         throw err;

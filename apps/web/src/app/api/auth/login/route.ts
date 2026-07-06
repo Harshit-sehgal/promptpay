@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
     // 3. Set httpOnly cookies + return user (NOT tokens) to browser
     const response = NextResponse.json(stripAuthTokens({ ...loginData, user: fullUser }), { status: 200 });
     return applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers });
-  } catch {
+  } catch (err: unknown) {
+    console.error('Login Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

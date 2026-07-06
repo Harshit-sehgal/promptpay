@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { MAX_AD_MESSAGE_LENGTH, PROHIBITED_CATEGORIES } from '@waitlayer/shared';
@@ -17,6 +17,8 @@ export interface ServiceActor {
 
 @Injectable()
 export class CampaignService {
+  private readonly logger = new Logger(CampaignService.name);
+
   constructor(private prisma: PrismaService, private audit: AuditService) {}
 
   // ── Creative Management ──
@@ -56,14 +58,16 @@ export class CampaignService {
       },
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: actor?.userId ?? 'unknown',
       actorRole: actor?.role ?? 'advertiser',
       action: 'create_creative',
       targetType: 'creative',
       targetId: creative.id,
       beforeSnap: { campaignId },
-    }).catch(() => {});
+    }).catch((auditErr) => {
+      this.logger.error(`Audit log failed for create_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
+    });
 
     return creative;
   }
@@ -96,14 +100,16 @@ export class CampaignService {
       },
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: actor?.userId ?? 'unknown',
       actorRole: actor?.role ?? 'advertiser',
       action: 'update_creative',
       targetType: 'creative',
       targetId: creativeId,
       beforeSnap: { campaignId: creative.campaignId },
-    }).catch(() => {});
+    }).catch((auditErr) => {
+      this.logger.error(`Audit log failed for update_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
+    });
 
     return updated;
   }
@@ -148,14 +154,16 @@ export class CampaignService {
 
     // Admin creative approval/rejection — actorId flows from controller in
     // the future; for now fall back to 'admin' so the audit row is well-formed.
-    this.audit.log({
+    void this.audit.log({
       actorId: 'admin',
       actorRole: 'admin',
       action: 'approve_creative',
       targetType: 'creative',
       targetId: creativeId,
       beforeSnap: { campaignId: creative.campaignId, oldStatus: creative.status },
-    }).catch(() => {});
+    }).catch((auditErr) => {
+      this.logger.error(`Audit log failed for approve_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
+    });
 
     return { creative: updated, campaignActivated };
   }
@@ -170,14 +178,16 @@ export class CampaignService {
       data: { status: 'rejected', rejectionReason: reason },
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: 'admin',
       actorRole: 'admin',
       action: 'reject_creative',
       targetType: 'creative',
       targetId: creativeId,
       beforeSnap: { campaignId: creative.campaignId, reason },
-    }).catch(() => {});
+    }).catch((auditErr) => {
+      this.logger.error(`Audit log failed for reject_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
+    });
 
     return rejected;
   }
@@ -197,14 +207,16 @@ export class CampaignService {
       }),
     ]);
 
-    this.audit.log({
+    void this.audit.log({
       actorId: actor?.userId ?? 'unknown',
       actorRole: actor?.role ?? 'advertiser',
       action: 'set_country_targeting',
       targetType: 'campaign',
       targetId: campaignId,
       beforeSnap: { countryCount: targets.length },
-    }).catch(() => {});
+    }).catch((auditErr) => {
+      this.logger.error(`Audit log failed for set_country_targeting: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
+    });
 
     return this.prisma.countryTargeting.findMany({ where: { campaignId } });
   }

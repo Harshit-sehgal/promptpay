@@ -143,15 +143,15 @@ export class AuthService {
 
     const tokens = await this.generateTokenPair(user.id, user.role);
 
-    // Audit log: new user registration
-    this.audit.log({
+    // Audit log: new user registration (fire-and-forget)
+    void this.audit.log({
       actorId: user.id,
       actorRole: user.role,
       action: 'signup',
       targetType: 'user',
       targetId: user.id,
       afterSnap: { email: user.email, role: user.role },
-    }).catch(() => {});
+    });
 
     return {
       user: this.sanitizeUser(user),
@@ -164,14 +164,14 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user) {
       // Audit: login attempt for unknown email
-      this.audit.log({
+      void this.audit.log({
         actorId: 'anonymous',
         actorRole: 'anonymous',
         action: 'login_failed',
         targetType: 'user',
         targetId: dto.email,
         afterSnap: { reason: 'unknown_email' },
-      }).catch(() => {});
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -192,27 +192,27 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) {
       // Audit: failed password attempt
-      this.audit.log({
+      void this.audit.log({
         actorId: user.id,
         actorRole: user.role,
         action: 'login_failed',
         targetType: 'user',
         targetId: user.id,
         afterSnap: { reason: 'bad_password' },
-      }).catch(() => {});
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const tokens = await this.generateTokenPair(user.id, user.role);
 
     // Audit: successful login
-    this.audit.log({
+    void this.audit.log({
       actorId: user.id,
       actorRole: user.role,
       action: 'login_success',
       targetType: 'user',
       targetId: user.id,
-    }).catch(() => {});
+    });
 
     return {
       user: this.sanitizeUser(user),
@@ -259,14 +259,14 @@ export class AuthService {
     const existingByEmail = await this.prisma.user.findUnique({ where: { email } });
     if (existingByEmail) {
       // Audit the attempted takeover so the real owner can detect it.
-      this.audit.log({
+      void this.audit.log({
         actorId: 'anonymous',
         actorRole: 'anonymous',
         action: 'google_link_blocked_existing_email',
         targetType: 'user',
         targetId: existingByEmail.id,
         afterSnap: { email, googleSub: googleId },
-      }).catch(() => {});
+      });
       throw new ConflictException(
         'An account with this email already exists. Sign in with your password and link Google from your account settings.',
       );
@@ -356,7 +356,7 @@ export class AuthService {
       // Forensic trail: a refresh-token replay is the canonical theft
       // signal reuse-detection exists to surface. Audit it so ops can
       // query `action='refresh_reuse_detected'` for incident response.
-      this.audit.log({
+      void this.audit.log({
         actorId: payload.sub,
         actorRole: 'unknown',
         action: 'refresh_reuse_detected',
@@ -391,7 +391,7 @@ export class AuthService {
       });
       // Hash mismatch = a tampered JWT or a token from a different family
       // (theft / forgery attempt). Audit so the family-revoke is visible.
-      this.audit.log({
+      void this.audit.log({
         actorId: payload.sub,
         actorRole: 'unknown',
         action: 'refresh_reuse_detected',
@@ -419,13 +419,13 @@ export class AuthService {
     await this.revokeAllSessions(userId);
     // Log who logged out (requires fetching role — fetch user briefly here)
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-    this.audit.log({
+    void this.audit.log({
       actorId: userId,
       actorRole: user?.role ?? 'unknown',
       action: 'logout',
       targetType: 'session',
       targetId: userId,
-    }).catch(() => {});
+    });
   }
 
   /** ── Get Current User ── */
@@ -582,16 +582,14 @@ export class AuthService {
     });
 
     // Recompute trust score to account for email verification (+10 points)
-    await this.fraud.computeTrustScore(user.id);
-
-    // Audit: email verified — key identity signal
-    this.audit.log({
-      actorId: user.id,
-      actorRole: user.role,
-      action: 'email_verified',
-      targetType: 'user',
-      targetId: user.id,
-    }).catch(() => {});
+    await this.fraud.computeTrustScore(user.id);      // Audit: email verified — key identity signal
+      void this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'email_verified',
+        targetType: 'user',
+        targetId: user.id,
+      });
 
     return {
       message: 'Email verified successfully',
@@ -675,13 +673,13 @@ export class AuthService {
     void this.email.sendPasswordChanged(user.email).catch(() => undefined);
 
     // Audit log: password reset completed
-    this.audit.log({
+    void this.audit.log({
       actorId: user.id,
       actorRole: user.role,
       action: 'password_reset',
       targetType: 'user',
       targetId: user.id,
-    }).catch(() => {});
+    });
 
     return { message: 'Password reset successfully. Please sign in with your new password.' };
   }

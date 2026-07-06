@@ -8,6 +8,7 @@ import { AdminService } from '../admin/admin.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
 import { ForbiddenException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 
 // ── Shared signing utility (no mocking needed — it's pure crypto) ──
 import { signPayload } from '@waitlayer/shared';
@@ -228,6 +229,9 @@ const mockPrisma = {
 };
 
 const prismaRef = mockPrisma as any;
+const mockGoogleVerifier = {
+  verify: vi.fn(),
+};
 
 // ── Shared in-memory ledger for cross-service assertions ──
 // Some ledger entries are created inside $transaction callbacks; we need
@@ -286,7 +290,7 @@ function makeServices(): TestFixtures {
   const fraud = new FraudService(prismaRef, ledger);
 
   // ExtensionService — real instance with all mocked deps
-  const extension = new ExtensionService(prismaRef, audit, ledger, fraud);
+  const extension = new ExtensionService(prismaRef, audit, ledger, fraud, mockGoogleVerifier as any);
 
   // CampaignService — real instance with mocked prisma + real audit (audit is fire-and-forget; safe to share)
   const campaign = new CampaignService(prismaRef, audit);
@@ -1458,6 +1462,180 @@ describe('E2E Money Loop', () => {
           platform: 'linux',
         }),
       });
+    });
+
+    it('rotates an existing device secret when the caller proves possession of the old secret', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const existingSecret = 'existing-device-event-secret';
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: existingSecret,
+        fingerprintHash: 'recover-fp',
+        toolType: 'claude_code',
+        extensionVersion: '1.0.0',
+        platform: 'linux',
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrisma.device.update.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve({ ...existingDevice, ...data }),
+      );
+
+      const result = await svc.extension.registerDevice(userId, {
+        toolType: 'claude_code',
+        fingerprintHash: 'recover-fp',
+        extensionVersion: '1.1.0',
+        platform: 'linux',
+        existingEventSecret: existingSecret,
+      });
+
+      expect(result.eventSecret).toEqual(expect.any(String));
+      expect(result.eventSecret).not.toBe(existingSecret);
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('recovers a lost device secret when the same user re-authenticates with their password', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const oldSecret = 'old-device-event-secret';
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: oldSecret,
+        fingerprintHash: 'password-recover-fp',
+        toolType: 'claude_code',
+        extensionVersion: '1.0.0',
+        platform: 'linux',
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        passwordHash: await bcrypt.hash('correct-password', 12),
+      });
+      mockPrisma.device.update.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve({ ...existingDevice, ...data }),
+      );
+
+      const result = await svc.extension.registerDevice(userId, {
+        toolType: 'claude_code',
+        fingerprintHash: 'password-recover-fp',
+        extensionVersion: '1.1.0',
+        platform: 'linux',
+        recoveryPassword: 'correct-password',
+      });
+
+      expect(result.eventSecret).toEqual(expect.any(String));
+      expect(result.eventSecret).not.toBe(oldSecret);
+      expect(mockPrisma.device.update).toHaveBeenCalledWith({
+        where: { id: deviceId },
+        data: expect.objectContaining({
+          eventSecret: expect.any(String),
+          extensionVersion: '1.1.0',
+        }),
+      });
+    });
+
+    it('rejects lost-secret recovery when the account password is wrong', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: 'old-device-event-secret',
+        fingerprintHash: 'bad-password-recover-fp',
+        toolType: 'claude_code',
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        passwordHash: await bcrypt.hash('correct-password', 12),
+      });
+
+      await expect(
+        svc.extension.registerDevice(userId, {
+          toolType: 'claude_code',
+          fingerprintHash: 'bad-password-recover-fp',
+          recoveryPassword: 'wrong-password',
+        }),
+      ).rejects.toThrow(/Password re-authentication failed/);
+      expect(mockPrisma.device.update).not.toHaveBeenCalled();
+    });
+
+    it('recovers a lost device secret for a Google-linked user with matching Google re-auth', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const oldSecret = 'old-google-device-event-secret';
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: oldSecret,
+        fingerprintHash: 'google-recover-fp',
+        toolType: 'claude_code',
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        passwordHash: null,
+        googleId: 'google-sub-123',
+        email: 'social@example.com',
+      });
+      mockGoogleVerifier.verify.mockResolvedValue({
+        sub: 'google-sub-123',
+        email: 'social@example.com',
+        email_verified: true,
+        aud: 'test-client',
+        iss: 'accounts.google.com',
+      });
+      mockPrisma.device.update.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve({ ...existingDevice, ...data }),
+      );
+
+      const result = await svc.extension.registerDevice(userId, {
+        toolType: 'claude_code',
+        fingerprintHash: 'google-recover-fp',
+        recoveryGoogleIdToken: 'valid-google-token',
+      });
+
+      expect(result.eventSecret).toEqual(expect.any(String));
+      expect(result.eventSecret).not.toBe(oldSecret);
+      expect(mockGoogleVerifier.verify).toHaveBeenCalledWith('valid-google-token');
+    });
+
+    it('rejects Google-linked device-secret recovery when Google re-auth does not match the account', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: 'old-google-device-event-secret',
+        fingerprintHash: 'google-mismatch-fp',
+        toolType: 'claude_code',
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        passwordHash: null,
+        googleId: 'google-sub-123',
+        email: 'social@example.com',
+      });
+      mockGoogleVerifier.verify.mockResolvedValue({
+        sub: 'different-google-sub',
+        email: 'social@example.com',
+        email_verified: true,
+        aud: 'test-client',
+        iss: 'accounts.google.com',
+      });
+
+      await expect(
+        svc.extension.registerDevice(userId, {
+          toolType: 'claude_code',
+          fingerprintHash: 'google-mismatch-fp',
+          recoveryGoogleIdToken: 'mismatched-google-token',
+        }),
+      ).rejects.toThrow(/Google re-authentication failed/);
+      expect(mockPrisma.device.update).not.toHaveBeenCalled();
     });
 
     it('rejects wait-state-start for device not owned by user', async () => {

@@ -350,13 +350,15 @@ Signals:
 
 - Devices repeatedly fail event signature verification after reinstall or local secret-store loss.
 - Users can authenticate but cannot serve ads because their registered device no longer has its local `eventSecret`.
-- Support tickets mention device re-registration failures.
+- Non-Google passwordless/social-login users cannot recover a lost local secret without provider re-auth or support.
 
 Mitigation:
 
 - Store device event secrets only in OS-backed secret stores where available.
 - Reject legacy global-HMAC event signatures instead of accepting a shared fallback.
 - Allow same-user legacy null-secret rows to re-register and receive a fresh per-device secret.
-- Build an explicit operator/user recovery flow for devices that have a server-side `eventSecret` but lost the local copy.
+- Allow same-user same-fingerprint password accounts to rotate a lost local secret only after password re-authentication.
+- Allow linked Google accounts to rotate a lost local secret only after matching Google ID-token re-authentication.
+- Build provider re-auth or support recovery for future non-Google provider accounts.
 
 Owner: Security/Extension Engineering

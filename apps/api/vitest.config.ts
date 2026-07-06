@@ -13,6 +13,12 @@ export default defineConfig({
       reporter: ['text', 'html'],
       include: ['src/**/*.ts'],
       exclude: ['**/*.dto.ts', '**/*.module.ts', 'main.ts'],
+      thresholds: {
+        lines: 60,
+        functions: 50,
+        branches: 50,
+        statements: 60,
+      },
     },
   },
   resolve: {

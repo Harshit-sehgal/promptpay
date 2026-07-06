@@ -82,9 +82,9 @@ export default function SignupPage() {
             setGoogleEnabled(true);
           }
         }
-      } catch {
+      } catch (err: unknown) {
         // Silently degrade — Google sign-in button will show as disabled.
-        // Logging in dev only to avoid leaking config-fetch errors in production.
+        console.error('Auth config fetch failed (signup):', err instanceof Error ? err.message : String(err));
       }
     };
     fetchConfig();

@@ -33,7 +33,8 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json(stripAuthTokens({ ...googleData, user: fullUser }), { status: 200 });
     return applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers });
-  } catch {
+  } catch (err: unknown) {
+    console.error('Google OAuth Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

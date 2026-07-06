@@ -33,7 +33,7 @@ export default function AdminFraudPage() {
 
   const fetchFlags = useCallback(() => {
     setLoading(true);
-    adminApi.getFraudFlags({ severity: severityFilter || undefined })
+    adminApi.getFraudFlags(severityFilter ? { severity: severityFilter } : undefined)
       .then((res: { data: FraudFlagsResponse }) => setFlags(normalizeFraudFlags(res.data)))
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load fraud flags')))
       .finally(() => setLoading(false));
@@ -145,7 +145,7 @@ export default function AdminFraudPage() {
                 )}
 
                 <p className="text-ink-500 text-xs">
-                  User: <span className="text-ink-300">{flag.userEmail || flag.userId}</span>
+                  User: <a href={`/admin/users?search=${encodeURIComponent(flag.userId)}`} className="text-brand-400 hover:text-brand-300 underline">{flag.userEmail || flag.userId}</a>
                   <span className="mx-2">·</span>
                   Detected {formatRelativeTime(flag.createdAt)}
                 </p>

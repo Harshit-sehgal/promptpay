@@ -28,7 +28,8 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json({ user: (data as Record<string, unknown>).user || null }, { status: 200 });
     return applyAuthCookies(response, { accessToken, refreshToken: newRefresh, headers: req.headers });
-  } catch {
+  } catch (err: unknown) {
+    console.error('Token Refresh Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

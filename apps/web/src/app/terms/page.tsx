@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Terms of Service — WaitLayer',
+  description: 'WaitLayer terms of service — developer and advertiser obligations, fraud policy, and payout terms.',
+};
 
 export default function TermsPage() {
   return (

@@ -140,7 +140,7 @@ export default function AdminPayoutsPage() {
                 </div>
 
                 <p className="text-ink-500 text-xs">
-                  User: <span className="text-ink-300">{p.userEmail || p.userId}</span>
+                  User: <a href={`/admin/users?search=${encodeURIComponent(p.userId)}`} className="text-brand-400 hover:text-brand-300 underline">{p.userEmail || p.userId}</a>
                   <span className="mx-2">·</span>
                   Requested {formatRelativeTime(p.createdAt)}
                 </p>

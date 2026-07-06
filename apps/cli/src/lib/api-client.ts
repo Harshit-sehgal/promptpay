@@ -31,12 +31,7 @@ export class ApiClient {
     return signPayload(payload, this.deviceEventSecret);
   }
 
-  /** Optional request-header signature. The API currently authorizes events
-   *  through body signatures; omit this header until a device secret exists. */
-  private signHeaderPayload(payload: Record<string, unknown>): string | undefined {
-    if (!this.deviceEventSecret) return undefined;
-    return signPayload(payload, this.deviceEventSecret);
-  }
+  /** Event payloads are signed in-body; no separate header signature is sent. */
 
   async getOrRegisterDevice(): Promise<string> {
     if (this.deviceUUID && this.deviceEventSecret) return this.deviceUUID;
@@ -142,30 +137,54 @@ export class ApiClient {
     });
   }
 
+  // Deduplicate concurrent refresh attempts — without this, two parallel
+  // requests receiving 401s would each call /auth/refresh simultaneously.
+  // The first call rotates the refresh token server-side; the second sees a
+  // 401 on its now-stale refresh-token argument and both requests fail,
+  // even though the first refresh succeeded. Matches the VSCode extension's
+  // pattern (see apps/vscode-extension/src/api-client.ts refreshTokens).
+  private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
+
+  private async refreshTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
+    if (!this.creds?.refreshToken) {
+      return Promise.reject({ status: 401, message: 'No refresh token' });
+    }
+    if (this._refreshInProgress) return this._refreshInProgress;
+    this._refreshInProgress = this._doRefresh();
+    return this._refreshInProgress;
+  }
+
+  private async _doRefresh(): Promise<{ accessToken: string; refreshToken: string } | null> {
+    try {
+      const refresh = await this.raw<{
+        accessToken: string;
+        refreshToken: string;
+      }>('POST', '/auth/refresh', { refreshToken: this.creds!.refreshToken }, true);
+      if (this.creds) {
+        this.creds.accessToken = refresh.accessToken;
+        this.creds.refreshToken = refresh.refreshToken;
+        setCredentials(this.creds);
+      }
+      return refresh;
+    } catch {
+      return null;
+    } finally {
+      this._refreshInProgress = null;
+    }
+  }
+
   private async raw<T>(
     method: 'GET' | 'POST',
     path: string,
     body?: Record<string, unknown>,
-    /** Internal: when true, this call IS the refresh attempt — never recurse
-     *  into another refresh on 401. Without this guard, an expired/invalid
-     *  refresh token (server returns 401 on /auth/refresh) would cause unbounded
-     *  recursion → stack overflow, because the inner raw() 401-branch would
-     *  call raw('POST', '/auth/refresh', …) again, forever. */
     _isRefreshAttempt = false,
   ): Promise<T> {
+    // No header signature: the body already carries `signature`, and the API
+    // does not verify an X-WaitLayer-Signature header. Emitting one would
+    // leak the per-device HMAC signing key to anyone reading headers
+    // (proxies, browser DevTools, server access logs that capture headers).
     const url = new URL(path.startsWith('http') ? path : API_URL + path);
     const bodyStr = body ? JSON.stringify(body) : '';
-
-    // Compute header signature from canonical form BEFORE signature field is in body.
-    // For extension routes, the body already carries its own signature field;
-    // the header signature is an additional layer signing the full body as-sent.
-    // We strip the signature field for header HMAC so it matches the
-    // canonical payload the backend verifies against.
-    let headerSignature: string | undefined;
-    if (body) {
-      const { signature: _, ...payloadForHeader } = body;
-      headerSignature = this.signHeaderPayload(payloadForHeader);
-    }
 
     return new Promise<T>((resolve, reject) => {
       if (url.protocol !== 'https:') {
@@ -184,9 +203,6 @@ export class ApiClient {
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(bodyStr).toString(),
-            ...(headerSignature
-              ? { 'X-WaitLayer-Signature': headerSignature }
-              : {}),
             ...(this.creds?.accessToken
               ? { Authorization: `Bearer ${this.creds.accessToken}` }
               : {}),
@@ -201,25 +217,13 @@ export class ApiClient {
               if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                 resolve(parsed as T);
               } else if (res.statusCode === 401 && this.creds?.refreshToken && !_isRefreshAttempt) {
-                // Single retry after refresh. _isRefreshAttempt bounds this to
-                // ONE refresh attempt; if /auth/refresh itself returns 401
-                // (expired/revoked refresh token) the inner call takes the
-                // 401 branch with _isRefreshAttempt=true → reject cleanly
-                // instead of recursing.
-                try {
-                  const refresh = await this.raw<{
-                    accessToken: string;
-                    refreshToken: string;
-                  }>('POST', '/auth/refresh', { refreshToken: this.creds.refreshToken }, true);
-                  if (this.creds) {
-                    this.creds.accessToken = refresh.accessToken;
-                    this.creds.refreshToken = refresh.refreshToken;
-                    setCredentials(this.creds);
-                  }
+                // Use deduplicated refresh — if a concurrent 401 is already
+                // refreshing, this reuses the same in-flight request.
+                const newTokens = await this.refreshTokens();
+                if (newTokens) {
                   return this.raw<T>(method, path, body).then(resolve, reject);
-                } catch {
-                  reject({ status: 401, message: 'unauthorized' });
                 }
+                reject({ status: 401, message: 'unauthorized' });
               } else {
                 // NestJS returns { message, error, statusCode }
                 const parsedObject = isRecord(parsed) ? parsed : {};

@@ -13,7 +13,8 @@
     },
     "resolveJsonModule": true,
         "skipLibCheck": true,
-    "sourceMap": true,
+    "sourceMap": false,     // Source maps removed for prod — out/*.js.map publish leaked full
+                            // TypeScript source (API endpoints, auth flow, secret storage keys).
     "strict": true,
     "target": "ES2022",
     "types": ["node", "vscode"]

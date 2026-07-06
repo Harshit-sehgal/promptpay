@@ -72,13 +72,13 @@ export class AdvertiserService {
     try {
       const profile = await this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl: dto.websiteUrl } });
 
-      this.audit.log({
+      void this.audit.log({
         actorId: userId,
         actorRole: 'advertiser',
         action: 'create_advertiser_profile',
         targetType: 'advertiser',
         targetId: profile.id,
-      }).catch(() => {});
+      });
 
       return profile;
     } catch (err: unknown) {
@@ -166,14 +166,14 @@ export class AdvertiserService {
       },
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: advertiserId,
       actorRole: 'advertiser',
       action: 'create_campaign',
       targetType: 'campaign',
       targetId: campaign.id,
       beforeSnap: { name: dto.name, category: dto.category, bidType: dto.bidType, budgetTotalMinor: dto.budgetTotalMinor },
-    }).catch(() => {});
+    });
 
     return campaign;
   }
@@ -204,14 +204,14 @@ export class AdvertiserService {
       data: { status: 'submitted', submittedAt: new Date() },
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: advertiserId,
       actorRole: 'advertiser',
       action: 'submit_campaign',
       targetType: 'campaign',
       targetId: campaignId,
       beforeSnap: { oldStatus: campaign.status },
-    }).catch(() => {});
+    });
 
     return submitted;
   }
@@ -226,13 +226,13 @@ export class AdvertiserService {
       data: { status: 'paused', pausedAt: new Date() },
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: advertiserId,
       actorRole: 'advertiser',
       action: 'pause_campaign',
       targetType: 'campaign',
       targetId: campaignId,
-    }).catch(() => {});
+    });
 
     return paused;
   }
@@ -259,13 +259,13 @@ export class AdvertiserService {
       data: { status: 'active', pausedAt: null, activatedAt: new Date() },
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: advertiserId,
       actorRole: 'advertiser',
       action: 'resume_campaign',
       targetType: 'campaign',
       targetId: campaignId,
-    }).catch(() => {});
+    });
 
     return resumed;
   }
@@ -403,14 +403,14 @@ export class AdvertiserService {
       `Archived campaign ${campaignId}: unspent refund obligation = ${result.unspentMinor} ${result.currency}`,
     );
 
-    this.audit.log({
+    void this.audit.log({
       actorId: advertiserId,
       actorRole: 'advertiser',
       action: 'archive_campaign',
       targetType: 'campaign',
       targetId: campaignId,
       beforeSnap: { oldStatus: campaign.status, refundObligationMinor: result.unspentMinor, currency: result.currency },
-    }).catch(() => {});
+    });
 
     return { campaign: updated, refundEntry: result.refundEntry ?? null, archived: true };
   }
@@ -446,14 +446,14 @@ export class AdvertiserService {
       data: dto,
     });
 
-    this.audit.log({
+    void this.audit.log({
       actorId: advertiserId,
       actorRole: 'advertiser',
       action: 'update_campaign',
       targetType: 'campaign',
       targetId: campaignId,
       beforeSnap: { changes: dto },
-    }).catch(() => {});
+    });
 
     return updated;
   }

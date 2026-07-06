@@ -30,7 +30,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage(
           `WaitLayer: $${(bal.available.amountMinor / 100).toFixed(2)} available (pending $${(bal.pending.amountMinor / 100).toFixed(2)})`,
         );
-      } catch (err) {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`WaitLayer: failed to fetch balance — ${msg}`);
         vscode.window.showErrorMessage(`WaitLayer: failed to fetch balance`);
       }
     }),
@@ -54,8 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
     const maxAdsPerHour = await config.getMaxAdsPerHour();
     const now = Date.now();
     adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
-    if (adTimestamps.length >= maxAdsPerHour) {
-      console.log('WaitLayer: frequency cap reached, skipping ad');
+    if (adTimestamps.length >= maxAdsPerHour) {          console.warn('WaitLayer: frequency cap reached, skipping ad');
       return;
     }
 
@@ -123,7 +124,7 @@ export function activate(context: vscode.ExtensionContext) {
           status.showIdle();
         });
       }
-    } catch (err) {
+    } catch (err: unknown) {
       // Don't disrupt the IDE with a modal, but make the failure visible in
       // the extension's output channel so the developer can see WHY ads
       // stopped serving (auth expiry, 429, fraud rejection, etc.). Logging
@@ -144,7 +145,9 @@ export function activate(context: vscode.ExtensionContext) {
     .then((bal) => {
       status.setEarnings(bal.available.amountMinor / 100);
     })
-    .catch(() => {
+    .catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[WaitLayer] Initial balance fetch failed: ${msg}`);
       status.setLoggedOut();
     });
 }

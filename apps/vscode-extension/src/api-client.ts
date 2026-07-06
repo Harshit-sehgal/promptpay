@@ -65,12 +65,6 @@ export class ApiClient {
     return signPayload(payload, this.deviceEventSecret);
   }
 
-  private async signHeaderPayload(payload: Record<string, unknown>): Promise<string | undefined> {
-    await this._initialized;
-    if (!this.deviceEventSecret) return undefined;
-    return signPayload(payload, this.deviceEventSecret);
-  }
-
   /** Refresh the access token using the stored refresh token.
    *  Returns the new token pair or null on failure. */
   private async refreshTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
@@ -118,7 +112,10 @@ export class ApiClient {
         this.deviceEventSecret = storedSecret;
         return stored;
       }
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[WaitLayer] Failed to read stored device UUID/secret: ${msg}`);
+    }
 
     const fingerprint = await this.config.getDeviceFingerprint();
     const res = await this.post<RegisterDeviceResponse>('/extension/register-device', {
@@ -137,7 +134,10 @@ export class ApiClient {
       try {
         await this.config.storeDeviceUUID(res.id);
         await this.config.storeDeviceEventSecret(res.eventSecret);
-      } catch {}
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[WaitLayer] Failed to persist device registration: ${msg}`);
+      }
       return res.id;
     }
     throw new Error('Failed to register device');
@@ -266,8 +266,14 @@ export class ApiClient {
       this.deviceUUID = null;
       this.deviceEventSecret = null;
       // Persist tokens so they survive extension restarts
-      this.config.storeTokens(tokens).catch(() => {});
-      this.config.clearDeviceRegistration().catch(() => {});
+      this.config.storeTokens(tokens).catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[WaitLayer] Failed to persist tokens after login: ${msg}`);
+      });
+      this.config.clearDeviceRegistration().catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
+      });
       vscode.window.showInformationMessage('WaitLayer: logged in');
     } catch {
       vscode.window.showErrorMessage('WaitLayer: login failed');
@@ -298,17 +304,10 @@ export class ApiClient {
   private async post<T>(path: string, body: Record<string, unknown>, skipAuth = false): Promise<T> {
     const bodyStr = JSON.stringify(body);
 
-    // Compute header signature from canonical form WITHOUT the signature field
-    let headerSignature: string | undefined;
-    if (body) {
-      const { signature: _, ...payloadForHeader } = body;
-      headerSignature = await this.signHeaderPayload(payloadForHeader);
-    }
-
     return this.request<T>(
       'POST',
       path,
-      headers(path, bodyStr, headerSignature),
+      headers(path, bodyStr),
       bodyStr,
       skipAuth,
     );
@@ -422,7 +421,7 @@ export class ApiClient {
             } else {
               reject(parsed);
             }
-          } catch (e) {
+          } catch (e: unknown) {
             reject(e);
           }
         });
@@ -447,16 +446,11 @@ export class ApiClient {
 function headers(
   path: string,
   bodyStr: string,
-  headerSignature?: string,
 ): Record<string, string> {
-  const base: Record<string, string> = {
+  return {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(bodyStr).toString(),
     'X-Extension-Version': '0.0.1',
     'X-Tool-Type': 'vscode',
   };
-  if (headerSignature) {
-    base['X-WaitLayer-Signature'] = headerSignature;
-  }
-  return base;
 }

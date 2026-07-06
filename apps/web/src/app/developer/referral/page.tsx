@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { referralApi } from '@/lib/api/services';
+import { getErrorMessage } from '@/lib/api/errors';
 import { LoadingSpinner, StatusBadge } from '@/components';
 import { formatCurrency, formatDate } from '@/lib/format';
 
@@ -31,7 +32,7 @@ export default function ReferralPage() {
   useEffect(() => {
     referralApi.getInfo()
       .then((res) => setData(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Failed to load referral data'))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load referral data')))
       .finally(() => setLoading(false));
   }, []);
 

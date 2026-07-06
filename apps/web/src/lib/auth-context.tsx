@@ -125,8 +125,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     // Best-effort — call the Route Handler to revoke the server-side session
-    // and clear auth cookies.
-    api.post('/auth/logout').catch(() => {});
+    // and clear auth cookies. Log failures so silent session leaks are visible.
+    api.post('/auth/logout').catch((err) => {
+      console.warn('[WaitLayer] logout request failed — server session may still be active:', err instanceof Error ? err.message : String(err));
+    });
     localStorage.removeItem('lastDashboard');
     setUser(null);
   }, []);

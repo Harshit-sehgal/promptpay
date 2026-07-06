@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { developerApi, referralApi } from '@/lib/api/services';
+import { getErrorMessage } from '@/lib/api/errors';
 import { LoadingSpinner } from '@/components';
 import { formatCurrency } from '@/lib/format';
 
@@ -106,7 +107,7 @@ export default function DeveloperDashboard() {
         setData(dashboardRes.data);
         setReferral(referralRes.data);
       })
-      .catch((err) => setError(err.response?.data?.message || 'Failed to load dashboard'))
+      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load dashboard')))
       .finally(() => setLoading(false));
   }, []);
 

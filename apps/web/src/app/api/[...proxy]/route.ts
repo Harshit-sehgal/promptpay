@@ -184,7 +184,8 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
           // The API expects { refreshToken }
           body = JSON.stringify({ refreshToken });
         }
-      } catch {
+      } catch (parseErr) {
+        console.warn('[WaitLayer] Proxy body parse failed:', parseErr instanceof Error ? parseErr.message : String(parseErr));
         body = undefined;
       }
     }
@@ -211,7 +212,8 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
     }
 
     return NextResponse.json(responseBody, { status: responseStatus });
-  } catch {
+  } catch (proxyErr) {
+    console.error('[WaitLayer] Proxy error:', proxyErr instanceof Error ? proxyErr.message : String(proxyErr));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

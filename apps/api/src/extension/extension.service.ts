@@ -7,7 +7,10 @@ import { LedgerService } from '../ledger/ledger.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { FraudService } from '../fraud/fraud.service';
 import * as crypto from 'crypto';
+import * as bcrypt from 'bcryptjs';
 import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } from '@waitlayer/shared';
+import { isUniqueConstraintViolation, isSerializationError } from '../common/utils/errors';
+import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 
 /**
  * When the extension reports a wait_state_end, its claimed duration must
@@ -63,6 +66,7 @@ export class ExtensionService {
     private audit: AuditService,
     private ledger: LedgerService,
     private fraud: FraudService,
+    private googleVerifier: GoogleTokenVerifier,
   ) {}
 
   // ── Device Registration ──
@@ -74,9 +78,11 @@ export class ExtensionService {
     platform?: string;
     publicKey?: string;
     existingEventSecret?: string;
+    recoveryPassword?: string;
+    recoveryGoogleIdToken?: string;
   }) {
     // Privacy: reject payloads containing prohibited data fields
-    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    this.enforcePrivacyOn(dto);
     // Check for duplicate device (same user + same fingerprint = re-registration).
     const existingDevice = await this.prisma.device.findUnique({
       where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
@@ -114,21 +120,16 @@ export class ExtensionService {
       // the old extension install is invalidated by this one-time reveal.
       //
       // CRITICAL: require proof-of-possession of the previously-issued secret
-      // before rotating. Without this gate, ANY authenticated user who
-      // merely knows another user's fingerprintHash could call this endpoint
-      // and rotate the victim's secret out from under them — receiving the
-      // fresh rotated secret in the response and locking out the legitimate
-      // device. A timing-safe comparison avoids leaking whether the secret
-      // matched (which would be the only oracle an attacker needs).
-      if (
-        !dto.existingEventSecret ||
-        Buffer.from(dto.existingEventSecret).length !== Buffer.from(existingDevice.eventSecret).length ||
-        !crypto.timingSafeEqual(
-          Buffer.from(dto.existingEventSecret),
-          Buffer.from(existingDevice.eventSecret),
-        )
-      ) {
-        throw new UnauthorizedException('Cannot re-register device without the existing device secret');
+      // before rotating. If the local secret was lost during reinstall, allow
+      // a deliberately stronger recovery path: same authenticated user, same
+      // fingerprint, and fresh account re-authentication. Password accounts
+      // prove that with the account password; linked Google accounts prove it
+      // with a matching Google ID token. That avoids restoring the removed
+      // global-HMAC fallback while still giving real users a way out.
+      const hasExistingSecretProof = hasMatchingSecret(dto.existingEventSecret, existingDevice.eventSecret);
+      let recoveryMode: 'event_secret' | 'password' | 'google' = 'event_secret';
+      if (!hasExistingSecretProof) {
+        recoveryMode = await this.assertDeviceRecoveryProof(userId, dto, existingDevice.id);
       }
 
       const rotatedSecret = crypto.randomBytes(32).toString('hex');
@@ -141,6 +142,14 @@ export class ExtensionService {
           eventSecret: rotatedSecret,
           lastSeenAt: new Date(),
         },
+      });
+      await this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: recoveryMode === 'event_secret' ? 'device_secret_rotated' : 'device_secret_recovered',
+        targetType: 'device',
+        targetId: existingDevice.id,
+        afterSnap: { recoveryMode },
       });
       return { ...updated, eventSecret: rotatedSecret };
     }
@@ -205,6 +214,90 @@ export class ExtensionService {
     return { ...device, eventSecret };
   }
 
+  private async assertDeviceRecoveryProof(
+    userId: string,
+    dto: { recoveryPassword?: string; recoveryGoogleIdToken?: string },
+    deviceId: string,
+  ): Promise<'password' | 'google'> {
+    if (!dto.recoveryPassword && !dto.recoveryGoogleIdToken) {
+      throw new UnauthorizedException('Cannot recover device secret without the existing device secret, account password, or Google re-auth token');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, googleId: true, email: true },
+    });
+    if (!user) {
+      await this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'device_secret_recovery_rejected',
+        targetType: 'device',
+        targetId: deviceId,
+        afterSnap: { reason: 'user_not_found' },
+      });
+      throw new UnauthorizedException('Device recovery user was not found');
+    }
+
+    if (dto.recoveryPassword) {
+      if (!user.passwordHash) {
+        await this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'device_secret_recovery_rejected',
+          targetType: 'device',
+          targetId: deviceId,
+          afterSnap: { reason: 'password_unavailable' },
+        });
+        throw new UnauthorizedException('Password re-authentication is required to recover this device');
+      }
+
+      const passwordOk = await bcrypt.compare(dto.recoveryPassword, user.passwordHash);
+      if (!passwordOk) {
+        await this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'device_secret_recovery_rejected',
+          targetType: 'device',
+          targetId: deviceId,
+          afterSnap: { reason: 'password_mismatch' },
+        });
+        throw new UnauthorizedException('Password re-authentication failed');
+      }
+      return 'password';
+    }
+
+    if (!user.googleId) {
+      await this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'device_secret_recovery_rejected',
+        targetType: 'device',
+        targetId: deviceId,
+        afterSnap: { reason: 'google_unavailable' },
+      });
+      throw new UnauthorizedException('Google re-authentication is not available for this account');
+    }
+
+    const googlePayload = await this.googleVerifier.verify(dto.recoveryGoogleIdToken!);
+    if (!googlePayload.email_verified || googlePayload.sub !== user.googleId || googlePayload.email !== user.email) {
+      await this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'device_secret_recovery_rejected',
+        targetType: 'device',
+        targetId: deviceId,
+        afterSnap: {
+          reason: 'google_mismatch',
+          googleSub: googlePayload.sub,
+          googleEmail: googlePayload.email,
+        },
+      });
+      throw new UnauthorizedException('Google re-authentication failed');
+    }
+    return 'google';
+  }
+
   // ── Wait State Events ──
 
   async recordWaitStateStart(userId: string, dto: {
@@ -215,7 +308,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    this.enforcePrivacyOn(dto);
     // Verify device belongs to this user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
     if (!device || device.userId !== userId) {
@@ -264,7 +357,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    this.enforcePrivacyOn(dto);
     // Resolve the start event FIRST so we can verify with the device's secret
     const start = await this.prisma.waitStateEvent.findFirst({
       where: { userId, waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
@@ -349,7 +442,7 @@ export class ExtensionService {
     signature: string;
   }) {
     // Enforce privacy: reject payloads containing prohibited data fields
-    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    this.enforcePrivacyOn(dto);
 
     // Verify device belongs to user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
@@ -665,7 +758,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    this.enforcePrivacyOn(dto);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -917,7 +1010,7 @@ export class ExtensionService {
     idempotencyKey: string;
     signature: string;
   }) {
-    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    this.enforcePrivacyOn(dto);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -1077,7 +1170,7 @@ export class ExtensionService {
         return click;
       });
     } catch (error) {
-      if (this.isUniqueConstraintViolation(error)) {
+      if (isUniqueConstraintViolation(error)) {
         return { clicked: false, reason: 'duplicate_click' };
       }
       throw error;
@@ -1092,7 +1185,7 @@ export class ExtensionService {
     details?: string;
     signature: string;
   }) {
-    this.enforcePrivacy(dto as unknown as Record<string, unknown>);
+    this.enforcePrivacyOn(dto);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
@@ -1160,7 +1253,7 @@ export class ExtensionService {
     }
 
     // Audit log for ad report (security-relevant: impression invalidated)
-    this.audit.log({
+    void this.audit.log({
       actorId: userId,
       actorRole: 'developer',
       action: 'report_ad',
@@ -1170,6 +1263,28 @@ export class ExtensionService {
     });
 
     return report;
+  }
+
+  // Rate-limited audit logging for signature rejections to prevent audit log flood
+  // Tracks (reason, deviceId) pairs and limits to at most 1 log per 60 seconds per pair.
+  private recentAuditRejections = new LRUCache<string, boolean>({ max: 500, ttl: 60_000 });
+
+  private async rateLimitedAuditRejection(
+    reason: string,
+    deviceId: string,
+    userId: string,
+  ): Promise<void> {
+    const dedupKey = `${reason}:${deviceId}`;
+    if (this.recentAuditRejections.has(dedupKey)) return;
+    this.recentAuditRejections.set(dedupKey, true);
+    void this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'device_signature_rejected',
+      targetType: 'device',
+      targetId: deviceId,
+      afterSnap: { reason },
+    });
   }
 
   // ── HMAC Signature Verification ──
@@ -1205,17 +1320,8 @@ export class ExtensionService {
       // path constantly (no-ops), but a forge / replay attempt by an attacker
       // who learned deviceIds but no secrets would also fail here. Sampling
       // keeps noise low while preserving the signal.
-      void this.audit.log({
-        actorId: 'anonymous',
-        actorRole: 'anonymous',
-        action: 'device_signature_rejected',
-        targetType: 'device',
-        // We deliberately do NOT include the payload here — it can carry
-        // first-party user-controlled fields, and the audit log's job is to
-        // count rejections, not store them.
-        targetId: 'null',
-        afterSnap: { reason: 'null_device_id' },
-      });
+      // Rate-limited: at most 1 entry per 60s per (reason, deviceId) pair.
+      await this.rateLimitedAuditRejection('null_device_id', 'null', 'anonymous');
       return false;
     }
 
@@ -1224,14 +1330,8 @@ export class ExtensionService {
       select: { eventSecret: true, userId: true },
     });
     if (!device) {
-      void this.audit.log({
-        actorId: 'anonymous',
-        actorRole: 'anonymous',
-        action: 'device_signature_rejected',
-        targetType: 'device',
-        targetId: deviceId,
-        afterSnap: { reason: 'unknown_device' },
-      });
+      // Rate-limited: at most 1 entry per 60s per (reason, deviceId) pair.
+      await this.rateLimitedAuditRejection('unknown_device', deviceId, 'anonymous');
       return false; // unknown device → reject
     }
 
@@ -1239,30 +1339,15 @@ export class ExtensionService {
       const ok = verifySignature(payload, device.eventSecret, signature);
       if (!ok) {
         // A device with a known secret submitted an unverifiable signature —
-        // either a stale secret (post-rotation, pre-issuance 「garbage key」)
-        // or an active forgery attempt. Logging the rejection supports
-        // per-device brute-force / replay detection even when the user is
-        // legitimately signed-in elsewhere.
-        void this.audit.log({
-          actorId: device.userId,
-          actorRole: 'developer',
-          action: 'device_signature_rejected',
-          targetType: 'device',
-          targetId: deviceId,
-          afterSnap: { reason: 'device_secret_mismatch' },
-        });
+        // either a stale secret (post-rotation, pre-issuance) or an active
+        // forgery attempt. Rate-limited: at most 1 entry per 60s per pair.
+        await this.rateLimitedAuditRejection('device_secret_mismatch', deviceId, device.userId);
       }
       return ok;
     }
 
-    void this.audit.log({
-      actorId: device.userId,
-      actorRole: 'developer',
-      action: 'device_signature_rejected',
-      targetType: 'device',
-      targetId: deviceId,
-      afterSnap: { reason: 'missing_device_secret' },
-    });
+    // Rate-limited: at most 1 entry per 60s per (reason, deviceId) pair.
+    await this.rateLimitedAuditRejection('missing_device_secret', deviceId, device.userId);
     return false;
   }
 
@@ -1277,6 +1362,11 @@ export class ExtensionService {
     }
   }
 
+  /** Typed wrapper around enforcePrivacy that avoids unsafe casts — spreads into a plain object */
+  private enforcePrivacyOn<T extends object>(dto: T): void {
+    this.enforcePrivacy({ ...dto } as Record<string, unknown>);
+  }
+
   private currentTimeHHMM(): string {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -1289,25 +1379,12 @@ export class ExtensionService {
     return now >= start || now <= end;
   }
 
-  private isUniqueConstraintViolation(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code?: string }).code === 'P2002'
-    );
-  }
 }
 
-/**
- * Detect a PostgreSQL/Prisma serialization failure (write-skew or
- * deadlock during a serializable transaction). Prisma surfaces these
- * as `PrismaClientKnownRequestError` with code `P2034` (serialization)
- * or `P2038` (transaction timeout / restart). Both are retryable.
- */
-function isSerializationError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  if (!('code' in error)) return false;
-  const code = (error as { code?: string }).code;
-  return code === 'P2034' || code === 'P2038';
+function hasMatchingSecret(candidate: string | undefined, expected: string): boolean {
+  if (!candidate) return false;
+  const candidateBuffer = Buffer.from(candidate);
+  const expectedBuffer = Buffer.from(expected);
+  return candidateBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
 }

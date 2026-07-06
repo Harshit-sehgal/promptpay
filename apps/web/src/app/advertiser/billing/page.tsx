@@ -98,9 +98,12 @@ export default function AdvertiserBillingPage() {
                 Deposits are processed via Stripe. Your balance is used to fund active campaigns.
                 Campaigns with insufficient balance are automatically paused.
               </p>
+              <p className="text-ink-400 text-xs mb-3">
+                Stripe Checkout integration pending — add funds via the admin panel or contact support.
+              </p>
               <button
-                className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-5 py-2.5 rounded-lg transition-colors text-sm"
-                onClick={() => {}}
+                disabled
+                className="bg-brand-500/50 text-white/70 font-medium px-5 py-2.5 rounded-lg text-sm cursor-not-allowed"
               >
                 Add funds via Stripe
               </button>

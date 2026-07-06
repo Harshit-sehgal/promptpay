@@ -40,27 +40,30 @@ export async function runWatch(opts: { once?: boolean }) {
   let activeWaitStateId: string | null = null;
   let activeStartTime: number | null = null;
 
+  /** End the current active wait state and reset tracking. Shared by both
+   *  the file-empty and ENOENT paths — ensures the wait-end logic lives in
+   *  one place rather than being duplicated across try/catch branches. */
+  const endActiveWait = async () => {
+    if (!activeWaitStateId || activeStartTime === null) return;
+    const durationMs = Date.now() - activeStartTime;
+    console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms`));
+    try {
+      await api.endWaitState({ waitStateId: activeWaitStateId, durationMs });
+    } catch (err: unknown) {
+      console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
+    }
+    activeWaitStateId = null;
+    activeStartTime = null;
+    lastState = null;
+  };
+
   const poll = async () => {
     try {
       const raw = fs.readFileSync(STATE_FILE, 'utf-8').trim();
 
       // ── Wait state ended (file removed/emptied) ──
       if (!raw) {
-        if (activeWaitStateId && activeStartTime) {
-          const durationMs = Date.now() - activeStartTime;
-          console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms`));
-          try {
-            await api.endWaitState({
-              waitStateId: activeWaitStateId,
-              durationMs,
-            });
-          } catch (err: unknown) {
-            console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
-          }
-          activeWaitStateId = null;
-          activeStartTime = null;
-          lastState = null;
-        }
+        await endActiveWait();
         return;
       }
 
@@ -89,28 +92,24 @@ export async function runWatch(opts: { once?: boolean }) {
       activeStartTime = state.startTime;
       lastState = state;
     } catch (err: unknown) {
-      if (getErrorCode(err) !== 'ENOENT') {
-        console.error(chalk.red(`watch error: ${getErrorMessage(err)}`));
+      if (getErrorCode(err) === 'ENOENT') {
+        // File disappeared — treat as wait state end
+        await endActiveWait();
       } else {
-        // File disappeared (ENOENT) — treat as wait state end
-        if (activeWaitStateId && activeStartTime) {
-          const durationMs = Date.now() - activeStartTime;
-          console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms`));
-          try {
-            await api.endWaitState({
-              waitStateId: activeWaitStateId,
-              durationMs,
-            });
-          } catch (err: unknown) {
-            console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
-          }
-          activeWaitStateId = null;
-          activeStartTime = null;
-          lastState = null;
-        }
+        console.error(chalk.red(`watch error: ${getErrorMessage(err)}`));
       }
     }
   };
+
+  // ── SIGINT/SIGTERM cleanup ──
+  // Send the final endWaitState before the process exits so we don't leave
+  // dangling wait states on the server when the user presses Ctrl+C.
+  const handleSignal = async () => {
+    await endActiveWait();
+    process.exit(0);
+  };
+  process.on('SIGINT', handleSignal);
+  process.on('SIGTERM', handleSignal);
 
   if (opts.once) {
     await poll();

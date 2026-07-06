@@ -278,7 +278,9 @@ export class WaitStateDetector {
     for (const l of this.signalListeners) {
       try {
         l(signal);
-      } catch {
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[WaitLayer] Detector signal listener error: ${msg}`);
         /* never let a listener disrupt detector */
       }
     }
@@ -288,7 +290,9 @@ export class WaitStateDetector {
     for (const l of this.listeners) {
       try {
         l(event);
-      } catch {
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[WaitLayer] Detector listener error: ${msg}`);
         /* never let a listener disrupt detector */
       }
     }

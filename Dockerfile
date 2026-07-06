@@ -24,6 +24,7 @@ RUN pnpm run build
 
 # ── API Runtime ──
 FROM node:22-alpine AS api
+RUN apk add --no-cache wget
 WORKDIR /app
 
 # Copy pruned production node_modules
@@ -41,10 +42,13 @@ COPY --from=build /app/package.json ./
 
 ENV NODE_ENV=production
 EXPOSE 4000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/v1/health || exit 1
 CMD ["sh", "-c", "packages/db/node_modules/.bin/prisma migrate deploy --schema packages/db/prisma/schema.prisma && node apps/api/dist/apps/api/src/main.js"]
 
 # ── Web Runtime ──
 FROM node:22-alpine AS web
+RUN apk add --no-cache wget
 WORKDIR /app/apps/web
 
 # Copy pruned production node_modules (monorepo root)
@@ -64,4 +68,6 @@ COPY --from=build /app/package.json /app/package.json
 
 ENV NODE_ENV=production
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 CMD ["node", "node_modules/next/dist/bin/next", "start"]

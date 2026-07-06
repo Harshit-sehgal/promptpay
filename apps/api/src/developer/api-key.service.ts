@@ -76,7 +76,7 @@ export class ApiKeyService {
     // who minted which key and with what scope, so a key minted with a
     // stolen session can be traced back even though the key itself
     // outlives the session revoke.
-    this.audit.log({
+    void this.audit.log({
       actorId: userId,
       actorRole: 'developer',
       action: 'api_key_minted',
@@ -214,7 +214,7 @@ export class ApiKeyService {
     // Audit: credential destruction. A revoked key is inert, but the
     // audit row gives ops the "who revoked which key + when" trail
     // (matching the mint event).
-    this.audit.log({
+    void this.audit.log({
       actorId: userId,
       actorRole: 'developer',
       action: 'api_key_revoked',

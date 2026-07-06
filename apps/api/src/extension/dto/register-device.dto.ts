@@ -39,4 +39,28 @@ export class RegisterDeviceDto {
   @IsString()
   @MinLength(16)
   existingEventSecret?: string;
+
+  /**
+   * Recovery path for a same-account reinstall where the local SecretStorage
+   * copy of `eventSecret` was lost. This is only accepted for an already
+   * authenticated user registering the same fingerprint and only after
+   * verifying the account password. Google-linked accounts can use
+   * `recoveryGoogleIdToken`; future providers need equivalent re-auth.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  recoveryPassword?: string;
+
+  /**
+   * Recovery path for linked Google accounts. The token must verify through
+   * the same Google verifier used by /auth/google and must match the
+   * authenticated user's linked googleId.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  @MaxLength(4096)
+  recoveryGoogleIdToken?: string;
 }

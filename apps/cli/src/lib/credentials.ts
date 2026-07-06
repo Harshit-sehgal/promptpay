@@ -51,8 +51,7 @@ export function getCredentials(): Credentials | null {
 export function setCredentials(creds: Credentials) {
   fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
   // Ensure the parent directory is also locked down — regardless of umask
-  // the directory must be readable only by the owner.
-  try { fs.chmodSync(CRED_DIR, 0o700); } catch { /* best-effort */ }
+  // the directory must be readable only by the owner.    try { fs.chmodSync(CRED_DIR, 0o700); } catch { console.warn('[waitlayer] Failed to set credentials directory permissions'); }
   // Strip the event secret BEFORE writing. Users who need it store it
   // separately via storeDeviceEventSecret() which backs onto the OS keychain
   // when available, or a separate encrypted blob otherwise.
@@ -102,8 +101,7 @@ export function getDeviceEventSecret(): string | null {
   }
 }
 
-export function clearDeviceEventSecret(): void {
-  try { fs.unlinkSync(path.join(CRED_DIR, '.event-secret')); } catch { /* noop */ }
+export function clearDeviceEventSecret(): void {    try { fs.unlinkSync(path.join(CRED_DIR, '.event-secret')); } catch { /* noop — file may not exist */ }
 }
 
 /**
@@ -131,6 +129,5 @@ function decodeHashedDeviceSecret(hashedHex: string): string {
 }
 
 export function clearCredentials() {
-  clearDeviceEventSecret();
-  try { fs.unlinkSync(CRED_FILE); } catch { /* noop */ }
+  clearDeviceEventSecret();    try { fs.unlinkSync(CRED_FILE); } catch { /* noop — file may not exist */ }
 }

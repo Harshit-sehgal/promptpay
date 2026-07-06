@@ -24,9 +24,10 @@ export async function GET() {
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch {
+  } catch (err: unknown) {
     // Degrade gracefully — the client treats a failed discovery as
     // "Google sign-in unavailable" and falls back to email/password.
+    console.error('Auth Config Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json(
       { message: 'Auth config unavailable', googleClientId: null },
       { status: 502 },

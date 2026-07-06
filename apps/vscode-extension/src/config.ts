@@ -127,7 +127,8 @@ export class ConfigurationManager {
       if (id) return id;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
+      console.error(`[WaitLayer] SecretStorage failure (getDeviceUUID): ${msg}`);
+    }
     return null;
   }
 
@@ -136,7 +137,8 @@ export class ConfigurationManager {
       await this.secrets.store(this.deviceUuidKey, uuid);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
+      console.error(`[WaitLayer] SecretStorage failure (storeDeviceUUID): ${msg}`);
+    }
   }
 
   async getDeviceEventSecret(): Promise<string | null> {
@@ -145,7 +147,8 @@ export class ConfigurationManager {
       if (secret) return secret;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
+      console.error(`[WaitLayer] SecretStorage failure (getDeviceEventSecret): ${msg}`);
+    }
     return null;
   }
 
@@ -154,7 +157,8 @@ export class ConfigurationManager {
       await this.secrets.store(this.deviceEventSecretKey, secret);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
+      console.error(`[WaitLayer] SecretStorage failure (storeDeviceEventSecret): ${msg}`);
+    }
   }
 
   async clearDeviceRegistration(): Promise<void> {
@@ -162,12 +166,14 @@ export class ConfigurationManager {
       await this.secrets.delete(this.deviceUuidKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
+      console.error(`[WaitLayer] SecretStorage failure (clear UUID): ${msg}`);
+    }
     try {
       await this.secrets.delete(this.deviceEventSecretKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[WaitLayer] SecretStorage failure: ${msg}`);}
+      console.error(`[WaitLayer] SecretStorage failure (clear event secret): ${msg}`);
+    }
   }
 }
 

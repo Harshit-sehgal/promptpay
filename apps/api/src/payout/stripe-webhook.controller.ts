@@ -335,7 +335,7 @@ export class StripeWebhookController {
       targetType: 'advertiser',
       targetId: advertiser.id,
       beforeSnap: { amountMinor: result.amountMinor, currency: result.currency, paymentIntentId: result.paymentIntentId, sessionId },
-    }).catch(() => {});
+    });
   }
 
   /** Reverse advertiser ledger entries when a charge is refunded */
@@ -498,7 +498,7 @@ export class StripeWebhookController {
       targetType: 'payment_intent',
       targetId: details.paymentIntentId ?? '',
       beforeSnap: { amountMinor: totalRefunded, currency: details.currency, refundId: refund.id },
-    }).catch(() => {});
+    });
   }
 
   /**
@@ -719,7 +719,7 @@ export class StripeWebhookController {
       targetType: 'dispute',
       targetId: dispute.id,
       beforeSnap: { paymentIntentId: details.paymentIntentId, reason: details.reason, amountMinor: details.amountMinor, advertiserId },
-    }).catch(() => {});
+    });
   }
 
   /**
@@ -889,7 +889,7 @@ export class StripeWebhookController {
       targetType: 'dispute',
       targetId: dispute.id,
       beforeSnap: { status: dispute.status, holdsProcessed: holdEntries.length, paymentIntentId: details.paymentIntentId },
-    }).catch(() => {});
+    });
   }
 
   /**
@@ -1044,7 +1044,7 @@ export class StripeWebhookController {
         targetType: 'payout_request',
         targetId: payoutRequestId,
         beforeSnap: { providerTxId },
-      }).catch(() => {});
+    });
     }
   }
 
@@ -1151,6 +1151,6 @@ export class StripeWebhookController {
       targetType: 'payout_request',
       targetId: tx.payoutRequestId,
       beforeSnap: { providerTxId, failureReason },
-    }).catch(() => {});
+    });
   }
 }

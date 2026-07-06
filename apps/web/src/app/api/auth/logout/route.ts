@@ -47,7 +47,8 @@ export async function POST(req: NextRequest) {
     // In either case the session row is either now revoked or already was —
     // clearing cookies is safe.
     return clearAuthCookies(NextResponse.json({ ok: true }, { status: 200 }), req.headers);
-  } catch {
+  } catch (err: unknown) {
+    console.error('Logout Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

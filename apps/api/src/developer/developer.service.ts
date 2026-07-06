@@ -284,7 +284,7 @@ export class DeveloperService {
     // the dump so bulk exfiltration via a compromised token is traceable
     // even after the data has left the platform. The export body itself
     // is not snapshotted (too large + sensitive).
-    this.audit.log({
+    void this.audit.log({
       actorId: userId,
       actorRole: 'developer',
       action: 'export_data',
@@ -324,7 +324,7 @@ export class DeveloperService {
     // Audit: account self-deletion is an irreversible destructive action.
     // Record it so a malicious deletion (compromised token) leaves a
     // forensic trail separate from the (now-anonymized) row itself.
-    this.audit.log({
+    void this.audit.log({
       actorId: userId,
       actorRole: 'developer',
       action: 'delete_account',

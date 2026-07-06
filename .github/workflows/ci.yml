@@ -27,6 +27,16 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -70,8 +80,8 @@ jobs:
       - name: Test
         env:
           DATABASE_URL: postgresql://waitlayer:waitlayer-ci@localhost:5432/waitlayer
+          REDIS_URL: redis://localhost:6379
           JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long-ok
-          EXTENSION_HMAC_SECRET: ci-test-hmac-secret-at-least-32-chars-long-ok
           NODE_ENV: test
           EMAIL_DRIVER: console
           EMAIL_FROM: noreply@ci.local

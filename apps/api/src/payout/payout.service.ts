@@ -126,7 +126,7 @@ export class PayoutService {
       targetType: 'payout_account',
       targetId: method.id,
       beforeSnap: { provider: dto.provider, currency: dto.currency || 'USD' },
-    }).catch(() => {});
+    });
 
     return method;
   }
@@ -484,7 +484,7 @@ export class PayoutService {
           currency: dto.currency,
           allocationCount: dto.earningsEntryIds?.length ?? 0,
         },
-      }).catch(() => {});
+      });
 
       return final;
     });

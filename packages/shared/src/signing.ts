@@ -9,7 +9,7 @@ import * as crypto from 'crypto';
  *  produce different canonical strings and signatures would diverge. */
 function sortKeysDeep<T>(value: T): T {
   if (Array.isArray(value)) {
-    return value.map((item) => sortKeysDeep(item)) as unknown as T;
+    return value.map((item) => sortKeysDeep(item)) as T;
   }
   if (value && typeof value === 'object') {
     const obj = value as Record<string, unknown>;
@@ -17,7 +17,7 @@ function sortKeysDeep<T>(value: T): T {
     for (const key of Object.keys(obj).sort()) {
       sorted[key] = sortKeysDeep(obj[key]);
     }
-    return sorted as unknown as T;
+    return sorted as T;
   }
   return value;
 }

@@ -20,7 +20,7 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
 | 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **196 tests across 9 files** (real HTTP+DB + service-level) |
+| 11 | Tests/readiness | PASS | **201 tests across 9 files** (real HTTP+DB + service-level) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
@@ -56,7 +56,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 **Verified flow surfaces:**
 - Extension routes require HMAC signature over the canonical payload (excluding the `signature` field itself)
 - Body schemas strictly reject unknown fields, so misnamed payloads (e.g. `headline` vs `title`) fail with 400
-- Device registration issues a per-device `eventSecret`; extension events must sign with that device secret. Legacy rows with `eventSecret = null` are rejected for event traffic and must re-register to receive a secret.
+- Device registration issues a per-device `eventSecret`; extension events must sign with that device secret. Legacy rows with `eventSecret = null` are rejected for event traffic and can re-register to receive a secret.
 
 ---
 
@@ -238,7 +238,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**196 tests across 9 files (all pass):**
+**201 tests across 9 files (all pass):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
@@ -248,7 +248,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 | `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, rate limit, self-click, flags |
 | `ledger/ledger.service.spec.ts` | 27 | Unit | splits, guarded spend, balances, history, hold days |
 | `payout/payout.service.spec.ts` | 21 | Unit | allocation validation, partial split, provider routing, production provider guards, recovery-debt availability |
-| `integration/e2e-money-loop.spec.ts` | 29 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement |
+| `integration/e2e-money-loop.spec.ts` | 34 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement and password/Google-gated secret recovery |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
 | `integration/contract-tests.spec.ts` | 32 | **Contract** | Zod validation of API response shapes |
 
@@ -373,7 +373,7 @@ pnpm --filter waitlayer-web dev
 | Redis required for multi-instance production abuse controls | Low | `REDIS_URL` is required in production; local/test can intentionally fall back to in-memory counters |
 | No external collections workflow for unrecovered payout debt | Med | Paid-fraud recovery debits reduce future payouts automatically, but users with no future earnings still require an operator/legal process outside the app |
 | Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET` is a dev-only placeholder and must be rotated before production deploy; compose also enables mock Google auth for local development only |
-| Lost per-device event secret requires re-registration or support recovery | Low | Event traffic no longer accepts a global HMAC fallback. A device with a server-side `eventSecret` but no local copy must be re-registered through an explicit recovery path |
+| Non-Google passwordless device-secret recovery still needs provider re-auth/support flow | Low | Password users recover via password re-auth; Google-linked users recover via matching Google ID token. Future non-Google social providers still need equivalent provider re-auth or support recovery |
 | Docker Compose has orphan one-off containers locally | Low | `docker compose up -d` warned about old `promptpay-api-run-*` containers from prior manual runs; current named services are healthy |
 | Build emits `dist/apps/api/src/main.js` (not `dist/main.js`) | Info | Because path aliases reach outside `src/`, TypeScript's auto-`rootDir` puts output one level deeper. Dockerfile CMD is aligned to the actual path |
 
@@ -392,6 +392,7 @@ pnpm --filter waitlayer-web dev
 | Added paid-fraud recovery debits | Fraud found after payout creates auditable debit rows that reduce future payout availability |
 | Added Redis-backed rate limiting and brute-force tracking | Production auth and route abuse controls share counters across API instances and fail closed if Redis is unavailable |
 | Removed global extension HMAC event fallback | Extension events now require API-issued per-device secrets; legacy null-secret device rows are rejected until re-registration issues a secret |
+| Added password/Google-gated device-secret recovery | Same-account same-fingerprint re-registration can rotate a lost per-device secret after password or linked-Google re-authentication, without restoring a shared global HMAC fallback |
 
 ---
 
@@ -444,7 +445,7 @@ All quality gates pass cleanly:
 - `pnpm install --frozen-lockfile` — PASS
 - `pnpm run lint` — PASS (12/12 tasks, 0 warnings)
 - `pnpm run typecheck` — PASS (13/13 tasks)
-- `pnpm run test` — PASS, 196 tests / 9 files
+- `pnpm run test` — PASS, 201 tests / 9 files
 - `pnpm run build` — PASS (9/9 packages)
 - `pnpm audit --prod` — PASS, 0 known production vulnerabilities
 - `pnpm audit` — PASS, 0 known vulnerabilities

@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Advertiser Policy — WaitLayer',
+  description: 'WaitLayer advertiser policy — eligibility, ad content guidelines, billing, fraud prevention, and account suspension policies.',
+};
 
 export default function AdvertiserPolicyPage() {
   return (
