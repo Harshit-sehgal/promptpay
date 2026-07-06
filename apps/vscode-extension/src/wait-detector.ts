@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 
+export interface WaitStateDetectorOptions {
+  /** Callback to read the configurable inactivity timeout (ms). Default 15_000. */
+  getInactivityTimeoutMs: () => Promise<number> | number;
+}
+
 export interface WaitStateEvent {
   startTime: number;
   durationMs: number;
@@ -42,6 +47,8 @@ export class WaitStateDetector {
   // ── Editor inactivity tracking ──
   private inactivityTimer?: NodeJS.Timeout;
   private lastEditTime = 0;
+  private getInactivityTimeoutMs: () => Promise<number> | number;
+
   /** User must be idle this long (with window focused) before we infer a wait. */
   private readonly inactivityThresholdMs = 15_000;
   private inWait = false;
@@ -61,6 +68,10 @@ export class WaitStateDetector {
   // We track when terminals are opened/closed and watch for AI tool names
   private terminalWriteCounts = new Map<string, number>();
   private lastTerminalActiveTime = 0;
+
+  constructor(options?: WaitStateDetectorOptions) {
+    this.getInactivityTimeoutMs = options?.getInactivityTimeoutMs ?? (() => 15_000);
+  }
 
   onWaitStateStart(fn: (e: WaitStateEvent) => void) {
     this.listeners.push(fn);
@@ -204,12 +215,13 @@ export class WaitStateDetector {
     // Reset the edit-burst counter on each scheduling cycle — any
     // accumulated edit count from the previous window is stale.
     this.editsDuringWait = 0;
-    this.inactivityTimer = setTimeout(() => {
-      this.checkInactivity();
+    this.inactivityTimer = setTimeout(async () => {
+      const threshold = await this.getInactivityTimeoutMs();
+      this.checkInactivity(threshold);
     }, this.inactivityThresholdMs);
   }
 
-  private checkInactivity() {
+  private checkInactivity(inactivityThresholdMs: number) {
     if (!this.windowFocused) return;
     if (this.inWait) return;
 
@@ -217,7 +229,7 @@ export class WaitStateDetector {
     // Must have an active text editor (user is actually coding, not idle browsing)
     const editor = vscode.window.activeTextEditor;
 
-    if (editor && idleTime >= this.inactivityThresholdMs) {
+    if (editor && idleTime >= inactivityThresholdMs) {
       // User has stopped typing for 4+ seconds while editor is open and focused.
       // This is a strong signal that AI is generating/thinking.
       this.enterWait('inactivity');

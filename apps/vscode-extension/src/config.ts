@@ -61,6 +61,17 @@ export class ConfigurationManager {
     );
   }
 
+  /**
+   * How long (ms) the user must be inactive before a wait state is inferred.
+   * Default: 15_000 (15 seconds).
+   * Configurable via `waitlayer.inactivityTimeoutMs` in VS Code settings.
+   */
+  async getInactivityTimeoutMs(): Promise<number> {
+    return (
+      vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('inactivityTimeoutMs') ?? 15_000
+    );
+  }
+
   async getTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
     try {
       const raw = await this.secrets.get('waitlayer.authTokens');

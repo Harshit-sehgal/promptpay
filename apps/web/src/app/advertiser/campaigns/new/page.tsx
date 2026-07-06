@@ -140,6 +140,7 @@ export default function NewCampaignPage() {
                   onChange={(e) => setName(e.target.value)}
                   required
                   placeholder="My developer tool campaign"
+                  autoComplete="off"
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                 />
               </div>
@@ -168,6 +169,7 @@ export default function NewCampaignPage() {
                     value={bidAmount}
                     onChange={(e) => setBidAmount(e.target.value)}
                     required
+                    inputMode="decimal"
                     className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                   />
                 </div>
@@ -185,6 +187,7 @@ export default function NewCampaignPage() {
                     value={budgetTotal}
                     onChange={(e) => setBudgetTotal(e.target.value)}
                     required
+                    inputMode="numeric"
                     className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                   />
                   <p className="text-ink-500 text-xs mt-1">Minimum $50.00</p>
@@ -211,6 +214,8 @@ export default function NewCampaignPage() {
                   onChange={(e) => setLandingUrl(e.target.value)}
                   required
                   placeholder="https://your-product.com"
+                  autoComplete="url"
+                  inputMode="url"
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                 />
               </div>

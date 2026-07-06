@@ -178,6 +178,8 @@ export default function SignupPage() {
             <button
               type="button"
               onClick={() => setRole('developer')}
+              role="tab"
+              aria-selected={role === 'developer'}
               className={`py-2.5 px-4 rounded-lg text-[14px] font-medium transition-all ${
                 role === 'developer'
                   ? 'bg-white text-surface-900 shadow-sm'
@@ -189,6 +191,8 @@ export default function SignupPage() {
             <button
               type="button"
               onClick={() => setRole('advertiser')}
+              role="tab"
+              aria-selected={role === 'advertiser'}
               className={`py-2.5 px-4 rounded-lg text-[14px] font-medium transition-all ${
                 role === 'advertiser'
                   ? 'bg-white text-surface-900 shadow-sm'
@@ -200,12 +204,12 @@ export default function SignupPage() {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5">
+            <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5" role="alert" aria-live="polite">
               <p className="text-red-600 text-[14px]">{error}</p>
             </div>
           )}
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit} role="form" aria-label="Sign up form">
             {role === 'advertiser' && (
               <div>
                 <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
@@ -216,6 +220,7 @@ export default function SignupPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="My Company"
+                  autoComplete="organization"
                   className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
                 />
               </div>
@@ -228,6 +233,8 @@ export default function SignupPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
+                autoComplete="email"
+                inputMode="email"
                 className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
               />
             </div>
@@ -239,6 +246,8 @@ export default function SignupPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="At least 8 characters"
                 required
+                autoComplete="new-password"
+                minLength={8}
                 className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
               />
             </div>
@@ -252,6 +261,7 @@ export default function SignupPage() {
                   value={referrerCode}
                   onChange={(e) => setReferrerCode(e.target.value)}
                   placeholder="Got an invite code?"
+                  autoComplete="off"
                   className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
                 />
               </div>
@@ -259,6 +269,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
+              aria-busy={loading}
               className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
             >
               {loading ? 'Creating account...' : 'Create account'}

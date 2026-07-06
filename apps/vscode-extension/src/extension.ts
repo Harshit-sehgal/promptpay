@@ -9,7 +9,9 @@ import { StatusBar } from './status-bar';
 export function activate(context: vscode.ExtensionContext) {
   const config = new ConfigurationManager(context.secrets);
   const api = new ApiClient(config);
-  const detector = new WaitStateDetector();
+  const detector = new WaitStateDetector({
+    getInactivityTimeoutMs: () => config.getInactivityTimeoutMs(),
+  });
   const panel = new AdPanel(context, api);
   const status = new StatusBar();
 

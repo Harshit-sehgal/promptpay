@@ -83,12 +83,12 @@ export class ApiClient {
         );
         // Update in-memory and persist
         this.currentTokens = tokens;
-        this.config.storeTokens(tokens).catch(() => {});
+        void this.config.storeTokens(tokens);
         return tokens;
       } catch {
         // Refresh failed — clear tokens
         this.currentTokens = null;
-        this.config.clearTokens().catch(() => {});
+        void this.config.clearTokens();
         return null;
       } finally {
         this._refreshInProgress = null;
@@ -289,8 +289,8 @@ export class ApiClient {
       this.currentTokens = null;
       this.deviceUUID = null;
       this.deviceEventSecret = null;
-      this.config.clearTokens().catch(() => {});
-      this.config.clearDeviceRegistration().catch(() => {});
+      void this.config.clearTokens();
+      void this.config.clearDeviceRegistration();
     }
     vscode.window.showInformationMessage('WaitLayer: logged out');
   }

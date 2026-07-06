@@ -4,6 +4,9 @@ import { jwtVerify } from 'jose';
 
 const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', '/dashboard'];
 
+// Static pages that can be publicly cached
+const STATIC_CACHEABLE_PATHS = ['/privacy', '/terms', '/payout-policy', '/advertiser-policy'];
+
 /**
  * Next.js middleware that gates protected routes on the httpOnly
  * `access_token` cookie.
@@ -33,11 +36,18 @@ const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Only check protected paths
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
-  if (!isProtected) return NextResponse.next();
+  if (!isProtected) {
+    // Set long-lived cache headers for static policy pages
+    if (STATIC_CACHEABLE_PATHS.some((p) => pathname === p)) {
+      const res = NextResponse.next();
+      res.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800');
+      return res;
+    }
+    return NextResponse.next();
+  }
 
   const accessCookie = request.cookies.get('access_token');
   const token = accessCookie?.value;
@@ -88,5 +98,10 @@ export const config = {
     '/admin/:path*',
     '/settings/:path*',
     '/dashboard/:path*',
+    // Public static pages — middleware handles caching headers
+    '/privacy',
+    '/terms',
+    '/payout-policy',
+    '/advertiser-policy',
   ],
 };

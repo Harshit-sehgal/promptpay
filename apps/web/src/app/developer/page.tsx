@@ -244,7 +244,7 @@ export default function DeveloperDashboard() {
 
           <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {stats.map(({ label, value, detail, Icon, valueClass }) => (
-              <section key={label} className="rounded-lg border border-surface-200/80 bg-white p-5 shadow-sm">
+              <section key={label} aria-label={label} className="rounded-lg border border-surface-200/80 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wider text-surface-500">{label}</p>
                   <Icon className="h-5 w-5 text-surface-400" />
@@ -256,7 +256,7 @@ export default function DeveloperDashboard() {
           </div>
 
           <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-            <section className="rounded-lg border border-surface-200/80 bg-white shadow-sm">
+            <section aria-label="Earnings breakdown" className="rounded-lg border border-surface-200/80 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-surface-100 px-5 py-4">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-surface-950">
                   <DollarSign className="h-4 w-4 text-surface-400" />
@@ -288,7 +288,7 @@ export default function DeveloperDashboard() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-surface-200/80 bg-white shadow-sm">
+            <section aria-label="Trust and payout status" className="rounded-lg border border-surface-200/80 bg-white shadow-sm">
               <div className="border-b border-surface-100 px-5 py-4">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-surface-950">
                   <ShieldCheck className="h-4 w-4 text-surface-400" />

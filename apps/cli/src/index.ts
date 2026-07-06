@@ -3,6 +3,7 @@ import { runAuth } from './commands/auth';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
 import { runLogout } from './commands/logout';
+import { runConfig } from './commands/config';
 
 const program = new Command();
 program
@@ -12,8 +13,9 @@ program
 
 program
   .command('auth')
-  .description('Authenticate with WaitLayer (saves token locally)')
+  .description('Authenticate with WaitLayer (login or signup)')
   .option('-e, --email <email>', 'Login email')
+  .option('-s, --signup', 'Create a new account instead of logging in')
   .action((opts) => runAuth(opts));
 
 program
@@ -32,5 +34,10 @@ program
   .command('logout')
   .description('Remove stored credentials')
   .action(() => runLogout());
+
+program
+  .command('config')
+  .description('View and update settings (ads, quiet mode, frequency)')
+  .action(() => runConfig());
 
 program.parse();

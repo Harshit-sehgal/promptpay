@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as https from 'https';
 import { signPayload } from '@waitlayer/shared';
 import { Credentials, getCredentials, setCredentials, storeDeviceEventSecret, getDeviceEventSecret } from './credentials';
+import { normalizeToolType } from './tool-types';
 
 const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
 
@@ -67,8 +68,23 @@ export class ApiClient {
     const res = await this.raw<{
       accessToken: string;
       refreshToken: string;
-      user: { id: string; role: string };
+      user: { id: string; role: string; referralCode?: string };
     }>('POST', '/auth/login', input);
+    return res;
+  }
+
+  async signup(input: {
+    email: string;
+    password: string;
+    role: string;
+    name?: string;
+    referrerCode?: string;
+  }) {
+    const res = await this.raw<{
+      accessToken: string;
+      refreshToken: string;
+      user: { id: string; role: string; referralCode?: string };
+    }>('POST', '/auth/signup', input);
     return res;
   }
 
@@ -96,6 +112,29 @@ export class ApiClient {
       trustScore?: number;
     }>('GET', '/developer/dashboard', undefined);
     return res;
+  }
+
+  async getSettings() {
+    return this.raw<{
+      adsEnabled: boolean;
+      quietMode: boolean;
+      quietModeStart?: string;
+      quietModeEnd?: string;
+      maxAdsPerHour?: number;
+      referralCode?: string;
+      email: string;
+      displayName?: string;
+    }>('GET', '/developer/settings', undefined);
+  }
+
+  async updateSettings(data: Record<string, unknown>) {
+    return this.raw<{
+      adsEnabled: boolean;
+      quietMode: boolean;
+      quietModeStart?: string;
+      quietModeEnd?: string;
+      maxAdsPerHour?: number;
+    }>('PATCH', '/developer/settings', data);
   }
 
   async reportWaitState(input: {
@@ -174,9 +213,9 @@ export class ApiClient {
   }
 
   private async raw<T>(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
-    body?: Record<string, unknown>,
+    body?: Record<string, unknown> | undefined,
     _isRefreshAttempt = false,
   ): Promise<T> {
     // No header signature: the body already carries `signature`, and the API
@@ -248,27 +287,4 @@ export class ApiClient {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-/**
- * Map user-supplied tool names to valid ToolType enum values.
- * Common AI tools → their enum value; unknown → 'terminal' (generic catch-all).
- */
-function normalizeToolType(raw: string): string {
-  const TOOL_MAP: Record<string, string> = {
-    claude_code: 'claude_code',
-    'claude-code': 'claude_code',
-    codex_cli: 'codex_cli',
-    'codex-cli': 'codex_cli',
-    codex: 'codex_cli',
-    cursor: 'cursor',
-    cline: 'cline',
-    windsurf: 'windsurf',
-    aider: 'aider',
-    vscode: 'vscode',
-    terminal: 'terminal',
-    browser: 'browser',
-  };
-  const key = raw.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-  return TOOL_MAP[key] ?? 'terminal';
 }

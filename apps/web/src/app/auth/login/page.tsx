@@ -172,20 +172,21 @@ export default function LoginPage() {
           <p className="text-surface-500 text-[14px] mb-8">Sign in to your account</p>
 
           {error && (
-            <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5">
+            <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5" role="alert" aria-live="polite">
               <p className="text-red-600 text-[14px]">{error}</p>
             </div>
           )}
 
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit} role="form" aria-label="Sign in form">
             <div>
-              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">Email</label>
-              <input
+              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">Email</label>                <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
+                autoComplete="email"
+                inputMode="email"
                 className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
               />
             </div>
@@ -205,12 +206,14 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                autoComplete="current-password"
                 className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
+              aria-busy={loading}
               className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
             >
               {loading ? 'Signing in...' : 'Sign in'}

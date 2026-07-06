@@ -273,6 +273,8 @@ export default function DevPayoutsPage() {
                       placeholder={
                         provider === 'paypal_email' ? 'you@example.com' : 'Account ID'
                       }
+                      autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
+                      inputMode={provider === 'paypal_email' ? 'email' : 'text'}
                       className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
                     />
                   </div>
