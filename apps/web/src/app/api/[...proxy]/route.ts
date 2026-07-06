@@ -20,6 +20,14 @@ import { COOKIE_ACCESS, COOKIE_REFRESH } from '../auth/_lib/cookies';
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
 /**
+ * Maximum body size this proxy will accept (in bytes). Mirrors the
+ * API server's `json({ limit: '100kb' })` in apps/api/src/main.ts.
+ * Anything larger is rejected with 413 to prevent OOM/DoS — Next.js does
+ * NOT implicitly cap `req.text()` the way built-in body parsers do.
+ */
+const MAX_PROXY_BODY_BYTES = 100_000;
+
+/**
  * Path prefixes the proxy is permitted to forward. Anything not on this list
  * is rejected with 403. This prevents the browser from reaching admin-only
  * upstream endpoints not intended for the web UI (e.g. extension-specific
@@ -121,6 +129,25 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // ── Body-size guard (DoS prevention) ────────────────────────────────
+    // Next.js does NOT implicitly cap `req.text()` on Route Handlers the
+    // way it does for built-in body parsers. A 1GiB POST would cause a 1GiB
+    // allocation in this Node worker before any auth check or upstream
+    // dispatch fires. Reject oversized bodies up front, mirroring the API
+    // server's 100kb limit (apps/api/src/main.ts body-parser caps).
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      const contentLengthRaw = req.headers.get('content-length');
+      if (contentLengthRaw) {
+        const contentLength = Number(contentLengthRaw);
+        if (Number.isFinite(contentLength) && contentLength > MAX_PROXY_BODY_BYTES) {
+          return NextResponse.json(
+            { message: 'Payload too large', code: 'BODY_TOO_LARGE' },
+            { status: 413, headers: { 'X-Max-Body-Bytes': String(MAX_PROXY_BODY_BYTES) } },
+          );
+        }
+      }
+    }
+
     const url = upstreamUrl(pathname);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
@@ -136,7 +163,19 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
     let body: string | undefined;
     if (req.method !== 'GET' && req.method !== 'DELETE') {
       try {
+        // Enforce the actual byte length after read in case the client omitted
+        // Content-Length (transfer-encoding: chunked). If the buffered body
+        // exceeds MAX_PROXY_BODY_BYTES, refuse to forward.
         body = await req.text();
+
+        // First-line defense: explicit cap on byte-length (Content-Length
+        // header may lie). Reject anything past the limit before forwarding.
+        if (body && Buffer.byteLength(body, 'utf-8') > MAX_PROXY_BODY_BYTES) {
+          return NextResponse.json(
+            { message: 'Payload too large', code: 'BODY_TOO_LARGE' },
+            { status: 413, headers: { 'X-Max-Body-Bytes': String(MAX_PROXY_BODY_BYTES) } },
+          );
+        }
 
         // Intercept /auth/refresh: the browser can't read the httpOnly
         // refresh_token cookie, so it sends an empty body. The proxy

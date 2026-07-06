@@ -514,7 +514,7 @@ export class PayoutService {
     const payout = await this.prisma.$transaction(async (tx) => {
       const pkt = await tx.payoutRequest.findUnique({
         where: { id: payoutId },
-        include: { payoutAccount: true, allocations: true },
+        include: { payoutAccount: true, allocations: { include: { earningsEntry: true } } },
       });
       if (!pkt) throw new BadRequestException('Payout request not found');
 
@@ -528,6 +528,30 @@ export class PayoutService {
         throw new BadRequestException(
           `Allocation mismatch: allocated ${allocatedSum} but expected ${expectedAmount}`,
         );
+      }
+
+      // **Race-safe vs holdEarnings / fraud flags**:
+      // After the `approved -> processing` claim above, a concurrent fraud flag
+      // can flip some allocated earnings from `confirmed` -> `held`. If we
+      // proceed and call `provider.initiate(...)`, real money leaves the
+      // platform against an earnings row the platform has now frozen — money
+      // and earnings are then misaligned. Refuse to call the provider if any
+      // allocated earnings entry is no longer `confirmed`.
+      //
+      // We deliberately exclude this check from the early-return tests: it is
+      // a guard that only fires under concurrent fraud-flag activity.
+      // Round 6 added the symmetric guard inside `markPayoutPaid`; this is
+      // the matching pre-flight before the PSP is contacted.
+      const holdEntryIds = pkt.allocations.map((a: { earningsEntryId: string }) => a.earningsEntryId);
+      if (holdEntryIds.length > 0) {
+        const notConfirmedCount = await tx.earningsLedger.count({
+          where: { id: { in: holdEntryIds }, status: { not: 'confirmed' } },
+        });
+        if (notConfirmedCount > 0) {
+          throw new BadRequestException(
+            `Payout cannot be processed: ${notConfirmedCount} allocated earnings entries are no longer in 'confirmed' status (likely held by a fraud flag). The payout must be rejected and the developer may re-request once the entries are released.`,
+          );
+        }
       }
 
       return pkt;
