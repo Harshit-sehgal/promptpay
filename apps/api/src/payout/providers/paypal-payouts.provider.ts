@@ -35,6 +35,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
   private readonly clientSecret: string;
   private readonly baseUrl: string;
   private readonly enabled: boolean;
+  private readonly nodeEnv: string;
   private accessToken: string | null = null;
   private tokenExpiry = 0;
 
@@ -46,11 +47,22 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       ? 'https://api-m.paypal.com'
       : 'https://api-m.sandbox.paypal.com';
     this.enabled = !!(this.clientId && this.clientSecret);
+    this.nodeEnv = this.config.get<string>('NODE_ENV', process.env.NODE_ENV || 'development');
   }
 
   /** Whether PayPal is configured */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  readiness(): { ok: true } | { ok: false; reason: string } {
+    if (!this.enabled && this.nodeEnv === 'production') {
+      return {
+        ok: false,
+        reason: 'PayPal Payouts is not configured. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET before processing paypal_payouts requests in production.',
+      };
+    }
+    return { ok: true };
   }
 
   /** Get a valid OAuth access token, refreshing if needed */
@@ -92,6 +104,9 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
     currency: string;
   }): Promise<{ providerTxId: string; status: string }> {
     if (!this.enabled) {
+      if (this.nodeEnv === 'production') {
+        throw new Error('PayPal Payouts is not configured for production');
+      }
       this.logger.warn('PayPal not configured — returning stub response');
       return { providerTxId: `paypal_stub_${params.payoutRequestId}`, status: 'processing' };
     }

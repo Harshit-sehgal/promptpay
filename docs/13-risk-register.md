@@ -66,7 +66,7 @@ Mitigation:
 
 - Payout holds.
 - Trust score.
-- Rate limits.
+- Redis-backed production rate limits and brute-force lockouts.
 - Fraud flags.
 - Manual payout approval.
 - Invalid traffic credits.
@@ -210,6 +210,8 @@ Mitigation:
 - Ledger tests.
 - Reconciliation jobs.
 - Manual payout review.
+- Confirmed `debit` recovery rows for `paidSkipped` fraud reversals so future payouts are reduced automatically.
+- Operational review for recovery debt that cannot be netted against future earnings.
 
 Owner: Backend/Finance Engineering
 
@@ -275,3 +277,86 @@ Mitigation:
 
 Owner: Strategy
 
+## Risk 13: Supply-chain or transitive dependency vulnerabilities reach production
+
+Impact: high
+
+Likelihood: medium
+
+Signals:
+
+- `pnpm audit --prod` reports critical or high vulnerabilities.
+- Deprecated transitive packages remain in production dependency paths.
+- Framework transitive dependencies lag patched versions.
+
+Mitigation:
+
+- Run `pnpm audit --prod` as a release gate.
+- Remove unused production dependencies promptly.
+- Use narrow workspace overrides for patched transitive versions when upstream packages lag.
+- Revisit overrides during framework upgrades so pins do not hide incompatibilities.
+
+Owner: Platform/Security
+
+## Risk 14: Stub payout integrations are used as real providers
+
+Impact: high
+
+Likelihood: medium
+
+Signals:
+
+- Production payout transaction IDs have stub-like prefixes.
+- Provider credentials are missing while automated payout methods are enabled.
+- Admins process non-manual providers without a PSP confirmation.
+
+Mitigation:
+
+- Automated stub providers fail closed in production before the processing claim.
+- PayPal Payouts requires credentials in production.
+- Keep manual payout methods explicit and reconcile them through admin review.
+- Require provider runbook evidence before enabling each automated PSP.
+
+Owner: Backend/Finance Engineering
+
+## Risk 15: Redis outage disables distributed abuse controls
+
+Impact: high
+
+Likelihood: medium
+
+Signals:
+
+- API startup fails in production because `REDIS_URL` is missing or unreachable.
+- Auth and route rate-limit checks return service-unavailable responses.
+- Redis latency or connection errors appear in API logs.
+
+Mitigation:
+
+- Require `REDIS_URL` in production configuration.
+- Fail closed for production rate limiting and brute-force tracking.
+- Run Redis with health checks and operational alerts.
+- Keep local/test in-memory fallback only outside production.
+
+Owner: Platform/Security
+
+## Risk 16: Device event secret loss blocks extension traffic
+
+Impact: medium
+
+Likelihood: medium
+
+Signals:
+
+- Devices repeatedly fail event signature verification after reinstall or local secret-store loss.
+- Users can authenticate but cannot serve ads because their registered device no longer has its local `eventSecret`.
+- Support tickets mention device re-registration failures.
+
+Mitigation:
+
+- Store device event secrets only in OS-backed secret stores where available.
+- Reject legacy global-HMAC event signatures instead of accepting a shared fallback.
+- Allow same-user legacy null-secret rows to re-register and receive a fresh per-device secret.
+- Build an explicit operator/user recovery flow for devices that have a server-side `eventSecret` but lost the local copy.
+
+Owner: Security/Extension Engineering

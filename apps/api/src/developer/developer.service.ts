@@ -33,17 +33,32 @@ export class DeveloperService {
   }
 
   async getEarningsSummary(userId: string) {
-    const entries = await this.prisma.earningsLedger.findMany({ where: { userId }, select: { status: true, amountMinor: true } });
+    const entries = await this.prisma.earningsLedger.findMany({
+      where: { userId },
+      select: { status: true, entryType: true, amountMinor: true },
+    });
     const summary = {
       estimatedEarnings: 0,
       confirmedEarnings: 0,
       pendingEarnings: 0,
       heldEarnings: 0,
       reversedEarnings: 0,
+      recoveryDebt: 0,
       availableForPayout: 0,
       lifetimeEarnings: 0,
     };
     for (const entry of entries) {
+      if (entry.entryType === 'debit') {
+        summary.recoveryDebt += entry.amountMinor;
+        if (entry.status !== 'reversed' && entry.status !== 'void') {
+          summary.lifetimeEarnings -= entry.amountMinor;
+          if (entry.status === 'confirmed') {
+            summary.confirmedEarnings -= entry.amountMinor;
+          }
+        }
+        continue;
+      }
+
       // reversed entries are NOT credited toward lifetime — they represent
       // money that was earned but then clawed back (fraud reversal). Adding
       // them back into the displayed lifetime total inflates the metric.
@@ -56,7 +71,9 @@ export class DeveloperService {
       else if (entry.status === 'held') summary.heldEarnings += entry.amountMinor;
       else if (entry.status === 'reversed') summary.reversedEarnings += entry.amountMinor;
     }
+    summary.confirmedEarnings = Math.max(0, summary.confirmedEarnings);
     summary.availableForPayout = summary.confirmedEarnings;
+    summary.lifetimeEarnings = Math.max(0, summary.lifetimeEarnings);
     return summary;
   }
 

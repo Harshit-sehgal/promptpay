@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-03 (verified after Phase B completion: per-device secrets, zod contracts, security hardening, and Docker build)
+Last updated: 2026-07-06 (verified after supply-chain hardening, payout-provider production guards, Redis-backed abuse controls, and full quality-gate pass)
 
 ---
 
@@ -16,11 +16,11 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 | 4 | Authorization | PASS | Integration test asserts 403s on cross-tenant access |
 | 5 | Campaign lifecycle | PASS | Real DB end-to-end: draft → submitted → approved → active |
 | 6 | Ledger/money flow | PASS | Integration asserts CPM and CPC 60/30/10 splits with guarded campaign spend |
-| 7 | Payouts | Partial | Lifecycle and partial-allocation splitting tested; PSP providers are still stubs |
+| 7 | Payouts | Partial | Lifecycle, partial allocations, provider-failure release, and production stub guards tested; several real PSP integrations still pending |
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
 | 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **168 tests across 8 files** (real HTTP+DB + service-level) |
+| 11 | Tests/readiness | PASS | **196 tests across 9 files** (real HTTP+DB + service-level) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
@@ -56,7 +56,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 **Verified flow surfaces:**
 - Extension routes require HMAC signature over the canonical payload (excluding the `signature` field itself)
 - Body schemas strictly reject unknown fields, so misnamed payloads (e.g. `headline` vs `title`) fail with 400
-- Device registration issues a per-device `eventSecret`; registered devices with an `eventSecret` must sign events with that secret. The global HMAC fallback remains only for legacy device rows where `eventSecret` is still null.
+- Device registration issues a per-device `eventSecret`; extension events must sign with that device secret. Legacy rows with `eventSecret = null` are rejected for event traffic and must re-register to receive a secret.
 
 ---
 
@@ -153,7 +153,9 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 7. Payouts -- Partial
 
-- Multi-provider architecture: PayPal Email, PayPal Payouts, Manual, Wise, Stripe Connect, Razorpay, Payoneer — **all providers are stubbed**: `initiate()` returns a provider-tx-id and `processing` status; none of them contact a real PSP
+- Multi-provider architecture: Manual, PayPal Email, PayPal Payouts, Wise, Stripe Connect, Razorpay, Payoneer.
+- PayPal Payouts calls the real PayPal API when `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are configured. In dev/test it can return a stub response when credentials are absent; in production it fails closed before the payout is claimed.
+- Wise, Stripe Connect, Razorpay, and Payoneer remain development stubs and are blocked in `NODE_ENV=production` before the `approved -> processing` claim.
 - Minimum payout threshold: $10.00 (`PAYOUT.MINIMUM_THRESHOLD_MINOR`)
 - Fraud flag check (high/critical) blocks payout requests
 - Restricted/banned users blocked from payout
@@ -163,12 +165,15 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - `markPayoutPaid` updates only `earningsEntryId ∈ allocatedEntryIds` from `confirmed → paid`. The split remainder stays `confirmed` and remains selectable for a future payout.
 - Double-payout prevented by checking that no allocated entry is already `paid` before any update.
 - Availability calculations reserve only in-flight payout statuses (`requested`, `under_review`, `approved`, `processing`); already-paid allocations are not subtracted from confirmed availability a second time.
+- Fraud discovered after a developer has already been paid creates idempotent confirmed `debit` recovery rows in `earnings_ledger`. Future payout availability subtracts those debits while preserving the original paid credit rows for audit.
 
 **What changed:**
 - A unique constraint on `PayoutAllocation.earningsEntryId` would prevent the same entry being referenced twice; see prisma schema (verify the actual constraint before relying on it for race protection in concurrent payouts).
+- Provider readiness is checked before claiming an approved payout, so unimplemented or unconfigured automated providers cannot move a production payout into `processing`.
+- If a provider explicitly returns `failed` from initiation, the payout is marked `failed` and its allocations are deleted in one transaction, making the earnings available for a fresh request.
 
 **Known limitation:**
-- Real PSP integration not implemented. To go live, wire `StripeConnectPayoutProvider.initiate()` and `WisePayoutProvider.initiate()` etc. to their respective SDKs, and verify the returned provider `status` (currently always `processing`).
+- Real PSP integrations are still missing for Stripe Connect payouts, Wise, Razorpay, and Payoneer. To go live with those providers, wire each provider to its SDK/API and verify provider status transitions end-to-end.
 
 ---
 
@@ -196,7 +201,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - `ad-panel.ts` renders the sponsored ad in a webview panel
 - `status-bar.ts` shows earnings and ad-serving state
 - Uses shared HMAC signing utility (`signPayload`) keyed by the API-issued per-device event secret after registration
-- Device registration stores the returned `eventSecret` in VS Code `SecretStorage`; the configured global extension secret is only a fallback before registration or for legacy device rows without `eventSecret`
+- Device registration stores the returned `eventSecret` in VS Code `SecretStorage`; the extension no longer uses a global extension HMAC fallback for event payloads
 - Login/logout clear stored device registration state so a new authenticated user re-registers and receives a user-scoped device secret
 - Persists access/refresh tokens via `SecretStorage`; refresh interceptor retries once on 401 with a single in-flight refresh
 - Ad webview CSP uses per-render nonces for script/style and does not allow `unsafe-inline`
@@ -233,18 +238,19 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**168 tests across 8 files (all pass):**
+**196 tests across 9 files (all pass):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
 | `auth/auth.service.spec.ts` | 27 | Unit | signup, login, refresh, replay detection, verification, password reset |
 | `auth/strategies/google-token-verifier.spec.ts` | 3 | Unit | env constraints; mock token verifier |
+| `common/guards/brute-force.guard.spec.ts` | 5 | Unit | Redis-ready brute-force dimensions, reset, production fail-closed behavior |
 | `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, rate limit, self-click, flags |
-| `ledger/ledger.service.spec.ts` | 18 | Unit | splits, guarded spend, balances, history, hold days |
-| `payout/payout.service.spec.ts` | 14 | Unit | allocation validation, partial split, provider routing |
-| `integration/e2e-money-loop.spec.ts` | 27 | Service-level E2E | Campaign through payout via mocked Prisma |
+| `ledger/ledger.service.spec.ts` | 27 | Unit | splits, guarded spend, balances, history, hold days |
+| `payout/payout.service.spec.ts` | 21 | Unit | allocation validation, partial split, provider routing, production provider guards, recovery-debt availability |
+| `integration/e2e-money-loop.spec.ts` | 29 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
-| `integration/contract-tests.spec.ts` | 27 | **Contract** | Zod validation of API response shapes |
+| `integration/contract-tests.spec.ts` | 32 | **Contract** | Zod validation of API response shapes |
 
 **What the real HTTP integration test actually exercises (with `JWT_SECRET` and `DATABASE_URL` set):**
 - Real NestJS `Test.createTestingModule({imports: [AppModule]})`
@@ -339,7 +345,10 @@ JWT_SECRET="test-jwt-secret-for-integration-test-runs-only-32+" \\
 # Run with coverage
 pnpm --filter waitlayer-api test:cov
 
-# Build and start the Docker stack (PostgreSQL + API + Web)
+# Production dependency audit
+pnpm audit --prod
+
+# Build and start the Docker stack (PostgreSQL + Redis + API + Web)
 docker compose build
 docker compose up -d
 
@@ -356,15 +365,33 @@ pnpm --filter waitlayer-web dev
 
 | Limitation | Severity | Detail |
 |------------|----------|--------|
-| All payout PSP providers are stubs | Med | `StripeConnectPayoutProvider`, `Wise`, `Razorpay`, `Payoneer`, `PayPal Payouts` all return a fake tx id and `processing` — none actually call a real PSP |
+| Non-PayPal automated payout PSPs are not production-ready | Med | Stripe Connect, Wise, Razorpay, and Payoneer are dev/test stubs and fail closed in production until real PSP integrations are wired |
+| PayPal Payouts requires credentials for production | Med | `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` must be set before processing `paypal_payouts` requests in production; absent credentials are allowed only for dev/test stubs |
 | Stripe provider requires env to fully run | Med | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY` must be set; without them endpoints stub out |
 | Real Google OAuth requires env | Low | `GOOGLE_CLIENT_ID` required for production; offline mock-token verifier is dev/test only |
-| Rate limits are per-process, in-memory only | Low | No Redis or distributed limiter; multi-instance deploys would each enforce limits independently |
 | No WebSockets / push | Low | Dashboards refresh on user action or polling |
-| Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET=change-me-in-production`, `EXTENSION_HMAC_SECRET=dev-secret-change-me-do-not-use-in-production` are placeholders only — must be rotated before production deploy |
-| Legacy global HMAC fallback remains for old device rows | Low | Registered devices with `Device.eventSecret` must use per-device signing; fallback is only for legacy rows where `eventSecret` is null. A production rollout should backfill or force re-registration, then remove the fallback entirely |
+| Redis required for multi-instance production abuse controls | Low | `REDIS_URL` is required in production; local/test can intentionally fall back to in-memory counters |
+| No external collections workflow for unrecovered payout debt | Med | Paid-fraud recovery debits reduce future payouts automatically, but users with no future earnings still require an operator/legal process outside the app |
+| Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET` is a dev-only placeholder and must be rotated before production deploy; compose also enables mock Google auth for local development only |
+| Lost per-device event secret requires re-registration or support recovery | Low | Event traffic no longer accepts a global HMAC fallback. A device with a server-side `eventSecret` but no local copy must be re-registered through an explicit recovery path |
 | Docker Compose has orphan one-off containers locally | Low | `docker compose up -d` warned about old `promptpay-api-run-*` containers from prior manual runs; current named services are healthy |
 | Build emits `dist/apps/api/src/main.js` (not `dist/main.js`) | Info | Because path aliases reach outside `src/`, TypeScript's auto-`rootDir` puts output one level deeper. Dockerfile CMD is aligned to the actual path |
+
+---
+
+## Quality Improvements (2026-07-06)
+
+| Change | Impact |
+|--------|--------|
+| Removed unused `passport-google-id-token` dependency | Dropped the deprecated `request` dependency chain and cleared production audit findings |
+| Added pnpm workspace overrides for `multer@2.2.0` and `postcss@8.5.16` | Pins transitive framework dependencies to patched versions |
+| Fixed Next ESLint plugin detection during `next build` | Framework-specific lint rules are now detected by the production build |
+| Added payout-provider readiness checks | Unconfigured PayPal Payouts and unimplemented automated providers fail before the payout is claimed in production |
+| Added failed-initiate payout handling | Explicit provider failures mark the payout failed and release allocations transactionally |
+| Added/updated payout tests | Production provider guards and failed-provider allocation release are covered |
+| Added paid-fraud recovery debits | Fraud found after payout creates auditable debit rows that reduce future payout availability |
+| Added Redis-backed rate limiting and brute-force tracking | Production auth and route abuse controls share counters across API instances and fail closed if Redis is unavailable |
+| Removed global extension HMAC event fallback | Extension events now require API-issued per-device secrets; legacy null-secret device rows are rejected until re-registration issues a secret |
 
 ---
 
@@ -392,7 +419,6 @@ Three rounds of code quality improvements were applied across 16 files (178 inse
 | Injected `ConfigService` instead of reading `process.env.WEB_BASE_URL` | `referral.service.ts` | Proper NestJS DI pattern, validated config |
 | Replaced `console.error()` with `Logger.error()` | `audit.service.ts` | Structured NestJS logging |
 | Uses validated `loadEnv()` return value instead of raw `process.env` | `main.ts` | Config validated before use |
-| Added production guard + dev warning for `EXTENSION_HMAC_SECRET` | `cli/api-client.ts` | Fails fast in production when secret missing; warns in dev |
 
 ### Developer Experience & DevOps
 
@@ -409,18 +435,17 @@ Three rounds of code quality improvements were applied across 16 files (178 inse
 All quality gates pass cleanly:
 - Typecheck: 13/13 tasks — PASS
 - Lint: 12/12 tasks, 0 errors, 0 warnings — PASS
-- Build: 9/9 packages (full turbo cache) — PASS
+- Build: 9/9 packages — PASS
 
 ---
 
 ## Commands Verified This Pass
 
 - `pnpm install --frozen-lockfile` — PASS
-- `pnpm --filter @waitlayer/db generate` — PASS
-- `pnpm run typecheck` — PASS (13/13 tasks)
 - `pnpm run lint` — PASS (12/12 tasks, 0 warnings)
-- `pnpm run build` — PASS (9/9 packages, full turbo cache)
-- `pnpm --filter waitlayer-api test` — PASS, 168 tests / 8 files
-- `docker compose build api` — PASS
-- `curl http://localhost:4002/api/v1/auth/me` — PASS smoke check, expected `401 Unauthorized`
-- `curl -I http://localhost:3000/` — PASS smoke check, `200 OK`
+- `pnpm run typecheck` — PASS (13/13 tasks)
+- `pnpm run test` — PASS, 196 tests / 9 files
+- `pnpm run build` — PASS (9/9 packages)
+- `pnpm audit --prod` — PASS, 0 known production vulnerabilities
+- `pnpm audit` — PASS, 0 known vulnerabilities
+- `git diff --check` — PASS

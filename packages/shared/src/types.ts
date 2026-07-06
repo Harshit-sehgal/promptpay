@@ -104,6 +104,7 @@ export interface DeveloperDashboard {
   confirmedEarnings: number;
   pendingEarnings: number;
   heldEarnings: number;
+  recoveryDebt: number;
   availableForPayout: number;
   lifetimeEarnings: number;
   trustLevel: TrustLevel;

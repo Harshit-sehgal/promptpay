@@ -4,7 +4,7 @@ const prettier = require('eslint-config-prettier');
 
 const config = [
   {
-    ignores: ['dist/**', 'node_modules/**', '.next/**', 'out/**', 'coverage/**', '*.js', '*.mjs', '*.cjs'],
+    ignores: ['dist/**', 'node_modules/**', '.next/**', 'out/**', 'coverage/**'],
   },
   {
     files: ['**/*.ts', '**/*.tsx'],

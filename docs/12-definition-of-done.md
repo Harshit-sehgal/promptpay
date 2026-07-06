@@ -97,6 +97,8 @@ Operational readiness:
 - [ ] Error monitoring is enabled.
 - [ ] Structured logging is enabled.
 - [ ] Secrets are not hardcoded.
+- [ ] Production dependency audit has no known high-risk findings.
+- [ ] Automated payout providers either have real credentials/integrations or fail closed before processing.
 - [ ] Core tests pass.
 
 ## V1 definition of done
@@ -125,12 +127,13 @@ V1 is done only when:
 - [ ] Authorization rules are tested.
 - [ ] Error states are handled.
 - [ ] Audit logging is added where sensitive.
-- [ ] Rate limits are added where abuse-prone.
+- [ ] Rate limits are added where abuse-prone, and production paths use shared/distributed counters.
 - [ ] User-facing copy avoids unsupported claims.
 - [ ] Unit tests cover core logic.
 - [ ] Integration tests cover critical path.
 - [ ] Privacy review is complete for new telemetry.
 - [ ] Feature is observable in logs/metrics.
+- [ ] Dependency, configuration, and provider-readiness risks are reviewed for production paths.
 
 ## Evidence required before claiming done
 
@@ -143,4 +146,6 @@ V1 is done only when:
 - Fraud simulation results.
 - Payout runbook dry run.
 - Admin audit log verification.
-
+- `pnpm audit --prod` output.
+- Production rate-limit store health/config verification.
+- Production payout-provider readiness check output or runbook evidence.

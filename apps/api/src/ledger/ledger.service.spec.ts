@@ -10,6 +10,7 @@ const mockPrisma = {
     groupBy: vi.fn(),
     updateMany: vi.fn(),
     update: vi.fn(),
+    upsert: vi.fn(),
     findFirst: vi.fn(),
     findUnique: vi.fn(),
   },
@@ -89,33 +90,39 @@ describe('LedgerService', () => {
   });
 
   describe('getAvailableBalance', () => {
-    // NOTE: getAvailableBalance is the *confirmed-credits* total only. It does
+    // NOTE: getAvailableBalance is the confirmed credits minus confirmed
+    // recovery debits. It does
     // NOT subtract in-flight payouts — that is PayoutService.getAvailableForPayout's
     // responsibility (it reserves funds via PayoutAllocation). These tests pin the
     // actual contract so a regression that silently changes the semantics is caught.
-    it('returns the sum of confirmed credit earnings', async () => {
-      mockPrisma.earningsLedger.aggregate.mockResolvedValueOnce({
-        _sum: { amountMinor: 250_00 },
-      });
+    it('returns confirmed credit earnings minus confirmed recovery debits', async () => {
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 250_00 } })
+        .mockResolvedValueOnce({ _sum: { amountMinor: 40_00 } });
 
       const result = await service.getAvailableBalance('u-1');
 
-      expect(result.amountMinor).toBe(250_00);
+      expect(result.amountMinor).toBe(210_00);
       expect(result.currency).toBe('USD');
       // Must aggregate confirmed credits and must never touch payoutRequest.
-      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledTimes(2);
       expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { userId: 'u-1', status: 'confirmed', entryType: 'credit' },
+        }),
+      );
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: 'u-1', status: 'confirmed', entryType: 'debit' },
         }),
       );
       expect(mockPrisma.payoutRequest.aggregate).not.toHaveBeenCalled();
     });
 
     it('returns 0 when there are no confirmed earnings', async () => {
-      mockPrisma.earningsLedger.aggregate.mockResolvedValueOnce({
-        _sum: { amountMinor: null },
-      });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: null } })
+        .mockResolvedValueOnce({ _sum: { amountMinor: null } });
 
       const result = await service.getAvailableBalance('u-1');
 
@@ -546,7 +553,7 @@ describe('LedgerService', () => {
       expect(mockPrisma.platformLedger.upsert).not.toHaveBeenCalled();
     });
 
-    it('reports paidSkipped when the impression has earnings already in `paid` (developer withdrawal)', async () => {
+    it('records recovery debit when the impression has earnings already in `paid` (developer withdrawal)', async () => {
       const impressionId = 'imp-paid';
       mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
         id: 'adv-row-1', advertiserId: 'adv-1', campaignId: 'cmp-1',
@@ -558,13 +565,48 @@ describe('LedgerService', () => {
       // 2 rows already in `paid` — can't be reversed by this method.
       mockPrisma.earningsLedger.count.mockResolvedValueOnce(2);
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.earningsLedger.findMany.mockResolvedValueOnce([
+        {
+          id: 'earn-paid-1',
+          userId: 'user-1',
+          campaignId: 'cmp-1',
+          impressionId,
+          clickId: null,
+          amountMinor: 120,
+          currency: 'USD',
+        },
+        {
+          id: 'earn-paid-2',
+          userId: 'user-1',
+          campaignId: 'cmp-1',
+          impressionId,
+          clickId: null,
+          amountMinor: 80,
+          currency: 'USD',
+        },
+      ]);
       mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
+      mockPrisma.earningsLedger.upsert.mockResolvedValue({});
 
       const result = await service.reverseEarnings({ impressionId });
 
       expect(result.paidSkipped).toBe(2);
-      // The caller should surface this gap to ops (claw-back debt flow is
-      // a separate TODO; documented on the method).
+      expect(mockPrisma.earningsLedger.upsert).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.earningsLedger.upsert).toHaveBeenCalledWith({
+        where: { idempotencyKey: `imp-${impressionId}-paid-debt-earn-paid-1` },
+        create: expect.objectContaining({
+          userId: 'user-1',
+          campaignId: 'cmp-1',
+          impressionId,
+          entryType: 'debit',
+          status: 'confirmed',
+          amountMinor: 120,
+          currency: 'USD',
+          availableAt: null,
+          idempotencyKey: `imp-${impressionId}-paid-debt-earn-paid-1`,
+        }),
+        update: {},
+      });
     });
 
     /**

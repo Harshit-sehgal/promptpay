@@ -6,31 +6,6 @@ import { Credentials, getCredentials, setCredentials, storeDeviceEventSecret, ge
 
 const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
 
-/**
- * HMAC secret for signing extension events.
- *
- * In development (no env var set) a hardcoded fallback is used so the CLI
- * works without configuration. In production this MUST be set via the
- * EXTENSION_HMAC_SECRET environment variable — the fallback is insecure
- * and will be rejected by the server in production deployments.
- */
-const HMAC_SECRET: string = (() => {
-  const envSecret = process.env.EXTENSION_HMAC_SECRET;
-  if (envSecret) return envSecret;
-
-  if (process.env.NODE_ENV !== 'development') {
-    throw new Error(
-      'EXTENSION_HMAC_SECRET environment variable is required. ' +
-      'Set it to the same value configured on the WaitLayer API server.',
-    );
-  }
-  console.warn(
-    '[WaitLayer CLI] EXTENSION_HMAC_SECRET not set — using dev-only fallback. ' +
-    'Set the env var for production use.',
-  );
-  return 'dev-secret-cli-fallback-only-never-for-production';
-})();
-
 interface RegisterDeviceResponse {
   id: string;
   eventSecret?: string;
@@ -48,10 +23,19 @@ export class ApiClient {
     this.deviceEventSecret = getDeviceEventSecret();
   }
 
-  /** Sign payload with the per-device secret when available; falls back to the
-   *  global HMAC_SECRET for backward compatibility. */
-  private sign(payload: Record<string, unknown>): string {
-    return signPayload(payload, this.deviceEventSecret ?? HMAC_SECRET);
+  /** Sign event payloads with the server-issued per-device secret only. */
+  private signEventPayload(payload: Record<string, unknown>): string {
+    if (!this.deviceEventSecret) {
+      throw new Error('WaitLayer device is not registered with an event secret. Run device registration again.');
+    }
+    return signPayload(payload, this.deviceEventSecret);
+  }
+
+  /** Optional request-header signature. The API currently authorizes events
+   *  through body signatures; omit this header until a device secret exists. */
+  private signHeaderPayload(payload: Record<string, unknown>): string | undefined {
+    if (!this.deviceEventSecret) return undefined;
+    return signPayload(payload, this.deviceEventSecret);
   }
 
   async getOrRegisterDevice(): Promise<string> {
@@ -68,14 +52,17 @@ export class ApiClient {
     });
 
     if (res && res.id) {
+      if (!res.eventSecret) {
+        throw new Error('Device registration did not return an event secret');
+      }
       this.deviceUUID = res.id;
-      this.deviceEventSecret = res.eventSecret ?? null;
+      this.deviceEventSecret = res.eventSecret;
       if (this.creds) {
         this.creds.deviceUUID = res.id;
         setCredentials(this.creds);
       }
       // Persist the event secret separately (not in the main credential JSON).
-      if (res.eventSecret) storeDeviceEventSecret(res.eventSecret);
+      storeDeviceEventSecret(res.eventSecret);
       return res.id;
     }
     throw new Error('Failed to register CLI device');
@@ -132,7 +119,7 @@ export class ApiClient {
       sessionId: 'cli-' + Date.now(),
       idempotencyKey: 'cli-start-' + input.waitStateId,
     };
-    const signature = this.sign(payload);
+    const signature = this.signEventPayload(payload);
     return this.raw('POST', '/extension/wait-state/start', {
       ...payload,
       signature,
@@ -148,7 +135,7 @@ export class ApiClient {
       duration: String(input.durationMs),
       idempotencyKey: 'cli-end-' + input.waitStateId,
     };
-    const signature = this.sign(payload);
+    const signature = this.signEventPayload(payload);
     return this.raw('POST', '/extension/wait-state/end', {
       ...payload,
       signature,
@@ -177,7 +164,7 @@ export class ApiClient {
     let headerSignature: string | undefined;
     if (body) {
       const { signature: _, ...payloadForHeader } = body;
-      headerSignature = this.sign(payloadForHeader);
+      headerSignature = this.signHeaderPayload(payloadForHeader);
     }
 
     return new Promise<T>((resolve, reject) => {

@@ -14,10 +14,11 @@ import { signPayload } from '@waitlayer/shared';
 
 // HMAC secret must match what ExtensionService uses
 const HMAC_SECRET = 'dev-secret-change-me-do-not-use-in-production';
+const DEVICE_EVENT_SECRET = 'test-device-event-secret-for-signing';
 
 // ── Helpers ──
-function hmacSign(payload: Record<string, unknown>): string {
-  return signPayload(payload, HMAC_SECRET);
+function hmacSign(payload: Record<string, unknown>, secret = DEVICE_EVENT_SECRET): string {
+  return signPayload(payload, secret);
 }
 
 // ── Prisma mock ──
@@ -275,14 +276,6 @@ interface TestFixtures {
 }
 
 function makeServices(): TestFixtures {
-  // ConfigService mock — returns the HMAC secret
-  const config = {
-    get: vi.fn((key: string, fallback?: string) => {
-      if (key === 'EXTENSION_HMAC_SECRET') return HMAC_SECRET;
-      return fallback ?? null;
-    }),
-  } as any;
-
   // AuditService — real instance (its prisma is mocked)
   const audit = new AuditService(prismaRef);
 
@@ -293,7 +286,7 @@ function makeServices(): TestFixtures {
   const fraud = new FraudService(prismaRef, ledger);
 
   // ExtensionService — real instance with all mocked deps
-  const extension = new ExtensionService(prismaRef, audit, config, ledger, fraud);
+  const extension = new ExtensionService(prismaRef, audit, ledger, fraud);
 
   // CampaignService — real instance with mocked prisma + real audit (audit is fire-and-forget; safe to share)
   const campaign = new CampaignService(prismaRef, audit);
@@ -581,6 +574,7 @@ describe('E2E Money Loop', () => {
       mockPrisma.device.findUnique.mockResolvedValue({
         id: DEVICE_ID,
         userId: DEV_USER_ID,
+        eventSecret: DEVICE_EVENT_SECRET,
         fingerprintHash: 'fp-hash-abc',
         toolType: 'claude_code',
       });
@@ -622,6 +616,7 @@ describe('E2E Money Loop', () => {
       mockPrisma.device.findUnique.mockResolvedValue({
         id: DEVICE_ID,
         userId: DEV_USER_ID,
+        eventSecret: DEVICE_EVENT_SECRET,
       });
 
       mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
@@ -767,6 +762,11 @@ describe('E2E Money Loop', () => {
       });
 
       // Ledger creates captured via installLedgerCapture()
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: DEVICE_ID,
+        userId: DEV_USER_ID,
+        eventSecret: DEVICE_EVENT_SECRET,
+      });
     });
 
     it('qualifies an impression and creates all 5 ledger entries + campaign spend increment', async () => {
@@ -936,6 +936,11 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
         campaignId: CAMPAIGN_ID,
         clickedAt: new Date(),
+      });
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: 'click-device',
+        userId: DEV_USER_ID,
+        eventSecret: DEVICE_EVENT_SECRET,
       });
 
       installLedgerCapture();
@@ -1205,7 +1210,7 @@ describe('E2E Money Loop', () => {
 
       // ── Step 8: Wait-state-start ──
       mockPrisma.device.findUnique.mockResolvedValue({
-        id: deviceId, userId: devUserId, fingerprintHash: 'fp-e2e', toolType: 'claude_code',
+        id: deviceId, userId: devUserId, eventSecret: DEVICE_EVENT_SECRET, fingerprintHash: 'fp-e2e', toolType: 'claude_code',
       });
       mockPrisma.waitStateEvent.findUnique.mockResolvedValue(null);
       mockPrisma.waitStateEvent.create.mockResolvedValue({
@@ -1221,7 +1226,7 @@ describe('E2E Money Loop', () => {
       // ── Step 9: Request ad ──
       mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: devUserId, adsEnabled: true });
       mockPrisma.device.findUnique.mockResolvedValue({
-        id: deviceId, userId: devUserId,
+        id: deviceId, userId: devUserId, eventSecret: DEVICE_EVENT_SECRET,
       });
       mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
         if (where.eventType === 'wait_state_start') {
@@ -1374,7 +1379,7 @@ describe('E2E Money Loop', () => {
       const deviceId = uid('dev');
       mockPrisma.waitStateEvent.findUnique.mockResolvedValue(null); // not idempotent
       mockPrisma.device.findUnique.mockResolvedValue({
-        id: deviceId, userId, fingerprintHash: 'fp-test', toolType: 'claude_code',
+        id: deviceId, userId, eventSecret: DEVICE_EVENT_SECRET, fingerprintHash: 'fp-test', toolType: 'claude_code',
       });
 
       const payload = {
@@ -1390,9 +1395,75 @@ describe('E2E Money Loop', () => {
       ).rejects.toThrow(/Invalid request signature/);
     });
 
+    it('rejects legacy device rows without per-device secrets even with global HMAC', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      mockPrisma.waitStateEvent.findUnique.mockResolvedValue(null);
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: deviceId,
+        userId,
+        eventSecret: null,
+        fingerprintHash: 'legacy-fp',
+        toolType: 'claude_code',
+      });
+
+      const payload = {
+        deviceId,
+        sessionId: uid('sess'),
+        toolType: 'claude_code',
+        waitStateId: uid('ws'),
+        idempotencyKey: 'idem-legacy-global-sig',
+      };
+
+      await expect(
+        svc.extension.recordWaitStateStart(userId, {
+          ...payload,
+          signature: hmacSign(payload, HMAC_SECRET),
+        }),
+      ).rejects.toThrow(/Invalid request signature/);
+    });
+
+    it('issues a one-time per-device secret when a same-user legacy device re-registers', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const legacyDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: null,
+        fingerprintHash: 'legacy-fp',
+        toolType: 'claude_code',
+        extensionVersion: '0.9.0',
+        platform: 'linux',
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(legacyDevice);
+      mockPrisma.device.update.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve({ ...legacyDevice, ...data }),
+      );
+
+      const result = await svc.extension.registerDevice(userId, {
+        toolType: 'claude_code',
+        fingerprintHash: 'legacy-fp',
+        extensionVersion: '1.0.0',
+        platform: 'linux',
+      });
+
+      expect(result.eventSecret).toEqual(expect.any(String));
+      expect(result.eventSecret).not.toBe(HMAC_SECRET);
+      expect(mockPrisma.device.update).toHaveBeenCalledWith({
+        where: { id: deviceId },
+        data: expect.objectContaining({
+          eventSecret: expect.any(String),
+          extensionVersion: '1.0.0',
+          platform: 'linux',
+        }),
+      });
+    });
+
     it('rejects wait-state-start for device not owned by user', async () => {
       mockPrisma.device.findUnique.mockResolvedValue({
         id: uid('dev'), userId: 'other-user',
+        eventSecret: DEVICE_EVENT_SECRET,
       });
 
       const payload = {
@@ -1451,7 +1522,7 @@ describe('E2E Money Loop', () => {
       mockPrisma.device.findUnique.mockResolvedValue({
         id: deviceId,
         userId,
-        eventSecret: null,
+        eventSecret: DEVICE_EVENT_SECRET,
       });
       mockPrisma.waitStateEvent.findUnique.mockResolvedValue({
         id: uid('wse'),
@@ -1486,6 +1557,11 @@ describe('E2E Money Loop', () => {
       const hash = require('crypto').createHash('sha256').update(token).digest('hex');
 
       const cpcDevUserId = 'cpc-dev-user';
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: 'cpc-device',
+        userId: cpcDevUserId,
+        eventSecret: DEVICE_EVENT_SECRET,
+      });
       mockPrisma.adImpression.findUnique.mockResolvedValue({
         id: impId,
         campaignId: uid('c'),
@@ -1594,7 +1670,11 @@ describe('E2E Money Loop', () => {
 
     it('ad-request idempotency with same idempotencyKey or waitStateId returns cached ad with token', async () => {
       // Setup device check
-      mockPrisma.device.findUnique.mockResolvedValue({ id: 'dev-1', userId: 'usr-1' });
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: 'dev-1',
+        userId: 'usr-1',
+        eventSecret: DEVICE_EVENT_SECRET,
+      });
       mockPrisma.userSettings.findUnique.mockResolvedValue({ adsEnabled: true });
       mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
         if (where.eventType === 'wait_state_start') {

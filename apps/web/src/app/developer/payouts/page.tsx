@@ -77,6 +77,14 @@ export default function DevPayoutsPage() {
   const handleAddMethod = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+
+    // Client-side validation for PayPal email format
+    if (provider === 'paypal_email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)) {
+      setError('Enter a valid email address for PayPal');
+      setSubmitting(false);
+      return;
+    }
+
     try {
       await payoutApi.addMethod({ provider, destination, currency: 'USD' });
       setDestination('');

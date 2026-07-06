@@ -32,15 +32,16 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async signUp(@Body() dto: SignUpDto, @Req() req: Request) {
     try {
+      await BruteForceGuard.assertCanAttempt(req, dto.email);
       const result = await this.authService.signUp(dto);
-      BruteForceGuard.resetOnSuccess(req);
+      await BruteForceGuard.resetOnSuccess(req, dto.email);
       return result;
     } catch (err: unknown) {
       // Only count against the brute-force guard for actual auth failures;
       // Conflict (email taken) or BadRequest (validation) are not
       // credential-stuffing events.
       if (err instanceof UnauthorizedException) {
-        BruteForceGuard.recordFailure(req, dto.email);
+        await BruteForceGuard.recordFailure(req, dto.email);
       }
       throw err;
     }
@@ -50,12 +51,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto, @Req() req: Request) {
     try {
+      await BruteForceGuard.assertCanAttempt(req, dto.email);
       const result = await this.authService.login(dto);
-      BruteForceGuard.resetOnSuccess(req);
+      await BruteForceGuard.resetOnSuccess(req, dto.email);
       return result;
     } catch (err: unknown) {
       if (err instanceof UnauthorizedException) {
-        BruteForceGuard.recordFailure(req, dto.email);
+        await BruteForceGuard.recordFailure(req, dto.email);
       }
       throw err;
     }
@@ -65,15 +67,16 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async googleOAuth(@Body() dto: GoogleOAuthDto, @Req() req: Request) {
     try {
+      await BruteForceGuard.assertCanAttempt(req);
       const result = await this.authService.googleOAuth(dto);
-      BruteForceGuard.resetOnSuccess(req);
+      await BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
       // Google OAuth failures may include ConflictException (account-link reject),
       // UnauthorizedException (invalid token), or BadRequestException (validation).
       // Only the auth-failure branch increments the counter.
       if (err instanceof UnauthorizedException) {
-        BruteForceGuard.recordFailure(req);
+        await BruteForceGuard.recordFailure(req);
       }
       throw err;
     }
@@ -113,12 +116,13 @@ export class AuthController {
     // The route is in `isAuthRoute` so the guard's pre-check rejects
     // already-locked keys before reaching the service.
     try {
+      await BruteForceGuard.assertCanAttempt(req);
       const result = await this.authService.confirmEmailVerification(dto.token);
-      BruteForceGuard.resetOnSuccess(req);
+      await BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
       if (err instanceof UnauthorizedException) {
-        BruteForceGuard.recordFailure(req);
+        await BruteForceGuard.recordFailure(req);
       }
       throw err;
     }
@@ -134,12 +138,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
     try {
+      await BruteForceGuard.assertCanAttempt(req);
       const result = await this.authService.resetPassword(dto.token, dto.newPassword);
-      BruteForceGuard.resetOnSuccess(req);
+      await BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
       if (err instanceof UnauthorizedException) {
-        BruteForceGuard.recordFailure(req);
+        await BruteForceGuard.recordFailure(req);
       }
       throw err;
     }

@@ -3,7 +3,6 @@ import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
 import { LRUCache } from 'lru-cache';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { ConfigService } from '@nestjs/config';
 import { LedgerService } from '../ledger/ledger.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { FraudService } from '../fraud/fraud.service';
@@ -38,7 +37,6 @@ interface ServedAd {
 
 @Injectable()
 export class ExtensionService {
-  private readonly hmacSecret: string;
   // LRU-bounded cache of served ads keyed by `(idempotencyKey, waitStateId)`.
   //
   // The previous implementation used a Map<String, ...> with a 60-second
@@ -63,27 +61,9 @@ export class ExtensionService {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
-    private config: ConfigService,
     private ledger: LedgerService,
     private fraud: FraudService,
-  ) {
-    const hmacSecret = this.config.get<string>('EXTENSION_HMAC_SECRET', 'dev-secret-change-me-do-not-use-in-production');
-    // Fail-closed in production: an unset/known-public HMAC secret would let
-    // anyone with the source code (or a leaky .env.example) forge signed
-    // extension events. The constant `'dev-secret-change-me-do-not-use-in-production'`
-    // is publicly visible in the repo and must never enable real auth.
-    if (
-      process.env.NODE_ENV === 'production' &&
-      (!process.env.EXTENSION_HMAC_SECRET ||
-        process.env.EXTENSION_HMAC_SECRET === 'dev-secret-change-me-do-not-use-in-production')
-    ) {
-      throw new Error(
-        'EXTENSION_HMAC_SECRET must be set in production and must not equal the ' +
-          'documented dev fallback. Refusing to start with forgeable HMAC verification.',
-      );
-    }
-    this.hmacSecret = hmacSecret;
-  }
+  ) {}
 
   // ── Device Registration ──
 
@@ -103,6 +83,33 @@ export class ExtensionService {
     });
 
     if (existingDevice) {
+      if (!existingDevice.eventSecret) {
+        // Legacy rows created before per-device secrets cannot authenticate
+        // event payloads anymore. Issue a one-time secret to the authenticated
+        // same-user owner so the device can migrate without keeping the global
+        // HMAC fallback alive.
+        const migratedSecret = crypto.randomBytes(32).toString('hex');
+        const updated = await this.prisma.device.update({
+          where: { id: existingDevice.id },
+          data: {
+            toolType: dto.toolType as ToolTypeEnum,
+            extensionVersion: dto.extensionVersion,
+            platform: dto.platform,
+            eventSecret: migratedSecret,
+            lastSeenAt: new Date(),
+          },
+        });
+        await this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'legacy_device_secret_issued',
+          targetType: 'device',
+          targetId: existingDevice.id,
+          afterSnap: { fingerprintHash: dto.fingerprintHash },
+        });
+        return { ...updated, eventSecret: migratedSecret };
+      }
+
       // Re-registration rotates the per-device secret. Any leaked token from
       // the old extension install is invalidated by this one-time reveal.
       //
@@ -114,7 +121,6 @@ export class ExtensionService {
       // device. A timing-safe comparison avoids leaking whether the secret
       // matched (which would be the only oracle an attacker needs).
       if (
-        !existingDevice.eventSecret ||
         !dto.existingEventSecret ||
         Buffer.from(dto.existingEventSecret).length !== Buffer.from(existingDevice.eventSecret).length ||
         !crypto.timingSafeEqual(
@@ -1183,10 +1189,9 @@ export class ExtensionService {
    *       mismatch — a known device secret must not be forgeable by the
    *       global fallback key.
    *    3. If the device row exists but has no `eventSecret` (a legacy row
-   *       that pre-dates per-device secrets), accept the global HMAC secret.
-   *       This is the only path the global key authorizes, and it applies
-   *       to a vanishing set of legacy device rows; new registrations always
-   *       mint an `eventSecret`.
+   *       that pre-dates per-device secrets), reject and require device
+   *       re-registration. The registration path can issue a one-time
+   *       per-device secret to the authenticated same-user owner.
    *
    *  The permanent anonymous (no-device) global-key fallback was removed: a
    *  null deviceId previously authenticated via the shared global HMAC,
@@ -1250,15 +1255,15 @@ export class ExtensionService {
       return ok;
     }
 
-    // Legacy device row with no eventSecret — accept the global HMAC. This
-    // path is the only one where the global key authorizes an event, and
-    // only for pre-eventSecret rows; new registrations always mint one.
-    return verifySignature(payload, this.hmacSecret, signature);
-  }
-
-  /** Deprecated: use verifyDeviceSignature instead. Kept for tests. */
-  verifySignature(payload: Record<string, unknown>, signature: string): boolean {
-    return verifySignature(payload, this.hmacSecret, signature);
+    void this.audit.log({
+      actorId: device.userId,
+      actorRole: 'developer',
+      action: 'device_signature_rejected',
+      targetType: 'device',
+      targetId: deviceId,
+      afterSnap: { reason: 'missing_device_secret' },
+    });
+    return false;
   }
 
   // ── Privacy Enforcement ──

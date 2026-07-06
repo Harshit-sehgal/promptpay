@@ -31,10 +31,10 @@ describe('GoogleTokenVerifier', () => {
 
   it('should throw UnauthorizedException for mock tokens in production environment', async () => {
     process.env.NODE_ENV = 'production';
-    
-    // In production, mock tokens are not bypassed, they are sent to the Google endpoint
-    // which will fail or throw standard exceptions
-    await expect(verifier.verify('mock-google-token-john-doe')).rejects.toThrow();
+
+    await expect(verifier.verify('mock-google-token-john-doe')).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('should throw UnauthorizedException if not configured and not a mock token', async () => {

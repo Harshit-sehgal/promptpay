@@ -10,7 +10,7 @@ const envSchema = z.object({
   DIRECT_URL: z.string().optional(),
 
   // Redis
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_URL: z.string().optional(),
 
   // API
   API_PORT: z.coerce.number().default(4000),
@@ -37,15 +37,8 @@ const envSchema = z.object({
     ),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('30d'),
-  // EXTENSION_HMAC_SECRET is required — no insecure default. A missing secret
-  // must fail fast at startup rather than silently falling back to a known value
-  // that would let anyone forge extension events.
-  EXTENSION_HMAC_SECRET: z
-    .string()
-    .min(32)
-    .refine((s) => !s.includes('change-me'), {
-      message: 'EXTENSION_HMAC_SECRET must not be a known placeholder',
-    }),
+  // Extension events use per-device eventSecret values issued at device
+  // registration. There is intentionally no shared global extension HMAC.
 
   // Stripe (advertiser deposits)
   STRIPE_PUBLIC_KEY: z.string().optional(),
@@ -58,10 +51,10 @@ const envSchema = z.object({
 
   // Google OAuth (extension + web sign-in)
   GOOGLE_CLIENT_ID: z.string().optional(),
-  // ALLOW_MOCK_GOOGLE is acknowledged for backwards-compatibility with old
-  // env files but the verifier no longer honors it — setting it true in a
-  // production deploy no longer opens the mock-auth path (see apps/api/src/
-  // auth/strategies/google-token-verifier.ts).
+  // Mock Google is off by default. The verifier accepts either the current
+  // MOCK_GOOGLE_ENABLED=1 flag or the legacy ALLOW_MOCK_GOOGLE=true alias,
+  // and still requires NODE_ENV !== 'production'.
+  MOCK_GOOGLE_ENABLED: z.string().optional(),
   ALLOW_MOCK_GOOGLE: z.string().optional(),
 
   // Email
@@ -74,6 +67,17 @@ const envSchema = z.object({
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
 })
+.refine(
+  (env) => {
+    if (env.NODE_ENV === 'production' && !env.REDIS_URL) return false;
+    return true;
+  },
+  {
+    message:
+      'REDIS_URL is required in production for distributed rate limiting and brute-force tracking',
+    path: ['REDIS_URL'],
+  },
+)
 .refine(
   (env) => {
     // If Stripe is enabled (secret key present) the webhook signing secret

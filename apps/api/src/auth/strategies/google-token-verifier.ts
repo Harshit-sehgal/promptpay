@@ -50,11 +50,12 @@ export class GoogleTokenVerifier {
     const mockEnabled =
       process.env.MOCK_GOOGLE_ENABLED === '1' ||
       process.env.ALLOW_MOCK_GOOGLE === 'true'; // legacy compat
-    if (
-      idToken.startsWith('mock-google-token-') &&
-      process.env.NODE_ENV !== 'production' &&
-      mockEnabled
-    ) {
+    const isMockToken = idToken.startsWith('mock-google-token-');
+    if (isMockToken && process.env.NODE_ENV === 'production') {
+      throw new UnauthorizedException('Mock Google tokens are disabled in production');
+    }
+
+    if (isMockToken && mockEnabled) {
       const parts = idToken.split('-');
       const identifier = parts[3] || 'user';
       const email = `${identifier}@mock-google.com`;

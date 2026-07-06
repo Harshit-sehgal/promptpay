@@ -27,6 +27,7 @@ interface DashboardData {
   confirmedEarnings: number;
   pendingEarnings: number;
   heldEarnings: number;
+  recoveryDebt: number;
   availableForPayout: number;
   lifetimeEarnings: number;
   trustLevel: string;
@@ -213,6 +214,9 @@ export default function DeveloperDashboard() {
                   label={data.payoutHoldStatus.isHeld ? 'Payout hold active' : 'Payout clear'}
                   tone={data.payoutHoldStatus.isHeld ? 'warning' : 'success'}
                 />
+                {data.recoveryDebt > 0 && (
+                  <StatusPill label={`Recovery debt ${formatCurrency(data.recoveryDebt)}`} tone="warning" />
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {data.payoutHoldStatus.isHeld && (

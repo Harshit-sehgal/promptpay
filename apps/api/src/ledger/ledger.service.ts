@@ -465,13 +465,12 @@ export class LedgerService {
    * column (`impressionId` or `clickId`) is used for the developer-row
    * flip.
    *
-   * Entries already in `paid` status (developer already withdrew) are
-   * OUTSIDE this method's reach — `paid` is a terminal state with no
-   * `EARNING_TRANSITIONS` exit. Reversing a `paid` entry requires a
-   * separate claw-back / debt flow (TODO); this method returns the count
-   * of `paid` entries it deliberately skipped so callers can flag the
-   * gap. All other entries (estimated/pending/confirmed) are reversed
-   * and the matching compensation entries written.
+   * Entries already in `paid` status (developer already withdrew) remain
+   * immutable because `paid` is a terminal state. For those, this method
+   * writes a separate confirmed `debit` row against the same user/entity
+   * as recovery debt. Payout availability subtracts those debits, so later
+   * withdrawals are reduced automatically while the original paid row stays
+   * audit-safe.
    *
    * Idempotent: every compensation entry uses a deterministic
    * `${base}-rev-${suffix}` idempotency key (`@unique`); a P2002 on any
@@ -504,14 +503,17 @@ export class LedgerService {
     const advBase = `${prefix}-${entityId}-adv`;
     const pltBase = `${prefix}-${entityId}-plt`;
     const resBase = `${prefix}-${entityId}-res`;
+    const paidWhere: Prisma.EarningsLedgerWhereInput = {
+      [entityCol]: entityId,
+      status: 'paid',
+      entryType: 'credit',
+    };
 
     const [advDebit, pltCredit, resCredit, paidCount] = await Promise.all([
       this.prisma.advertiserLedger.findUnique({ where: { idempotencyKey: advBase } }),
       this.prisma.platformLedger.findUnique({ where: { idempotencyKey: pltBase } }),
       this.prisma.platformLedger.findUnique({ where: { idempotencyKey: resBase } }),
-      this.prisma.earningsLedger.count({
-        where: { [entityCol]: entityId, status: 'paid' },
-      }),
+      this.prisma.earningsLedger.count({ where: paidWhere }),
     ]);
 
     const entityLabel = prefix === 'clk' ? 'click' : 'impression';
@@ -593,6 +595,44 @@ export class LedgerService {
         });
       }
 
+      // 5. Paid-entry recovery debt. We do not mutate the original `paid`
+      //    credit row, but we do create an idempotent debit row so future
+      //    payout availability nets against money already paid for fraud.
+      if (paidCount > 0) {
+        const paidEntries = await tx.earningsLedger.findMany({
+          where: paidWhere,
+          select: {
+            id: true,
+            userId: true,
+            campaignId: true,
+            impressionId: true,
+            clickId: true,
+            amountMinor: true,
+            currency: true,
+          },
+        });
+
+        for (const entry of paidEntries) {
+          await tx.earningsLedger.upsert({
+            where: { idempotencyKey: `${prefix}-${entityId}-paid-debt-${entry.id}` },
+            create: {
+              userId: entry.userId,
+              campaignId: entry.campaignId,
+              impressionId: entry.impressionId,
+              clickId: entry.clickId,
+              entryType: 'debit',
+              status: 'confirmed',
+              amountMinor: entry.amountMinor,
+              currency: entry.currency,
+              availableAt: null,
+              idempotencyKey: `${prefix}-${entityId}-paid-debt-${entry.id}`,
+              description: `Recovery debt for paid ${entityLabel} ${entityId}${reason ? `: ${reason}` : ''}`,
+            },
+            update: {},
+          });
+        }
+      }
+
       return { reversed: reversed.count, paidSkipped: paidCount };
     });
   }
@@ -601,12 +641,21 @@ export class LedgerService {
 
   /** Get total confirmed (available) earnings for a user */
   async getAvailableBalance(userId: string): Promise<{ amountMinor: number; currency: string }> {
-    const result = await this.prisma.earningsLedger.aggregate({
-      where: { userId, status: 'confirmed', entryType: 'credit' },
-      _sum: { amountMinor: true },
-    });
+    const [credits, debits] = await Promise.all([
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: 'confirmed', entryType: 'debit' },
+        _sum: { amountMinor: true },
+      }),
+    ]);
     return {
-      amountMinor: result._sum.amountMinor || 0,
+      amountMinor: Math.max(
+        0,
+        (credits._sum.amountMinor || 0) - (debits._sum.amountMinor || 0),
+      ),
       currency: 'USD',
     };
   }
@@ -625,12 +674,21 @@ export class LedgerService {
 
   /** Get all-time total earnings for a user (excluding reversed/void) */
   async getTotalEarnings(userId: string): Promise<{ amountMinor: number; currency: string }> {
-    const result = await this.prisma.earningsLedger.aggregate({
-      where: { userId, status: { notIn: ['reversed', 'void'] }, entryType: 'credit' },
-      _sum: { amountMinor: true },
-    });
+    const [credits, debits] = await Promise.all([
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: { notIn: ['reversed', 'void'] }, entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, status: { notIn: ['reversed', 'void'] }, entryType: 'debit' },
+        _sum: { amountMinor: true },
+      }),
+    ]);
     return {
-      amountMinor: result._sum.amountMinor || 0,
+      amountMinor: Math.max(
+        0,
+        (credits._sum.amountMinor || 0) - (debits._sum.amountMinor || 0),
+      ),
       currency: 'USD',
     };
   }
@@ -795,6 +853,7 @@ export class LedgerService {
       totalPlatformReversal,
       totalReserveCredit,
       totalReserveReversal,
+      totalEarningsDebit,
     ] = await Promise.all([
       this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
       this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
@@ -803,9 +862,12 @@ export class LedgerService {
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
       this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
+      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
     ]);
 
-    const earningsMinor = totalEarnings._sum?.amountMinor ?? 0;
+    const earningsMinor =
+      (totalEarnings._sum?.amountMinor ?? 0) -
+      (totalEarningsDebit._sum?.amountMinor ?? 0);
     // Advertiser spend = gross debits (billed) minus refunds (reversed fraud, archive)
     const advertiserMinor =
       (totalAdvertiserDebit._sum?.amountMinor ?? 0) -

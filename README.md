@@ -29,8 +29,8 @@ pnpm install --frozen-lockfile
 # Generate Prisma client
 pnpm --filter @waitlayer/db generate
 
-# Start database
-docker compose up -d postgres
+# Start database and Redis-backed local rate limiting
+docker compose up -d postgres redis
 
 # Start API dev server
 pnpm --filter waitlayer-api dev
@@ -45,7 +45,8 @@ pnpm --filter waitlayer-web dev
 pnpm run typecheck   # 13/13 tasks
 pnpm run lint        # 12/12 tasks, 0 warnings
 pnpm run build       # 9/9 packages
-pnpm run test        # 168 tests (requires running database)
+pnpm run test        # 196 tests (requires running database)
+pnpm audit --prod    # production dependency vulnerability audit
 ```
 
 ## Core Features
@@ -54,7 +55,7 @@ pnpm run test        # 168 tests (requires running database)
 - **Campaigns**: Draft → submitted → approved → active lifecycle with budget/bid validation
 - **Ledger**: Three-ledger accounting (earnings, advertiser, platform) with 60/30/10 revenue split
 - **Payouts**: Multi-provider architecture (PayPal, Stripe, Wise, Razorpay) with hold periods by trust level
-- **Fraud**: Rate limits, CTR analysis, self-click detection, trust scoring, automatic earning holds
+- **Fraud**: Redis-backed rate limits, brute-force lockouts, CTR analysis, self-click detection, trust scoring, automatic earning holds
 - **Extensions**: HMAC-signed event pipeline per device, privacy-enforced, idempotent
 - **Referrals**: Code-based referral system with $5 reward on first payout
 - **API Keys**: Machine-to-machine auth with scoped, expirable keys

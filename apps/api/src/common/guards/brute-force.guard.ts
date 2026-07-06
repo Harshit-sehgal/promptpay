@@ -1,34 +1,37 @@
-import { Injectable, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
+import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
+import { RedisWindowCounter } from '../rate-limit/redis-window-counter';
 
 export interface RequestLike {
   ip?: string;
   url?: string;
+  originalUrl?: string;
   route?: { path?: string };
   headers?: Record<string, string | string[] | undefined>;
   connection?: { remoteAddress?: string };
 }
 
 /**
- * Brute-force detection guard — tracks sequential login / password-reset
- * failures per (route × resolved-ip × target-email).
+ * Brute-force detection guard. It tracks auth failures by route+IP and, when
+ * a target is known, by route+target. The target dimension catches distributed
+ * attacks against one account; the IP dimension catches one source trying many
+ * accounts.
  *
  * Approach:
- *  - In-memory Map<key, {failures, lockUntil}>.
- *  - 5 consecutive failures locks the composite key for 15 minutes.
- *  - Resets on first successful auth after the lock period.
+ *  - Redis-backed counters when REDIS_URL is configured.
+ *  - In-memory fallback for local/test runs without Redis.
+ *  - Production fails closed if Redis is configured but unavailable.
+ *  - 5 failures locks the key for 15 minutes.
  *
  * Important design notes:
- *  - The tracker lives in the main-thread process memory — it does NOT scale
- *    across multiple API instances. Deploy behind a single-instance auth
- *    endpoint or, for multi-instance, replace the Map with a shared Redis
- *    store keyed on the same composite.
- *  - `req.ip` is the authoritative resolved IP. We NEVER read the raw
- *    `x-forwarded-for` header directly — that would let an attacker rotate
- *    their claimed IP per request and defeat the counter entirely. Express's
- *    `trust proxy` must be configured in main.ts to set the expected proxy
- *    hop count so `req.ip` resolves the true downstream address.
+ *  - Redis keys contain hashes of IPs and targets, not raw addresses/emails.
+ *  - `req.ip` is the authoritative resolved IP. We never read the raw
+ *    `x-forwarded-for` header directly because an attacker controls it.
+ *    Express's `trust proxy` must be configured in main.ts so `req.ip`
+ *    resolves the expected downstream address.
  *  - Only `UnauthorizedException` increments the counter. Conflict,
- *    BadRequest, and other non-auth failures do not count toward lockout —
+ *    BadRequest, and other non-auth failures do not count toward lockout -
  *    counting "email already registered" as a brute-force strike is a
  *    self-DoS / framing vector.
  *
@@ -37,91 +40,113 @@ export interface RequestLike {
  */
 const MAX_FAILURES = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const REDIS_NAMESPACE = 'wl:bruteforce';
 
 const tracker = new Map<string, { failures: number; lockUntil: number; lastFailure: number }>();
+let redisCounter: RedisWindowCounter | null = null;
+let configuredRedisUrl: string | undefined;
+let failClosed = false;
 
 @Injectable()
-export class BruteForceGuard {
-  canActivate(context: ExecutionContext): boolean {
+export class BruteForceGuard implements CanActivate {
+  constructor(config: ConfigService) {
+    BruteForceGuard.configure(config);
+  }
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<RequestLike>();
-    const ip = resolveIp(req);
-    const path = req.route?.path ?? req.url ?? '';
-
-    // Only track auth routes
-    if (!isAuthRoute(path)) {
-      return true; // pass through — other guards handle non-auth
-    }
-
-    // The guard runs BEFORE the request body is parsed, so the target email
-    // is not yet available. Locks are recorded under composite keys shaped
-    // `${path}:${ip}:${target}` (recordFailure). If ANY such key for this
-    // route+ip is currently locked, reject — this covers both the
-    // per-account lock (distributed attack on one account) and the
-    // anonymous-target lock (route recorded with no email).
-    const prefix = `${path}:${ip}:`;
-    const now = Date.now();
-    let locked = false;
-    for (const [key, entry] of tracker.entries()) {
-      if (!key.startsWith(prefix)) continue;
-      if (entry.lockUntil > now) {
-        locked = true;
-        break;
-      }
-    }
-
-    if (locked) {
-      throw new HttpException('Too many failed attempts — try again later', HttpStatus.TOO_MANY_REQUESTS);
-    }
-
-    // Pre-allow — failures increment on POST hook (in the controller catch).
+    await BruteForceGuard.assertCanAttempt(req);
     return true;
+  }
+
+  static configure(config: ConfigService): void {
+    const redisUrl = config.get<string>('REDIS_URL');
+    const nodeEnv = config.get<string>('NODE_ENV');
+    this.configureRuntime(redisUrl, nodeEnv === 'production');
+  }
+
+  static configureForTests(options: { redisUrl?: string; nodeEnv?: string } = {}): void {
+    this.configureRuntime(options.redisUrl, options.nodeEnv === 'production');
+  }
+
+  static async resetForTests(): Promise<void> {
+    tracker.clear();
+    const counter = redisCounter;
+    redisCounter = null;
+    configuredRedisUrl = undefined;
+    failClosed = false;
+    if (counter) {
+      await counter.disconnect().catch(() => undefined);
+    }
+  }
+
+  static async assertCanAttempt(req: RequestLike, target?: string): Promise<void> {
+    const path = resolvePath(req);
+    if (!isAuthRoute(path)) return;
+
+    const keys = buildAttemptKeys(path, resolveIp(req), target);
+    const isLocked = await this.withLimiter(
+      async (counter) => {
+        const states = await Promise.all(keys.map((key) => counter.isBlocked(key)));
+        return states.some((state) => state.blocked);
+      },
+      () => keys.some((key) => isMemoryLocked(key)),
+    );
+
+    if (isLocked) {
+      throw new HttpException('Too many failed attempts - try again later', HttpStatus.TOO_MANY_REQUESTS);
+    }
   }
 
   /**
    * Record an authentication failure.
    *
-   * @param req    The HTTP request (used to resolve the client IP).
-   * @param target The identifier being attacked — email for login/signup,
-   *   or an anonymous placeholder for routes without a known target.
-   *   Providing the email creates a composite (route + ip + email) key
-   *   so a distributed attack on the same account is tracked across IPs.
+   * @param req The HTTP request (used to resolve the client IP).
+   * @param target The identifier being attacked - email for login/signup, or
+   * an anonymous placeholder for routes without a known target. Providing the
+   * email also increments a route+target key so a distributed attack on the
+   * same account is tracked across IPs.
    */
-  static recordFailure(req: RequestLike, target?: string): void {
-    const ip = resolveIp(req);
-    const path = req.route?.path ?? req.url ?? '';
+  static async recordFailure(req: RequestLike, target?: string): Promise<void> {
+    const path = resolvePath(req);
     if (!isAuthRoute(path)) return;
 
-    const key = buildKey(path, ip, target ?? '');
-    const now = Date.now();
-    const entry = tracker.get(key);
-
-    if (entry && entry.lockUntil > now) return; // already locked
-
-    const failures = (entry?.failures ?? 0) + 1;
-    const lockUntil = failures >= MAX_FAILURES ? now + LOCK_DURATION_MS : 0;
-    tracker.set(key, { failures, lockUntil, lastFailure: now });
+    const keys = buildAttemptKeys(path, resolveIp(req), target);
+    await this.withLimiter(
+      async (counter) => {
+        await Promise.all(
+          keys.map((key) => counter.hit(key, LOCK_DURATION_MS, MAX_FAILURES - 1, LOCK_DURATION_MS)),
+        );
+      },
+      () => {
+        for (const key of keys) recordMemoryFailure(key);
+      },
+    );
   }
 
   /**
-   * Reset the counter after a successful auth (login / password change).
-   * Clears all composite keys for the route+ip so a successful reset
-   * doesn't leave stale per-email locks behind.
+   * Reset counters after successful auth. This clears the route+IP key and,
+   * when a target is known, the route+target key.
    */
-  static resetOnSuccess(req: RequestLike): void {
-    const ip = resolveIp(req);
-    const path = req.route?.path ?? req.url ?? '';
+  static async resetOnSuccess(req: RequestLike, target?: string): Promise<void> {
+    const path = resolvePath(req);
     if (!isAuthRoute(path)) return;
 
-    for (const key of tracker.keys()) {
-      if (key.startsWith(`${path}:${ip}:`)) tracker.delete(key);
-    }
+    const keys = buildAttemptKeys(path, resolveIp(req), target);
+    await this.withLimiter(
+      async (counter) => {
+        await counter.reset(keys);
+      },
+      () => {
+        for (const key of keys) tracker.delete(key);
+      },
+    );
   }
 
-    /** Clean up stale entries (lock expired + no recent failures) */
+  /** Clean up stale in-memory entries (lock expired + no recent failures). */
   static cleanup(): void {
     const now = Date.now();
     for (const [key, entry] of tracker.entries()) {
-      // Remove entries where lock has expired or where there's no lock and no recent activity
       if (
         (entry.lockUntil && entry.lockUntil <= now) ||
         (!entry.lockUntil && now - entry.lastFailure > LOCK_DURATION_MS)
@@ -130,12 +155,46 @@ export class BruteForceGuard {
       }
     }
   }
+
+  private static configureRuntime(redisUrl: string | undefined, shouldFailClosed: boolean): void {
+    failClosed = shouldFailClosed;
+    if (!redisUrl) {
+      redisCounter = null;
+      configuredRedisUrl = undefined;
+      return;
+    }
+
+    if (configuredRedisUrl === redisUrl && redisCounter) return;
+    redisCounter = new RedisWindowCounter(redisUrl, REDIS_NAMESPACE);
+    configuredRedisUrl = redisUrl;
+  }
+
+  private static async withLimiter<T>(
+    redisOperation: (counter: RedisWindowCounter) => Promise<T>,
+    memoryFallback: () => T | Promise<T>,
+  ): Promise<T> {
+    if (!redisCounter) {
+      if (failClosed) {
+        throw new HttpException('Authentication rate limiter unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+      return memoryFallback();
+    }
+
+    try {
+      return await redisOperation(redisCounter);
+    } catch {
+      if (failClosed) {
+        throw new HttpException('Authentication rate limiter unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+      return memoryFallback();
+    }
+  }
 }
 
 let cleanupInterval: NodeJS.Timeout | null = null;
 
 /**
- * Start periodic cleanup — called once on module load.
+ * Start periodic cleanup - called once on module load.
  * Stores the interval handle so it can be cleared during testing or shutdown.
  */
 export function startCleanup(): void {
@@ -146,7 +205,7 @@ export function startCleanup(): void {
 
 startCleanup();
 
-/** Clear the cleanup interval (useful in tests or graceful shutdown) */
+/** Clear the cleanup interval (useful in tests or graceful shutdown). */
 export function stopCleanup(): void {
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
@@ -154,24 +213,61 @@ export function stopCleanup(): void {
   }
 }
 
-function buildKey(path: string, ip: string, target: string): string {
-  return `${path}:${ip}:${target}`;
+function buildAttemptKeys(path: string, ip: string, target?: string): string[] {
+  const routeKey = hashValue(path);
+  const keys = [`route:${routeKey}:ip:${hashValue(ip)}`];
+  const normalizedTarget = normalizeTarget(target);
+  if (normalizedTarget) {
+    keys.push(`route:${routeKey}:target:${hashValue(normalizedTarget)}`);
+  }
+  return keys;
+}
+
+function isMemoryLocked(key: string): boolean {
+  const entry = tracker.get(key);
+  if (!entry) return false;
+  const now = Date.now();
+  if (entry.lockUntil > now) return true;
+  if (entry.lockUntil && entry.lockUntil <= now) tracker.delete(key);
+  return false;
+}
+
+function recordMemoryFailure(key: string): void {
+  const now = Date.now();
+  const entry = tracker.get(key);
+
+  if (entry && entry.lockUntil > now) return;
+
+  const failures = (entry?.failures ?? 0) + 1;
+  const lockUntil = failures >= MAX_FAILURES ? now + LOCK_DURATION_MS : 0;
+  tracker.set(key, { failures, lockUntil, lastFailure: now });
+}
+
+function resolvePath(req: RequestLike): string {
+  const rawPath = req.originalUrl ?? req.route?.path ?? req.url ?? '';
+  return rawPath.split('?')[0];
 }
 
 function resolveIp(req: RequestLike): string {
   // req.ip is Express's resolved client IP (honours the `trust proxy` setting).
-  // Never read x-forwarded-for directly — an attacker controls that header and
+  // Never read x-forwarded-for directly - an attacker controls that header and
   // can rotate it per request to defeat the counter.
   return req.ip ?? req.connection?.remoteAddress ?? 'unknown';
+}
+
+function normalizeTarget(target?: string): string {
+  return target?.trim().toLowerCase() ?? '';
+}
+
+function hashValue(value: string): string {
+  return createHash('sha256').update(value || 'unknown').digest('hex');
 }
 
 function isAuthRoute(path: string): boolean {
   // `/auth/verify-email/*` (request + confirm) carries short random
   // verification tokens. Without brute-force tracking an attacker could
-  // hammer the confirm endpoint guessing tokens. Treat them as auth
-  // routes so the same per-(route×ip×target) lockout applies. The
-  // `target` for these routes is the user identifier (email) so a
-  // distributed guess attack on one account is tracked across IPs.
+  // hammer the confirm endpoint guessing tokens. Treat them as auth routes so
+  // the same route+IP lockout applies.
   return (
     path.includes('/auth/login') ||
     path.includes('/auth/signup') ||
