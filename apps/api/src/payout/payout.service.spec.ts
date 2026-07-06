@@ -67,13 +67,18 @@ const mockPayPalPayouts = {
 const mockAudit = {
   log: vi.fn().mockResolvedValue(undefined),
 } as any;
+const mockStripeConnect = {
+  readiness: vi.fn().mockReturnValue({ ok: true }),
+  initiate: vi.fn().mockResolvedValue({ providerTxId: 'sc_tx_123', status: 'processing' }),
+  checkStatus: vi.fn().mockResolvedValue({ status: 'processing' }),
+} as any;
 
 describe('PayoutService', () => {
   let service: PayoutService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockAudit, mockPayPalPayouts);
+    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockAudit, mockPayPalPayouts, mockStripeConnect);
   });
 
   describe('addPayoutMethod', () => {
@@ -318,7 +323,7 @@ describe('PayoutService', () => {
     });
 
     it('should process stub/mock providers without throwing an exception', async () => {
-      const providers = ['stripe_connect', 'payoneer', 'wise', 'razorpay', 'manual', 'paypal_email'];
+      const providers = ['payoneer', 'wise', 'razorpay', 'manual', 'paypal_email'];
       for (const provider of providers) {
         mockPrisma.payoutRequest.findUnique.mockResolvedValue({
           id: `req_${provider}`,

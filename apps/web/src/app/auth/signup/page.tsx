@@ -328,17 +328,4 @@ export default function SignupPage() {
   );
 }
 
-/** Extend window type for Google Identity Services */
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: Record<string, unknown>) => void;
-          renderButton: (element: HTMLElement, config: Record<string, unknown>) => void;
-          prompt: () => void;
-        };
-      };
-    };
-  }
-}
+// Google Identity Services types are declared in `@/types/google.d.ts`

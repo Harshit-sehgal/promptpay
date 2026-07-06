@@ -50,16 +50,14 @@ async function bootstrap() {
 
   // ── Trust proxy — resolve client IP from x-forwarded-for ──────
   // Behind NGINX/LB, `req.ip` returns the proxy IP unless we tell
-  // Express how many hops to trust. Set TRUST_PROXY_HOPS in env
-  // (default 1 — correct for a single reverse proxy).
-  // Express also accepts `true` / IP / CIDR / arrays; a single
-  // integer hop-count is the simplest secure default.
-  // This powers per-IP brute-force tracking and rate limiting.
-  const trustProxy = process.env.TRUST_PROXY_HOPS;
-  app.getHttpAdapter().getInstance().set(
-    'trust proxy',
-    trustProxy ? parseInt(trustProxy, 10) || 1 : 1,
-  );
+  // Express how many hops to trust. Set via validated TRUST_PROXY_HOPS
+  // (default 1 — correct for a single reverse proxy, max 3 to avoid
+  // over-trusting client-supplied X-Forwarded-For). This powers per-IP
+  // brute-force tracking and rate limiting.
+  const trustProxyHops = Number.isFinite(env.TRUST_PROXY_HOPS)
+    ? Math.min(3, Math.max(0, Math.trunc(env.TRUST_PROXY_HOPS)))
+    : 1;
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
 
   // Raw body parsing for the Stripe webhook route — Stripe needs the raw
   // request body for signature verification. Applied BEFORE the global
@@ -83,6 +81,9 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   app.enableCors({
+    // In production WEB_BASE_URL is validated to be a concrete origin (not
+    // '*') by @waitlayer/config. With credentials: true, a single explicit
+    // origin is required; reflect only that origin.
     origin: env.WEB_BASE_URL,
     credentials: true,
   });

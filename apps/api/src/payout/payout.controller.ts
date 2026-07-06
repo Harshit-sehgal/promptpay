@@ -18,7 +18,7 @@ export class PayoutController {
 
   @Post('method')
   @Roles('developer')
-  @RequiredScopes('advertiser:write')
+  @RequiredScopes('payout:write')
   addPayoutMethod(
     @CurrentUser('id') userId: string,
     @Body() dto: AddPayoutMethodDto,
@@ -28,14 +28,14 @@ export class PayoutController {
 
   @Get('info')
   @Roles('developer')
-  @RequiredScopes('advertiser:read')
+  @RequiredScopes('payout:read')
   getPayoutInfo(@CurrentUser('id') userId: string) {
     return this.service.getPayoutInfo(userId);
   }
 
   @Post('request')
   @Roles('developer')
-  @RequiredScopes('advertiser:write')
+  @RequiredScopes('payout:write')
   requestPayout(
     @CurrentUser('id') userId: string,
     @Body() dto: RequestPayoutDto,

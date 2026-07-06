@@ -5,7 +5,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
 import { AuditService } from '../audit/audit.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
-import { PayPalPayoutsProvider } from './providers';
+import { PayPalPayoutsProvider, StripeConnectPayoutProvider } from './providers';
 
 const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.REQUESTED,
@@ -84,12 +84,13 @@ export class PayoutService {
     private referral: ReferralService,
     private audit: AuditService,
     @Inject(PayPalPayoutsProvider) private paypalPayouts: PayPalPayoutsProvider,
+    @Inject(StripeConnectPayoutProvider) private stripeConnect: StripeConnectPayoutProvider,
   ) {
     this.providers = {
       manual: new ManualPayoutProvider(),
       paypal_email: new PayPalEmailPayoutProvider(),
       paypal_payouts: this.paypalPayouts,
-      stripe_connect: new StubPayoutProvider('Stripe Connect', 'stripe'),
+      stripe_connect: this.stripeConnect,
       payoneer: new StubPayoutProvider('Payoneer', 'payoneer'),
       wise: new StubPayoutProvider('Wise', 'wise'),
       razorpay: new StubPayoutProvider('Razorpay', 'razorpay'),

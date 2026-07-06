@@ -20,6 +20,14 @@ const envSchema = z.object({
   WEB_PORT: z.coerce.number().default(3000),
   WEB_BASE_URL: z.string().default('http://localhost:3000'),
 
+  // Reverse-proxy trust hops. Behind an LB/ingress, `req.ip` resolves to the
+  // proxy unless Express is told how many hops to trust. This powers
+  // per-IP brute-force tracking and rate limiting, so a wrong value either
+  // (a) keys abuse controls off the proxy IP (trivially bypassable) or
+  // (b) over-trusts client-supplied X-Forwarded-For (IP spoofing). Must be a
+  // positive integer; default 1 (single reverse proxy).
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(1),
+
   // Auth
   // NOTE: min(32) catches length, but a 32-char placeholder (e.g.
   // "change-me-in-production-32chars-ok") passes zod and is forgeable in
@@ -94,6 +102,26 @@ const envSchema = z.object({
     message:
       'STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is set — Stripe webhooks cannot be verified without it.',
     path: ['STRIPE_WEBHOOK_SECRET'],
+  },
+)
+.refine(
+  (env) => {
+    // In production, CORS is locked to a single concrete `WEB_BASE_URL` origin
+    // (credentials: true). A wildcard / '*' origin with credentials is rejected
+    // by browsers, and an empty/malformed origin would make `enableCors` fall
+    // back to reflecting any Origin — a CSRF/credential-leak vector. Fail fast.
+    if (env.NODE_ENV === 'production') {
+      const origin = env.WEB_BASE_URL.trim();
+      if (!origin || origin === '*' || !/^https?:\/\/[^\s/]+/.test(origin)) {
+        return false;
+      }
+    }
+    return true;
+  },
+  {
+    message:
+      'WEB_BASE_URL must be a concrete http(s) origin (not "*") in production — CORS uses credentials: true.',
+    path: ['WEB_BASE_URL'],
   },
 )
 .refine(

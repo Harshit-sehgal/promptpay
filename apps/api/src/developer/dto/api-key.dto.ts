@@ -8,6 +8,10 @@ const ALLOWED_API_KEY_SCOPES = [
   'ledger:read',
   'advertiser:read',
   'advertiser:write',
+  'extension:read',
+  'extension:write',
+  'payout:read',
+  'payout:write',
 ] as const;
 
 export class CreateApiKeyDto {

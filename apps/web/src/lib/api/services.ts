@@ -7,7 +7,6 @@ import {
   PayoutRequestResponse,
   PayoutAvailableResponse,
   LedgerBalanceResponse,
-  RoleSchema,
 } from '@waitlayer/shared';
 
 type AxiosLikeResponse<T> = { data: T; status: number };
@@ -48,22 +47,6 @@ export const authApi = {
     api.post('/auth/password/reset', { token, newPassword }),
   confirmEmailVerification: (token: string) => api.post('/auth/verify-email/confirm', { token }),
 };
-
-/**
- * Use this helper to assert a role string before building a payload that
- * includes `role`. The API rejects anything outside the allowed list with
- * 400, but this catches the typo on the client side.
- */
-type SupportedRole = 'developer' | 'advertiser' | 'admin' | 'support' | 'super_admin';
-export function coerceRole(role: string): SupportedRole {
-  const parsed = RoleSchema.safeParse(role);
-  if (!parsed.success) {
-    throw new Error(
-      `Invalid role '${role}' — must be one of: developer | advertiser | admin | support | super_admin`,
-    );
-  }
-  return parsed.data as SupportedRole;
-}
 
 export const developerApi = {
   getDashboard: () => api.get('/developer/dashboard'),
