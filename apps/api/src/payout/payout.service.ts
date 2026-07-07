@@ -465,15 +465,16 @@ export class PayoutService {
     // ── Outer pre-checks (fast rejection) ──
     const [confirmedEarnings, confirmedDebits, allocatedTotal, openFlags, account] = await Promise.all([
       this.prisma.earningsLedger.aggregate({
-        where: { userId, status: 'confirmed', entryType: 'credit' },
+        where: { userId, status: 'confirmed', entryType: 'credit', currency: dto.currency },
         _sum: { amountMinor: true },
       }),
       this.prisma.earningsLedger.aggregate({
-        where: { userId, status: 'confirmed', entryType: 'debit' },
+        where: { userId, status: 'confirmed', entryType: 'debit', currency: dto.currency },
         _sum: { amountMinor: true },
       }),
       this.prisma.payoutAllocation.aggregate({
         where: {
+          earningsEntry: { currency: dto.currency },
           payoutRequest: {
             userId,
             status: { in: RESERVED_PAYOUT_STATUSES },
