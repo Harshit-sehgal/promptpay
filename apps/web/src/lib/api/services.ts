@@ -81,6 +81,7 @@ export const adminApi = {
   approvePayout: (id: string, note?: string) => api.post(`/admin/payouts/${id}/approve`, { note }),
   rejectPayout: (id: string, reason: string) => api.post(`/admin/payouts/${id}/reject`, { reason }),
   getFraudFlags: (params?: Record<string, unknown>) => api.get('/admin/fraud', { params }),
+  getFraudStats: () => api.get('/admin/fraud/stats'),
   resolveFraudFlag: (
     id: string,
     decision: 'confirmed' | 'invalid',

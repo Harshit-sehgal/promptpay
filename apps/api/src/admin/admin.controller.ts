@@ -96,6 +96,11 @@ export class AdminController {
     return this.service.getFraudFlags(query);
   }
 
+  @Get('fraud/stats')
+  getFraudStats() {
+    return this.service.getFraudStats();
+  }
+
   @Post('fraud/:id/resolve')
   resolveFraudFlag(
     @Param('id', ParseUUIDPipe) id: string,
@@ -103,6 +108,11 @@ export class AdminController {
     @Body() dto: ResolveFraudFlagDto,
   ) {
     return this.service.resolveFraudFlag(id, userId, dto.decision, dto.note);
+  }
+
+  @Post('fraud/compute-trust/:userId')
+  computeTrustScore(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.service.recomputeTrustScore(userId);
   }
 
   @Get('audit-log')

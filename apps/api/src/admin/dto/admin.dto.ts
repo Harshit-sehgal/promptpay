@@ -1,5 +1,5 @@
 import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Min, Max, MaxLength } from 'class-validator';
-import { FraudSeverity, FraudFlagStatus } from '@waitlayer/shared';
+import { FraudSeverity } from '@waitlayer/shared';
 
 // ── Campaign approval ──
 
@@ -77,13 +77,38 @@ export class ResolveFraudFlagDto {
 }
 
 export class FraudFlagsQueryDto {
+  /**
+   * Comma-separated list of statuses to filter by (e.g. "open,reviewing"
+   * or "resolved_valid,resolved_invalid"). Accepts any FraudFlagStatus
+   * value. If omitted, no status filter is applied.
+   */
   @IsOptional()
-  @IsEnum(FraudFlagStatus)
-  status?: FraudFlagStatus;
+  @IsString()
+  status?: string;
 
   @IsOptional()
   @IsEnum(FraudSeverity)
   severity?: FraudSeverity;
+
+  @IsOptional()
+  @IsString()
+  flagType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
 }
 
 // ── Users ──
