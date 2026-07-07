@@ -57,8 +57,10 @@ const ALLOWED_PATH_PREFIXES = [
 
   // Advertiser
   '/advertiser/dashboard',
+  '/advertiser/billing',
   '/advertiser/campaigns',
   '/advertiser/reports',
+  '/advertiser/deposit-session',
 
   // Admin (gated by RoleGuard upstream; the proxy just forwards)
   '/admin/overview',

@@ -127,6 +127,55 @@ export class AdvertiserService {
     };
   }
 
+  /** Get advertiser billing balance and recent advertiser-ledger entries. */
+  async getBilling(advertiserId: string) {
+    const advertiser = await this.prisma.advertiser.findUnique({
+      where: { id: advertiserId },
+      select: { id: true },
+    });
+    if (!advertiser) throw new NotFoundException('Advertiser not found');
+
+    const [credits, debits, entries] = await Promise.all([
+      this.prisma.advertiserLedger.aggregate({
+        where: { advertiserId, entryType: 'credit', status: 'confirmed' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.advertiserLedger.aggregate({
+        where: { advertiserId, entryType: 'debit', status: 'confirmed' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.advertiserLedger.findMany({
+        where: { advertiserId },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+        select: {
+          id: true,
+          campaignId: true,
+          entryType: true,
+          status: true,
+          amountMinor: true,
+          currency: true,
+          description: true,
+          stripePaymentIntentId: true,
+          stripeDisputeId: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    const totalDepositsMinor = credits._sum.amountMinor ?? 0;
+    const totalChargesMinor = debits._sum.amountMinor ?? 0;
+    const currency = entries[0]?.currency ?? 'USD';
+
+    return {
+      balanceMinor: totalDepositsMinor - totalChargesMinor,
+      currency,
+      totalDepositsMinor,
+      totalChargesMinor,
+      entries,
+    };
+  }
+
   /** Create a new campaign (always starts in DRAFT) */
   async createCampaign(advertiserId: string, dto: {
     name: string;

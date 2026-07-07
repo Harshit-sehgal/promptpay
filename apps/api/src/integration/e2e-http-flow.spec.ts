@@ -14,15 +14,17 @@ import { LedgerService } from '../ledger/ledger.service';
 async function cleanDb(prisma: PrismaService) {
   // Truncate tables to ensure a clean test run without foreign key violations
   await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE 
-      "users", "sessions", "devices", "user_settings", "payout_accounts", 
-      "advertisers", "campaigns", "ad_creatives", "categories", 
-      "blocked_categories", "country_targeting", "tool_integrations", 
-      "wait_state_events", "ad_impressions", "ad_clicks", "ad_reports", 
-      "earnings_ledger", "advertiser_ledger", "platform_ledger", 
-      "payout_requests", "payout_allocations", "payout_transactions", 
-      "fraud_flags", "trust_scores", "campaign_approvals", "api_keys", 
-      "webhook_events", "audit_logs", "referrals", "referral_rewards" 
+    TRUNCATE TABLE
+      "users", "sessions", "devices", "device_recovery_tokens",
+      "user_settings", "payout_accounts",
+      "advertisers", "campaigns", "ad_creatives", "categories",
+      "blocked_categories", "country_targeting", "tool_integrations",
+      "wait_state_events", "ad_impressions", "ad_clicks", "ad_reports",
+      "earnings_ledger", "advertiser_ledger", "platform_ledger",
+      "payout_requests", "payout_allocations", "payout_transactions",
+      "recovery_debt_cases",
+      "fraud_flags", "trust_scores", "campaign_approvals", "api_keys",
+      "webhook_events", "audit_logs", "referrals", "referral_rewards"
     CASCADE;
   `);
 }

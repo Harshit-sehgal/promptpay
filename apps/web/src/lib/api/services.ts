@@ -63,12 +63,15 @@ export const developerApi = {
 
 export const advertiserApi = {
   getDashboard: () => api.get('/advertiser/dashboard'),
+  getBilling: () => api.get('/advertiser/billing'),
   createCampaign: (data: Record<string, unknown>) =>
     api.post('/advertiser/campaigns', data).then((r) => ok(CreateCampaignResponse.parse(r.data))),
   submitCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/submit`),
   pauseCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/pause`),
   resumeCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/resume`),
   getReports: (params?: Record<string, unknown>) => api.get('/advertiser/reports', { params }),
+  createDepositSession: (amountMinor: number, currency?: string) =>
+    api.post('/advertiser/deposit-session', { amountMinor, currency }),
 };
 
 export const adminApi = {

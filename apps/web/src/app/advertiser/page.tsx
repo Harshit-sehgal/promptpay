@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { LoadingSpinner } from '@/components';
@@ -54,6 +56,24 @@ export default function AdvertisersPage() {
   const [data, setData] = useState<AdvertiserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ type: 'success' | 'cancelled'; visible: boolean } | null>(null);
+
+  const searchParams = useSearchParams();
+  const depositStatus = searchParams.get('deposit');
+
+  // Handle Stripe Checkout redirect (successUrl/cancelUrl in advertiser.controller.ts)
+  useEffect(() => {
+    if (depositStatus === 'success') {
+      setBanner({ type: 'success', visible: true });
+    } else if (depositStatus === 'cancelled') {
+      setBanner({ type: 'cancelled', visible: true });
+    }
+    if (depositStatus) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('deposit');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [depositStatus]);
 
   useEffect(() => {
     advertiserApi.getDashboard()
@@ -68,6 +88,55 @@ export default function AdvertisersPage() {
         <h1 className="text-2xl font-bold text-white mb-1">Advertiser overview</h1>
         <p className="text-ink-300 text-sm">Your campaigns and performance</p>
       </div>
+
+      {/* Stripe Checkout redirect banners */}
+      {banner?.visible && (
+        <div
+          className={`mb-6 rounded-xl p-4 border ${
+            banner.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/20'
+              : 'bg-amber-500/10 border-amber-500/20'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {banner.type === 'success' ? (
+              <svg className="w-5 h-5 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            )}
+            <div className="flex-1">
+              <p className={`text-sm font-medium ${banner.type === 'success' ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {banner.type === 'success'
+                  ? 'Your deposit was successful! Your account has been credited.'
+                  : 'Deposit cancelled. No charges were made.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {banner.type === 'success' && (
+                <Link
+                  href="/advertiser/billing"
+                  className="text-xs text-emerald-300 hover:text-emerald-200 underline underline-offset-2 transition-colors"
+                >
+                  View billing
+                </Link>
+              )}
+              <button
+                onClick={() => setBanner(null)}
+                className="text-ink-400 hover:text-ink-200 transition-colors"
+                aria-label="Dismiss"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && <LoadingSpinner />}
 

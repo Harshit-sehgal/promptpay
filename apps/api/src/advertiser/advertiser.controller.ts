@@ -80,6 +80,14 @@ export class AdvertiserController {
     return this.service.getDashboard(advertiserId);
   }
 
+  @Get('billing')
+  @RequiredScopes('advertiser:read')
+  async getBilling(@Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.getBilling(advertiserId);
+  }
+
   @Post('campaigns')
   @RequiredScopes('campaigns:write')
   async createCampaign(@Req() req: Request, @Body() dto: CreateCampaignDto) {

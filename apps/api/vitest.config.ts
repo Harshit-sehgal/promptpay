@@ -8,6 +8,10 @@ export default defineConfig({
     // Integration tests share one Postgres database (TRUNCATE in setup),
     // so test files must not run in parallel against it.
     fileParallelism: false,
+    // The HTTP suites boot the full Nest app and truncate the local Docker
+    // Postgres schema in hooks. The default 10s hook timeout is too tight on
+    // slower developer disks even when the suite is healthy.
+    hookTimeout: 60_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
