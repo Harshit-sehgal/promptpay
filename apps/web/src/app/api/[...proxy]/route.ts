@@ -66,6 +66,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/admin/campaigns',
   '/admin/payouts',
   '/admin/fraud',
+  '/admin/recovery-debt',
   '/admin/audit-log',
 
   // Payout
@@ -97,6 +98,10 @@ function upstreamUrl(pathname: string): string {
   return `${API_BASE}${pathWithoutApi}`;
 }
 
+function proxyPath(pathname: string): string {
+  return pathname.replace(/^\/api/, '');
+}
+
 export async function GET(req: NextRequest) {
   return proxy(req);
 }
@@ -116,11 +121,12 @@ export async function DELETE(req: NextRequest) {
 async function proxy(req: NextRequest): Promise<NextResponse> {
   try {
     const pathname = req.nextUrl.pathname;
+    const pathWithoutApi = proxyPath(pathname);
 
     // Reject paths not on the explicit allowlist — the web UI never needs them
     // and they could reach upstream endpoints the browser shouldn't access.
     const allowed = ALLOWED_PATH_PREFIXES.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+      (prefix) => pathWithoutApi === prefix || pathWithoutApi.startsWith(`${prefix}/`),
     );
     if (!allowed) {
       return NextResponse.json(

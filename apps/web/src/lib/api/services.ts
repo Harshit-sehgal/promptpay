@@ -87,6 +87,25 @@ export const adminApi = {
     decision: 'confirmed' | 'invalid',
     note?: string,
   ) => api.post(`/admin/fraud/${id}/resolve`, { decision, note }),
+  getRecoveryDebtCases: (params?: Record<string, unknown>) =>
+    api.get('/admin/recovery-debt', { params }),
+  openRecoveryDebtCase: (
+    userId: string,
+    data: {
+      status?: 'open' | 'in_collections';
+      currency?: string;
+      externalReference?: string;
+      note?: string;
+    },
+  ) => api.post(`/admin/recovery-debt/users/${userId}/open`, data),
+  resolveRecoveryDebtCase: (
+    id: string,
+    data: {
+      status: 'recovered' | 'written_off' | 'closed';
+      externalReference?: string;
+      note?: string;
+    },
+  ) => api.post(`/admin/recovery-debt/cases/${id}/resolve`, data),
   getAuditLog: (params?: Record<string, unknown>) => api.get('/admin/audit-log', { params }),
 };
 

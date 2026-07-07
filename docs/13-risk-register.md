@@ -211,7 +211,7 @@ Mitigation:
 - Reconciliation jobs.
 - Manual payout review.
 - Confirmed `debit` recovery rows for `paidSkipped` fraud reversals so future payouts are reduced automatically.
-- Currency-scoped admin recovery-debt cases for debt that cannot be netted against future earnings, including external references, terminal outcomes, audit logs, and a partial unique index preventing duplicate active cases per developer/currency.
+- Currency-scoped admin recovery-debt cases for debt that cannot be netted against future earnings, including a web operator page, external references, terminal outcomes, audit logs, and a partial unique index preventing duplicate active cases per developer/currency.
 
 Owner: Backend/Finance Engineering
 

@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-07 (verified after support-mediated device-secret recovery, currency-scoped recovery-debt cases, and full quality-gate pass)
+Last updated: 2026-07-07 (verified after support-mediated device-secret recovery, currency-scoped recovery-debt cases, admin recovery-debt UI, and full quality-gate pass)
 
 ---
 
@@ -186,13 +186,15 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Auth: login, signup
 - Developer: dashboard (with referral info), earnings, payouts, settings, trust, api-keys, billing
 - Advertiser: dashboard, campaigns, new campaign, billing, reports
-- Admin: overview, campaigns, payouts, fraud, users, audit, ledger, api-keys, tools, webhooks
+- Admin: overview, campaigns, payouts, recovery debt, fraud, users, audit, ledger, api-keys, tools, webhooks
 - Legal: privacy, terms, payout-policy, advertiser-policy
 
 **API contracts (verified by source diff):**
 - Advertiser `createCreative()` sends the backend DTO shape (`title`, `sponsoredMessage`, `destinationUrl`, `displayDomain`), not the legacy `headline/message/ctaText/ctaUrl` shape
 - Country targeting sends `[{countryCode, include}]` as a JSON array, matching the backend `setCountryTargeting` payload
 - Admin ledger page calls `/ledger/admin/breakdown` and `/ledger/admin/history` (admin-only), with both flat totals **and** nested objects (`earningsLedger`, `advertiserLedger`, `platformLedger`) — backend now returns both shapes for the UI
+- Admin recovery-debt page calls `/admin/recovery-debt`, `/admin/recovery-debt/users/:userId/open`, and `/admin/recovery-debt/cases/:id/resolve` through the same-origin proxy.
+- The same-origin proxy now applies its explicit allowlist to the upstream path after stripping `/api`, so browser calls like `/api/admin/overview` and `/api/admin/recovery-debt` match their configured `/admin/...` allowlist entries.
 - `services.ts` exposes `googleLogin`, `refresh`, `getMe`, dashboard APIs, payout APIs, ledger APIs, referral APIs, admin APIs, and api-key APIs
 
 ---
@@ -402,6 +404,7 @@ pnpm --filter waitlayer-web dev
 | Fixed blocked-category `SET NULL` schema mismatch | `blocked_categories.categoryId` is nullable, so deleting a category preserves historical blocked-category rows instead of failing on a NOT NULL constraint |
 | Added recovery-debt case workflow | Admins can list net outstanding paid-fraud recovery debt per currency, open/update active collection cases, and record recovered/written-off/closed outcomes with audit trails; a partial unique index prevents duplicate active cases per developer/currency |
 | Fixed payout-account history constraint | Replacing a payout method no longer collides with older inactive destinations; only active user/provider pairs are unique, and the replacement write is transactional |
+| Added recovery-debt admin UI and proxy route | Operators can manage recovery debt cases from `/admin/recovery-debt`; the Next.js API proxy allowlist now matches stripped upstream paths correctly |
 
 ---
 

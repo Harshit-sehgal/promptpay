@@ -96,6 +96,18 @@ export default function AdminDashboard() {
               </div>
               <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
                 <div>
+                  <p className="text-white font-medium">Recovery debt</p>
+                  <p className="text-ink-400 text-xs">Paid-fraud debt not netted from future earnings</p>
+                </div>
+                <button
+                  onClick={() => router.push('/admin/recovery-debt')}
+                  className="text-brand-500 hover:text-brand-400 text-sm"
+                >
+                  Review →
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
+                <div>
                   <p className="text-white font-medium">Fraud flags</p>
                   <p className="text-ink-400 text-xs">Suspicious activity detected</p>
                 </div>
