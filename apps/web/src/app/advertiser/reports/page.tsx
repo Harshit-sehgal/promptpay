@@ -51,10 +51,10 @@ function periodPreset(days: number): { from: string; to: string } {
 }
 
 const PRESETS = [
-  { label: 'Last 24h', days: 1 },
-  { label: '7 days', days: 7 },
-  { label: '30 days', days: 30 },
-  { label: '90 days', days: 90 },
+  { key: '1d' as const, label: 'Last 24h', days: 1 },
+  { key: '7d' as const, label: '7 days', days: 7 },
+  { key: '30d' as const, label: '30 days', days: 30 },
+  { key: '90d' as const, label: '90 days', days: 90 },
 ] as const;
 
 // ── Mini bar chart ──
@@ -121,8 +121,8 @@ export default function AdvertiserReportsPage() {
     fetchReports();
   }, [fetchReports]);
 
-  // Derived stats for comparison (show vs previous period)
-  const statsWithComparison = useMemo(() => {
+  // Derived stats object to avoid accessing data.summary.x everywhere
+  const displayStats = useMemo(() => {
     if (!data) return null;
     const { summary } = data;
     return {
@@ -160,10 +160,10 @@ export default function AdvertiserReportsPage() {
         <span className="text-ink-400 text-sm mr-1">Period:</span>
         {PRESETS.map((p) => (
           <button
-            key={p.label}
-            onClick={() => setPeriod(p.label === 'Last 24h' ? '1d' : p.label === '7 days' ? '7d' : p.label === '30 days' ? '30d' : '90d')}
+            key={p.key}
+            onClick={() => setPeriod(p.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              period === (p.label === 'Last 24h' ? '1d' : p.label === '7 days' ? '7d' : p.label === '30 days' ? '30d' : '90d')
+              period === p.key
                 ? 'bg-brand-500 text-white'
                 : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
             }`}
@@ -231,24 +231,24 @@ export default function AdvertiserReportsPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
             <StatCard
               label="Impressions"
-              value={formatNumber(statsWithComparison!.impressions)}
+              value={formatNumber(displayStats!.impressions)}
             />
             <StatCard
               label="Clicks"
-              value={formatNumber(statsWithComparison!.clicks)}
+              value={formatNumber(displayStats!.clicks)}
             />
             <StatCard
               label="Avg CTR"
-              value={formatPercent(statsWithComparison!.ctr)}
+              value={formatPercent(displayStats!.ctr)}
             />
             <StatCard
               label="Total spend"
-              value={formatCurrency(statsWithComparison!.spend)}
+              value={formatCurrency(displayStats!.spend)}
               valueColor="text-brand-500"
             />
             <StatCard
               label="Campaigns"
-              value={formatNumber(statsWithComparison!.campaigns)}
+              value={formatNumber(displayStats!.campaigns)}
             />
           </div>
 

@@ -510,8 +510,7 @@ export class AdvertiserService {
     const spendByCampaign = new Map(spendRows.map((r) => [r.campaignId, r._sum.amountMinor ?? 0]));
 
     // Build campaign name lookup
-    const campaignNames = new Map(campaigns.map((c) => [c.id, c.name]));
-    const campaignCurrencies = new Map(campaigns.map((c) => [c.id, c.currency]));
+
 
     // Aggregate impressions per campaign
     const impByCampaign = new Map<string, number>();
