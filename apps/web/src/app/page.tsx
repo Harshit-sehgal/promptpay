@@ -295,6 +295,8 @@ export default function HomePage() {
               <div>
                 <h4 className="text-surface-900 font-semibold text-[13px] mb-3">Product</h4>
                 <div className="flex flex-col gap-2">
+                  <Link href="/pricing" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">Pricing</Link>
+                  <Link href="/comparison" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">Comparison</Link>
                   <a href="#how-it-works" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">How it works</a>
                   <a href="#developers" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">For developers</a>
                   <a href="#advertisers" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">For advertisers</a>
