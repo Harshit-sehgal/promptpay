@@ -411,6 +411,12 @@ export class PayoutService {
     if (user.status === 'restricted' || user.status === 'banned') {
       throw new ForbiddenException('Account is restricted from payouts');
     }
+    // Payouts move real money to an external account, so require a verified
+    // email before any payout can be requested. This blocks account-takeover
+    // payout theft from unverified/squatted accounts.
+    if (!user.emailVerified) {
+      throw new ForbiddenException('Email must be verified before requesting a payout');
+    }
 
     // Minimum threshold check
     if (dto.amountMinor < PAYOUT.MINIMUM_THRESHOLD_MINOR) {

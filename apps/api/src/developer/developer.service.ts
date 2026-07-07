@@ -310,6 +310,7 @@ export class DeveloperService {
           githubId: null,
           name: null,
           referralCode: null,
+          country: null,
         },
       }),
       this.prisma.session.updateMany({

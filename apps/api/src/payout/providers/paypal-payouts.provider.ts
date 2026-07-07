@@ -108,7 +108,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
         throw new Error('PayPal Payouts is not configured for production');
       }
       this.logger.warn('PayPal not configured — returning stub response');
-      return { providerTxId: `paypal_stub_${params.payoutRequestId}`, status: 'processing' };
+      return { providerTxId: `dev_stub_paypal_${params.payoutRequestId}`, status: 'processing' };
     }
 
     const token = await this.getAccessToken();

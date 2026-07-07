@@ -118,7 +118,7 @@ describe('PayoutService', () => {
 
   describe('requestPayout', () => {
     it('should throw ForbiddenException if user is restricted or banned', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'banned' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'banned', emailVerified: false });
 
       await expect(
         service.requestPayout('user_123', {
@@ -130,7 +130,7 @@ describe('PayoutService', () => {
     });
 
     it('should throw BadRequestException if request amount is below minimum threshold', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active', emailVerified: true });
 
       await expect(
         service.requestPayout('user_123', {
@@ -142,7 +142,7 @@ describe('PayoutService', () => {
     });
 
     it('should throw BadRequestException if user has insufficient available earnings', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active', emailVerified: true });
       mockPrisma.earningsLedger.aggregate
         .mockResolvedValueOnce({ _sum: { amountMinor: 5000 } }) // confirmed credits
         .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
@@ -158,7 +158,7 @@ describe('PayoutService', () => {
     });
 
     it('should throw ForbiddenException if user has open critical/high fraud flags', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active', emailVerified: true });
       mockPrisma.earningsLedger.aggregate
         .mockResolvedValueOnce({ _sum: { amountMinor: 5000 } }) // confirmed credits
         .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
@@ -175,7 +175,7 @@ describe('PayoutService', () => {
     });
 
     it('should allocate earnings and create a payout request successfully', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active', emailVerified: true });
       mockPrisma.earningsLedger.aggregate
         .mockResolvedValueOnce({ _sum: { amountMinor: 5000 } }) // confirmed credits
         .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
@@ -354,15 +354,15 @@ describe('PayoutService', () => {
       process.env.NODE_ENV = 'production';
       try {
         mockPrisma.payoutRequest.findUnique.mockResolvedValue({
-          id: 'req_wise',
+          id: 'req_payoneer',
           status: 'approved',
           currency: 'USD',
           approvedAmountMinor: 2000,
           allocations: [{ amountMinor: 2000 }],
-          payoutAccount: { provider: 'wise', destination: 'dev@test.com' },
+          payoutAccount: { provider: 'payoneer', destination: 'dev@test.com' },
         });
 
-        await expect(service.processPayout('req_wise')).rejects.toThrow(BadRequestException);
+        await expect(service.processPayout('req_payoneer')).rejects.toThrow(BadRequestException);
 
         expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
         expect(mockPrisma.payoutTransaction.create).not.toHaveBeenCalled();

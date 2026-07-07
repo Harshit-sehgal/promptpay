@@ -54,7 +54,7 @@ pnpm audit --prod    # production dependency vulnerability audit
 - **Auth**: Email/password signup, Google OAuth, JWT with refresh rotation + reuse detection, password reset
 - **Campaigns**: Draft → submitted → approved → active lifecycle with budget/bid validation
 - **Ledger**: Three-ledger accounting (earnings, advertiser, platform) with 60/30/10 revenue split
-- **Payouts**: Multi-provider architecture with PayPal Payouts and Stripe Connect wired, regional PSP stubs fail-closed in production, and hold periods by trust level
+- **Payouts**: Multi-provider architecture with PayPal Payouts, Stripe Connect, and Wise wired, Razorpay/Payoneer stubs fail-closed in production, and hold periods by trust level
 - **Fraud**: Redis-backed rate limits, brute-force lockouts, CTR analysis, self-click detection, trust scoring, automatic earning holds
 - **Extensions**: HMAC-signed event pipeline per device, privacy-enforced, idempotent, with password/Google/support device-secret recovery
 - **Referrals**: Code-based referral system with $5 reward on first payout

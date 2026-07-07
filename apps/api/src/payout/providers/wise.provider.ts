@@ -121,7 +121,7 @@ export class WisePayoutProvider implements PayoutProviderHandler {
         throw new Error('Wise payouts are not configured for production');
       }
       this.logger.warn('Wise not configured — returning stub response');
-      return { providerTxId: `wise_stub_${params.payoutRequestId}`, status: 'processing' };
+      return { providerTxId: `dev_stub_wise_${params.payoutRequestId}`, status: 'processing' };
     }
 
     const email = params.destination?.trim();

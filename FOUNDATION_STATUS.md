@@ -16,7 +16,7 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 | 4 | Authorization | PASS | Integration test asserts 403s on cross-tenant access |
 | 5 | Campaign lifecycle | PASS | Real DB end-to-end: draft → submitted → approved → active |
 | 6 | Ledger/money flow | PASS | Integration asserts CPM and CPC 60/30/10 splits with guarded campaign spend |
-| 7 | Payouts | Partial | Lifecycle, partial allocations, PayPal Payouts, Stripe Connect, provider-failure release, and production stub guards tested; regional PSP integrations still pending |
+| 7 | Payouts | Partial | Lifecycle, partial allocations, provider-failure release, and production stub guards tested; PayPal Payouts, Stripe Connect, and Wise call their real APIs when configured, Razorpay and Payoneer remain dev/test stubs blocked in production |
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
 | 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
@@ -156,7 +156,8 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Multi-provider architecture: Manual, PayPal Email, PayPal Payouts, Wise, Stripe Connect, Razorpay, Payoneer.
 - PayPal Payouts calls the real PayPal API when `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are configured. In dev/test it can return a stub response when credentials are absent; in production it fails closed before the payout is claimed.
 - Stripe Connect payouts call Stripe's payout API against the developer connected account when `STRIPE_SECRET_KEY` is configured and the payout method destination is an `acct_*` account id; missing configuration or malformed destinations fail closed before money movement.
-- Wise, Razorpay, and Payoneer remain development stubs and are blocked in `NODE_ENV=production` before the `approved -> processing` claim.
+- Wise payouts call the Wise REST API (`/v1/transfers`) against the developer recipient email when `WISE_API_TOKEN` and `WISE_PROFILE_ID` are configured; empty/invalid email destinations and non-positive amounts fail closed. In dev/test without credentials it returns a stub response; in production it fails closed before the payout is claimed.
+- Razorpay and Payoneer remain development stubs and are blocked in `NODE_ENV=production` before the `approved -> processing` claim.
 - Minimum payout threshold: $10.00 (`PAYOUT.MINIMUM_THRESHOLD_MINOR`)
 - Fraud flag check (high/critical) blocks payout requests
 - Restricted/banned users blocked from payout
@@ -176,7 +177,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - If a provider explicitly returns `failed` from initiation, the payout is marked `failed` and its allocations are deleted in one transaction, making the earnings available for a fresh request.
 
 **Known limitation:**
-- In-app Stripe Connect onboarding is still not built; operators must only enable `stripe_connect` payout methods after separately verifying and storing the developer's connected account id. Real PSP integrations are still missing for Wise, Razorpay, and Payoneer.
+- In-app Stripe Connect onboarding is still not built; operators must only enable `stripe_connect` payout methods after separately verifying and storing the developer's connected account id. Real PSP integrations remain missing for Razorpay and Payoneer (Wise and Stripe Connect are now wired).
 
 ---
 
@@ -256,6 +257,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 | `ledger/ledger.service.spec.ts` | 27 | Unit | splits, guarded spend, balances, history, hold days |
 | `payout/payout.service.spec.ts` | 25 | Unit | allocation validation, partial split, provider routing, production provider guards, recovery-debt availability |
 | `payout/providers/stripe-connect.provider.spec.ts` | 7 | Unit | Stripe Connect readiness, connected-account destination validation, payout creation, status mapping |
+| `payout/providers/wise.provider.spec.ts` | 4 | Unit | Wise readiness, email-destination validation, stub response, transfer creation |
 | `integration/e2e-money-loop.spec.ts` | 40 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement, password/Google/support-gated secret recovery, and recovery-debt case operations |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
 | `integration/contract-tests.spec.ts` | 32 | **Contract** | Zod validation of API response shapes |
@@ -375,7 +377,7 @@ pnpm --filter waitlayer-web dev
 
 | Limitation | Severity | Detail |
 |------------|----------|--------|
-| Regional automated payout PSPs are not production-ready | Med | Wise, Razorpay, and Payoneer are dev/test stubs and fail closed in production until real PSP integrations are wired |
+| Regional automated payout PSPs are not production-ready | Med | Razorpay and Payoneer are dev/test stubs and fail closed in production until real PSP integrations are wired; Wise and Stripe Connect are now wired behind required credentials |
 | PayPal Payouts requires credentials for production | Med | `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` must be set before processing `paypal_payouts` requests in production; absent credentials are allowed only for dev/test stubs |
 | Stripe provider requires env and onboarding to fully run | Med | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY` must be set; Stripe Connect payout methods also require a verified `acct_*` destination until in-app onboarding is built |
 | Real Google OAuth requires env | Low | `GOOGLE_CLIENT_ID` required for production; offline mock-token verifier is dev/test only |

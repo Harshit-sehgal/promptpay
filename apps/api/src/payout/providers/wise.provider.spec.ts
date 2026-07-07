@@ -77,6 +77,11 @@ describe('WisePayoutProvider', () => {
     it('creates a transfer via the Wise API when configured', async () => {
       const p = makeProvider({ token: 'tok', profileId: '123' });
       const fetchMock = vi.fn(async (url: string, init: any) => {
+        // Recipient list (GET on the profile accounts endpoint) → empty array.
+        if (url.includes('/profiles/') && url.includes('/accounts')) {
+          return new Response(JSON.stringify([]), { status: 200 });
+        }
+        // Recipient create (POST /v1/accounts) → new account id.
         if (url.includes('/v1/accounts')) {
           return new Response(JSON.stringify({ id: 555 }), { status: 200 });
         }
