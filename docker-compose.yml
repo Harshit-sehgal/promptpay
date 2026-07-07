@@ -60,6 +60,9 @@ services:
       EMAIL_DRIVER: console
       EMAIL_FROM: noreply@waitlayer.local
       STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
+      # Sentry — uncomment to enable error monitoring locally
+      # SENTRY_DSN: https://your-dsn@o123456.ingest.sentry.io/654321
+      # SENTRY_ENVIRONMENT: development
     depends_on:
       postgres:
         condition: service_healthy

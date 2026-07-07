@@ -90,8 +90,16 @@ jobs:
         # than an always-empty directory.
         run: pnpm --filter waitlayer-api run test:cov
 
+      # Upload Sentry source maps on main-branch builds if SENTRY_AUTH_TOKEN
+      # is available (set as a GitHub Actions secret). The Sentry CLI is
+      # bundled with @sentry/nextjs / @sentry/nestjs — no separate install.
       - name: Build
         run: pnpm run build
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
       - name: Upload coverage
         if: always()

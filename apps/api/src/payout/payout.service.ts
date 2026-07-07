@@ -1,11 +1,11 @@
 import { Injectable, BadRequestException, ForbiddenException, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
-import { EarningsLedger, Prisma } from '@waitlayer/db';
+import { EarningsLedger, PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
 import { AuditService } from '../audit/audit.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
-import { PayPalPayoutsProvider, StripeConnectPayoutProvider } from './providers';
+import { PayPalPayoutsProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
 
 const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.REQUESTED,
@@ -85,6 +85,7 @@ export class PayoutService {
     private audit: AuditService,
     @Inject(PayPalPayoutsProvider) private paypalPayouts: PayPalPayoutsProvider,
     @Inject(StripeConnectPayoutProvider) private stripeConnect: StripeConnectPayoutProvider,
+    @Inject(WisePayoutProvider) private wise: WisePayoutProvider,
   ) {
     this.providers = {
       manual: new ManualPayoutProvider(),
@@ -92,9 +93,16 @@ export class PayoutService {
       paypal_payouts: this.paypalPayouts,
       stripe_connect: this.stripeConnect,
       payoneer: new StubPayoutProvider('Payoneer', 'payoneer'),
-      wise: new StubPayoutProvider('Wise', 'wise'),
+      wise: this.wise,
       razorpay: new StubPayoutProvider('Razorpay', 'razorpay'),
     };
+  }
+
+  private toDbPayoutProvider(provider: string): DbPayoutProvider {
+    if ((Object.values(DbPayoutProvider) as string[]).includes(provider)) {
+      return provider as DbPayoutProvider;
+    }
+    throw new BadRequestException(`Payout provider "${provider}" is not valid`);
   }
 
   /** Add or update a payout method for a user */
@@ -645,24 +653,10 @@ export class PayoutService {
     });
 
     if (result.status === PayoutStatus.FAILED) {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.payoutTransaction.create({
-          data: {
-            payoutRequestId: payout.id,
-            provider: payout.payoutAccount.provider,
-            providerTxId: result.providerTxId,
-            status: PayoutStatus.FAILED,
-            failureReason: 'Provider initiate returned failed',
-          },
-        });
-        const failed = await tx.payoutRequest.updateMany({
-          where: { id: payout.id, status: PayoutStatus.PROCESSING },
-          data: { status: PayoutStatus.FAILED },
-        });
-        if (failed.count === 0) {
-          throw new BadRequestException('Payout provider failed, but payout request is no longer processing');
-        }
-        await tx.payoutAllocation.deleteMany({ where: { payoutRequestId: payout.id } });
+      await this.markPayoutFailed(payout.id, {
+        provider: payout.payoutAccount.provider,
+        providerTxId: result.providerTxId,
+        failureReason: 'Provider initiate returned failed',
       });
 
       return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.FAILED };
@@ -799,16 +793,55 @@ export class PayoutService {
         );
       }
 
-      // 2. Record payout transaction
-      await tx.payoutTransaction.create({
-        data: {
+      // 2. Record payout transaction. processPayout already creates the
+      // in-flight provider row, so terminal transitions update that row first
+      // instead of creating a duplicate `(provider, providerTxId)` pair.
+      const txUpdate = await tx.payoutTransaction.updateMany({
+        where: {
           payoutRequestId: payoutId,
           provider: payout.payoutAccount.provider,
           providerTxId: data.providerTxId,
-          status: 'paid',
+          status: { in: [PayoutStatus.APPROVED, PayoutStatus.PROCESSING] },
+        },
+        data: {
+          status: PayoutStatus.PAID,
           paidAt: paidAtDate,
+          failureReason: null,
         },
       });
+
+      if (txUpdate.count === 0) {
+        const existingTx = await tx.payoutTransaction.findFirst({
+          where: {
+            provider: payout.payoutAccount.provider,
+            providerTxId: data.providerTxId,
+          },
+          select: { id: true, payoutRequestId: true, status: true },
+        });
+
+        if (existingTx) {
+          if (existingTx.payoutRequestId !== payoutId) {
+            throw new BadRequestException(
+              `Provider transaction ${data.providerTxId} is already attached to another payout`,
+            );
+          }
+          if (existingTx.status !== PayoutStatus.PAID) {
+            throw new BadRequestException(
+              `Provider transaction ${data.providerTxId} cannot be marked paid from status '${existingTx.status}'`,
+            );
+          }
+        } else {
+          await tx.payoutTransaction.create({
+            data: {
+              payoutRequestId: payoutId,
+              provider: payout.payoutAccount.provider,
+              providerTxId: data.providerTxId,
+              status: PayoutStatus.PAID,
+              paidAt: paidAtDate,
+            },
+          });
+        }
+      }
 
       // 3. Mark only the allocated / confirmed earnings as paid.
       // `updateMany where status: 'confirmed'` is the per-row TOCTOU guard:
@@ -872,6 +905,100 @@ export class PayoutService {
       where: { id: payoutId },
       include: { allocations: true },
     });
+  }
+
+  /** Mark a provider payout as failed and un-reserve its allocations.
+   *
+   * Used by provider initiation failures, webhook failures, and polling cron
+   * failures. Keeping the transition centralized prevents the failure paths
+   * from drifting on the important invariants:
+   *   - only `approved` / `processing` payouts may transition to `failed`;
+   *   - the provider transaction is marked failed, or created if the failure
+   *     happened before a processing transaction row existed;
+   *   - payout allocations are deleted so confirmed earnings become available
+   *     for a fresh payout request.
+   */
+  async markPayoutFailed(payoutId: string, data: {
+    provider: string;
+    providerTxId: string;
+    failureReason: string;
+  }) {
+    const dbProvider = this.toDbPayoutProvider(data.provider);
+
+    return this.prisma.$transaction(async (tx) => {
+      const failed = await tx.payoutRequest.updateMany({
+        where: { id: payoutId, status: { in: ['approved', 'processing'] } },
+        data: { status: PayoutStatus.FAILED },
+      });
+
+      if (failed.count === 0) {
+        const current = await tx.payoutRequest.findUnique({
+          where: { id: payoutId },
+          include: { allocations: true },
+        });
+        if (current?.status === PayoutStatus.FAILED) return current;
+        throw new BadRequestException(
+          current
+            ? `Payout cannot be marked failed from status '${current.status}'`
+            : 'Payout not found',
+        );
+      }
+
+      const txUpdate = await tx.payoutTransaction.updateMany({
+        where: {
+          payoutRequestId: payoutId,
+          provider: dbProvider,
+          providerTxId: data.providerTxId,
+          status: { in: [PayoutStatus.APPROVED, PayoutStatus.PROCESSING] },
+        },
+        data: { status: PayoutStatus.FAILED, failureReason: data.failureReason },
+      });
+
+      if (txUpdate.count === 0) {
+        const existingTx = await tx.payoutTransaction.findFirst({
+          where: {
+            provider: dbProvider,
+            providerTxId: data.providerTxId,
+          },
+          select: { id: true, payoutRequestId: true, status: true },
+        });
+
+        if (existingTx) {
+          if (existingTx.payoutRequestId !== payoutId) {
+            throw new BadRequestException(
+              `Provider transaction ${data.providerTxId} is already attached to another payout`,
+            );
+          }
+          if (existingTx.status !== PayoutStatus.FAILED) {
+            throw new BadRequestException(
+              `Provider transaction ${data.providerTxId} cannot be marked failed from status '${existingTx.status}'`,
+            );
+          }
+        } else {
+          await tx.payoutTransaction.create({
+            data: {
+              payoutRequestId: payoutId,
+              provider: dbProvider,
+              providerTxId: data.providerTxId,
+              status: PayoutStatus.FAILED,
+              failureReason: data.failureReason,
+            },
+          });
+        }
+      }
+
+      await tx.payoutAllocation.deleteMany({ where: { payoutRequestId: payoutId } });
+
+      return tx.payoutRequest.findUnique({
+        where: { id: payoutId },
+        include: { allocations: true },
+      });
+    });
+  }
+
+  /** Expose the provider map so the payout cron can check status on processing payouts */
+  getProvider(providerName: string): PayoutProviderHandler | undefined {
+    return this.providers[providerName];
   }
 
   /** Get payout history for a user */

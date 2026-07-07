@@ -27,6 +27,8 @@ const mockPrisma = {
   },
   payoutTransaction: {
     create: vi.fn(),
+    updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    findFirst: vi.fn().mockResolvedValue(null),
   },
   earningsLedger: {
     findMany: vi.fn(),
@@ -72,13 +74,18 @@ const mockStripeConnect = {
   initiate: vi.fn().mockResolvedValue({ providerTxId: 'sc_tx_123', status: 'processing' }),
   checkStatus: vi.fn().mockResolvedValue({ status: 'processing' }),
 } as any;
+const mockWise = {
+  readiness: vi.fn().mockReturnValue({ ok: true }),
+  initiate: vi.fn().mockResolvedValue({ providerTxId: 'wise_tx_123', status: 'processing' }),
+  checkStatus: vi.fn().mockResolvedValue({ status: 'processing' }),
+} as any;
 
 describe('PayoutService', () => {
   let service: PayoutService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockAudit, mockPayPalPayouts, mockStripeConnect);
+    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockAudit, mockPayPalPayouts, mockStripeConnect, mockWise);
   });
 
   describe('addPayoutMethod', () => {
@@ -325,7 +332,7 @@ describe('PayoutService', () => {
     });
 
     it('should process stub/mock providers without throwing an exception', async () => {
-      const providers = ['payoneer', 'wise', 'razorpay', 'manual', 'paypal_email'];
+      const providers = ['payoneer', 'razorpay', 'manual', 'paypal_email'];
       for (const provider of providers) {
         mockPrisma.payoutRequest.findUnique.mockResolvedValue({
           id: `req_${provider}`,
@@ -395,18 +402,41 @@ describe('PayoutService', () => {
         status: 'failed',
       });
       mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
-        id: 'req_failed',
-        status: 'approved',
-        currency: 'USD',
-        approvedAmountMinor: 2000,
-        allocations: [{ amountMinor: 2000, earningsEntryId: 'earn_1' }],
-        payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
-      });
+      mockPrisma.payoutRequest.findUnique
+        .mockResolvedValueOnce({
+          id: 'req_failed',
+          status: 'approved',
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
+        })
+        .mockResolvedValueOnce({
+          id: 'req_failed',
+          status: 'processing',
+          currency: 'USD',
+          approvedAmountMinor: 2000,
+          allocations: [{ amountMinor: 2000, earningsEntryId: 'earn_1' }],
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
+        })
+        .mockResolvedValueOnce({
+          id: 'req_failed',
+          status: 'failed',
+          allocations: [],
+        });
 
       const result = await service.processPayout('req_failed');
 
       expect(result.status).toBe('failed');
+      expect(mockPrisma.payoutTransaction.updateMany).toHaveBeenCalledWith({
+        where: {
+          payoutRequestId: 'req_failed',
+          provider: 'paypal_payouts',
+          providerTxId: 'pp_failed_123',
+          status: { in: ['approved', 'processing'] },
+        },
+        data: {
+          status: 'failed',
+          failureReason: 'Provider initiate returned failed',
+        },
+      });
       expect(mockPrisma.payoutTransaction.create).toHaveBeenCalledWith({
         data: {
           payoutRequestId: 'req_failed',
@@ -417,7 +447,7 @@ describe('PayoutService', () => {
         },
       });
       expect(mockPrisma.payoutRequest.updateMany).toHaveBeenLastCalledWith({
-        where: { id: 'req_failed', status: 'processing' },
+        where: { id: 'req_failed', status: { in: ['approved', 'processing'] } },
         data: { status: 'failed' },
       });
       expect(mockPrisma.payoutAllocation.deleteMany).toHaveBeenCalledWith({
@@ -496,6 +526,44 @@ describe('PayoutService', () => {
         where: { id: 'req_123', status: { in: ['approved', 'processing'] } },
         data: { status: 'paid', paidAt: new Date(nowStr) },
       });
+    });
+
+    it('updates an existing processing provider transaction when marking paid', async () => {
+      const nowStr = new Date().toISOString();
+      mockPrisma.payoutTransaction.updateMany.mockResolvedValueOnce({ count: 1 });
+      mockPrisma.payoutRequest.findUnique.mockImplementation((_args: any) => {
+        if (mockPrisma.payoutRequest.updateMany.mock.calls.length > 0) {
+          return Promise.resolve({ id: 'req_123', status: 'paid', userId: 'user_123', allocations: [] });
+        }
+        return Promise.resolve({
+          id: 'req_123',
+          status: 'processing',
+          userId: 'user_123',
+          payoutAccount: { provider: 'paypal_payouts' },
+          allocations: [
+            { earningsEntry: { status: 'confirmed' }, earningsEntryId: 'earn_1' },
+          ],
+        });
+      });
+      mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _count: { _all: 1 } });
+
+      const res = await service.markPayoutPaid('req_123', { providerTxId: 'pp_tx_123', paidAt: nowStr });
+
+      expect(mockPrisma.payoutTransaction.updateMany).toHaveBeenCalledWith({
+        where: {
+          payoutRequestId: 'req_123',
+          provider: 'paypal_payouts',
+          providerTxId: 'pp_tx_123',
+          status: { in: ['approved', 'processing'] },
+        },
+        data: {
+          status: 'paid',
+          paidAt: new Date(nowStr),
+          failureReason: null,
+        },
+      });
+      expect(mockPrisma.payoutTransaction.create).not.toHaveBeenCalled();
+      expect(res.status).toBe('paid');
     });
 
     it('should reject marking a payout paid from a non-payable state (e.g. rejected)', async () => {
@@ -597,6 +665,80 @@ describe('PayoutService', () => {
         where: { id: { in: ['earn_1', 'earn_2'] }, status: 'confirmed' },
         data: { status: 'paid' },
       });
+    });
+  });
+
+  describe('markPayoutFailed', () => {
+    it('updates an existing processing provider transaction and releases allocations', async () => {
+      mockPrisma.payoutRequest.updateMany.mockResolvedValueOnce({ count: 1 });
+      mockPrisma.payoutTransaction.updateMany.mockResolvedValueOnce({ count: 1 });
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+        id: 'req_failed',
+        status: 'failed',
+        allocations: [],
+      });
+
+      const res = await service.markPayoutFailed('req_failed', {
+        provider: 'paypal_payouts',
+        providerTxId: 'pp_tx_123',
+        failureReason: 'Provider reported failure',
+      });
+
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 'req_failed', status: { in: ['approved', 'processing'] } },
+        data: { status: 'failed' },
+      });
+      expect(mockPrisma.payoutTransaction.updateMany).toHaveBeenCalledWith({
+        where: {
+          payoutRequestId: 'req_failed',
+          provider: 'paypal_payouts',
+          providerTxId: 'pp_tx_123',
+          status: { in: ['approved', 'processing'] },
+        },
+        data: {
+          status: 'failed',
+          failureReason: 'Provider reported failure',
+        },
+      });
+      expect(mockPrisma.payoutTransaction.create).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutAllocation.deleteMany).toHaveBeenCalledWith({
+        where: { payoutRequestId: 'req_failed' },
+      });
+      expect(res.status).toBe('failed');
+    });
+
+    it('rejects marking failed from a non-failable state', async () => {
+      mockPrisma.payoutRequest.updateMany.mockResolvedValueOnce({ count: 0 });
+      mockPrisma.payoutRequest.findUnique.mockResolvedValueOnce({
+        id: 'req_paid',
+        status: 'paid',
+        allocations: [],
+      });
+
+      await expect(
+        service.markPayoutFailed('req_paid', {
+          provider: 'paypal_payouts',
+          providerTxId: 'pp_tx_123',
+          failureReason: 'Provider reported failure',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.payoutTransaction.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutAllocation.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid provider before mutating payout state', async () => {
+      await expect(
+        service.markPayoutFailed('req_failed', {
+          provider: 'not_a_provider',
+          providerTxId: 'tx_123',
+          failureReason: 'Provider reported failure',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutTransaction.updateMany).not.toHaveBeenCalled();
     });
   });
 });

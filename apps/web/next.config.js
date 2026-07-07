@@ -1,4 +1,5 @@
-/** @type {import('next').NextConfig} */
+/** @type {import('@sentry/nextjs').SentryBuildOptions} */
+const { withSentryConfig } = require('@sentry/nextjs');
 const path = require('path');
 
 /**
@@ -30,7 +31,7 @@ const SECURITY_HEADERS = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+      "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
   },
   {
     key: 'X-Content-Type-Options',
@@ -65,4 +66,19 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Wrap with Sentry config — only active when SENTRY_DSN is set (no-op otherwise)
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  // Source maps are uploaded only when an auth token is provided (CI/CD builds)
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  // Disable tunnel in favor of direct browser→Sentry transport (simpler CSP)
+  tunnelRoute: undefined,
+  // Hide source maps from non-Sentry endpoints
+  hideSourceMaps: true,
+  webpack: {
+    automaticVercelMonitors: true,
+  },
+});

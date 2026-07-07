@@ -110,6 +110,7 @@ export const adminApi = {
     },
   ) => api.post(`/admin/recovery-debt/cases/${id}/resolve`, data),
   getAuditLog: (params?: Record<string, unknown>) => api.get('/admin/audit-log', { params }),
+  getMetrics: (days?: number) => api.get('/admin/metrics', { params: { days } }),
 };
 
 export const payoutApi = {

@@ -33,6 +33,11 @@ export class AdminController {
     return this.service.getOverview();
   }
 
+  @Get('metrics')
+  getMetrics(@Query('days') days?: string) {
+    return this.service.getMetrics(days ? parseInt(days, 10) : 30);
+  }
+
   @Get('users')
   getUsers(@Query() query: UsersQueryDto) {
     return this.service.getUsers(query);

@@ -70,10 +70,22 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().default('noreply@waitlayer.local'),
   RESEND_API_KEY: z.string().optional(),
 
+  // Sentry (error monitoring)
+  SENTRY_DSN: z.string().optional(),
+  SENTRY_ENVIRONMENT: z.string().optional(),
+
   // PayPal (payouts — later)
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+
+  // Wise (payouts — dev stub, real API in production when configured)
+  WISE_API_TOKEN: z.string().optional(),
+  WISE_API_VERSION: z.string().default('3.0'),
+  // WISE_PROFILE_ID selects the Wise business profile that holds the balance
+  // used to fund developer payouts. Required for live transfers.
+  WISE_PROFILE_ID: z.string().optional(),
+  WISE_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
 })
 .refine(
   (env) => {
@@ -126,6 +138,18 @@ const envSchema = z.object({
 )
 .refine(
   (env) => {
+    // Wise live mode requires a token + profile id. sandbox is OK without
+    // them (the Wise provider fails closed / stubs in dev).
+    if (env.WISE_MODE === 'live' && (!env.WISE_API_TOKEN || !env.WISE_PROFILE_ID)) return false;
+    return true;
+  },
+  {
+    message: 'WISE_API_TOKEN and WISE_PROFILE_ID are required when WISE_MODE is "live"',
+    path: ['WISE_API_TOKEN'],
+  },
+)
+.refine(
+  (env) => {
     // PayPal live mode requires credentials. sandbox is OK without them
     // (the PayPal provider stubs/falls-back gracefully in dev).
     if (env.PAYPAL_MODE === 'live' && (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET)) return false;
@@ -135,6 +159,18 @@ const envSchema = z.object({
     message:
       'PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required when PAYPAL_MODE is "live"',
     path: ['PAYPAL_CLIENT_ID'],
+  },
+)
+.refine(
+  (env) => {
+    // Wise live mode requires a token + profile id. sandbox is OK without
+    // them (the Wise provider fails closed / stubs in dev).
+    if (env.WISE_MODE === 'live' && (!env.WISE_API_TOKEN || !env.WISE_PROFILE_ID)) return false;
+    return true;
+  },
+  {
+    message: 'WISE_API_TOKEN and WISE_PROFILE_ID are required when WISE_MODE is "live"',
+    path: ['WISE_API_TOKEN'],
   },
 );
 

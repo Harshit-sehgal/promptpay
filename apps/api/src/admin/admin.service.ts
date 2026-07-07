@@ -785,6 +785,181 @@ export class AdminService {
     };
   }
 
+  // ── Operational Metrics ──
+
+  async getMetrics(days = 30) {
+    const now = new Date();
+    const periodStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const prevPeriodStart = new Date(periodStart.getTime() - days * 24 * 60 * 60 * 1000);
+
+    // Date-floor helper for grouping by day
+    const floorDay = (d: Date): string => d.toISOString().slice(0, 10);
+
+    // ── Daily impression trend ──
+    const rawImpressions = await this.prisma.adImpression.findMany({
+      where: { createdAt: { gte: periodStart } },
+      select: { createdAt: true, isBillable: true },
+    });
+    const impressionByDay = new Map<string, { total: number; billable: number }>();
+    for (const imp of rawImpressions) {
+      const day = floorDay(imp.createdAt);
+      const bucket = impressionByDay.get(day) ?? { total: 0, billable: 0 };
+      bucket.total++;
+      if (imp.isBillable) bucket.billable++;
+      impressionByDay.set(day, bucket);
+    }
+
+    // ── Daily signup trend ──
+    const rawSignups = await this.prisma.user.findMany({
+      where: { createdAt: { gte: periodStart } },
+      select: { createdAt: true, role: true },
+    });
+    const signupsByDay = new Map<string, { total: number; developer: number; advertiser: number }>();
+    for (const u of rawSignups) {
+      const day = floorDay(u.createdAt);
+      const bucket = signupsByDay.get(day) ?? { total: 0, developer: 0, advertiser: 0 };
+      bucket.total++;
+      if (u.role === 'developer') bucket.developer++;
+      if (u.role === 'advertiser') bucket.advertiser++;
+      signupsByDay.set(day, bucket);
+    }
+
+    // ── Daily revenue/spend (from earnings ledger credits) ──
+    const rawRevenue = await this.prisma.earningsLedger.findMany({
+      where: { createdAt: { gte: periodStart }, entryType: 'credit' },
+      select: { createdAt: true, amountMinor: true, status: true },
+    });
+    const revenueByDay = new Map<string, { estimated: number; confirmed: number; paid: number }>();
+    for (const r of rawRevenue) {
+      const day = floorDay(r.createdAt);
+      const bucket = revenueByDay.get(day) ?? { estimated: 0, confirmed: 0, paid: 0 };
+      if (r.status === 'estimated') bucket.estimated += r.amountMinor;
+      else if (r.status === 'confirmed') bucket.confirmed += r.amountMinor;
+      else if (r.status === 'paid') bucket.paid += r.amountMinor;
+      revenueByDay.set(day, bucket);
+    }
+
+    // ── Daily advertiser spend ──
+    const rawSpend = await this.prisma.advertiserLedger.findMany({
+      where: { createdAt: { gte: periodStart }, entryType: 'debit' },
+      select: { createdAt: true, amountMinor: true },
+    });
+    const spendByDay = new Map<string, number>();
+    for (const s of rawSpend) {
+      const day = floorDay(s.createdAt);
+      spendByDay.set(day, (spendByDay.get(day) ?? 0) + s.amountMinor);
+    }
+
+    // ── Campaign status distribution ──
+    const campaignByStatus = await this.prisma.campaign.groupBy({
+      by: ['status'],
+      _count: { _all: true },
+    });
+
+    // ── Active user counts (by role) ──
+    const [devCount, advCount, adminCount] = await Promise.all([
+      this.prisma.user.count({ where: { role: 'developer', status: 'active' } }),
+      this.prisma.user.count({ where: { role: 'advertiser', status: 'active' } }),
+      this.prisma.user.count({ where: { role: { in: ['admin', 'super_admin'] as const }, status: 'active' } }),
+    ]);
+
+    // ── Payout stats ──
+    const [
+      totalPayouts,
+      pendingPayouts,
+      payoutSum,
+    ] = await Promise.all([
+      this.prisma.payoutRequest.count(),
+      this.prisma.payoutRequest.count({ where: { status: { in: ['requested', 'under_review'] } } }),
+      this.prisma.earningsLedger.aggregate({ where: { status: 'paid', entryType: 'credit' }, _sum: { amountMinor: true } }),
+    ]);
+
+    // ── Fill in daily time-series (fill missing days with zeros) ──
+    const daily: { date: string; impressions: number; billableImpressions: number; signups: number; developerSignups: number; advertiserSignups: number; estimatedRevenueMinor: number; confirmedRevenueMinor: number; paidRevenueMinor: number; advertiserSpendMinor: number }[] = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dayStr = floorDay(d);
+      const imps = impressionByDay.get(dayStr);
+      const sigs = signupsByDay.get(dayStr);
+      const rev = revenueByDay.get(dayStr);
+      daily.push({
+        date: dayStr,
+        impressions: imps?.total ?? 0,
+        billableImpressions: imps?.billable ?? 0,
+        signups: sigs?.total ?? 0,
+        developerSignups: sigs?.developer ?? 0,
+        advertiserSignups: sigs?.advertiser ?? 0,
+        estimatedRevenueMinor: rev?.estimated ?? 0,
+        confirmedRevenueMinor: rev?.confirmed ?? 0,
+        paidRevenueMinor: rev?.paid ?? 0,
+        advertiserSpendMinor: spendByDay.get(dayStr) ?? 0,
+      });
+    }
+
+    // ── Period-over-period comparison ──
+    const [prevImpressions, prevSignups, prevRevenue] = await Promise.all([
+      this.prisma.adImpression.count({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart } } }),
+      this.prisma.user.count({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart } } }),
+      this.prisma.earningsLedger.aggregate({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart }, entryType: 'credit' }, _sum: { amountMinor: true } }),
+    ]);
+
+    const currentImpressions = rawImpressions.length;
+    const currentSignups = rawSignups.length;
+    const currentRevenue = rawRevenue.reduce((sum, r) => sum + r.amountMinor, 0);
+
+    const calcPct = (current: number, prev: number): number | null =>
+      prev > 0 ? Math.round(((current - prev) / prev) * 1000) / 10 : null;
+
+    // ── Platform ledger breakdown ──
+    const platform = await this.prisma.platformLedger.aggregate({
+      _sum: { amountMinor: true },
+      where: { bucket: 'platform_fee', entryType: 'credit' },
+    });
+    const reserve = await this.prisma.platformLedger.aggregate({
+      _sum: { amountMinor: true },
+      where: { bucket: 'fraud_reserve', entryType: 'credit' },
+    });
+
+    return {
+      period: { days, from: floorDay(periodStart), to: floorDay(now) },
+      daily,
+      totals: {
+        impressions: currentImpressions,
+        billableImpressions: rawImpressions.filter((i) => i.isBillable).length,
+        signups: currentSignups,
+        estimatedRevenueMinor: rawRevenue.filter((r) => r.status === 'estimated').reduce((s, r) => s + r.amountMinor, 0),
+        confirmedRevenueMinor: rawRevenue.filter((r) => r.status === 'confirmed').reduce((s, r) => s + r.amountMinor, 0),
+        paidRevenueMinor: rawRevenue.filter((r) => r.status === 'paid').reduce((s, r) => s + r.amountMinor, 0),
+        advertiserSpendMinor: rawSpend.reduce((s, r) => s + r.amountMinor, 0),
+      },
+      vsPreviousPeriod: {
+        impressionsChangePct: calcPct(currentImpressions, prevImpressions),
+        signupsChangePct: calcPct(currentSignups, prevSignups),
+        revenueChangePct: calcPct(currentRevenue, prevRevenue._sum.amountMinor ?? 0),
+      },
+      activeUsers: {
+        developers: devCount,
+        advertisers: advCount,
+        admins: adminCount,
+        total: devCount + advCount + adminCount,
+      },
+      campaigns: {
+        byStatus: campaignByStatus.map((c) => ({ status: c.status, count: c._count._all })),
+        total: campaignByStatus.reduce((s, c) => s + c._count._all, 0),
+      },
+      payouts: {
+        total: totalPayouts,
+        pending: pendingPayouts,
+        totalPaidMinor: payoutSum._sum.amountMinor ?? 0,
+      },
+      platformRevenue: {
+        platformFeeMinor: platform._sum.amountMinor ?? 0,
+        fraudReserveMinor: reserve._sum.amountMinor ?? 0,
+        totalMinor: (platform._sum.amountMinor ?? 0) + (reserve._sum.amountMinor ?? 0),
+      },
+    };
+  }
+
   // ── Tool Integrations ──
 
   async getToolIntegrations() {

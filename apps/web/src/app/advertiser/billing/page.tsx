@@ -15,11 +15,19 @@ interface LedgerEntry {
   createdAt: string;
 }
 
+interface BillingBalance {
+  currency: string;
+  balanceMinor: number;
+  totalDepositsMinor: number;
+  totalChargesMinor: number;
+}
+
 interface BillingData {
   balanceMinor: number;
   currency: string;
   totalDepositsMinor: number;
   totalChargesMinor: number;
+  balances?: BillingBalance[];
   entries: LedgerEntry[];
 }
 
@@ -119,6 +127,21 @@ export default function AdvertiserBillingPage() {
               value={formatCurrency(data.totalChargesMinor, data.currency)}
             />
           </div>
+          {data.balances && data.balances.length > 1 && (
+            <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4 mb-8">
+              <p className="text-ink-300 text-xs uppercase tracking-wide mb-3">Balances by currency</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {data.balances.map((balance) => (
+                  <div key={balance.currency} className="flex items-center justify-between bg-ink-700/50 rounded-lg px-3 py-2">
+                    <span className="text-ink-300 text-sm">{balance.currency}</span>
+                    <span className="text-white font-mono text-sm">
+                      {formatCurrency(balance.balanceMinor, balance.currency)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Deposit card */}
           <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">

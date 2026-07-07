@@ -1,3 +1,7 @@
+// Sentry instrument MUST be the first import — it hooks Node.js internals
+// before any module is loaded so all spans and errors are captured correctly.
+import './instrument';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
@@ -7,6 +11,7 @@ import * as crypto from 'crypto';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { loadEnv } from '@waitlayer/config';
 
 async function bootstrap() {
@@ -77,7 +82,7 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalFilters(new SentryGlobalFilter(), new HttpExceptionFilter());
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   app.enableCors({

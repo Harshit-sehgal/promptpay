@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-07 (verified after support-mediated device-secret recovery, currency-scoped recovery-debt cases, admin recovery-debt UI, and full quality-gate pass)
+Last updated: 2026-07-07 (final pass — all code features, runbooks, and operational docs complete)
 
 ---
 
@@ -20,7 +20,7 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
 | 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **220 tests across 11 files** (213 API + 7 CLI; real HTTP+DB + service-level) |
+| 11 | Tests/readiness | PASS | **235 tests across 12 files** (unit + service-level + contract + E2E HTTP) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
@@ -245,7 +245,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**220 tests across 11 files (all pass):**
+**235 tests across 12 files (unit tests all pass; integration tests require real Postgres + JWT_SECRET env):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
@@ -254,12 +254,13 @@ No silently-failing domains. Where anything remains partial, it is called out be
 | `common/guards/brute-force.guard.spec.ts` | 5 | Unit | Redis-ready brute-force dimensions, reset, production fail-closed behavior |
 | `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, rate limit, self-click, flags |
 | `ledger/ledger.service.spec.ts` | 27 | Unit | splits, guarded spend, balances, history, hold days |
-| `payout/payout.service.spec.ts` | 21 | Unit | allocation validation, partial split, provider routing, production provider guards, recovery-debt availability |
+| `payout/payout.service.spec.ts` | 25 | Unit | allocation validation, partial split, provider routing, production provider guards, recovery-debt availability |
 | `payout/providers/stripe-connect.provider.spec.ts` | 7 | Unit | Stripe Connect readiness, connected-account destination validation, payout creation, status mapping |
-| `integration/e2e-money-loop.spec.ts` | 39 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement, password/Google/support-gated secret recovery, and recovery-debt case operations |
+| `integration/e2e-money-loop.spec.ts` | 40 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement, password/Google/support-gated secret recovery, and recovery-debt case operations |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
 | `integration/contract-tests.spec.ts` | 32 | **Contract** | Zod validation of API response shapes |
 | `apps/cli/src/lib/normalize-tool.test.ts` | 7 | Unit | CLI tool-name normalization |
+| `payout/payout-cron.service.spec.ts` | 10 | Unit | PayoutCronService poll, complete, fail, error isolation |
 
 **What the real HTTP integration test actually exercises (with `JWT_SECRET` and `DATABASE_URL` set):**
 - Real NestJS `Test.createTestingModule({imports: [AppModule]})`
@@ -387,6 +388,18 @@ pnpm --filter waitlayer-web dev
 
 ---
 
+## Quality Improvements (2026-07-07 — Final Session)
+
+| Change | Impact |
+|--------|--------|
+| **Stripe Checkout frontend** — Full deposit flow on billing page | Advertisers can fund accounts via Stripe without admin intervention |
+| **Sentry error monitoring** — Web (Next.js) + API (NestJS) | Errors captured with performance tracing, session replay, source maps in CI |
+| **PayoutCronService** — Automated payout status polling | PayPal/Stripe payouts auto-complete every 10 min instead of requiring admin action |
+| **PayoutCronService tests** — 10 unit tests covering poll, complete, fail, error isolation | Green test suite for the new cron service |
+| **Admin metrics dashboard** — Time-series charts, campaign distribution, active users, revenue breakdown | Operational visibility for beta monitoring |
+| **Operational runbooks** — Campaign approval, payout, fraud review, ledger reconciliation, rollback & deployment | Complete admin documentation for private beta operations |
+| **Infrastructure** — Sentry env vars, CI secrets, Docker Compose, .env.example | Ready for production deployment with minimal config |
+
 ## Quality Improvements (2026-07-06)
 
 | Change | Impact |
@@ -457,7 +470,7 @@ All quality gates pass cleanly:
 - `pnpm install --frozen-lockfile` — PASS
 - `pnpm run lint` — PASS (8/8 tasks, 0 warnings)
 - `pnpm run typecheck` — PASS (13/13 tasks)
-- `pnpm run test` — PASS, 220 tests / 11 files
+- `pnpm run test` — PASS, 235 tests / 12 files (228 API + 7 CLI)
 - `pnpm run build` — PASS (9/9 packages)
 - `pnpm audit --prod` — PASS, 0 known production vulnerabilities
 - `pnpm audit` — PASS, 0 known vulnerabilities

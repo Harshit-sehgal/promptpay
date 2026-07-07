@@ -304,11 +304,15 @@ Query: campaign_id, date range, grouping.
 
 Response: impressions, clicks, CTR, spend, invalid traffic, remaining budget, country/tool breakdown.
 
-### POST /advertiser/billing/deposit
+### GET /advertiser/billing
 
-Request: amount_minor, currency, campaign_id optional.
+Response: advertiser-ledger primary balance, per-currency balances, total confirmed deposits/charges, and recent advertiser ledger entries.
 
-Response: Stripe checkout session or payment intent.
+### POST /advertiser/deposit-session
+
+Request: amountMinor, currency optional.
+
+Response: Stripe checkout session id and redirect URL.
 
 ## Admin
 
@@ -421,4 +425,3 @@ Response: audit log entries.
 - `PAYOUT_THRESHOLD_NOT_MET`
 - `INSUFFICIENT_AVAILABLE_EARNINGS`
 - `CAMPAIGN_REVIEW_REQUIRED`
-

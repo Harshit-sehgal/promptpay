@@ -12,7 +12,7 @@ export function StatCard({
   variant?: 'dark' | 'light';
 }) {
   const isLight = variant === 'light';
-  
+
   const defaultValColor = valueColor || (isLight ? 'text-surface-900' : 'text-white');
 
   return (

@@ -17,11 +17,15 @@ import { FraudModule } from './fraud/fraud.module';
 import { CampaignModule } from './campaign/campaign.module';
 import { AuditModule } from './audit/audit.module';
 import { ReferralModule } from './referral/referral.module';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { PrismaModule } from './config/prisma.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
+    // SentryModule is a no-op when Sentry is not configured (no DSN)
+    SentryModule.forRoot(),
+
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],

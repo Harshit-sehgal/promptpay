@@ -64,6 +64,7 @@ const ALLOWED_PATH_PREFIXES = [
 
   // Admin (gated by RoleGuard upstream; the proxy just forwards)
   '/admin/overview',
+  '/admin/metrics',
   '/admin/users',
   '/admin/campaigns',
   '/admin/payouts',

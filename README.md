@@ -45,7 +45,7 @@ pnpm --filter waitlayer-web dev
 pnpm run typecheck   # 13/13 tasks
 pnpm run lint        # 8/8 tasks, 0 warnings
 pnpm run build       # 9/9 packages
-pnpm run test        # 220 tests: 213 API + 7 CLI (API tests require running database)
+pnpm run test        # 235 tests: 228 API + 7 CLI (API tests require running database)
 pnpm audit --prod    # production dependency vulnerability audit
 ```
 

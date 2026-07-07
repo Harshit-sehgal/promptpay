@@ -183,6 +183,7 @@ const mockPrisma = {
     count: vi.fn(),
     create: vi.fn(),
     aggregate: vi.fn(),
+    groupBy: vi.fn(),
     update: vi.fn(),
     findFirst: vi.fn(),
   },
@@ -531,6 +532,69 @@ describe('E2E Money Loop', () => {
       // approveCampaign now returns { campaign, activated, status, blockers }
       expect(result.activated).toBe(true);
       expect(result.campaign.status).toBe('active');
+    });
+  });
+
+  describe('Advertiser billing', () => {
+    it('reports advertiser-ledger balance without counting refund obligations as spendable credit', async () => {
+      const advertiserId = uid('adv');
+      const createdAt = new Date('2026-07-07T00:00:00.000Z');
+
+      mockPrisma.advertiser.findUnique.mockResolvedValue({ id: advertiserId });
+      mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
+        { currency: 'USD', entryType: 'credit', _sum: { amountMinor: 10_000 } },
+        { currency: 'USD', entryType: 'debit', _sum: { amountMinor: 2_500 } },
+      ]);
+      mockPrisma.advertiserLedger.findMany.mockResolvedValue([
+        {
+          id: uid('al'),
+          campaignId: null,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: 10_000,
+          currency: 'USD',
+          description: 'Stripe deposit',
+          stripePaymentIntentId: 'pi_123',
+          stripeDisputeId: null,
+          createdAt,
+        },
+        {
+          id: uid('al'),
+          campaignId: uid('camp'),
+          entryType: 'refund',
+          status: 'pending',
+          amountMinor: 1_000,
+          currency: 'USD',
+          description: 'Unspent-budget refund obligation',
+          stripePaymentIntentId: null,
+          stripeDisputeId: null,
+          createdAt,
+        },
+      ]);
+
+      const result = await svc.advertiser.getBilling(advertiserId);
+
+      expect(result.balanceMinor).toBe(7_500);
+      expect(result.totalDepositsMinor).toBe(10_000);
+      expect(result.totalChargesMinor).toBe(2_500);
+      expect(result.balances).toEqual([
+        {
+          currency: 'USD',
+          balanceMinor: 7_500,
+          totalDepositsMinor: 10_000,
+          totalChargesMinor: 2_500,
+        },
+      ]);
+      expect(result.entries).toHaveLength(2);
+      expect(mockPrisma.advertiserLedger.groupBy).toHaveBeenCalledWith({
+        by: ['currency', 'entryType'],
+        where: {
+          advertiserId,
+          entryType: { in: ['credit', 'debit'] },
+          status: 'confirmed',
+        },
+        _sum: { amountMinor: true },
+      });
     });
   });
 

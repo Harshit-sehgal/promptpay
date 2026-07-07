@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/sidebar';
 
 const ADMIN_NAV = [
   { label: 'Overview', href: '/admin' },
+  { label: 'Metrics', href: '/admin/metrics' },
   { label: 'Users', href: '/admin/users' },
   { label: 'Campaign approvals', href: '/admin/campaigns' },
   { label: 'Fraud review', href: '/admin/fraud' },

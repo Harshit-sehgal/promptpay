@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.63.0",
     "@waitlayer/shared": "workspace:*",
     "@waitlayer/ui": "workspace:*",
     "axios": "^1.18.1",

@@ -135,13 +135,14 @@ export class AdvertiserService {
     });
     if (!advertiser) throw new NotFoundException('Advertiser not found');
 
-    const [credits, debits, entries] = await Promise.all([
-      this.prisma.advertiserLedger.aggregate({
-        where: { advertiserId, entryType: 'credit', status: 'confirmed' },
-        _sum: { amountMinor: true },
-      }),
-      this.prisma.advertiserLedger.aggregate({
-        where: { advertiserId, entryType: 'debit', status: 'confirmed' },
+    const [totals, entries] = await Promise.all([
+      this.prisma.advertiserLedger.groupBy({
+        by: ['currency', 'entryType'],
+        where: {
+          advertiserId,
+          entryType: { in: ['credit', 'debit'] },
+          status: 'confirmed',
+        },
         _sum: { amountMinor: true },
       }),
       this.prisma.advertiserLedger.findMany({
@@ -163,15 +164,43 @@ export class AdvertiserService {
       }),
     ]);
 
-    const totalDepositsMinor = credits._sum.amountMinor ?? 0;
-    const totalChargesMinor = debits._sum.amountMinor ?? 0;
-    const currency = entries[0]?.currency ?? 'USD';
+    const byCurrency = new Map<string, {
+      currency: string;
+      balanceMinor: number;
+      totalDepositsMinor: number;
+      totalChargesMinor: number;
+    }>();
+
+    for (const row of totals) {
+      const currency = row.currency.toUpperCase();
+      const current = byCurrency.get(currency) ?? {
+        currency,
+        balanceMinor: 0,
+        totalDepositsMinor: 0,
+        totalChargesMinor: 0,
+      };
+      const amount = row._sum.amountMinor ?? 0;
+      if (row.entryType === 'credit') current.totalDepositsMinor += amount;
+      if (row.entryType === 'debit') current.totalChargesMinor += amount;
+      current.balanceMinor = current.totalDepositsMinor - current.totalChargesMinor;
+      byCurrency.set(currency, current);
+    }
+
+    const balances = Array.from(byCurrency.values()).sort((a, b) => {
+      if (a.currency === 'USD') return -1;
+      if (b.currency === 'USD') return 1;
+      return a.currency.localeCompare(b.currency);
+    });
+    const primary = balances[0] ?? {
+      currency: 'USD',
+      balanceMinor: 0,
+      totalDepositsMinor: 0,
+      totalChargesMinor: 0,
+    };
 
     return {
-      balanceMinor: totalDepositsMinor - totalChargesMinor,
-      currency,
-      totalDepositsMinor,
-      totalChargesMinor,
+      ...primary,
+      balances,
       entries,
     };
   }
