@@ -80,6 +80,7 @@ export class ExtensionService {
     existingEventSecret?: string;
     recoveryPassword?: string;
     recoveryGoogleIdToken?: string;
+    recoverySupportToken?: string;
   }) {
     // Privacy: reject payloads containing prohibited data fields
     this.enforcePrivacyOn(dto);
@@ -124,10 +125,12 @@ export class ExtensionService {
       // a deliberately stronger recovery path: same authenticated user, same
       // fingerprint, and fresh account re-authentication. Password accounts
       // prove that with the account password; linked Google accounts prove it
-      // with a matching Google ID token. That avoids restoring the removed
-      // global-HMAC fallback while still giving real users a way out.
+      // with a matching Google ID token; support/admin can issue a short-lived
+      // one-time recovery token for future non-Google passwordless accounts.
+      // That avoids restoring the removed global-HMAC fallback while still
+      // giving real users a way out.
       const hasExistingSecretProof = hasMatchingSecret(dto.existingEventSecret, existingDevice.eventSecret);
-      let recoveryMode: 'event_secret' | 'password' | 'google' = 'event_secret';
+      let recoveryMode: 'event_secret' | 'password' | 'google' | 'support' = 'event_secret';
       if (!hasExistingSecretProof) {
         recoveryMode = await this.assertDeviceRecoveryProof(userId, dto, existingDevice.id);
       }
@@ -216,11 +219,19 @@ export class ExtensionService {
 
   private async assertDeviceRecoveryProof(
     userId: string,
-    dto: { recoveryPassword?: string; recoveryGoogleIdToken?: string },
+    dto: { recoveryPassword?: string; recoveryGoogleIdToken?: string; recoverySupportToken?: string },
     deviceId: string,
-  ): Promise<'password' | 'google'> {
-    if (!dto.recoveryPassword && !dto.recoveryGoogleIdToken) {
-      throw new UnauthorizedException('Cannot recover device secret without the existing device secret, account password, or Google re-auth token');
+  ): Promise<'password' | 'google' | 'support'> {
+    const proofCount = [
+      dto.recoveryPassword,
+      dto.recoveryGoogleIdToken,
+      dto.recoverySupportToken,
+    ].filter(Boolean).length;
+    if (proofCount === 0) {
+      throw new UnauthorizedException('Cannot recover device secret without the existing device secret, account password, Google re-auth token, or support recovery token');
+    }
+    if (proofCount > 1) {
+      throw new BadRequestException('Provide only one device recovery proof');
     }
 
     const user = await this.prisma.user.findUnique({
@@ -267,35 +278,94 @@ export class ExtensionService {
       return 'password';
     }
 
-    if (!user.googleId) {
-      await this.audit.log({
-        actorId: userId,
-        actorRole: 'developer',
-        action: 'device_secret_recovery_rejected',
-        targetType: 'device',
-        targetId: deviceId,
-        afterSnap: { reason: 'google_unavailable' },
-      });
-      throw new UnauthorizedException('Google re-authentication is not available for this account');
+    if (dto.recoveryGoogleIdToken) {
+      if (!user.googleId) {
+        await this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'device_secret_recovery_rejected',
+          targetType: 'device',
+          targetId: deviceId,
+          afterSnap: { reason: 'google_unavailable' },
+        });
+        throw new UnauthorizedException('Google re-authentication is not available for this account');
+      }
+
+      const googlePayload = await this.googleVerifier.verify(dto.recoveryGoogleIdToken);
+      if (!googlePayload.email_verified || googlePayload.sub !== user.googleId || googlePayload.email !== user.email) {
+        await this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'device_secret_recovery_rejected',
+          targetType: 'device',
+          targetId: deviceId,
+          afterSnap: {
+            reason: 'google_mismatch',
+            googleSub: googlePayload.sub,
+            googleEmail: googlePayload.email,
+          },
+        });
+        throw new UnauthorizedException('Google re-authentication failed');
+      }
+      return 'google';
     }
 
-    const googlePayload = await this.googleVerifier.verify(dto.recoveryGoogleIdToken!);
-    if (!googlePayload.email_verified || googlePayload.sub !== user.googleId || googlePayload.email !== user.email) {
+    const tokenHash = hashDeviceRecoveryToken(dto.recoverySupportToken!);
+    const recoveryToken = await this.prisma.deviceRecoveryToken.findUnique({
+      where: { tokenHash },
+      select: {
+        id: true,
+        userId: true,
+        deviceId: true,
+        expiresAt: true,
+        usedAt: true,
+        revokedAt: true,
+      },
+    });
+    const now = new Date();
+    if (
+      !recoveryToken ||
+      recoveryToken.userId !== userId ||
+      recoveryToken.deviceId !== deviceId ||
+      recoveryToken.usedAt ||
+      recoveryToken.revokedAt ||
+      recoveryToken.expiresAt <= now
+    ) {
       await this.audit.log({
         actorId: userId,
         actorRole: 'developer',
         action: 'device_secret_recovery_rejected',
         targetType: 'device',
         targetId: deviceId,
-        afterSnap: {
-          reason: 'google_mismatch',
-          googleSub: googlePayload.sub,
-          googleEmail: googlePayload.email,
-        },
+        afterSnap: { reason: 'support_token_invalid_or_expired' },
       });
-      throw new UnauthorizedException('Google re-authentication failed');
+      throw new UnauthorizedException('Support recovery token is invalid or expired');
     }
-    return 'google';
+
+    const consumed = await this.prisma.deviceRecoveryToken.updateMany({
+      where: {
+        id: recoveryToken.id,
+        userId,
+        deviceId,
+        tokenHash,
+        usedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { usedAt: now },
+    });
+    if (consumed.count !== 1) {
+      await this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'device_secret_recovery_rejected',
+        targetType: 'device',
+        targetId: deviceId,
+        afterSnap: { reason: 'support_token_race_lost' },
+      });
+      throw new UnauthorizedException('Support recovery token is invalid or expired');
+    }
+    return 'support';
   }
 
   // ── Wait State Events ──
@@ -1387,4 +1457,8 @@ function hasMatchingSecret(candidate: string | undefined, expected: string): boo
   const expectedBuffer = Buffer.from(expected);
   return candidateBuffer.length === expectedBuffer.length &&
     crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
+function hashDeviceRecoveryToken(token: string): string {
+  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
 }

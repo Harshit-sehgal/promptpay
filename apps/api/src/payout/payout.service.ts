@@ -23,7 +23,7 @@ export interface PayoutProviderHandler {
     amountMinor: number;
     currency: string;
   }): Promise<{ providerTxId: string; status: string }>;
-  checkStatus(providerTxId: string): Promise<{ status: string; paidAt?: Date }>;
+  checkStatus(providerTxId: string, context?: { destination?: string }): Promise<{ status: string; paidAt?: Date }>;
 }
 
 /** Manual payout provider — for MVP, admin processes manually */
@@ -103,19 +103,26 @@ export class PayoutService {
     destination: string;
     currency?: string;
   }) {
-    // Deactivate existing methods with same provider
-    await this.prisma.payoutAccount.updateMany({
-      where: { userId, provider: dto.provider as PayoutProvider, isActive: true },
-      data: { isActive: false },
-    });
+    const provider = dto.provider as PayoutProvider;
+    const currency = dto.currency?.toUpperCase() || 'USD';
+    const method = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Deactivate the current active method and create the replacement atomically.
+      // The DB enforces at most one active account per user/provider with a
+      // partial unique index, while retaining any number of inactive historical
+      // destinations for audit.
+      await tx.payoutAccount.updateMany({
+        where: { userId, provider, isActive: true },
+        data: { isActive: false },
+      });
 
-    const method = await this.prisma.payoutAccount.create({
-      data: {
-        userId,
-        provider: dto.provider as PayoutProvider,
-        destination: dto.destination,
-        currency: dto.currency || 'USD',
-      },
+      return tx.payoutAccount.create({
+        data: {
+          userId,
+          provider,
+          destination: dto.destination.trim(),
+          currency,
+        },
+      });
     });
 
     // Audit: payout method added (destination-change is security-relevant)
@@ -125,7 +132,7 @@ export class PayoutService {
       action: 'add_payout_method',
       targetType: 'payout_account',
       targetId: method.id,
-      beforeSnap: { provider: dto.provider, currency: dto.currency || 'USD' },
+      beforeSnap: { provider, currency },
     });
 
     return method;

@@ -43,9 +43,9 @@ pnpm --filter waitlayer-web dev
 
 ```bash
 pnpm run typecheck   # 13/13 tasks
-pnpm run lint        # 12/12 tasks, 0 warnings
+pnpm run lint        # 8/8 tasks, 0 warnings
 pnpm run build       # 9/9 packages
-pnpm run test        # 201 tests (requires running database)
+pnpm run test        # 220 tests: 213 API + 7 CLI (API tests require running database)
 pnpm audit --prod    # production dependency vulnerability audit
 ```
 
@@ -54,9 +54,9 @@ pnpm audit --prod    # production dependency vulnerability audit
 - **Auth**: Email/password signup, Google OAuth, JWT with refresh rotation + reuse detection, password reset
 - **Campaigns**: Draft → submitted → approved → active lifecycle with budget/bid validation
 - **Ledger**: Three-ledger accounting (earnings, advertiser, platform) with 60/30/10 revenue split
-- **Payouts**: Multi-provider architecture (PayPal, Stripe, Wise, Razorpay) with hold periods by trust level
+- **Payouts**: Multi-provider architecture with PayPal Payouts and Stripe Connect wired, regional PSP stubs fail-closed in production, and hold periods by trust level
 - **Fraud**: Redis-backed rate limits, brute-force lockouts, CTR analysis, self-click detection, trust scoring, automatic earning holds
-- **Extensions**: HMAC-signed event pipeline per device, privacy-enforced, idempotent
+- **Extensions**: HMAC-signed event pipeline per device, privacy-enforced, idempotent, with password/Google/support device-secret recovery
 - **Referrals**: Code-based referral system with $5 reward on first payout
 - **API Keys**: Machine-to-machine auth with scoped, expirable keys
 

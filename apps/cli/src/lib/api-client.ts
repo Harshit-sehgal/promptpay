@@ -39,13 +39,28 @@ export class ApiClient {
 
     const hostname = os.hostname();
     const fingerprint = crypto.createHash('sha256').update(`cli-${hostname}`).digest('hex');
-
-    const res = await this.raw<RegisterDeviceResponse>('POST', '/extension/register-device', {
+    const recoverySupportToken = process.env.WAITLAYER_DEVICE_RECOVERY_TOKEN?.trim();
+    const registrationPayload = {
       toolType: 'terminal',
       fingerprintHash: fingerprint,
       extensionVersion: '0.0.1',
       platform: os.platform() || 'unknown',
-    });
+      ...(this.deviceEventSecret ? { existingEventSecret: this.deviceEventSecret } : {}),
+      ...(recoverySupportToken ? { recoverySupportToken } : {}),
+    };
+
+    let res: RegisterDeviceResponse;
+    try {
+      res = await this.raw<RegisterDeviceResponse>('POST', '/extension/register-device', registrationPayload);
+    } catch (err: unknown) {
+      if (isDeviceRecoveryError(err) && !recoverySupportToken) {
+        throw new Error(
+          `${getRequestErrorMessage(err)}. ` +
+          'If support issued a device recovery token, rerun with WAITLAYER_DEVICE_RECOVERY_TOKEN set to that one-time token.',
+        );
+      }
+      throw err;
+    }
 
     if (res && res.id) {
       if (!res.eventSecret) {
@@ -287,4 +302,21 @@ export class ApiClient {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getRequestErrorMessage(err: unknown): string {
+  if (isRecord(err) && typeof err.message === 'string') return err.message;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+function isDeviceRecoveryError(err: unknown): boolean {
+  const message = getRequestErrorMessage(err);
+  return (
+    message.includes('Cannot recover device secret') ||
+    message.includes('device recovery') ||
+    message.includes('Device recovery') ||
+    message.includes('Support recovery token') ||
+    message.includes('Provide only one device recovery proof')
+  );
 }

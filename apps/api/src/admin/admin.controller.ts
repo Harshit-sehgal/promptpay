@@ -13,6 +13,10 @@ import {
   ResolveFraudFlagDto,
   FraudFlagsQueryDto,
   UsersQueryDto,
+  IssueDeviceRecoveryTokenDto,
+  RecoveryDebtCasesQueryDto,
+  OpenRecoveryDebtCaseDto,
+  ResolveRecoveryDebtCaseDto,
   ToggleToolIntegrationDto,
   WebhookEventsQueryDto,
   AuditLogQueryDto,
@@ -104,6 +108,68 @@ export class AdminController {
   @Get('audit-log')
   getAuditLog(@Query() query: AuditLogQueryDto) {
     return this.service.getAuditLog(query);
+  }
+
+  // ── Device Recovery ──
+
+  @Post('devices/:id/recovery-token')
+  @Roles('admin', 'support', 'super_admin')
+  issueDeviceRecoveryToken(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: IssueDeviceRecoveryTokenDto,
+  ) {
+    return this.service.issueDeviceRecoveryToken({
+      deviceId: id,
+      userId: dto.userId,
+      reviewerId,
+      reviewerRole,
+      reason: dto.reason,
+      expiresInMinutes: dto.expiresInMinutes,
+    });
+  }
+
+  // ── Recovery Debt Operations ──
+
+  @Get('recovery-debt')
+  getRecoveryDebtCases(@Query() query: RecoveryDebtCasesQueryDto) {
+    return this.service.getRecoveryDebtCases(query);
+  }
+
+  @Post('recovery-debt/users/:userId/open')
+  openRecoveryDebtCase(
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: OpenRecoveryDebtCaseDto,
+  ) {
+    return this.service.openRecoveryDebtCase({
+      userId,
+      reviewerId,
+      reviewerRole,
+      status: dto.status,
+      currency: dto.currency,
+      externalReference: dto.externalReference,
+      note: dto.note,
+    });
+  }
+
+  @Post('recovery-debt/cases/:id/resolve')
+  resolveRecoveryDebtCase(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: ResolveRecoveryDebtCaseDto,
+  ) {
+    return this.service.resolveRecoveryDebtCase({
+      caseId: id,
+      reviewerId,
+      reviewerRole,
+      status: dto.status,
+      externalReference: dto.externalReference,
+      note: dto.note,
+    });
   }
 
   // ── Tool Integrations ──

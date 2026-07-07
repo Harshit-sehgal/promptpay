@@ -211,7 +211,7 @@ Mitigation:
 - Reconciliation jobs.
 - Manual payout review.
 - Confirmed `debit` recovery rows for `paidSkipped` fraud reversals so future payouts are reduced automatically.
-- Operational review for recovery debt that cannot be netted against future earnings.
+- Currency-scoped admin recovery-debt cases for debt that cannot be netted against future earnings, including external references, terminal outcomes, audit logs, and a partial unique index preventing duplicate active cases per developer/currency.
 
 Owner: Backend/Finance Engineering
 
@@ -309,11 +309,14 @@ Signals:
 - Production payout transaction IDs have stub-like prefixes.
 - Provider credentials are missing while automated payout methods are enabled.
 - Admins process non-manual providers without a PSP confirmation.
+- Users repeatedly fail to replace a payout destination because inactive historical rows collide with new methods.
 
 Mitigation:
 
 - Automated stub providers fail closed in production before the processing claim.
-- PayPal Payouts requires credentials in production.
+- PayPal Payouts and Stripe Connect require credentials in production.
+- Stripe Connect payout methods must store a verified connected-account id (`acct_*`) until in-app onboarding is built.
+- Enforce one active payout method per user/provider with an active-only partial unique index; retain inactive destination history for audit.
 - Keep manual payout methods explicit and reconcile them through admin review.
 - Require provider runbook evidence before enabling each automated PSP.
 
@@ -350,7 +353,7 @@ Signals:
 
 - Devices repeatedly fail event signature verification after reinstall or local secret-store loss.
 - Users can authenticate but cannot serve ads because their registered device no longer has its local `eventSecret`.
-- Non-Google passwordless/social-login users cannot recover a lost local secret without provider re-auth or support.
+- Support recovery tokens are issued unusually often, expire unused, or are used from unexpected authenticated sessions.
 
 Mitigation:
 
@@ -359,6 +362,7 @@ Mitigation:
 - Allow same-user legacy null-secret rows to re-register and receive a fresh per-device secret.
 - Allow same-user same-fingerprint password accounts to rotate a lost local secret only after password re-authentication.
 - Allow linked Google accounts to rotate a lost local secret only after matching Google ID-token re-authentication.
-- Build provider re-auth or support recovery for future non-Google provider accounts.
+- Allow support/admin-issued one-time recovery tokens for non-Google passwordless accounts; store only token hashes, expire them quickly, revoke older unused tokens for the same device, consume them before secret rotation, and audit issuance/rejections.
+- Build provider-native re-authentication for future non-Google providers to reduce support-token usage.
 
 Owner: Security/Extension Engineering

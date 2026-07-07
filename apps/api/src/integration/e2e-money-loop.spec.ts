@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
 import { ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 
 // ── Shared signing utility (no mocking needed — it's pure crypto) ──
 import { signPayload } from '@waitlayer/shared';
@@ -31,6 +32,7 @@ const mockPrisma = {
   user: {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
+    findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     count: vi.fn(),
@@ -85,6 +87,21 @@ const mockPrisma = {
     create: vi.fn(),
     update: vi.fn(),
     count: vi.fn(),
+  },
+  // ── DeviceRecoveryToken ──
+  deviceRecoveryToken: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  // ── RecoveryDebtCase ──
+  recoveryDebtCase: {
+    findMany: vi.fn(),
+    findFirst: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
   },
   // ── UserSettings ──
   userSettings: {
@@ -299,10 +316,10 @@ function makeServices(): TestFixtures {
   const advertiser = new AdvertiserService(prismaRef, campaign, audit);
 
   // PayoutService — real instance with mocked prisma, real ledger + audit, dummy paypal payouts provider
-  const payout = new PayoutService(prismaRef, ledger, {} as any, audit, {} as any);
+  const payout = new PayoutService(prismaRef, ledger, {} as any, audit, {} as any, {} as any);
 
   // AdminService — real instance with mocked prisma and real audit service and payout service
-  const admin = new AdminService(prismaRef, audit, payout);
+  const admin = new AdminService(prismaRef, audit, payout, fraud);
 
   return { extension, ledger, fraud, campaign, advertiser, admin, audit, payout };
 }
@@ -1636,6 +1653,305 @@ describe('E2E Money Loop', () => {
         }),
       ).rejects.toThrow(/Google re-authentication failed/);
       expect(mockPrisma.device.update).not.toHaveBeenCalled();
+    });
+
+    it('issues and consumes a one-time support recovery token for a passwordless non-Google account', async () => {
+      const userId = uid('u');
+      const reviewerId = uid('support');
+      const deviceId = uid('dev');
+      const oldSecret = 'old-support-device-event-secret';
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: oldSecret,
+        fingerprintHash: 'support-recover-fp',
+        toolType: 'claude_code',
+      };
+
+      mockPrisma.device.findUnique
+        .mockResolvedValueOnce({
+          ...existingDevice,
+          user: {
+            id: userId,
+            email: 'future-provider@example.com',
+            role: 'developer',
+            status: 'active',
+          },
+        })
+        .mockResolvedValueOnce(existingDevice);
+      mockPrisma.deviceRecoveryToken.updateMany
+        .mockResolvedValueOnce({ count: 0 })
+        .mockResolvedValueOnce({ count: 1 });
+      mockPrisma.deviceRecoveryToken.create.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve({ id: 'support-token-id', ...data }),
+      );
+      mockPrisma.user.findUnique.mockResolvedValue({
+        passwordHash: null,
+        googleId: null,
+        email: 'future-provider@example.com',
+      });
+      mockPrisma.device.update.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve({ ...existingDevice, ...data }),
+      );
+
+      const issued = await svc.admin.issueDeviceRecoveryToken({
+        deviceId,
+        userId,
+        reviewerId,
+        reviewerRole: 'support',
+        reason: 'Verified identity through support workflow',
+        expiresInMinutes: 15,
+      });
+      const tokenHash = crypto.createHash('sha256').update(issued.recoverySupportToken, 'utf8').digest('hex');
+      mockPrisma.deviceRecoveryToken.findUnique.mockResolvedValue({
+        id: issued.tokenId,
+        userId,
+        deviceId,
+        expiresAt: issued.expiresAt,
+        usedAt: null,
+        revokedAt: null,
+      });
+
+      const result = await svc.extension.registerDevice(userId, {
+        toolType: 'claude_code',
+        fingerprintHash: 'support-recover-fp',
+        recoverySupportToken: issued.recoverySupportToken,
+      });
+
+      expect(issued.recoverySupportToken).toEqual(expect.any(String));
+      expect(issued.recoverySupportToken).not.toContain(tokenHash);
+      expect(mockPrisma.deviceRecoveryToken.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId,
+          deviceId,
+          createdByUserId: reviewerId,
+          tokenHash,
+          reason: 'Verified identity through support workflow',
+        }),
+      });
+      expect(mockPrisma.deviceRecoveryToken.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({
+          id: issued.tokenId,
+          userId,
+          deviceId,
+          tokenHash,
+          usedAt: null,
+          revokedAt: null,
+        }),
+        data: expect.objectContaining({ usedAt: expect.any(Date) }),
+      });
+      expect(result.eventSecret).toEqual(expect.any(String));
+      expect(result.eventSecret).not.toBe(oldSecret);
+      expect(mockPrisma.device.update).toHaveBeenCalledWith({
+        where: { id: deviceId },
+        data: expect.objectContaining({
+          eventSecret: expect.any(String),
+        }),
+      });
+    });
+
+    it('rejects reused support recovery tokens before rotating the device secret', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const recoverySupportToken = 'support-token-that-has-already-been-used-123';
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: 'old-support-device-event-secret',
+        fingerprintHash: 'used-support-token-fp',
+        toolType: 'claude_code',
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        passwordHash: null,
+        googleId: null,
+        email: 'future-provider@example.com',
+      });
+      mockPrisma.deviceRecoveryToken.findUnique.mockResolvedValue({
+        id: 'used-support-token-id',
+        userId,
+        deviceId,
+        expiresAt: new Date(Date.now() + 15 * 60_000),
+        usedAt: new Date(),
+        revokedAt: null,
+      });
+
+      await expect(
+        svc.extension.registerDevice(userId, {
+          toolType: 'claude_code',
+          fingerprintHash: 'used-support-token-fp',
+          recoverySupportToken,
+        }),
+      ).rejects.toThrow(/Support recovery token is invalid or expired/);
+      expect(mockPrisma.deviceRecoveryToken.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.device.update).not.toHaveBeenCalled();
+    });
+
+    it('lists users with unrecovered paid-fraud debt and attaches their latest collections case', async () => {
+      const userId = uid('u');
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([
+          { userId, currency: 'USD', _sum: { amountMinor: 1500 }, _count: { _all: 2 } },
+          { userId: 'settled-user', currency: 'USD', _sum: { amountMinor: 300 }, _count: { _all: 1 } },
+        ])
+        .mockResolvedValueOnce([
+          { userId, currency: 'USD', _sum: { amountMinor: 500 } },
+          { userId: 'settled-user', currency: 'USD', _sum: { amountMinor: 300 } },
+        ]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        {
+          id: userId,
+          email: 'debt@example.com',
+          name: 'Debt User',
+          status: 'active',
+          trustLevel: 'restricted',
+        },
+      ]);
+      mockPrisma.recoveryDebtCase.findMany.mockResolvedValue([
+        {
+          id: 'case-eur-newer',
+          userId,
+          status: 'in_collections',
+          amountMinor: 9999,
+          currency: 'EUR',
+          updatedAt: new Date('2026-07-08T00:00:00.000Z'),
+        },
+        {
+          id: 'case-latest',
+          userId,
+          status: 'in_collections',
+          amountMinor: 1000,
+          currency: 'USD',
+          updatedAt: new Date('2026-07-07T00:00:00.000Z'),
+        },
+      ]);
+
+      const result = await svc.admin.getRecoveryDebtCases({ page: 1, limit: 20 });
+
+      expect(mockPrisma.recoveryDebtCase.findMany).toHaveBeenCalledWith({
+        where: { userId: { in: [userId] }, currency: { in: ['USD'] } },
+        orderBy: { updatedAt: 'desc' },
+      });
+      expect(result.total).toBe(1);
+      expect(result.items[0]).toMatchObject({
+        userId,
+        currency: 'USD',
+        confirmedDebitMinor: 1500,
+        confirmedCreditMinor: 500,
+        outstandingDebtMinor: 1000,
+        recoveryDebitEntryCount: 2,
+        user: { email: 'debt@example.com' },
+        latestCase: { id: 'case-latest', status: 'in_collections' },
+      });
+    });
+
+    it('opens an active recovery debt case from the current outstanding debt snapshot', async () => {
+      const userId = uid('u');
+      const reviewerId = uid('admin');
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: userId,
+        email: 'debt@example.com',
+        role: 'developer',
+        status: 'restricted',
+      });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 2500 } })
+        .mockResolvedValueOnce({ _sum: { amountMinor: 400 } });
+      mockPrisma.recoveryDebtCase.findFirst.mockResolvedValue(null);
+      mockPrisma.recoveryDebtCase.create.mockImplementationOnce(({ data }: any) =>
+        Promise.resolve({ id: 'case-open', ...data }),
+      );
+
+      const result = await svc.admin.openRecoveryDebtCase({
+        userId,
+        reviewerId,
+        reviewerRole: 'admin',
+        status: 'in_collections',
+        currency: 'eur',
+        externalReference: 'COLL-123',
+        note: 'No future earnings after paid-fraud reversal',
+      });
+
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenNthCalledWith(1, {
+        where: { userId, currency: 'EUR', status: 'confirmed', entryType: 'debit' },
+        _sum: { amountMinor: true },
+      });
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenNthCalledWith(2, {
+        where: { userId, currency: 'EUR', status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      });
+      expect(result.debt.outstandingDebtMinor).toBe(2100);
+      expect(mockPrisma.recoveryDebtCase.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId,
+          status: 'in_collections',
+          amountMinor: 2100,
+          currency: 'EUR',
+          externalReference: 'COLL-123',
+          note: 'No future earnings after paid-fraud reversal',
+          openedByUserId: reviewerId,
+        }),
+      });
+      expect(result.case.id).toBe('case-open');
+    });
+
+    it('resolves only active recovery debt cases and records the current debt snapshot', async () => {
+      const userId = uid('u');
+      const reviewerId = uid('admin');
+      const existingCase = {
+        id: 'case-active',
+        userId,
+        status: 'in_collections',
+        amountMinor: 2100,
+        currency: 'EUR',
+      };
+      const resolvedCase = {
+        ...existingCase,
+        status: 'written_off',
+        resolvedByUserId: reviewerId,
+        resolvedAt: new Date('2026-07-07T00:00:00.000Z'),
+      };
+      mockPrisma.recoveryDebtCase.findUnique
+        .mockResolvedValueOnce(existingCase)
+        .mockResolvedValueOnce(resolvedCase);
+      mockPrisma.recoveryDebtCase.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 2500 } })
+        .mockResolvedValueOnce({ _sum: { amountMinor: 400 } });
+
+      const result = await svc.admin.resolveRecoveryDebtCase({
+        caseId: existingCase.id,
+        reviewerId,
+        reviewerRole: 'admin',
+        status: 'written_off',
+        externalReference: 'COLL-123',
+        note: 'Legal write-off approved',
+      });
+
+      expect(mockPrisma.recoveryDebtCase.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: existingCase.id,
+          status: { in: ['open', 'in_collections'] },
+        },
+        data: expect.objectContaining({
+          status: 'written_off',
+          externalReference: 'COLL-123',
+          note: 'Legal write-off approved',
+          resolvedByUserId: reviewerId,
+          resolvedAt: expect.any(Date),
+        }),
+      });
+      expect(result.case?.status).toBe('written_off');
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenNthCalledWith(1, {
+        where: { userId, currency: 'EUR', status: 'confirmed', entryType: 'debit' },
+        _sum: { amountMinor: true },
+      });
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenNthCalledWith(2, {
+        where: { userId, currency: 'EUR', status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      });
+      expect(result.debt.outstandingDebtMinor).toBe(2100);
     });
 
     it('rejects wait-state-start for device not owned by user', async () => {

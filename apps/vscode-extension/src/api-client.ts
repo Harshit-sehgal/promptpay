@@ -1,4 +1,5 @@
 import * as https from 'https';
+import * as http from 'http';
 import * as vscode from 'vscode';
 import { signPayload } from '@waitlayer/shared';
 import { ConfigurationManager } from './config';
@@ -118,12 +119,30 @@ export class ApiClient {
     }
 
     const fingerprint = await this.config.getDeviceFingerprint();
-    const res = await this.post<RegisterDeviceResponse>('/extension/register-device', {
+    const registrationPayload = {
       toolType: 'vscode',
       fingerprintHash: fingerprint,
       extensionVersion: '0.0.1',
       platform: process.platform || 'unknown',
-    });
+      ...(this.deviceEventSecret ? { existingEventSecret: this.deviceEventSecret } : {}),
+    };
+    let res: RegisterDeviceResponse;
+    try {
+      res = await this.post<RegisterDeviceResponse>('/extension/register-device', registrationPayload);
+    } catch (err: unknown) {
+      if (!isDeviceRecoveryError(err)) throw err;
+      const recoverySupportToken = await vscode.window.showInputBox({
+        prompt: 'WaitLayer device recovery token',
+        placeHolder: 'Paste the one-time token issued by WaitLayer support',
+        password: true,
+        ignoreFocusOut: true,
+      });
+      if (!recoverySupportToken?.trim()) throw err;
+      res = await this.post<RegisterDeviceResponse>('/extension/register-device', {
+        ...registrationPayload,
+        recoverySupportToken: recoverySupportToken.trim(),
+      });
+    }
 
     if (res && res.id) {
       if (!res.eventSecret) {
@@ -376,7 +395,7 @@ export class ApiClient {
       );
       return;
     }
-    const transport = https;
+    const transport = url.protocol === 'https:' ? https : http;
     const req = transport.request(
       {
         method,
@@ -453,4 +472,25 @@ function headers(
     'X-Extension-Version': '0.0.1',
     'X-Tool-Type': 'vscode',
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getRequestErrorMessage(err: unknown): string {
+  if (isRecord(err) && typeof err.message === 'string') return err.message;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+function isDeviceRecoveryError(err: unknown): boolean {
+  const message = getRequestErrorMessage(err);
+  return (
+    message.includes('Cannot recover device secret') ||
+    message.includes('device recovery') ||
+    message.includes('Device recovery') ||
+    message.includes('Support recovery token') ||
+    message.includes('Provide only one device recovery proof')
+  );
 }

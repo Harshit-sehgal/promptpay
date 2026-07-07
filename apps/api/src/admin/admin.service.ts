@@ -1,10 +1,19 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { FraudFlagStatus, FraudSeverity, Prisma, UserRole, UserStatus } from '@waitlayer/db';
+import { FraudFlagStatus, FraudSeverity, Prisma, RecoveryDebtCaseStatus, UserRole, UserStatus } from '@waitlayer/db';
+import * as crypto from 'crypto';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
 import { FraudService } from '../fraud/fraud.service';
 import { getErrorCode } from '../common/utils/errors';
+
+const DEFAULT_DEVICE_RECOVERY_TOKEN_MINUTES = 15;
+const MAX_DEVICE_RECOVERY_TOKEN_MINUTES = 60;
+const DEFAULT_RECOVERY_DEBT_CURRENCY = 'USD';
+const ACTIVE_RECOVERY_DEBT_CASE_STATUSES = [
+  RecoveryDebtCaseStatus.open,
+  RecoveryDebtCaseStatus.in_collections,
+];
 
 @Injectable()
 export class AdminService {
@@ -282,6 +291,374 @@ export class AdminService {
     return this.audit.query(params);
   }
 
+  // ── Device Recovery ──
+
+  async issueDeviceRecoveryToken(params: {
+    deviceId: string;
+    userId: string;
+    reviewerId: string;
+    reviewerRole?: string;
+    reason?: string;
+    expiresInMinutes?: number;
+  }) {
+    const expiresInMinutes = params.expiresInMinutes ?? DEFAULT_DEVICE_RECOVERY_TOKEN_MINUTES;
+    if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > MAX_DEVICE_RECOVERY_TOKEN_MINUTES) {
+      throw new BadRequestException(
+        `expiresInMinutes must be an integer between 5 and ${MAX_DEVICE_RECOVERY_TOKEN_MINUTES}`,
+      );
+    }
+
+    const device = await this.prisma.device.findUnique({
+      where: { id: params.deviceId },
+      select: {
+        id: true,
+        userId: true,
+        fingerprintHash: true,
+        eventSecret: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+    });
+    if (!device || device.userId !== params.userId) {
+      throw new BadRequestException('Device was not found for the requested user');
+    }
+    if (device.user.role !== 'developer') {
+      throw new BadRequestException('Only developer extension devices can receive recovery tokens');
+    }
+    if (device.user.status === 'banned' || device.user.status === 'deleted') {
+      throw new BadRequestException('Device recovery is unavailable for this account status');
+    }
+    if (!device.eventSecret) {
+      throw new BadRequestException('Legacy devices without a per-device secret can re-register without a support token');
+    }
+
+    const recoverySupportToken = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = hashDeviceRecoveryToken(recoverySupportToken);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + expiresInMinutes * 60_000);
+    const reason = params.reason?.trim() || undefined;
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      await tx.deviceRecoveryToken.updateMany({
+        where: {
+          userId: params.userId,
+          deviceId: params.deviceId,
+          usedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { revokedAt: now },
+      });
+
+      return tx.deviceRecoveryToken.create({
+        data: {
+          userId: params.userId,
+          deviceId: params.deviceId,
+          createdByUserId: params.reviewerId,
+          tokenHash,
+          reason,
+          expiresAt,
+        },
+      });
+    });
+
+    await this.audit.log({
+      actorId: params.reviewerId,
+      actorRole: params.reviewerRole ?? 'admin',
+      action: 'device_recovery_token_issued',
+      targetType: 'device',
+      targetId: params.deviceId,
+      afterSnap: {
+        userId: params.userId,
+        tokenId: created.id,
+        expiresAt: expiresAt.toISOString(),
+        reason,
+      },
+    });
+
+    return {
+      tokenId: created.id,
+      userId: params.userId,
+      deviceId: params.deviceId,
+      expiresAt,
+      recoverySupportToken,
+    };
+  }
+
+  // ── Recovery Debt Operations ──
+
+  async getRecoveryDebtCases(params: { page?: number; limit?: number; minAmountMinor?: number; currency?: string }) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params.limit ?? 20));
+    const minAmountMinor = Math.max(1, params.minAmountMinor ?? 1);
+    const currency = normalizeOptionalCurrency(params.currency);
+    const currencyFilter = currency ? { currency } : {};
+
+    const [debitGroups, creditGroups] = await Promise.all([
+      this.prisma.earningsLedger.groupBy({
+        by: ['userId', 'currency'],
+        where: { status: 'confirmed', entryType: 'debit', ...currencyFilter },
+        _sum: { amountMinor: true },
+        _count: { _all: true },
+      }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['userId', 'currency'],
+        where: { status: 'confirmed', entryType: 'credit', ...currencyFilter },
+        _sum: { amountMinor: true },
+      }),
+    ]);
+
+    const creditByUserCurrency = new Map<string, number>();
+    for (const credit of creditGroups) {
+      creditByUserCurrency.set(
+        `${credit.userId}:${credit.currency}`,
+        credit._sum.amountMinor ?? 0,
+      );
+    }
+
+    const allDebtRows = debitGroups
+      .map((debit) => {
+        const debitMinor = debit._sum.amountMinor ?? 0;
+        const confirmedCreditMinor = creditByUserCurrency.get(`${debit.userId}:${debit.currency}`) ?? 0;
+        const outstandingDebtMinor = Math.max(0, debitMinor - confirmedCreditMinor);
+        return {
+          userId: debit.userId,
+          currency: debit.currency,
+          confirmedDebitMinor: debitMinor,
+          confirmedCreditMinor,
+          outstandingDebtMinor,
+          recoveryDebitEntryCount: debit._count._all,
+        };
+      })
+      .filter((row) => row.outstandingDebtMinor >= minAmountMinor)
+      .sort((a, b) => b.outstandingDebtMinor - a.outstandingDebtMinor || a.userId.localeCompare(b.userId));
+
+    const total = allDebtRows.length;
+    const rows = allDebtRows.slice((page - 1) * limit, page * limit);
+    const userIds = Array.from(new Set(rows.map((row) => row.userId)));
+    const currencies = Array.from(new Set(rows.map((row) => row.currency)));
+    const [users, cases] = userIds.length > 0
+      ? await Promise.all([
+        this.prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, email: true, name: true, status: true, trustLevel: true },
+        }),
+        this.prisma.recoveryDebtCase.findMany({
+          where: { userId: { in: userIds }, currency: { in: currencies } },
+          orderBy: { updatedAt: 'desc' },
+        }),
+      ])
+      : [[], []];
+
+    const userById = new Map(users.map((user) => [user.id, user]));
+    const latestCaseByUserCurrency = new Map<string, (typeof cases)[number]>();
+    for (const debtCase of cases) {
+      const key = recoveryDebtCaseKey(debtCase.userId, debtCase.currency);
+      if (!latestCaseByUserCurrency.has(key)) {
+        latestCaseByUserCurrency.set(key, debtCase);
+      }
+    }
+
+    return {
+      items: rows.map((row) => ({
+        ...row,
+        user: userById.get(row.userId) ?? null,
+        latestCase: latestCaseByUserCurrency.get(recoveryDebtCaseKey(row.userId, row.currency)) ?? null,
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async openRecoveryDebtCase(params: {
+    userId: string;
+    reviewerId: string;
+    reviewerRole?: string;
+    status?: 'open' | 'in_collections';
+    currency?: string;
+    externalReference?: string;
+    note?: string;
+  }) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: params.userId },
+      select: { id: true, email: true, role: true, status: true },
+    });
+    if (!user) throw new BadRequestException('User not found');
+    if (user.role !== 'developer') {
+      throw new BadRequestException('Recovery debt cases can only be opened for developer accounts');
+    }
+
+    const requestedCurrency = normalizeOptionalCurrency(params.currency) ?? DEFAULT_RECOVERY_DEBT_CURRENCY;
+    const debt = await this.getOutstandingRecoveryDebt(params.userId, requestedCurrency);
+    if (debt.outstandingDebtMinor <= 0) {
+      throw new BadRequestException('User has no outstanding recovery debt');
+    }
+
+    const status = params.status === 'in_collections'
+      ? RecoveryDebtCaseStatus.in_collections
+      : RecoveryDebtCaseStatus.open;
+    const note = sanitizeOptionalString(params.note);
+    const externalReference = sanitizeOptionalString(params.externalReference);
+
+    const debtCase = await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.recoveryDebtCase.findFirst({
+        where: {
+          userId: params.userId,
+          currency: debt.currency,
+          status: { in: ACTIVE_RECOVERY_DEBT_CASE_STATUSES },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (existing) {
+        return tx.recoveryDebtCase.update({
+          where: { id: existing.id },
+          data: {
+            status,
+            amountMinor: debt.outstandingDebtMinor,
+            currency: debt.currency,
+            externalReference,
+            note,
+            openedByUserId: params.reviewerId,
+            resolvedByUserId: null,
+            resolvedAt: null,
+          },
+        });
+      }
+
+      return tx.recoveryDebtCase.create({
+        data: {
+          userId: params.userId,
+          status,
+          amountMinor: debt.outstandingDebtMinor,
+          currency: debt.currency,
+          externalReference,
+          note,
+          openedByUserId: params.reviewerId,
+        },
+      });
+    }).catch((err: unknown) => {
+      if (getErrorCode(err) === 'P2002') {
+        throw new BadRequestException(
+          'An active recovery debt case already exists for this user and currency. Reload and update the existing case.',
+        );
+      }
+      throw err;
+    });
+
+    await this.audit.log({
+      actorId: params.reviewerId,
+      actorRole: params.reviewerRole ?? 'admin',
+      action: 'recovery_debt_case_opened',
+      targetType: 'recovery_debt_case',
+      targetId: debtCase.id,
+      afterSnap: {
+        userId: params.userId,
+        status,
+        outstandingDebtMinor: debt.outstandingDebtMinor,
+        currency: debt.currency,
+        externalReference,
+      },
+    });
+
+    return { case: debtCase, debt };
+  }
+
+  async resolveRecoveryDebtCase(params: {
+    caseId: string;
+    reviewerId: string;
+    reviewerRole?: string;
+    status: 'recovered' | 'written_off' | 'closed';
+    externalReference?: string;
+    note?: string;
+  }) {
+    const terminalStatus = toTerminalRecoveryDebtStatus(params.status);
+    const note = sanitizeOptionalString(params.note);
+    const externalReference = sanitizeOptionalString(params.externalReference);
+    const now = new Date();
+
+    const existing = await this.prisma.recoveryDebtCase.findUnique({
+      where: { id: params.caseId },
+    });
+    if (!existing) throw new BadRequestException('Recovery debt case not found');
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.recoveryDebtCase.updateMany({
+        where: {
+          id: params.caseId,
+          status: { in: ACTIVE_RECOVERY_DEBT_CASE_STATUSES },
+        },
+        data: {
+          status: terminalStatus,
+          externalReference,
+          note,
+          resolvedByUserId: params.reviewerId,
+          resolvedAt: now,
+        },
+      });
+      if (claimed.count === 0) {
+        const current = await tx.recoveryDebtCase.findUnique({
+          where: { id: params.caseId },
+          select: { status: true },
+        });
+        throw new BadRequestException(
+          current
+            ? `Recovery debt case cannot be resolved from status '${current.status}'`
+            : 'Recovery debt case not found',
+        );
+      }
+      return tx.recoveryDebtCase.findUnique({ where: { id: params.caseId } });
+    });
+
+    const debt = await this.getOutstandingRecoveryDebt(existing.userId, existing.currency);
+    await this.audit.log({
+      actorId: params.reviewerId,
+      actorRole: params.reviewerRole ?? 'admin',
+      action: 'recovery_debt_case_resolved',
+      targetType: 'recovery_debt_case',
+      targetId: params.caseId,
+      beforeSnap: { status: existing.status, amountMinor: existing.amountMinor },
+      afterSnap: {
+        status: terminalStatus,
+        userId: existing.userId,
+        currentOutstandingDebtMinor: debt.outstandingDebtMinor,
+        currency: debt.currency,
+        externalReference,
+      },
+    });
+
+    return { case: updated, debt };
+  }
+
+  private async getOutstandingRecoveryDebt(userId: string, currency = DEFAULT_RECOVERY_DEBT_CURRENCY) {
+    const [confirmedDebits, confirmedCredits] = await Promise.all([
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, currency, status: 'confirmed', entryType: 'debit' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.earningsLedger.aggregate({
+        where: { userId, currency, status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
+    ]);
+    const confirmedDebitMinor = confirmedDebits._sum.amountMinor ?? 0;
+    const confirmedCreditMinor = confirmedCredits._sum.amountMinor ?? 0;
+    return {
+      userId,
+      currency,
+      confirmedDebitMinor,
+      confirmedCreditMinor,
+      outstandingDebtMinor: Math.max(0, confirmedDebitMinor - confirmedCreditMinor),
+    };
+  }
+
   // ── Tool Integrations ──
 
   async getToolIntegrations() {
@@ -402,5 +779,38 @@ export class AdminService {
       where: { id: params.entryId },
     });
     return { entry: confirmed, confirmed: true };
+  }
+}
+
+function hashDeviceRecoveryToken(token: string): string {
+  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function sanitizeOptionalString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function normalizeOptionalCurrency(value: string | undefined): string | undefined {
+  const currency = value?.trim().toUpperCase();
+  if (!currency) return undefined;
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new BadRequestException('currency must be a 3-letter ISO currency code');
+  }
+  return currency;
+}
+
+function recoveryDebtCaseKey(userId: string, currency: string): string {
+  return `${userId}:${currency}`;
+}
+
+function toTerminalRecoveryDebtStatus(status: 'recovered' | 'written_off' | 'closed'): RecoveryDebtCaseStatus {
+  switch (status) {
+    case 'recovered':
+      return RecoveryDebtCaseStatus.recovered;
+    case 'written_off':
+      return RecoveryDebtCaseStatus.written_off;
+    case 'closed':
+      return RecoveryDebtCaseStatus.closed;
   }
 }

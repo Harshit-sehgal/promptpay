@@ -88,9 +88,11 @@ describe('PayoutService', () => {
 
       const res = await service.addPayoutMethod('user_123', {
         provider: 'wise',
-        destination: 'test@wise.com',
+        destination: ' test@wise.com ',
+        currency: 'usd',
       });
 
+      expect(mockPrisma.$transaction).toHaveBeenCalledWith(expect.any(Function));
       expect(mockPrisma.payoutAccount.updateMany).toHaveBeenCalledWith({
         where: { userId: 'user_123', provider: 'wise', isActive: true },
         data: { isActive: false },

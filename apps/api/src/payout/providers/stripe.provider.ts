@@ -259,11 +259,20 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
     return { providerTxId: payout.id, status: payout.status ?? 'pending' };
   }
 
-  async checkStatus(providerTxId: string): Promise<{ status: string; paidAt?: Date }> {
+  async checkStatus(
+    providerTxId: string,
+    context?: { destination?: string },
+  ): Promise<{ status: string; paidAt?: Date }> {
     if (!this.stripe) {
       throw new Error('Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).');
     }
-    const payout = await this.stripe.payouts.retrieve(providerTxId);
+    const connectedAccount = context?.destination?.trim();
+    if (!connectedAccount || !connectedAccount.startsWith('acct_')) {
+      throw new Error(
+        `Invalid Stripe Connect status destination '${connectedAccount}': a connected account id (acct_...) is required to retrieve a connected-account payout.`,
+      );
+    }
+    const payout = await this.stripe.payouts.retrieve(providerTxId, {}, { stripeAccount: connectedAccount });
     return {
       status: payout.status,
       paidAt: payout.arrival_date ? new Date(payout.arrival_date * 1000) : undefined,

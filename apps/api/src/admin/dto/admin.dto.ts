@@ -1,4 +1,4 @@
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, Min, Max, MaxLength } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Min, Max, MaxLength } from 'class-validator';
 import { FraudSeverity, FraudFlagStatus } from '@waitlayer/shared';
 
 // ── Campaign approval ──
@@ -100,6 +100,85 @@ export class UsersQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+}
+
+// ── Device recovery ──
+
+export class IssueDeviceRecoveryTokenDto {
+  @IsUUID()
+  userId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(60)
+  expiresInMinutes?: number;
+}
+
+// ── Recovery debt operations ──
+
+export class RecoveryDebtCasesQueryDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minAmountMinor?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currency?: string;
+}
+
+export class OpenRecoveryDebtCaseDto {
+  @IsOptional()
+  @IsIn(['open', 'in_collections'])
+  status?: 'open' | 'in_collections';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currency?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  externalReference?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
+}
+
+export class ResolveRecoveryDebtCaseDto {
+  @IsIn(['recovered', 'written_off', 'closed'])
+  status!: 'recovered' | 'written_off' | 'closed';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  externalReference?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  note?: string;
 }
 
 // ── Tool Integrations ──

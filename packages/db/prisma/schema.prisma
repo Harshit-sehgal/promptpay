@@ -163,6 +163,14 @@ enum ApprovalDecision {
   changes_requested
 }
 
+enum RecoveryDebtCaseStatus {
+  open
+  in_collections
+  recovered
+  written_off
+  closed
+}
+
 // ══════════════════════════════════════════════════════════
 // User & Identity
 // ══════════════════════════════════════════════════════════
@@ -187,24 +195,29 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Relations
-  adminProfile    AdminUser?
-  advertiser      Advertiser?
-  sessions        Session[]
-  devices         Device[]
-  settings        UserSettings?
-  payoutAccounts  PayoutAccount[]
-  earnings        EarningsLedger[]
-  payoutRequests  PayoutRequest[]
-  trustScore      TrustScore?
-  fraudFlags      FraudFlag[]
-  adReports       AdReport[]
-  waitStateEvents WaitStateEvent[]
-  adImpressions   AdImpression[]
-  adClicks        AdClick[]
-  referralOut     Referral[]       @relation("Referrer")
-  referralIn      Referral[]       @relation("Referred")
-  referralRewards ReferralReward[]
-  apiKeys         ApiKey[]
+  adminProfile               AdminUser?
+  advertiser                 Advertiser?
+  sessions                   Session[]
+  devices                    Device[]
+  settings                   UserSettings?
+  payoutAccounts             PayoutAccount[]
+  earnings                   EarningsLedger[]
+  payoutRequests             PayoutRequest[]
+  trustScore                 TrustScore?
+  fraudFlags                 FraudFlag[]
+  adReports                  AdReport[]
+  waitStateEvents            WaitStateEvent[]
+  adImpressions              AdImpression[]
+  adClicks                   AdClick[]
+  deviceRecoveryTokens       DeviceRecoveryToken[] @relation("DeviceRecoveryUserTokens")
+  issuedDeviceRecoveryTokens DeviceRecoveryToken[] @relation("IssuedDeviceRecoveryTokens")
+  recoveryDebtCases          RecoveryDebtCase[]    @relation("RecoveryDebtUserCases")
+  openedRecoveryDebtCases    RecoveryDebtCase[]    @relation("RecoveryDebtOpenedBy")
+  resolvedRecoveryDebtCases  RecoveryDebtCase[]    @relation("RecoveryDebtResolvedBy")
+  referralOut                Referral[]            @relation("Referrer")
+  referralIn                 Referral[]            @relation("Referred")
+  referralRewards            ReferralReward[]
+  apiKeys                    ApiKey[]
 
   // The `email` @unique (above) already serves equality/like scans on
   // email; a separate @@index duplicates storage and write cost.
@@ -266,6 +279,7 @@ model Device {
   adImpressions   AdImpression[]
   adClicks        AdClick[]
   fraudFlags      FraudFlag[]
+  recoveryTokens  DeviceRecoveryToken[]
 
   @@unique([userId, fingerprintHash])
   // Cross-user uniqueness — without this constraint two users could
@@ -277,6 +291,28 @@ model Device {
   @@index([fingerprintHash])
   @@index([userId])
   @@map("devices")
+}
+
+model DeviceRecoveryToken {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation("DeviceRecoveryUserTokens", fields: [userId], references: [id], onDelete: Cascade)
+  deviceId        String
+  device          Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  createdByUserId String
+  createdBy       User      @relation("IssuedDeviceRecoveryTokens", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  tokenHash       String    @unique
+  reason          String?
+  expiresAt       DateTime  @db.Timestamptz
+  usedAt          DateTime? @db.Timestamptz
+  revokedAt       DateTime? @db.Timestamptz
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, deviceId, expiresAt])
+  @@index([deviceId, usedAt, revokedAt, expiresAt])
+  @@index([createdByUserId, createdAt])
+  @@map("device_recovery_tokens")
 }
 
 // ══════════════════════════════════════════════════════════
@@ -318,7 +354,7 @@ model PayoutAccount {
 
   payoutRequests PayoutRequest[]
 
-  @@unique([userId, provider, isActive])
+  @@index([userId, provider, isActive])
   @@map("payout_accounts")
 }
 
@@ -335,7 +371,7 @@ model Advertiser {
   // Globally unique per-Stripe-account. Without this, two advertisers could
   // be wired to the same Stripe customer via a TOCTOU race on the webhook
   // `advertiser.stripeCustomerId` first-time-set path.
-  stripeCustomerId String?  @unique
+  stripeCustomerId String?    @unique
   websiteUrl       String?
   trustStatus      TrustLevel @default(new)
 
@@ -385,7 +421,7 @@ model Campaign {
   fraudFlags       FraudFlag[]
   earningsEntries  EarningsLedger[]
   advertiserLedger AdvertiserLedger[]
-  platformLedger  PlatformLedger[]
+  platformLedger   PlatformLedger[]
 
   @@index([advertiserId])
   @@index([status])
@@ -432,14 +468,14 @@ model Category {
 }
 
 model BlockedCategory {
-  id         String   @id @default(uuid())
-  categoryId String
+  id         String    @id @default(uuid())
+  categoryId String?
   // BlockedCategory rows are user-generated spam flags — when the underlying
   // Category row is removed by an admin, the blocks linger as a historical
   // reference (per record of "what was blocked when"), so SetNull lets the
   // audit row survive; the API layer filters out rows where category is null
   // for display purposes.
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   blockedBy  String
   reason     String
 
@@ -673,7 +709,7 @@ model AdvertiserLedger {
   // source of truth for historical accounting and must not be cascade-deleted
   // with its campaign; nulling the FK keeps referential integrity while
   // ensuring the row remains queryable by `advertiserId`/`createdAt`/etc.
-  campaign              Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  campaign              Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   stripePaymentIntentId String?
   // The Stripe Dispute id when this row participates in a dispute freeze.
   // Set on the `hold`/`hold-rev` rows created by the dispute webhook and on
@@ -793,6 +829,31 @@ model PayoutTransaction {
   // Single-column index for txId-only lookups from provider callbacks.
   @@index([providerTxId])
   @@map("payout_transactions")
+}
+
+model RecoveryDebtCase {
+  id                String                 @id @default(uuid())
+  userId            String
+  user              User                   @relation("RecoveryDebtUserCases", fields: [userId], references: [id], onDelete: Restrict)
+  status            RecoveryDebtCaseStatus @default(open)
+  amountMinor       Int
+  currency          String                 @default("USD")
+  externalReference String?
+  note              String?
+  openedByUserId    String?
+  openedBy          User?                  @relation("RecoveryDebtOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+  resolvedByUserId  String?
+  resolvedBy        User?                  @relation("RecoveryDebtResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  resolvedAt        DateTime?              @db.Timestamptz
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, currency])
+  @@index([status, updatedAt])
+  @@index([openedByUserId, createdAt])
+  @@index([resolvedByUserId, resolvedAt])
+  @@map("recovery_debt_cases")
 }
 
 // ══════════════════════════════════════════════════════════

@@ -35,6 +35,7 @@ export {
   PayoutStatus,
   Prisma,
   PrismaClient,
+  RecoveryDebtCaseStatus,
   ToolTypeEnum,
   TrustLevel,
   UserRole,

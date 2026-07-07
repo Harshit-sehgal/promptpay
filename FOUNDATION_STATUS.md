@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-06 (verified after supply-chain hardening, payout-provider production guards, Redis-backed abuse controls, and full quality-gate pass)
+Last updated: 2026-07-07 (verified after support-mediated device-secret recovery, currency-scoped recovery-debt cases, and full quality-gate pass)
 
 ---
 
@@ -16,11 +16,11 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 | 4 | Authorization | PASS | Integration test asserts 403s on cross-tenant access |
 | 5 | Campaign lifecycle | PASS | Real DB end-to-end: draft → submitted → approved → active |
 | 6 | Ledger/money flow | PASS | Integration asserts CPM and CPC 60/30/10 splits with guarded campaign spend |
-| 7 | Payouts | Partial | Lifecycle, partial allocations, provider-failure release, and production stub guards tested; several real PSP integrations still pending |
+| 7 | Payouts | Partial | Lifecycle, partial allocations, PayPal Payouts, Stripe Connect, provider-failure release, and production stub guards tested; regional PSP integrations still pending |
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
 | 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **201 tests across 9 files** (real HTTP+DB + service-level) |
+| 11 | Tests/readiness | PASS | **220 tests across 11 files** (213 API + 7 CLI; real HTTP+DB + service-level) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
@@ -56,7 +56,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 **Verified flow surfaces:**
 - Extension routes require HMAC signature over the canonical payload (excluding the `signature` field itself)
 - Body schemas strictly reject unknown fields, so misnamed payloads (e.g. `headline` vs `title`) fail with 400
-- Device registration issues a per-device `eventSecret`; extension events must sign with that device secret. Legacy rows with `eventSecret = null` are rejected for event traffic and can re-register to receive a secret.
+- Device registration issues a per-device `eventSecret`; extension events must sign with that device secret. Legacy rows with `eventSecret = null` are rejected for event traffic and can re-register to receive a secret. Existing same-fingerprint devices can recover a lost local secret through old-secret proof, password re-auth, linked-Google re-auth, or a one-time support/admin recovery token.
 
 ---
 
@@ -66,7 +66,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Google OAuth via ID token verification when `GOOGLE_CLIENT_ID` is configured; mock verification available when not set (dev/test only)
 - JWT access tokens (`aud: 'access'`, `jti`) and refresh tokens (`aud: 'refresh'`, `jti`, `family`)
 - Refresh tokens are looked up by `jti`, the bcrypt hash is verified, and reuse revokes the entire token family
-- Role-based guards: `@Roles('admin')`, `@Roles('advertiser')`, `@Roles('developer')`
+- Role-based guards: `@Roles('admin')`, `@Roles('support')`, `@Roles('advertiser')`, `@Roles('developer')`
 - Session table tracks `tokenFamily` and `tokenHash` per token
 - Password hashing via bcryptjs with salt rounds 12
 - Stateless JWT-based email verification flow (`verify-email/request` and `verify-email/confirm`) with automatic trust score recalculation
@@ -155,10 +155,12 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 - Multi-provider architecture: Manual, PayPal Email, PayPal Payouts, Wise, Stripe Connect, Razorpay, Payoneer.
 - PayPal Payouts calls the real PayPal API when `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are configured. In dev/test it can return a stub response when credentials are absent; in production it fails closed before the payout is claimed.
-- Wise, Stripe Connect, Razorpay, and Payoneer remain development stubs and are blocked in `NODE_ENV=production` before the `approved -> processing` claim.
+- Stripe Connect payouts call Stripe's payout API against the developer connected account when `STRIPE_SECRET_KEY` is configured and the payout method destination is an `acct_*` account id; missing configuration or malformed destinations fail closed before money movement.
+- Wise, Razorpay, and Payoneer remain development stubs and are blocked in `NODE_ENV=production` before the `approved -> processing` claim.
 - Minimum payout threshold: $10.00 (`PAYOUT.MINIMUM_THRESHOLD_MINOR`)
 - Fraud flag check (high/critical) blocks payout requests
 - Restricted/banned users blocked from payout
+- Replacing a payout method deactivates the current active destination and creates the replacement in one transaction. The database enforces only one active account per developer/provider while preserving inactive destination history for audit.
 
 **Allocation accounting (verified by tests and source):**
 - When a payment allocation is smaller than a ledger entry: the entry is shrunk to the allocated amount and a NEW `confirmed` remainder entry is created with a stable `idempotencyKey`. The `PayoutAllocation.earningsEntryId` references only the shrunken entry.
@@ -166,6 +168,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Double-payout prevented by checking that no allocated entry is already `paid` before any update.
 - Availability calculations reserve only in-flight payout statuses (`requested`, `under_review`, `approved`, `processing`); already-paid allocations are not subtracted from confirmed availability a second time.
 - Fraud discovered after a developer has already been paid creates idempotent confirmed `debit` recovery rows in `earnings_ledger`. Future payout availability subtracts those debits while preserving the original paid credit rows for audit.
+- Admin recovery-debt cases list users whose confirmed recovery debits exceed confirmed credits per currency, open/update active collection cases, and resolve cases with external references without mutating the immutable earnings ledger. A partial unique database index prevents duplicate active cases for the same developer and currency.
 
 **What changed:**
 - A unique constraint on `PayoutAllocation.earningsEntryId` would prevent the same entry being referenced twice; see prisma schema (verify the actual constraint before relying on it for race protection in concurrent payouts).
@@ -173,7 +176,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - If a provider explicitly returns `failed` from initiation, the payout is marked `failed` and its allocations are deleted in one transaction, making the earnings available for a fresh request.
 
 **Known limitation:**
-- Real PSP integrations are still missing for Stripe Connect payouts, Wise, Razorpay, and Payoneer. To go live with those providers, wire each provider to its SDK/API and verify provider status transitions end-to-end.
+- In-app Stripe Connect onboarding is still not built; operators must only enable `stripe_connect` payout methods after separately verifying and storing the developer's connected account id. Real PSP integrations are still missing for Wise, Razorpay, and Payoneer.
 
 ---
 
@@ -187,7 +190,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Legal: privacy, terms, payout-policy, advertiser-policy
 
 **API contracts (verified by source diff):**
-- Athletic `createCreative()` sends the BACKEND DTO shape (`title`, `sponsoredMessage`, `destinationUrl`, `displayDomain`), not the legacy `headline/message/ctaText/ctaUrl` shape
+- Advertiser `createCreative()` sends the backend DTO shape (`title`, `sponsoredMessage`, `destinationUrl`, `displayDomain`), not the legacy `headline/message/ctaText/ctaUrl` shape
 - Country targeting sends `[{countryCode, include}]` as a JSON array, matching the backend `setCountryTargeting` payload
 - Admin ledger page calls `/ledger/admin/breakdown` and `/ledger/admin/history` (admin-only), with both flat totals **and** nested objects (`earningsLedger`, `advertiserLedger`, `platformLedger`) — backend now returns both shapes for the UI
 - `services.ts` exposes `googleLogin`, `refresh`, `getMe`, dashboard APIs, payout APIs, ledger APIs, referral APIs, admin APIs, and api-key APIs
@@ -202,6 +205,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - `status-bar.ts` shows earnings and ad-serving state
 - Uses shared HMAC signing utility (`signPayload`) keyed by the API-issued per-device event secret after registration
 - Device registration stores the returned `eventSecret` in VS Code `SecretStorage`; the extension no longer uses a global extension HMAC fallback for event payloads
+- If the local secret is lost and the API requires recovery, VS Code prompts for a one-time support/admin recovery token and submits it only in the registration request body
 - Login/logout clear stored device registration state so a new authenticated user re-registers and receives a user-scoped device secret
 - Persists access/refresh tokens via `SecretStorage`; refresh interceptor retries once on 401 with a single in-flight refresh
 - Ad webview CSP uses per-render nonces for script/style and does not allow `unsafe-inline`
@@ -227,6 +231,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - `login()` parses flat `{user, accessToken, refreshToken}` (NestJS shape), no nested `.data` wrapper
 - `getBalance()` parses flat `{available: {amountMinor, currency}, pending: {...}, total: {...}, paidOut: {...}}` — the entry-form shape from the ledger controller
 - `getOverview()` parses the full dashboard shape from `/developer/dashboard` (`estimatedEarnings, confirmedEarnings, pendingEarnings, heldEarnings, availableForPayout, lifetimeEarnings, trustLevel, trustScore`)
+- `getOrRegisterDevice()` submits any existing local event secret as proof when re-registering, and accepts a one-time support/admin token through `WAITLAYER_DEVICE_RECOVERY_TOKEN`
 - `reportWaitState()` normalizes user-supplied tool names through `normalizeToolType()` so values land in the `ToolType` enum (`claude_code`, `codex_cli`, `terminal`, etc.); arbitrary strings fall back to `terminal` instead of being rejected by `forbidNonWhitelisted`
 - Error parsing in `raw()` extracts `message` from NestJS exception responses (`{message, error, statusCode}`)
 
@@ -238,7 +243,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**201 tests across 9 files (all pass):**
+**220 tests across 11 files (all pass):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
@@ -248,9 +253,11 @@ No silently-failing domains. Where anything remains partial, it is called out be
 | `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, rate limit, self-click, flags |
 | `ledger/ledger.service.spec.ts` | 27 | Unit | splits, guarded spend, balances, history, hold days |
 | `payout/payout.service.spec.ts` | 21 | Unit | allocation validation, partial split, provider routing, production provider guards, recovery-debt availability |
-| `integration/e2e-money-loop.spec.ts` | 34 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement and password/Google-gated secret recovery |
+| `payout/providers/stripe-connect.provider.spec.ts` | 7 | Unit | Stripe Connect readiness, connected-account destination validation, payout creation, status mapping |
+| `integration/e2e-money-loop.spec.ts` | 39 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement, password/Google/support-gated secret recovery, and recovery-debt case operations |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
 | `integration/contract-tests.spec.ts` | 32 | **Contract** | Zod validation of API response shapes |
+| `apps/cli/src/lib/normalize-tool.test.ts` | 7 | Unit | CLI tool-name normalization |
 
 **What the real HTTP integration test actually exercises (with `JWT_SECRET` and `DATABASE_URL` set):**
 - Real NestJS `Test.createTestingModule({imports: [AppModule]})`
@@ -365,15 +372,14 @@ pnpm --filter waitlayer-web dev
 
 | Limitation | Severity | Detail |
 |------------|----------|--------|
-| Non-PayPal automated payout PSPs are not production-ready | Med | Stripe Connect, Wise, Razorpay, and Payoneer are dev/test stubs and fail closed in production until real PSP integrations are wired |
+| Regional automated payout PSPs are not production-ready | Med | Wise, Razorpay, and Payoneer are dev/test stubs and fail closed in production until real PSP integrations are wired |
 | PayPal Payouts requires credentials for production | Med | `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` must be set before processing `paypal_payouts` requests in production; absent credentials are allowed only for dev/test stubs |
-| Stripe provider requires env to fully run | Med | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY` must be set; without them endpoints stub out |
+| Stripe provider requires env and onboarding to fully run | Med | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY` must be set; Stripe Connect payout methods also require a verified `acct_*` destination until in-app onboarding is built |
 | Real Google OAuth requires env | Low | `GOOGLE_CLIENT_ID` required for production; offline mock-token verifier is dev/test only |
 | No WebSockets / push | Low | Dashboards refresh on user action or polling |
 | Redis required for multi-instance production abuse controls | Low | `REDIS_URL` is required in production; local/test can intentionally fall back to in-memory counters |
-| No external collections workflow for unrecovered payout debt | Med | Paid-fraud recovery debits reduce future payouts automatically, but users with no future earnings still require an operator/legal process outside the app |
 | Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET` is a dev-only placeholder and must be rotated before production deploy; compose also enables mock Google auth for local development only |
-| Non-Google passwordless device-secret recovery still needs provider re-auth/support flow | Low | Password users recover via password re-auth; Google-linked users recover via matching Google ID token. Future non-Google social providers still need equivalent provider re-auth or support recovery |
+| Provider-native re-auth for future non-Google identity providers is not wired | Low | Password users recover via password re-auth; Google-linked users recover via matching Google ID token; non-Google passwordless users can recover through a short-lived support/admin token. Future providers should add native provider re-auth to reduce support burden |
 | Docker Compose has orphan one-off containers locally | Low | `docker compose up -d` warned about old `promptpay-api-run-*` containers from prior manual runs; current named services are healthy |
 | Build emits `dist/apps/api/src/main.js` (not `dist/main.js`) | Info | Because path aliases reach outside `src/`, TypeScript's auto-`rootDir` puts output one level deeper. Dockerfile CMD is aligned to the actual path |
 
@@ -392,7 +398,10 @@ pnpm --filter waitlayer-web dev
 | Added paid-fraud recovery debits | Fraud found after payout creates auditable debit rows that reduce future payout availability |
 | Added Redis-backed rate limiting and brute-force tracking | Production auth and route abuse controls share counters across API instances and fail closed if Redis is unavailable |
 | Removed global extension HMAC event fallback | Extension events now require API-issued per-device secrets; legacy null-secret device rows are rejected until re-registration issues a secret |
-| Added password/Google-gated device-secret recovery | Same-account same-fingerprint re-registration can rotate a lost per-device secret after password or linked-Google re-authentication, without restoring a shared global HMAC fallback |
+| Added password/Google/support-gated device-secret recovery | Same-account same-fingerprint re-registration can rotate a lost per-device secret after password, linked-Google, or support/admin one-time-token re-authentication, without restoring a shared global HMAC fallback |
+| Fixed blocked-category `SET NULL` schema mismatch | `blocked_categories.categoryId` is nullable, so deleting a category preserves historical blocked-category rows instead of failing on a NOT NULL constraint |
+| Added recovery-debt case workflow | Admins can list net outstanding paid-fraud recovery debt per currency, open/update active collection cases, and record recovered/written-off/closed outcomes with audit trails; a partial unique index prevents duplicate active cases per developer/currency |
+| Fixed payout-account history constraint | Replacing a payout method no longer collides with older inactive destinations; only active user/provider pairs are unique, and the replacement write is transactional |
 
 ---
 
@@ -435,7 +444,7 @@ Three rounds of code quality improvements were applied across 16 files (178 inse
 
 All quality gates pass cleanly:
 - Typecheck: 13/13 tasks — PASS
-- Lint: 12/12 tasks, 0 errors, 0 warnings — PASS
+- Lint: 8/8 tasks, 0 errors, 0 warnings — PASS
 - Build: 9/9 packages — PASS
 
 ---
@@ -443,9 +452,9 @@ All quality gates pass cleanly:
 ## Commands Verified This Pass
 
 - `pnpm install --frozen-lockfile` — PASS
-- `pnpm run lint` — PASS (12/12 tasks, 0 warnings)
+- `pnpm run lint` — PASS (8/8 tasks, 0 warnings)
 - `pnpm run typecheck` — PASS (13/13 tasks)
-- `pnpm run test` — PASS, 201 tests / 9 files
+- `pnpm run test` — PASS, 220 tests / 11 files
 - `pnpm run build` — PASS (9/9 packages)
 - `pnpm audit --prod` — PASS, 0 known production vulnerabilities
 - `pnpm audit` — PASS, 0 known vulnerabilities

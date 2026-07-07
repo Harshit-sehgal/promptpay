@@ -45,7 +45,8 @@ export class RegisterDeviceDto {
    * copy of `eventSecret` was lost. This is only accepted for an already
    * authenticated user registering the same fingerprint and only after
    * verifying the account password. Google-linked accounts can use
-   * `recoveryGoogleIdToken`; future providers need equivalent re-auth.
+   * `recoveryGoogleIdToken`; non-Google passwordless accounts require a
+   * support-issued `recoverySupportToken`.
    */
   @IsOptional()
   @IsString()
@@ -63,4 +64,15 @@ export class RegisterDeviceDto {
   @MinLength(16)
   @MaxLength(4096)
   recoveryGoogleIdToken?: string;
+
+  /**
+   * One-time support/admin recovery token for non-Google passwordless
+   * accounts. The server stores only a hash, enforces expiry, and consumes
+   * the token before rotating the device secret.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(32)
+  @MaxLength(256)
+  recoverySupportToken?: string;
 }

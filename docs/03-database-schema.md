@@ -111,7 +111,8 @@ approval_decision: approved, rejected, changes_requested
 
 Constraint:
 
-- one active payout account per user/provider.
+- one active payout account per user/provider via a partial unique index on `(user_id, provider)` where `is_active = true`.
+- inactive historical payout destinations are retained for audit and are not globally unique.
 - same PayPal email across many accounts triggers fraud review; do not hard-block without human review in MVP.
 
 ## Advertisers and campaigns
@@ -177,9 +178,9 @@ Constraint:
 ### blocked_categories
 
 - id uuid primary key
-- category_id uuid references categories(id)
+- category_id uuid nullable references categories(id) on delete set null
 - reason text not null
-- created_by uuid references users(id)
+- blocked_by text not null
 - created_at timestamptz not null
 
 ### country_targeting
@@ -353,6 +354,27 @@ Indexes:
 - created_at timestamptz not null
 - updated_at timestamptz not null
 
+### recovery_debt_cases
+
+- id uuid primary key
+- user_id uuid references users(id) on delete restrict
+- status recovery_debt_case_status not null default open
+- amount_minor int not null
+- currency char(3) not null default 'USD'
+- external_reference text
+- note text
+- opened_by_user_id uuid references users(id) on delete set null
+- resolved_by_user_id uuid references users(id) on delete set null
+- resolved_at timestamptz
+- created_at timestamptz not null
+- updated_at timestamptz not null
+
+Indexes and constraints:
+
+- index on (user_id, currency)
+- index on (status, updated_at)
+- partial unique index on (user_id, currency) where status in ('open', 'in_collections')
+
 ## Fraud and trust
 
 ### fraud_flags
@@ -465,4 +487,3 @@ Indexes:
 - Payout request only includes available confirmed earnings.
 - Manual payout marking moves included entries to paid.
 - Same PayPal email across multiple accounts creates fraud flag.
-
