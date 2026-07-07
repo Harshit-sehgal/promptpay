@@ -45,10 +45,10 @@ export class StripeWebhookController {
     }
 
     // Stripe requires the raw request body for signature verification.
-    // rawBody is populated by the raw-body middleware configured in main.ts.
-    const rawBody = req.rawBody;
+    // express.raw() exposes it as req.body; some adapters expose req.rawBody.
+    const rawBody = req.rawBody ?? (Buffer.isBuffer(req.body) || typeof req.body === 'string' ? req.body : undefined);
     if (!rawBody) {
-      this.logger.error('Stripe webhook missing raw body — raw-body middleware may not be configured');
+      this.logger.error('Stripe webhook missing raw body — raw-body middleware may not be configured before JSON parsing');
       return { received: false, reason: 'missing_raw_body' };
     }
 

@@ -315,6 +315,9 @@ Mitigation:
 
 - Automated stub providers fail closed in production before the processing claim.
 - PayPal Payouts and Stripe Connect require credentials in production.
+- PayPal Payouts validates recipient email and positive amount before any provider network call.
+- Payout method creation validates provider-specific destination shape before storage so bad rows cannot sit dormant until payout processing.
+- Automated payout provider logs should store only provider ids and hashed recipient references, never raw payout destination PII.
 - Stripe Connect payout methods must store a verified connected-account id (`acct_*`) until in-app onboarding is built.
 - Enforce one active payout method per user/provider with an active-only partial unique index; retain inactive destination history for audit.
 - Keep manual payout methods explicit and reconcile them through admin review.

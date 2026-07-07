@@ -51,9 +51,9 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string, twoFactorToken?: string) => Promise<User>;
   signup: (data: SignupPayload) => Promise<User>;
-  googleLogin: (idToken: string, role?: string) => Promise<User>;
+  googleLogin: (idToken: string, role?: string, twoFactorToken?: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -92,8 +92,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const data = (await authFetch('/auth/login', { email, password })) as { user: Record<string, unknown> };
+  const login = useCallback(async (email: string, password: string, twoFactorToken?: string) => {
+    const data = (await authFetch('/auth/login', {
+      email,
+      password,
+      ...(twoFactorToken ? { twoFactorToken } : {}),
+    })) as { user: Record<string, unknown> };
     // The Route Handler already merged /auth/me into the user profile
     const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
@@ -112,10 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return fullUser;
   }, []);
 
-  const googleLogin = useCallback(async (idToken: string, role?: string) => {
+  const googleLogin = useCallback(async (idToken: string, role?: string, twoFactorToken?: string) => {
     const data = (await authFetch('/auth/google', {
       idToken,
       role: role as 'developer' | 'advertiser' | undefined,
+      ...(twoFactorToken ? { twoFactorToken } : {}),
     })) as { user: Record<string, unknown> };
     const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));

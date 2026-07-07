@@ -1,6 +1,9 @@
-import { Controller, Get, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Logger, UseGuards } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../config/prisma.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators';
 
 @Controller('health')
 @SkipThrottle()
@@ -28,7 +31,11 @@ export class HealthController {
     }
 
     return checks;
+  }
+
   @Get('metrics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'super_admin')
   @HttpCode(HttpStatus.OK)
   async metrics() {
     const mem = process.memoryUsage();

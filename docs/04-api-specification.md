@@ -71,25 +71,27 @@ Query: date range, status.
 
 Response: ledger entries and aggregates.
 
-### GET /developer/payouts
+### GET /payout/info
 
 Response: payout account, threshold, available balance, payout requests, payout transactions.
 
-### POST /developer/payout-method
+### POST /payout/method
 
 Request:
 
 ```json
 {
   "provider": "paypal_email",
-  "destination_email": "user@example.com",
+  "destination": "user@example.com",
   "currency": "USD"
 }
 ```
 
+Validation: `paypal_email`, `paypal_payouts`, and `wise` destinations must be recipient emails; `stripe_connect` destinations must be connected account ids beginning with `acct_`; `currency` must be a 3-letter code.
+
 Response: payout account status.
 
-### POST /developer/request-payout
+### POST /payout/request
 
 Request:
 
@@ -123,7 +125,9 @@ Response: export job id.
 
 ### POST /developer/delete-account
 
-Response: deletion request status.
+Request: `confirmation` must be exactly `DELETE_MY_ACCOUNT`, plus either `currentPassword` for password-backed accounts or `googleIdToken` for linked-Google passwordless accounts.
+
+Response: deletion request status. Admin/support erasure uses `/admin/users/:id/erase`; self-service deletion requires this step-up proof.
 
 ## Extension and CLI
 
@@ -315,6 +319,12 @@ Request: amountMinor, currency optional.
 Response: Stripe checkout session id and redirect URL.
 
 ## Admin
+
+### GET /health/metrics
+
+Auth: admin or super_admin JWT.
+
+Response: uptime, memory, database connectivity, and operational counts. The basic `GET /health` liveness endpoint remains public for load balancers and container health checks.
 
 ### GET /admin/overview
 

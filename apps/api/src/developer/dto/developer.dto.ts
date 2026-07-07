@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Max, Min, MaxLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Matches, Max, Min, MaxLength, MinLength } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -49,4 +49,23 @@ export class EarningsQueryDto {
   @Min(1)
   @Max(100)
   limit?: number;
+}
+
+export class DeleteAccountDto {
+  @IsString()
+  @Matches(/^DELETE_MY_ACCOUNT$/, {
+    message: 'confirmation must be exactly DELETE_MY_ACCOUNT',
+  })
+  confirmation!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  currentPassword?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  googleIdToken?: string;
 }

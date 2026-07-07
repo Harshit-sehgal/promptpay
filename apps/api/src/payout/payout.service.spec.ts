@@ -69,6 +69,12 @@ const mockPayPalPayouts = {
 const mockAudit = {
   log: vi.fn().mockResolvedValue(undefined),
 } as any;
+const mockConfig = {
+  get: vi.fn((key: string, fallback?: string) => {
+    if (key === 'PAYOUT_REQUIRE_2FA') return 'false';
+    return fallback ?? undefined;
+  }),
+} as any;
 const mockStripeConnect = {
   readiness: vi.fn().mockReturnValue({ ok: true }),
   initiate: vi.fn().mockResolvedValue({ providerTxId: 'sc_tx_123', status: 'processing' }),
@@ -85,7 +91,7 @@ describe('PayoutService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockAudit, mockPayPalPayouts, mockStripeConnect, mockWise);
+    service = new PayoutService(prismaRef, mockLedger, mockReferral, mockAudit, mockConfig, mockPayPalPayouts, mockStripeConnect, mockWise);
   });
 
   describe('addPayoutMethod', () => {
@@ -95,7 +101,7 @@ describe('PayoutService', () => {
 
       const res = await service.addPayoutMethod('user_123', {
         provider: 'wise',
-        destination: ' test@wise.com ',
+        destination: ' Test@Wise.com ',
         currency: 'usd',
       });
 
@@ -113,6 +119,45 @@ describe('PayoutService', () => {
         },
       });
       expect(res.provider).toBe('wise');
+    });
+
+    it('rejects invalid email payout destinations before storing the method', async () => {
+      await expect(
+        service.addPayoutMethod('user_123', {
+          provider: 'paypal_payouts',
+          destination: 'not-an-email',
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed Stripe Connect destinations before storing the method', async () => {
+      await expect(
+        service.addPayoutMethod('user_123', {
+          provider: 'stripe_connect',
+          destination: 'dev@example.com',
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed payout currency codes before storing the method', async () => {
+      await expect(
+        service.addPayoutMethod('user_123', {
+          provider: 'wise',
+          destination: 'dev@example.com',
+          currency: 'US1',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutAccount.create).not.toHaveBeenCalled();
     });
   });
 
@@ -139,6 +184,26 @@ describe('PayoutService', () => {
           currency: 'USD',
         })
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('requires MFA before payout when PAYOUT_REQUIRE_2FA is enabled', async () => {
+      mockConfig.get.mockImplementationOnce((key: string) =>
+        key === 'PAYOUT_REQUIRE_2FA' ? 'true' : undefined,
+      );
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        status: 'active',
+        emailVerified: true,
+        twoFactorEnabled: false,
+      });
+
+      await expect(
+        service.requestPayout('user_123', {
+          payoutAccountId: 'acc_123',
+          amountMinor: 2000,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw BadRequestException if user has insufficient available earnings', async () => {
@@ -181,7 +246,7 @@ describe('PayoutService', () => {
         .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
       mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 1000 } }); // available 4000
       mockPrisma.fraudFlag.count.mockResolvedValue(0);
-      mockPrisma.payoutAccount.findUnique.mockResolvedValue({ id: 'acc_123', userId: 'user_123' });
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({ id: 'acc_123', userId: 'user_123', currency: 'USD' });
       
       mockPrisma.payoutRequest.create.mockResolvedValue({ id: 'req_123', requestedAmountMinor: 2000 });
       mockPrisma.payoutAllocation.findMany.mockResolvedValue([]); // no other allocations

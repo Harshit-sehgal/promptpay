@@ -191,6 +191,15 @@ model User {
   githubVerified Boolean    @default(false)
   referralCode   String?    @unique
 
+  // ── Multi-factor authentication (TOTP) ──
+  // `twoFactorSecret` stores the base32 TOTP secret. Enrollment is a two-step
+  // flow (setup returns a provisioning secret; enable verifies a code and flips
+  // `twoFactorEnabled`). Rotation requires disabling with a current code before
+  // setting up a replacement secret. Values are encrypted by the API before
+  // storage; legacy plaintext values are only tolerated for read compatibility.
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String? @map("two_factor_secret")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -218,6 +227,7 @@ model User {
   referralIn                 Referral[]            @relation("Referred")
   referralRewards            ReferralReward[]
   apiKeys                    ApiKey[]
+  consents                   Consent[]
 
   // The `email` @unique (above) already serves equality/like scans on
   // email; a separate @@index duplicates storage and write cost.
@@ -1070,4 +1080,44 @@ model ReferralReward {
   @@index([referralId])
   @@index([userId])
   @@map("referral_rewards")
+}
+
+// ══════════════════════════════════════════════════════════
+// Consent & Data Retention
+// ══════════════════════════════════════════════════════════
+
+// Records explicit user consent (e.g. marketing cookies, privacy policy version,
+// terms acceptance). Consent is append-only — withdrawing creates a new row with
+// `granted = false` rather than mutating history, so the audit trail is intact.
+model Consent {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // e.g. "privacy_policy", "marketing_cookies", "terms_of_service"
+  purpose     String
+  // Version of the policy/terms the consent applies to (e.g. "2026-07-01").
+  version     String
+  granted     Boolean  @default(true)
+  // Optional free-text or structured context (IP hash, method of capture).
+  metadata    Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, purpose])
+  @@index([purpose, version])
+  @@map("consents")
+}
+
+// Operator-tunable retention windows (in days) per data category. A single row
+// (keyed by `category`) drives the retention cron so thresholds are config, not
+// code. Categories: "webhook_events", "audit_logs", "sessions", "export_cache".
+model DataRetentionConfig {
+  id        String @id @default(uuid())
+  category  String @unique
+  // Number of days to retain before the retention cron purges. NULL = retain
+  // indefinitely (never purge this category).
+  retainDays Int?
+  updatedAt DateTime @updatedAt
+
+  @@map("data_retention_config")
 }

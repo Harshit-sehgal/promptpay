@@ -45,6 +45,9 @@ const envSchema = z.object({
     ),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('30d'),
+  // App-level encryption key for server-stored TOTP secrets. Required in
+  // production so a database-only leak does not expose reusable MFA seeds.
+  TOTP_SECRET_ENCRYPTION_KEY: z.string().optional(),
   // Extension events use per-device eventSecret values issued at device
   // registration. There is intentionally no shared global extension HMAC.
 
@@ -74,6 +77,11 @@ const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
   SENTRY_ENVIRONMENT: z.string().optional(),
 
+  // Payout security: when 'true', requesting a payout requires the account to
+  // have MFA (TOTP) enrolled. Off by default so existing developer flows are
+  // unaffected until 2FA adoption is broad enough.
+  PAYOUT_REQUIRE_2FA: z.string().optional(),
+
   // PayPal (payouts — later)
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
@@ -96,6 +104,22 @@ const envSchema = z.object({
     message:
       'REDIS_URL is required in production for distributed rate limiting and brute-force tracking',
     path: ['REDIS_URL'],
+  },
+)
+.refine(
+  (env) => {
+    if (
+      env.NODE_ENV === 'production' &&
+      (!env.TOTP_SECRET_ENCRYPTION_KEY || env.TOTP_SECRET_ENCRYPTION_KEY.length < 32)
+    ) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message:
+      'TOTP_SECRET_ENCRYPTION_KEY is required in production and must be at least 32 characters.',
+    path: ['TOTP_SECRET_ENCRYPTION_KEY'],
   },
 )
 .refine(

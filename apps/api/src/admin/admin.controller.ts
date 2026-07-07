@@ -125,6 +125,15 @@ export class AdminController {
     return this.service.getAuditLog(query);
   }
 
+  @Post('users/:id/erase')
+  eraseUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') actorId: string,
+    @CurrentUser('role') actorRole: string,
+  ) {
+    return this.service.eraseUser(actorId, actorRole, id);
+  }
+
   // ── Device Recovery ──
 
   @Post('devices/:id/recovery-token')

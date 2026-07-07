@@ -4,3 +4,4 @@ export * from './refresh.dto';
 export * from './google-oauth.dto';
 export * from './verify-email.dto';
 export * from './password-reset.dto';
+export * from './two-factor.dto';

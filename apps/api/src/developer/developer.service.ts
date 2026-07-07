@@ -1,9 +1,11 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { Prisma } from '@waitlayer/db';
 import { LedgerStatus } from '@waitlayer/shared';
 import { FraudService } from '../fraud/fraud.service';
 import { AuditService } from '../audit/audit.service';
+import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import * as bcrypt from 'bcryptjs';
 
 interface DeveloperSettingsUpdate {
   adsEnabled?: boolean;
@@ -13,12 +15,26 @@ interface DeveloperSettingsUpdate {
   maxAdsPerHour?: number;
 }
 
+interface DeleteAccountAuditActor {
+  actorId: string;
+  actorRole: string;
+  action?: string;
+}
+
+interface DeleteAccountOptions {
+  confirmation?: string;
+  currentPassword?: string;
+  googleIdToken?: string;
+  auditActor?: DeleteAccountAuditActor;
+}
+
 @Injectable()
 export class DeveloperService {
   constructor(
     private prisma: PrismaService,
     private fraud: FraudService,
     private audit: AuditService,
+    private googleVerifier: GoogleTokenVerifier,
   ) {}
 
   async getDashboard(userId: string) {
@@ -294,7 +310,12 @@ export class DeveloperService {
     return { user, earnings, impressions, clicks, payouts };
   }
 
-  async deleteAccount(userId: string) {
+  async deleteAccount(userId: string, options: DeleteAccountOptions = {}) {
+    const auditActor = options.auditActor;
+    if (!auditActor) {
+      await this.verifySelfDeleteStepUp(userId, options);
+    }
+
     // Anonymize user data, revoke all sessions and API keys.
     // The FK ON DELETE SET NULL on api_keys.ownerId will null the owner
     // column when the User row is eventually hard-deleted; this explicit
@@ -308,6 +329,11 @@ export class DeveloperService {
           passwordHash: null,
           googleId: null,
           githubId: null,
+          googleVerified: false,
+          githubVerified: false,
+          emailVerified: false,
+          twoFactorEnabled: false,
+          twoFactorSecret: null,
           name: null,
           referralCode: null,
           country: null,
@@ -326,13 +352,67 @@ export class DeveloperService {
     // Record it so a malicious deletion (compromised token) leaves a
     // forensic trail separate from the (now-anonymized) row itself.
     void this.audit.log({
-      actorId: userId,
-      actorRole: 'developer',
-      action: 'delete_account',
+      actorId: auditActor?.actorId ?? userId,
+      actorRole: auditActor?.actorRole ?? 'developer',
+      action: auditActor?.action ?? 'delete_account',
       targetType: 'user',
       targetId: userId,
     });
     return result;
+  }
+
+  private async verifySelfDeleteStepUp(userId: string, options: DeleteAccountOptions) {
+    if (options.confirmation !== 'DELETE_MY_ACCOUNT') {
+      throw new ForbiddenException('Account deletion requires explicit confirmation');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, passwordHash: true, googleId: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (user.passwordHash) {
+      if (!options.currentPassword) {
+        throw new UnauthorizedException('Current password is required to delete this account');
+      }
+      const ok = await bcrypt.compare(options.currentPassword, user.passwordHash);
+      if (!ok) {
+        void this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'delete_account_reauth_failed',
+          targetType: 'user',
+          targetId: userId,
+          afterSnap: { reason: 'bad_password' },
+        });
+        throw new UnauthorizedException('Invalid current password');
+      }
+      return;
+    }
+
+    if (user.googleId) {
+      if (!options.googleIdToken) {
+        throw new UnauthorizedException('Google re-authentication is required to delete this account');
+      }
+      const payload = await this.googleVerifier.verify(options.googleIdToken);
+      if (!payload.email_verified || payload.sub !== user.googleId || payload.email !== user.email) {
+        void this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'delete_account_reauth_failed',
+          targetType: 'user',
+          targetId: userId,
+          afterSnap: { reason: 'google_mismatch' },
+        });
+        throw new UnauthorizedException('Invalid Google re-authentication token');
+      }
+      return;
+    }
+
+    throw new ForbiddenException(
+      'This account has no supported self-service re-authentication method. Contact support for account erasure.',
+    );
   }
 
   private ensureSettings(userId: string) {

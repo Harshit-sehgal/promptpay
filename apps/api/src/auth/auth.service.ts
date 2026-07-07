@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
 import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -10,7 +10,7 @@ import type { StringValue } from 'ms';
 import { PrismaService } from '../config/prisma.service';
 import { Prisma } from '@waitlayer/db';
 import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
-import { UserRole, UserStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
+import { UserRole, UserStatus, DEFAULT_COMPANY_NAME, generateTotpSecret, buildOtpAuthUrl, verifyTotp } from '@waitlayer/shared';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { FraudService } from '../fraud/fraud.service';
 import { EmailService } from '../email/email.service';
@@ -50,6 +50,7 @@ export class AuthService {
   private readonly accessTtl: StringValue;
   private readonly refreshTtl: StringValue;
   private readonly jwtSecret: string;
+  private readonly totpEncryptionKey: Buffer;
 
   constructor(
     private prisma: PrismaService,
@@ -73,6 +74,7 @@ export class AuthService {
       );
     }
     this.jwtSecret = secret;
+    this.totpEncryptionKey = this.buildTotpEncryptionKey();
   }
 
   /** ── Sign Up ── */
@@ -203,6 +205,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    this.assertTwoFactorSatisfied(user, dto.twoFactorToken);
+
     const tokens = await this.generateTokenPair(user.id, user.role);
 
     // Audit: successful login
@@ -245,6 +249,7 @@ export class AuthService {
       if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
         throw new UnauthorizedException('Invalid credentials');
       }
+      this.assertTwoFactorSatisfied(user, dto.twoFactorToken);
       const tokens = await this.generateTokenPair(user.id, user.role);
       return { user: this.sanitizeUser(user), ...tokens };
     }
@@ -597,6 +602,88 @@ export class AuthService {
     };
   }
 
+  /** ── Two-Factor Authentication (TOTP) ──
+   *  Enrollment is a two-step flow:
+   *    1. `setupTwoFactor` mints a secret and stores it (twoFactorEnabled stays
+   *       false). The client renders the otpauth URL as a QR code.
+   *    2. `enableTwoFactor` verifies a code against the stored secret, then
+   *       flips twoFactorEnabled to true. Rotation requires disabling with a
+   *       current code before setting up a replacement secret.
+   *  Disabling requires a valid current code (step-up) to prevent an attacker
+   *  who has taken over a session from silently turning MFA off.
+   */
+  async setupTwoFactor(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    if (user.twoFactorEnabled) {
+      throw new BadRequestException('Disable two-factor authentication before setting up a new secret');
+    }
+
+    const secret = generateTotpSecret();
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorSecret: this.encryptTotpSecret(secret) },
+    });
+
+    return {
+      secret,
+      otpauthUrl: buildOtpAuthUrl(secret, user.email || userId),
+    };
+  }
+
+  async enableTwoFactor(userId: string, token: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    if (!user.twoFactorSecret) {
+      throw new BadRequestException('Call setupTwoFactor before enabling 2FA');
+    }
+    const secret = this.decryptTotpSecret(user.twoFactorSecret);
+    if (!secret || !verifyTotp(secret, token)) {
+      throw new BadRequestException('Invalid or expired 2FA code');
+    }
+    const updateData: Prisma.UserUpdateInput = { twoFactorEnabled: true };
+    if (!this.isEncryptedTotpSecret(user.twoFactorSecret)) {
+      updateData.twoFactorSecret = this.encryptTotpSecret(secret);
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+    void this.audit.log({
+      actorId: userId,
+      actorRole: user.role,
+      action: 'two_factor_enabled',
+      targetType: 'user',
+      targetId: userId,
+    });
+    return { twoFactorEnabled: true };
+  }
+
+  async disableTwoFactor(userId: string, token: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      // Already disabled — idempotent success.
+      return { twoFactorEnabled: false };
+    }
+    const secret = this.decryptTotpSecret(user.twoFactorSecret);
+    if (!secret || !verifyTotp(secret, token)) {
+      throw new BadRequestException('Invalid or expired 2FA code');
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorEnabled: false, twoFactorSecret: null },
+    });
+    void this.audit.log({
+      actorId: userId,
+      actorRole: user.role,
+      action: 'two_factor_disabled',
+      targetType: 'user',
+      targetId: userId,
+    });
+    return { twoFactorEnabled: false };
+  }
+
   /** ── Password Reset: Request ──
    *  Always returns a generic message to prevent account enumeration.
    *  The stateless token embeds a fingerprint of the current password hash,
@@ -692,8 +779,81 @@ export class AuthService {
       .slice(0, 16);
   }
 
-  private sanitizeUser<T extends { passwordHash?: unknown }>(user: T): Omit<T, 'passwordHash'> {
-    const { passwordHash: _passwordHash, ...safe } = user;
+  private assertTwoFactorSatisfied(
+    user: { id: string; role: string; twoFactorEnabled?: boolean; twoFactorSecret?: string | null },
+    token?: string,
+  ) {
+    if (!user.twoFactorEnabled) return;
+    const secret = user.twoFactorSecret ? this.decryptTotpSecret(user.twoFactorSecret) : null;
+    if (!secret || !token || !verifyTotp(secret, token)) {
+      void this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'login_failed',
+        targetType: 'user',
+        targetId: user.id,
+        afterSnap: { reason: 'bad_2fa' },
+      });
+      throw new UnauthorizedException('Invalid two-factor authentication code');
+    }
+  }
+
+  private buildTotpEncryptionKey(): Buffer {
+    const configured = this.config.get<string>('TOTP_SECRET_ENCRYPTION_KEY', '');
+    if (configured && configured.length >= 32) {
+      return createHash('sha256').update(configured).digest();
+    }
+    if (this.config.get<string>('NODE_ENV', 'development') === 'production') {
+      throw new Error(
+        'TOTP_SECRET_ENCRYPTION_KEY must be set to a 32+ character secret in production.',
+      );
+    }
+    return createHash('sha256').update(`${this.jwtSecret}:totp-secret-encryption`).digest();
+  }
+
+  private isEncryptedTotpSecret(value: string): boolean {
+    return value.startsWith('v1:');
+  }
+
+  private encryptTotpSecret(secret: string): string {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', this.totpEncryptionKey, iv);
+    const encrypted = Buffer.concat([cipher.update(secret, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return [
+      'v1',
+      iv.toString('base64url'),
+      tag.toString('base64url'),
+      encrypted.toString('base64url'),
+    ].join(':');
+  }
+
+  private decryptTotpSecret(stored: string): string | null {
+    if (!this.isEncryptedTotpSecret(stored)) {
+      return stored;
+    }
+    const [, ivRaw, tagRaw, encryptedRaw] = stored.split(':');
+    if (!ivRaw || !tagRaw || !encryptedRaw) return null;
+    try {
+      const decipher = createDecipheriv(
+        'aes-256-gcm',
+        this.totpEncryptionKey,
+        Buffer.from(ivRaw, 'base64url'),
+      );
+      decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
+      return Buffer.concat([
+        decipher.update(Buffer.from(encryptedRaw, 'base64url')),
+        decipher.final(),
+      ]).toString('utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  private sanitizeUser<T extends { passwordHash?: unknown; twoFactorSecret?: unknown }>(
+    user: T,
+  ): Omit<T, 'passwordHash' | 'twoFactorSecret'> {
+    const { passwordHash: _passwordHash, twoFactorSecret: _twoFactorSecret, ...safe } = user;
     return safe;
   }
 

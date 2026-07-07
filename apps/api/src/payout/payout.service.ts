@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, ForbiddenException, Inject, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../config/prisma.service';
 import { EarningsLedger, PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
 import { LedgerService } from '../ledger/ledger.service';
@@ -83,6 +84,7 @@ export class PayoutService {
     private ledger: LedgerService,
     private referral: ReferralService,
     private audit: AuditService,
+    private config: ConfigService,
     @Inject(PayPalPayoutsProvider) private paypalPayouts: PayPalPayoutsProvider,
     @Inject(StripeConnectPayoutProvider) private stripeConnect: StripeConnectPayoutProvider,
     @Inject(WisePayoutProvider) private wise: WisePayoutProvider,
@@ -111,8 +113,7 @@ export class PayoutService {
     destination: string;
     currency?: string;
   }) {
-    const provider = dto.provider as PayoutProvider;
-    const currency = dto.currency?.toUpperCase() || 'USD';
+    const { provider, destination, currency } = this.normalizePayoutMethod(dto);
     const method = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Deactivate the current active method and create the replacement atomically.
       // The DB enforces at most one active account per user/provider with a
@@ -127,7 +128,7 @@ export class PayoutService {
         data: {
           userId,
           provider,
-          destination: dto.destination.trim(),
+          destination,
           currency,
         },
       });
@@ -144,6 +145,37 @@ export class PayoutService {
     });
 
     return method;
+  }
+
+  private normalizePayoutMethod(dto: {
+    provider: string;
+    destination: string;
+    currency?: string;
+  }): { provider: PayoutProvider; destination: string; currency: string } {
+    this.toDbPayoutProvider(dto.provider);
+    const provider = dto.provider as PayoutProvider;
+    const destination = dto.destination?.trim();
+    if (!destination) {
+      throw new BadRequestException('Payout destination is required');
+    }
+
+    const currency = dto.currency?.trim().toUpperCase() || 'USD';
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new BadRequestException('Payout currency must be a 3-letter ISO currency code');
+    }
+
+    if ([PayoutProvider.PAYPAL_EMAIL, PayoutProvider.PAYPAL_PAYOUTS, PayoutProvider.WISE].includes(provider)) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(destination)) {
+        throw new BadRequestException(`Payout destination for ${provider} must be a recipient email`);
+      }
+      return { provider, destination: destination.toLowerCase(), currency };
+    }
+
+    if (provider === PayoutProvider.STRIPE_CONNECT && !/^acct_[A-Za-z0-9]+$/.test(destination)) {
+      throw new BadRequestException('Stripe Connect payout destination must be a connected account id (acct_...)');
+    }
+
+    return { provider, destination, currency };
   }
 
   /** Get payout info for a user */
@@ -417,6 +449,13 @@ export class PayoutService {
     if (!user.emailVerified) {
       throw new ForbiddenException('Email must be verified before requesting a payout');
     }
+    // Optional hard requirement: when PAYOUT_REQUIRE_2FA=true, payouts are
+    // blocked until the account has MFA enrolled. This is off by default so
+    // existing developer flows are unaffected; operators enable it once 2FA
+    // adoption is sufficiently broad (or per risk tier).
+    if (this.config.get<string>('PAYOUT_REQUIRE_2FA') === 'true' && !user.twoFactorEnabled) {
+      throw new ForbiddenException('Two-factor authentication is required before requesting a payout');
+    }
 
     // Minimum threshold check
     if (dto.amountMinor < PAYOUT.MINIMUM_THRESHOLD_MINOR) {
@@ -461,6 +500,16 @@ export class PayoutService {
     }
     if (!account || account.userId !== userId) {
       throw new BadRequestException('Invalid payout account');
+    }
+    // Currency safety: a payout can only move funds in the destination
+    // account's currency. Without this, a USD-denominated earnings balance
+    // could be paid to a EUR account (or vice versa), producing silently
+    // mis-denominated payouts. Full multi-currency ledger accounting is a
+    // follow-up; this guard blocks the cross-currency path today.
+    if ((account.currency ?? 'USD').toUpperCase() !== dto.currency.toUpperCase()) {
+      throw new BadRequestException(
+        `Payout currency ${dto.currency} does not match the payout account currency ${account.currency}`,
+      );
     }
 
     // ── Authoritative allocation inside a transaction ──

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 import { PayoutProviderHandler } from '../payout.service';
 
 interface PayPalTokenResponse {
@@ -111,8 +112,17 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       return { providerTxId: `dev_stub_paypal_${params.payoutRequestId}`, status: 'processing' };
     }
 
-    const token = await this.getAccessToken();
+    const email = params.destination?.trim();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      throw new Error(`Invalid PayPal payout destination '${email}': must be a recipient email.`);
+    }
+
     const amount = (params.amountMinor / 100).toFixed(2);
+    if (!(Number(amount) > 0)) {
+      throw new Error(`Refusing PayPal payout with non-positive amount: ${amount}`);
+    }
+
+    const token = await this.getAccessToken();
     const senderItemId = `wl_${params.payoutRequestId}`;
 
     const res = await fetch(`${this.baseUrl}/v1/payments/payouts`, {
@@ -134,7 +144,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
               value: amount,
               currency: params.currency.toUpperCase(),
             },
-            receiver: params.destination,
+            receiver: email,
             sender_item_id: senderItemId,
             note: 'WaitLayer developer payout',
           },
@@ -152,7 +162,8 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
     const data = await res.json() as PayPalPayoutResponse;
     const payoutItemId = data.items?.[0]?.payout_item_id ?? `paypal_${params.payoutRequestId}`;
 
-    this.logger.log(`PayPal payout initiated: ${payoutItemId} for ${params.destination}`);
+    const destHash = createHash('sha256').update(email).digest('hex').slice(0, 8);
+    this.logger.log(`PayPal payout initiated: ${payoutItemId} for recipient ${destHash}`);
 
     return { providerTxId: payoutItemId, status: 'processing' };
   }

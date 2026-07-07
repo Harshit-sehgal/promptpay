@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 import { PayoutProviderHandler } from '../payout.service';
 
 /**
@@ -160,7 +161,9 @@ export class WisePayoutProvider implements PayoutProviderHandler {
     }
 
     const transfer = (await transferRes.json()) as { id: number; status?: string };
-    this.logger.log(`Wise payout initiated: transfer=${transfer.id} for ${email}`);
+    // Log only a short hash of the destination email — never the raw PII.
+    const destHash = createHash('sha256').update(email).digest('hex').slice(0, 8);
+    this.logger.log(`Wise payout initiated: transfer=${transfer.id} for recipient ${destHash}`);
     return { providerTxId: String(transfer.id), status: transfer.status ?? 'processing' };
   }
 

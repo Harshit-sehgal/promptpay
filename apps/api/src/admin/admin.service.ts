@@ -5,6 +5,7 @@ import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
 import { FraudService } from '../fraud/fraud.service';
+import { DeveloperService } from '../developer/developer.service';
 import { getErrorCode } from '../common/utils/errors';
 
 const DEFAULT_DEVICE_RECOVERY_TOKEN_MINUTES = 15;
@@ -22,6 +23,7 @@ export class AdminService {
     private audit: AuditService,
     private payoutService: PayoutService,
     private fraudService: FraudService,
+    private developerService: DeveloperService,
   ) {}
 
   async getOverview() {
@@ -41,6 +43,28 @@ export class AdminService {
     if (params.role) where.role = params.role as UserRole;
     if (params.search) where.OR = [{ email: { contains: params.search, mode: 'insensitive' } }, { name: { contains: params.search, mode: 'insensitive' } }];
     return this.prisma.user.findMany({ where, select: { id: true, email: true, name: true, role: true, status: true, trustLevel: true, country: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 50 });
+  }
+
+  /**
+   * Admin-initiated account erasure (right-to-be-forgotten / ToS termination).
+   * Reuses the developer self-deletion path (anonymize PII, revoke sessions &
+   * API keys) but logs the action under the admin actor so the forensic trail
+   * is separate from the (now-anonymized) subject row.
+   */
+  async eraseUser(actorId: string, actorRole: string, targetUserId: string) {
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target) throw new BadRequestException('Target user not found');
+    if (target.role === 'super_admin') {
+      throw new BadRequestException('Cannot erase a super-admin account');
+    }
+    await this.developerService.deleteAccount(targetUserId, {
+      auditActor: {
+        actorId,
+        actorRole,
+        action: 'admin_erased_user',
+      },
+    });
+    return { erased: true, userId: targetUserId };
   }
 
   async getPendingCampaigns() {

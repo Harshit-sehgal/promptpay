@@ -109,10 +109,11 @@ Add when:
 Requirements:
 
 - Batch payout idempotency.
-- Webhook processing.
+- Provider status reconciliation through polling.
 - Failed payout retry workflow.
+- Recipient email and amount validation before provider API calls.
+- Redacted payout logs that never include raw recipient PII.
 - Fees and currency conversion accounting.
-- Provider status reconciliation.
 
 ### Phase 3: Stripe Connect
 
@@ -141,6 +142,7 @@ Potential providers:
 - Manual approval for all MVP payouts.
 - Longer hold for new users.
 - Hold on payout destination reuse.
+- API-side validation for payout method destination shape before storage.
 - Hold on new country/device before payout.
 - Hold on high earning velocity.
 - Hold on unresolved fraud flags.
@@ -180,4 +182,3 @@ Required dashboard concepts:
 - Admin mark-paid requires transaction ID.
 - Mark-paid updates payout transaction and ledger atomically.
 - Failed payout releases ledger entries back to available or held depending on reason.
-

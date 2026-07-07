@@ -20,6 +20,7 @@ import { ReferralModule } from './referral/referral.module';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { PrismaModule } from './config/prisma.module';
 import { HealthModule } from './health/health.module';
+import { ComplianceModule } from './compliance/compliance.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { HealthModule } from './health/health.module';
     FraudModule,
     CampaignModule,
     ReferralModule,
+    ComplianceModule,
   ],
   providers: [
     // ApiKeyGuard first: it's a no-op unless `x-api-key` is present AND the

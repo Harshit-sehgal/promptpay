@@ -44,17 +44,23 @@ export default function LoginPage() {
   const { login, googleLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactorToken, setTwoFactorToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const googleInitialized = useRef(false);
+  const twoFactorTokenRef = useRef('');
+
+  useEffect(() => {
+    twoFactorTokenRef.current = twoFactorToken;
+  }, [twoFactorToken]);
 
   const handleMockGoogleLogin = async () => {
     setError('');
     setLoading(true);
     try {
-      await googleLogin('mock-google-token-developer');
+      await googleLogin('mock-google-token-developer', undefined, twoFactorToken);
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
     } catch (err: unknown) {
@@ -103,7 +109,10 @@ export default function LoginPage() {
           callback: async (response: GoogleCredentialResponse) => {
             setError('');
             setLoading(true);
-            const errorMsg = await handleGoogleCredential(response.credential, googleLogin);
+            const errorMsg = await handleGoogleCredential(
+              response.credential,
+              (idToken) => googleLogin(idToken, undefined, twoFactorTokenRef.current),
+            );
             setLoading(false);
             if (errorMsg) {
               setError(errorMsg);
@@ -147,7 +156,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
+      await login(email, password, twoFactorToken);
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
     } catch (err: unknown) {
@@ -207,6 +216,22 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 required
                 autoComplete="current-password"
+                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+              />
+            </div>
+            <div>
+              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                2FA code
+              </label>
+              <input
+                type="text"
+                value={twoFactorToken}
+                onChange={(e) => setTwoFactorToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Optional"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
                 className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
               />
             </div>

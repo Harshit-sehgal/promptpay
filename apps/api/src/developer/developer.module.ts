@@ -4,11 +4,12 @@ import { DeveloperService } from './developer.service';
 import { ApiKeyController } from './api-key.controller';
 import { ApiKeyService } from './api-key.service';
 import { FraudModule } from '../fraud/fraud.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [FraudModule],
+  imports: [FraudModule, AuthModule],
   controllers: [DeveloperController, ApiKeyController],
   providers: [DeveloperService, ApiKeyService],
-  exports: [ApiKeyService],
+  exports: [ApiKeyService, DeveloperService],
 })
 export class DeveloperModule {}

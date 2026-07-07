@@ -4,7 +4,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
 import { RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { DeveloperService } from './developer.service';
-import { UpdateSettingsDto, EarningsQueryDto } from './dto';
+import { UpdateSettingsDto, EarningsQueryDto, DeleteAccountDto } from './dto';
 
 @Controller('developer')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -58,7 +58,11 @@ export class DeveloperController {
   @Post('delete-account')
   @HttpCode(HttpStatus.OK)
   @RequiredScopes('developer:write')
-  deleteAccount(@CurrentUser('id') userId: string) {
-    return this.service.deleteAccount(userId);
+  deleteAccount(@CurrentUser('id') userId: string, @Body() dto: DeleteAccountDto) {
+    return this.service.deleteAccount(userId, {
+      confirmation: dto.confirmation,
+      currentPassword: dto.currentPassword,
+      googleIdToken: dto.googleIdToken,
+    });
   }
 }

@@ -47,7 +47,7 @@ describe('WisePayoutProvider', () => {
         amountMinor: 2500,
         currency: 'USD',
       });
-      expect(res.providerTxId).toMatch(/^wise_stub_/);
+      expect(res.providerTxId).toMatch(/^dev_stub_wise_/);
     });
 
     it('refuses an invalid email destination so money never goes to an unknown recipient', async () => {
@@ -76,7 +76,7 @@ describe('WisePayoutProvider', () => {
 
     it('creates a transfer via the Wise API when configured', async () => {
       const p = makeProvider({ token: 'tok', profileId: '123' });
-      const fetchMock = vi.fn(async (url: string, init: any) => {
+      const fetchMock = vi.fn(async (url: string, _init: any) => {
         // Recipient list (GET on the profile accounts endpoint) → empty array.
         if (url.includes('/profiles/') && url.includes('/accounts')) {
           return new Response(JSON.stringify([]), { status: 200 });

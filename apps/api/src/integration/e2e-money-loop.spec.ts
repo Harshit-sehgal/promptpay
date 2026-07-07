@@ -7,6 +7,7 @@ import { AdvertiserService } from '../advertiser/advertiser.service';
 import { AdminService } from '../admin/admin.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutService } from '../payout/payout.service';
+import { DeveloperService } from '../developer/developer.service';
 import { ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
@@ -295,6 +296,7 @@ interface TestFixtures {
   admin: AdminService;
   audit: AuditService;
   payout: PayoutService;
+  developer: DeveloperService;
 }
 
 function makeServices(): TestFixtures {
@@ -317,12 +319,29 @@ function makeServices(): TestFixtures {
   const advertiser = new AdvertiserService(prismaRef, campaign, audit);
 
   // PayoutService — real instance with mocked prisma, real ledger + audit, dummy paypal payouts provider
-  const payout = new PayoutService(prismaRef, ledger, {} as any, audit, {} as any, {} as any);
+  const payoutConfig = {
+    get: vi.fn((key: string, fallback?: string) => {
+      if (key === 'PAYOUT_REQUIRE_2FA') return 'false';
+      return fallback ?? undefined;
+    }),
+  } as any;
+  const payout = new PayoutService(
+    prismaRef,
+    ledger,
+    {} as any,
+    audit,
+    payoutConfig,
+    {} as any,
+    {} as any,
+    {} as any,
+  );
+
+  const developer = new DeveloperService(prismaRef, fraud, audit, mockGoogleVerifier as any);
 
   // AdminService — real instance with mocked prisma and real audit service and payout service
-  const admin = new AdminService(prismaRef, audit, payout, fraud);
+  const admin = new AdminService(prismaRef, audit, payout, fraud, developer);
 
-  return { extension, ledger, fraud, campaign, advertiser, admin, audit, payout };
+  return { extension, ledger, fraud, campaign, advertiser, admin, audit, payout, developer };
 }
 
 // ── ID helpers ──

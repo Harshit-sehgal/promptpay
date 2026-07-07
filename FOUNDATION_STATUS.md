@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-07 (final pass — all code features, runbooks, and operational docs complete)
+Last updated: 2026-07-07 (current hardening pass)
 
 ---
 
@@ -12,7 +12,7 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 |---|--------|--------|--------------|
 | 1 | Build/monorepo | PASS | `pnpm run build` / `pnpm run typecheck` succeeds; all workspace packages compile |
 | 2 | API contract | PASS | **Zod 3.25 schemas** integrated via `contract-tests.spec.ts` verifying live HTTP responses |
-| 3 | Auth + roles | PASS | Real Postgres integration covers signup/login/refresh/replay/password-reset |
+| 3 | Auth + roles | PASS | Real Postgres integration covers signup/login/refresh/replay/password-reset; unit tests cover TOTP 2FA enforcement and encrypted secret storage |
 | 4 | Authorization | PASS | Integration test asserts 403s on cross-tenant access |
 | 5 | Campaign lifecycle | PASS | Real DB end-to-end: draft → submitted → approved → active |
 | 6 | Ledger/money flow | PASS | Integration asserts CPM and CPC 60/30/10 splits with guarded campaign spend |
@@ -20,12 +20,15 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
 | 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **235 tests across 12 files** (unit + service-level + contract + E2E HTTP) |
+| 11 | Tests/readiness | PASS | **273 tests across 18 files** (unit + service-level + contract + E2E HTTP) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
 | 15 | Tool integrations | PASS | Seed + admin toggle endpoints present |
 | 16 | Webhook events | PASS | Admin view + Stripe logging present |
+| 17 | Compliance/privacy | PASS | Consent ledger, retention cron, migration, and user/admin erasure paths are wired |
+| 18 | Health/observability | PASS | Public liveness probe stays open; operational metrics route is admin-JWT guarded |
+| 19 | Destructive actions | PASS | Self-service account deletion requires explicit confirmation plus password or linked-Google re-authentication |
 
 No silently-failing domains. Where anything remains partial, it is called out below.
 
@@ -154,14 +157,16 @@ No silently-failing domains. Where anything remains partial, it is called out be
 ## 7. Payouts -- Partial
 
 - Multi-provider architecture: Manual, PayPal Email, PayPal Payouts, Wise, Stripe Connect, Razorpay, Payoneer.
-- PayPal Payouts calls the real PayPal API when `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are configured. In dev/test it can return a stub response when credentials are absent; in production it fails closed before the payout is claimed.
+- PayPal Payouts calls the real PayPal API when `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are configured. In dev/test it can return a stub response when credentials are absent; in production it fails closed before the payout is claimed. Malformed recipient emails and non-positive amounts are rejected before any PayPal network call, and payout logs include only a hashed recipient reference.
 - Stripe Connect payouts call Stripe's payout API against the developer connected account when `STRIPE_SECRET_KEY` is configured and the payout method destination is an `acct_*` account id; missing configuration or malformed destinations fail closed before money movement.
 - Wise payouts call the Wise REST API (`/v1/transfers`) against the developer recipient email when `WISE_API_TOKEN` and `WISE_PROFILE_ID` are configured; empty/invalid email destinations and non-positive amounts fail closed. In dev/test without credentials it returns a stub response; in production it fails closed before the payout is claimed.
 - Razorpay and Payoneer remain development stubs and are blocked in `NODE_ENV=production` before the `approved -> processing` claim.
 - Minimum payout threshold: $10.00 (`PAYOUT.MINIMUM_THRESHOLD_MINOR`)
 - Fraud flag check (high/critical) blocks payout requests
 - Restricted/banned users blocked from payout
+- Payout method creation rejects malformed provider destinations before storage: PayPal/Wise require recipient emails, Stripe Connect requires an `acct_*` connected-account id, and currencies must be 3-letter ISO-style codes.
 - Replacing a payout method deactivates the current active destination and creates the replacement in one transaction. The database enforces only one active account per developer/provider while preserving inactive destination history for audit.
+- When `PAYOUT_REQUIRE_2FA=true`, payout requests are blocked until the user has TOTP 2FA enabled.
 
 **Allocation accounting (verified by tests and source):**
 - When a payment allocation is smaller than a ledger entry: the entry is shrunk to the allocated amount and a NEW `confirmed` remainder entry is created with a stable `idempotencyKey`. The `PayoutAllocation.earningsEntryId` references only the shrunken entry.
@@ -246,19 +251,24 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**235 tests across 12 files (unit tests all pass; integration tests require real Postgres + JWT_SECRET env):**
+**273 tests across 18 files (unit tests all pass; integration tests require real Postgres + JWT_SECRET env):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
-| `auth/auth.service.spec.ts` | 27 | Unit | signup, login, refresh, replay detection, verification, password reset |
+| `auth/auth.service.spec.ts` | 32 | Unit | signup, login, refresh, replay detection, verification, password reset, TOTP enforcement, encrypted TOTP secret storage |
+| `auth/totp.spec.ts` | 6 | Unit | RFC 6238 TOTP secret generation, code verification, time-window tolerance, otpauth URL generation, and timing-safe checks |
 | `auth/strategies/google-token-verifier.spec.ts` | 3 | Unit | env constraints; mock token verifier |
 | `common/guards/brute-force.guard.spec.ts` | 5 | Unit | Redis-ready brute-force dimensions, reset, production fail-closed behavior |
 | `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, rate limit, self-click, flags |
 | `ledger/ledger.service.spec.ts` | 27 | Unit | splits, guarded spend, balances, history, hold days |
-| `payout/payout.service.spec.ts` | 25 | Unit | allocation validation, partial split, provider routing, production provider guards, recovery-debt availability |
+| `payout/payout.service.spec.ts` | 29 | Unit | payout-method destination/currency validation, allocation validation, partial split, provider routing, production provider guards, recovery-debt availability, optional 2FA payout gate |
+| `payout/providers/paypal-payouts.provider.spec.ts` | 6 | Unit | PayPal Payouts readiness, dev stub response, recipient email validation, positive-amount guard, payout creation, and PII-safe logging |
 | `payout/providers/stripe-connect.provider.spec.ts` | 7 | Unit | Stripe Connect readiness, connected-account destination validation, payout creation, status mapping |
-| `payout/providers/wise.provider.spec.ts` | 4 | Unit | Wise readiness, email-destination validation, stub response, transfer creation |
+| `payout/providers/wise.provider.spec.ts` | 6 | Unit | Wise readiness, email-destination validation, stub response, transfer creation, PII-safe logging |
+| `developer/developer.service.spec.ts` | 5 | Unit | self-service deletion step-up plus account erasure clears MFA secrets, revokes credentials, and logs the supplied actor |
+| `health/health.controller.spec.ts` | 2 | Unit | `/health` remains probe-safe while `/health/metrics` requires admin JWT roles |
 | `integration/e2e-money-loop.spec.ts` | 40 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement, password/Google/support-gated secret recovery, and recovery-debt case operations |
+| `integration/stripe-webhook.spec.ts` | 4 | Real HTTP + Postgres | Stripe payout webhook signature raw-body path, idempotency, paid reconciliation, and failure release behavior |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
 | `integration/contract-tests.spec.ts` | 32 | **Contract** | Zod validation of API response shapes |
 | `apps/cli/src/lib/normalize-tool.test.ts` | 7 | Unit | CLI tool-name normalization |
@@ -383,6 +393,7 @@ pnpm --filter waitlayer-web dev
 | Real Google OAuth requires env | Low | `GOOGLE_CLIENT_ID` required for production; offline mock-token verifier is dev/test only |
 | No WebSockets / push | Low | Dashboards refresh on user action or polling |
 | Redis required for multi-instance production abuse controls | Low | `REDIS_URL` is required in production; local/test can intentionally fall back to in-memory counters |
+| TOTP encryption key required for production | Med | `TOTP_SECRET_ENCRYPTION_KEY` must be set to a 32+ character secret in production so MFA seeds are encrypted independently of the database |
 | Dev secrets in `docker-compose.yml` | Med | `JWT_SECRET` is a dev-only placeholder and must be rotated before production deploy; compose also enables mock Google auth for local development only |
 | Provider-native re-auth for future non-Google identity providers is not wired | Low | Password users recover via password re-auth; Google-linked users recover via matching Google ID token; non-Google passwordless users can recover through a short-lived support/admin token. Future providers should add native provider re-auth to reduce support burden |
 | Docker Compose has orphan one-off containers locally | Low | `docker compose up -d` warned about old `promptpay-api-run-*` containers from prior manual runs; current named services are healthy |
@@ -456,6 +467,9 @@ Three rounds of code quality improvements were applied across 16 files (178 inse
 | Rewrote `.env.example` with current config keys, `change-me` placeholders, clearer documentation | Faster developer onboarding |
 | Replaced hardcoded base64-looking secrets with recognizable dev-only placeholders in `docker-compose.yml` | No ambiguity about production vs dev secrets |
 | Added healthcheck and `depends_on: condition: service_healthy` to API + web services | Proper container orchestration in Docker Compose |
+| Guarded `/health/metrics` with admin JWT roles while keeping `/health` public | Prevents unauthenticated exposure of operational counts without breaking liveness probes |
+| Added idempotent MFA schema cleanup migration | Removes legacy `users."twoFactorEnabled"` drift while preserving enabled MFA state |
+| Added self-delete step-up verification | Prevents an already-compromised access token from deleting a developer account without current password or linked-Google proof |
 | Added `.js` extension to `start:api` script | Consistent with Dockerfile CMD |
 
 ### Verification
@@ -472,8 +486,11 @@ All quality gates pass cleanly:
 - `pnpm install --frozen-lockfile` — PASS
 - `pnpm run lint` — PASS (8/8 tasks, 0 warnings)
 - `pnpm run typecheck` — PASS (13/13 tasks)
-- `pnpm run test` — PASS, 235 tests / 12 files (228 API + 7 CLI)
+- `pnpm run test` — PASS, 273 tests / 18 files (266 API + 7 CLI)
 - `pnpm run build` — PASS (9/9 packages)
 - `pnpm audit --prod` — PASS, 0 known production vulnerabilities
 - `pnpm audit` — PASS, 0 known vulnerabilities
+- `pnpm --filter @waitlayer/db exec prisma validate --schema prisma/schema.prisma` — PASS
+- `pnpm --filter @waitlayer/db exec prisma migrate status --schema prisma/schema.prisma` — PASS, 21 migrations applied and database schema is up to date
+- `prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` — PASS, empty migration
 - `git diff --check` — PASS

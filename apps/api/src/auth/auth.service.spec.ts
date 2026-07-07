@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { generateTotp } from '@waitlayer/shared';
 
 // ── Prisma mock ──
 const mockPrisma = {
@@ -148,8 +149,51 @@ describe('AuthService', () => {
         role: 'developer',
         status: 'active',
         passwordHash: await (await import('bcryptjs')).hash('mypassword', 12),
+        twoFactorEnabled: false,
+        twoFactorSecret: 'JBSWY3DPEHPK3PXP',
       });
       const result = await service.login({ email: 'ok@test.com', password: 'mypassword' });
+      expect(result.accessToken).toBeDefined();
+      expect('twoFactorSecret' in result.user).toBe(false);
+      expect(mockPrisma.session.create).toHaveBeenCalled();
+    });
+
+    it('requires a valid TOTP code when two-factor authentication is enabled', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-2fa',
+        email: '2fa@test.com',
+        role: 'developer',
+        status: 'active',
+        passwordHash: await (await import('bcryptjs')).hash('mypassword', 12),
+        twoFactorEnabled: true,
+        twoFactorSecret: 'JBSWY3DPEHPK3PXP',
+      });
+
+      await expect(service.login({ email: '2fa@test.com', password: 'mypassword' })).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
+
+    it('returns tokens for an MFA-enabled user with a valid TOTP code', async () => {
+      const { service } = makeService();
+      const secret = 'JBSWY3DPEHPK3PXP';
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-2fa',
+        email: '2fa@test.com',
+        role: 'developer',
+        status: 'active',
+        passwordHash: await (await import('bcryptjs')).hash('mypassword', 12),
+        twoFactorEnabled: true,
+        twoFactorSecret: secret,
+      });
+
+      const result = await service.login({
+        email: '2fa@test.com',
+        password: 'mypassword',
+        twoFactorToken: generateTotp(secret),
+      });
       expect(result.accessToken).toBeDefined();
       expect(mockPrisma.session.create).toHaveBeenCalled();
     });
@@ -467,6 +511,30 @@ describe('AuthService', () => {
       expect(res.accessToken).toBeDefined();
     });
 
+    it('requires a valid TOTP code for an MFA-enabled Google account', async () => {
+      const { service, googleVerifier } = makeService();
+      googleVerifier.verify.mockResolvedValue({
+        sub: 'google-2fa',
+        email: 'google-2fa@test.com',
+        email_verified: true,
+        name: 'Google MFA User',
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-google-2fa',
+        email: 'google-2fa@test.com',
+        googleId: 'google-2fa',
+        role: 'developer',
+        status: 'active',
+        twoFactorEnabled: true,
+        twoFactorSecret: 'JBSWY3DPEHPK3PXP',
+      });
+
+      await expect(service.googleOAuth({ idToken: 'some-token' })).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
+
     it('should create a new developer profile and return tokens if new user signs up via Google', async () => {
       const { service, googleVerifier } = makeService();
       googleVerifier.verify.mockResolvedValue({
@@ -495,6 +563,40 @@ describe('AuthService', () => {
       const res = await service.googleOAuth({ idToken: 'some-token', role: 'developer' as any });
       expect(res.user.id).toBe('u-new-google');
       expect(res.accessToken).toBeDefined();
+    });
+  });
+
+  describe('two-factor setup', () => {
+    it('stores the TOTP secret encrypted while returning the provisioning secret once', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-setup',
+        email: 'setup@test.com',
+        role: 'developer',
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+      });
+
+      const result = await service.setupTwoFactor('u-setup');
+      const storedSecret = mockPrisma.user.update.mock.calls[0][0].data.twoFactorSecret;
+
+      expect(result.secret).toEqual(expect.any(String));
+      expect(storedSecret).toEqual(expect.stringMatching(/^v1:/));
+      expect(storedSecret).not.toBe(result.secret);
+    });
+
+    it('refuses to rotate an enabled TOTP secret without first disabling 2FA', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-2fa',
+        email: '2fa@test.com',
+        role: 'developer',
+        twoFactorEnabled: true,
+        twoFactorSecret: 'JBSWY3DPEHPK3PXP',
+      });
+
+      await expect(service.setupTwoFactor('u-2fa')).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
     });
   });
 });

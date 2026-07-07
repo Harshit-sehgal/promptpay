@@ -55,6 +55,8 @@ export const developerApi = {
   getTrust: () => api.get('/developer/trust'),
   updateSettings: (data: Record<string, unknown>) => api.patch('/developer/settings', data),
   exportData: () => api.post('/developer/export-data'),
+  deleteAccount: (data: { confirmation: 'DELETE_MY_ACCOUNT'; currentPassword?: string; googleIdToken?: string }) =>
+    api.post('/developer/delete-account', data),
   listApiKeys: () => api.get('/developer/api-keys'),
   createApiKey: (data: { scopes: string[]; advertiserId?: string; expiresAt?: string }) =>
     api.post('/developer/api-keys', data),

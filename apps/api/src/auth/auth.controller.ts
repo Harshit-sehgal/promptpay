@@ -21,6 +21,8 @@ import {
   VerifyEmailConfirmDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  TwoFactorEnableDto,
+  TwoFactorDisableDto,
 } from './dto';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 
@@ -140,6 +142,27 @@ export class AuthController {
       }
       throw err;
     }
+  }
+
+  @Post('2fa/setup')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  setupTwoFactor(@CurrentUser('id') userId: string) {
+    return this.authService.setupTwoFactor(userId);
+  }
+
+  @Post('2fa/enable')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  enableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorEnableDto) {
+    return this.authService.enableTwoFactor(userId, dto.token);
+  }
+
+  @Post('2fa/disable')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  disableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorDisableDto) {
+    return this.authService.disableTwoFactor(userId, dto.token);
   }
 
   @Post('password/forgot')

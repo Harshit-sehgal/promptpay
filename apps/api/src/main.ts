@@ -13,6 +13,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { loadEnv } from '@waitlayer/config';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   // Validate env on startup. Non-production environments allow
@@ -21,9 +22,14 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
+  // Raw body parsing for the Stripe webhook route — Stripe needs the raw
+  // request body for signature verification. Mount this before general JSON
+  // parsing so the webhook body is not consumed as an object first.
+  app.use('/api/v1/payout/stripe/webhook', raw({ type: 'application/json', limit: '256kb' }));
+
   // ── Body-parser size limits ─────────────────────────────────────────
   //    NestJS's default body-parser caps JSON at 100kb, but that default
-  //    is implicit and the Stripe webhook `raw()` mount (below) had no
+  //    is implicit and an unbounded Stripe webhook `raw()` mount would have no
   //    limit (potentially unbounded). An attacker submitting a large JSON
   //    body to any non-webhook route could amplify IO/CPU before the
   //    throttle guard reacts. Pin explicit limits so the cap is enforced
@@ -64,13 +70,6 @@ async function bootstrap() {
     : 1;
   app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
 
-  // Raw body parsing for the Stripe webhook route — Stripe needs the raw
-  // request body for signature verification. Applied BEFORE the global
-  // prefix so the path matches the effective route. Only one Stripe webhook
-  // controller exists (POST /api/v1/payout/stripe/webhook) — the duplicate
-  // orphan controller at /api/v1/webhooks/stripe was removed.
-  app.use('/api/v1/payout/stripe/webhook', raw({ type: 'application/json', limit: '256kb' }));
-
   app.setGlobalPrefix('api/v1');
 
   app.useGlobalPipes(
@@ -91,6 +90,22 @@ async function bootstrap() {
     // origin is required; reflect only that origin.
     origin: env.WEB_BASE_URL,
     credentials: true,
+  });
+
+  // ── OpenAPI / Swagger docs ───────────────────────────────
+  // Machine-readable API contract + interactive UI at /api/v1/docs. This is
+  // read-only documentation; it never alters requests. Useful for the web,
+  // CLI, and (future) external developer clients.
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('WaitLayer API')
+    .setDescription('Privacy-first reward marketplace for AI wait time and developer attention')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .addApiKey(undefined, 'X-Api-Key')
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('docs', app, document, {
+    swaggerOptions: { persistAuthorization: true },
   });
 
   await app.listen(env.API_PORT);
