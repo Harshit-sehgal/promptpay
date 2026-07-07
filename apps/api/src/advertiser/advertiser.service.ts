@@ -458,68 +458,124 @@ export class AdvertiserService {
     return updated;
   }
 
-  /** Get reports for advertiser campaigns */
+  /** Get reports for advertiser campaigns — aggregated by campaign */
   async getReports(advertiserId: string, params: { campaignId?: string; from?: string; to?: string }) {
     const campaignWhere: Prisma.CampaignWhereInput = { advertiserId };
     if (params.campaignId) campaignWhere.id = params.campaignId;
 
     const campaigns = await this.prisma.campaign.findMany({
       where: campaignWhere,
-      select: { id: true },
+      select: { id: true, name: true, status: true, currency: true },
     });
     const campaignIds = campaigns.map((campaign) => campaign.id);
 
-    const impressionTimeWhere: Pick<Prisma.AdImpressionWhereInput, 'createdAt'> = {};
-    const clickTimeWhere: Pick<Prisma.AdClickWhereInput, 'createdAt'> = {};
-    if (params.from || params.to) {
-      const gte = params.from ? new Date(params.from) : undefined;
-      const lte = params.to ? new Date(params.to) : undefined;
-      // Reject malformed date strings up-front — `new Date("not a date")`
-      // returns Invalid Date, which silently widens the query to "no lower
-      // bound" or "no upper bound" depending on the field. The HTTP
-      // controller already catches this; this guards non-HTTP callers.
-      if (gte && Number.isNaN(gte.getTime())) {
-        throw new BadRequestException(`Invalid 'from' date: ${params.from}`);
-      }
-      if (lte && Number.isNaN(lte.getTime())) {
-        throw new BadRequestException(`Invalid 'to' date: ${params.to}`);
-      }
-      impressionTimeWhere.createdAt = { gte, lte };
-      clickTimeWhere.createdAt = { gte, lte };
+    // Parse date range
+    const gte = params.from ? new Date(params.from) : undefined;
+    const lte = params.to ? new Date(params.to) : undefined;
+    if (gte && Number.isNaN(gte.getTime())) {
+      throw new BadRequestException(`Invalid 'from' date: ${params.from}`);
+    }
+    if (lte && Number.isNaN(lte.getTime())) {
+      throw new BadRequestException(`Invalid 'to' date: ${params.to}`);
     }
 
-    // Allow-list projections — never return sensitive internal fields
-    // (impressionTokenHash, ipHash, idempotencyKey, deviceId, sessionId)
-    // to advertisers. The report only needs performance metrics.
-    const impressionSelect: Prisma.AdImpressionSelect = {
-      id: true, campaignId: true, creativeId: true, userId: true,
-      createdAt: true, renderedAt: true, qualifiedAt: true,
-      visibleDurationMs: true, visibleSurface: true, isBillable: true,
-      invalidationReason: true, invalidatedAt: true,
+    const timeFilter = { createdAt: { gte, lte } } as const;
+
+    // Get daily aggregated data for trend chart and campaign breakdown
+    // Group impressions by campaign + day
+    const rawImpressions = await this.prisma.adImpression.findMany({
+      where: { campaignId: { in: campaignIds }, isBillable: true, ...timeFilter },
+      select: { campaignId: true, userId: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const rawClicks = await this.prisma.adClick.findMany({
+      where: { campaignId: { in: campaignIds }, isValid: true, ...timeFilter },
+      select: { campaignId: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Get spend per campaign from advertiser ledger
+    const spendRows = await this.prisma.advertiserLedger.groupBy({
+      by: ['campaignId'],
+      where: {
+        advertiserId,
+        campaignId: { in: campaignIds },
+        entryType: 'debit',
+        status: { in: ['confirmed', 'paid'] },
+        ...timeFilter,
+      },
+      _sum: { amountMinor: true },
+    });
+    const spendByCampaign = new Map(spendRows.map((r) => [r.campaignId, r._sum.amountMinor ?? 0]));
+
+    // Build campaign name lookup
+    const campaignNames = new Map(campaigns.map((c) => [c.id, c.name]));
+    const campaignCurrencies = new Map(campaigns.map((c) => [c.id, c.currency]));
+
+    // Aggregate impressions per campaign
+    const impByCampaign = new Map<string, number>();
+    for (const imp of rawImpressions) {
+      impByCampaign.set(imp.campaignId, (impByCampaign.get(imp.campaignId) ?? 0) + 1);
+    }
+
+    // Aggregate clicks per campaign
+    const clicksByCampaign = new Map<string, number>();
+    for (const click of rawClicks) {
+      clicksByCampaign.set(click.campaignId, (clicksByCampaign.get(click.campaignId) ?? 0) + 1);
+    }
+
+    // Daily aggregation for trend chart
+    const dailyMap = new Map<string, { impressions: number; clicks: number; date: string }>();
+    for (const imp of rawImpressions) {
+      const day = imp.createdAt.toISOString().slice(0, 10);
+      const entry = dailyMap.get(day) ?? { date: day, impressions: 0, clicks: 0 };
+      entry.impressions++;
+      dailyMap.set(day, entry);
+    }
+    for (const click of rawClicks) {
+      const day = click.createdAt.toISOString().slice(0, 10);
+      const entry = dailyMap.get(day) ?? { date: day, impressions: 0, clicks: 0 };
+      entry.clicks++;
+      dailyMap.set(day, entry);
+    }
+    const dailyTrend = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+    // Build per-campaign rows
+    const rows = campaigns.map((campaign) => {
+      const impressions = impByCampaign.get(campaign.id) ?? 0;
+      const clicks = clicksByCampaign.get(campaign.id) ?? 0;
+      const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+      const spendMinor = spendByCampaign.get(campaign.id) ?? 0;
+      return {
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        status: campaign.status,
+        impressions,
+        clicks,
+        ctr,
+        spendMinor,
+        currency: campaign.currency,
+      };
+    });
+
+    // Summary
+    const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
+    const totalClicks = rows.reduce((s, r) => s + r.clicks, 0);
+    const totalSpendMinor = rows.reduce((s, r) => s + r.spendMinor, 0);
+    const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+
+    return {
+      rows,
+      dailyTrend,
+      summary: {
+        totalImpressions,
+        totalClicks,
+        totalSpendMinor,
+        avgCtr,
+        totalCampaigns: campaigns.length,
+      },
     };
-
-    const clickSelect: Prisma.AdClickSelect = {
-      id: true, impressionId: true, campaignId: true, userId: true,
-      creativeId: true, clickedAt: true, targetUrl: true,
-      isValid: true, invalidationReason: true, createdAt: true,
-    };
-
-    const [impressions, clicks] = await Promise.all([
-      this.prisma.adImpression.findMany({
-        where: { ...impressionTimeWhere, campaignId: { in: campaignIds }, isBillable: true },
-        select: impressionSelect,
-        orderBy: { createdAt: 'desc' },
-        take: 500,
-      }),
-      this.prisma.adClick.findMany({
-        where: { ...clickTimeWhere, campaignId: { in: campaignIds }, isValid: true },
-        select: clickSelect,
-        orderBy: { createdAt: 'desc' },
-        take: 500,
-      }),
-    ]);
-
-    return { impressions, clicks };
   }
 
   // ── Private ──
