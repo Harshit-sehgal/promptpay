@@ -1,5 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
+
 import {
   normalizeCreativeDestination,
   normalizeCreativeUpdate,

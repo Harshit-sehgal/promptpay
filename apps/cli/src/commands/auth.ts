@@ -1,8 +1,9 @@
 import chalk from 'chalk';
-import { prompt } from '../lib/prompt';
-import { setCredentials, getCredentials } from '../lib/credentials';
+
 import { ApiClient } from '../lib/api-client';
+import { getCredentials,setCredentials } from '../lib/credentials';
 import { getErrorMessage } from '../lib/errors';
+import { prompt } from '../lib/prompt';
 
 export async function runAuth(opts: { email?: string; signup?: boolean }) {
   const existing = getCredentials();

@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+
+import { CurrentUser,Roles } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles, CurrentUser } from '../common/decorators';
-import { ReferralService } from './referral.service';
 import { ApplyReferralDto } from './dto';
+import { ReferralService } from './referral.service';
 
 @ApiTags('Referral')
 @Controller('referral')

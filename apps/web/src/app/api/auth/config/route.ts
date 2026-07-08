@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+
 import { apiBaseUrl } from '../_lib/cookies';
 
 /**

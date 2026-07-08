@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { describe, expect, it } from 'vitest';
+
 import { RolesGuard } from './roles.guard';
 
 function guard(requiredRoles?: string[]) {

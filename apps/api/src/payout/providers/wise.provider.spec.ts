@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach,describe, expect, it, vi } from 'vitest';
+
 import { WisePayoutProvider } from './wise.provider';
 
 function makeProvider(opts: { token?: string; profileId?: string; mode?: string; nodeEnv?: string }) {

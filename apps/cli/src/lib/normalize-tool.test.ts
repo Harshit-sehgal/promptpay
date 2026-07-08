@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { normalizeToolType } from './tool-types';
+import { describe, expect,it } from 'vitest';
+
 import { formatCurrency, formatNumber } from './format';
+import { normalizeToolType } from './tool-types';
 
 describe('normalizeToolType', () => {
   it('maps known tool names to their enum values', () => {

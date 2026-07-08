@@ -1,5 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
 import { isIP } from 'node:net';
+import { BadRequestException } from '@nestjs/common';
 
 export interface PublicHttpsUrl {
   value: string;

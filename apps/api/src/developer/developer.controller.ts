@@ -1,11 +1,12 @@
-import { Controller, Get, Post, Patch, Body, UseGuards, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus,Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+
+import { CurrentUser,Roles } from '../common/decorators';
+import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles, CurrentUser } from '../common/decorators';
-import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { DeveloperService } from './developer.service';
-import { UpdateSettingsDto, EarningsQueryDto, DeleteAccountDto } from './dto';
+import { DeleteAccountDto,EarningsQueryDto, UpdateSettingsDto } from './dto';
 
 @ApiTags('Developer')
 @Controller('developer')

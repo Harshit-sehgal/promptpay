@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
   CheckCircle2,
@@ -17,10 +16,11 @@ import {
   Wallet,
   Zap,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { developerApi, referralApi } from '@/lib/api/services';
-import { getErrorMessage } from '@/lib/api/errors';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { getErrorMessage } from '@/lib/api/errors';
+import { developerApi, referralApi } from '@/lib/api/services';
 import { formatCurrencyBreakdown } from '@/lib/format';
 
 interface DashboardData {

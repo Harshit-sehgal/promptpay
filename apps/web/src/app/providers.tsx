@@ -1,8 +1,9 @@
 'use client';
 
-import { AuthProvider } from '@/lib/auth-context';
-import { ToastProvider } from '@waitlayer/ui';
 import { ReactNode } from 'react';
+import { AuthProvider } from '@/lib/auth-context';
+
+import { ToastProvider } from '@waitlayer/ui';
 
 export function Providers({ children }: { children: ReactNode }) {
   return (

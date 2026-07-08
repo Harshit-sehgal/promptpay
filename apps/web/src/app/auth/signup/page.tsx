@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, FormEvent, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { FormEvent, useEffect, useRef,useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
 
@@ -33,6 +33,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [referrerCode, setReferrerCode] = useState('');
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState('');
@@ -146,6 +147,10 @@ export default function SignupPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!ageConfirmed) {
+      setError('You must confirm you are at least 18 years old to continue.');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -266,9 +271,26 @@ export default function SignupPage() {
                 />
               </div>
             )}
+            <label className="flex items-start gap-2.5 text-surface-600 text-[13px] leading-relaxed cursor-pointer">
+              <input
+                type="checkbox"
+                checked={ageConfirmed}
+                onChange={(e) => setAgeConfirmed(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-surface-300 text-brand-500 focus:ring-brand-400/20"
+                required
+              />
+              <span>
+                I confirm that I am at least 18 years old and have read the{' '}
+                <Link href="/privacy" className="text-brand-500 hover:text-brand-600 underline underline-offset-2">
+                  Privacy Policy
+                </Link>
+                .
+              </span>
+            </label>
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !ageConfirmed}
               aria-busy={loading}
               className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
             >

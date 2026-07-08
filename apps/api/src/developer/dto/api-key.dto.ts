@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, MinLength, MaxLength, IsUUID, IsDateString, ArrayMinSize, ArrayMaxSize, ArrayUnique } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique,IsArray, IsDateString, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 const ALLOWED_API_KEY_SCOPES = [
   'campaigns:read',

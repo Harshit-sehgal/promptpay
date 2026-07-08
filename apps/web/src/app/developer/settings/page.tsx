@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, FormEvent } from 'react';
 import type { AxiosResponse } from 'axios';
 import Image from 'next/image';
+import { FormEvent,useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
-import { developerApi, authApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
+import { authApi,developerApi } from '@/lib/api/services';
+
 import { useToast } from '@waitlayer/ui';
 
 interface DevSettings {

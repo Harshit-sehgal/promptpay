@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AuthService } from './auth.service';
-import { JwtService } from '@nestjs/jwt';
+import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { BadRequestException,ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+
 import { generateTotp } from '@waitlayer/shared';
+
+import { AuthService } from './auth.service';
 
 // ── Prisma mock ──
 const mockPrisma = {

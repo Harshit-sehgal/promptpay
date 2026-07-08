@@ -1,5 +1,6 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { HttpException, HttpStatus } from '@nestjs/common';
+
 import { BruteForceGuard, RequestLike } from './brute-force.guard';
 
 function authReq(path: string, ip = '203.0.113.10'): RequestLike {

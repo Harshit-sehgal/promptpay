@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { referralApi } from '@/lib/api/services';
-import { getErrorMessage } from '@/lib/api/errors';
 import { LoadingSpinner, StatusBadge } from '@/components';
-import { useToast } from '@waitlayer/ui';
+import { getErrorMessage } from '@/lib/api/errors';
+import { referralApi } from '@/lib/api/services';
 import { formatCurrencyBreakdown, formatDate } from '@/lib/format';
+
+import { useToast } from '@waitlayer/ui';
 
 interface ReferralData {
   referralCode: string | null;

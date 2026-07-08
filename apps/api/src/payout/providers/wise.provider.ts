@@ -1,6 +1,7 @@
+import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+
 import { PayoutProviderHandler } from '../payout.service';
 
 /**

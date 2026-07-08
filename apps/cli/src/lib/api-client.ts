@@ -1,9 +1,11 @@
 import * as crypto from 'crypto';
-import * as os from 'os';
 import * as http from 'http';
 import * as https from 'https';
+import * as os from 'os';
+
 import { signPayload } from '@waitlayer/shared';
-import { Credentials, getCredentials, setCredentials, storeDeviceEventSecret, getDeviceEventSecret } from './credentials';
+
+import { Credentials, getCredentials, getDeviceEventSecret,setCredentials, storeDeviceEventSecret } from './credentials';
 import { normalizeToolType } from './tool-types';
 
 const API_URL = process.env.WAITLAYER_API_URL ?? (process.env.NODE_ENV === 'production' ? 'https://api.waitlayer.com/api/v1' : 'http://localhost:4002/api/v1');

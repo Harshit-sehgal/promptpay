@@ -1,13 +1,15 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { FraudFlagStatus, FraudSeverity, Prisma, RecoveryDebtCaseStatus, UserRole, UserStatus } from '@waitlayer/db';
 import * as crypto from 'crypto';
-import { PrismaService } from '../config/prisma.service';
+import { BadRequestException,Injectable } from '@nestjs/common';
+
+import { FraudFlagStatus, FraudSeverity, Prisma, RecoveryDebtCaseStatus, UserRole, UserStatus } from '@waitlayer/db';
+
 import { AuditService } from '../audit/audit.service';
-import { PayoutService } from '../payout/payout.service';
-import { FraudService } from '../fraud/fraud.service';
-import { DeveloperService } from '../developer/developer.service';
 import { getErrorCode } from '../common/utils/errors';
+import { PrismaService } from '../config/prisma.service';
+import { DeveloperService } from '../developer/developer.service';
+import { FraudService } from '../fraud/fraud.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
+import { PayoutService } from '../payout/payout.service';
 
 const DEFAULT_DEVICE_RECOVERY_TOKEN_MINUTES = 15;
 const MAX_DEVICE_RECOVERY_TOKEN_MINUTES = 60;

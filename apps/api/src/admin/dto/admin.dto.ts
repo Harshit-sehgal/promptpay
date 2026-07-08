@@ -1,4 +1,5 @@
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Min, Max, MaxLength } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength,Min } from 'class-validator';
+
 import { FraudSeverity } from '@waitlayer/shared';
 
 // ── Campaign approval ──

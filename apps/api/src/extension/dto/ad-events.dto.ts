@@ -1,4 +1,5 @@
-import { IsString, IsEnum, IsUUID, IsOptional, IsArray, IsNumber, Min, MinLength, MaxLength, Max, IsDateString } from 'class-validator';
+import { IsArray, IsDateString,IsEnum, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+
 import { ToolType } from '@waitlayer/shared';
 
 export class AdRequestDto {

@@ -1,15 +1,16 @@
-import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query,UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+
+import { CurrentUser,Roles } from '../common/decorators';
+import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles, CurrentUser } from '../common/decorators';
-import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
-import { PayoutService } from './payout.service';
 import {
   AddPayoutMethodDto,
-  RequestPayoutDto,
   PayoutHistoryQueryDto,
+  RequestPayoutDto,
 } from './dto';
+import { PayoutService } from './payout.service';
 
 @ApiTags('Payout')
 @Controller('payout')

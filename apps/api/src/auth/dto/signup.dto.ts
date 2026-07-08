@@ -1,5 +1,7 @@
-import { IsEmail, IsString, IsEnum, MaxLength, IsOptional } from 'class-validator';
-import { UserRole, SIGNUP_ALLOWED_ROLES } from '@waitlayer/shared';
+import { IsEmail, IsEnum, IsOptional,IsString, MaxLength } from 'class-validator';
+
+import { SIGNUP_ALLOWED_ROLES,UserRole } from '@waitlayer/shared';
+
 import { IsStrongPassword } from '../../common/validators/password.validator';
 
 export class SignUpDto {

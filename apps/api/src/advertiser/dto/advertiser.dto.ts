@@ -1,4 +1,5 @@
-import { IsEmail, IsString, IsOptional, IsUrl, IsIn, IsInt, IsBoolean, IsEnum, MaxLength, Min, Max, Length, Matches } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUrl, Length, Matches,Max, MaxLength, Min } from 'class-validator';
+
 import { BidType } from '@waitlayer/shared';
 
 const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'brl', 'mxn', 'sgd'] as const;

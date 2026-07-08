@@ -1,4 +1,5 @@
-import { IsInt, IsOptional, IsString, Min, Max, MaxLength, IsEnum, IsArray, IsUUID, Length, Matches } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches,Max, MaxLength, Min } from 'class-validator';
+
 import { PayoutProvider } from '@waitlayer/shared';
 
 export class AddPayoutMethodDto {

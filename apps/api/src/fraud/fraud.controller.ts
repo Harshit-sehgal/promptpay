@@ -1,12 +1,13 @@
-import { Controller, Get, Post, Param, Body, Query, UseGuards, UseInterceptors, ParseUUIDPipe } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe,Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+
+import { Roles } from '../common/decorators';
+import { CurrentUser } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
-import { Roles } from '../common/decorators';
-import { CurrentUser } from '../common/decorators';
-import { FraudService } from './fraud.service';
 import { ResolveFlagDto } from './dto/resolve-flag.dto';
+import { FraudService } from './fraud.service';
 
 @ApiTags('Fraud')
 @Controller('fraud')

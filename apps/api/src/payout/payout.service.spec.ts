@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PayoutService } from './payout.service';
+import { beforeEach,describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+
+import { PayoutService } from './payout.service';
 import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
 
 const mockPrisma = {

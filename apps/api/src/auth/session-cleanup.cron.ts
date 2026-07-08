@@ -1,4 +1,5 @@
-import { Injectable, OnApplicationBootstrap, OnModuleDestroy, Logger } from '@nestjs/common';
+import { Injectable, Logger,OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+
 import { PrismaService } from '../config/prisma.service';
 
 /**

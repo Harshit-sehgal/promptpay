@@ -1,1 +1,1 @@
-export { AddPayoutMethodDto, RequestPayoutDto, PayoutHistoryQueryDto } from './payout.dto';
+export { AddPayoutMethodDto, PayoutHistoryQueryDto,RequestPayoutDto } from './payout.dto';

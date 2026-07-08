@@ -1,14 +1,15 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { JwtStrategy } from './strategies/jwt.strategy';
-import { GoogleTokenVerifier } from './strategies/google-token-verifier';
-import { FraudModule } from '../fraud/fraud.module';
+
 import { EmailModule } from '../email/email.module';
+import { FraudModule } from '../fraud/fraud.module';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
 import { SessionCleanupCron } from './session-cleanup.cron';
+import { GoogleTokenVerifier } from './strategies/google-token-verifier';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [

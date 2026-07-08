@@ -1,10 +1,11 @@
-import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { ConfigurationManager } from './config';
-import { WaitStateDetector } from './wait-detector';
-import { ApiClient } from './api-client';
+import * as vscode from 'vscode';
+
 import { AdPanel } from './ad-panel';
+import { ApiClient } from './api-client';
+import { ConfigurationManager } from './config';
 import { StatusBar } from './status-bar';
+import { WaitStateDetector } from './wait-detector';
 
 export function activate(context: vscode.ExtensionContext) {
   const config = new ConfigurationManager(context.secrets);

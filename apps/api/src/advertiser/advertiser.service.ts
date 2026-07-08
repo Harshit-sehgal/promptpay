@@ -1,11 +1,13 @@
-import { Injectable, ForbiddenException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger,NotFoundException } from '@nestjs/common';
+
 import { BidType, Prisma } from '@waitlayer/db';
-import { PrismaService } from '../config/prisma.service';
-import { CampaignService } from '../campaign/campaign.service';
+import { AD_SERVING, CampaignStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
+
 import { AuditService } from '../audit/audit.service';
-import { CampaignStatus, AD_SERVING, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
+import { CampaignService } from '../campaign/campaign.service';
 import { getErrorCode } from '../common/utils/errors';
 import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
+import { PrismaService } from '../config/prisma.service';
 
 /** Valid campaign status transitions */
 const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {

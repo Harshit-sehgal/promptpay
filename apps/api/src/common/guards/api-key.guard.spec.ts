@@ -1,7 +1,8 @@
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiKeyGuard } from './api-key.guard';
+import { ExecutionContext } from '@nestjs/common';
+
 import { ALLOW_API_KEY, REQUIRED_API_KEY_SCOPES } from '../decorators/allow-api-key.decorator';
+import { ApiKeyGuard } from './api-key.guard';
 
 interface RequestLike {
   headers: Record<string, string | undefined>;

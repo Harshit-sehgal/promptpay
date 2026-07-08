@@ -1,1 +1,1 @@
-export { UpdateSettingsDto, EarningsQueryDto, DeleteAccountDto } from './developer.dto';
+export { DeleteAccountDto,EarningsQueryDto, UpdateSettingsDto } from './developer.dto';

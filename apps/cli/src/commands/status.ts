@@ -1,6 +1,7 @@
 import chalk from 'chalk';
-import { getCredentials } from '../lib/credentials';
+
 import { ApiClient } from '../lib/api-client';
+import { getCredentials } from '../lib/credentials';
 import { getErrorMessage, getErrorStatus } from '../lib/errors';
 import { formatCurrency } from '../lib/format';
 

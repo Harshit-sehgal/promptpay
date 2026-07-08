@@ -1,19 +1,20 @@
-import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus,Post, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+
+import { CurrentUser, Roles } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { CurrentUser, Roles } from '../common/decorators';
-import { ExtensionService } from './extension.service';
 import {
-  RegisterDeviceDto,
-  WaitStateStartDto,
-  WaitStateEndDto,
-  AdRequestDto,
-  AdRenderedDto,
-  QualifiedImpressionDto,
   AdClickDto,
+  AdRenderedDto,
+  AdRequestDto,
+  QualifiedImpressionDto,
+  RegisterDeviceDto,
   ReportAdDto,
+  WaitStateEndDto,
+  WaitStateStartDto,
 } from './dto';
+import { ExtensionService } from './extension.service';
 
 @ApiTags('Extension')
 @Controller('extension')

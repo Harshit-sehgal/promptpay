@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiBaseUrl, readAuthCookie, COOKIE_ACCESS, COOKIE_REFRESH } from '../auth/_lib/cookies';
+
+import { apiBaseUrl, COOKIE_ACCESS, COOKIE_REFRESH,readAuthCookie } from '../auth/_lib/cookies';
 import {
   MAX_API_ROUTE_BODY_BYTES,
   readLimitedTextBody,
@@ -101,6 +102,9 @@ const ALLOWED_PATH_PREFIXES = [
 
   // Campaigns (shared — creative management from both advertiser + admin pages)
   '/campaigns',
+
+  // Compliance / consent (re-prompt flow #65)
+  '/consent',
 ];
 
 function upstreamUrl(pathname: string): string {

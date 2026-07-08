@@ -1,28 +1,29 @@
-import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { ThrottleByRouteGuard } from './common/guards/throttle-by-route.guard';
-import { BruteForceGuard } from './common/guards/brute-force.guard';
-import { RedisBackedThrottlerStorage } from './common/rate-limit/redis-throttler.storage';
-import { ApiKeyGuard } from './common/guards/api-key.guard';
-import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
-import { CacheControlInterceptor } from './common/interceptors/cache-control.interceptor';
-import { AuthModule } from './auth/auth.module';
-import { DeveloperModule } from './developer/developer.module';
-import { AdvertiserModule } from './advertiser/advertiser.module';
+import { SentryModule } from '@sentry/nestjs/setup';
+
 import { AdminModule } from './admin/admin.module';
+import { AdvertiserModule } from './advertiser/advertiser.module';
+import { AuditModule } from './audit/audit.module';
+import { AuthModule } from './auth/auth.module';
+import { CampaignModule } from './campaign/campaign.module';
+import { ApiKeyGuard } from './common/guards/api-key.guard';
+import { BruteForceGuard } from './common/guards/brute-force.guard';
+import { ThrottleByRouteGuard } from './common/guards/throttle-by-route.guard';
+import { CacheControlInterceptor } from './common/interceptors/cache-control.interceptor';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { RedisBackedThrottlerStorage } from './common/rate-limit/redis-throttler.storage';
+import { ComplianceModule } from './compliance/compliance.module';
+import { PrismaModule } from './config/prisma.module';
+import { DeveloperModule } from './developer/developer.module';
 import { ExtensionModule } from './extension/extension.module';
+import { FraudModule } from './fraud/fraud.module';
+import { HealthModule } from './health/health.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { PayoutModule } from './payout/payout.module';
-import { FraudModule } from './fraud/fraud.module';
-import { CampaignModule } from './campaign/campaign.module';
-import { AuditModule } from './audit/audit.module';
 import { ReferralModule } from './referral/referral.module';
-import { SentryModule } from '@sentry/nestjs/setup';
-import { PrismaModule } from './config/prisma.module';
-import { HealthModule } from './health/health.module';
-import { ComplianceModule } from './compliance/compliance.module';
 
 @Module({
   imports: [

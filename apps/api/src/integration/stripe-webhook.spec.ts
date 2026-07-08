@@ -1,14 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { raw } from 'express';
 import request from 'supertest';
+import { afterAll,beforeAll, describe, expect, it } from 'vitest';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+
+import { UserRole } from '@waitlayer/shared';
+
 import { AppModule } from '../app.module';
-import { PrismaService } from '../config/prisma.service';
-import { StripeProvider } from '../payout/providers';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
-import { UserRole } from '@waitlayer/shared';
+import { PrismaService } from '../config/prisma.service';
+import { StripeProvider } from '../payout/providers';
 
 /**
  * Integration tests for the Stripe webhook reconciliation path — the

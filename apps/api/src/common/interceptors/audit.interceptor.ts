@@ -1,16 +1,18 @@
 import * as crypto from 'crypto';
+import { from,Observable } from 'rxjs';
+import { throwError } from 'rxjs';
+import { catchError, switchMap,tap } from 'rxjs/operators';
 import {
+  CallHandler,
+  ExecutionContext,
   Injectable,
   NestInterceptor,
-  ExecutionContext,
-  CallHandler,
 } from '@nestjs/common';
-import { Observable, from } from 'rxjs';
-import { tap, catchError, switchMap } from 'rxjs/operators';
-import { throwError } from 'rxjs';
+
 import type { Prisma } from '@waitlayer/db';
-import { PrismaService } from '../../config/prisma.service';
+
 import { AuditService } from '../../audit/audit.service';
+import { PrismaService } from '../../config/prisma.service';
 
 interface AuditedRequest {
   method?: string;

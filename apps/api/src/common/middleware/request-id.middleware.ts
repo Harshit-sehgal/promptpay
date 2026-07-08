@@ -1,6 +1,6 @@
-import { Injectable, NestMiddleware } from '@nestjs/common';
-import { NextFunction, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
+import { NextFunction, Request, Response } from 'express';
+import { Injectable, NestMiddleware } from '@nestjs/common';
 
 /**
  * Stamps every inbound request with an `x-request-id` header and echoes it

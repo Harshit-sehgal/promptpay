@@ -2,9 +2,9 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useEffect } from 'react';
-import { adminApi } from '@/lib/api/services';
 import { LoadingSpinner, StatCard } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
+import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 
 // ── Types ──

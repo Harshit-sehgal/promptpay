@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { describe, expect, it, vi } from 'vitest';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
 import { StripeProvider } from '../payout/providers';
 import { AdvertiserController } from './advertiser.controller';
 import { AdvertiserService } from './advertiser.service';

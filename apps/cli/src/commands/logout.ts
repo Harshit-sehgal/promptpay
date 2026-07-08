@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+
 import { clearCredentials } from '../lib/credentials';
 
 export function runLogout() {

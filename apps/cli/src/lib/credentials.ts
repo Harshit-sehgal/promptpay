@@ -1,7 +1,7 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import { createHash } from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 const CRED_DIR = path.join(os.homedir(), '.config', 'waitlayer');
 const CRED_FILE = path.join(CRED_DIR, 'credentials.json');
@@ -28,7 +28,7 @@ async function loadKeytar(): Promise<{
 } | null> {
   try {
     const modName = 'keytar';
-    const mod = (await import(modName)) as any;
+    const mod = await import(modName);
     const keyring = mod?.default ?? mod;
     // @napi-rs/keyring (the `keytar` alias) v1 is class-based: an `AsyncEntry`
     // is constructed from (service, account) and exposes setPassword /

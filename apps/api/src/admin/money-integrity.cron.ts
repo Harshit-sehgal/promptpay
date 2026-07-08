@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
-import { AdminService } from './admin.service';
+
 import { AuditService } from '../audit/audit.service';
+import { AdminService } from './admin.service';
 
 /**
  * Continuous money-integrity monitor.

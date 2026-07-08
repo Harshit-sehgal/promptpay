@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DeveloperService } from './developer.service';
 import * as bcrypt from 'bcryptjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
+
+import { DeveloperService } from './developer.service';
 
 const mockPrisma = {
   user: {
@@ -24,6 +25,9 @@ const mockAudit = {
 const mockGoogleVerifier = {
   verify: vi.fn(),
 } as any;
+const mockEmail = {
+  sendAccountDeleted: vi.fn().mockResolvedValue(undefined),
+} as any;
 
 describe('DeveloperService', () => {
   let service: DeveloperService;
@@ -33,7 +37,7 @@ describe('DeveloperService', () => {
     mockPrisma.user.update.mockResolvedValue({ id: 'user_123', status: 'deleted' });
     mockPrisma.session.updateMany.mockResolvedValue({ count: 2 });
     mockPrisma.apiKey.updateMany.mockResolvedValue({ count: 1 });
-    service = new DeveloperService(mockPrisma as any, mockFraud, mockAudit, mockGoogleVerifier);
+    service = new DeveloperService(mockPrisma as any, mockFraud, mockAudit, mockGoogleVerifier, mockEmail);
   });
 
   describe('deleteAccount', () => {

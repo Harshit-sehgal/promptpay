@@ -1,5 +1,5 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { createClient, RedisClientType } from 'redis';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 
 export interface RedisHealthResult {
   status: 'connected' | 'error' | 'not_configured';

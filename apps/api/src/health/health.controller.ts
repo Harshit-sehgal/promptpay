@@ -1,11 +1,12 @@
 import { Controller, Get, HttpCode, HttpStatus, Logger, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { PrismaService } from '../config/prisma.service';
-import { RedisHealthService } from './redis-health.service';
+
+import { Roles } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { Roles } from '../common/decorators';
+import { PrismaService } from '../config/prisma.service';
+import { RedisHealthService } from './redis-health.service';
 
 @ApiTags('Health')
 @Controller('health')

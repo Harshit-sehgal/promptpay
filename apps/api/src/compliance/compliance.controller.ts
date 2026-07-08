@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Body, Param, UseGuards, HttpCode, HttpStatus, ValidationPipe, UsePipes } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsObject, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards, UsePipes,ValidationPipe } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+
 import { CurrentUser } from '../common/decorators';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { ComplianceService } from './compliance.service';
 
 class RecordConsentDto {
@@ -47,6 +48,20 @@ export class ComplianceController {
       dto.granted ?? true,
       dto.metadata,
     );
+  }
+
+  /** Latest policy/terms versions users must have accepted (re-prompt flow #65). */
+  @Get('required-versions')
+  @HttpCode(HttpStatus.OK)
+  requiredVersions() {
+    return this.compliance.getRequiredConsentVersions();
+  }
+
+  /** Consent purposes whose accepted version is stale for this user (#65). */
+  @Get('stale')
+  @HttpCode(HttpStatus.OK)
+  stale(@CurrentUser('id') userId: string) {
+    return this.compliance.getStaleConsents(userId);
   }
 
   @Get(':purpose')

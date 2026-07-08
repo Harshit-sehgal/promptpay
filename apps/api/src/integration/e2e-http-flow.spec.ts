@@ -1,14 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { afterAll,beforeAll, describe, expect, it } from 'vitest';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+
+import { BidType, PayoutProvider,UserRole } from '@waitlayer/shared';
+import { signPayload } from '@waitlayer/shared';
+
 import { AppModule } from '../app.module';
-import { PrismaService } from '../config/prisma.service';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
-import { UserRole, BidType, PayoutProvider } from '@waitlayer/shared';
-import { signPayload } from '@waitlayer/shared';
+import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 
 async function cleanDb(prisma: PrismaService) {
@@ -73,7 +75,7 @@ describe('End-to-End HTTP Integration Flow', () => {
     // endpoint. Seeding here mirrors how an admin would actually be created
     // (escalation path / migration), so the rest of the suite can log in as
     // admin without exercising the (intentionally forbidden) signup path.
-    const adminPasswordHash = await bcrypt.hash('password123', 12);
+    const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
         email: 'admin@waitlayer.com',
@@ -125,7 +127,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .post('/api/v1/auth/signup')
         .send({
           email: 'dev@waitlayer.com',
-          password: 'password123',
+          password: 'Password123!',
           role: UserRole.DEVELOPER,
           name: 'Jane Developer',
           country: 'US',
@@ -143,7 +145,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .post('/api/v1/auth/signup')
         .send({
           email: 'adv@waitlayer.com',
-          password: 'password123',
+          password: 'Password123!',
           role: UserRole.ADVERTISER,
           name: 'Big Brand Co',
           country: 'US',
@@ -160,7 +162,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .post('/api/v1/auth/signup')
         .send({
           email: 'adv-b@waitlayer.com',
-          password: 'password123',
+          password: 'Password123!',
           role: UserRole.ADVERTISER,
           name: 'Alternative Advertiser',
           country: 'US',
@@ -180,7 +182,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .post('/api/v1/auth/signup')
         .send({
           email: 'admin2@waitlayer.com',
-          password: 'password123',
+          password: 'Password123!',
           role: UserRole.ADMIN,
           name: 'Super Admin',
           country: 'US',
@@ -194,7 +196,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Developer Login
       const devRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'dev@waitlayer.com', password: 'password123' })
+        .send({ email: 'dev@waitlayer.com', password: 'Password123!' })
         .expect(200);
       devToken = devRes.body.accessToken;
       firstDevRefreshToken = devRes.body.refreshToken;
@@ -202,14 +204,14 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Admin Login
       const adminRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'admin@waitlayer.com', password: 'password123' })
+        .send({ email: 'admin@waitlayer.com', password: 'Password123!' })
         .expect(200);
       adminToken = adminRes.body.accessToken;
 
       // Advertiser B Login
       const advBRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'adv-b@waitlayer.com', password: 'password123' })
+        .send({ email: 'adv-b@waitlayer.com', password: 'Password123!' })
         .expect(200);
       advertiserBToken = advBRes.body.accessToken;
     });
@@ -247,7 +249,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Login again to refresh devToken for subsequent tests
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'dev@waitlayer.com', password: 'password123' })
+        .send({ email: 'dev@waitlayer.com', password: 'Password123!' })
         .expect(200);
       devToken = loginRes.body.accessToken;
     });
@@ -286,7 +288,7 @@ describe('End-to-End HTTP Integration Flow', () => {
     it('should complete the full password reset flow (forgot → reset → re-login)', async () => {
       const email = 'reset-flow@waitlayer.com';
       const originalPassword = 'original-password-123';
-      const newPassword = 'brand-new-password-456';
+      const newPassword = 'Brand-new-password-456!';
 
       // Register a dedicated user for this flow
       await request(app.getHttpServer())
@@ -325,7 +327,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Token is single-use: replay must fail
       await request(app.getHttpServer())
         .post('/api/v1/auth/password/reset')
-        .send({ token: resetToken, newPassword: 'another-password-789' })
+        .send({ token: resetToken, newPassword: 'Another-password-789!' })
         .expect(400);
 
       // Old password no longer works
@@ -871,7 +873,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .post('/api/v1/auth/signup')
         .send({
           email: 'dev2@waitlayer.com',
-          password: 'password123',
+          password: 'Password123!',
           role: UserRole.DEVELOPER,
           name: 'Dev Two',
           country: 'US',
@@ -881,7 +883,7 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'dev2@waitlayer.com', password: 'password123' })
+        .send({ email: 'dev2@waitlayer.com', password: 'Password123!' })
         .expect(200);
       dev2Token = loginRes.body.accessToken;
     });

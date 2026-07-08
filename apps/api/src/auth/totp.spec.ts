@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import {
-  generateTotpSecret,
-  generateTotp,
-  verifyTotp,
   buildOtpAuthUrl,
+  generateTotp,
+  generateTotpSecret,
+  verifyTotp,
 } from '@waitlayer/shared';
 
 describe('TOTP (RFC 6238)', () => {

@@ -1,6 +1,10 @@
-import './globals.css';
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
+import './globals.css';
+import ConsentRePrompt from '@/components/consent-reprompt';
+import CookieConsent from '@/components/cookie-consent';
+import SiteFooter from '@/components/site-footer';
+
 import { Providers } from './providers';
 
 const inter = Inter({
@@ -41,7 +45,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <SiteFooter />
+          <CookieConsent />
+          <ConsentRePrompt />
+        </Providers>
       </body>
     </html>
   );

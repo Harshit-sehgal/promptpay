@@ -1,5 +1,6 @@
+import { afterEach,beforeEach, describe, expect, it, vi } from 'vitest';
 import { Logger } from '@nestjs/common';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { PayPalPayoutsProvider } from './paypal-payouts.provider';
 
 function makeProvider(opts: { clientId?: string; clientSecret?: string; mode?: string; nodeEnv?: string }) {

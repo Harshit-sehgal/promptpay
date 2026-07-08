@@ -1,18 +1,19 @@
 // Sentry instrument MUST be the first import — it hooks Node.js internals
 // before any module is loaded so all spans and errors are captured correctly.
-import './instrument';
-
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import helmet from 'helmet';
-import { raw, json, urlencoded } from 'express';
 import cookieParser from 'cookie-parser';
+import { json, raw, urlencoded } from 'express';
+import helmet from 'helmet';
+import './instrument';
+import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SentryGlobalFilter } from '@sentry/nestjs/setup';
+
+import { loadEnv } from '@waitlayer/config';
+
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-import { SentryGlobalFilter } from '@sentry/nestjs/setup';
-import { loadEnv } from '@waitlayer/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   // Validate env on startup. Non-production environments allow

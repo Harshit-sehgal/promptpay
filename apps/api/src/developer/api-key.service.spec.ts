@@ -1,5 +1,6 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
+
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { ApiKeyService } from './api-key.service';

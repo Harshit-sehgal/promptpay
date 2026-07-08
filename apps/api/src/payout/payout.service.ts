@@ -1,14 +1,16 @@
-import { Injectable, BadRequestException, ForbiddenException, Inject, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../config/prisma.service';
+
 import { EarningsLedger, PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
+import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
+
+import { AuditService } from '../audit/audit.service';
+import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
+import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
-import { AuditService } from '../audit/audit.service';
-import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
-import { PayPalPayoutsProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
 import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
-import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
+import { PayPalPayoutsProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
 
 const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.REQUESTED,

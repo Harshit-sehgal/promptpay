@@ -1,32 +1,33 @@
+import { Request } from 'express';
 import {
-  Controller,
-  Post,
-  Get,
+  BadRequestException,
   Body,
-  UseGuards,
+  Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Post,
   Req,
   UnauthorizedException,
-  BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
-import { AuthService } from './auth.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+
 import { CurrentUser } from '../common/decorators';
+import { BruteForceGuard } from '../common/guards/brute-force.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { AuthService } from './auth.service';
 import {
-  SignUpDto,
+  ForgotPasswordDto,
+  GoogleOAuthDto,
   LoginDto,
   RefreshDto,
-  GoogleOAuthDto,
-  VerifyEmailConfirmDto,
-  ForgotPasswordDto,
   ResetPasswordDto,
-  TwoFactorEnableDto,
+  SignUpDto,
   TwoFactorDisableDto,
+  TwoFactorEnableDto,
+  VerifyEmailConfirmDto,
 } from './dto';
-import { BruteForceGuard } from '../common/guards/brute-force.guard';
 
 function isCredentialFailure(err: unknown): boolean {
   return err instanceof UnauthorizedException || err instanceof BadRequestException;

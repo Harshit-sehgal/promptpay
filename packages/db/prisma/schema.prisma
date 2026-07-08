@@ -506,6 +506,9 @@ model CountryTargeting {
   countryCode String
   include     Boolean  @default(true)
 
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([campaignId, countryCode])
   @@index([campaignId])
   @@map("country_targeting")

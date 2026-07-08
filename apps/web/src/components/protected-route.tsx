@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
+import { useEffect } from 'react';
 import { LoadingSpinner } from '@/components/loading-spinner';
+import { useAuth } from '@/lib/auth-context';
 
 export function ProtectedRoute({
   children,

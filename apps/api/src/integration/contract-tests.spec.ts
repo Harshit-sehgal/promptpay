@@ -1,33 +1,35 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request from 'supertest';
 import * as bcrypt from 'bcryptjs';
-import { AppModule } from '../app.module';
-import { PrismaService } from '../config/prisma.service';
-import { BruteForceGuard } from '../common/guards/brute-force.guard';
-import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
-import { UserRole, PayoutProvider, BidType, canonicalJson, verifySignature } from '@waitlayer/shared';
+import request from 'supertest';
+import { afterAll,beforeAll, describe, expect, it } from 'vitest';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+
+import { BidType, canonicalJson, PayoutProvider, UserRole, verifySignature } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 import {
-  SignupResponse,
-  LoginResponse,
-  RefreshResponse,
-  MeResponse,
-  RegisterDeviceResponse,
-  WaitStateStartResponse,
-  WaitStateEndResponse,
-  AdRequestResponse,
-  AdRenderedResponse,
-  QualifiedImpressionResponse,
   AdClickResponse,
-  PayoutMethodResponse,
-  PayoutRequestResponse,
-  PayoutAvailableResponse,
-  LedgerBalanceResponse,
+  AdRenderedResponse,
+  AdRequestResponse,
   CreateCampaignResponse,
   CreativeResponse,
+  LedgerBalanceResponse,
+  LoginResponse,
+  MeResponse,
+  PayoutAvailableResponse,
+  PayoutMethodResponse,
+  PayoutRequestResponse,
+  QualifiedImpressionResponse,
+  RefreshResponse,
+  RegisterDeviceResponse,
+  SignupResponse,
+  WaitStateEndResponse,
+  WaitStateStartResponse,
 } from '@waitlayer/shared';
+
+import { AppModule } from '../app.module';
+import { BruteForceGuard } from '../common/guards/brute-force.guard';
+import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
+import { PrismaService } from '../config/prisma.service';
 
 async function cleanDb(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(`
@@ -85,7 +87,7 @@ describe('API Contract Tests', () => {
     // privileged roles (SIGNUP_ALLOWED_ROLES = developer, advertiser); the
     // contract test exercises the (forbidden) admin signup below purely to
     // assert that control returns 400, then logs in with this seeded admin.
-    const adminPasswordHash = await bcrypt.hash('password123', 12);
+    const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
         email: 'contract-admin@test.com',
@@ -126,7 +128,7 @@ describe('API Contract Tests', () => {
     it('POST /auth/signup → matches SignupResponse schema', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-dev@test.com', password: 'password123', role: UserRole.DEVELOPER, name: 'Contract Dev', country: 'US' })
+        .send({ email: 'contract-dev@test.com', password: 'Password123!', role: UserRole.DEVELOPER, name: 'Contract Dev', country: 'US' })
         .expect(201);
       expect(() => SignupResponse.parse(res.body)).not.toThrow();
       devToken = res.body.accessToken;
@@ -135,7 +137,7 @@ describe('API Contract Tests', () => {
     it('POST /auth/login → matches LoginResponse schema', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'contract-dev@test.com', password: 'password123' })
+        .send({ email: 'contract-dev@test.com', password: 'Password123!' })
         .expect(200);
       expect(() => LoginResponse.parse(res.body)).not.toThrow();
     });
@@ -143,7 +145,7 @@ describe('API Contract Tests', () => {
     it('POST /auth/refresh → matches RefreshResponse schema', async () => {
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'contract-dev@test.com', password: 'password123' });
+        .send({ email: 'contract-dev@test.com', password: 'Password123!' });
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
         .send({ refreshToken: loginRes.body.refreshToken })
@@ -165,17 +167,17 @@ describe('API Contract Tests', () => {
       // beforeAll. Login with the seeded admin to obtain a token.
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-admin@test.com', password: 'password123', role: UserRole.ADMIN, name: 'Contract Admin', country: 'US' })
+        .send({ email: 'contract-admin@test.com', password: 'Password123!', role: UserRole.ADMIN, name: 'Contract Admin', country: 'US' })
         .expect(400);
       const adminLogin = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
-        .send({ email: 'contract-admin@test.com', password: 'password123' })
+        .send({ email: 'contract-admin@test.com', password: 'Password123!' })
         .expect(200);
       adminToken = adminLogin.body.accessToken;
 
       const advRes = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-adv@test.com', password: 'password123', role: UserRole.ADVERTISER, name: 'Contract Adv', country: 'US' })
+        .send({ email: 'contract-adv@test.com', password: 'Password123!', role: UserRole.ADVERTISER, name: 'Contract Adv', country: 'US' })
         .expect(201);
       advertiserToken = advRes.body.accessToken;
 

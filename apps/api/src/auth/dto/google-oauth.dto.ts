@@ -1,5 +1,6 @@
-import { IsString, IsOptional, IsEnum, MaxLength, Matches } from 'class-validator';
-import { UserRole, SIGNUP_ALLOWED_ROLES } from '@waitlayer/shared';
+import { IsEnum, IsOptional, IsString, Matches,MaxLength } from 'class-validator';
+
+import { SIGNUP_ALLOWED_ROLES,UserRole } from '@waitlayer/shared';
 
 export class GoogleOAuthDto {
   @IsString()

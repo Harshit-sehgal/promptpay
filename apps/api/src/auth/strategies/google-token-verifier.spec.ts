@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { GoogleTokenVerifier } from './google-token-verifier';
-import { ConfigService } from '@nestjs/config';
+import { beforeEach,describe, expect, it, vi } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import { GoogleTokenVerifier } from './google-token-verifier';
 
 describe('GoogleTokenVerifier', () => {
   let verifier: GoogleTokenVerifier;

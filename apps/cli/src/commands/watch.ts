@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
-import { getCredentials } from '../lib/credentials';
+
 import { ApiClient } from '../lib/api-client';
+import { getCredentials } from '../lib/credentials';
 import { getErrorCode, getErrorMessage } from '../lib/errors';
 
 const STATE_FILE = `${process.cwd()}/.waitlayer-wait`;

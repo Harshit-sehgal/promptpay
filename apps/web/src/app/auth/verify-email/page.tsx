@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { authApi } from '@/lib/api/services';
+import { Suspense,useEffect, useRef, useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
+import { authApi } from '@/lib/api/services';
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();

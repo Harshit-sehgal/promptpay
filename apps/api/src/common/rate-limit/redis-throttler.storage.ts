@@ -1,5 +1,6 @@
-import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
+import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
+
 import { RedisWindowCounter } from './redis-window-counter';
 
 type ThrottlerRecord = Awaited<ReturnType<ThrottlerStorage['increment']>>;

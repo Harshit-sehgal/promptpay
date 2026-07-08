@@ -1,8 +1,9 @@
-import { ForbiddenException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
+
+import { PrismaService } from '../config/prisma.service';
 import { CampaignController } from './campaign.controller';
 import { CampaignService } from './campaign.service';
-import { PrismaService } from '../config/prisma.service';
 
 function makeController() {
   const service = {

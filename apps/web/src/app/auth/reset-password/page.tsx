@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, FormEvent, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { authApi } from '@/lib/api/services';
+import { FormEvent, Suspense,useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
+import { authApi } from '@/lib/api/services';
 
 function ResetPasswordForm() {
   const router = useRouter();

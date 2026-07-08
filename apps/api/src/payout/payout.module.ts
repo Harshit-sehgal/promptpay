@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
+
+import { EventBus } from '../common/events/event-bus';
+import { LedgerModule } from '../ledger/ledger.module';
+import { ReferralModule } from '../referral/referral.module';
 import { PayoutController } from './payout.controller';
 import { PayoutService } from './payout.service';
 import { PayoutCronService } from './payout-cron.service';
-import { LedgerModule } from '../ledger/ledger.module';
-import { ReferralModule } from '../referral/referral.module';
-import { PayPalPayoutsProvider, StripeProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
+import { PayPalPayoutsProvider, StripeConnectPayoutProvider, StripeProvider, WisePayoutProvider } from './providers';
 import { StripeWebhookController } from './stripe-webhook.controller';
-import { EventBus } from '../common/events/event-bus';
 
 @Module({
   imports: [LedgerModule, ReferralModule],

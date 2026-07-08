@@ -1,21 +1,23 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
 // `@types/jsonwebtoken` types `expiresIn` as `ms`'s branded `StringValue`,
 // not a bare `string`. ConfigService hands us plain strings, so we brand
 // them at assignment time so the value satisfies the option type.
 import type { StringValue } from 'ms';
-import { PrismaService } from '../config/prisma.service';
+import { BadRequestException, ConflictException, Injectable, Logger,UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+
 import { Prisma } from '@waitlayer/db';
-import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
-import { UserRole, DEFAULT_COMPANY_NAME, generateTotpSecret, buildOtpAuthUrl, verifyTotp } from '@waitlayer/shared';
-import { GoogleTokenVerifier } from './strategies/google-token-verifier';
-import { FraudService } from '../fraud/fraud.service';
-import { EmailService } from '../email/email.service';
+import { buildOtpAuthUrl, DEFAULT_COMPANY_NAME, generateTotpSecret, UserRole, verifyTotp } from '@waitlayer/shared';
+
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
+import { PrismaService } from '../config/prisma.service';
+import { EmailService } from '../email/email.service';
+import { FraudService } from '../fraud/fraud.service';
+import { GoogleOAuthDto,LoginDto, SignUpDto } from './dto';
+import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 
 interface TokenPayload {
   sub: string;

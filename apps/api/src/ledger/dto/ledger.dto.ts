@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max,Min } from 'class-validator';
 
 export class LedgerHistoryQueryDto {
   @IsOptional()

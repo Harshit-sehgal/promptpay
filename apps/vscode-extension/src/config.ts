@@ -1,5 +1,5 @@
-import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as vscode from 'vscode';
 
 const CONFIG_SECTION = 'waitlayer';
 

@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+
 import {
   FraudFlagStatus as DbFraudFlagStatus,
   FraudFlagType as DbFraudFlagType,
@@ -6,9 +7,10 @@ import {
   Prisma,
   TrustLevel,
 } from '@waitlayer/db';
+import { FraudFlagType,FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@waitlayer/shared';
+
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { RATE_LIMITS, TRUST_SCORE, FraudSeverity, FraudFlagType } from '@waitlayer/shared';
 
 @Injectable()
 export class FraudService {

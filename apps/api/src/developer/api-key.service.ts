@@ -1,9 +1,10 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
-import { PrismaService } from '../config/prisma.service';
+import { BadRequestException, ForbiddenException,Injectable, NotFoundException } from '@nestjs/common';
+
 import { AuditService } from '../audit/audit.service';
-import { ALLOWED_API_KEY_SCOPES } from './dto/api-key.dto';
 import { isActiveAccountStatus } from '../common/utils/account-status';
+import { PrismaService } from '../config/prisma.service';
+import { ALLOWED_API_KEY_SCOPES } from './dto/api-key.dto';
 
 @Injectable()
 export class ApiKeyService {

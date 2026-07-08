@@ -1,5 +1,5 @@
-import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as vscode from 'vscode';
 
 export interface WaitStateDetectorOptions {
   /** Callback to read the configurable inactivity timeout (ms). Default 15_000. */

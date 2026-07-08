@@ -1,5 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
+
 import { AdminService } from './admin.service';
 
 const mockPrisma: any = {

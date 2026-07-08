@@ -1,9 +1,10 @@
 import { Command } from 'commander';
+
 import { runAuth } from './commands/auth';
+import { runConfig } from './commands/config';
+import { runLogout } from './commands/logout';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
-import { runLogout } from './commands/logout';
-import { runConfig } from './commands/config';
 
 const program = new Command();
 program

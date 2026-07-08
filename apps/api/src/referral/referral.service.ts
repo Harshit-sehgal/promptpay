@@ -1,9 +1,11 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+
+import { REFERRAL } from '@waitlayer/shared';
+
+import { isUniqueConstraintViolation } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { REFERRAL } from '@waitlayer/shared';
-import { isUniqueConstraintViolation } from '../common/utils/errors';
 
 @Injectable()
 export class ReferralService {

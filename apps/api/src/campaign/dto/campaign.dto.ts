@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsUrl, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+
 import { MAX_AD_MESSAGE_LENGTH } from '@waitlayer/shared';
 
 export class CreateCreativeDto {

@@ -1,7 +1,9 @@
-import * as https from 'https';
 import * as http from 'http';
+import * as https from 'https';
 import * as vscode from 'vscode';
+
 import { signPayload } from '@waitlayer/shared';
+
 import { ConfigurationManager } from './config';
 import { requestHostnameForUrl, resolveCredentialSafeUrl } from './transport-policy';
 
@@ -282,7 +284,7 @@ export class ApiClient {
         { email, password },
       );
       await this.handleLoginSuccess(res);
-    } catch (err: any) {
+    } catch (err) {
       // The backend emits a structured 2FA challenge ({ twoFactorRequired: true })
       // when a TOTP-protected account logs in without a code, and a generic
       // "Invalid two-factor authentication code" when a wrong code is supplied.

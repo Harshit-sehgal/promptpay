@@ -1,6 +1,7 @@
+import { describe, expect, it, vi } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { describe, expect, it, vi } from 'vitest';
+
 import { PrismaService } from '../../config/prisma.service';
 import { JwtStrategy } from './jwt.strategy';
 

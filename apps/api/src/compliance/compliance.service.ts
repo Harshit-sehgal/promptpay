@@ -1,13 +1,24 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../config/prisma.service';
+import { BadRequestException,Injectable, Logger } from '@nestjs/common';
+
 import { AuditService } from '../audit/audit.service';
 import { assertSafeJson } from '../common/utils/json-value';
+import { PrismaService } from '../config/prisma.service';
 
 const DEFAULT_RETENTION_DAYS: Record<string, number> = {
   webhook_events: 90,
   audit_logs: 365,
   sessions: 30,
   export_cache: 7,
+};
+
+// Current policy/terms versions users must have consented to. Bump these
+// strings whenever the privacy policy / terms / cookie notice materially
+// change — the re-prompt flow (#65) compares a user's latest consent version
+// against these to decide whether to ask again.
+const CURRENT_CONSENT_VERSIONS: Record<string, string> = {
+  privacy_policy: '2026-07-01',
+  terms_of_service: '2026-07-01',
+  marketing_cookies: '2026-07-01',
 };
 
 @Injectable()
@@ -62,6 +73,26 @@ export class ComplianceService {
     if (!row || !row.granted) return false;
     if (version && row.version !== version) return false;
     return true;
+  }
+
+  /** The latest policy/terms versions users are required to have accepted. */
+  getRequiredConsentVersions(): Record<string, string> {
+    return { ...CURRENT_CONSENT_VERSIONS };
+  }
+
+  /**
+   * Returns the consent purposes whose user-held version is stale relative to
+   * {@link CURRENT_CONSENT_VERSIONS}. Used by the re-prompt flow (#65) to
+   * decide whether the web UI must ask the user to re-consent. A purpose the
+   * user never consented to, or consented to a revoked version, is reported.
+   */
+  async getStaleConsents(userId: string): Promise<string[]> {
+    const stale: string[] = [];
+    for (const [purpose, version] of Object.entries(CURRENT_CONSENT_VERSIONS)) {
+      const current = await this.isConsented(userId, purpose, version);
+      if (!current) stale.push(purpose);
+    }
+    return stale;
   }
 
   // ── Retention ────────────────────────────────────────────

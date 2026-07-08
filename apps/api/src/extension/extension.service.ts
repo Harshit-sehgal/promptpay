@@ -1,18 +1,20 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
-import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
-import { LRUCache } from 'lru-cache';
-import { PrismaService } from '../config/prisma.service';
-import { AuditService } from '../audit/audit.service';
-import { LedgerService } from '../ledger/ledger.service';
-import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
-import { FraudService } from '../fraud/fraud.service';
-import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
-import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } from '@waitlayer/shared';
-import { isUniqueConstraintViolation, isSerializationError } from '../common/utils/errors';
+import * as crypto from 'crypto';
+import { LRUCache } from 'lru-cache';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger,NotFoundException, UnauthorizedException } from '@nestjs/common';
+
+import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
+import { MINIMUM_VISIBLE_DURATION_MS, PROHIBITED_DATA_FIELDS, verifySignature } from '@waitlayer/shared';
+
+import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
-import { normalizeCreativeDestination } from '../common/utils/external-url-policy';
 import { isActiveAccountStatus } from '../common/utils/account-status';
+import { isSerializationError,isUniqueConstraintViolation } from '../common/utils/errors';
+import { normalizeCreativeDestination } from '../common/utils/external-url-policy';
+import { PrismaService } from '../config/prisma.service';
+import { FraudService } from '../fraud/fraud.service';
+import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
+import { LedgerService } from '../ledger/ledger.service';
 
 class BudgetExhaustedError extends Error {
   constructor() {

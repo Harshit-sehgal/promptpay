@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+
+import { LedgerModule } from '../ledger/ledger.module';
 import { ReferralController } from './referral.controller';
 import { ReferralService } from './referral.service';
-import { LedgerModule } from '../ledger/ledger.module';
 
 @Module({
   imports: [LedgerModule],

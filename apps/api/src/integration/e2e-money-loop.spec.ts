@@ -1,19 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ExtensionService } from '../extension/extension.service';
-import { LedgerService } from '../ledger/ledger.service';
-import { FraudService } from '../fraud/fraud.service';
-import { CampaignService } from '../campaign/campaign.service';
-import { AdvertiserService } from '../advertiser/advertiser.service';
-import { AdminService } from '../admin/admin.service';
-import { AuditService } from '../audit/audit.service';
-import { PayoutService } from '../payout/payout.service';
-import { DeveloperService } from '../developer/developer.service';
-import { ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 
 // ── Shared signing utility (no mocking needed — it's pure crypto) ──
 import { signPayload } from '@waitlayer/shared';
+
+import { AdminService } from '../admin/admin.service';
+import { AdvertiserService } from '../advertiser/advertiser.service';
+import { AuditService } from '../audit/audit.service';
+import { CampaignService } from '../campaign/campaign.service';
+import { DeveloperService } from '../developer/developer.service';
+import { ExtensionService } from '../extension/extension.service';
+import { FraudService } from '../fraud/fraud.service';
+import { LedgerService } from '../ledger/ledger.service';
+import { PayoutService } from '../payout/payout.service';
 
 // HMAC secret must match what ExtensionService uses
 const HMAC_SECRET = 'dev-secret-change-me-do-not-use-in-production';

@@ -1,10 +1,11 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
 import { type Request } from 'express';
+import { ExtractJwt, JwtFromRequestFunction,Strategy } from 'passport-jwt';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../../config/prisma.service';
+import { PassportStrategy } from '@nestjs/passport';
+
 import { isActiveAccountStatus } from '../../common/utils/account-status';
+import { PrismaService } from '../../config/prisma.service';
 
 /**
  * Dual-source JWT extraction: Authorization header OR httpOnly `access_token`

@@ -1,15 +1,16 @@
 import { z } from 'zod';
+
 import {
+  BidType,
   CampaignStatus,
   CreativeStatus,
+  LedgerEntryType,
+  LedgerStatus,
+  PayoutProvider,
+  PayoutStatus,
+  TrustLevel,
   UserRole,
   UserStatus,
-  TrustLevel,
-  BidType,
-  PayoutStatus,
-  PayoutProvider,
-  LedgerStatus,
-  LedgerEntryType,
 } from './enums';
 
 const CampaignStatusSchema = z.nativeEnum(CampaignStatus);

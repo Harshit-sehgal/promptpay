@@ -1,6 +1,7 @@
+import { createHash } from 'crypto';
 import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash } from 'crypto';
+
 import { RedisWindowCounter } from '../rate-limit/redis-window-counter';
 
 export interface RequestLike {
