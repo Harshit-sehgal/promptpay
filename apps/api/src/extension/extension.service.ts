@@ -14,6 +14,13 @@ import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { normalizeCreativeDestination } from '../common/utils/external-url-policy';
 import { isActiveAccountStatus } from '../common/utils/account-status';
 
+class BudgetExhaustedError extends Error {
+  constructor() {
+    super('Campaign budget exhausted or campaign inactive');
+    this.name = 'BudgetExhaustedError';
+  }
+}
+
 /**
  * When the extension reports a wait_state_end, its claimed duration must
  * agree with the server-computed delta from the matching start event.
@@ -461,12 +468,12 @@ export class ExtensionService {
       return existing;
     }
 
-    const claimedDuration = typeof dto.duration === 'string' ? parseInt(dto.duration, 10) : dto.duration;
-    if (
-      Number.isNaN(claimedDuration) ||
-      claimedDuration < 0 ||
-      claimedDuration > WAIT_STATE_MAX_DURATION_SECONDS
-    ) {
+    const claimedDurationMs = typeof dto.duration === 'string' ? parseInt(dto.duration, 10) : dto.duration;
+    if (Number.isNaN(claimedDurationMs) || claimedDurationMs < 0) {
+      throw new BadRequestException('Invalid duration value');
+    }
+    const claimedDuration = Math.floor(claimedDurationMs / 1000);
+    if (claimedDuration > WAIT_STATE_MAX_DURATION_SECONDS) {
       throw new BadRequestException('Invalid duration value');
     }
 
@@ -625,13 +632,41 @@ export class ExtensionService {
       }),
     }));
 
-    const eligible = campaignsWithSafeCreatives.filter((c) => {
+    const initialEligible = campaignsWithSafeCreatives.filter((c) => {
       if (c.creatives.length === 0) return false;
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
       // Category filter
       if (dto.blockedCategories?.length && dto.blockedCategories.includes(c.category)) return false;
       if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category)) return false;
       return true;
+    });
+
+    if (!initialEligible.length) {
+      return { ad: null, reason: 'no_eligible_campaign' };
+    }
+
+    // Filter by advertiser balance to prevent serving ads for advertisers with negative/zero balance
+    const advertiserIds = initialEligible.map((c) => c.advertiserId);
+    const advertiserLedgerSums = await this.prisma.advertiserLedger.groupBy({
+      by: ['advertiserId', 'entryType'],
+      where: {
+        advertiserId: { in: advertiserIds },
+        status: 'confirmed',
+      },
+      _sum: { amountMinor: true },
+    });
+
+    const advertiserBalances = new Map<string, number>();
+    for (const row of advertiserLedgerSums) {
+      const current = advertiserBalances.get(row.advertiserId) ?? 0;
+      const amount = row._sum.amountMinor ?? 0;
+      if (row.entryType === 'credit') advertiserBalances.set(row.advertiserId, current + amount);
+      if (row.entryType === 'debit') advertiserBalances.set(row.advertiserId, current - amount);
+    }
+
+    const eligible = initialEligible.filter((c) => {
+      const balance = advertiserBalances.get(c.advertiserId) ?? 0;
+      return balance >= c.bidAmountMinor;
     });
 
     if (!eligible.length) {
@@ -986,6 +1021,22 @@ export class ExtensionService {
       return { qualified: true, impressionId: updated.id };
     }
 
+    if (impression.campaign.bidType !== 'cpc') {
+      const advertiserBalance = await this.getAdvertiserBalance(impression.campaign.advertiserId, impression.campaign.currency);
+      if (advertiserBalance < impression.campaign.bidAmountMinor) {
+        await this.prisma.adImpression.update({
+          where: { id: impression.id },
+          data: {
+            qualifiedAt: new Date(dto.qualifiedAt),
+            visibleDurationMs: dto.visibleDurationMs,
+            isBillable: false,
+            invalidationReason: 'insufficient_advertiser_balance',
+          },
+        });
+        return { qualified: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
+      }
+    }
+
     // Look up the user's trust level for hold days
     const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
     const trustLevel = trustScore?.level || 'new';
@@ -1001,115 +1052,121 @@ export class ExtensionService {
     const idempotencyBase = `imp-${impression.id}`;
 
     // Single atomic transaction: impression update + all ledger entries + campaign spend.
+    // The CAS claim happens FIRST. If a concurrent request already qualified it,
+    // we return early without touching campaign budget or ledger tables.
     // The spend guard uses raw SQL UPDATE…WHERE so two concurrent CPM impressions
     // cannot both pass the JS pre-flight check and exceed budgetTotalMinor.
-    // $executeRaw returns row count: 0 means the WHERE rejected (budget full
-    // OR campaign no longer active — see the status guard below).
-    const billed = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // (0) Atomic spend increment — rejects when budget would overflow OR the
-      // campaign is no longer `active`. The `status = 'active'` clause closes a
-      // TOCTOU with `archiveCampaign`: ad serving re-reads the campaign status
-      // only at request time, so a campaign archived between requestAd and
-      // this record-time debit would otherwise still accrue spend. With the
-      // guard, an archived (or paused) campaign reports `spent === 0` here and
-      // the impression is marked non-billable — no advertiser debit, no
-      // developer credit, no budget increment.
-      const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
-        impression.campaign.bidAmountMinor,
-        impression.campaignId,
-      );
-      if (spent === 0) return false; // budget exhausted / archived / paused — mark not billable below
+    // If the budget increment fails, we throw a BudgetExhaustedError to rollback.
+    let billed: 'already_qualified' | 'billed';
+    try {
+      billed = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // (1) Atomic CAS: only flip this impression to billable if it has NOT
+        // been qualified concurrently. Two concurrent recordQualifiedImpression
+        // calls for the same impression both pass the outer
+        // `if (impression.qualifiedAt) return` check (neither has written yet).
+        // The conditional UPDATE ensures at most one caller wins the flip;
+        // the loser (claim.count === 0) returns early without writing
+        // any ledger rows or incrementing campaign budget.
+        const claim = await tx.adImpression.updateMany({
+          where: { id: impression.id, qualifiedAt: null },
+          data: {
+            qualifiedAt: new Date(dto.qualifiedAt),
+            visibleDurationMs: dto.visibleDurationMs,
+            isBillable: true,
+          },
+        });
+        if (claim.count === 0) {
+          return 'already_qualified';
+        }
 
-      // (1) Atomic CAS: only flip this impression to billable if it has NOT
-      // been qualified concurrently. Two concurrent recordQualifiedImpression
-      // calls for the same impression both pass the outer
-      // `if (impression.qualifiedAt) return` check (neither has written yet).
-      // The conditional UPDATE ensures at most one caller wins the flip;
-      // the loser (claim.count === 0) returns idempotently without writing
-      // any ledger rows — preventing the spend-debit + developer-credit
-      // from being applied twice across a retry / concurrent request. The
-      // idempotencyKey floors would catch the duplicate via P2002, but the
-      // CAS avoids throwing a serialization error in the first place.
-      const claim = await tx.adImpression.updateMany({
-        where: { id: impression.id, qualifiedAt: null },
-        data: {
-          qualifiedAt: new Date(dto.qualifiedAt),
-          visibleDurationMs: dto.visibleDurationMs,
-          isBillable: true,
-        },
+        // (2) Atomic spend increment — rejects when budget would overflow OR the
+        // campaign is no longer `active`.
+        const spent: number = await tx.$executeRawUnsafe(
+          `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
+          impression.campaign.bidAmountMinor,
+          impression.campaignId,
+        );
+        if (spent === 0) {
+          throw new BudgetExhaustedError();
+        }
+
+        // (3) Debit advertiser balance
+        await tx.advertiserLedger.create({
+          data: {
+            advertiserId: impression.campaign.advertiserId,
+            campaignId: impression.campaignId,
+            entryType: 'debit',
+            status: 'confirmed',
+            amountMinor: impression.campaign.bidAmountMinor,
+            currency: impression.campaign.currency,
+            idempotencyKey: `${idempotencyBase}-adv`,
+            description: `Impression ${impression.id} - campaign ${impression.campaignId}`,
+          },
+        });
+        // (4) Credit developer (estimated until hold expires)
+        await tx.earningsLedger.create({
+          data: {
+            userId: impression.userId,
+            campaignId: impression.campaignId,
+            impressionId: impression.id,
+            entryType: 'credit',
+            status: 'estimated',
+            amountMinor: split.userShare,
+            currency: impression.campaign.currency,
+            availableAt,
+            idempotencyKey: `${idempotencyBase}-usr`,
+            description: 'Earnings from qualified impression',
+          },
+        });
+        // (5) Credit platform fee
+        await tx.platformLedger.create({
+          data: {
+            campaignId: impression.campaignId,
+            entryType: 'credit',
+            status: 'confirmed',
+            amountMinor: split.platformShare,
+            currency: impression.campaign.currency,
+            bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
+            referenceId: impression.id,
+            idempotencyKey: `${idempotencyBase}-plt`,
+            description: 'Platform fee from impression',
+          },
+        });
+        // (6) Credit fraud/payment reserve
+        await tx.platformLedger.create({
+          data: {
+            campaignId: impression.campaignId,
+            entryType: 'credit',
+            status: 'confirmed',
+            amountMinor: split.reserveShare,
+            currency: impression.campaign.currency,
+            bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
+            referenceId: impression.id,
+            idempotencyKey: `${idempotencyBase}-res`,
+            description: 'Fraud/payment reserve from impression',
+          },
+        });
+
+        return 'billed';
       });
-      if (claim.count === 0) {
-        // Another caller already qualified this impression. The budget
-        // increment we just made is rolled back on tx return → no
-        // double-spend. Return idempotent success with no new ledger rows.
-        return true;
+    } catch (err) {
+      if (err instanceof BudgetExhaustedError) {
+        await this.prisma.adImpression.update({
+          where: { id: impression.id },
+          data: {
+            qualifiedAt: new Date(dto.qualifiedAt),
+            visibleDurationMs: dto.visibleDurationMs,
+            isBillable: false,
+            invalidationReason: 'budget_exhausted',
+          },
+        });
+        return { qualified: false, impressionId: impression.id, reason: 'budget_exhausted' };
       }
-      // (2) Debit advertiser balance
-      await tx.advertiserLedger.create({
-        data: {
-          advertiserId: impression.campaign.advertiserId,
-          campaignId: impression.campaignId,
-          entryType: 'debit',
-          status: 'confirmed',
-          amountMinor: impression.campaign.bidAmountMinor,
-          currency: impression.campaign.currency,
-          idempotencyKey: `${idempotencyBase}-adv`,
-          description: `Impression ${impression.id} - campaign ${impression.campaignId}`,
-        },
-      });
-      // (3) Credit developer (estimated until hold expires)
-      await tx.earningsLedger.create({
-        data: {
-          userId: impression.userId,
-          campaignId: impression.campaignId,
-          impressionId: impression.id,
-          entryType: 'credit',
-          status: 'estimated',
-          amountMinor: split.userShare,
-          currency: impression.campaign.currency,
-          availableAt,
-          idempotencyKey: `${idempotencyBase}-usr`,
-          description: 'Earnings from qualified impression',
-        },
-      });
-      // (4) Credit platform fee
-      await tx.platformLedger.create({
-        data: {
-          campaignId: impression.campaignId,
-          entryType: 'credit',
-          status: 'confirmed',
-          amountMinor: split.platformShare,
-          currency: impression.campaign.currency,
-          bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
-          referenceId: impression.id,
-          idempotencyKey: `${idempotencyBase}-plt`,
-          description: 'Platform fee from impression',
-        },
-      });
-      // (5) Credit fraud/payment reserve
-      await tx.platformLedger.create({
-        data: {
-          campaignId: impression.campaignId,
-          entryType: 'credit',
-          status: 'confirmed',
-          amountMinor: split.reserveShare,
-          currency: impression.campaign.currency,
-          bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
-          referenceId: impression.id,
-          idempotencyKey: `${idempotencyBase}-res`,
-          description: 'Fraud/payment reserve from impression',
-        },
-      });
-      return true;
-    });
+      throw err;
+    }
 
-    if (!billed) {
-      await this.prisma.adImpression.update({
-        where: { id: impression.id },
-        data: { isBillable: false, invalidationReason: 'budget_exhausted' },
-      });
-      return { qualified: false, impressionId: impression.id, reason: 'budget_exhausted' };
+    if (billed === 'already_qualified') {
+      return { qualified: true, impressionId: impression.id, alreadyQualified: true };
     }
 
     return { qualified: true, impressionId: impression.id };
@@ -1488,6 +1545,25 @@ export class ExtensionService {
   /** Typed wrapper around enforcePrivacy that avoids unsafe casts — spreads into a plain object */
   private enforcePrivacyOn<T extends object>(dto: T): void {
     this.enforcePrivacy({ ...dto } as Record<string, unknown>);
+  }
+
+  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+    const sums = await this.prisma.advertiserLedger.groupBy({
+      by: ['entryType'],
+      where: {
+        advertiserId,
+        currency,
+        status: 'confirmed',
+      },
+      _sum: { amountMinor: true },
+    });
+    let deposits = 0;
+    let charges = 0;
+    for (const row of sums) {
+      if (row.entryType === 'credit') deposits = row._sum.amountMinor ?? 0;
+      if (row.entryType === 'debit') charges = row._sum.amountMinor ?? 0;
+    }
+    return deposits - charges;
   }
 
   private currentTimeHHMM(): string {

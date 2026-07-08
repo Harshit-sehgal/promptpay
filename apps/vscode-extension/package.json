@@ -9,7 +9,37 @@
   "categories": [
     "Other"
   ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:waitlayer.login",
+    "onCommand:waitlayer.logout",
+    "onCommand:waitlayer.showEarnings",
+    "onCommand:waitlayer.toggleAds",
+    "onCommand:waitlayer.openDashboard"
+  ],
   "contributes": {
+    "commands": [
+      {
+        "command": "waitlayer.login",
+        "title": "WaitLayer: Login"
+      },
+      {
+        "command": "waitlayer.logout",
+        "title": "WaitLayer: Logout"
+      },
+      {
+        "command": "waitlayer.showEarnings",
+        "title": "WaitLayer: Show Earnings"
+      },
+      {
+        "command": "waitlayer.toggleAds",
+        "title": "WaitLayer: Toggle Ads"
+      },
+      {
+        "command": "waitlayer.openDashboard",
+        "title": "WaitLayer: Open Dashboard"
+      }
+    ],
     "configuration": {
       "title": "WaitLayer",
       "properties": {
@@ -66,7 +96,7 @@
     "build": "pnpm run compile",
     "test": "vitest run"
   },
-  "main": "./out/extension.js",
+  "main": "./out/apps/vscode-extension/src/extension.js",
   "dependencies": {
     "@waitlayer/shared": "workspace:*"
   },

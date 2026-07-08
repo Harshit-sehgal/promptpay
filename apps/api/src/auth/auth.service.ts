@@ -91,58 +91,62 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const referralCode = await this.generateReferralCode();
 
-    let user;
-    try {
-      user = await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          passwordHash,
-          name: dto.name,
-          role: dto.role,
-          country: dto.country,
-          referralCode,
-        },
-      });
-    } catch (err: unknown) {
-      // Concurrent signups with the same email race past the pre-check
-      // above. The `email @unique` constraint is THE authoritative source of
-      // truth — translate P2002 into ConflictException so the loser doesn't
-      // see a raw Prisma error (500) leak past the API surface.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Email already registered');
-      }
-      throw err;
-    }
-
-    // Developer onboarding: create settings + trust score
-    if (dto.role === UserRole.DEVELOPER) {
-      await this.prisma.userSettings.create({ data: { userId: user.id } });
-      await this.prisma.trustScore.create({ data: { userId: user.id } });
-    }
-
-    // Advertiser onboarding: create advertiser profile stub
-    if (dto.role === UserRole.ADVERTISER) {
-      await this.prisma.advertiser.create({
-        data: { userId: user.id, companyName: dto.name || DEFAULT_COMPANY_NAME, billingEmail: dto.email },
-      });
-    }
-
-    // Handle referral if provided
-    if (dto.referrerCode) {
-      const normalizedReferrerCode = dto.referrerCode.trim().toUpperCase();
-      const referrer = await this.prisma.user.findUnique({
-        where: { referralCode: normalizedReferrerCode },
-      });
-      if (referrer) {
-        await this.prisma.referral.create({
+    const user = await this.prisma.$transaction(async (tx) => {
+      let createdUser;
+      try {
+        createdUser = await tx.user.create({
           data: {
-            referrerId: referrer.id,
-            referredId: user.id,
-            code: `ref_${user.id.slice(0, 8)}_${Date.now()}`,
+            email: dto.email,
+            passwordHash,
+            name: dto.name,
+            role: dto.role,
+            country: dto.country,
+            referralCode,
           },
         });
+      } catch (err: unknown) {
+        // Concurrent signups with the same email race past the pre-check
+        // above. The `email @unique` constraint is THE authoritative source of
+        // truth — translate P2002 into ConflictException so the loser doesn't
+        // see a raw Prisma error (500) leak past the API surface.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new ConflictException('Email already registered');
+        }
+        throw err;
       }
-    }
+
+      // Developer onboarding: create settings + trust score
+      if (dto.role === UserRole.DEVELOPER) {
+        await tx.userSettings.create({ data: { userId: createdUser.id } });
+        await tx.trustScore.create({ data: { userId: createdUser.id } });
+      }
+
+      // Advertiser onboarding: create advertiser profile stub
+      if (dto.role === UserRole.ADVERTISER) {
+        await tx.advertiser.create({
+          data: { userId: createdUser.id, companyName: dto.name || DEFAULT_COMPANY_NAME, billingEmail: dto.email },
+        });
+      }
+
+      // Handle referral if provided
+      if (dto.referrerCode) {
+        const normalizedReferrerCode = dto.referrerCode.trim().toUpperCase();
+        const referrer = await tx.user.findUnique({
+          where: { referralCode: normalizedReferrerCode },
+        });
+        if (referrer) {
+          await tx.referral.create({
+            data: {
+              referrerId: referrer.id,
+              referredId: createdUser.id,
+              code: `ref_${createdUser.id.slice(0, 8)}_${Date.now()}`,
+            },
+          });
+        }
+      }
+
+      return createdUser;
+    });
 
     const tokens = await this.generateTokenPair(user.id, user.role);
 
@@ -421,8 +425,15 @@ export class AuthService {
   }
 
   /** ── Logout ── */
-  async logout(userId: string) {
-    await this.revokeAllSessions(userId);
+  async logout(userId: string, jti?: string) {
+    if (jti) {
+      await this.prisma.session.update({
+        where: { id: jti },
+        data: { revoked: true },
+      });
+    } else {
+      await this.revokeAllSessions(userId);
+    }
     // Log who logged out (requires fetching role — fetch user briefly here)
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
     void this.audit.log({

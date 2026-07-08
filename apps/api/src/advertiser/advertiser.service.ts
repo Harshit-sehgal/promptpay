@@ -333,6 +333,11 @@ export class AdvertiserService {
       throw new BadRequestException('Cannot resume campaign: budget has been fully spent');
     }
 
+    const balance = await this.getAdvertiserBalance(advertiserId, campaign.currency);
+    if (balance <= 0) {
+      throw new BadRequestException('Cannot resume campaign: advertiser has no funded balance. Please deposit funds first.');
+    }
+
     this.validateTransition(campaign.status, 'active');
     const resumed = await this.prisma.campaign.update({
       where: { id: campaignId },
@@ -666,5 +671,24 @@ export class AdvertiserService {
         `Invalid campaign transition: ${currentStatus} → ${newStatus}. Allowed: ${allowed?.join(', ') || 'none'}`,
       );
     }
+  }
+
+  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+    const sums = await this.prisma.advertiserLedger.groupBy({
+      by: ['entryType'],
+      where: {
+        advertiserId,
+        currency,
+        status: 'confirmed',
+      },
+      _sum: { amountMinor: true },
+    });
+    let deposits = 0;
+    let charges = 0;
+    for (const row of sums) {
+      if (row.entryType === 'credit') deposits = row._sum.amountMinor ?? 0;
+      if (row.entryType === 'debit') charges = row._sum.amountMinor ?? 0;
+    }
+    return deposits - charges;
   }
 }

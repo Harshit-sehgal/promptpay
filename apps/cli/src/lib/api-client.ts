@@ -6,7 +6,7 @@ import { signPayload } from '@waitlayer/shared';
 import { Credentials, getCredentials, setCredentials, storeDeviceEventSecret, getDeviceEventSecret } from './credentials';
 import { normalizeToolType } from './tool-types';
 
-const API_URL = process.env.WAITLAYER_API_URL ?? 'https://api.waitlayer.com/api/v1';
+const API_URL = process.env.WAITLAYER_API_URL ?? (process.env.NODE_ENV === 'production' ? 'https://api.waitlayer.com/api/v1' : 'http://localhost:4000/api/v1');
 
 interface RegisterDeviceResponse {
   id: string;
@@ -39,7 +39,14 @@ export class ApiClient {
     if (this.deviceUUID && this.deviceEventSecret) return this.deviceUUID;
 
     const hostname = os.hostname();
-    const fingerprint = crypto.createHash('sha256').update(`cli-${hostname}`).digest('hex');
+    const username = os.userInfo().username;
+    const homedir = os.homedir();
+    const platform = os.platform();
+    const arch = os.arch();
+    const fingerprint = crypto
+      .createHash('sha256')
+      .update(`cli-${hostname}-${username}-${platform}-${arch}-${homedir}`)
+      .digest('hex');
     const recoverySupportToken = process.env.WAITLAYER_DEVICE_RECOVERY_TOKEN?.trim();
     const registrationPayload = {
       toolType: 'terminal',

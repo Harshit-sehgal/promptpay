@@ -7,6 +7,7 @@ import { PayoutService } from '../payout/payout.service';
 import { FraudService } from '../fraud/fraud.service';
 import { DeveloperService } from '../developer/developer.service';
 import { getErrorCode } from '../common/utils/errors';
+import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 
 const DEFAULT_DEVICE_RECOVERY_TOKEN_MINUTES = 15;
 const MAX_DEVICE_RECOVERY_TOKEN_MINUTES = 60;
@@ -35,6 +36,97 @@ export class AdminService {
       this.prisma.fraudFlag.count({ where: { status: 'open' } }),
     ]);
     return { activeUsers: users, activeCampaigns: campaigns, totalBillableImpressions: impressions, totalPayoutsMinor: payouts._sum.amountMinor || 0, openFraudFlags: fraudFlags };
+  }
+
+  async getMoneyIntegrityReport() {
+    // 1. Campaign Spend vs Advertiser Debits
+    const campaigns = await this.prisma.campaign.findMany({
+      select: { id: true, name: true, budgetSpentMinor: true, currency: true }
+    });
+    const advertiserDebits = await this.prisma.advertiserLedger.groupBy({
+      by: ['campaignId'],
+      where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } },
+      _sum: { amountMinor: true }
+    });
+    const debitMap = new Map(advertiserDebits.map(d => [d.campaignId, d._sum.amountMinor ?? 0]));
+
+    const campaignDiscrepancies: Array<{ campaignId: string; campaignName: string; budgetSpentMinor: number; ledgerDebits: number; diff: number }> = [];
+    for (const c of campaigns) {
+      const debits = debitMap.get(c.id) ?? 0;
+      if (c.budgetSpentMinor !== debits) {
+        campaignDiscrepancies.push({
+          campaignId: c.id,
+          campaignName: c.name,
+          budgetSpentMinor: c.budgetSpentMinor,
+          ledgerDebits: debits,
+          diff: c.budgetSpentMinor - debits
+        });
+      }
+    }
+
+    // 2. Global Split Reconciliation
+    const [
+      totalEarningsCredit,
+      totalEarningsDebit,
+      totalAdvertiserDebit,
+      totalAdvertiserRefund,
+      totalPlatformCredit,
+      totalPlatformReversal,
+      totalReserveCredit,
+      totalReserveReversal,
+    ] = await Promise.all([
+      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', status: { in: ['estimated', 'pending', 'confirmed', 'held', 'paid', 'reversed'] } } }),
+      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit', status: 'confirmed' } }),
+      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } } }),
+      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'refund', status: { in: ['confirmed', 'paid'] } } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
+      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
+    ]);
+
+    const netEarnings = (totalEarningsCredit._sum.amountMinor || 0) - (totalEarningsDebit._sum.amountMinor || 0);
+    const netAdvertiser = (totalAdvertiserDebit._sum.amountMinor || 0) - (totalAdvertiserRefund._sum.amountMinor || 0);
+    const netPlatform = (totalPlatformCredit._sum.amountMinor || 0) - (totalPlatformReversal._sum.amountMinor || 0);
+    const netReserve = (totalReserveCredit._sum.amountMinor || 0) - (totalReserveReversal._sum.amountMinor || 0);
+
+    const splitSum = netEarnings + netPlatform + netReserve;
+    const globalDiscrepancy = netAdvertiser - splitSum;
+
+    // 3. Developer Negative Balances
+    const users = await this.prisma.user.findMany({ where: { role: 'developer' }, select: { id: true, email: true } });
+    const negativeDeveloperBalances: Array<{ userId: string; email: string; balanceMinor: number }> = [];
+    for (const u of users) {
+      const [credits, debits] = await Promise.all([
+        this.prisma.earningsLedger.aggregate({
+          where: { userId: u.id, status: 'confirmed', entryType: 'credit' },
+          _sum: { amountMinor: true },
+        }),
+        this.prisma.earningsLedger.aggregate({
+          where: { userId: u.id, status: 'confirmed', entryType: 'debit' },
+          _sum: { amountMinor: true },
+        }),
+      ]);
+      const balance = (credits._sum.amountMinor || 0) - (debits._sum.amountMinor || 0);
+      if (balance < 0) {
+        negativeDeveloperBalances.push({ userId: u.id, email: u.email, balanceMinor: balance });
+      }
+    }
+
+    return {
+      timestamp: new Date().toISOString(),
+      status: (campaignDiscrepancies.length === 0 && globalDiscrepancy === 0 && negativeDeveloperBalances.length === 0) ? 'healthy' : 'unhealthy',
+      globalReconciliation: {
+        netAdvertiserSpendMinor: netAdvertiser,
+        netDeveloperEarningsMinor: netEarnings,
+        netPlatformFeeMinor: netPlatform,
+        netReserveMinor: netReserve,
+        splitSumMinor: splitSum,
+        discrepancyMinor: globalDiscrepancy,
+      },
+      campaignDiscrepancies,
+      negativeDeveloperBalances,
+    };
   }
 
   async getUsers(params: { status?: string; role?: string; search?: string }) {

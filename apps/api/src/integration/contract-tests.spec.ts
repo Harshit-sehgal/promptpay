@@ -175,8 +175,27 @@ describe('API Contract Tests', () => {
 
       const advRes = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-adv@test.com', password: 'password123', role: UserRole.ADVERTISER, name: 'Contract Adv', country: 'US' });
+        .send({ email: 'contract-adv@test.com', password: 'password123', role: UserRole.ADVERTISER, name: 'Contract Adv', country: 'US' })
+        .expect(201);
       advertiserToken = advRes.body.accessToken;
+
+      // Fund the advertiser balance so campaigns are eligible to serve
+      const advertiser = await prisma.advertiser.findUnique({
+        where: { userId: advRes.body.user.id },
+      });
+      if (advertiser) {
+        await prisma.advertiserLedger.create({
+          data: {
+            advertiserId: advertiser.id,
+            entryType: 'credit',
+            status: 'confirmed',
+            amountMinor: 100000,
+            currency: 'USD',
+            idempotencyKey: 'contract-deposit-initial',
+            description: 'Initial deposit for contract tests',
+          },
+        });
+      }
     });
   });
 
@@ -252,7 +271,7 @@ describe('API Contract Tests', () => {
     });
 
     it('POST /extension/wait-state/end → matches WaitStateEndResponse schema', async () => {
-      const payload = { waitStateId: 'contract-ws', duration: '1', idempotencyKey: 'contract-ws-end' };
+      const payload = { waitStateId: 'contract-ws', duration: '1000', idempotencyKey: 'contract-ws-end' };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/end')
@@ -288,8 +307,11 @@ describe('API Contract Tests', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-rendered')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ ...payload, signature: sig })
-        .expect(200);
+        .send({ ...payload, signature: sig });
+      if (res.status !== 200) {
+        console.error('ad-rendered error body:', res.body);
+      }
+      expect(res.status).toBe(200);
       expect(() => AdRenderedResponse.parse(res.body)).not.toThrow();
     });
 
@@ -302,6 +324,98 @@ describe('API Contract Tests', () => {
         .send({ ...payload, signature: sig })
         .expect(200);
       expect(() => QualifiedImpressionResponse.parse(res.body)).not.toThrow();
+    });
+
+    it('POST /extension/impression-qualified (duplicate) → does not double spend or duplicate ledger entries', async () => {
+      const campaignBefore = await prisma.campaign.findUnique({ where: { id: campaignId } });
+      const advertiserLedgerCountBefore = await prisma.advertiserLedger.count();
+      const earningsLedgerCountBefore = await prisma.earningsLedger.count();
+      const platformLedgerCountBefore = await prisma.platformLedger.count();
+
+      const payload = { impressionToken, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'contract-qual-dup' };
+      const sig = signPayload(payload, deviceEventSecret);
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/extension/impression-qualified')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...payload, signature: sig })
+        .expect(200);
+
+      expect(() => QualifiedImpressionResponse.parse(res.body)).not.toThrow();
+      expect(res.body.qualified).toBe(true);
+      expect(res.body.alreadyQualified).toBe(true);
+
+      const campaignAfter = await prisma.campaign.findUnique({ where: { id: campaignId } });
+      expect(campaignAfter?.budgetSpentMinor).toBe(campaignBefore?.budgetSpentMinor);
+
+      const advertiserLedgerCountAfter = await prisma.advertiserLedger.count();
+      const earningsLedgerCountAfter = await prisma.earningsLedger.count();
+      const platformLedgerCountAfter = await prisma.platformLedger.count();
+
+      expect(advertiserLedgerCountAfter).toBe(advertiserLedgerCountBefore);
+      expect(earningsLedgerCountAfter).toBe(earningsLedgerCountBefore);
+      expect(platformLedgerCountAfter).toBe(platformLedgerCountBefore);
+    });
+
+    it('POST /extension/impression-qualified (concurrent) → handles concurrent requests atomically, billing only once', async () => {
+      // Mark previous impressions as non-billable to bypass frequency cap
+      await prisma.adImpression.updateMany({
+        data: { isBillable: false },
+      });
+
+      const wsPayload = { deviceId, sessionId: 'contract-session-concurrent', toolType: 'vscode', waitStateId: 'concurrent-ws', idempotencyKey: 'concurrent-ws-start' };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/start')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...wsPayload, signature: signPayload(wsPayload, deviceEventSecret) })
+        .expect(200);
+
+      const adReqPayload = { deviceId, sessionId: 'contract-session-concurrent', waitStateId: 'concurrent-ws', toolType: 'vscode', idempotencyKey: 'concurrent-ad-req' };
+      const adRes = await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-request')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...adReqPayload, signature: signPayload(adReqPayload, deviceEventSecret) })
+        .expect(200);
+      const token = adRes.body.ad.impressionToken;
+
+      const renderPayload = { impressionToken: token, renderedAt: new Date().toISOString(), idempotencyKey: 'concurrent-render' };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-rendered')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...renderPayload, signature: signPayload(renderPayload, deviceEventSecret) })
+        .expect(200);
+
+      const payload1 = { impressionToken: token, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'concurrent-qual-1' };
+      const payload2 = { impressionToken: token, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'concurrent-qual-2' };
+
+      const campaignBefore = await prisma.campaign.findUnique({ where: { id: campaignId } });
+      const advCountBefore = await prisma.advertiserLedger.count();
+
+      const [res1, res2] = await Promise.all([
+        request(app.getHttpServer())
+          .post('/api/v1/extension/impression-qualified')
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ ...payload1, signature: signPayload(payload1, deviceEventSecret) }),
+        request(app.getHttpServer())
+          .post('/api/v1/extension/impression-qualified')
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ ...payload2, signature: signPayload(payload2, deviceEventSecret) }),
+      ]);
+
+      expect(res1.status).toBe(200);
+      expect(res2.status).toBe(200);
+
+      expect(res1.body.qualified).toBe(true);
+      expect(res2.body.qualified).toBe(true);
+
+      const alreadyQual1 = !!res1.body.alreadyQualified;
+      const alreadyQual2 = !!res2.body.alreadyQualified;
+      expect(alreadyQual1 !== alreadyQual2).toBe(true);
+
+      const campaignAfter = await prisma.campaign.findUnique({ where: { id: campaignId } });
+      expect(campaignAfter?.budgetSpentMinor).toBe((campaignBefore?.budgetSpentMinor ?? 0) + campaignBefore?.bidAmountMinor!);
+
+      const advCountAfter = await prisma.advertiserLedger.count();
+      expect(advCountAfter).toBe(advCountBefore + 1);
     });
 
     it('POST /extension/click → matches AdClickResponse schema', async () => {

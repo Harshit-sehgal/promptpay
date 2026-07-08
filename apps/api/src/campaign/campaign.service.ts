@@ -150,11 +150,14 @@ export class CampaignService {
     if (campaign && campaign.status === 'approved' && campaign.creatives.length > 0) {
       const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
       if (hasBudget) {
-        await this.prisma.campaign.update({
-          where: { id: campaign.id },
-          data: { status: 'active', activatedAt: new Date() },
-        });
-        campaignActivated = true;
+        const balance = await this.getAdvertiserBalance(campaign.advertiserId, campaign.currency);
+        if (balance > 0) {
+          await this.prisma.campaign.update({
+            where: { id: campaign.id },
+            data: { status: 'active', activatedAt: new Date() },
+          });
+          campaignActivated = true;
+        }
       }
     }
 
@@ -313,5 +316,24 @@ export class CampaignService {
     if (!advertiser || advertiser.id !== campaign.advertiserId) {
       throw new ForbiddenException('You do not own this campaign');
     }
+  }
+
+  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+    const sums = await this.prisma.advertiserLedger.groupBy({
+      by: ['entryType'],
+      where: {
+        advertiserId,
+        currency,
+        status: 'confirmed',
+      },
+      _sum: { amountMinor: true },
+    });
+    let deposits = 0;
+    let charges = 0;
+    for (const row of sums) {
+      if (row.entryType === 'credit') deposits = row._sum.amountMinor ?? 0;
+      if (row.entryType === 'debit') charges = row._sum.amountMinor ?? 0;
+    }
+    return deposits - charges;
   }
 }

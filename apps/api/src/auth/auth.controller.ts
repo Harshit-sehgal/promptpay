@@ -107,8 +107,11 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  logout(@CurrentUser('id') userId: string) {
-    return this.authService.logout(userId);
+  logout(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('jti') jti: string,
+  ) {
+    return this.authService.logout(userId, jti);
   }
 
   @Get('me')

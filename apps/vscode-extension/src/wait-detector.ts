@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 
 export interface WaitStateDetectorOptions {
   /** Callback to read the configurable inactivity timeout (ms). Default 15_000. */
-  getInactivityTimeoutMs: () => Promise<number> | number;
+  getInactivityTimeoutMs: () => number;
 }
 
 export interface WaitStateEvent {
@@ -47,7 +47,7 @@ export class WaitStateDetector {
   // ── Editor inactivity tracking ──
   private inactivityTimer?: NodeJS.Timeout;
   private lastEditTime = 0;
-  private getInactivityTimeoutMs: () => Promise<number> | number;
+  private getInactivityTimeoutMs: () => number;
 
   /** User must be idle this long (with window focused) before we infer a wait. */
   private readonly inactivityThresholdMs = 15_000;
@@ -107,10 +107,9 @@ export class WaitStateDetector {
         this.editsDuringWait++;
         if (this.editsDuringWait >= 3) {
           this.endWait();
-        } else {
-          // Extend the wait check — a single edit doesn't cancel it yet.
-          // The next checkInactivity cycle will re-evaluate.
         }
+      } else {
+        this.scheduleInactivityCheck();
       }
     });
     this.disposables.push(editListener);
@@ -215,10 +214,16 @@ export class WaitStateDetector {
     // Reset the edit-burst counter on each scheduling cycle — any
     // accumulated edit count from the previous window is stale.
     this.editsDuringWait = 0;
-    this.inactivityTimer = setTimeout(async () => {
-      const threshold = await this.getInactivityTimeoutMs();
+
+    let threshold = 15_000;
+    try {
+      threshold = this.getInactivityTimeoutMs();
+    } catch (err) {
+      // Fallback to default
+    }
+    this.inactivityTimer = setTimeout(() => {
       this.checkInactivity(threshold);
-    }, this.inactivityThresholdMs);
+    }, threshold);
   }
 
   private checkInactivity(inactivityThresholdMs: number) {

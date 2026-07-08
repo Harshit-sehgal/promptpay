@@ -33,6 +33,11 @@ export class AdminController {
     return this.service.getOverview();
   }
 
+  @Get('money-integrity')
+  getMoneyIntegrityReport() {
+    return this.service.getMoneyIntegrityReport();
+  }
+
   @Get('metrics')
   getMetrics(@Query('days') days?: string) {
     return this.service.getMetrics(days ? parseInt(days, 10) : 30);

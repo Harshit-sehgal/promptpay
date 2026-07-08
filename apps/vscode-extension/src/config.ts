@@ -66,7 +66,7 @@ export class ConfigurationManager {
    * Default: 15_000 (15 seconds).
    * Configurable via `waitlayer.inactivityTimeoutMs` in VS Code settings.
    */
-  async getInactivityTimeoutMs(): Promise<number> {
+  getInactivityTimeoutMs(): number {
     return (
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('inactivityTimeoutMs') ?? 15_000
     );
