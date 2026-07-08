@@ -12,6 +12,7 @@ allowBuilds:
   '@scarf/scarf': true
   '@sentry/cli': true
   '@sentry/node-cpu-profiler': true
+  keytar: true
   prisma: true
   sharp: true
   unrs-resolver: true

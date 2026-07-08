@@ -85,6 +85,9 @@ describe('WisePayoutProvider', () => {
         if (url.includes('/v1/accounts')) {
           return new Response(JSON.stringify({ id: 555 }), { status: 200 });
         }
+        if (url.includes('/v1/quotes')) {
+          return new Response(JSON.stringify({ id: 'quote-123' }), { status: 200 });
+        }
         if (url.includes('/v1/transfers')) {
           return new Response(JSON.stringify({ id: 999, status: 'incoming_payment_waiting' }), { status: 200 });
         }

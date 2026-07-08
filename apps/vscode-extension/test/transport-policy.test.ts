@@ -9,14 +9,14 @@ describe('VS Code extension transport policy', () => {
   });
 
   it('allows loopback HTTP for local development', () => {
-    expect(resolveCredentialSafeUrl('http://localhost:4000/api/v1', '/auth/me').hostname).toBe(
+    expect(resolveCredentialSafeUrl('http://localhost:4002/api/v1', '/auth/me').hostname).toBe(
       'localhost',
     );
-    expect(resolveCredentialSafeUrl('http://127.0.0.1:4000/api/v1', '/auth/me').hostname).toBe(
+    expect(resolveCredentialSafeUrl('http://127.0.0.1:4002/api/v1', '/auth/me').hostname).toBe(
       '127.0.0.1',
     );
 
-    const ipv6 = resolveCredentialSafeUrl('http://[::1]:4000/api/v1', '/auth/me');
+    const ipv6 = resolveCredentialSafeUrl('http://[::1]:4002/api/v1', '/auth/me');
     expect(requestHostnameForUrl(ipv6)).toBe('::1');
   });
 

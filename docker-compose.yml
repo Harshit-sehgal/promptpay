@@ -32,7 +32,7 @@ services:
       context: .
       target: api
     ports:
-      - "4000:4000"
+      - "4002:4002"
     environment:
       DATABASE_URL: postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer
       REDIS_URL: redis://redis:6379
@@ -46,7 +46,7 @@ services:
       JWT_SECRET: dev-only-docker-compose-jwt-secret-at-least-32-char
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
-      API_PORT: "4000"
+      API_PORT: "4002"
       GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
       WEB_BASE_URL: http://localhost:3000
       # docker-compose is a developer convenience — run with dev NODE_ENV so the
@@ -69,7 +69,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/api/v1/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4002/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -82,7 +82,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
       JWT_SECRET: dev-only-docker-compose-jwt-secret-at-least-32-char
       # Match the api service — dev convenience compose uses NODE_ENV=development

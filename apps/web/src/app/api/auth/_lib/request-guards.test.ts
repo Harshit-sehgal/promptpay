@@ -128,8 +128,8 @@ describe('request route guards', () => {
     process.env.NEXT_PUBLIC_API_URL = 'https://api.example.com/api/v1/';
     expect(apiBaseUrl()).toBe('https://api.example.com/api/v1');
 
-    process.env.NEXT_PUBLIC_API_URL = 'http://[::1]:4000/api/v1';
-    expect(apiBaseUrl()).toBe('http://[::1]:4000/api/v1');
+    process.env.NEXT_PUBLIC_API_URL = 'http://[::1]:4002/api/v1';
+    expect(apiBaseUrl()).toBe('http://[::1]:4002/api/v1');
   });
 
   it('rejects cleartext remote upstream API base URLs', () => {

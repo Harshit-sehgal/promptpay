@@ -111,6 +111,38 @@ export class WisePayoutProvider implements PayoutProviderHandler {
     return String(created.id);
   }
 
+  /**
+   * Create a Wise quote for a balance-funded transfer. Wise requires the
+   * transfer to reference a quote UUID; without it the transfer is rejected.
+   * Throws on failure so the caller fails closed instead of emitting a broken
+   * transfer. NOTE: this flow must be validated against the Wise sandbox
+   * (WISE_MODE=sandbox) before enabling WISE_MODE=live.
+   */
+  private async createQuote(recipientId: string, amount: number, currency: string): Promise<string> {
+    const quoteRes = await fetch(`${this.baseUrl}/v1/quotes`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({
+        profileId: Number(this.profileId),
+        sourceCurrency: currency,
+        targetCurrency: currency,
+        targetAmount: amount,
+        rateType: 'FIXED',
+        payOut: 'BANK_TRANSFER',
+        preferredPayIn: 'BALANCE',
+      }),
+    });
+    if (!quoteRes.ok) {
+      const text = await quoteRes.text();
+      throw new Error(`Wise quote creation failed: ${quoteRes.status} ${text}`);
+    }
+    const quote = (await quoteRes.json()) as { id: string };
+    if (!quote.id) {
+      throw new Error('Wise quote creation returned no quote id');
+    }
+    return quote.id;
+  }
+
   async initiate(params: {
     payoutRequestId: string;
     destination: string;
@@ -137,12 +169,17 @@ export class WisePayoutProvider implements PayoutProviderHandler {
 
     const recipientId = await this.resolveRecipient(email);
 
+    // Wise requires a quote before a transfer: the quote captures the rate and
+    // the balance draw. A transfer sent without a valid `quoteUuid` is rejected
+    // by Wise, so we create one first and fail closed if it cannot be created.
+    const quoteUuid = await this.createQuote(recipientId, amount, params.currency.toUpperCase());
+
     const transferRes = await fetch(`${this.baseUrl}/v1/transfers`, {
       method: 'POST',
       headers: this.headers(),
       body: JSON.stringify({
         targetAccount: Number(recipientId),
-        quoteUuid: undefined, // balance-funded transfer; Wise derives quote from profile
+        quoteUuid,
         customerTransactionId: `wl_${params.payoutRequestId}`,
         details: {
           reference: `WaitLayer payout ${params.payoutRequestId}`,

@@ -14,6 +14,7 @@
     "@waitlayer/shared": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
+    "keytar": "npm:@napi-rs/keyring@^1.1.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {

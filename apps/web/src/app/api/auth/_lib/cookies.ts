@@ -19,7 +19,7 @@ import { NextResponse } from 'next/server';
  */
 export const COOKIE_ACCESS = 'access_token';
 export const COOKIE_REFRESH = 'refresh_token';
-const DEFAULT_API_BASE_URL = 'http://localhost:4000/api/v1';
+const DEFAULT_API_BASE_URL = 'http://localhost:4002/api/v1';
 
 /**
  * JWT access token TTL — must match JWT_ACCESS_TTL on the API (15m default).
@@ -185,8 +185,7 @@ export function clearAuthCookies(response: NextResponse, headers: Headers): Next
  * client uses is reachable from Route Handlers.
  */
 export function apiBaseUrl(): string {
-  // Default `localhost:4000` matches the API's API_PORT default (4000). The
-  // earlier `localhost:4002` default drifted from the actual API port.
+  // Default `localhost:4002` matches the API's API_PORT default (4002).
   const rawUrl = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL;
   const url = new URL(rawUrl);
   const hostname = normalizeUrlHostname(url.hostname);

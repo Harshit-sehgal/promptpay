@@ -20,13 +20,17 @@ export class ApiClient {
   constructor(private creds: Credentials | null = null) {
     if (!this.creds) this.creds = getCredentials();
     if (this.creds?.deviceUUID) this.deviceUUID = this.creds.deviceUUID;
-    // Event secret is NOT in the JSON credential file (it's in a separate
-    // obfuscated file). Fetch from the dedicated helper.
-    this.deviceEventSecret = getDeviceEventSecret();
+    // Event secret is NOT in the JSON credential file (it's in the OS keychain
+    // when available, else a separate obfuscated file). Loaded lazily on first
+    // signing; see signEventPayload().
+    this.deviceEventSecret = null;
   }
 
   /** Sign event payloads with the server-issued per-device secret only. */
-  private signEventPayload(payload: Record<string, unknown>): string {
+  private async signEventPayload(payload: Record<string, unknown>): Promise<string> {
+    if (!this.deviceEventSecret) {
+      this.deviceEventSecret = await getDeviceEventSecret();
+    }
     if (!this.deviceEventSecret) {
       throw new Error('WaitLayer device is not registered with an event secret. Run device registration again.');
     }
@@ -84,7 +88,7 @@ export class ApiClient {
         setCredentials(this.creds);
       }
       // Persist the event secret separately (not in the main credential JSON).
-      storeDeviceEventSecret(res.eventSecret);
+      await storeDeviceEventSecret(res.eventSecret);
       return res.id;
     }
     throw new Error('Failed to register CLI device');
@@ -179,7 +183,7 @@ export class ApiClient {
       sessionId: 'cli-' + Date.now(),
       idempotencyKey: 'cli-start-' + input.waitStateId,
     };
-    const signature = this.signEventPayload(payload);
+    const signature = await this.signEventPayload(payload);
     return this.raw('POST', '/extension/wait-state/start', {
       ...payload,
       signature,
@@ -195,7 +199,7 @@ export class ApiClient {
       durationSeconds: String(input.durationSeconds),
       idempotencyKey: 'cli-end-' + input.waitStateId,
     };
-    const signature = this.signEventPayload(payload);
+    const signature = await this.signEventPayload(payload);
     return this.raw('POST', '/extension/wait-state/end', {
       ...payload,
       signature,

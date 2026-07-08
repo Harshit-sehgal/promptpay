@@ -1,4 +1,4 @@
-/* Live end-to-end test against the running API (localhost:4000).
+/* Live end-to-end test against the running API (localhost:4002).
  *
  * Exercises real guards (no overrides), the hardened per-device extension
  * flow (HMAC-signed events), 2FA/consent, advertiser campaign creation +
@@ -15,7 +15,7 @@ const { PrismaClient } = require('@waitlayer/db');
 const { canonicalJson } = require('@waitlayer/shared');
 const bcrypt = require('bcryptjs');
 
-const BASE = 'http://localhost:4000/api/v1';
+const BASE = 'http://localhost:4002/api/v1';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-local-super-secret-jwt-key-please-change-32+';
 const results = [];
 function rec(name, ok, detail) {

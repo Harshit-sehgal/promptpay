@@ -22,12 +22,11 @@ export class ConfigurationManager {
   }
 
   getApiUrl(): string {
-    // Default `localhost:4000` matches the API's API_PORT default (4000) in
-    // packages/config. The earlier `localhost:4002` default drifted from the
-    // actual API port and only worked when an explicit override was set.
+    // Default `localhost:4002` matches the API's API_PORT default (4002) in
+    // packages/config.
     return (
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('apiUrl') ||
-      'http://localhost:4000/api/v1'
+      'http://localhost:4002/api/v1'
     );
   }
 

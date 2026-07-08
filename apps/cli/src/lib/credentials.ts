@@ -6,6 +6,52 @@ import { createHash } from 'crypto';
 const CRED_DIR = path.join(os.homedir(), '.config', 'waitlayer');
 const CRED_FILE = path.join(CRED_DIR, 'credentials.json');
 
+// OS keychain coordinates for the per-device event secret. When a keychain
+// backend (keytar: GNOME Keyring / macOS Keychain / Windows CredMan) is
+// available, the secret lives ONLY there; otherwise we fall back to the local
+// XOR-obfuscated file (dev/CI only — production refuses the fallback).
+const KEYCHAIN_SERVICE = 'waitlayer-cli';
+const KEYCHAIN_ACCOUNT = 'device-event-secret';
+
+/**
+ * Load the keytar module via dynamic import. Using a string variable (rather
+ * than a literal `import('keytar')`) keeps TypeScript from requiring the
+ * module at type-check time, so the CLI still builds even if the optional
+ * native dependency is not installed in a given environment. At runtime the
+ * import resolves when keytar is present, and rejects (→ null) otherwise, so
+ * callers transparently fall back to local storage.
+ */
+async function loadKeytar(): Promise<{
+  setPassword: (service: string, account: string, secret: string) => Promise<void>;
+  getPassword: (service: string, account: string) => Promise<string | null>;
+  deletePassword: (service: string, account: string) => Promise<boolean>;
+} | null> {
+  try {
+    const modName = 'keytar';
+    const mod = (await import(modName)) as any;
+    const keyring = mod?.default ?? mod;
+    // @napi-rs/keyring (the `keytar` alias) v1 is class-based: an `AsyncEntry`
+    // is constructed from (service, account) and exposes setPassword /
+    // getPassword / deletePassword. Adapt it to the keytar-shaped interface
+    // our callers expect.
+    if (keyring?.AsyncEntry) {
+      const Entry = keyring.AsyncEntry;
+      return {
+        setPassword: (service, account, secret) => new Entry(service, account).setPassword(secret),
+        getPassword: (service, account) =>
+          new Entry(service, account).getPassword().then((p: string | undefined) => p ?? null),
+        deletePassword: (service, account) =>
+          new Entry(service, account).deletePassword().then(() => true).catch(() => false),
+      };
+    }
+    // Fallback: a keytar-shaped module exposing top-level functions.
+    if (keyring?.setPassword && keyring?.getPassword) return keyring;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Credential payload before stripping secrets from the filesystem copy.
  * `deviceEventSecret` and `accessToken` are the most sensitive fields —
@@ -61,29 +107,35 @@ export function setCredentials(creds: Credentials) {
 
 /** Store the per-device event secret separately from the main credential file.
  *
- * Production fail-closed: when NODE_ENV=production, refuse to use the
- * local XOR file fallback (which is decryptable from `hostname + username`
- * alone — see `hashDeviceSecretOnDisk`'s docstring) and require an OS
- * keychain integration. Today this throws on store. Production deployments
- * must wire up `keytar` (Linux/GNOME keyring, macOS Keychain, Windows
- * CredMan) or another platform-appropriate backend before release.
+ * Preferred path: the OS keychain (keytar), so the secret never touches disk
+ * in plaintext-equivalent form. Fallback path: a local XOR-obfuscated file for
+ * dev/CI only. Production fail-closed: when NODE_ENV=production AND no OS
+ * keychain backend is available, refuse the weak fallback (it is recoverable
+ * from `hostname + username` alone — see `hashDeviceSecretOnDisk`) and require
+ * a proper keychain integration.
  */
-export function storeDeviceEventSecret(secret: string): void {
+export async function storeDeviceEventSecret(secret: string): Promise<void> {
+  const keytar = await loadKeytar();
+  if (keytar) {
+    try {
+      await keytar.setPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, secret);
+      return;
+    } catch (err: unknown) {
+      console.warn('[waitlayer] OS keychain write failed; using local fallback');
+    }
+  }
+
   if (process.env.NODE_ENV === 'production') {
     // The local XOR storage is recoverable from `hostname + username` alone
     // (the key in `hashDeviceSecretOnDisk` derives from those two values,
     // both fully discoverable to any local code). Shipping that to a
     // production binary means the per-device HMAC signing key is, in
     // practice, plaintext on disk to any process running as the same
-    // user. Production binaries must integrate an OS keychain before
-    // releasing — surface that as an explicit failure here, not a silent
-    // security regression. The non-prod path (dev/CI/local-extension-host)
-    // continues to use the local XOR file so iterative development is not
-    // blocked on a keychain binding.
+    // user. Production binaries must have an OS keychain; surface that as an
+    // explicit failure here, not a silent security regression.
     throw new Error(
-      'storeDeviceEventSecret does not support NODE_ENV=production — ' +
-      'integrate an OS keychain (keytar / libsecret / macOS Keychain / ' +
-      'Windows CredMan) to ship this credential safely.',
+      'storeDeviceEventSecret does not support NODE_ENV=production without an OS keychain — ' +
+      'integrate keytar (GNOME Keyring / macOS Keychain / Windows CredMan) to ship this credential safely.',
     );
   }
   const keyFile = path.join(CRED_DIR, '.event-secret');
@@ -91,7 +143,16 @@ export function storeDeviceEventSecret(secret: string): void {
   fs.writeFileSync(keyFile, hashDeviceSecretOnDisk(secret), { mode: 0o600 });
 }
 
-export function getDeviceEventSecret(): string | null {
+export async function getDeviceEventSecret(): Promise<string | null> {
+  const keytar = await loadKeytar();
+  if (keytar) {
+    try {
+      const fromKeychain = await keytar.getPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+      if (fromKeychain) return fromKeychain;
+    } catch {
+      // fall through to the local file fallback
+    }
+  }
   const keyFile = path.join(CRED_DIR, '.event-secret');
   try {
     const hashed = fs.readFileSync(keyFile, 'utf-8');
@@ -101,7 +162,20 @@ export function getDeviceEventSecret(): string | null {
   }
 }
 
-export function clearDeviceEventSecret(): void {    try { fs.unlinkSync(path.join(CRED_DIR, '.event-secret')); } catch { /* noop — file may not exist */ }
+export async function clearDeviceEventSecret(): Promise<void> {
+  const keytar = await loadKeytar();
+  if (keytar) {
+    try {
+      await keytar.deletePassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+    } catch {
+      /* noop — keychain entry may not exist */
+    }
+  }
+  try {
+    fs.unlinkSync(path.join(CRED_DIR, '.event-secret'));
+  } catch {
+    /* noop — file may not exist */
+  }
 }
 
 /**
@@ -129,5 +203,12 @@ function decodeHashedDeviceSecret(hashedHex: string): string {
 }
 
 export function clearCredentials() {
-  clearDeviceEventSecret();    try { fs.unlinkSync(CRED_FILE); } catch { /* noop — file may not exist */ }
+  // Best-effort keychain clear (fire-and-forget; the file unlink below is the
+  // authoritative local cleanup).
+  void clearDeviceEventSecret();
+  try {
+    fs.unlinkSync(CRED_FILE);
+  } catch {
+    /* noop — file may not exist */
+  }
 }
