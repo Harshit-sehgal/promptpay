@@ -45,6 +45,8 @@ export default function AdminCampaignsPage() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [rejectModalFor, setRejectModalFor] = useState<PendingCampaign | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [creativeRejectFor, setCreativeRejectFor] = useState<Creative | null>(null);
+  const [creativeRejectReason, setCreativeRejectReason] = useState('');
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
 
   const fetchCampaigns = useCallback(() => {
@@ -98,10 +100,13 @@ export default function AdminCampaignsPage() {
     }
   };
 
-  const handleRejectCreative = async (creativeId: string) => {
-    setProcessing(creativeId);
+  const handleRejectCreativeConfirm = async () => {
+    if (!creativeRejectFor || !creativeRejectReason.trim()) return;
+    setProcessing(creativeRejectFor.id);
     try {
-      await campaignApi.rejectCreative(creativeId, 'Rejected by admin');
+      await campaignApi.rejectCreative(creativeRejectFor.id, creativeRejectReason.trim());
+      setCreativeRejectFor(null);
+      setCreativeRejectReason('');
       fetchCampaigns();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Creative reject failed'));
@@ -217,7 +222,10 @@ export default function AdminCampaignsPage() {
                             {(cr.status === 'pending_review' || cr.status === 'draft') && (
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <button
-                                  onClick={() => handleRejectCreative(cr.id)}
+                                  onClick={() => {
+                                    setCreativeRejectFor(cr);
+                                    setCreativeRejectReason('');
+                                  }}
                                   disabled={processing === cr.id}
                                   className="bg-ink-600 hover:bg-ink-500 text-red-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
                                 >
@@ -246,7 +254,7 @@ export default function AdminCampaignsPage() {
           </div>
         )}
 
-        {/* Reject modal */}
+        {/* Campaign reject modal */}
         {rejectModalFor && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
             <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
@@ -275,6 +283,45 @@ export default function AdminCampaignsPage() {
                 <button
                   onClick={handleReject}
                   disabled={!rejectReason.trim() || processing === rejectModalFor.id}
+                  className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Creative reject modal */}
+        {creativeRejectFor && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+            <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+              <h3 className="text-white font-semibold mb-2">Reject creative</h3>
+              <p className="text-ink-400 text-sm mb-4">
+                Domain: <span className="text-white">{creativeRejectFor.displayDomain}</span>
+              </p>
+              <p className="text-white text-xs mb-4 truncate">{creativeRejectFor.sponsoredMessage}</p>
+              <textarea
+                value={creativeRejectReason}
+                onChange={(e) => setCreativeRejectReason(e.target.value)}
+                placeholder="Reason (required) — visible to advertiser"
+                rows={3}
+                required
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              />
+              <div className="flex items-center gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setCreativeRejectFor(null);
+                    setCreativeRejectReason('');
+                  }}
+                  className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRejectCreativeConfirm}
+                  disabled={!creativeRejectReason.trim() || processing === creativeRejectFor.id}
                   className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
                 >
                   Reject

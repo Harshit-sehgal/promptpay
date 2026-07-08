@@ -195,15 +195,15 @@ export default function AdvertiserCampaignsPage() {
                       </div>
 
                       <div className="flex items-center gap-3">
-                        {campaign.status === 'draft' && (
-                          <button
-                            onClick={() => {}}
+                        {(campaign.status === 'draft' || campaign.status === 'rejected') && (
+                          <Link
+                            href={`/advertiser/campaigns/${campaign.id}/edit`}
                             className="text-brand-500 hover:text-brand-400 text-xs font-medium"
                           >
                             Edit
-                          </button>
+                          </Link>
                         )}
-                        {campaign.status === 'approved' && (
+                        {campaign.status === 'active' && (
                           <button
                             onClick={() => handlePause(campaign.id)}
                             disabled={actionLoading === campaign.id}

@@ -73,6 +73,7 @@ export interface AdResponse {
   label: string; // "Sponsored" or "Ad"
   displayDomain: string;
   destinationUrl: string;
+  ctaText?: string | null;
 }
 
 export interface AdRenderedEvent {

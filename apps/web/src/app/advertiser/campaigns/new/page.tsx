@@ -80,6 +80,7 @@ export default function NewCampaignPage() {
         sponsoredMessage: message,
         destinationUrl: finalCtaUrl,
         displayDomain,
+        ctaText: ctaText?.trim() || undefined,
       });
 
       // Set country targeting if provided

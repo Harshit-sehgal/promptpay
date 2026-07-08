@@ -112,7 +112,7 @@ export default function AdvertisersPage() {
             <div className="flex-1">
               <p className={`text-sm font-medium ${banner.type === 'success' ? 'text-emerald-300' : 'text-amber-300'}`}>
                 {banner.type === 'success'
-                  ? 'Your deposit was successful! Your account has been credited.'
+                  ? 'Your payment was completed. Your account balance will be credited once the payment is confirmed by our payment processor — check the billing page in a moment.'
                   : 'Deposit cancelled. No charges were made.'}
               </p>
             </div>

@@ -40,6 +40,7 @@ export interface Ad {
   label: string;
   displayDomain: string;
   destinationUrl: string;
+  ctaText?: string | null;
 }
 
 export class ApiClient {
