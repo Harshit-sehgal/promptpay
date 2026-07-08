@@ -220,7 +220,7 @@ export class WaitStateDetector {
     let threshold = 15_000;
     try {
       threshold = this.getInactivityTimeoutMs();
-    } catch (err) {
+    } catch {
       // Fallback to default
     }
     this.inactivityTimer = setTimeout(() => {

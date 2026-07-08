@@ -120,7 +120,7 @@ export async function storeDeviceEventSecret(secret: string): Promise<void> {
     try {
       await keytar.setPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, secret);
       return;
-    } catch (err: unknown) {
+    } catch {
       console.warn('[waitlayer] OS keychain write failed; using local fallback');
     }
   }
