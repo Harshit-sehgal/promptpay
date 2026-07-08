@@ -131,6 +131,8 @@ describe('End-to-End HTTP Integration Flow', () => {
           role: UserRole.DEVELOPER,
           name: 'Jane Developer',
           country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
         })
         .expect(201);
 
@@ -149,6 +151,8 @@ describe('End-to-End HTTP Integration Flow', () => {
           role: UserRole.ADVERTISER,
           name: 'Big Brand Co',
           country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
         })
         .expect(201);
 
@@ -166,6 +170,8 @@ describe('End-to-End HTTP Integration Flow', () => {
           role: UserRole.ADVERTISER,
           name: 'Alternative Advertiser',
           country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
         })
         .expect(201);
 
@@ -186,6 +192,8 @@ describe('End-to-End HTTP Integration Flow', () => {
           role: UserRole.ADMIN,
           name: 'Super Admin',
           country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
         })
         .expect(400);
     });
@@ -301,7 +309,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Register a dedicated user for this flow
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email, password: originalPassword, role: UserRole.DEVELOPER, name: 'Reset Flow', country: 'US' })
+        .send({ email, password: originalPassword, role: UserRole.DEVELOPER, name: 'Reset Flow', country: 'US', ageConfirmed: true, termsAccepted: true })
         .expect(201);
 
       // Unknown email → generic message, no token leaked
@@ -656,6 +664,9 @@ describe('End-to-End HTTP Integration Flow', () => {
     });
 
     it('should record qualified impression (CPM), triggering ledger splits', async () => {
+      // Wait past the server-enforced minimum visible duration before
+      // qualifying (issue A-060). The ad was rendered in the previous test.
+      await new Promise((r) => setTimeout(r, 4000));
       const impressionPayload = {
         impressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -778,6 +789,8 @@ describe('End-to-End HTTP Integration Flow', () => {
     });
 
     it('should qualify CPC impression (no CPM charge)', async () => {
+      // Wait past the server-enforced minimum visible duration (issue A-060).
+      await new Promise((r) => setTimeout(r, 4000));
       const impressionPayload = {
         impressionToken: cpcImpressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -885,6 +898,8 @@ describe('End-to-End HTTP Integration Flow', () => {
           role: UserRole.DEVELOPER,
           name: 'Dev Two',
           country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
         })
         .expect(201);
       expect(res.body.user.id).toBeDefined();
@@ -1024,6 +1039,9 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ ...rp, signature: signPayload(rp, deviceEventSecret) })
         .expect(200);
 
+      // Wait past the server-enforced minimum visible duration (issue A-060).
+      await new Promise((r) => setTimeout(r, 4000));
+
       const ip = { impressionToken: tok, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: `i-budget-${wsId}` };
       const qRes = await request(app.getHttpServer()).post('/api/v1/extension/impression-qualified')
         .set('Authorization', `Bearer ${devToken}`)
@@ -1070,6 +1088,14 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       expect(res.body.id).toBeDefined();
       payoutAccountId = res.body.id;
+
+      // Payout accounts must be verified before they can be used for payouts
+      // (issue A-048). In production an admin verifies the destination; the
+      // contract test verifies it directly to exercise the payout flow.
+      await prisma.payoutAccount.update({
+        where: { id: payoutAccountId },
+        data: { isVerified: true },
+      });
     });
 
     it('should allow developer to request payout for mature earnings', async () => {

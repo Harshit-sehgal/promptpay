@@ -10,6 +10,7 @@ import { AdminService } from '../admin/admin.service';
 import { AdvertiserService } from '../advertiser/advertiser.service';
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
+import { ComplianceService } from '../compliance/compliance.service';
 import { DeveloperService } from '../developer/developer.service';
 import { ExtensionService } from '../extension/extension.service';
 import { FraudService } from '../fraud/fraud.service';
@@ -187,9 +188,14 @@ const mockPrisma = {
     aggregate: vi.fn(),
     groupBy: vi.fn(async (args?: any) => {
       const advertiserId = args?.where?.advertiserId?.in?.[0] || args?.where?.advertiserId || 'default-adv';
+      // The mock must include `currency` in every returned row so the per-currency
+      // balance helpers (`getAdvertiserBalancesByCurrency`, `getAdvertiserBalance`)
+      // can compose `advertiserId:currency` keys and match campaigns by currency.
+      const currency = args?.where?.currency || 'USD';
       return [
         {
           advertiserId,
+          currency,
           entryType: 'credit',
           _sum: { amountMinor: 10000_00 },
         },
@@ -241,6 +247,22 @@ const mockPrisma = {
   // ── Referral ──
   referral: {
     create: vi.fn(),
+  },
+
+  // ── Consent (A-034 / A-036) ──
+  consent: {
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+  },
+  // ── Retention (ComplianceService.purge / ensureRetentionDefaults) ──
+  dataRetentionConfig: {
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+  },
+  webhookEvent: {
+    deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
   },
 
   // Raw SQL — used for atomic budget guards. Default return = 1 (row updated).
@@ -319,14 +341,26 @@ function makeServices(): TestFixtures {
   // FraudService — real instance with mocked prisma and real ledger
   const fraud = new FraudService(prismaRef, ledger);
 
+  // ComplianceService — real instance with mocked prisma and real audit (A-036
+  // wires extension.requestAd to check `ccpa_opt_out` via compliance.isConsented).
+  const compliance = new ComplianceService(prismaRef, audit);
+
   // ExtensionService — real instance with all mocked deps
-  const extension = new ExtensionService(prismaRef, audit, ledger, fraud, mockGoogleVerifier as any);
+  const extension = new ExtensionService(
+    prismaRef,
+    audit,
+    ledger,
+    fraud,
+    compliance,
+    mockGoogleVerifier as any,
+  );
 
   // CampaignService — real instance with mocked prisma + real audit (audit is fire-and-forget; safe to share)
   const campaign = new CampaignService(prismaRef, audit);
 
   // AdvertiserService — real instance with mocked prisma and real campaign service + audit
-  const advertiser = new AdvertiserService(prismaRef, campaign, audit);
+  // (A-044 added the GoogleTokenVerifier dep so deleteAccount can step-up reauth Google-only accounts.)
+  const advertiser = new AdvertiserService(prismaRef, campaign, audit, mockGoogleVerifier as any);
 
   // PayoutService — real instance with mocked prisma, real ledger + audit, dummy paypal payouts provider
   const payoutConfig = {
@@ -663,7 +697,7 @@ describe('E2E Money Loop', () => {
     beforeEach(() => {
       // Advertiser balance: credit of 1000 USD
       mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
-        { advertiserId: ADS_PROFILE_ID, entryType: 'credit', _sum: { amountMinor: 1000_00 } },
+        { advertiserId: ADS_PROFILE_ID, currency: 'USD', entryType: 'credit', _sum: { amountMinor: 1000_00 } },
       ]);
       // Pre-seed the "developer" user and "advertiser" user exists
       mockPrisma.user.findUnique.mockImplementation((args: any) => {
@@ -895,7 +929,7 @@ describe('E2E Money Loop', () => {
         deviceId: DEVICE_ID,
         sessionId: uid('sess'),
         impressionTokenHash: require('crypto').createHash('sha256').update(IMPRESSION_TOKEN).digest('hex'),
-        renderedAt: new Date(),
+        renderedAt: new Date(Date.now() - 6000),
         qualifiedAt: null,
         visibleDurationMs: null,
         isBillable: false,
@@ -1044,7 +1078,7 @@ describe('E2E Money Loop', () => {
         deviceId: DEVICE_ID,
         sessionId: uid('sess'),
         impressionTokenHash: require('crypto').createHash('sha256').update(IMPRESSION_TOKEN).digest('hex'),
-        renderedAt: new Date(),
+        renderedAt: new Date(Date.now() - 6000),
         qualifiedAt: null,
         visibleDurationMs: null,
         isBillable: false,
@@ -1528,7 +1562,7 @@ describe('E2E Money Loop', () => {
         id: impressionId, campaignId, creativeId, userId: devUserId,
         deviceId, sessionId,
         impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
-        renderedAt: new Date(), qualifiedAt: null, isBillable: false,
+        renderedAt: new Date(Date.now() - 6000), qualifiedAt: null, isBillable: false,
         campaign: {
           id: campaignId, bidAmountMinor: 5_00, currency: 'USD',
           advertiserId: advProfileId, bidType: 'cpm',
@@ -2299,6 +2333,7 @@ describe('E2E Money Loop', () => {
         deviceId: uid('dev'),
         sessionId: uid('sess'),
         impressionTokenHash: hash,
+        renderedAt: new Date(Date.now() - 6000),
         campaign: {
           id: uid('c'),
           bidAmountMinor: 5_00,

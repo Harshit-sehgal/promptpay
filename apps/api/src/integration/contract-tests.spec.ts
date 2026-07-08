@@ -128,7 +128,7 @@ describe('API Contract Tests', () => {
     it('POST /auth/signup → matches SignupResponse schema', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-dev@test.com', password: 'Password123!', role: UserRole.DEVELOPER, name: 'Contract Dev', country: 'US' })
+        .send({ email: 'contract-dev@test.com', password: 'Password123!', role: UserRole.DEVELOPER, name: 'Contract Dev', country: 'US', ageConfirmed: true, termsAccepted: true })
         .expect(201);
       expect(() => SignupResponse.parse(res.body)).not.toThrow();
       devToken = res.body.accessToken;
@@ -175,7 +175,7 @@ describe('API Contract Tests', () => {
       // beforeAll. Login with the seeded admin to obtain a token.
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-admin@test.com', password: 'Password123!', role: UserRole.ADMIN, name: 'Contract Admin', country: 'US' })
+        .send({ email: 'contract-admin@test.com', password: 'Password123!', role: UserRole.ADMIN, name: 'Contract Admin', country: 'US', ageConfirmed: true, termsAccepted: true })
         .expect(400);
       const adminLogin = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
@@ -185,7 +185,7 @@ describe('API Contract Tests', () => {
 
       const advRes = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-adv@test.com', password: 'Password123!', role: UserRole.ADVERTISER, name: 'Contract Adv', country: 'US' })
+        .send({ email: 'contract-adv@test.com', password: 'Password123!', role: UserRole.ADVERTISER, name: 'Contract Adv', country: 'US', ageConfirmed: true, termsAccepted: true })
         .expect(201);
       advertiserToken = advRes.body.accessToken;
 
@@ -330,6 +330,11 @@ describe('API Contract Tests', () => {
     });
 
     it('POST /extension/impression-qualified → matches QualifiedImpressionResponse schema', async () => {
+      // The server records the render timestamp authoritatively and requires
+      // the minimum visible duration (5s, with grace) to have elapsed before
+      // qualification (issue A-060). The ad-rendered test ran immediately
+      // before this one, so wait past the threshold first.
+      await new Promise((r) => setTimeout(r, 4000));
       const payload = { impressionToken, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'contract-qual' };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
@@ -397,6 +402,9 @@ describe('API Contract Tests', () => {
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...renderPayload, signature: signPayload(renderPayload, deviceEventSecret) })
         .expect(200);
+
+      // Wait past the minimum visible duration before qualifying (issue A-060).
+      await new Promise((r) => setTimeout(r, 4000));
 
       const payload1 = { impressionToken: token, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'concurrent-qual-1' };
       const payload2 = { impressionToken: token, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'concurrent-qual-2' };

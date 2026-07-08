@@ -50,14 +50,12 @@ export class ComplianceController {
     );
   }
 
-  /** Latest policy/terms versions users must have accepted (re-prompt flow #65). */
-  @Get('required-versions')
-  @HttpCode(HttpStatus.OK)
-  requiredVersions() {
-    return this.compliance.getRequiredConsentVersions();
-  }
-
-  /** Consent purposes whose accepted version is stale for this user (#65). */
+  /**
+   * Latest required consent versions for THIS user's re-prompt flow. NB: the
+   * unauthenticated `GET /consent/required-versions` form is served by the
+   * public {@link ConsentVersionsController}; this controller only exposes
+   * per-user consent reads/staleness checks behind `JwtAuthGuard`.
+   */
   @Get('stale')
   @HttpCode(HttpStatus.OK)
   stale(@CurrentUser('id') userId: string) {

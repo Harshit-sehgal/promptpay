@@ -1,6 +1,6 @@
 import { Request } from 'express';
 import Stripe from 'stripe';
-import { Controller, HttpCode, HttpStatus, Logger, OnModuleInit,Post, Req } from '@nestjs/common';
+import { Controller, HttpCode, HttpStatus, HttpException, Logger, OnModuleInit,Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
 import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
@@ -60,13 +60,15 @@ export class StripeWebhookController implements OnModuleInit {
   async handleWebhook(@Req() req: RawBodyRequest) {
     if (!this.stripe.isEnabled()) {
       this.logger.warn('Stripe webhook received but Stripe is not configured');
-      return { received: false, reason: 'stripe_not_configured' };
+      // Returning 2xx here would tell Stripe the event was accepted when it
+      // was not — so we fail closed with 503 (issue A-062).
+      throw new HttpException({ received: false, reason: 'stripe_not_configured' }, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     const sig = req.headers['stripe-signature'] as string;
     if (!sig) {
       this.logger.warn('Stripe webhook missing signature header');
-      return { received: false, reason: 'missing_signature' };
+      throw new HttpException({ received: false, reason: 'missing_signature' }, HttpStatus.BAD_REQUEST);
     }
 
     // Stripe requires the raw request body for signature verification.
@@ -74,7 +76,7 @@ export class StripeWebhookController implements OnModuleInit {
     const rawBody = req.rawBody ?? (Buffer.isBuffer(req.body) || typeof req.body === 'string' ? req.body : undefined);
     if (!rawBody) {
       this.logger.error('Stripe webhook missing raw body — raw-body middleware may not be configured before JSON parsing');
-      return { received: false, reason: 'missing_raw_body' };
+      throw new HttpException({ received: false, reason: 'missing_raw_body' }, HttpStatus.BAD_REQUEST);
     }
 
     let event: Stripe.Event;
@@ -82,7 +84,11 @@ export class StripeWebhookController implements OnModuleInit {
       event = this.stripe.verifyWebhookSignature(rawBody, sig);
     } catch (err: unknown) {
       this.logger.error(`Stripe webhook signature verification failed: ${getErrorMessage(err)}`);
-      return { received: false, reason: 'signature_verification_failed' };
+      // A bad signature means this is not a genuine Stripe event. Returning
+      // 400 (not 2xx) stops Stripe from retrying an event we can never
+      // process, and — critically — does NOT acknowledge a (potentially
+      // money-moving) event we did not verify (issue A-062).
+      throw new HttpException({ received: false, reason: 'signature_verification_failed' }, HttpStatus.BAD_REQUEST);
     }
 
     // ── Idempotency: insert-or-detect-replay then atomic claim ──
@@ -131,7 +137,10 @@ export class StripeWebhookController implements OnModuleInit {
     });
     if (!existing) {
       this.logger.error(`Webhook event ${event.id} vanished after insert — aborting`);
-      return { received: false, reason: 'persistence_race' };
+      // The event was valid (signature verified) but could not be read back.
+      // Fail with 5xx so Stripe retries rather than dropping a (potentially
+      // money-moving) event (issue A-062).
+      throw new HttpException({ received: false, reason: 'persistence_race' }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     if (existing.processingStatus === 'processed') {

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef,useState } from 'react';
+import api from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
 
@@ -43,6 +44,32 @@ export default function SignupPage() {
   const roleRef = useRef(role);
   const ageConfirmedRef = useRef(ageConfirmed);
 
+  // A-047: Fetch the current required consent versions from the server so the
+  // recorded acceptance matches the active server policy, not a hardcoded
+  // date that drifts after a backend bump.
+  const [policyVersion, setPolicyVersion] = useState('2026-07-01');
+  const policyRef = useRef(policyVersion);
+
+  useEffect(() => {
+    const fetchVersions = async () => {
+      try {
+        const res = await api.get<Record<string, string>>('/consent/required-versions');
+        const version =
+          res.data?.terms_of_service || res.data?.privacy_policy || '2026-07-01';
+        setPolicyVersion(version);
+      } catch {
+        // Fall back to the hardcoded default — the re-prompt flow will surface
+        // any version mismatch after login if the server version is newer.
+      }
+    };
+    fetchVersions();
+  }, []);
+
+  // Keep policyRef in sync so the GIS callback closure reads the latest version
+  useEffect(() => {
+    policyRef.current = policyVersion;
+  }, [policyVersion]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const referralFromUrl = params.get('ref');
@@ -80,7 +107,7 @@ export default function SignupPage() {
       await googleLogin('mock-google-token-developer', role, undefined, {
         ageConfirmed: true,
         termsAccepted: true,
-        policyVersion: '2026-07-01',
+        policyVersion,
       });
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
@@ -143,7 +170,7 @@ export default function SignupPage() {
               response.credential,
               googleLogin,
               roleRef.current,
-              { ageConfirmed: true, termsAccepted: true, policyVersion: '2026-07-01' },
+              { ageConfirmed: true, termsAccepted: true, policyVersion: policyRef.current },
             );
             setLoading(false);
             if (errorMsg) {
@@ -199,7 +226,7 @@ export default function SignupPage() {
         referrerCode: referrerCode || undefined,
         ageConfirmed,
         termsAccepted: ageConfirmed,
-        policyVersion: '2026-07-01',
+        policyVersion,
       });
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
@@ -327,6 +354,10 @@ export default function SignupPage() {
               />
               <span>
                 I confirm that I am at least 18 years old and have read the{' '}
+                <Link href="/terms" className="text-brand-500 hover:text-brand-600 underline underline-offset-2">
+                  Terms of Service
+                </Link>
+                {' '}and{' '}
                 <Link href="/privacy" className="text-brand-500 hover:text-brand-600 underline underline-offset-2">
                   Privacy Policy
                 </Link>

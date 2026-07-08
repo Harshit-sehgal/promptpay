@@ -82,8 +82,36 @@ async function handleSignup(email: string, _opts: { email?: string }) {
 
   const referrerCode = await prompt('Referral code (optional):');
 
-  console.log(chalk.dim('Signing up...'));
+  console.log();
+  console.log(chalk.dim('Consent required to create an account:'));
+  console.log(chalk.dim('  • You confirm you are at least 18 years old.'));
+  console.log(chalk.dim('  • You accept the Terms of Service and Privacy Policy.'));
+  const ageOk = await prompt('Confirm you are 18+ (y/N):');
+  const termsOk = await prompt('Accept Terms of Service & Privacy Policy (y/N):');
+  const ageConfirmed = ageOk?.trim().toLowerCase() === 'y';
+  const termsAccepted = termsOk?.trim().toLowerCase() === 'y';
+  if (!ageConfirmed || !termsAccepted) {
+    console.error(chalk.red('Account creation requires age confirmation and acceptance of the Terms of Service and Privacy Policy.'));
+    process.exit(1);
+  }
+
+  // A-065: Fetch the current required consent versions from the server so the
+  // recorded acceptance carries the live policy version, not a hard-coded date.
+  let policyVersion = '2026-07-01'; // fallback if the fetch fails
   const api = new ApiClient();
+  try {
+    const versions = await api.getRequiredConsentVersions();
+    if (versions?.terms_of_service) {
+      policyVersion = versions.terms_of_service;
+    } else if (versions?.privacy_policy) {
+      policyVersion = versions.privacy_policy;
+    }
+  } catch {
+    // Silently fall back to the default — the re-prompt flow will surface any
+    // version mismatch after login.
+  }
+
+  console.log(chalk.dim('Signing up...'));
   try {
     const res = await api.signup({
       email,
@@ -91,6 +119,9 @@ async function handleSignup(email: string, _opts: { email?: string }) {
       role,
       name: name?.trim() || undefined,
       referrerCode: referrerCode?.trim().toUpperCase() || undefined,
+      ageConfirmed: true,
+      termsAccepted: true,
+      policyVersion,
     });
     setCredentials({
       email,

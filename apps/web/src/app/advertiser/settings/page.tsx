@@ -13,6 +13,7 @@ export default function AdvertiserSettingsPage() {
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -41,10 +42,17 @@ export default function AdvertiserSettingsPage() {
       setDeleteError('Type DELETE_MY_ACCOUNT to confirm.');
       return;
     }
+    // A-044: step-up reauthentication before irreversible erasure. Password
+    // accounts must provide their current password. Google-only accounts
+    // without a password will get a backend error directing them to contact
+    // support (Google ID token reauth is not wired in the advertiser UI yet).
     setDeleteBusy(true);
     setDeleteError(null);
     try {
-      await advertiserApi.deleteAccount({ confirmation: 'DELETE_MY_ACCOUNT' });
+      await advertiserApi.deleteAccount({
+        confirmation: 'DELETE_MY_ACCOUNT',
+        ...(currentPassword ? { currentPassword } : {}),
+      });
       toast.success('Your account has been deleted.');
       router.push('/auth/login');
     } catch (err: unknown) {
@@ -94,6 +102,14 @@ export default function AdvertiserSettingsPage() {
             This permanently erases your personal identity. Ledger, payout, and audit records are
             retained for compliance. This action cannot be undone.
           </p>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            placeholder="Current password (required for deletion)"
+            autoComplete="current-password"
+            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 mb-3 focus:outline-none focus:border-rose-400"
+          />
           <input
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}

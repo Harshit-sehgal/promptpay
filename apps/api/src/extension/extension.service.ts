@@ -7,6 +7,7 @@ import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
 import { MINIMUM_VISIBLE_DURATION_MS, PROHIBITED_DATA_FIELDS, verifySignature } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
+import { ComplianceService } from '../compliance/compliance.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { getAdvertiserBalance, getAdvertiserBalancesByCurrency } from '../common/utils/advertiser-balance';
 import { isActiveAccountStatus } from '../common/utils/account-status';
@@ -105,6 +106,7 @@ export class ExtensionService {
     private audit: AuditService,
     private ledger: LedgerService,
     private fraud: FraudService,
+    private compliance: ComplianceService,
     private googleVerifier: GoogleTokenVerifier,
   ) {}
 
@@ -561,6 +563,23 @@ export class ExtensionService {
       return { ad: null, reason: 'account_not_active' };
     }
 
+    // A-036: Authenticated users who have recorded an account-level CCPA opt-out
+    // must not receive targeted/sold ad impressions. A logged-out opt-out stored
+    // device-local only is NOT enforced here (there is no userId to check), but
+    // the privacy page tells those visitors the preference is local-only.
+    const ccpaOptedOut = await this.compliance.isConsented(userId, 'ccpa_opt_out');
+    if (ccpaOptedOut) {
+      void this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'ccpa_opt_out_enforced',
+        targetType: 'ad_request',
+        targetId: userId,
+        afterSnap: { reason: 'ad_not_served_ccpa_opt_out' },
+      });
+      return { ad: null, reason: 'ccpa_opt_out' };
+    }
+
     // Verify HMAC signature with device-specific secret
     const { signature: _, ...payload } = dto;
     if (!await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature)) {
@@ -631,6 +650,26 @@ export class ExtensionService {
     // Find active campaigns with approved creatives (outside the critical
     // section — read-mostly data, no contention).
     const recentBillableCampaignIds = await this.recentBillableCampaignIds(userId, oneHourAgo);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Per-campaign frequency-cap accounting (issue A-061). Count this user's
+    // served impressions for every candidate campaign within the trailing hour
+    // and day, then exclude campaigns that have already hit their configured
+    // cap. We count ALL impressions (billable or not) because the cap governs
+    // ad exposure, not billing.
+    const recentImpressions = await this.prisma.adImpression.findMany({
+      where: { userId, createdAt: { gte: oneDayAgo } },
+      select: { campaignId: true, createdAt: true },
+    });
+    const campaignHourCounts = new Map<string, number>();
+    const campaignDayCounts = new Map<string, number>();
+    for (const imp of recentImpressions) {
+      if (imp.createdAt >= oneHourAgo) {
+        campaignHourCounts.set(imp.campaignId, (campaignHourCounts.get(imp.campaignId) ?? 0) + 1);
+      }
+      campaignDayCounts.set(imp.campaignId, (campaignDayCounts.get(imp.campaignId) ?? 0) + 1);
+    }
+
     const campaigns = await this.prisma.campaign.findMany({
       where: {
         status: 'active',
@@ -670,6 +709,15 @@ export class ExtensionService {
       // Category filter
       if (dto.blockedCategories?.length && dto.blockedCategories.includes(c.category)) return false;
       if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category)) return false;
+      // Per-campaign frequency caps (issue A-061). A cap of 0/undefined means
+      // "no limit"; a positive cap is enforced against the user's served
+      // impressions in the trailing hour and day.
+      if (c.frequencyCapPerHour && c.frequencyCapPerHour > 0) {
+        if ((campaignHourCounts.get(c.id) ?? 0) >= c.frequencyCapPerHour) return false;
+      }
+      if (c.frequencyCapPerDay && c.frequencyCapPerDay > 0) {
+        if ((campaignDayCounts.get(c.id) ?? 0) >= c.frequencyCapPerDay) return false;
+      }
       return true;
     });
 
@@ -933,7 +981,14 @@ export class ExtensionService {
     return this.prisma.adImpression.update({
       where: { id: impression.id },
       data: {
-        renderedAt: new Date(dto.renderedAt),
+        // The render timestamp is recorded by the SERVER, not trusted from the
+        // client. A client could otherwise backdate `renderedAt` and bypass the
+        // minimum-visible-duration check at qualification time (issue A-060).
+        // The HMAC signature is still verified against the client payload
+        // (which includes its own `renderedAt`), so possession of the device
+        // secret is proven; only the stored, billing-relevant time is server
+        // authoritative.
+        renderedAt: new Date(),
         visibleSurface: dto.visibleSurface,
       },
     });
@@ -985,21 +1040,37 @@ export class ExtensionService {
       return { qualified: false, impressionId: impression.id, reason: 'account_not_active' };
     }
 
-    // Must meet minimum visible duration. Also clamp against the elapsed
-    // server time since `renderedAt` to prevent the client from claiming
-    // more visible time than wall-clock could have elapsed. The claim is
-    // accepted when it is within a generous grace window (5s above elapsed)
-    // OR when the elapsed is too small to be meaningful (sub-second render
-    // → qualify timestamps) — in the latter case we trust the claim since
-    // there's no server-side clock to refute it.
-    let effectiveDurationMs = dto.visibleDurationMs;
-    if (impression.renderedAt) {
-      const elapsedServer = Date.now() - impression.renderedAt.getTime();
-      if (elapsedServer > 1_000 && dto.visibleDurationMs > elapsedServer + 5_000) {
-        effectiveDurationMs = elapsedServer;
-      }
+    // Minimum visible duration is a SERVER-SIDE timing invariant (issue A-060).
+    // The render timestamp is recorded by the server in `recordRendered()`, so
+    // a client cannot fast-forward or backdate it. A billable impression may
+    // only qualify once the server has actually observed at least
+    // MINIMUM_VISIBLE_DURATION_MS elapse since render — a small grace window
+    // absorbs clock skew and processing variance, but an immediate
+    // render→qualify (or a future-dated render) is rejected. The claimed
+    // `visibleDurationMs` is still clamped so it can never exceed real elapsed
+    // wall-clock time.
+    const MIN_DURATION_GRACE_MS = 1_500;
+    if (!impression.renderedAt) {
+      return {
+        qualified: false,
+        reason: 'render_required',
+        minimumRequired: MINIMUM_VISIBLE_DURATION_MS,
+        actual: 0,
+      };
     }
-
+    const elapsedServer = Date.now() - impression.renderedAt.getTime();
+    if (elapsedServer < MINIMUM_VISIBLE_DURATION_MS - MIN_DURATION_GRACE_MS) {
+      return {
+        qualified: false,
+        reason: 'minimum_duration_not_met',
+        minimumRequired: MINIMUM_VISIBLE_DURATION_MS,
+        actual: Math.max(0, elapsedServer),
+      };
+    }
+    let effectiveDurationMs = dto.visibleDurationMs;
+    if (dto.visibleDurationMs > elapsedServer + 5_000) {
+      effectiveDurationMs = elapsedServer;
+    }
     if (effectiveDurationMs < MINIMUM_VISIBLE_DURATION_MS) {
       return {
         qualified: false,

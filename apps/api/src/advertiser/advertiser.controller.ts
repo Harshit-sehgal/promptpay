@@ -8,6 +8,7 @@ import { depositMinimumMinor } from '@waitlayer/shared';
 import { CurrentUser, Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StripeProvider } from '../payout/providers';
 import { AdvertiserService } from './advertiser.service';
@@ -241,6 +242,7 @@ export class AdvertiserController {
 
   @Post('export-data')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('advertiser:write')
   exportData(@CurrentUser('id') userId: string) {
     return this.service.exportData(userId);
@@ -248,6 +250,7 @@ export class AdvertiserController {
 
   @Post('delete-account')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('advertiser:write')
   deleteAccount(
     @CurrentUser('id') userId: string,
@@ -256,6 +259,11 @@ export class AdvertiserController {
     if (dto.confirmation !== 'DELETE_MY_ACCOUNT') {
       throw new BadRequestException('Confirmation string must be exactly DELETE_MY_ACCOUNT');
     }
-    return this.service.deleteAccount(userId);
+    // A-044: Mirror the developer deletion step-up model — require either
+    // current password or a fresh Google ID token before anonymizing the user.
+    return this.service.deleteAccount(userId, {
+      currentPassword: dto.currentPassword,
+      googleIdToken: dto.googleIdToken,
+    });
   }
 }

@@ -1,10 +1,12 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger,NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger,NotFoundException, UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
 
 import { BidType, Prisma } from '@waitlayer/db';
 import { AD_SERVING, CampaignStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
+import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode } from '../common/utils/errors';
 import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
@@ -25,7 +27,12 @@ const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
 @Injectable()
 export class AdvertiserService {
   private readonly logger = new Logger(AdvertiserService.name);
-  constructor(private prisma: PrismaService, private campaignService: CampaignService, private audit: AuditService) {}
+  constructor(
+    private prisma: PrismaService,
+    private campaignService: CampaignService,
+    private audit: AuditService,
+    private googleVerifier: GoogleTokenVerifier,
+  ) {}
 
   /** Get or create advertiser profile for user */
   async getOrCreateProfile(userId: string) {
@@ -127,9 +134,40 @@ export class AdvertiserService {
    * Money-retention/legal-hold rows (ledger, payouts) are intentionally left
    * intact for audit/compliance — only the personal identity is erased.
    */
-  async deleteAccount(userId: string) {
-    const prior = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
-    const priorEmail = prior?.email;
+  async deleteAccount(
+    userId: string,
+    options: { currentPassword?: string; googleIdToken?: string } = {},
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    // A-044: step-up reauthentication before irreversible erasure. A stolen
+    // active session must not be able to delete the account with only a
+    // typed confirmation string. Require either the current password (for
+    // password accounts) or a fresh Google ID token (for social accounts).
+    if (user.passwordHash) {
+      if (!options.currentPassword) {
+        throw new UnauthorizedException('Current password is required to delete your account');
+      }
+      const ok = await bcrypt.compare(options.currentPassword, user.passwordHash);
+      if (!ok) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+    } else if (user.googleId) {
+      if (!options.googleIdToken) {
+        throw new UnauthorizedException('Google reauthentication is required to delete your account');
+      }
+      const payload = await this.googleVerifier.verify(options.googleIdToken);
+      if (payload.sub !== user.googleId) {
+        throw new UnauthorizedException('Google reauthentication token does not match this account');
+      }
+    } else {
+      // No password and no Google link — extremely unlikely for a real account,
+      // but fail closed rather than allow unauthenticated erasure.
+      throw new UnauthorizedException('Unable to verify account ownership for deletion');
+    }
+
+    const priorEmail = user.email;
 
     await this.prisma.$transaction([
       this.prisma.user.update({

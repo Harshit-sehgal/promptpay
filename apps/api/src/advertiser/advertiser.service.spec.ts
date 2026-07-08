@@ -3,6 +3,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
+import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { AdvertiserService } from './advertiser.service';
 import { CampaignStatus } from '@waitlayer/db';
 
@@ -41,7 +42,8 @@ function makePrisma() {
 function makeService(prisma: ReturnType<typeof makePrisma>) {
   const audit = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
   const campaignService = {} as unknown as CampaignService;
-  return new AdvertiserService(prisma as any, campaignService, audit);
+  const googleVerifier = { verify: vi.fn() } as unknown as GoogleTokenVerifier;
+  return new AdvertiserService(prisma as any, campaignService, audit, googleVerifier);
 }
 
 describe('AdvertiserService.getDashboard CTR ratio (A-024)', () => {

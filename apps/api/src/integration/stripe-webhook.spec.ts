@@ -262,4 +262,55 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     });
     expect(evt?.processingStatus).toBe('processed');
   });
+
+  // ── A-062: failure paths must NOT be acknowledged with HTTP 200 ──
+  it('returns 503 when Stripe is not configured', async () => {
+    const original = fakeStripe.isEnabled;
+    fakeStripe.isEnabled = () => false;
+    try {
+      const res = await postWebhook({
+        id: 'evt_cfg', type: 'payout.paid',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'po_cfg', status: 'paid' } },
+      });
+      expect(res.status).toBe(503);
+    } finally {
+      fakeStripe.isEnabled = original;
+    }
+  });
+
+  it('returns 400 when the signature header is missing', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/payout/stripe/webhook')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ id: 'evt_nosig', type: 'payout.paid' }));
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when signature verification fails', async () => {
+    const original = fakeStripe.verifyWebhookSignature;
+    fakeStripe.verifyWebhookSignature = () => {
+      throw new Error('bad signature');
+    };
+    try {
+      const res = await postWebhook({
+        id: 'evt_badsig', type: 'payout.paid',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'po_badsig', status: 'paid' } },
+      });
+      expect(res.status).toBe(400);
+    } finally {
+      fakeStripe.verifyWebhookSignature = original;
+    }
+  });
+
+  it('still returns 200 for a verified event after exercising failure paths', async () => {
+    const res = await postWebhook({
+      id: 'evt_ok_2',
+      type: 'customer.created',
+      created: Math.floor(Date.now() / 1000),
+      data: { object: { id: 'cus_ok_2' } },
+    });
+    expect(res.status).toBe(200);
+  });
 });

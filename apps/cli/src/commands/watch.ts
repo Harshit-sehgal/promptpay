@@ -99,6 +99,9 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
 
       // Generate a stable waitStateId for this wait period
       const waitStateId = `cli-${state.startTime}-${state.tool}`;
+      // One stable session id shared by the wait-state start and the ad request
+      // so the API can correlate them (issue A-064).
+      const sessionId = `cli-${waitStateId}`;
 
       const deviceId = await api.getOrRegisterDevice();
 
@@ -106,6 +109,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         deviceId,
         waitStateId,
         toolType: state.tool,
+        sessionId,
       });
 
       // Optionally serve an ad during the wait state so the developer can earn.
@@ -113,7 +117,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         try {
           const ad = await api.requestAd({
             deviceId,
-            sessionId: `cli-${waitStateId}`,
+            sessionId,
             waitStateId,
             toolType: state.tool,
             idempotencyKey: `cli-ad-${waitStateId}`,

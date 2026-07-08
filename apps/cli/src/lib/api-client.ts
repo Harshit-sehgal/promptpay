@@ -138,6 +138,9 @@ export class ApiClient {
     role: string;
     name?: string;
     referrerCode?: string;
+    ageConfirmed?: boolean;
+    termsAccepted?: boolean;
+    policyVersion?: string;
   }) {
     const res = await this.raw<{
       accessToken: string;
@@ -156,6 +159,10 @@ export class ApiClient {
       paidOut: { amountMinor: number; currency: string };
     }>('GET', '/ledger/balance', undefined);
     return res;
+  }
+
+  async getRequiredConsentVersions(): Promise<Record<string, string> | null> {
+    return this.raw<Record<string, string>>('GET', '/consent/required-versions');
   }
 
   async getOverview() {
@@ -200,6 +207,7 @@ export class ApiClient {
     deviceId: string;
     waitStateId: string;
     toolType: string;
+    sessionId: string;
   }) {
     // Normalize tool name to a valid ToolType enum value.
     // Common tool names map to enum values; unrecognized ones default to 'terminal'.
@@ -209,7 +217,7 @@ export class ApiClient {
       deviceId: input.deviceId,
       waitStateId: input.waitStateId,
       toolType: normalizedTool,
-      sessionId: 'cli-' + Date.now(),
+      sessionId: input.sessionId,
       idempotencyKey: 'cli-start-' + input.waitStateId,
     };
     const signature = await this.signEventPayload(payload);
