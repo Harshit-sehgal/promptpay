@@ -374,21 +374,20 @@ describe('E2E Money Loop', () => {
     svc = makeServices();
     installLedgerCapture();
 
-    // Default mock for advertiser balance to prevent requestAd / billing checks failing
+    // Default mock for advertiser balance to prevent requestAd / billing checks failing.
+    // The balance helper (getAdvertiserBalancesByCurrency / getAdvertiserBalance) groups
+    // by advertiserId:currency:entryType and subtracts debits/refunds, so the mocked rows
+    // must include currency (USD) and a confirmed credit for every requested advertiser.
     mockPrisma.advertiserLedger.groupBy.mockImplementation(async (args?: any) => {
-      const advertiserId = args?.where?.advertiserId?.in?.[0] || args?.where?.advertiserId || 'default-adv';
-      return [
-        {
-          advertiserId,
-          entryType: 'credit',
-          _sum: { amountMinor: 10000_00 },
-        },
-        {
-          advertiserId: undefined,
-          entryType: 'credit',
-          _sum: { amountMinor: 10000_00 },
-        },
-      ];
+      const ids: string[] =
+        args?.where?.advertiserId?.in ??
+        (args?.where?.advertiserId ? [args.where.advertiserId] : ['default-adv']);
+      return ids.map((advertiserId) => ({
+        advertiserId,
+        currency: 'USD',
+        entryType: 'credit',
+        _sum: { amountMinor: 10000_00 },
+      }));
     });
   });
 
@@ -1451,7 +1450,7 @@ describe('E2E Money Loop', () => {
 
       // ── Step 9: Request ad ──
       mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
-        { advertiserId: advProfileId, entryType: 'credit', _sum: { amountMinor: 10000_00 } },
+        { advertiserId: advProfileId, currency: 'USD', entryType: 'credit', _sum: { amountMinor: 10000_00 } },
       ]);
       mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: devUserId, adsEnabled: true });
       mockPrisma.device.findUnique.mockResolvedValue({
@@ -2475,9 +2474,19 @@ describe('E2E Money Loop', () => {
       mockPrisma.campaign.findMany.mockResolvedValue([
         {
           id: 'camp-1',
+          advertiserId: 'adv-1',
+          name: 'Idempotency Campaign',
+          category: 'developer_tools',
           status: 'active',
+          bidType: 'cpm',
           bidAmountMinor: 100,
+          budgetTotalMinor: 1_000_00,
+          budgetSpentMinor: 0,
+          currency: 'USD',
+          frequencyCapPerHour: 2,
+          frequencyCapPerDay: 6,
           creatives: [{ id: 'cr-1', title: 'Ad Title', sponsoredMessage: 'Ad msg', displayDomain: 'domain.com', destinationUrl: 'https://domain.com/offer', status: 'approved' }],
+          countryTargeting: [],
         }
       ]);
 
