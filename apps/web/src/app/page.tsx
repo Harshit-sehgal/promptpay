@@ -507,7 +507,7 @@ export default function HomePage() {
                         *All ad delivery uses rate limit controls and fingerprint verification to prevent click fraud. Platform commissions split directly to developers.
                       </p>
                       <Link
-                        href="/auth/signup"
+                        href="/auth/signup?role=advertiser"
                         className="mt-5 w-full inline-flex items-center justify-center bg-surface-900 hover:bg-surface-800 text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors"
                       >
                         Start Advertiser Campaign

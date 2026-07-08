@@ -17,13 +17,13 @@ import { NextResponse } from 'next/server';
  * Cookie name `access_token` — verified by `middleware.ts` to gate protected
  * routes (replaces the legacy non-httpOnly `session` cookie).
  */
-// Cookie names — prefer __Host- prefix when possible for stronger browser guarantees
-export const COOKIE_ACCESS = '__Host-access_token';
-export const COOKIE_REFRESH = '__Host-refresh_token';
-// Backwards-compatible aliases for existing clients that may still send the
-// non-__Host names (used while rolling out stronger cookie policies).
-export const LEGACY_COOKIE_ACCESS = 'access_token';
-export const LEGACY_COOKIE_REFRESH = 'refresh_token';
+// Bare cookie names. The `__Host-` prefix is added at write time by
+// `cookieName()` only when the connection is Secure (HTTPS). Keeping the base
+// names bare here avoids the previous double-prefix bug
+// (`__Host-__Host-access_token`) and the dev breakage where a `__Host-` cookie
+// was written without the `Secure` flag (which browsers reject).
+export const COOKIE_ACCESS = 'access_token';
+export const COOKIE_REFRESH = 'refresh_token';
 const DEFAULT_API_BASE_URL = 'http://localhost:4002/api/v1';
 
 /**
@@ -40,16 +40,20 @@ function cookieName(base: string, secure: boolean): string {
 
 /**
  * Read an auth cookie regardless of whether it was set with the `__Host-`
- * prefix (production/HTTPS) or the bare name (dev/HTTP). Tries the prefixed
- * name first, then the bare name, so callers don't need to know the connection
- * security context.
+ * prefix (production/HTTPS), the bare name (dev/HTTP), or the legacy
+ * double-prefixed name produced by the older buggy code
+ * (`__Host-__Host-access_token`). Tries the prefixed name first, then the bare
+ * name, then the legacy double-prefixed name, so callers don't need to know
+ * the connection security context and in-flight sessions survive the rollout.
  */
 export function readAuthCookie(
   req: { cookies: { get(name: string): { value?: string } | undefined } },
   base: string,
 ): string | undefined {
   return (
-    req.cookies.get(`__Host-${base}`)?.value ?? req.cookies.get(base)?.value
+    req.cookies.get(`__Host-${base}`)?.value ??
+    req.cookies.get(base)?.value ??
+    req.cookies.get(`__Host-__Host-${base}`)?.value
   );
 }
 
@@ -194,20 +198,28 @@ export function applyAuthCookies(
  */
 export function clearAuthCookies(response: NextResponse, headers: Headers): NextResponse {
   const secure = isSecure(headers);
-  response.cookies.set(cookieName(COOKIE_ACCESS, secure), '', {
-    httpOnly: true,
-    secure: secure,
-    sameSite: 'strict',
-    path: '/',
-    maxAge: 0,
-  });
-  response.cookies.set(cookieName(COOKIE_REFRESH, secure), '', {
-    httpOnly: true,
-    secure: secure,
-    sameSite: 'strict',
-    path: '/',
-    maxAge: 0,
-  });
+  // Clear every known spelling of the auth cookies so a stale/legacy cookie
+  // (including the buggy `__Host-__Host-` double-prefixed form or the dev
+  // `__Host-access_token` form) cannot keep impersonating the user after a
+  // server-side revocation.
+  for (const name of [
+    cookieName(COOKIE_ACCESS, true),
+    cookieName(COOKIE_ACCESS, false),
+    `__Host-__Host-${COOKIE_ACCESS}`,
+    `__Host-${COOKIE_ACCESS}`,
+    cookieName(COOKIE_REFRESH, true),
+    cookieName(COOKIE_REFRESH, false),
+    `__Host-__Host-${COOKIE_REFRESH}`,
+    `__Host-${COOKIE_REFRESH}`,
+  ]) {
+    response.cookies.set(name, '', {
+      httpOnly: true,
+      secure: secure,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 0,
+    });
+  }
   return response;
 }
 

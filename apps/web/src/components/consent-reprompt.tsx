@@ -1,25 +1,29 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import api from '@/lib/api/client';
 import { useAuth } from '@/lib/auth-context';
-
-const VERSION = '2026-07-01';
 
 export default function ConsentRePrompt() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
   const [stale, setStale] = useState<string[]>([]);
+  const [requiredVersions, setRequiredVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   const check = useCallback(async () => {
     try {
-      const { data } = await api.get<string[]>('/consent/stale');
-      setStale(Array.isArray(data) ? data : []);
+      const [staleRes, versionsRes] = await Promise.all([
+        api.get<string[]>('/consent/stale'),
+        api.get<Record<string, string>>('/consent/required-versions'),
+      ]);
+      setStale(Array.isArray(staleRes.data) ? staleRes.data : []);
+      setRequiredVersions(versionsRes.data ?? {});
     } catch {
       setStale([]);
+      setRequiredVersions({});
     }
   }, []);
 
@@ -36,13 +40,20 @@ export default function ConsentRePrompt() {
         stale.map((purpose) =>
           api.post('/consent', {
             purpose,
-            version: VERSION,
+            // Post the server-required version for this purpose, not a
+            // hard-coded constant. If the backend bumps a policy version the
+            // web must pick it up automatically.
+            version: requiredVersions[purpose] ?? '2026-07-01',
             granted: true,
             metadata: { method: 're_prompt' },
           }),
         ),
       );
-      setStale([]);
+      // Re-check: keep the banner up if any purpose is still reported stale
+      // (e.g. a server write failed or returned an unrecorded version).
+      const { data } = await api.get<string[]>('/consent/stale');
+      setStale(Array.isArray(data) ? data : []);
+      if (Array.isArray(data) && data.length === 0) setDismissed(true);
     } catch {
       // Keep the banner up if the server sync failed.
     } finally {

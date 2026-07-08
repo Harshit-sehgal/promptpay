@@ -8,6 +8,7 @@ import { MINIMUM_VISIBLE_DURATION_MS, PROHIBITED_DATA_FIELDS, verifySignature } 
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import { getAdvertiserBalance, getAdvertiserBalancesByCurrency } from '../common/utils/advertiser-balance';
 import { isActiveAccountStatus } from '../common/utils/account-status';
 import { isSerializationError,isUniqueConstraintViolation } from '../common/utils/errors';
 import { normalizeCreativeDestination } from '../common/utils/external-url-policy';
@@ -21,6 +22,32 @@ class BudgetExhaustedError extends Error {
     super('Campaign budget exhausted or campaign inactive');
     this.name = 'BudgetExhaustedError';
   }
+}
+
+/**
+ * Thrown when an advertiser's account-level (per-currency) spendable balance
+ * is insufficient to cover a billable event, detected INSIDE the locked billing
+ * transaction (issue A-055). The caller rolls back the transaction and marks
+ * the impression/click as not billable with reason
+ * 'insufficient_advertiser_balance'.
+ */
+class AdvertiserBalanceExhaustedError extends Error {
+  constructor() {
+    super('Advertiser balance exhausted');
+    this.name = 'AdvertiserBalanceExhaustedError';
+  }
+}
+
+/**
+ * Deterministic 32-bit advisory lock key for an (advertiserId, currency) pair.
+ * Used to serialize all billing writes for the same advertiser+currency so two
+ * concurrent campaigns cannot both read the same pre-bill balance and overdraw
+ * the advertiser's account (issue A-055).
+ */
+function advertiserCurrencyLockKey(advertiserId: string, currency: string): bigint {
+  return BigInt(
+    '0x' + crypto.createHash('sha256').update(`adv:${advertiserId}:${currency}`).digest('hex').slice(0, 8),
+  );
 }
 
 /**
@@ -584,8 +611,14 @@ export class ExtensionService {
       return { ad: null, reason: 'quiet_mode' };
     }
 
-    // Idempotency: return same ad if we already served one for this key/waitStateId
-    const cached = this.adCache.get(dto.idempotencyKey) ?? this.adCache.get(dto.waitStateId);
+    // Idempotency: return same ad if we already served one for this
+    // user/device/waitStateId. Keys are NAMESPACED by userId + deviceId so two
+    // different users who collide on a client-generated waitStateId or
+    // idempotencyKey cannot receive each other's served ad / impression token
+    // (issue A-038).
+    const cached =
+      this.adCache.get(adIdempotencyCacheKey(userId, dto.deviceId, dto.idempotencyKey)) ??
+      this.adCache.get(adCacheKey(userId, dto.deviceId, dto.waitStateId));
     if (cached) {
       return { ad: cached.ad };
     }
@@ -643,27 +676,14 @@ export class ExtensionService {
       return { ad: null, reason: 'no_eligible_campaign' };
     }
 
-    // Filter by advertiser balance to prevent serving ads for advertisers with negative/zero balance
+    // Filter by per-currency advertiser balance (issue A-039). Each campaign is
+    // compared against its OWN currency balance, so an advertiser with plenty of
+    // EUR but zero USD cannot serve a USD campaign.
     const advertiserIds = initialEligible.map((c) => c.advertiserId);
-    const advertiserLedgerSums = await this.prisma.advertiserLedger.groupBy({
-      by: ['advertiserId', 'entryType'],
-      where: {
-        advertiserId: { in: advertiserIds },
-        status: 'confirmed',
-      },
-      _sum: { amountMinor: true },
-    });
-
-    const advertiserBalances = new Map<string, number>();
-    for (const row of advertiserLedgerSums) {
-      const current = advertiserBalances.get(row.advertiserId) ?? 0;
-      const amount = row._sum.amountMinor ?? 0;
-      if (row.entryType === 'credit') advertiserBalances.set(row.advertiserId, current + amount);
-      if (row.entryType === 'debit') advertiserBalances.set(row.advertiserId, current - amount);
-    }
+    const advertiserBalances = await getAdvertiserBalancesByCurrency(this.prisma, advertiserIds);
 
     const eligible = initialEligible.filter((c) => {
-      const balance = advertiserBalances.get(c.advertiserId) ?? 0;
+      const balance = advertiserBalances.get(`${c.advertiserId}:${c.currency}`) ?? 0;
       return balance >= c.bidAmountMinor;
     });
 
@@ -750,9 +770,10 @@ export class ExtensionService {
 
     // Save to LRU cache for immediate retries. Both keys map to the same ad
     // so a retry on either lookup hits the bounded cache. LRU's TTL evicts
-    // these after 60s — older than that there's no valid request anyway.
-    this.adCache.set(dto.idempotencyKey, { ad });
-    this.adCache.set(dto.waitStateId, { ad });
+    // these after 60s — older than that there's no valid request anymore.
+    // Keys are namespaced by userId + deviceId (issue A-038).
+    this.adCache.set(adIdempotencyCacheKey(userId, dto.deviceId, dto.idempotencyKey), { ad });
+    this.adCache.set(adCacheKey(userId, dto.deviceId, dto.waitStateId), { ad });
 
     // Audit log on every billable ad served. This is the platform's most
     // sensitive money-flow and forensics here directly supports fraud
@@ -1022,20 +1043,6 @@ export class ExtensionService {
       return { qualified: true, impressionId: impression.id };
     }
 
-    const advertiserBalance = await this.getAdvertiserBalance(impression.campaign.advertiserId, impression.campaign.currency);
-    if (advertiserBalance < impression.campaign.bidAmountMinor) {
-      await this.prisma.adImpression.update({
-        where: { id: impression.id },
-        data: {
-          qualifiedAt: new Date(dto.qualifiedAt),
-          visibleDurationMs: dto.visibleDurationMs,
-          isBillable: false,
-          invalidationReason: 'insufficient_advertiser_balance',
-        },
-      });
-      return { qualified: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
-    }
-
     // Look up the user's trust level for hold days
     const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
     const trustLevel = trustScore?.level || 'new';
@@ -1059,6 +1066,16 @@ export class ExtensionService {
     let billed: 'already_qualified' | 'billed';
     try {
       billed = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // (0) Account-level billing serialization (issue A-055): serialize all
+        // billing writes for this advertiser+currency so concurrent CPM/CPC
+        // events on different campaigns cannot both read the same pre-bill
+        // balance and overdraw the advertiser's account.
+        const balanceLockKey = advertiserCurrencyLockKey(
+          impression.campaign.advertiserId,
+          impression.campaign.currency,
+        );
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${balanceLockKey})`;
+
         // (1) Atomic CAS: only flip this impression to billable if it has NOT
         // been qualified concurrently. Two concurrent recordQualifiedImpression
         // calls for the same impression both pass the outer
@@ -1076,6 +1093,19 @@ export class ExtensionService {
         });
         if (claim.count === 0) {
           return 'already_qualified';
+        }
+
+        // (1.5) Account-level balance guard (issue A-055): re-check the
+        // spendable balance INSIDE the locked transaction. The centralized
+        // formula subtracts confirmed refunds, so a confirmed archive refund
+        // also blocks further spend.
+        const advertiserBalance = await getAdvertiserBalance(
+          tx as unknown as PrismaService,
+          impression.campaign.advertiserId,
+          impression.campaign.currency,
+        );
+        if (advertiserBalance < impression.campaign.bidAmountMinor) {
+          throw new AdvertiserBalanceExhaustedError();
         }
 
         // (2) Atomic spend increment — rejects when budget would overflow OR the
@@ -1160,6 +1190,18 @@ export class ExtensionService {
           },
         });
         return { qualified: false, impressionId: impression.id, reason: 'budget_exhausted' };
+      }
+      if (err instanceof AdvertiserBalanceExhaustedError) {
+        await this.prisma.adImpression.update({
+          where: { id: impression.id },
+          data: {
+            qualifiedAt: new Date(dto.qualifiedAt),
+            visibleDurationMs: dto.visibleDurationMs,
+            isBillable: false,
+            invalidationReason: 'insufficient_advertiser_balance',
+          },
+        });
+        return { qualified: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
       }
       throw err;
     }
@@ -1260,16 +1302,32 @@ export class ExtensionService {
     const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const split = isCpcBid ? this.ledger.calculateSplit(impression.campaign.bidAmountMinor) : null;
 
-    if (isCpcBid) {
-      const advertiserBalance = await this.getAdvertiserBalance(impression.campaign.advertiserId, impression.campaign.currency);
-      if (advertiserBalance < impression.campaign.bidAmountMinor) {
-        throw new BadRequestException('Insufficient advertiser balance');
-      }
-    }
-
     let click: { id: string };
     try {
       click = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // (0) Account-level billing serialization (issue A-055): serialize all
+        // billing writes for this advertiser+currency so concurrent CPM/CPC
+        // events on different campaigns cannot both read the same pre-bill
+        // balance and overdraw the advertiser's account.
+        const balanceLockKey = advertiserCurrencyLockKey(
+          impression.campaign.advertiserId,
+          impression.campaign.currency,
+        );
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${balanceLockKey})`;
+
+        // (0.5) Account-level balance guard (issue A-055): re-check the
+        // spendable balance INSIDE the locked transaction before billing.
+        if (isCpcBid) {
+          const advertiserBalance = await getAdvertiserBalance(
+            tx as unknown as PrismaService,
+            impression.campaign.advertiserId,
+            impression.campaign.currency,
+          );
+          if (advertiserBalance < impression.campaign.bidAmountMinor) {
+            throw new AdvertiserBalanceExhaustedError();
+          }
+        }
+
         const click = await tx.adClick.create({
           data: {
             impressionId: impression.id,
@@ -1356,6 +1414,9 @@ export class ExtensionService {
         return click;
       });
     } catch (error) {
+      if (error instanceof AdvertiserBalanceExhaustedError) {
+        return { clicked: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
+      }
       if (isUniqueConstraintViolation(error)) {
         return { clicked: false, reason: 'duplicate_click' };
       }
@@ -1553,23 +1614,8 @@ export class ExtensionService {
     this.enforcePrivacy({ ...dto } as Record<string, unknown>);
   }
 
-  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
-    const sums = await this.prisma.advertiserLedger.groupBy({
-      by: ['entryType'],
-      where: {
-        advertiserId,
-        currency,
-        status: 'confirmed',
-      },
-      _sum: { amountMinor: true },
-    });
-    let deposits = 0;
-    let charges = 0;
-    for (const row of sums) {
-      if (row.entryType === 'credit') deposits = row._sum.amountMinor ?? 0;
-      if (row.entryType === 'debit') charges = row._sum.amountMinor ?? 0;
-    }
-    return deposits - charges;
+  private getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+    return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
 
   private currentTimeHHMM(): string {
@@ -1596,4 +1642,18 @@ function hasMatchingSecret(candidate: string | undefined, expected: string): boo
 
 function hashDeviceRecoveryToken(token: string): string {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+/**
+ * Ad-request cache keys. They MUST be namespaced by (userId, deviceId) so that
+ * a client-generated `waitStateId` or `idempotencyKey` collision between two
+ * users cannot leak one user's served ad / impression token to the other
+ * (issue A-038). Exported for unit testing the scoping.
+ */
+export function adCacheKey(userId: string, deviceId: string, waitStateId: string): string {
+  return `${userId}:${deviceId}:${waitStateId}`;
+}
+
+export function adIdempotencyCacheKey(userId: string, deviceId: string, idempotencyKey: string): string {
+  return `${userId}:${deviceId}:${idempotencyKey}`;
 }

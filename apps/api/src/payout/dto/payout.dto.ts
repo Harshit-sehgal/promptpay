@@ -1,6 +1,6 @@
 import { IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches,Max, MaxLength, Min } from 'class-validator';
 
-import { PayoutProvider } from '@waitlayer/shared';
+import { PayoutProvider, payoutMinimumMinor } from '@waitlayer/shared';
 
 export class AddPayoutMethodDto {
   @IsEnum(PayoutProvider)
@@ -21,7 +21,10 @@ export class RequestPayoutDto {
   payoutAccountId!: string;
 
   @IsInt()
-  @Min(1)
+  @Min((args) => payoutMinimumMinor((args.object as RequestPayoutDto).currency), {
+    message: (args) =>
+      `Minimum payout is ${payoutMinimumMinor((args.object as RequestPayoutDto).currency)} minor units`,
+  })
   amountMinor!: number;
 
   @IsString()

@@ -8,11 +8,39 @@ import { signPayload } from '@waitlayer/shared';
 import { Credentials, getCredentials, getDeviceEventSecret,setCredentials, storeDeviceEventSecret } from './credentials';
 import { normalizeToolType } from './tool-types';
 
-const API_URL = process.env.WAITLAYER_API_URL ?? (process.env.NODE_ENV === 'production' ? 'https://api.waitlayer.com/api/v1' : 'http://localhost:4002/api/v1');
+const PRODUCTION_API_URL = 'https://api.waitlayer.com/api/v1';
+const DEV_API_URL = 'http://localhost:4002/api/v1';
+
+/**
+ * Resolve the API base URL for the CLI. Packaged/distributed clients default
+ * to the production SaaS origin so an installed CLI can reach the real API
+ * without manual configuration. Local development overrides via
+ * `WAITLAYER_API_URL`, and `NODE_ENV=production` is an explicit opt-in to the
+ * production origin (A-013). We never fall back to localhost for a packaged
+ * install — that would silently point real users at their own machine.
+ */
+export function resolveApiBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.WAITLAYER_API_URL) return env.WAITLAYER_API_URL;
+  if (env.NODE_ENV === 'production') return PRODUCTION_API_URL;
+  return PRODUCTION_API_URL;
+}
+
+const API_URL = resolveApiBaseUrl();
 
 interface RegisterDeviceResponse {
   id: string;
   eventSecret?: string;
+}
+
+export interface Ad {
+  impressionToken: string;
+  campaignId: string;
+  creativeId: string;
+  title: string;
+  message: string;
+  label: string;
+  displayDomain: string;
+  destinationUrl: string;
 }
 
 export class ApiClient {
@@ -206,6 +234,68 @@ export class ApiClient {
       ...payload,
       signature,
     });
+  }
+
+  async requestAd(input: {
+    deviceId: string;
+    sessionId: string;
+    waitStateId: string;
+    toolType: string;
+    idempotencyKey: string;
+  }): Promise<Ad | null> {
+    const payload = {
+      deviceId: input.deviceId,
+      sessionId: input.sessionId,
+      waitStateId: input.waitStateId,
+      toolType: input.toolType,
+      idempotencyKey: input.idempotencyKey,
+    };
+    const signature = await this.signEventPayload(payload);
+    const res = await this.raw<{ ad: Ad | null }>('POST', '/extension/ad-request', {
+      ...payload,
+      signature,
+    });
+    return res?.ad ?? null;
+  }
+
+  async recordAdRendered(input: {
+    impressionToken: string;
+    renderedAt: string;
+    idempotencyKey: string;
+  }): Promise<void> {
+    const payload = {
+      impressionToken: input.impressionToken,
+      renderedAt: input.renderedAt,
+      idempotencyKey: input.idempotencyKey,
+    };
+    const signature = await this.signEventPayload(payload);
+    await this.raw('POST', '/extension/ad-rendered', { ...payload, signature });
+  }
+
+  async recordImpressionQualified(input: {
+    impressionToken: string;
+    qualifiedAt: string;
+    visibleDurationMs: number;
+    idempotencyKey: string;
+  }): Promise<void> {
+    const payload = {
+      impressionToken: input.impressionToken,
+      qualifiedAt: input.qualifiedAt,
+      visibleDurationMs: input.visibleDurationMs,
+      idempotencyKey: input.idempotencyKey,
+    };
+    const signature = await this.signEventPayload(payload);
+    await this.raw('POST', '/extension/impression-qualified', { ...payload, signature });
+  }
+
+  async recordClick(impressionToken: string): Promise<void> {
+    const payload = {
+      impressionToken,
+      clickedAt: new Date().toISOString(),
+      idempotencyKey: `click-${impressionToken}`,
+    };
+    const signature = await this.signEventPayload(payload);
+    await this.raw('POST', '/extension/click', { ...payload, signature });
   }
 
   // Deduplicate concurrent refresh attempts — without this, two parallel

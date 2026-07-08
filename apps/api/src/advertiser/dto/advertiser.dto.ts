@@ -1,6 +1,6 @@
 import { IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUrl, Length, Matches,Max, MaxLength, Min } from 'class-validator';
 
-import { BidType } from '@waitlayer/shared';
+import { BidType, depositMinimumMinor } from '@waitlayer/shared';
 
 const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'brl', 'mxn', 'sgd'] as const;
 
@@ -97,10 +97,19 @@ export class CreateCountryTargetingDto {
 
 /** Deposit-session body was previously unvalidated raw `{ amountMinor, currency }`
  *  — a zero/negative/float amount could reach Stripe's unit_amount.
- *  This DTO closes that gap. */
+ *  This DTO enforces the global integer floor; the per-currency minimum
+ *  (see `depositMinimumMinor()` in @waitlayer/shared) is re-checked in the
+ *  controller/service once the currency is normalized, where the dynamic
+ *  policy value can be read safely. class-validator's `@Min` takes a static
+ *  number, not a per-field-value callback. */
 export class CreateDepositSessionDto {
   @IsInt()
-  @Min(100, { message: 'Minimum deposit is 100 minor units' })
+  @Min(depositMinimumMinor('USD'), {
+    message: (args) =>
+      `Minimum deposit is ${depositMinimumMinor(
+        (args.object as CreateDepositSessionDto).currency ?? 'USD',
+      )} minor units`,
+  })
   amountMinor!: number;
 
   @IsOptional()

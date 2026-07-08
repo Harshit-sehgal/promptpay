@@ -47,6 +47,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/auth/password/forgot',
   '/auth/password/reset',
   '/auth/verify-email/confirm',
+  '/auth/verify-email/request',
   '/auth/2fa/setup',
   '/auth/2fa/enable',
   '/auth/2fa/disable',
@@ -57,6 +58,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/developer/settings',
   '/developer/trust',
   '/developer/export-data',
+  '/developer/delete-account',
   '/developer/api-keys',
 
   // Advertiser
@@ -72,6 +74,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/admin/metrics',
   '/admin/users',
   '/admin/campaigns',
+  '/admin/devices',
   '/admin/payouts',
   '/admin/fraud',
   '/admin/recovery-debt',
@@ -105,6 +108,9 @@ const ALLOWED_PATH_PREFIXES = [
 
   // Compliance / consent (re-prompt flow #65)
   '/consent',
+
+  // Feedback (public submission)
+  '/feedback',
 ];
 
 function upstreamUrl(pathname: string): string {
@@ -205,7 +211,14 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       // The auth Route Handlers already strip tokens from login/signup/google
       // responses, but this is an independent defense-in-depth guard in case
       // any non-auth upstream endpoint accidentally projects a token or secret.
-      responseBody = stripSensitiveFields(responseBody);
+      //
+      // Exception: `/auth/2fa/setup` intentionally returns the TOTP `secret`
+      // (and `otpauthUrl`) so the user can copy it manually when they cannot
+      // scan the QR code. We preserve only those two fields for that exact
+      // route — every other route still has `secret` stripped (including the
+      // `eventSecret` used for device signing).
+      const allowSetupSecret = pathWithoutApi === '/auth/2fa/setup';
+      responseBody = stripSensitiveFields(responseBody, allowSetupSecret);
     } else {
       responseBody = await upstreamRes.text();
     }
@@ -233,17 +246,24 @@ const SENSITIVE_FIELDS = new Set([
   'eventSecret',
 ]);
 
-function stripSensitiveFields(value: unknown): unknown {
+function stripSensitiveFields(value: unknown, allowSetupSecret = false): unknown {
   if (value === null || value === undefined) return value;
   if (Array.isArray(value)) {
-    return value.map(stripSensitiveFields);
+    return value.map((v) => stripSensitiveFields(v, allowSetupSecret));
   }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
     const stripped: Record<string, unknown> = {};
     for (const key of Object.keys(obj)) {
+      // The 2FA setup endpoint is the single route allowed to surface a TOTP
+      // `secret` (and its `otpauthUrl`) to the logged-in user. No other route
+      // may leak a `secret`/`eventSecret` through the proxy.
+      if (allowSetupSecret && (key === 'secret' || key === 'otpauthUrl')) {
+        stripped[key] = obj[key];
+        continue;
+      }
       if (SENSITIVE_FIELDS.has(key)) continue;
-      stripped[key] = stripSensitiveFields(obj[key]);
+      stripped[key] = stripSensitiveFields(obj[key], allowSetupSecret);
     }
     return stripped;
   }

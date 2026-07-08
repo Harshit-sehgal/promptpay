@@ -42,10 +42,17 @@ export default function SignupPage() {
   const roleRef = useRef(role);
 
   useEffect(() => {
-    const referralFromUrl = new URLSearchParams(window.location.search).get('ref');
+    const params = new URLSearchParams(window.location.search);
+    const referralFromUrl = params.get('ref');
     if (referralFromUrl) {
+      // Referral links are always developer-only and take precedence.
       setReferrerCode(referralFromUrl.trim().toUpperCase());
       setRole('developer');
+      return;
+    }
+    const roleParam = params.get('role');
+    if (roleParam === 'advertiser' || roleParam === 'developer') {
+      setRole(roleParam);
     }
   }, []);
 

@@ -2016,6 +2016,8 @@ Evidence:
 
 - The landing page has advertiser-facing calls to action, including "Start
   Advertiser Campaign", but they link to `/auth/signup` without a role hint.
+- The pricing page's advertiser card has "Start advertising" and also links to
+  `/auth/signup` without a role hint.
 - `apps/web/src/app/auth/signup/page.tsx` initializes `role` to `developer`.
 - The signup page only reads `ref` from the query string, and a referral code
   explicitly forces the role back to `developer`.
@@ -2238,6 +2240,253 @@ Done when:
 - Tests cover matching country, excluded country, no targeting, and tool-type
   eligibility.
 
+### A-057: Developer Category Blocking Has No Persisted Settings or Client Path
+
+Severity: medium-high.
+
+Evidence:
+
+- The landing page says developers can "Block categories" and the FAQ says
+  category blocking is available from the settings dashboard.
+- `UserSettings` only stores `adsEnabled`, quiet-mode fields, and
+  `maxAdsPerHour`.
+- `UpdateSettingsDto`, `DeveloperService.updateSettings()`, and
+  `apps/web/src/app/developer/settings/page.tsx` have no category preference
+  fields or controls.
+- `AdRequestDto` has optional `allowedCategories` and `blockedCategories`, and
+  `ExtensionService.requestAd()` filters on those DTO fields, but the VS Code
+  extension's `requestAd()` payload never sends either field.
+- The `BlockedCategory` model appears to be an admin/user-generated report
+  table with `blockedBy` and `reason`; it is not wired as a per-developer ad
+  preference.
+
+Likely impact:
+
+- Developers cannot actually block advertiser categories through the product.
+- Any category filtering depends on a client voluntarily sending transient
+  arrays that current clients do not send.
+- Public privacy/control claims overstate the current developer preference
+  surface.
+
+Fix direction:
+
+- Add persisted per-developer category preferences, or remove category-blocking
+  claims until implemented.
+- Have extension/CLI fetch settings and include/enforce the persisted category
+  preferences, or have the API apply them directly during ad selection.
+- Clarify the difference between a user blocking a category and reporting a bad
+  category/ad.
+
+Desired goal:
+
+- Developer category preferences are durable and enforced server-side for every
+  ad request from that developer.
+
+Done when:
+
+- Settings UI/API can create, update, and display blocked categories.
+- `requestAd()` applies the persisted preferences even if the client omits
+  category arrays.
+- Tests cover blocked, allowed, and unconfigured category behavior.
+
+### A-058: Quiet Mode Uses Server Time Instead of Developer Local Time
+
+Severity: medium-high.
+
+Evidence:
+
+- `UserSettings` stores `quietModeStart` and `quietModeEnd` as `HH:MM` strings
+  without a timezone.
+- `ExtensionService.requestAd()` calls `currentTimeHHMM()` on the API server and
+  compares that server-local value to the user's quiet-mode window.
+- The VS Code extension and CLI ad/request flows do not send a local timezone,
+  offset, or local time context.
+- The settings UI presents quiet mode as a developer preference, implying it
+  applies to the developer's local hours.
+
+Likely impact:
+
+- Developers outside the API server timezone can receive ads during their
+  intended quiet hours or have ads suppressed at the wrong time.
+- Operators cannot reason about quiet-mode behavior across regions.
+- Tests running in one timezone can pass while production users in another
+  timezone see incorrect behavior.
+
+Fix direction:
+
+- Store a timezone/offset with developer settings, or have clients send a
+  signed local-time context and validate it carefully.
+- Prefer IANA timezone storage for account settings so daylight-saving changes
+  are handled predictably.
+- Add tests with a developer timezone different from the server timezone.
+
+Desired goal:
+
+- Quiet mode is evaluated in the developer's intended local time.
+
+Done when:
+
+- A developer in a non-server timezone has ads suppressed only during their
+  configured local quiet window.
+- Settings UI shows the timezone used for quiet mode.
+- Tests cover same-day and overnight quiet windows across timezones.
+
+### A-059: Partial Payout Approval Can Mark Too Much Earnings as Paid
+
+Severity: high.
+
+Evidence:
+
+- `AdminService.approvePayout()` accepts `approvedAmountMinor`, so the backend
+  supports approving less than the originally requested payout amount.
+- `PayoutService.processPayout()` reconciles a partial approval by trimming
+  `PayoutAllocation.amountMinor` rows until their sum matches the approved
+  amount.
+- `PayoutAllocation` stores its own `amountMinor`, but the linked
+  `EarningsLedger` row still has a single whole-row `amountMinor` and `status`.
+- `PayoutService.markPayoutPaid()` and the Stripe payout webhook collect
+  allocated earnings ids and update matching `EarningsLedger` rows to
+  `status: 'paid'` by id; they do not split or mark only the allocated amount.
+- If an allocation is shrunk during partial approval, the whole earnings row can
+  still be marked paid even though only part of that row was actually paid out.
+- The admin payout UI does not expose partial approval, but the backend API path
+  exists and tests cover partial approval as a supported service behavior.
+
+Likely impact:
+
+- A developer can lose the unpaid remainder of an earnings row after a partial
+  payout is marked paid.
+- Ledger balances can show less confirmed earnings than actually remain owed.
+- Admins may believe partial approval is safe because the API validates the
+  approved amount and `processPayout()` trims allocations, while the terminal
+  paid transition still acts at whole-row granularity.
+
+Fix direction:
+
+- On partial approval, split the underlying `EarningsLedger` rows so every
+  remaining allocation points to an earnings row whose `amountMinor` exactly
+  equals the paid allocation.
+- Alternatively, replace whole-row earnings status with amount-level payout
+  settlement accounting, but that is a larger ledger model change.
+- Add integration tests for a single large earning partially approved, paid,
+  and then re-requested for the unpaid remainder.
+
+Desired goal:
+
+- Partial payout approval pays exactly the approved amount and leaves the unpaid
+  remainder available or held with an explicit reason.
+
+Done when:
+
+- Marking a partially approved payout paid cannot mark more earnings as paid
+  than the approved payout amount.
+- Developer payout availability after partial payment equals the unpaid
+  confirmed remainder.
+- Admin and webhook paid paths share the same amount-level reconciliation.
+
+### A-060: Minimum Visible Duration Can Be Claimed Without Waiting
+
+Severity: high.
+
+Evidence:
+
+- `ExtensionService.recordQualifiedImpression()` accepts the client-provided
+  `visibleDurationMs` after verifying the device signature.
+- The server only clamps the claimed duration when
+  `elapsedServer > 1_000 && visibleDurationMs > elapsedServer + 5_000`.
+- If `recordRendered()` and `recordQualifiedImpression()` are called
+  immediately, `elapsedServer` is sub-second and the code trusts the claimed
+  duration.
+- Integration tests exercise this path by rendering an ad and immediately
+  sending `visibleDurationMs: 6000`, which passes the current checks.
+- `qualifiedAt` is parsed into a date for storage, but the server does not use
+  it to require that at least `MINIMUM_VISIBLE_DURATION_MS` elapsed after the
+  server-recorded render time.
+
+Likely impact:
+
+- A signed client can qualify impressions instantly instead of waiting the
+  advertised five seconds.
+- Advertisers can be charged and developers credited for ads that were not
+  actually visible for the minimum duration.
+- Fraud checks see apparently valid qualified impressions because the HMAC
+  proves device possession, not honest view-time measurement.
+
+Fix direction:
+
+- Treat minimum visible duration as a server-side timing invariant: require
+  `Date.now() - renderedAt >= MINIMUM_VISIBLE_DURATION_MS` before qualification,
+  with only a small grace window for server clock/processing variance.
+- Reject future `renderedAt`/`qualifiedAt` values and impossible event order.
+- If client-side visibility evidence is needed, store it as supporting
+  telemetry, not as the authoritative billing clock.
+
+Desired goal:
+
+- A billable impression cannot qualify until the server has observed enough
+  elapsed time since render.
+
+Done when:
+
+- Immediate render→qualify calls with `visibleDurationMs >= 5000` are rejected.
+- Qualification succeeds only after the required server-observed delay.
+- Tests cover immediate, below-threshold, exact-threshold, delayed, and
+  future-timestamp cases.
+
+### A-061: Developer and Campaign Frequency Caps Are Not Enforced End-to-End
+
+Severity: high.
+
+Evidence:
+
+- `UserSettings.maxAdsPerHour` is configurable in the developer settings UI and
+  stored in the database.
+- `ExtensionService.requestAd()` enforces that setting only inside
+  `claimImpression()`, and the count only includes impressions where
+  `isBillable: true`.
+- New ad-request impressions are created with `isBillable: false`, so multiple
+  concurrent or rapid wait states can be served before any of them qualify.
+- `recordQualifiedImpression()` does not re-check `maxAdsPerHour`; it only calls
+  `FraudService.checkImpressionRateLimit()`, which uses the global
+  `RATE_LIMITS.IMPRESSIONS_PER_USER_PER_HOUR` / device limits rather than the
+  developer's selected max.
+- `Campaign.frequencyCapPerHour` and `frequencyCapPerDay` are in the schema and
+  advertiser DTOs, but `ExtensionService.requestAd()` never reads those fields.
+  It only excludes campaigns with a billable impression in the last hour, and
+  there is no daily campaign cap check.
+
+Likely impact:
+
+- Developers can receive and bill more ads than their own max-per-hour setting
+  if several ad requests are made before qualification.
+- Advertisers can configure campaign frequency caps that are not actually
+  enforced by delivery.
+- The delivery engine's hard-coded "not shown in the last hour" behavior may be
+  stricter than an advertiser's hourly cap and looser than the daily cap,
+  making campaign pacing and spend expectations unreliable.
+
+Fix direction:
+
+- Decide whether caps apply at served-ad time, billable-qualification time, or
+  both; then enforce the same policy atomically at the money-moving point.
+- Count pending served impressions when enforcing developer ad exposure caps,
+  or reserve cap slots at request time and release them on non-qualification.
+- Implement campaign `frequencyCapPerHour` and `frequencyCapPerDay` in the ad
+  eligibility filter with user/device/campaign scoped counts.
+
+Desired goal:
+
+- Developer and advertiser frequency controls match the product settings and
+  cannot be bypassed by request/qualification timing.
+
+Done when:
+
+- Rapid concurrent wait states cannot exceed a developer's configured hourly
+  cap.
+- Campaign hourly and daily caps are enforced exactly as stored.
+- Tests cover pending impressions, qualified impressions, hourly caps, daily
+  caps, and cap reset windows.
+
 ## End-to-End SaaS Readiness Checks
 
 Do not declare WaitLayer SaaS-ready until these flows pass against a fresh,
@@ -2266,20 +2515,22 @@ Required path:
 9. Client starts and ends a wait state with signed payloads.
 10. Approved/funded advertiser campaign is eligible and ad request returns a
    valid creative for the correct account/device/currency context.
-11. Client renders an ad, qualifies an impression after minimum visible
-    duration, and optionally records a click. Terminal/CLI earning claims must
-    pass this step too or be explicitly excluded from launch copy.
+11. Client renders an ad, qualifies an impression only after server-enforced
+    minimum visible duration and cap checks, and optionally records a click.
+    Terminal/CLI earning claims must pass this step too or be explicitly
+    excluded from launch copy.
 12. Advertiser is debited, developer earnings are credited, platform/reserve
     ledgers reconcile, and fraud checks can hold/release earnings.
 13. Ledger maturation makes earnings confirmed after the correct hold period.
 14. Developer adds a verified payout method.
 15. Developer requests payout only after threshold, email verification, and
     fraud/2FA/API-key safety requirements are satisfied.
-16. Admin reviews/approves/processes payout or the automated provider processes
-    it.
+16. Admin reviews/approves/processes payout, including partial-approval
+    accounting if partial approval remains supported, or the automated provider
+    processes it.
 17. Payout is marked paid by provider webhook or audited admin action.
 18. Developer payout history, ledger balance, payoutable referral reward logic,
-    privacy preferences, and export data all reflect the final state.
+    privacy/category preferences, and export data all reflect the final state.
 19. A policy-version bump in the API re-prompts existing users and records the
     current per-purpose consent version through the web UI.
 
@@ -2362,8 +2613,9 @@ call, direct database mutation, or tribal-knowledge script.
 4. Fix A-035, A-037, and A-048 so 2FA/API-key/payout-destination behavior
    matches the money-movement security policy.
 5. Fix A-019, A-020, A-021, A-022, A-023, A-024, A-038, A-039, A-050, A-051,
-   A-054, A-055, and A-056 to make the advertiser
-   campaign/ad-serving/billing/reporting loop coherent.
+   A-054, A-055, A-056, A-059, A-060, and A-061 to make the
+   advertiser/developer money campaign/ad-serving/billing/reporting loop
+   coherent.
 6. Fix A-041 so referral rewards match payout accounting.
 7. Fix A-003 and A-012 so tests and schema setup become trustworthy.
 8. Fix A-001 so root, CI, and Docker builds are release-safe.
@@ -2373,9 +2625,11 @@ call, direct database mutation, or tribal-knowledge script.
 11. Fix A-042 and A-053 before relying on container/load-balancer readiness.
 12. Address A-007, A-008, A-009, A-030, A-031, and A-032 as product hardening
     and scale work.
-13. Update stale status docs for A-010 and public claims in A-033 only after
+13. Fix A-057 and A-058 before launch copy claims developer category blocking,
+    fine-grained category control, or reliable local quiet hours.
+14. Update stale status docs for A-010 and public claims in A-033 only after
     commands and E2E checks are genuinely green.
-14. Keep A-011 in mind throughout: do not combine unrelated fixes.
+15. Keep A-011 in mind throughout: do not combine unrelated fixes.
 
 ## Required Verification Before Calling the Repo Healthy
 

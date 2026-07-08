@@ -5,6 +5,7 @@ import { AD_SERVING, CampaignStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/sha
 
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
+import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode } from '../common/utils/errors';
 import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
 import { PrismaService } from '../config/prisma.service';
@@ -129,7 +130,7 @@ export class AdvertiserService {
       totalSpendByCurrency,
       totalImpressions,
       totalClicks,
-      ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+      ctr: totalImpressions > 0 ? totalClicks / totalImpressions : 0,
       activeCampaigns: campaigns.filter((c: { status: string }) => c.status === 'active').length,
       totalCampaigns: campaigns.length,
       campaigns,
@@ -585,7 +586,10 @@ export class AdvertiserService {
   }
 
   /** Get reports for advertiser campaigns — aggregated by campaign */
-  async getReports(advertiserId: string, params: { campaignId?: string; from?: string; to?: string }) {
+  async getReports(
+    advertiserId: string,
+    params: { campaignId?: string; from?: string; to?: string; page?: number; limit?: number },
+  ) {
     const campaignWhere: Prisma.CampaignWhereInput = { advertiserId };
     if (params.campaignId) campaignWhere.id = params.campaignId;
 
@@ -605,21 +609,48 @@ export class AdvertiserService {
       throw new BadRequestException(`Invalid 'to' date: ${params.to}`);
     }
 
-    const timeFilter = { createdAt: { gte, lte } } as const;
+    // Build the time filter. A date-ONLY `to` (no 'T', e.g. "2026-07-09") is
+    // parsed by `new Date(...)` as midnight at the START of that day, which
+    // would exclude every impression/click that happened later on the selected
+    // end day (issue A-050). Treat a date-only `to` as inclusive-of-the-day by
+    // using an exclusive next-day lower bound (`lt`); ISO datetimes are kept
+    // as an inclusive upper bound (`lte`). "Last 24h" callers should pass a
+    // full ISO datetime for `from`/`to`.
+    const createdAt: { gte?: Date; lte?: Date; lt?: Date } = {};
+    if (gte) createdAt.gte = gte;
+    if (params.to) {
+      if (params.to.includes('T')) {
+        createdAt.lte = lte;
+      } else {
+        const toDate = new Date(params.to);
+        createdAt.lt = new Date(
+          toDate.getFullYear(),
+          toDate.getMonth(),
+          toDate.getDate() + 1,
+        );
+      }
+    }
+    const timeFilter = Object.keys(createdAt).length > 0 ? { createdAt } : {};
 
-    // Get daily aggregated data for trend chart and campaign breakdown
-    // Group impressions by campaign + day
-    const rawImpressions = await this.prisma.adImpression.findMany({
+    // Aggregate impressions + clicks per campaign in the database (groupBy)
+    // instead of loading every raw billable row into application memory (A-007).
+    const impCounts = await this.prisma.adImpression.groupBy({
+      by: ['campaignId'],
       where: { campaignId: { in: campaignIds }, isBillable: true, ...timeFilter },
-      select: { campaignId: true, userId: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
+      _count: { _all: true },
     });
+    const impByCampaign = new Map<string, number>(
+      impCounts.map((r) => [r.campaignId, r._count._all]),
+    );
 
-    const rawClicks = await this.prisma.adClick.findMany({
+    const clickCounts = await this.prisma.adClick.groupBy({
+      by: ['campaignId'],
       where: { campaignId: { in: campaignIds }, isValid: true, ...timeFilter },
-      select: { campaignId: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
+      _count: { _all: true },
     });
+    const clicksByCampaign = new Map<string, number>(
+      clickCounts.map((r) => [r.campaignId, r._count._all]),
+    );
 
     // Get spend per campaign from advertiser ledger
     const spendRows = await this.prisma.advertiserLedger.groupBy({
@@ -637,30 +668,26 @@ export class AdvertiserService {
       spendRows.map((r) => [`${r.campaignId}:${r.currency}`, r._sum.amountMinor ?? 0]),
     );
 
-    // Build campaign name lookup
+    // Daily aggregation for trend chart — only the `createdAt` column is needed
+    // for day-bucketing, so select just that rather than full impression/click
+    // rows (keeps memory bounded for large date ranges, A-007).
+    const dailyImpressions = await this.prisma.adImpression.findMany({
+      where: { campaignId: { in: campaignIds }, isBillable: true, ...timeFilter },
+      select: { createdAt: true },
+    });
+    const dailyClicks = await this.prisma.adClick.findMany({
+      where: { campaignId: { in: campaignIds }, isValid: true, ...timeFilter },
+      select: { createdAt: true },
+    });
 
-
-    // Aggregate impressions per campaign
-    const impByCampaign = new Map<string, number>();
-    for (const imp of rawImpressions) {
-      impByCampaign.set(imp.campaignId, (impByCampaign.get(imp.campaignId) ?? 0) + 1);
-    }
-
-    // Aggregate clicks per campaign
-    const clicksByCampaign = new Map<string, number>();
-    for (const click of rawClicks) {
-      clicksByCampaign.set(click.campaignId, (clicksByCampaign.get(click.campaignId) ?? 0) + 1);
-    }
-
-    // Daily aggregation for trend chart
     const dailyMap = new Map<string, { impressions: number; clicks: number; date: string }>();
-    for (const imp of rawImpressions) {
+    for (const imp of dailyImpressions) {
       const day = imp.createdAt.toISOString().slice(0, 10);
       const entry = dailyMap.get(day) ?? { date: day, impressions: 0, clicks: 0 };
       entry.impressions++;
       dailyMap.set(day, entry);
     }
-    for (const click of rawClicks) {
+    for (const click of dailyClicks) {
       const day = click.createdAt.toISOString().slice(0, 10);
       const entry = dailyMap.get(day) ?? { date: day, impressions: 0, clicks: 0 };
       entry.clicks++;
@@ -672,7 +699,7 @@ export class AdvertiserService {
     const rows = campaigns.map((campaign) => {
       const impressions = impByCampaign.get(campaign.id) ?? 0;
       const clicks = clicksByCampaign.get(campaign.id) ?? 0;
-      const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+      const ctr = impressions > 0 ? clicks / impressions : 0;
       const spendMinor = spendByCampaignCurrency.get(`${campaign.id}:${campaign.currency}`) ?? 0;
       return {
         campaignId: campaign.id,
@@ -693,7 +720,7 @@ export class AdvertiserService {
       totals[row.currency] = (totals[row.currency] ?? 0) + row.spendMinor;
       return totals;
     }, {});
-    const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+    const avgCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
 
     return {
       rows,
@@ -720,22 +747,7 @@ export class AdvertiserService {
     }
   }
 
-  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
-    const sums = await this.prisma.advertiserLedger.groupBy({
-      by: ['entryType'],
-      where: {
-        advertiserId,
-        currency,
-        status: 'confirmed',
-      },
-      _sum: { amountMinor: true },
-    });
-    let deposits = 0;
-    let charges = 0;
-    for (const row of sums) {
-      if (row.entryType === 'credit') deposits = row._sum.amountMinor ?? 0;
-      if (row.entryType === 'debit') charges = row._sum.amountMinor ?? 0;
-    }
-    return deposits - charges;
+  private getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+    return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
 }

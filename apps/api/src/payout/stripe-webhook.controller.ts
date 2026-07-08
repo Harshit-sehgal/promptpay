@@ -6,6 +6,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
 
 import { AuditService } from '../audit/audit.service';
+import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { EventBus } from '../common/events/event-bus';
 import { getErrorCode, getErrorMessage } from '../common/utils/errors';
 import { assertSafeJson } from '../common/utils/json-value';
@@ -363,6 +364,29 @@ export class StripeWebhookController implements OnModuleInit {
       where: { provider: 'stripe', eventId: event.id },
       data: { processingStatus: 'processed', processedAt: new Date() },
     });
+
+    // ── A-019: activate campaigns that were approved while unfunded ──
+    // A campaign can reach `approved` before the advertiser has deposited. The
+    // Stripe deposit webhook now credits the advertiser balance, so activate
+    // any `approved` campaign that has an approved creative, remaining budget,
+    // and a positive same-currency balance. This closes the gap where an
+    // approved-then-funded campaign would otherwise never start serving.
+    const approvedCampaigns = await this.prisma.campaign.findMany({
+      where: { advertiserId: advertiser.id, status: 'approved' },
+      include: { creatives: { where: { status: 'approved' } } },
+    });
+    for (const campaign of approvedCampaigns) {
+      if (campaign.creatives.length === 0) continue;
+      if (campaign.budgetSpentMinor >= campaign.budgetTotalMinor) continue;
+      const balance = await getAdvertiserBalance(this.prisma, campaign.advertiserId, campaign.currency);
+      if (balance > 0) {
+        await this.prisma.campaign.update({
+          where: { id: campaign.id },
+          data: { status: 'active', activatedAt: new Date() },
+        });
+        this.logger.log(`Activated previously-unfunded approved campaign ${campaign.id} after deposit`);
+      }
+    }
 
     this.logger.log(
       `Recorded Stripe deposit: ${result.amountMinor} ${result.currency} for advertiser ${advertiser.id}`,

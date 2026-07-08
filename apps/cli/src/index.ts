@@ -1,10 +1,28 @@
 import { Command } from 'commander';
 
+import { resolveApiBaseUrl } from './lib/api-client';
 import { runAuth } from './commands/auth';
 import { runConfig } from './commands/config';
 import { runLogout } from './commands/logout';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
+
+const API_URL = resolveApiBaseUrl();
+const API_HOSTNAME = (() => {
+  try {
+    return new URL(API_URL).hostname;
+  } catch {
+    return '';
+  }
+})();
+const IS_LOOPBACK = API_HOSTNAME === 'localhost' || API_HOSTNAME === '127.0.0.1' || API_HOSTNAME === '::1';
+if (IS_LOOPBACK) {
+  console.warn(
+    '[WaitLayer] CLI is pointed at a local dev API (' +
+      API_URL +
+      '). Set WAITLAYER_API_URL to the production API (https://api.waitlayer.com/api/v1) to connect to WaitLayer.',
+  );
+}
 
 const program = new Command();
 program

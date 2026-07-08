@@ -3,6 +3,8 @@ import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCod
 import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 
+import { depositMinimumMinor } from '@waitlayer/shared';
+
 import { Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -188,10 +190,19 @@ export class AdvertiserController {
         'Platform is not configured. Please contact support.',
       );
     }
+    // Re-check the per-currency deposit minimum once the currency is
+    // normalized: the DTO's static `@Min` only enforces the global floor, so a
+    // policy with a higher `depositMinimumMinor` for a specific currency is
+    // enforced here. See A-031.
+    const currency = dto.currency ?? 'usd';
+    const minimum = depositMinimumMinor(currency);
+    if (dto.amountMinor < minimum) {
+      throw new BadRequestException(`Minimum deposit is ${minimum} minor units`);
+    }
     return this.stripe.createDepositSession({
       advertiserId,
       amountMinor: dto.amountMinor,
-      currency: dto.currency ?? 'usd',
+      currency,
       successUrl: `${webBaseUrl}/advertiser?deposit=success`,
       cancelUrl: `${webBaseUrl}/advertiser?deposit=cancelled`,
     });

@@ -1,10 +1,10 @@
-/** Format minor units (cents) to display currency string */
+import { formatMinorUnits } from '@waitlayer/shared';
+
+/** Format minor units (cents) to display currency string.
+ *  Uses the per-currency minor-unit exponent (JPY=0, USD=2, BHD=3, ...) so
+ *  non-2-decimal currencies are not mis-rendered. */
 export function formatCurrency(minorUnits: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(minorUnits / 100);
+  return formatMinorUnits(minorUnits, currency);
 }
 
 /** Format grouped minor-unit totals without mixing currencies */

@@ -46,7 +46,7 @@ COPY --from=build /app/package.json ./
 ENV NODE_ENV=production
 EXPOSE 4002
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:4002/api/v1/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:4002/api/v1/health/ready || exit 1
 CMD ["sh", "-c", "node scripts/wait-for-postgres.mjs && packages/db/node_modules/.bin/prisma migrate deploy --schema packages/db/prisma/schema.prisma && node apps/api/dist/apps/api/src/main.js"]
 
 # ── Web Runtime ──

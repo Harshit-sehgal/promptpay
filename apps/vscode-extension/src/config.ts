@@ -22,11 +22,13 @@ export class ConfigurationManager {
   }
 
   getApiUrl(): string {
-    // Default `localhost:4002` matches the API's API_PORT default (4002) in
-    // packages/config.
+    // Packaged/distributed installs default to the production SaaS origin so a
+    // user who installs the extension can reach the real API without manual
+    // configuration. Local development overrides via the `waitlayer.apiUrl`
+    // setting (A-013).
     return (
       vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('apiUrl') ||
-      'http://localhost:4002/api/v1'
+      'https://api.waitlayer.com/api/v1'
     );
   }
 

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } f
 import { ConfigService } from '@nestjs/config';
 
 import { EarningsLedger, PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
-import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
+import { PAYOUT, PayoutProvider, PayoutStatus, payoutMinimumMinor } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
@@ -536,9 +536,10 @@ export class PayoutService {
       throw new ForbiddenException('Two-factor authentication is required before requesting a payout');
     }
 
-    // Minimum threshold check
-    if (dto.amountMinor < PAYOUT.MINIMUM_THRESHOLD_MINOR) {
-      throw new BadRequestException(`Minimum payout is $${PAYOUT.MINIMUM_THRESHOLD_MINOR / 100}`);
+    // Minimum threshold check — per-currency floor from the currency policy.
+    const minPayout = payoutMinimumMinor(currency);
+    if (dto.amountMinor < minPayout) {
+      throw new BadRequestException(`Minimum payout is ${minPayout} ${currency} minor units`);
     }
     const currency = dto.currency.trim().toUpperCase();
 

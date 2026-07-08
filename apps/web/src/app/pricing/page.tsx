@@ -104,7 +104,7 @@ export default function PricingPage() {
             </p>
             <p className="text-white/50 text-[14px] mb-8">CPM or CPC bidding. Only pay for valid traffic.</p>
             <Link
-              href="/auth/signup"
+              href="/auth/signup?role=advertiser"
               className="block w-full text-center bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-3 rounded-xl text-[15px] transition-colors mb-8"
             >
               Start advertising →

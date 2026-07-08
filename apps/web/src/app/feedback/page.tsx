@@ -1,32 +1,46 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent,useState } from 'react';
+import { FormEvent, useState } from 'react';
 
 import { useToast } from '@waitlayer/ui';
 
-const FEEDBACK_KEY = 'wl_feedback_submissions';
-
 export default function FeedbackPage() {
-  const { success } = useToast();
+  const { success, error: showError } = useToast();
   const [message, setMessage] = useState('');
   const [rating, setRating] = useState<number | null>(null);
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
+    setSubmitting(true);
     try {
-      const prev = JSON.parse(window.localStorage.getItem(FEEDBACK_KEY) ?? '[]');
-      prev.push({ message, rating, at: new Date().toISOString() });
-      window.localStorage.setItem(FEEDBACK_KEY, JSON.stringify(prev));
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          rating: rating ?? undefined,
+          category: 'other',
+        }),
+      });
+      if (!res.ok) throw new Error('feedback submit failed');
+      setSent(true);
+      setMessage('');
+      setRating(null);
+      success('Thanks for your feedback!');
     } catch {
-      // Non-fatal: feedback is best-effort local capture.
+      // Best-effort: if the network/API is unavailable, still thank the user
+      // locally but surface that it may not have reached the team.
+      setSent(true);
+      setMessage('');
+      setRating(null);
+      showError('We could not deliver your feedback just now. Please try again later.');
+    } finally {
+      setSubmitting(false);
     }
-    setSent(true);
-    setMessage('');
-    setRating(null);
-    success('Thanks for your feedback!');
   };
 
   return (
@@ -86,10 +100,10 @@ export default function FeedbackPage() {
             </div>
             <button
               type="submit"
-              disabled={!message.trim()}
+              disabled={!message.trim() || submitting}
               className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors"
             >
-              Send feedback
+              {submitting ? 'Sending…' : 'Send feedback'}
             </button>
           </form>
         )}

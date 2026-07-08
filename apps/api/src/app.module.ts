@@ -19,6 +19,7 @@ import { ComplianceModule } from './compliance/compliance.module';
 import { PrismaModule } from './config/prisma.module';
 import { DeveloperModule } from './developer/developer.module';
 import { ExtensionModule } from './extension/extension.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { FraudModule } from './fraud/fraud.module';
 import { HealthModule } from './health/health.module';
 import { LedgerModule } from './ledger/ledger.module';
@@ -52,6 +53,7 @@ import { ReferralModule } from './referral/referral.module';
     AdvertiserModule,
     AdminModule,
     ExtensionModule,
+    FeedbackModule,
     LedgerModule,
     PayoutModule,
     FraudModule,

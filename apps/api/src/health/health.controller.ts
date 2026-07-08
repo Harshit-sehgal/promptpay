@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, HttpStatus, Logger, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpException, HttpStatus, Logger, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 
@@ -41,6 +41,45 @@ export class HealthController {
     const redis = await this.redis.check();
     checks['redis'] = redis;
 
+    return checks;
+  }
+
+  /**
+   * Readiness probe — used by Docker/K8s healthchecks and load balancers.
+   *
+   * Unlike `GET /health` (liveness, which always returns HTTP 200 so a
+   * crashed process can be detected and restarted), readiness returns a
+   * non-200 status when a required dependency (Postgres, Redis) is
+   * unavailable. This prevents routing traffic to an API that cannot safely
+   * serve it (A-042).
+   */
+  @Get('ready')
+  @HttpCode(HttpStatus.OK)
+  async ready() {
+    const checks: Record<string, unknown> = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+    let ready = true;
+
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      checks['database'] = 'connected';
+    } catch {
+      ready = false;
+      checks['database'] = { status: 'error' as const, error: 'Database unreachable' };
+      this.logger.error('Readiness: database unreachable');
+    }
+
+    const redis = await this.redis.check();
+    checks['redis'] = redis;
+    if (redis.status !== 'connected') {
+      ready = false;
+    }
+
+    if (!ready) {
+      throw new HttpException(checks, HttpStatus.SERVICE_UNAVAILABLE);
+    }
     return checks;
   }
 

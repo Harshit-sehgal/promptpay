@@ -11,8 +11,10 @@ import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 
 import { loadEnv } from '@waitlayer/config';
 
+import { PrismaService } from './config/prisma.service';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { verifyMigrationsApplied } from './config/migration-check';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
@@ -86,6 +88,16 @@ async function bootstrap() {
   // stops SIGKILL after the default 10s, leaking the brute-force in-memory
   // tracker, the cleanup interval, and any open Redis connection.
   app.enableShutdownHooks();
+
+  // Detect unapplied migrations before serving traffic. In production this
+  // fails fast; in development it logs a warning (A-012).
+  const prisma = app.get(PrismaService);
+  try {
+    await verifyMigrationsApplied(prisma);
+  } catch (err) {
+    console.error('[WaitLayer] Migration check failed:', err);
+    throw err;
+  }
 
   // ── OpenAPI / Swagger docs ───────────────────────────────
   // Machine-readable API contract + interactive UI at /api/v1/docs. This is

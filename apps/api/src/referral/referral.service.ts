@@ -212,7 +212,7 @@ export class ReferralService {
       if (insideReward) return null;
 
       try {
-        const [platformEntry, reward] = await Promise.all([
+        const [platformEntry, reward, earningsEntry] = await Promise.all([
           tx.platformLedger.create({
             data: {
               entryType: 'credit',
@@ -232,6 +232,23 @@ export class ReferralService {
               amountMinor: rewardAmount,
               currency: REFERRAL.CURRENCY,
               status: 'confirmed',
+            },
+          }),
+          // A-041: make the referral reward payoutable developer earnings.
+          // Without this earningsLedger credit the platformLedger bonus is just
+          // an internal accounting entry that never reaches the referrer's
+          // payout balance. Idempotent on a per-referral idempotency key so a
+          // retried reward process cannot double-credit earnings.
+          tx.earningsLedger.create({
+            data: {
+              userId: referral.referrerId,
+              campaignId: null,
+              entryType: 'credit',
+              status: 'confirmed',
+              amountMinor: rewardAmount,
+              currency: REFERRAL.CURRENCY,
+              idempotencyKey: `ref-rew-earn-${referral.id}`,
+              description: `Referral reward earnings for referring user ${referredUserId}`,
             },
           }),
         ]);

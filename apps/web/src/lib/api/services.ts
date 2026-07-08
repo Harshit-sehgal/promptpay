@@ -47,6 +47,7 @@ export const authApi = {
   resetPassword: (token: string, newPassword: string) =>
     api.post('/auth/password/reset', { token, newPassword }),
   confirmEmailVerification: (token: string) => api.post('/auth/verify-email/confirm', { token }),
+  requestEmailVerification: () => api.post('/auth/verify-email/request'),
   setup2fa: () => api.post('/auth/2fa/setup'),
   enable2fa: (token: string) => api.post('/auth/2fa/enable', { token }),
   disable2fa: (token: string) => api.post('/auth/2fa/disable', { token }),
@@ -134,6 +135,10 @@ export const adminApi = {
   getPendingArchiveRefunds: () => api.get('/admin/refunds/archive/pending'),
   confirmArchiveRefund: (id: string, stripeRefundPaymentIntentId: string) =>
     api.post(`/admin/refunds/archive/${id}/confirm`, { stripeRefundPaymentIntentId }),
+  issueDeviceRecoveryToken: (
+    deviceId: string,
+    data: { userId: string; reason: string; expiresInMinutes?: number },
+  ) => api.post(`/admin/devices/${deviceId}/recovery-token`, data),
 };
 
 export const payoutApi = {

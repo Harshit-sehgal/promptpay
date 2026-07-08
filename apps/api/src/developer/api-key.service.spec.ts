@@ -70,6 +70,32 @@ describe('ApiKeyService account-status policy', () => {
     expect(ctx.prisma.apiKey.create).not.toHaveBeenCalled();
   });
 
+  it('rejects minting keys with money-movement / destructive scopes', async () => {
+    ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
+
+    for (const scope of ['payout:write', 'payout:read', 'developer:write']) {
+      await expect(ctx.service.generateApiKey('user-1', [scope])).rejects.toThrow(
+        BadRequestException,
+      );
+    }
+    expect(ctx.prisma.apiKey.create).not.toHaveBeenCalled();
+  });
+
+  it('still mints ordinary extension/integration keys', async () => {
+    ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
+    ctx.prisma.apiKey.create.mockResolvedValue({
+      id: 'key-2',
+      keyPrefix: 'wl_abcdef0',
+      scopes: ['extension:write', 'ledger:read'],
+      expiresAt: null,
+      createdAt: new Date('2026-07-08T00:00:00.000Z'),
+    });
+
+    await expect(
+      ctx.service.generateApiKey('user-1', ['extension:write', 'ledger:read']),
+    ).resolves.toMatchObject({ id: 'key-2' });
+  });
+
   it('rejects existing API keys when the owner is restricted', async () => {
     ctx.prisma.apiKey.findUnique.mockResolvedValue({
       id: 'key-1',

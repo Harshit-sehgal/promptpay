@@ -56,7 +56,7 @@ interface AuthContextValue {
   login: (email: string, password: string, twoFactorToken?: string) => Promise<User>;
   signup: (data: SignupPayload) => Promise<User>;
   googleLogin: (idToken: string, role?: string, twoFactorToken?: string) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -130,14 +130,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return fullUser;
   }, []);
 
-  const logout = useCallback(() => {
-    // Best-effort — call the Route Handler to revoke the server-side session
-    // and clear auth cookies. Log failures so silent session leaks are visible.
-    api.post('/auth/logout').catch((err) => {
-      console.warn('[WaitLayer] logout request failed — server session may still be active:', err instanceof Error ? err.message : String(err));
-    });
-    localStorage.removeItem('lastDashboard');
-    setUser(null);
+  const logout = useCallback(async () => {
+    try {
+      // Await the Route Handler so the server-side session is actually revoked
+      // and the httpOnly cookies are cleared before local state is dropped.
+      // If the API/logout Route Handler fails (5xx/502/network), we throw so
+      // the caller can surface a retryable error and the user stays visibly
+      // authenticated instead of believing logout succeeded while the cookies
+      // (and therefore the session) are still alive.
+      await api.post('/auth/logout');
+      localStorage.removeItem('lastDashboard');
+      setUser(null);
+    } catch (err: unknown) {
+      console.warn('[WaitLayer] logout failed — keeping the session active:', err instanceof Error ? err.message : String(err));
+      throw err;
+    }
   }, []);
 
   return (

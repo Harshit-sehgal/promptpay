@@ -3,6 +3,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger,NotFoundExc
 import { MAX_AD_MESSAGE_LENGTH, PROHIBITED_CATEGORIES } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
+import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { normalizeCreativeDestination, normalizeCreativeUpdate } from '../common/utils/external-url-policy';
 import { PrismaService } from '../config/prisma.service';
 
@@ -253,7 +254,7 @@ export class CampaignService {
       campaign,
       impressions,
       clicks,
-      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      ctr: impressions > 0 ? clicks / impressions : 0,
       spendMinor: spend._sum.amountMinor || 0,
       budgetRemaining: campaign ? campaign.budgetTotalMinor - campaign.budgetSpentMinor : 0,
     };
@@ -320,22 +321,7 @@ export class CampaignService {
     }
   }
 
-  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
-    const sums = await this.prisma.advertiserLedger.groupBy({
-      by: ['entryType'],
-      where: {
-        advertiserId,
-        currency,
-        status: 'confirmed',
-      },
-      _sum: { amountMinor: true },
-    });
-    let deposits = 0;
-    let charges = 0;
-    for (const row of sums) {
-      if (row.entryType === 'credit') deposits = row._sum.amountMinor ?? 0;
-      if (row.entryType === 'debit') charges = row._sum.amountMinor ?? 0;
-    }
-    return deposits - charges;
+  private getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+    return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
 }

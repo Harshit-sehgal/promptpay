@@ -188,7 +188,7 @@ export default function DevSettingsPage() {
 
     try {
       const res = (await developerApi.createApiKey({
-        scopes: ['extension:write', 'ledger:read'],
+        scopes: ['ledger:read'],
       })) as AxiosResponse<CreateApiKeyResponse>;
       setNewApiKey(res.data.plainKey);
       const keysRes = (await developerApi.listApiKeys()) as AxiosResponse<DeveloperApiKey[]>;
@@ -535,7 +535,7 @@ export default function DevSettingsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <div>
                 <h2 className="text-surface-900 font-bold text-[16px]">API keys</h2>
-                <p className="text-surface-500 text-xs mt-1">Manage keys for extension and CLI integrations.</p>
+                <p className="text-surface-500 text-xs mt-1">Manage API keys for programmatic access to your account, ledger, and reports.</p>
               </div>
               <button
                 type="button"

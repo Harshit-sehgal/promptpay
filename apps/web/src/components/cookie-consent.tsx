@@ -24,6 +24,7 @@ function readStored(): Choice | null {
 
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false);
+  const [marketingVersion, setMarketingVersion] = useState('2026-07-01');
   const { success } = useToast();
 
   useEffect(() => {
@@ -31,13 +32,24 @@ export default function CookieConsent() {
 
     const reopen = () => setVisible(true);
     window.addEventListener(OPEN_EVENT, reopen);
+
+    // Resolve the server-required marketing_cookies version so the recorded
+    // consent matches the current policy version (rather than a hard-coded
+    // constant that drifts from the backend).
+    api
+      .get<Record<string, string>>('/consent/required-versions')
+      .then((res) => {
+        if (res.data?.marketing_cookies) setMarketingVersion(res.data.marketing_cookies);
+      })
+      .catch(() => undefined);
+
     return () => window.removeEventListener(OPEN_EVENT, reopen);
   }, []);
 
   const persist = (choice: Choice) => {
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ choice, at: new Date().toISOString() }),
+      JSON.stringify({ choice, at: new Date().toISOString(), version: marketingVersion }),
     );
     setVisible(false);
   };
@@ -46,7 +58,7 @@ export default function CookieConsent() {
     try {
       await api.post('/consent', {
         purpose: 'marketing_cookies',
-        version: '2026-07-01',
+        version: marketingVersion,
         granted: true,
         metadata: { method: 'cookie_banner' },
       });

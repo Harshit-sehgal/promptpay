@@ -25,11 +25,26 @@ export class RedisHealthService implements OnModuleDestroy {
     return Boolean(this.redisUrl);
   }
 
+  /** Drop any current connection and clear the cached connect promise so the
+   *  next check starts fresh. Called on connect failure or ping failure so a
+   *  transient Redis outage cannot permanently latch the probe into the failed
+   *  state (see A-053). */
+  private async disposeClient(): Promise<void> {
+    this.connectPromise = null;
+    const client = this.client;
+    this.client = null;
+    if (client) {
+      await client.quit().catch(() => undefined);
+    }
+  }
+
   private ensureClient(): Promise<RedisClientType> | null {
     if (!this.redisUrl) return null;
     if (this.client?.isReady) return Promise.resolve(this.client);
-    if (this.connectPromise) return this.connectPromise;
-    this.connectPromise = (async () => {
+    // A previous connection is either absent or not ready (closed, or still
+    // handshaking a dead socket). Drop it before attempting a fresh connect.
+    void this.disposeClient();
+    const connectPromise = (async () => {
       const client = createClient({ url: this.redisUrl });
       client.on('error', () => {
         // Health-only client: never surface raw Redis errors as exceptions.
@@ -38,20 +53,32 @@ export class RedisHealthService implements OnModuleDestroy {
       this.client = client;
       return client;
     })();
-    return this.connectPromise;
+    this.connectPromise = connectPromise;
+    // On failure, clear the cached promise so a later check retries with a new
+    // socket instead of awaiting the same rejected promise forever (A-053).
+    connectPromise.catch(() => {
+      this.connectPromise = null;
+      this.client = null;
+    });
+    return connectPromise;
   }
 
   async check(): Promise<RedisHealthResult> {
-    const ensure = this.ensureClient();
-    if (!ensure) {
+    if (!this.redisUrl) {
       return { status: 'not_configured' };
     }
     const start = Date.now();
     try {
-      const client = await ensure;
+      const client = await this.ensureClient();
+      if (!client?.isReady) {
+        throw new Error('Redis client not ready');
+      }
       await client.ping();
       return { status: 'connected', latencyMs: Date.now() - start };
     } catch (err) {
+      // Any failure — connect rejection or ping error — tears down the client
+      // so the next probe reconnects rather than reusing a dead connection.
+      await this.disposeClient();
       return {
         status: 'error',
         error: err instanceof Error ? err.message : String(err),
@@ -60,6 +87,6 @@ export class RedisHealthService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client?.quit().catch(() => undefined);
+    await this.disposeClient();
   }
 }
