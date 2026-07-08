@@ -432,7 +432,7 @@ export class ExtensionService {
 
   async recordWaitStateEnd(userId: string, dto: {
     waitStateId: string;
-    durationSeconds: string | number;
+    duration: string | number;
     idempotencyKey: string;
     signature: string;
   }) {

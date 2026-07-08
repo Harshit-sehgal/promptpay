@@ -617,10 +617,9 @@ describe('End-to-End HTTP Integration Flow', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ ...adReqPayload, signature });
-      console.log('DEBUG ad-request', res.status, JSON.stringify(res.body));
+        .send({ ...adReqPayload, signature })
+        .expect(200);
 
-      expect(res.status).toBe(200);
       expect(res.body.ad).toBeDefined();
       expect(res.body.ad.impressionToken).toBeDefined();
       expect(res.body.ad.campaignId).toBe(campaignId);
@@ -659,7 +658,6 @@ describe('End-to-End HTTP Integration Flow', () => {
         .post('/api/v1/extension/impression-qualified')
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...impressionPayload, signature });
-      console.log('DEBUG impression-qualified', res.status, JSON.stringify(res.body));
 
       expect(res.status).toBe(200);
       expect(res.body.qualified).toBe(true);

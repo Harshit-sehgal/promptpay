@@ -271,11 +271,11 @@ describe('API Contract Tests', () => {
     });
 
     it('POST /extension/wait-state/end → matches WaitStateEndResponse schema', async () => {
-      // DTO field is `durationSeconds` (string, 1-16 chars), NOT `duration`.
-      // Value must be within 30s tolerance of the server-computed duration
-      // (server computes elapsed seconds since the wait_state_start event,
-      // which was created just moments ago in the previous test — so 1s works).
-      const payload = { waitStateId: 'contract-ws', durationSeconds: '1', idempotencyKey: 'contract-ws-end' };
+      // DTO field is `duration` (string, 1-16 chars) carrying milliseconds,
+      // NOT `durationSeconds`. Value must be within 30s tolerance of the
+      // server-computed duration (server computes elapsed seconds since the
+      // wait_state_start event, created moments ago — so 1000ms works).
+      const payload = { waitStateId: 'contract-ws', duration: '1000', idempotencyKey: 'contract-ws-end' };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/end')

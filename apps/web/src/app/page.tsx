@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 
 /* ── Small inline SVG icons (no emoji) ── */
@@ -48,6 +51,31 @@ const IconRefresh = () => (
 );
 
 export default function HomePage() {
+  const [calcMode, setCalcMode] = useState<'developer' | 'advertiser'>('developer');
+  
+  // Developer calculator states
+  const [devQueries, setDevQueries] = useState<number>(200);
+  const [devAdFrequency, setDevAdFrequency] = useState<number>(40);
+  const [devCpm, setDevCpm] = useState<number>(35);
+
+  // Advertiser calculator states
+  const [advBudget, setAdvBudget] = useState<number>(500);
+  const [advCpm, setAdvCpm] = useState<number>(35);
+  const [advCtr, setAdvCtr] = useState<number>(1.5);
+
+  // Developer calculations
+  const devDailyImpressions = devQueries * (devAdFrequency / 100);
+  const devMonthlyImpressions = devDailyImpressions * 20; // 20 working days
+  const devMonthlySpend = (devMonthlyImpressions / 1000) * devCpm;
+  const devMonthlyEarnings = devMonthlySpend * 0.60; // 60% split
+  const devDailyEarnings = devMonthlyEarnings / 20;
+  const devAnnualEarnings = devMonthlyEarnings * 12;
+
+  // Advertiser calculations
+  const advImpressions = Math.round((advBudget / advCpm) * 1000);
+  const advClicks = Math.round(advImpressions * (advCtr / 100));
+  const advCpc = advClicks > 0 ? advBudget / advClicks : 0;
+
   return (
     <div className="min-h-screen bg-white">
       {/* ── Navigation ── */}
@@ -217,6 +245,278 @@ export default function HomePage() {
                 <p className="text-surface-500 text-[14px] leading-relaxed">{item.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Interactive Calculator Section ── */}
+      <section className="py-32 px-6 border-t border-surface-100 bg-white">
+        <div className="mx-auto max-w-5xl">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
+              Estimate your <span className="gradient-text">WaitLayer impact</span>
+            </h2>
+            <p className="text-surface-500 text-lg max-w-xl mx-auto">
+              Choose your role to calculate potential developer earnings or advertiser reach.
+            </p>
+
+            {/* Mode Toggle Switch */}
+            <div className="flex justify-center mt-8">
+              <div className="inline-flex rounded-full bg-surface-100 p-1 border border-surface-200/80">
+                <button
+                  type="button"
+                  onClick={() => setCalcMode('developer')}
+                  className={`px-6 py-2 rounded-full text-[14px] font-semibold transition-all duration-200 ${
+                    calcMode === 'developer'
+                      ? 'bg-brand-500 text-white shadow-sm'
+                      : 'text-surface-500 hover:text-surface-900'
+                  }`}
+                >
+                  For Developers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCalcMode('advertiser')}
+                  className={`px-6 py-2 rounded-full text-[14px] font-semibold transition-all duration-200 ${
+                    calcMode === 'advertiser'
+                      ? 'bg-brand-500 text-white shadow-sm'
+                      : 'text-surface-500 hover:text-surface-900'
+                  }`}
+                >
+                  For Advertisers
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-surface-50/60 border border-surface-200/80 rounded-3xl p-8 md:p-12 shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+              {/* Left Column: Sliders */}
+              <div className="space-y-8">
+                {calcMode === 'developer' ? (
+                  <>
+                    <h3 className="text-lg font-bold text-surface-900">Your Developer Activity</h3>
+                    
+                    {/* Daily Queries */}
+                    <div>
+                      <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
+                        <span>Daily AI Queries</span>
+                        <span className="font-semibold text-brand-600">{devQueries} queries</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="50"
+                        max="800"
+                        step="50"
+                        value={devQueries}
+                        onChange={(e) => setDevQueries(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
+                      />
+                      <div className="flex justify-between text-xs text-surface-400 mt-1">
+                        <span>50</span>
+                        <span>400</span>
+                        <span>800</span>
+                      </div>
+                    </div>
+
+                    {/* Ad Frequency */}
+                    <div>
+                      <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
+                        <span>Ad Display Frequency</span>
+                        <span className="font-semibold text-brand-600">{devAdFrequency}% of queries</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="100"
+                        step="10"
+                        value={devAdFrequency}
+                        onChange={(e) => setDevAdFrequency(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
+                      />
+                      <div className="flex justify-between text-xs text-surface-400 mt-1">
+                        <span>10% (minimal)</span>
+                        <span>50%</span>
+                        <span>100% (every wait)</span>
+                      </div>
+                    </div>
+
+                    {/* Estimated CPM */}
+                    <div>
+                      <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
+                        <span>Average Campaign CPM</span>
+                        <span className="font-semibold text-brand-600">${devCpm}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="120"
+                        step="5"
+                        value={devCpm}
+                        onChange={(e) => setDevCpm(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
+                      />
+                      <div className="flex justify-between text-xs text-surface-400 mt-1">
+                        <span>$10</span>
+                        <span>$65</span>
+                        <span>$120</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-bold text-surface-900">Your Campaign Settings</h3>
+
+                    {/* Budget */}
+                    <div>
+                      <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
+                        <span>Campaign Budget</span>
+                        <span className="font-semibold text-brand-600">${advBudget}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="50"
+                        max="5000"
+                        step="50"
+                        value={advBudget}
+                        onChange={(e) => setAdvBudget(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
+                      />
+                      <div className="flex justify-between text-xs text-surface-400 mt-1">
+                        <span>$50</span>
+                        <span>$2,500</span>
+                        <span>$5,000</span>
+                      </div>
+                    </div>
+
+                    {/* Target CPM */}
+                    <div>
+                      <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
+                        <span>Target CPM</span>
+                        <span className="font-semibold text-brand-600">${advCpm}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="15"
+                        max="120"
+                        step="5"
+                        value={advCpm}
+                        onChange={(e) => setAdvCpm(parseInt(e.target.value))}
+                        className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
+                      />
+                      <div className="flex justify-between text-xs text-surface-400 mt-1">
+                        <span>$15</span>
+                        <span>$65</span>
+                        <span>$120</span>
+                      </div>
+                    </div>
+
+                    {/* Estimated CTR */}
+                    <div>
+                      <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
+                        <span>Expected Click-Through Rate (CTR)</span>
+                        <span className="font-semibold text-brand-600">{advCtr}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="5"
+                        step="0.1"
+                        value={advCtr}
+                        onChange={(e) => setAdvCtr(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
+                      />
+                      <div className="flex justify-between text-xs text-surface-400 mt-1">
+                        <span>0.5%</span>
+                        <span>2.5%</span>
+                        <span>5.0%</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Right Column: Outcomes */}
+              <div className="flex flex-col justify-between bg-white border border-surface-200 rounded-2xl p-8">
+                {calcMode === 'developer' ? (
+                  <>
+                    <div>
+                      <h4 className="text-surface-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                        Estimated Developer Revenue (60% split)
+                      </h4>
+                      <div className="text-5xl font-bold text-surface-900 tracking-tight mb-6">
+                        ${devMonthlyEarnings.toFixed(2)}<span className="text-lg font-normal text-surface-500"> / month</span>
+                      </div>
+                      
+                      <div className="space-y-4 border-t border-surface-100 pt-6">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-surface-500">Estimated Daily Earnings</span>
+                          <span className="font-semibold text-surface-900">${devDailyEarnings.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-surface-500">Estimated Annual Earnings</span>
+                          <span className="font-semibold text-surface-900">${devAnnualEarnings.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-surface-500">Monthly Impressions</span>
+                          <span className="font-semibold text-surface-900">{devMonthlyImpressions.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 pt-6 border-t border-surface-100">
+                      <p className="text-xs text-surface-400 leading-relaxed">
+                        *Estimates assume 20 active working days/month. High trust score status qualifies you for immediate payouts without hold periods.
+                      </p>
+                      <Link
+                        href="/auth/signup"
+                        className="mt-5 w-full inline-flex items-center justify-center bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors"
+                      >
+                        Create Developer Account
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <h4 className="text-surface-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                        Estimated Campaign Reach
+                      </h4>
+                      <div className="text-5xl font-bold text-surface-900 tracking-tight mb-6">
+                        {advImpressions.toLocaleString()}<span className="text-lg font-normal text-surface-500"> impressions</span>
+                      </div>
+
+                      <div className="space-y-4 border-t border-surface-100 pt-6">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-surface-500">Estimated Clicks ({advCtr}%)</span>
+                          <span className="font-semibold text-surface-900">{advClicks.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-surface-500">Effective Cost Per Click (CPC)</span>
+                          <span className="font-semibold text-surface-900">${advCpc.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-surface-500">Audience</span>
+                          <span className="font-semibold text-surface-900">Verified Active Developers</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 pt-6 border-t border-surface-100">
+                      <p className="text-xs text-surface-400 leading-relaxed">
+                        *All ad delivery uses rate limit controls and fingerprint verification to prevent click fraud. Platform commissions split directly to developers.
+                      </p>
+                      <Link
+                        href="/auth/signup"
+                        className="mt-5 w-full inline-flex items-center justify-center bg-surface-900 hover:bg-surface-800 text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors"
+                      >
+                        Start Advertiser Campaign
+                      </Link>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </section>
