@@ -1,16 +1,22 @@
 import { Controller, Get, HttpCode, HttpStatus, Logger, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../config/prisma.service';
+import { RedisHealthService } from './redis-health.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators';
 
+@ApiTags('Health')
 @Controller('health')
 @SkipThrottle()
 export class HealthController {
   private readonly logger = new Logger(HealthController.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redis: RedisHealthService,
+  ) {}
 
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -29,6 +35,10 @@ export class HealthController {
       checks['database'] = { status: 'error' as const, error: 'Database unreachable' };
       this.logger.error('Health check: database unreachable');
     }
+
+    // Redis connectivity check (abuse controls / rate limiting backing store)
+    const redis = await this.redis.check();
+    checks['redis'] = redis;
 
     return checks;
   }

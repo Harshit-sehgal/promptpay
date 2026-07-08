@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
@@ -48,6 +48,7 @@ interface PasswordResetPayload {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly accessTtl: StringValue;
   private readonly refreshTtl: StringValue;
   private readonly jwtSecret: string;
@@ -826,7 +827,10 @@ export class AuthService {
         'TOTP_SECRET_ENCRYPTION_KEY must be set to a 32+ character secret in production.',
       );
     }
-    return createHash('sha256').update(`${this.jwtSecret}:totp-secret-encryption`).digest();
+    this.logger.warn(
+      'TOTP_SECRET_ENCRYPTION_KEY is not set or too short. Using a stable development/test fallback key. Do NOT run this in production!',
+    );
+    return createHash('sha256').update('stable-development-totp-encryption-fallback-key-32-chars').digest();
   }
 
   private isEncryptedTotpSecret(value: string): boolean {

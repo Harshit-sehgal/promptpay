@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Param, UseGuards, UseInterceptors, Query, ParseUUIDPipe, BadRequestException } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -22,6 +23,7 @@ import {
   AuditLogQueryDto,
 } from './dto';
 
+@ApiTags('Admin')
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @UseInterceptors(AuditInterceptor)

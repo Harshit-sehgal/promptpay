@@ -1,4 +1,5 @@
 import { Controller, Post, Get, Body, Param, UseGuards, HttpCode, HttpStatus, ValidationPipe, UsePipes } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsObject, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators';
@@ -24,6 +25,7 @@ class RecordConsentDto {
   metadata?: Record<string, unknown>;
 }
 
+@ApiTags('Consent')
 @Controller('consent')
 @UseGuards(JwtAuthGuard)
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))

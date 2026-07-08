@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -7,6 +8,7 @@ import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.
 import { LedgerService } from './ledger.service';
 import { LedgerHistoryQueryDto } from './dto';
 
+@ApiTags('Ledger')
 @Controller('ledger')
 @UseGuards(JwtAuthGuard)
 @AllowApiKey()

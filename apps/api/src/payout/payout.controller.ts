@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
@@ -10,6 +11,7 @@ import {
   PayoutHistoryQueryDto,
 } from './dto';
 
+@ApiTags('Payout')
 @Controller('payout')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @AllowApiKey()

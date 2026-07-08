@@ -2522,7 +2522,7 @@ describe('E2E Money Loop', () => {
 
       const endPayload = {
         waitStateId: 'wait-1',
-        duration: 3000,
+        durationSeconds: 3,
         idempotencyKey: 'idem-end-1',
       };
       const signed = { ...endPayload, signature: hmacSign(endPayload) };

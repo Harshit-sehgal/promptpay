@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Param, Body, UseGuards, HttpCode, HttpStatus, ForbiddenException, ParseUUIDPipe, Req } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -34,6 +35,7 @@ function resolveCampaignActor(req: CampaignRequest, userId: string, role: string
   return { userId, role };
 }
 
+@ApiTags('Campaign')
 @Controller('campaigns')
 @UseGuards(JwtAuthGuard)
 export class CampaignController {

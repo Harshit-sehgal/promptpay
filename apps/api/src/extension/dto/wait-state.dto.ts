@@ -37,7 +37,7 @@ export class WaitStateEndDto {
   @IsString()
   @MinLength(1)
   @MaxLength(16)
-  duration!: string; // serialized as string (milliseconds) from extension, parsed to int
+  durationSeconds!: string; // serialized as string from extension, parsed to int
 
   @IsString()
   @MinLength(1)

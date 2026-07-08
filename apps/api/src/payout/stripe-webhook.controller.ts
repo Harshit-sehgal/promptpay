@@ -1,4 +1,5 @@
 import { Controller, Post, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import Stripe from 'stripe';
 import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
@@ -20,6 +21,7 @@ type RawBodyRequest = Request & { rawBody?: Buffer | string };
  * Raw body parsing is configured in main.ts for this route so that
  * Stripe's signature verification works correctly.
  */
+@ApiTags('Stripe Webhooks')
 @Controller('payout/stripe')
 export class StripeWebhookController {
   private readonly logger = new Logger(StripeWebhookController.name);

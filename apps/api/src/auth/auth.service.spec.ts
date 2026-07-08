@@ -248,6 +248,38 @@ describe('AuthService', () => {
       ).rejects.toThrow(UnauthorizedException);
       expect(mockPrisma.session.create).not.toHaveBeenCalled();
     });
+
+    it('does not issue tokens for banned accounts', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-banned',
+        email: 'banned@test.com',
+        role: 'developer',
+        status: 'banned',
+        passwordHash: await (await import('bcryptjs')).hash('mypassword', 12),
+      });
+
+      await expect(
+        service.login({ email: 'banned@test.com', password: 'mypassword' }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
+
+    it('does not issue tokens for deleted accounts', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-deleted',
+        email: 'deleted@test.com',
+        role: 'developer',
+        status: 'deleted',
+        passwordHash: await (await import('bcryptjs')).hash('mypassword', 12),
+      });
+
+      await expect(
+        service.login({ email: 'deleted@test.com', password: 'mypassword' }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('refresh — token rotation', () => {

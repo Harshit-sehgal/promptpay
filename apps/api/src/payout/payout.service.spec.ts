@@ -188,6 +188,30 @@ describe('PayoutService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should throw BadRequestException if request amount is zero', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active', emailVerified: true });
+
+      await expect(
+        service.requestPayout('user_123', {
+          payoutAccountId: 'acc_123',
+          amountMinor: 0,
+          currency: 'USD',
+        })
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if request amount is negative', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active', emailVerified: true });
+
+      await expect(
+        service.requestPayout('user_123', {
+          payoutAccountId: 'acc_123',
+          amountMinor: -100,
+          currency: 'USD',
+        })
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('requires MFA before payout when PAYOUT_REQUIRE_2FA is enabled', async () => {
       mockConfig.get.mockImplementationOnce((key: string) =>
         key === 'PAYOUT_REQUIRE_2FA' ? 'true' : undefined,

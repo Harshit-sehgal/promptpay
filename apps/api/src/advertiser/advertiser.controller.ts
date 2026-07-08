@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, HttpCode, HttpStatus, BadRequestException, ForbiddenException, Req, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -38,6 +39,7 @@ function resolveApiContext(req: { user?: { id?: string; sub?: string }; apiKey?:
   return { userId, advertiserId: null, auth: 'jwt' };
 }
 
+@ApiTags('Advertiser')
 @Controller('advertiser')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @AllowApiKey() // allow API-key auth alongside JWT on all routes in this controller

@@ -1,4 +1,5 @@
 import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser, Roles } from '../common/decorators';
@@ -14,6 +15,7 @@ import {
   ReportAdDto,
 } from './dto';
 
+@ApiTags('Extension')
 @Controller('extension')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('developer')

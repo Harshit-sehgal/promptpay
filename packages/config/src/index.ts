@@ -190,18 +190,6 @@ const envSchema = z.object({
       'PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET are required when PAYPAL_MODE is "live"',
     path: ['PAYPAL_CLIENT_ID'],
   },
-)
-.refine(
-  (env) => {
-    // Wise live mode requires a token + profile id. sandbox is OK without
-    // them (the Wise provider fails closed / stubs in dev).
-    if (env.WISE_MODE === 'live' && (!env.WISE_API_TOKEN || !env.WISE_PROFILE_ID)) return false;
-    return true;
-  },
-  {
-    message: 'WISE_API_TOKEN and WISE_PROFILE_ID are required when WISE_MODE is "live"',
-    path: ['WISE_API_TOKEN'],
-  },
 );
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env) {

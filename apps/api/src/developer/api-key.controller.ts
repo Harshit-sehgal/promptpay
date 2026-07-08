@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Delete, Body, Param, UseGuards, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
 import { ApiKeyService } from './api-key.service';
 import { CreateApiKeyDto } from './dto/api-key.dto';
 
+@ApiTags('API Keys')
 @Controller('developer/api-keys')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('developer')

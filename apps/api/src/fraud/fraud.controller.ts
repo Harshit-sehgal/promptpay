@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Param, Body, Query, UseGuards, UseInterceptors, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -7,6 +8,7 @@ import { CurrentUser } from '../common/decorators';
 import { FraudService } from './fraud.service';
 import { ResolveFlagDto } from './dto/resolve-flag.dto';
 
+@ApiTags('Fraud')
 @Controller('fraud')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class FraudController {
