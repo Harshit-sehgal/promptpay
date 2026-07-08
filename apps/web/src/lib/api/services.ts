@@ -46,6 +46,9 @@ export const authApi = {
   resetPassword: (token: string, newPassword: string) =>
     api.post('/auth/password/reset', { token, newPassword }),
   confirmEmailVerification: (token: string) => api.post('/auth/verify-email/confirm', { token }),
+  setup2fa: () => api.post('/auth/2fa/setup'),
+  enable2fa: (token: string) => api.post('/auth/2fa/enable', { token }),
+  disable2fa: (token: string) => api.post('/auth/2fa/disable', { token }),
 };
 
 export const developerApi = {
@@ -169,4 +172,8 @@ export const campaignApi = {
   approveCreative: (creativeId: string) => api.post(`/campaigns/creatives/${creativeId}/approve`),
   rejectCreative: (creativeId: string, reason: string) =>
     api.post(`/campaigns/creatives/${creativeId}/reject`, { reason }),
+};
+
+export const systemApi = {
+  getHealth: () => api.get('/health'),
 };

@@ -46,6 +46,9 @@ const ALLOWED_PATH_PREFIXES = [
   '/auth/password/forgot',
   '/auth/password/reset',
   '/auth/verify-email/confirm',
+  '/auth/2fa/setup',
+  '/auth/2fa/enable',
+  '/auth/2fa/disable',
 
   // Developer
   '/developer/dashboard',
@@ -92,6 +95,9 @@ const ALLOWED_PATH_PREFIXES = [
 
   // Referral
   '/referral',
+
+  // Health check
+  '/health',
 
   // Campaigns (shared — creative management from both advertiser + admin pages)
   '/campaigns',

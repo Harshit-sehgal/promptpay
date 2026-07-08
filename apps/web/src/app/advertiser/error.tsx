@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
 
-export default function Error({
+export default function DashboardError({
   error,
   reset,
 }: {
@@ -10,21 +11,24 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
+    Sentry.captureException(error);
     if (process.env.NODE_ENV === 'development') {
       console.error(error);
     }
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-ink-900 px-6">
+    <div className="py-12 px-6 flex items-center justify-center bg-surface-50 rounded-2xl border border-surface-200">
       <div className="max-w-md text-center">
-        <h2 className="text-2xl font-bold text-white mb-2">Something went wrong</h2>
-        <p className="text-ink-300 mb-6">An error occurred in the advertiser dashboard. Please try again.</p>
+        <h2 className="text-xl font-bold text-surface-900 mb-2">Failed to load this section</h2>
+        <p className="text-surface-500 text-sm mb-6">
+          There was an error loading this dashboard view.
+        </p>
         <button
           onClick={reset}
-          className="bg-brand-500 hover:bg-brand-600 text-white font-medium py-2.5 px-6 rounded-xl text-[14px] transition-colors"
+          className="bg-brand-500 hover:bg-brand-600 text-white font-medium py-2 px-5 rounded-xl text-[13px] transition-colors"
         >
-          Try again
+          Reload view
         </button>
       </div>
     </div>

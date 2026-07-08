@@ -27,6 +27,11 @@ enum UserStatus {
   deleted
 }
 
+enum ReferralStatus {
+  pending
+  rewarded
+}
+
 enum TrustLevel {
   new
   low_trust
@@ -1047,7 +1052,7 @@ model Referral {
   referredId String
   referred   User   @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
   code       String @unique
-  status     String @default("pending")
+  status     ReferralStatus @default(pending)
 
   createdAt DateTime @default(now())
 

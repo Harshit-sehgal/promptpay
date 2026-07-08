@@ -48,11 +48,12 @@ export class GoogleTokenVerifier {
     // This prevents staging/preview/qa environments from silently accepting
     // mock-google-token-* identities.
     const mockEnabled =
-      process.env.MOCK_GOOGLE_ENABLED === '1' ||
-      process.env.ALLOW_MOCK_GOOGLE === 'true'; // legacy compat
+      (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
+      (process.env.MOCK_GOOGLE_ENABLED === '1' ||
+        process.env.ALLOW_MOCK_GOOGLE === 'true'); // legacy compat
     const isMockToken = idToken.startsWith('mock-google-token-');
-    if (isMockToken && process.env.NODE_ENV === 'production') {
-      throw new UnauthorizedException('Mock Google tokens are disabled in production');
+    if (isMockToken && !mockEnabled) {
+      throw new UnauthorizedException('Mock Google tokens are only allowed in local development or test environments');
     }
 
     if (isMockToken && mockEnabled) {

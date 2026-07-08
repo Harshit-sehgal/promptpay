@@ -276,28 +276,66 @@ export class ApiClient {
     if (!password) return;
 
     try {
-      // Backend returns flat { user, accessToken, refreshToken } — no data wrapper
+      // First attempt: try normal login without TOTP
       const res = await this.post<{ accessToken: string; refreshToken: string }>(
         '/auth/login',
         { email, password },
       );
-      const tokens = { accessToken: res.accessToken, refreshToken: res.refreshToken };
-      this.currentTokens = tokens;
-      this.deviceUUID = null;
-      this.deviceEventSecret = null;
-      // Persist tokens so they survive extension restarts
-      this.config.storeTokens(tokens).catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[WaitLayer] Failed to persist tokens after login: ${msg}`);
-      });
-      this.config.clearDeviceRegistration().catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
-      });
-      vscode.window.showInformationMessage('WaitLayer: logged in');
-    } catch {
-      vscode.window.showErrorMessage('WaitLayer: login failed');
+      await this.handleLoginSuccess(res);
+    } catch (err: any) {
+      // The backend emits a structured 2FA challenge ({ twoFactorRequired: true })
+      // when a TOTP-protected account logs in without a code, and a generic
+      // "Invalid two-factor authentication code" when a wrong code is supplied.
+      // Detect either case so we can prompt for the code and resubmit.
+      const errBody = isRecord(err) ? err : {};
+      const is2fa =
+        errBody.twoFactorRequired === true ||
+        errBody.message === 'Invalid two-factor authentication code';
+      if (is2fa) {
+        const twoFactorToken = await vscode.window.showInputBox({
+          prompt: 'Enter 6-digit Two-Factor Authentication (2FA) Code',
+          placeHolder: '123456',
+          password: true,
+          ignoreFocusOut: true,
+        });
+        if (!twoFactorToken) {
+          vscode.window.showWarningMessage('WaitLayer: login cancelled — 2FA code required');
+          return;
+        }
+        try {
+          const res = await this.post<{ accessToken: string; refreshToken: string }>(
+            '/auth/login',
+            { email, password, twoFactorToken },
+          );
+          await this.handleLoginSuccess(res);
+        } catch (err2: unknown) {
+          vscode.window.showErrorMessage(
+            `WaitLayer: login failed — ${getRequestErrorMessage(err2)}`,
+          );
+        }
+      } else {
+        vscode.window.showErrorMessage(
+          `WaitLayer: login failed — ${getRequestErrorMessage(err)}`,
+        );
+      }
     }
+  }
+
+  private async handleLoginSuccess(res: { accessToken: string; refreshToken: string }): Promise<void> {
+    const tokens = { accessToken: res.accessToken, refreshToken: res.refreshToken };
+    this.currentTokens = tokens;
+    this.deviceUUID = null;
+    this.deviceEventSecret = null;
+    // Persist tokens so they survive extension restarts
+    this.config.storeTokens(tokens).catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[WaitLayer] Failed to persist tokens after login: ${msg}`);
+    });
+    this.config.clearDeviceRegistration().catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
+    });
+    vscode.window.showInformationMessage('WaitLayer: logged in');
   }
 
   async logout(): Promise<void> {

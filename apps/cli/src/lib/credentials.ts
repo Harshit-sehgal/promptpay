@@ -97,12 +97,22 @@ export function getCredentials(): Credentials | null {
 export function setCredentials(creds: Credentials) {
   fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
   // Ensure the parent directory is also locked down — regardless of umask
-  // the directory must be readable only by the owner.    try { fs.chmodSync(CRED_DIR, 0o700); } catch { console.warn('[waitlayer] Failed to set credentials directory permissions'); }
+  // the directory must be readable only by the owner.
+  try {
+    fs.chmodSync(CRED_DIR, 0o700);
+  } catch {
+    console.warn('[waitlayer] Failed to set credentials directory permissions');
+  }
   // Strip the event secret BEFORE writing. Users who need it store it
   // separately via storeDeviceEventSecret() which backs onto the OS keychain
   // when available, or a separate encrypted blob otherwise.
   const { deviceEventSecret: _, ...safe } = creds as RawCredentials;
   fs.writeFileSync(CRED_FILE, JSON.stringify(safe, null, 2), { mode: 0o600 });
+  try {
+    fs.chmodSync(CRED_FILE, 0o600);
+  } catch {
+    // Ignore permissions failures on read-only environments
+  }
 }
 
 /** Store the per-device event secret separately from the main credential file.

@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react';
 import type { AxiosResponse } from 'axios';
 import { LoadingSpinner } from '@/components';
-import { developerApi } from '@/lib/api/services';
+import { developerApi, authApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
 
 interface DevSettings {
@@ -16,6 +16,7 @@ interface DevSettings {
   email: string;
   displayName?: string;
   githubLinked?: boolean;
+  twoFactorEnabled?: boolean;
 }
 
 interface DeveloperApiKey {
@@ -51,6 +52,16 @@ export default function DevSettingsPage() {
   const [quietModeEnd, setQuietModeEnd] = useState('08:00');
   const [maxAdsPerHour, setMaxAdsPerHour] = useState(6);
 
+  // 2FA state
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [show2faSetup, setShow2faSetup] = useState(false);
+  const [totpSecret, setTotpSecret] = useState('');
+  const [otpauthUrl, setOtpauthUrl] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+  const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
+  const [twoFactorSuccess, setTwoFactorSuccess] = useState<string | null>(null);
+
   const fetchSettings = () => {
     setLoading(true);
     Promise.all([
@@ -66,9 +77,62 @@ export default function DevSettingsPage() {
         setQuietModeStart(s.quietModeStart ?? '22:00');
         setQuietModeEnd(s.quietModeEnd ?? '08:00');
         setMaxAdsPerHour(s.maxAdsPerHour ?? 6);
+        setTwoFactorEnabled(s.twoFactorEnabled ?? false);
       })
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load settings')))
       .finally(() => setLoading(false));
+  };
+
+  const handleStart2faSetup = async () => {
+    setTwoFactorBusy(true);
+    setTwoFactorError(null);
+    setTwoFactorSuccess(null);
+    try {
+      const res = await authApi.setup2fa();
+      setTotpSecret(res.data.secret);
+      setOtpauthUrl(res.data.otpauthUrl);
+      setShow2faSetup(true);
+    } catch (err: unknown) {
+      setTwoFactorError(getErrorMessage(err, 'Failed to initialize 2FA setup'));
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const handleConfirm2faEnable = async () => {
+    if (!verificationCode) return;
+    setTwoFactorBusy(true);
+    setTwoFactorError(null);
+    setTwoFactorSuccess(null);
+    try {
+      await authApi.enable2fa(verificationCode);
+      setTwoFactorEnabled(true);
+      setShow2faSetup(false);
+      setVerificationCode('');
+      setTwoFactorSuccess('Two-factor authentication enabled successfully.');
+    } catch (err: unknown) {
+      setTwoFactorError(getErrorMessage(err, 'Failed to verify code'));
+    } finally {
+      setTwoFactorBusy(false);
+    }
+  };
+
+  const handleConfirm2faDisable = async () => {
+    if (!verificationCode) return;
+    setTwoFactorBusy(true);
+    setTwoFactorError(null);
+    setTwoFactorSuccess(null);
+    try {
+      await authApi.disable2fa(verificationCode);
+      setTwoFactorEnabled(false);
+      setShow2faSetup(false);
+      setVerificationCode('');
+      setTwoFactorSuccess('Two-factor authentication disabled successfully.');
+    } catch (err: unknown) {
+      setTwoFactorError(getErrorMessage(err, 'Failed to disable 2FA'));
+    } finally {
+      setTwoFactorBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -314,6 +378,149 @@ export default function DevSettingsPage() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Two-factor authentication */}
+          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
+            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Two-factor authentication (2FA)</h2>
+            <div className="space-y-6">
+              {twoFactorError && (
+                <div className="bg-red-50 border border-red-200/60 rounded-xl p-4">
+                  <p className="text-red-600 text-sm">{twoFactorError}</p>
+                </div>
+              )}
+              {twoFactorSuccess && (
+                <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
+                  <p className="text-emerald-600 text-sm">{twoFactorSuccess}</p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-surface-900 font-semibold text-[14px]">Status: {twoFactorEnabled ? 'Enabled' : 'Disabled'}</p>
+                  <p className="text-surface-500 text-xs mt-0.5">
+                    Secure your account with TOTP two-factor authentication. Required for payouts.
+                  </p>
+                </div>
+                {!twoFactorEnabled && !show2faSetup && (
+                  <button
+                    type="button"
+                    onClick={handleStart2faSetup}
+                    disabled={twoFactorBusy}
+                    className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+                  >
+                    Enable 2FA
+                  </button>
+                )}
+                {twoFactorEnabled && !show2faSetup && (
+                  <button
+                    type="button"
+                    onClick={() => setShow2faSetup(true)}
+                    className="text-rose-600 hover:text-rose-700 font-medium text-[13px]"
+                  >
+                    Disable 2FA
+                  </button>
+                )}
+              </div>
+
+              {/* Setup / Disable form */}
+              {show2faSetup && (
+                <div className="border-t border-surface-100 pt-5 mt-5 space-y-5">
+                  {!twoFactorEnabled ? (
+                    <>
+                      <p className="text-surface-900 font-semibold text-[14px]">Set up Authenticator app</p>
+                      <ol className="list-decimal pl-5 text-surface-600 text-xs space-y-2">
+                        <li>Scan the QR code below or manually enter the key into your authenticator app (Google Authenticator, Authy, etc.).</li>
+                        <li>Enter the 6-digit code from your app below to verify setup.</li>
+                      </ol>
+
+                      <div className="flex flex-col sm:flex-row items-center gap-6 py-3">
+                        {otpauthUrl && (
+                          <div className="bg-white p-3 border border-surface-200 rounded-xl shadow-sm">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`https://chart.googleapis.com/chart?chs=160x160&chld=M|0&cht=qr&chl=${encodeURIComponent(otpauthUrl)}`}
+                              alt="Scan to pair TOTP"
+                              width={160}
+                              height={160}
+                            />
+                          </div>
+                        )}
+                        <div className="space-y-2 text-center sm:text-left">
+                          <p className="text-surface-500 text-xs uppercase font-semibold">Secret Key</p>
+                          <code className="bg-surface-50 border border-surface-200 rounded-md px-3 py-1.5 text-surface-900 text-xs font-mono select-all block break-all">
+                            {totpSecret}
+                          </code>
+                        </div>
+                      </div>
+
+                      <div className="max-w-xs space-y-3">
+                        <label className="text-surface-700 text-sm font-medium block">
+                          Verification code
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="000000"
+                            maxLength={6}
+                            value={verificationCode}
+                            onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:border-brand-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleConfirm2faEnable}
+                            disabled={twoFactorBusy || verificationCode.length !== 6}
+                            className="bg-surface-900 hover:bg-surface-800 disabled:opacity-50 text-white font-medium px-5 py-3 rounded-xl text-sm transition-colors shrink-0"
+                          >
+                            Verify
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="max-w-xs space-y-3">
+                      <p className="text-surface-900 font-semibold text-[14px]">Confirm Disabling 2FA</p>
+                      <p className="text-surface-500 text-xs">
+                        Enter the current code from your authenticator app to disable 2FA.
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="000000"
+                          maxLength={6}
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                          className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:border-brand-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleConfirm2faDisable}
+                          disabled={twoFactorBusy || verificationCode.length !== 6}
+                          className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-medium px-5 py-3 rounded-xl text-sm transition-colors shrink-0"
+                        >
+                          Disable
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShow2faSetup(false);
+                        setVerificationCode('');
+                        setTwoFactorError(null);
+                      }}
+                      className="text-surface-500 hover:text-surface-700 font-medium text-xs px-3 py-1.5 rounded-lg border border-surface-200 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

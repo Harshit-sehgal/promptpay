@@ -804,7 +804,36 @@ export class AuthService {
   ) {
     if (!user.twoFactorEnabled) return;
     const secret = user.twoFactorSecret ? this.decryptTotpSecret(user.twoFactorSecret) : null;
-    if (!secret || !token || !verifyTotp(secret, token)) {
+    if (!secret) {
+      // TOTP was enabled but the encrypted secret is missing/unrecoverable
+      // (e.g. key rotation). Treat as a hard failure — never bypass 2FA.
+      void this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'login_failed',
+        targetType: 'user',
+        targetId: user.id,
+        afterSnap: { reason: '2fa_secret_missing' },
+      });
+      throw new UnauthorizedException('Two-factor authentication is required but misconfigured');
+    }
+    // No token supplied yet → emit a structured 2FA challenge so clients
+    // (web, CLI, VS Code) can prompt for the code and resubmit, rather than
+    // returning the same generic "invalid credentials" as a bad password.
+    if (!token) {
+      void this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'login_2fa_challenge',
+        targetType: 'user',
+        targetId: user.id,
+      });
+      throw new UnauthorizedException({
+        message: 'Two-factor authentication code required',
+        twoFactorRequired: true,
+      });
+    }
+    if (!verifyTotp(secret, token)) {
       void this.audit.log({
         actorId: user.id,
         actorRole: user.role,

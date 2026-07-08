@@ -34,6 +34,23 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ---
 
+## Recently Completed (2026-07-08)
+
+The following gaps from the gap analysis were closed in this pass:
+
+| # | Gap | What changed |
+|---|-----|--------------|
+| 114 | Swagger/OpenAPI installed but zero decorators | `apps/api/nest-cli.json` enables the `@nestjs/swagger` compiler plugin (`classValidatorShim` + `introspectComments`); all 14 controllers carry `@ApiTags`. Interactive docs live at `GET /api/v1/docs`, spec at `/api/v1/docs-json`. Request/response schemas are auto-derived from DTOs + class-validator rules. |
+| 62 | Health check never validates Redis | `RedisHealthService` probes Redis (`connected` / `error` / `not_configured`) and is surfaced on both `GET /health` and `GET /health/metrics`. |
+| 157 | No DB CHECK constraints on monetary columns | New migration `20260708010000_monetary_check_constraints` adds `CHECK (amountMinor >= 0)` (and `bidAmountMinor > 0`, non-negative count caps) across ledger/payout/campaign tables, applied `NOT VALID` so deploy never fails against historical data while enforcing on all new writes. Verified against a real Postgres. |
+| 106 | No structured logging | `LoggingInterceptor` emits structured JSON in production (`type`, `method`, `url`, `statusCode`, `durationMs`, `requestId`); human-readable lines in dev. |
+| 77 | VS Code extension login lacks TOTP 2FA | Backend `assertTwoFactorSatisfied` now emits a structured `{ twoFactorRequired: true }` challenge (filter forwards it); the VS Code `promptLogin` detects it, prompts for the code, and resubmits with `twoFactorToken`. |
+| 127 / 59 | No ADRs / no architecture diagram | Added `docs/adr/*` (6 ADRs) and `docs/16-architecture-overview.md` (system-context + flow diagrams). |
+| 14 | No API changelog | Added `docs/17-api-changelog.md`. |
+| 133 | No task-runner shortcuts | Added root `Makefile` (`make dev/build/typecheck/lint/test/db-migrate/...`). |
+
+---
+
 ## 1. Build/monorepo -- PASS
 
 - `pnpm run build` and `pnpm run typecheck` compile all workspace packages cleanly

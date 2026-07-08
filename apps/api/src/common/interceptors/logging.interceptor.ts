@@ -22,19 +22,49 @@ export class LoggingInterceptor implements NestInterceptor {
     // trace, and the client-visible response all share one correlation id.
     const requestId = (request.headers?.['x-request-id'] as string | undefined) || '-';
     const now = Date.now();
+    const isJson = process.env.NODE_ENV === 'production';
 
     return next.handle().pipe(
       tap(() => {
         const response = context.switchToHttp().getResponse();
         const { statusCode } = response;
-        this.logger.log(`${method} ${url} ${statusCode} - ${Date.now() - now}ms - requestId=${requestId}`);
+        const durationMs = Date.now() - now;
+        if (isJson) {
+          this.logger.log(
+            JSON.stringify({
+              type: 'request',
+              method,
+              url,
+              statusCode,
+              durationMs,
+              requestId,
+            }),
+          );
+        } else {
+          this.logger.log(`${method} ${url} ${statusCode} - ${durationMs}ms - requestId=${requestId}`);
+        }
       }),
       catchError((err: unknown) => {
         const status = (err as { status?: unknown }).status;
         const statusCode = typeof status === 'number' ? status : HttpStatus.INTERNAL_SERVER_ERROR;
-        this.logger.error(
-          `${method} ${url} ${statusCode} - ${Date.now() - now}ms - requestId=${requestId} - ${getErrorMessage(err)}`,
-        );
+        const durationMs = Date.now() - now;
+        if (isJson) {
+          this.logger.error(
+            JSON.stringify({
+              type: 'request_error',
+              method,
+              url,
+              statusCode,
+              durationMs,
+              requestId,
+              message: getErrorMessage(err),
+            }),
+          );
+        } else {
+          this.logger.error(
+            `${method} ${url} ${statusCode} - ${durationMs}ms - requestId=${requestId} - ${getErrorMessage(err)}`,
+          );
+        }
         return throwError(() => err);
       }),
     );

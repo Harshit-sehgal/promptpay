@@ -52,13 +52,37 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // can correlate even when the body is consumed elsewhere.
     response.setHeader('x-request-id', requestId);
 
+    const errorProp = typeof message === 'object' && message !== null
+      ? (message as { error?: string })?.error
+      : undefined;
+
     response.status(status).json({
       statusCode: status,
       message: getExceptionMessage(message),
+      error: errorProp || (status >= 500 ? 'Internal Server Error' : undefined),
+      // Forward a small allowlist of structured challenge hints so clients
+      // (web, CLI, VS Code) can drive multi-step auth flows without parsing
+      // free-text messages. Only well-known contract fields are surfaced.
+      ...getPassthroughFields(message),
       requestId,
       timestamp: new Date().toISOString(),
     });
   }
+}
+
+// Fields an exception response may carry that clients rely on for flow
+// control (e.g. a 2FA challenge). These are explicitly allowlisted so the
+// error envelope stays stable and we never leak arbitrary server internals.
+const PASSTHROUGH_FIELDS = ['twoFactorRequired'] as const;
+
+function getPassthroughFields(message: unknown): Record<string, unknown> {
+  if (typeof message !== 'object' || message === null) return {};
+  const out: Record<string, unknown> = {};
+  for (const key of PASSTHROUGH_FIELDS) {
+    const value = (message as Record<string, unknown>)[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
 }
 
 function getExceptionMessage(message: unknown): unknown {

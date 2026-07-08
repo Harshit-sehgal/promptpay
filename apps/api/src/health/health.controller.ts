@@ -63,6 +63,9 @@ export class HealthController {
       await this.prisma.$queryRaw`SELECT 1`;
       checks['database'] = 'connected';
 
+      const redis = await this.redis.check();
+      checks['redis'] = redis;
+
       const [pendingPayouts, openFraudFlags, activeDevelopers] = await Promise.all([
         this.prisma.payoutRequest.count({ where: { status: { in: ['requested', 'under_review', 'approved', 'processing'] } } }),
         this.prisma.fraudFlag.count({ where: { status: 'open' } }),

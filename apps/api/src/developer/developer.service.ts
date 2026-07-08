@@ -135,6 +135,7 @@ export class DeveloperService {
           emailVerified: true,
           googleVerified: true,
           githubVerified: true,
+          twoFactorEnabled: true,
         },
       }),
       this.ensureSettings(userId),
@@ -150,6 +151,7 @@ export class DeveloperService {
       emailVerified: user.emailVerified,
       googleVerified: user.googleVerified,
       githubLinked: user.githubVerified,
+      twoFactorEnabled: user.twoFactorEnabled,
     };
   }
 

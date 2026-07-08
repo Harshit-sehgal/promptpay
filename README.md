@@ -39,6 +39,14 @@ pnpm --filter waitlayer-api dev
 pnpm --filter waitlayer-web dev
 ```
 
+The API serves interactive **OpenAPI docs at `/api/v1/docs`** (spec:
+`/api/v1/docs-json`) once the API is running.
+
+## Make targets
+
+A `Makefile` wraps common workflows: `make dev`, `make build`, `make typecheck`,
+`make lint`, `make test`, `make db-migrate`, `make db-studio`. Run `make help`.
+
 ## Quality Gates
 
 ```bash
@@ -79,4 +87,7 @@ pnpm audit --prod    # production dependency vulnerability audit
 - [Risk Register](docs/13-risk-register.md)
 - [Validation Experiments](docs/14-validation-experiments.md)
 - [Sources & Assumptions](docs/15-sources-and-assumptions.md)
+- [Architecture Overview](docs/16-architecture-overview.md)
+- [API Changelog](docs/17-api-changelog.md)
+- [Architecture Decision Records](docs/adr/0001-record-architecture-decisions.md)
 - [Foundation Status](FOUNDATION_STATUS.md)

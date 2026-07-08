@@ -128,7 +128,7 @@ export class LedgerService {
       trustLevel,
     } = params;
 
-    const split = this.calculateSplit(bidAmountMinor);
+    const split = this.calculateSplit(bidAmountMinor, process.env.LAUNCH_SPLIT_ENABLED === 'true');
     const holdDays = this.getHoldDays(trustLevel);
     // A negative hold-day (PAYOUT_HOLD_DAYS.RESTRICTED = -1) means "indefinite hold,
     // never mature". Storing availableAt:null keeps matureEarnings()'s `<= new Date()`
@@ -247,7 +247,7 @@ export class LedgerService {
       trustLevel,
     } = params;
 
-    const split = this.calculateSplit(clickBidMinor);
+    const split = this.calculateSplit(clickBidMinor, process.env.LAUNCH_SPLIT_ENABLED === 'true');
     const holdDays = this.getHoldDays(trustLevel);
     // Negative hold-day => indefinite hold (restricted trust level). See rationale on
     // recordImpressionEarnings; same handling here.
