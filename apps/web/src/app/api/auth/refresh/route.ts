@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiBaseUrl, applyAuthCookies, clearAuthCookies, COOKIE_REFRESH } from '../_lib/cookies';
+import { apiBaseUrl, applyAuthCookies, clearAuthCookies, readAuthCookie, COOKIE_REFRESH } from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
 
 export async function POST(req: NextRequest) {
@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     if (blockedOrigin) return blockedOrigin;
 
     // Read the refresh token from the httpOnly cookie.
-    const refreshToken = req.cookies.get(COOKIE_REFRESH)?.value;
+    const refreshToken = readAuthCookie(req, COOKIE_REFRESH);
     if (!refreshToken) {
       return NextResponse.json({ message: 'No refresh token' }, { status: 401 });
     }

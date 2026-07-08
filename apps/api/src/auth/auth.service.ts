@@ -903,8 +903,14 @@ export class AuthService {
 
   private sanitizeUser<T extends { passwordHash?: unknown; twoFactorSecret?: unknown }>(
     user: T,
-  ): Omit<T, 'passwordHash' | 'twoFactorSecret'> {
-    const { passwordHash: _passwordHash, twoFactorSecret: _twoFactorSecret, ...safe } = user;
+  ): Omit<T, 'passwordHash' | 'twoFactorSecret' | 'googleId' | 'githubId'> {
+    const {
+      passwordHash: _passwordHash,
+      twoFactorSecret: _twoFactorSecret,
+      googleId: _googleId,
+      githubId: _githubId,
+      ...safe
+    } = user as T & { googleId?: unknown; githubId?: unknown };
     return safe;
   }
 

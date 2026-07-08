@@ -19,6 +19,9 @@ const ADMIN_NAV = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
+      {/* Admin surfaces are authenticated and must never be indexed by search
+          engines or appear in sitemaps. */}
+      <meta name="robots" content="noindex, nofollow" />
       <div className="dark min-h-screen bg-ink-900 flex flex-col lg:flex-row">
         <Sidebar
           brand="Admin"

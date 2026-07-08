@@ -197,8 +197,21 @@ export class AuthController {
 
   @Post('password/forgot')
   @HttpCode(HttpStatus.OK)
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.requestPasswordReset(dto.email);
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    // Per-email brute-force protection against password-reset enumeration
+    // and token-flooding. Mirrors the login guard: only credential-style
+    // failures count, but here we pre-check before issuing a reset email.
+    try {
+      await BruteForceGuard.assertCanAttempt(req, dto.email);
+    } catch {
+      // Fail closed: surface a generic throttle response without disclosing
+      // whether the email exists. The route still returns 200 with the same
+      // generic message as a successful request.
+      return { message: 'If that email exists, a reset link has been sent.' };
+    }
+    const result = await this.authService.requestPasswordReset(dto.email);
+    await BruteForceGuard.resetOnSuccess(req, dto.email);
+    return result;
   }
 
   @Post('password/reset')

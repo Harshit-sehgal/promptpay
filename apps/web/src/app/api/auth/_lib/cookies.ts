@@ -17,9 +17,41 @@ import { NextResponse } from 'next/server';
  * Cookie name `access_token` — verified by `middleware.ts` to gate protected
  * routes (replaces the legacy non-httpOnly `session` cookie).
  */
-export const COOKIE_ACCESS = 'access_token';
-export const COOKIE_REFRESH = 'refresh_token';
+// Cookie names — prefer __Host- prefix when possible for stronger browser guarantees
+export const COOKIE_ACCESS = '__Host-access_token';
+export const COOKIE_REFRESH = '__Host-refresh_token';
+// Backwards-compatible aliases for existing clients that may still send the
+// non-__Host names (used while rolling out stronger cookie policies).
+export const LEGACY_COOKIE_ACCESS = 'access_token';
+export const LEGACY_COOKIE_REFRESH = 'refresh_token';
 const DEFAULT_API_BASE_URL = 'http://localhost:4002/api/v1';
+
+/**
+ * Cookie name actually written to the browser. When the connection is Secure
+ * we use the `__Host-` prefix, which the browser only accepts when the cookie
+ * is also `Secure`, `Path=/`, and has no `Domain` — a strong, host-bound
+ * guarantee that prevents subdomain cookie injection / fixation. On plain-HTTP
+ * dev (non-Secure) we fall back to the bare name because the browser rejects
+ * `__Host-` cookies without the Secure flag.
+ */
+function cookieName(base: string, secure: boolean): string {
+  return secure ? `__Host-${base}` : base;
+}
+
+/**
+ * Read an auth cookie regardless of whether it was set with the `__Host-`
+ * prefix (production/HTTPS) or the bare name (dev/HTTP). Tries the prefixed
+ * name first, then the bare name, so callers don't need to know the connection
+ * security context.
+ */
+export function readAuthCookie(
+  req: { cookies: { get(name: string): { value?: string } | undefined } },
+  base: string,
+): string | undefined {
+  return (
+    req.cookies.get(`__Host-${base}`)?.value ?? req.cookies.get(base)?.value
+  );
+}
 
 /**
  * JWT access token TTL — must match JWT_ACCESS_TTL on the API (15m default).
@@ -139,17 +171,17 @@ export function applyAuthCookies(
   args: { accessToken: string; refreshToken: string; headers: Headers },
 ): NextResponse {
   const secure = isSecure(args.headers);
-  response.cookies.set(COOKIE_ACCESS, args.accessToken, {
+  response.cookies.set(cookieName(COOKIE_ACCESS, secure), args.accessToken, {
     httpOnly: true,
     secure: secure,
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: ACCESS_COOKIE_MAX_AGE_SECONDS,
   });
-  response.cookies.set(COOKIE_REFRESH, args.refreshToken, {
+  response.cookies.set(cookieName(COOKIE_REFRESH, secure), args.refreshToken, {
     httpOnly: true,
     secure: secure,
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: REFRESH_COOKIE_MAX_AGE_SECONDS,
   });
@@ -162,17 +194,17 @@ export function applyAuthCookies(
  */
 export function clearAuthCookies(response: NextResponse, headers: Headers): NextResponse {
   const secure = isSecure(headers);
-  response.cookies.set(COOKIE_ACCESS, '', {
+  response.cookies.set(cookieName(COOKIE_ACCESS, secure), '', {
     httpOnly: true,
     secure: secure,
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 0,
   });
-  response.cookies.set(COOKIE_REFRESH, '', {
+  response.cookies.set(cookieName(COOKIE_REFRESH, secure), '', {
     httpOnly: true,
     secure: secure,
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
     maxAge: 0,
   });

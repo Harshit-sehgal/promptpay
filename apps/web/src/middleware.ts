@@ -49,8 +49,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const accessCookie = request.cookies.get('access_token');
-  const refreshCookie = request.cookies.get('refresh_token');
+  const accessCookie = request.cookies.get('__Host-access_token') ?? request.cookies.get('access_token');
+  const refreshCookie = request.cookies.get('__Host-refresh_token') ?? request.cookies.get('refresh_token');
   const token = accessCookie?.value;
 
   if (!token) {

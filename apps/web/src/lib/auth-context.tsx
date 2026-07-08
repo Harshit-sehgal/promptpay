@@ -21,6 +21,7 @@ interface User {
   status: string;
   trustLevel?: string | null;
   referralCode?: string | null;
+  twoFactorEnabled?: boolean;
 }
 
 /** Construct a User from the raw API response data. */
@@ -33,6 +34,7 @@ function mapUser(raw: Record<string, unknown>): User {
     status: (raw.status as string) || 'active',
     trustLevel: (raw.trustLevel as string | null) ?? 'new',
     referralCode: (raw.referralCode as string | null) ?? undefined,
+    twoFactorEnabled: (raw.twoFactorEnabled as boolean | undefined) ?? false,
   };
 }
 

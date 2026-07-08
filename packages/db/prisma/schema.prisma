@@ -338,7 +338,7 @@ model UserSettings {
   id             String  @id @default(uuid())
   userId         String  @unique
   user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  adsEnabled     Boolean @default(true)
+  adsEnabled     Boolean @default(false)
   quietMode      Boolean @default(false)
   quietModeStart String  @default("22:00")
   quietModeEnd   String  @default("08:00")
@@ -1122,6 +1122,7 @@ model DataRetentionConfig {
   // Number of days to retain before the retention cron purges. NULL = retain
   // indefinitely (never purge this category).
   retainDays Int?
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("data_retention_config")

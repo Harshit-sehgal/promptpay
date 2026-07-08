@@ -49,6 +49,22 @@ The following gaps from the gap analysis were closed in this pass:
 | 14 | No API changelog | Added `docs/17-api-changelog.md`. |
 | 133 | No task-runner shortcuts | Added root `Makefile` (`make dev/build/typecheck/lint/test/db-migrate/...`). |
 
+### Recently Completed (2026-07-08 — batch 2)
+
+| # | Gap | What changed |
+|---|-----|--------------|
+| 117 | DTO password validation too weak | New `IsStrongPassword` class-validator (`common/validators/password.validator.ts`) enforces 8–128 chars with upper/lower/digit/symbol and rejects a common-password blocklist. Applied to `SignUpDto.password` and `ResetPasswordDto.newPassword`. |
+| 143 | `sanitizeUser` doesn't strip `googleId`/`githubId` | `sanitizeUser` now omits `googleId` and `githubId` alongside `passwordHash`/`twoFactorSecret` so OAuth identities never leak to clients. |
+| 23 | No rate limiting on `forgot-password` | `POST /auth/password/forgot` now runs through `BruteForceGuard.assertCanAttempt(req, email)` and returns a generic throttled response on lockout (no email enumeration). |
+| 67 | TOTP code validation has no input trimming | `TwoFactorEnableDto`/`TwoFactorDisableDto` tokens are `@Transform`-trimmed so pasted codes with surrounding whitespace are accepted. |
+| 84 | Auth cookies missing `__Host-` prefix / `SameSite=Strict` | Cookies are now written as `__Host-<name>` (when Secure) with `SameSite=strict`; readers resolve either the prefixed or bare name via `readAuthCookie`. Covers middleware, refresh, logout, and the same-origin proxy. |
+| 22 | No CSRF protection on auth endpoints | Mitigated by `SameSite=strict` auth cookies (cross-site requests no longer carry the session) plus the existing `rejectCrossOriginMutation` guard on mutating proxy routes. |
+| 94 | Admin pages missing `noindex` | Admin layout emits `<meta name="robots" content="noindex, nofollow" />` so authenticated admin surfaces are excluded from search indexes. |
+| 105 | Prisma client uses default connection pool | `PrismaService` now appends `connection_limit=10` and `pool_timeout=10` to `DATABASE_URL` (only when not already set), preventing connection exhaustion / indefinite pool waits under burst load. |
+| 83 | Many pages missing `loading.tsx` | Added route-level `loading.tsx` (developer / admin / advertiser) using the shared `LoadingSpinner`. |
+
+> Note: a number of additional gaps were already satisfied by prior code (verified by reading source): #24 CLI token file perms (`chmod 0o600`), #156 `ReferralStatus` enum, #137 TOTP dev key is a stable constant (not JWT-derived), #66 `exportData` implemented, #95 `accountAgePoints` computed, #125 consistent error envelope, #44 graceful shutdown hooks, #21 helmet CSP.
+
 ---
 
 ## 1. Build/monorepo -- PASS

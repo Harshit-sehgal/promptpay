@@ -90,6 +90,16 @@ jobs:
         # than an always-empty directory.
         run: pnpm --filter waitlayer-api run test:cov
 
+      # VS Code extension: typecheck + lint + unit tests. The extension's
+      # tests are pure unit tests (transport policy) and do not require a
+      # downloaded VS Code binary, so they run directly in CI. This enforces
+      # build/type correctness of the extension on every push.
+      - name: VS Code extension checks
+        run: |
+          pnpm --filter waitlayer-vscode run typecheck
+          pnpm --filter waitlayer-vscode run lint
+          pnpm --filter waitlayer-vscode run test
+
       # Upload Sentry source maps on main-branch builds if SENTRY_AUTH_TOKEN
       # is available (set as a GitHub Actions secret). The Sentry CLI is
       # bundled with @sentry/nextjs / @sentry/nestjs — no separate install.

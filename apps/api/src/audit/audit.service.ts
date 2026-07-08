@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Prisma } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 
@@ -15,34 +15,81 @@ export interface AuditLogEntry {
   ipHash?: string;
 }
 
+/**
+ * Bounded in-memory buffer of audit entries that failed to persist because the
+ * database was unreachable. The retry timer drains it whenever the DB is back,
+ * so a transient outage no longer silently loses audit history. The buffer is
+ * bounded (oldest entries are dropped under sustained outage) to avoid OOM.
+ */
+const MAX_QUEUED = 1000;
+const RETRY_INTERVAL_MS = 30_000;
+
 @Injectable()
-export class AuditService {
+export class AuditService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AuditService.name);
+  private readonly queue: AuditLogEntry[] = [];
+  private retryTimer?: NodeJS.Timeout;
 
   constructor(private prisma: PrismaService) {}
 
+  onModuleInit() {
+    this.retryTimer = setInterval(() => {
+      void this.drain().catch(() => {
+        // Keep retrying on the next tick; entries remain queued.
+      });
+    }, RETRY_INTERVAL_MS);
+  }
+
+  onModuleDestroy() {
+    if (this.retryTimer) clearInterval(this.retryTimer);
+  }
+
+  /** Attempt to flush the queued entries. Best-effort; failures stay queued. */
+  private async drain(): Promise<void> {
+    if (this.queue.length === 0) return;
+    // Snapshot + clear so concurrent log() calls append to a fresh buffer.
+    const batch = this.queue.splice(0, this.queue.length);
+    for (const entry of batch) {
+      try {
+        await this.write(entry);
+      } catch {
+        // Re-queue at the tail (bounded) so we retry on a future tick.
+        if (this.queue.length < MAX_QUEUED) this.queue.push(entry);
+      }
+    }
+  }
+
+  private async write(entry: AuditLogEntry): Promise<void> {
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: entry.actorId,
+        actorRole: entry.actorRole,
+        action: entry.action,
+        targetType: entry.targetType,
+        targetId: entry.targetId,
+        beforeSnap: entry.beforeSnap ?? undefined,
+        afterSnap: entry.afterSnap ?? undefined,
+        ipHash: entry.ipHash,
+      },
+    });
+  }
+
   /**
-   * Persist an audit log entry. Fire-and-forget — never blocks the caller.
-   * Errors are logged but not surfaced to avoid disrupting the primary flow.
+   * Persist an audit log entry. Never blocks the caller. On a database write
+   * failure the entry is buffered for retry (see `drain`) instead of being
+   * silently dropped, so transient outages preserve audit history.
    */
   async log(entry: AuditLogEntry): Promise<void> {
     try {
-      await this.prisma.auditLog.create({
-        data: {
-          actorId: entry.actorId,
-          actorRole: entry.actorRole,
-          action: entry.action,
-          targetType: entry.targetType,
-          targetId: entry.targetId,
-          beforeSnap: entry.beforeSnap ?? undefined,
-          afterSnap: entry.afterSnap ?? undefined,
-          ipHash: entry.ipHash,
-        },
-      });
+      await this.write(entry);
     } catch (err) {
-      // Audit logging must never break the primary operation.
-      // In production, pipe this to an alerting channel instead.
-      this.logger.error('Failed to write audit log', (err as Error).stack ?? (err as Error).message ?? err);
+      // Buffer for retry rather than lose the entry.
+      if (this.queue.length < MAX_QUEUED) this.queue.push(entry);
+      this.logger.warn(
+        `Audit log write failed; queued for retry (buffer=${this.queue.length}): ${
+          (err as Error).message ?? String(err)
+        }`,
+      );
     }
   }
 

@@ -1,13 +1,14 @@
-import { IsEmail, IsString, IsEnum, MinLength, MaxLength, IsOptional } from 'class-validator';
+import { IsEmail, IsString, IsEnum, MaxLength, IsOptional } from 'class-validator';
 import { UserRole, SIGNUP_ALLOWED_ROLES } from '@waitlayer/shared';
+import { IsStrongPassword } from '../../common/validators/password.validator';
 
 export class SignUpDto {
   @IsEmail()
   email!: string;
 
   @IsString()
-  @MinLength(8)
   @MaxLength(128)
+  @IsStrongPassword()
   password!: string;
 
   @IsEnum(SIGNUP_ALLOWED_ROLES, {

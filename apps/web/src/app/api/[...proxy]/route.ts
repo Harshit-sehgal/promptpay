@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { apiBaseUrl, COOKIE_ACCESS, COOKIE_REFRESH } from '../auth/_lib/cookies';
+import { apiBaseUrl, readAuthCookie, COOKIE_ACCESS, COOKIE_REFRESH } from '../auth/_lib/cookies';
 import {
   MAX_API_ROUTE_BODY_BYTES,
   readLimitedTextBody,
@@ -154,13 +154,13 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
     // Forward the access token from the httpOnly cookie as a Bearer header
-    const accessToken = req.cookies.get(COOKIE_ACCESS)?.value;
+    const accessToken = readAuthCookie(req, COOKIE_ACCESS);
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
 
     // Pick up the refresh token for auth/refresh calls below
-    const refreshToken = req.cookies.get(COOKIE_REFRESH)?.value;
+    const refreshToken = readAuthCookie(req, COOKIE_REFRESH);
 
     let body: string | undefined;
     if (req.method !== 'GET' && req.method !== 'DELETE') {

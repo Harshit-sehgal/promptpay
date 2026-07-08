@@ -50,9 +50,13 @@ async function bootstrap() {
   // (access log) and HttpExceptionFilter (5xx stack trace + JSON response)
   // both read this so an operator can correlate a client-visible requestId
   // across the access log, the error log, and the response body/header.
-  app.use((req: import('express').Request, _res: import('express').Response, next: import('express').NextFunction) => {
+  app.use((req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => {
     const incoming = (req.headers['x-request-id'] as string | undefined)?.trim();
-    req.headers['x-request-id'] = incoming || crypto.randomUUID();
+    const requestId = incoming || crypto.randomUUID();
+    req.headers['x-request-id'] = requestId;
+    // Echo request id to the client so it can be correlated with server logs
+    // (useful for support, tracing, and observability).
+    try { res.setHeader('x-request-id', requestId); } catch { /* best-effort */ }
     next();
   });
 
