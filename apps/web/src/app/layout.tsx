@@ -16,8 +16,22 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://waitlayer.com'),
   title: 'WaitLayer — Earn from AI wait time',
   description: 'Privacy-first reward marketplace for AI coding assistant wait states. PayPal-first payouts. Transparent earnings. No code tracking.',
+  keywords: ['AI wait time', 'developer earnings', 'developer ads', 'privacy-first ads', 'paypal payouts'],
+  openGraph: {
+    type: 'website',
+    siteName: 'WaitLayer',
+    title: 'WaitLayer — Earn from AI wait time',
+    description: 'Privacy-first reward marketplace for AI coding assistant wait states. Transparent earnings, PayPal-first payouts.',
+    url: '/',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'WaitLayer — Earn from AI wait time',
+    description: 'Privacy-first reward marketplace for AI coding assistant wait states. Transparent earnings, PayPal-first payouts.',
+  },
   icons: {
     icon: '/favicon.svg',
   },

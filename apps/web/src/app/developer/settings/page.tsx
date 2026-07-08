@@ -2,9 +2,11 @@
 
 import { useEffect, useState, FormEvent } from 'react';
 import type { AxiosResponse } from 'axios';
+import Image from 'next/image';
 import { LoadingSpinner } from '@/components';
 import { developerApi, authApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
+import { useToast } from '@waitlayer/ui';
 
 interface DevSettings {
   adsEnabled: boolean;
@@ -44,6 +46,7 @@ export default function DevSettingsPage() {
   const [apiKeyBusy, setApiKeyBusy] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [copiedApiKey, setCopiedApiKey] = useState(false);
+  const toast = useToast();
 
   // Editable copies
   const [adsEnabled, setAdsEnabled] = useState(false);
@@ -72,7 +75,7 @@ export default function DevSettingsPage() {
         const s = settingsRes.data;
         setSettings(s);
         setApiKeys(apiKeysRes.data || []);
-        setAdsEnabled(s.adsEnabled ?? true);
+        setAdsEnabled(s.adsEnabled ?? false);
         setQuietMode(s.quietMode ?? false);
         setQuietModeStart(s.quietModeStart ?? '22:00');
         setQuietModeEnd(s.quietModeEnd ?? '08:00');
@@ -153,6 +156,7 @@ export default function DevSettingsPage() {
         maxAdsPerHour,
       });
       setSuccess(true);
+      toast.success('Settings saved successfully.');
       fetchSettings();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to save settings'));
@@ -214,6 +218,7 @@ export default function DevSettingsPage() {
     if (!newApiKey) return;
     navigator.clipboard.writeText(newApiKey);
     setCopiedApiKey(true);
+    toast.success('API key copied to clipboard');
     setTimeout(() => setCopiedApiKey(false), 2000);
   };
 
@@ -438,12 +443,12 @@ export default function DevSettingsPage() {
                       <div className="flex flex-col sm:flex-row items-center gap-6 py-3">
                         {otpauthUrl && (
                           <div className="bg-white p-3 border border-surface-200 rounded-xl shadow-sm">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            <Image
                               src={`https://chart.googleapis.com/chart?chs=160x160&chld=M|0&cht=qr&chl=${encodeURIComponent(otpauthUrl)}`}
                               alt="Scan to pair TOTP"
                               width={160}
                               height={160}
+                              unoptimized
                             />
                           </div>
                         )}

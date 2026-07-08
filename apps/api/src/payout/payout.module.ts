@@ -6,11 +6,12 @@ import { LedgerModule } from '../ledger/ledger.module';
 import { ReferralModule } from '../referral/referral.module';
 import { PayPalPayoutsProvider, StripeProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
 import { StripeWebhookController } from './stripe-webhook.controller';
+import { EventBus } from '../common/events/event-bus';
 
 @Module({
   imports: [LedgerModule, ReferralModule],
   controllers: [PayoutController, StripeWebhookController],
-  providers: [PayoutService, PayoutCronService, PayPalPayoutsProvider, StripeProvider, StripeConnectPayoutProvider, WisePayoutProvider],
-  exports: [PayoutService, StripeProvider],
+  providers: [PayoutService, PayoutCronService, PayPalPayoutsProvider, StripeProvider, StripeConnectPayoutProvider, WisePayoutProvider, EventBus],
+  exports: [PayoutService, StripeProvider, EventBus],
 })
 export class PayoutModule {}

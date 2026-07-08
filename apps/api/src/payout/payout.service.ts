@@ -8,6 +8,7 @@ import { AuditService } from '../audit/audit.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 import { PayPalPayoutsProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
 import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
+import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 
 const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.REQUESTED,
@@ -195,36 +196,75 @@ export class PayoutService {
 
   /** Get payout info for a user */
   async getPayoutInfo(userId: string) {
+    // Each sub-query is isolated so a single transient DB failure (e.g. one
+    // overloaded index or a dead connection mid-batch) doesn't 500 the whole
+    // response. A failed query yields an empty/default result for that slice
+    // and is logged; the remaining slices still render.
+    const safe = async <T>(fn: () => Promise<T>, label: string, fallback: T): Promise<T> => {
+      try {
+        return await fn();
+      } catch (err: unknown) {
+        this.logger.warn(
+          `getPayoutInfo: sub-query "${label}" failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return fallback;
+      }
+    };
+
     const [accounts, payoutHistory, confirmedEarnings, confirmedDebits, allocatedRows] = await Promise.all([
-      this.prisma.payoutAccount.findMany({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } }),
-      this.prisma.payoutRequest.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        include: { allocations: true },
-      }),
-      this.prisma.earningsLedger.groupBy({
-        by: ['currency'],
-        where: { userId, status: 'confirmed', entryType: 'credit' },
-        _sum: { amountMinor: true },
-      }),
-      this.prisma.earningsLedger.groupBy({
-        by: ['currency'],
-        where: { userId, status: 'confirmed', entryType: 'debit' },
-        _sum: { amountMinor: true },
-      }),
-      this.prisma.payoutAllocation.findMany({
-        where: {
-          payoutRequest: {
-            userId,
-            status: { in: RESERVED_PAYOUT_STATUSES },
-          },
-        },
-        select: {
-          amountMinor: true,
-          earningsEntry: { select: { currency: true } },
-        },
-      }),
+      safe(
+        () => this.prisma.payoutAccount.findMany({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } }),
+        'accounts',
+        [],
+      ),
+      safe(
+        () =>
+          this.prisma.payoutRequest.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            include: { allocations: true },
+          }),
+        'payoutHistory',
+        [],
+      ),
+      safe(
+        () =>
+          this.prisma.earningsLedger.groupBy({
+            by: ['currency'],
+            where: { userId, status: 'confirmed', entryType: 'credit' },
+            _sum: { amountMinor: true },
+          }),
+        'confirmedEarnings',
+        [],
+      ),
+      safe(
+        () =>
+          this.prisma.earningsLedger.groupBy({
+            by: ['currency'],
+            where: { userId, status: 'confirmed', entryType: 'debit' },
+            _sum: { amountMinor: true },
+          }),
+        'confirmedDebits',
+        [],
+      ),
+      safe(
+        () =>
+          this.prisma.payoutAllocation.findMany({
+            where: {
+              payoutRequest: {
+                userId,
+                status: { in: RESERVED_PAYOUT_STATUSES },
+              },
+            },
+            select: {
+              amountMinor: true,
+              earningsEntry: { select: { currency: true } },
+            },
+          }),
+        'allocatedRows',
+        [],
+      ),
     ]);
 
     const rawBalancesByCurrency: Record<string, number> = {};
@@ -760,12 +800,21 @@ export class PayoutService {
 
     let result: { providerTxId: string; status: string };
     try {
-      result = await provider.initiate({
-        payoutRequestId: payout.id,
-        destination: payout.payoutAccount.destination,
-        amountMinor: expectedAmount,
-        currency: payout.currency,
-      });
+      // Wrap the external PSP initiation in a timeout + circuit breaker (per
+      // provider) so an unresponsive provider fails closed (markPayoutFailed)
+      // instead of hanging the request thread indefinitely.
+      result = await providerBreaker.call(`initiate:${payout.payoutAccount.provider}`, () =>
+        withTimeout(
+          () =>
+            provider.initiate({
+              payoutRequestId: payout.id,
+              destination: payout.payoutAccount.destination,
+              amountMinor: expectedAmount,
+              currency: payout.currency,
+            }),
+          `provider initiate ${payout.payoutAccount.provider}`,
+        ),
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (err instanceof PayoutProviderUnsafeFailure) {

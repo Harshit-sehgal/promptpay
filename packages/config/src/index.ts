@@ -100,6 +100,31 @@ const envSchema = z.object({
   // used to fund developer payouts. Required for live transfers.
   WISE_PROFILE_ID: z.string().optional(),
   WISE_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+
+  // ── Feature / behaviour toggles ──
+
+  // Launch incentive split: when 'true', impression/click earnings use the
+  // 80/10/10 (developer/platform/reserve) split instead of the standard
+  // 60/30/10. Off by default so operators opt in explicitly. Read by
+  // LedgerService via process.env (validated here at boot).
+  LAUNCH_SPLIT_ENABLED: z.enum(['true', 'false']).default('false'),
+
+  // Webhook processing mode. When 'true', Stripe webhook events are
+  // acknowledged (HTTP 200) and processed off the request thread via the
+  // in-process event bus. When 'false' (default), processing stays inline so
+  // behaviour is unchanged and integration tests remain synchronous.
+  WEBHOOK_ASYNC_PROCESSING: z.enum(['true', 'false']).default('false'),
+
+  // ── Cron intervals (ms) ──
+  // All crons fall back to safe defaults; operators can override per deploy.
+  PAYOUT_POLL_INTERVAL_MS: z.coerce.number().int().min(60_000).default(600_000),
+  RETENTION_CRON_INTERVAL_MS: z.coerce.number().int().min(3_600_000).default(86_400_000),
+  LEDGER_MATURATION_INTERVAL_MS: z.coerce.number().int().min(60_000).default(600_000),
+
+  // Per-call timeout (ms) for external PSP provider calls (initiate / status
+  // checks). Protects cron loops and payout processing from hanging on an
+  // unresponsive provider.
+  PROVIDER_CALL_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(15_000),
 })
 .refine(
   (env) => {

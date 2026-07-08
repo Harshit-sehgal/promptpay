@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { referralApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
 import { LoadingSpinner, StatusBadge } from '@/components';
+import { useToast } from '@waitlayer/ui';
 import { formatCurrencyBreakdown, formatDate } from '@/lib/format';
 
 interface ReferralData {
@@ -29,6 +30,7 @@ export default function ReferralPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const { info } = useToast();
 
   useEffect(() => {
     referralApi.getInfo()
@@ -41,6 +43,7 @@ export default function ReferralPage() {
     if (data?.referralLink) {
       navigator.clipboard.writeText(data.referralLink);
       setCopied(true);
+      info('Referral link copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     }
   };

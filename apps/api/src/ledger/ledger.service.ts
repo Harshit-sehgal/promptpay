@@ -56,6 +56,15 @@ export class LedgerService {
    * to/from platform and reserve. We compute in integer basis points instead.
    */
   calculateSplit(bidAmountMinor: number, useLaunchIncentive = false) {
+    // Guard: a non-positive bid would silently produce zero/negative platform
+    // and reserve shares — a money-accounting bug. Refuse outright so callers
+    // fail closed instead of writing a bogus split.
+    if (!Number.isFinite(bidAmountMinor) || bidAmountMinor <= 0) {
+      throw new BadRequestException(
+        `calculateSplit requires a positive bid amount (got ${bidAmountMinor})`,
+      );
+    }
+
     // Split percentages expressed as basis points (1 bps = 0.01%). Sum to 10000
     // (100.00%) for both REVENUE_SPLIT and LAUNCH_INCENTIVE_SPLIT at the source —
     // no float round-trip through the constants.

@@ -56,6 +56,13 @@ const nextConfig = {
   typedRoutes: true,
   outputFileTracingRoot: path.join(__dirname, '../../'),
 
+  images: {
+    remotePatterns: [
+      // TOTP QR codes rendered via Google Chart API on the 2FA settings page
+      { protocol: 'https', hostname: 'chart.googleapis.com' },
+    ],
+  },
+
   async headers() {
     return [
       {

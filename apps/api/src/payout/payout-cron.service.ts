@@ -2,6 +2,7 @@ import { Injectable, OnApplicationBootstrap, OnModuleDestroy, Logger } from '@ne
 import { PrismaService } from '../config/prisma.service';
 import { PayoutService } from './payout.service';
 import { PayoutStatus } from '@waitlayer/shared';
+import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 
 /**
  * Payout status polling cron.
@@ -23,7 +24,10 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
   private readonly logger = new Logger(PayoutCronService.name);
   private intervalId?: NodeJS.Timeout;
   private pollInFlight = false;
-  private readonly POLL_INTERVAL_MS = 600_000; // 10 minutes
+  // Configurable via PAYOUT_POLL_INTERVAL_MS (default 10 minutes).
+  private readonly POLL_INTERVAL_MS = Number(
+    process.env.PAYOUT_POLL_INTERVAL_MS ?? 600_000,
+  );
   /** Skip payouts processed within the last N ms (anti-fast-poll) */
   private readonly STALL_THRESHOLD_MS = 120_000; // 2 minutes
 
@@ -111,9 +115,20 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
         checked++;
 
         try {
-          const status = await provider.checkStatus(providerTxId, {
-            destination: payout.payoutAccount.destination,
-          });
+          // Wrap the external PSP status check in a timeout + circuit breaker
+          // (per provider) so an unresponsive provider can't hang the poll
+          // loop or be hammered while unhealthy.
+          const status = await providerBreaker.call(
+            `checkStatus:${payout.payoutAccount.provider}`,
+            () =>
+              withTimeout(
+                () =>
+                  provider.checkStatus(providerTxId, {
+                    destination: payout.payoutAccount.destination,
+                  }),
+                `provider checkStatus ${payout.payoutAccount.provider}`,
+              ),
+          );
 
           if (status.status === 'paid') {
             this.logger.log(

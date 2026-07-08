@@ -609,6 +609,7 @@ export default function HomePage() {
                   <Link href="/terms" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">Terms</Link>
                   <Link href="/advertiser-policy" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">Advertiser Policy</Link>
                   <Link href="/payout-policy" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">Payout Policy</Link>
+                  <Link href="/contact" className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors">Contact</Link>
                 </div>
               </div>
             </div>

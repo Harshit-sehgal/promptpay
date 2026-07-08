@@ -1,6 +1,7 @@
 const tseslint = require('@typescript-eslint/eslint-plugin');
 const tsparser = require('@typescript-eslint/parser');
 const prettier = require('eslint-config-prettier');
+const simpleImportSort = require('eslint-plugin-simple-import-sort');
 
 const config = [
   {
@@ -17,6 +18,7 @@ const config = [
     },
     plugins: {
       '@typescript-eslint': tseslint,
+      'simple-import-sort': simpleImportSort,
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
@@ -24,6 +26,22 @@ const config = [
       '@typescript-eslint/no-require-imports': 'off',
       'prefer-const': 'error',
       'no-var': 'error',
+      // Enforce a consistent import order: side-effect imports, then external
+      // (with `node:`-prefixed builtins first), then internal `@waitlayer/*`
+      // and relative imports. Keeping this in the shared config means every
+      // package sorts identically — see docs/STYLE_GUIDE.md.
+      'simple-import-sort/imports': [
+        'warn',
+        {
+          groups: [
+            ['^\\u0000'],
+            ['^(node:.*|node:.*|\\w.*)$', '\\w.*'],
+            ['^@waitlayer/(.*)$'],
+            ['^\\.\\.(.*)$', '^\\.(.*)$'],
+          ],
+        },
+      ],
+      'simple-import-sort/exports': 'warn',
     },
   },
   {

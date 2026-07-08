@@ -1,3 +1,10 @@
+# Docker Compose reference for WaitLayer.
+#
+# Profiles:
+#   (default)  — postgres, redis, api, web (local dev / demo)
+#   test       — adds `postgres-test` (a fresh, isolated DB on :5433) for
+#                running the integration suite without touching the dev DB:
+#                  docker compose --profile test up -d postgres-test
 services:
   postgres:
     image: postgres:16-alpine
@@ -23,6 +30,25 @@ services:
       - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Isolated Postgres for the integration test suite (profile `test`). Keeps
+  # the dev DB untouched when running `pnpm --filter waitlayer-api test`.
+  postgres-test:
+    image: postgres:16-alpine
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: waitlayer_test
+      POSTGRES_USER: waitlayer
+      POSTGRES_PASSWORD: waitlayer-test
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgtestdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waitlayer -d waitlayer_test"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -96,3 +122,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  pgtestdata:

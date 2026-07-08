@@ -28,6 +28,8 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
 
   useEffect(() => {
     setLoading(true);
@@ -36,6 +38,10 @@ export default function AdminUsersPage() {
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load users')))
       .finally(() => setLoading(false));
   }, [search, roleFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(users.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const visibleUsers = users.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
 <>
@@ -88,7 +94,7 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-600/20">
-                {users.map((u) => (
+                {visibleUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-ink-700/30 transition-colors">
                     <td className="px-4 py-3">
                       <div>
@@ -128,7 +134,34 @@ export default function AdminUsersPage() {
             </table>
           )}
         </div>
-      
+
+        {users.length > pageSize && (
+          <div className="flex items-center justify-between mt-4 text-sm">
+            <p className="text-ink-400">
+              Showing {Math.min((safePage - 1) * pageSize + 1, users.length)}–{Math.min(safePage * pageSize, users.length)} of {users.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage <= 1}
+                className="bg-ink-800 border border-ink-600/50 rounded-lg px-3 py-1.5 text-white text-sm disabled:opacity-40 transition-colors"
+              >
+                Previous
+              </button>
+              <span className="text-ink-300 px-2">Page {safePage} / {totalPages}</span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage >= totalPages}
+                className="bg-ink-800 border border-ink-600/50 rounded-lg px-3 py-1.5 text-white text-sm disabled:opacity-40 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+       
 </>
 );
 }

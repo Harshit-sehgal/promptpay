@@ -4,8 +4,18 @@ import { errors, jwtVerify } from 'jose';
 
 const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', '/dashboard'];
 
-// Static pages that can be publicly cached
-const STATIC_CACHEABLE_PATHS = ['/privacy', '/terms', '/payout-policy', '/advertiser-policy'];
+// Static/marketing pages that can be publicly cached at the edge
+const STATIC_CACHEABLE_PATHS = [
+  '/',
+  '/pricing',
+  '/comparison',
+  '/faq',
+  '/security',
+  '/privacy',
+  '/terms',
+  '/payout-policy',
+  '/advertiser-policy',
+];
 
 /**
  * Next.js middleware that gates protected routes on the httpOnly
@@ -97,7 +107,12 @@ export const config = {
     '/admin/:path*',
     '/settings/:path*',
     '/dashboard/:path*',
-    // Public static pages — middleware handles caching headers
+    // Public static/marketing pages — middleware handles caching headers
+    '/',
+    '/pricing',
+    '/comparison',
+    '/faq',
+    '/security',
     '/privacy',
     '/terms',
     '/payout-policy',

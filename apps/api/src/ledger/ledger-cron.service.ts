@@ -13,8 +13,9 @@ export class LedgerCronService implements OnApplicationBootstrap, OnModuleDestro
     // Run immediately on startup
     await this.runMaturation();
 
-    // Check every 10 minutes (600,000 ms)
-    const intervalMs = 600000;
+    // Check every 10 minutes by default; configurable via
+    // LEDGER_MATURATION_INTERVAL_MS.
+    const intervalMs = Number(process.env.LEDGER_MATURATION_INTERVAL_MS ?? 600000);
     this.intervalId = setInterval(() => {
       this.runMaturation();
     }, intervalMs);

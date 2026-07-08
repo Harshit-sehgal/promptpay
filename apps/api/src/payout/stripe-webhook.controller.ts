@@ -1,4 +1,4 @@
-import { Controller, Post, Req, HttpCode, HttpStatus, Logger } from '@nestjs/common';
+import { Controller, Post, Req, HttpCode, HttpStatus, Logger, OnModuleInit } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import Stripe from 'stripe';
@@ -6,9 +6,13 @@ import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlaye
 import { StripeProvider } from './providers';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { EventBus } from '../common/events/event-bus';
 import { getErrorCode, getErrorMessage } from '../common/utils/errors';
+import { assertSafeJson } from '../common/utils/json-value';
 
 type RawBodyRequest = Request & { rawBody?: Buffer | string };
+
+const WEBHOOK_EVENT = 'stripe.webhook';
 
 /**
  * Stripe webhook controller — receives Stripe events for payout/deposit lifecycle.
@@ -23,14 +27,30 @@ type RawBodyRequest = Request & { rawBody?: Buffer | string };
  */
 @ApiTags('Stripe Webhooks')
 @Controller('payout/stripe')
-export class StripeWebhookController {
+export class StripeWebhookController implements OnModuleInit {
   private readonly logger = new Logger(StripeWebhookController.name);
+  // When true, webhook events are acknowledged (200) and processed off the
+  // request thread via the in-process EventBus. Off by default so integration
+  // tests and synchronous callers still observe the processing effects before
+  // the response returns.
+  private readonly asyncProcessing = process.env.WEBHOOK_ASYNC_PROCESSING === 'true';
 
   constructor(
     private readonly stripe: StripeProvider,
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly eventBus: EventBus,
   ) {}
+
+  onModuleInit() {
+    // Subscribe the reconciliation handler to the bus. The handler receives
+    // `{ event }` and performs its own failure recovery (reset to 'pending'
+    // for retry) so async dispatch keeps the row reclaimable.
+    this.eventBus.on(WEBHOOK_EVENT, (payload) => {
+      const { event } = payload as { event: Stripe.Event };
+      return this.runProcessing(event);
+    });
+  }
 
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
@@ -81,6 +101,9 @@ export class StripeWebhookController {
 
     // 1. Insert or detect replay
     try {
+      // Validate the externally-supplied event shape before persisting it to
+      // the JSON column (rejects prototype-pollution / non-serializable input).
+      assertSafeJson(event, `event.${event.id}`);
       await this.prisma.webhookEvent.create({
         data: {
           provider: 'stripe',
@@ -142,20 +165,34 @@ export class StripeWebhookController {
       return { received: true, reason: 'claimed_by_other' };
     }
 
-    // 4. Process event
+    // 4. Process event — off the request thread when async mode is enabled,
+    //    otherwise inline (awaited) so behaviour is unchanged and synchronous
+    //    callers (integration tests) observe the effect before the 200 returns.
+    if (this.asyncProcessing) {
+      this.eventBus.dispatchAsync(WEBHOOK_EVENT, { event });
+      return { received: true, reason: 'accepted_async' };
+    }
+    await this.runProcessing(event);
+    return { received: true };
+  }
+
+  /**
+   * Run the reconciliation handler and perform its own failure recovery: on
+   * error, reset the webhook event to 'pending' so the next delivery (or the
+   * 30-min stall-reclaim path) can reprocess it. Used by both the inline and
+   * async dispatch paths.
+   */
+  private async runProcessing(event: Stripe.Event): Promise<void> {
     try {
       await this.processEvent(event);
     } catch (err: unknown) {
       this.logger.error(`Processing failed for Stripe event ${event.id}: ${getErrorMessage(err)}`);
-      // Reset to 'pending' so the next retry can reclaim
+      // Reset to 'pending' so the next retry can reclaim.
       await this.prisma.webhookEvent.updateMany({
         where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
         data: { processingStatus: 'pending' },
       });
-      return { received: true, reason: 'processing_failed_will_retry' };
     }
-
-    return { received: true };
   }
 
   /**

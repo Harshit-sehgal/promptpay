@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { assertSafeJson } from '../common/utils/json-value';
 
 const DEFAULT_RETENTION_DAYS: Record<string, number> = {
   webhook_events: 90,
@@ -27,6 +28,15 @@ export class ComplianceService {
     granted = true,
     metadata?: Record<string, unknown>,
   ) {
+    // Validate user-supplied consent metadata before it is persisted to the
+    // JSON column (rejects prototype-pollution / non-serializable input).
+    if (metadata) {
+      try {
+        assertSafeJson(metadata, `consent.${purpose}`);
+      } catch {
+        throw new BadRequestException('Consent metadata is not a valid JSON value');
+      }
+    }
     const row = await this.prisma.consent.create({
       data: { userId, purpose, version, granted, metadata: metadata as object | undefined },
     });

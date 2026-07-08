@@ -14,7 +14,10 @@ import { ComplianceService } from './compliance.service';
 export class RetentionCronService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(RetentionCronService.name);
   private intervalId?: NodeJS.Timeout;
-  private readonly POLL_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+  // Configurable via RETENTION_CRON_INTERVAL_MS (default 24h).
+  private readonly POLL_INTERVAL_MS = Number(
+    process.env.RETENTION_CRON_INTERVAL_MS ?? 24 * 60 * 60 * 1000,
+  );
 
   constructor(private compliance: ComplianceService) {}
 

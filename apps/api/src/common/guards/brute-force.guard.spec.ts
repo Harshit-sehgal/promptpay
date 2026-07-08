@@ -83,6 +83,46 @@ describe('BruteForceGuard', () => {
     );
   });
 
+  it.each(['/auth/2fa/setup', '/auth/2fa/enable', '/auth/2fa/disable'])(
+    'rate-limits every 2FA endpoint (%s) under repeated failed attempts',
+    async (path) => {
+      const req = authReq(path, '203.0.113.40');
+      const target = 'user_2fa';
+
+      for (let i = 0; i < 4; i += 1) {
+        await BruteForceGuard.recordFailure(req, target);
+      }
+      // Still allowed before the threshold is reached.
+      await expect(BruteForceGuard.assertCanAttempt(req, target)).resolves.toBeUndefined();
+
+      await BruteForceGuard.recordFailure(req, target); // 5th failure
+
+      await expectHttpStatus(
+        BruteForceGuard.assertCanAttempt(req, target),
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    },
+  );
+
+  it('locks a single IP only after exactly five failures (rate-limit threshold)', async () => {
+    const req = authReq('/auth/login', '198.51.100.99');
+    const target = 'threshold@example.com';
+
+    for (let i = 0; i < 4; i += 1) {
+      await BruteForceGuard.recordFailure(req, target);
+      await expect(
+        BruteForceGuard.assertCanAttempt(req, target),
+      ).resolves.toBeUndefined();
+    }
+
+    await BruteForceGuard.recordFailure(req, target); // 5th failure trips the lock
+
+    await expectHttpStatus(
+      BruteForceGuard.assertCanAttempt(req, target),
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  });
+
   it('ignores non-auth routes', async () => {
     const req = authReq('/developer/dashboard', '203.0.113.30');
 

@@ -1,11 +1,13 @@
-import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottleByRouteGuard } from './common/guards/throttle-by-route.guard';
 import { BruteForceGuard } from './common/guards/brute-force.guard';
 import { RedisBackedThrottlerStorage } from './common/rate-limit/redis-throttler.storage';
 import { ApiKeyGuard } from './common/guards/api-key.guard';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { CacheControlInterceptor } from './common/interceptors/cache-control.interceptor';
 import { AuthModule } from './auth/auth.module';
 import { DeveloperModule } from './developer/developer.module';
 import { AdvertiserModule } from './advertiser/advertiser.module';
@@ -63,6 +65,18 @@ import { ComplianceModule } from './compliance/compliance.module';
     { provide: APP_GUARD, useClass: ApiKeyGuard },
     { provide: APP_GUARD, useClass: BruteForceGuard },
     { provide: APP_GUARD, useClass: ThrottleByRouteGuard },
+    // Cache-Control headers on every response (no-store for authed routes,
+    // short public cache for the health probe + docs).
+    { provide: APP_INTERCEPTOR, useClass: CacheControlInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Request-id correlation middleware for all routes, declared here via
+    // MiddlewareConsumer so all request middleware lives in one place.
+    consumer
+      .apply(RequestIdMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}
+

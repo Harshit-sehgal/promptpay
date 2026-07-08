@@ -168,6 +168,24 @@ export class EmailService {
     });
   }
 
+  /** Confirmation that an account was deleted and its PII anonymized */
+  async sendAccountDeleted(to: string): Promise<EmailSendResult> {
+    return this.send({
+      to,
+      subject: 'Your WaitLayer account has been deleted',
+      text:
+        'Your WaitLayer account has been permanently deleted. Your personal information has been anonymized ' +
+        'and all active sessions and API keys have been revoked. If this was not you, contact support immediately.',
+      html: this.layout(
+        'Account deleted',
+        `<p>Your WaitLayer account has been <strong>permanently deleted</strong>. Your personal information has been anonymized and all active sessions and API keys have been revoked.</p>`,
+        null,
+        null,
+        'If this was not you, contact support immediately.',
+      ),
+    });
+  }
+
   // ── Private ──
 
   private async sendViaResend(msg: EmailMessage): Promise<EmailSendResult> {

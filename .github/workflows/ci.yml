@@ -10,7 +10,7 @@ jobs:
   quality:
     name: Typecheck + Lint + Test + Build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -63,6 +63,18 @@ jobs:
 
       - name: Lint
         run: pnpm run lint
+
+      # Schema drift detection: compare committed migrations against the
+      # current Prisma datamodel. If schema.prisma has changed without a
+      # matching migration, `migrate diff` emits a non-empty diff and exits
+      # with code 2, failing the build so drift is caught in CI rather than
+      # in production deploys.
+      - name: Detect Prisma schema drift
+        run: |
+          pnpm --filter @waitlayer/db exec prisma migrate diff \
+            --from-migrations packages/db/prisma/migrations \
+            --to-schema-datamodel packages/db/prisma/schema.prisma \
+            --exit-code
 
       # Provision the CI Postgres service with the actual schema before tests.
       # The integration specs (e2e-http-flow, contract-tests) boot the real

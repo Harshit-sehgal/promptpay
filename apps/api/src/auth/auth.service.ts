@@ -522,17 +522,25 @@ export class AuthService {
   }
 
   private parseTtlToMs(ttl: string): number {
-    const match = ttl.match(/^(\d+)([smhd])$/);
-    if (!match) return 30 * 24 * 60 * 60 * 1000; // default 30d
-    const value = parseInt(match[1], 10);
-    const unit = match[2];
-    switch (unit) {
-      case 's': return value * 1000;
-      case 'm': return value * 60 * 1000;
-      case 'h': return value * 60 * 60 * 1000;
-      case 'd': return value * 24 * 60 * 60 * 1000;
-      default: return 30 * 24 * 60 * 60 * 1000;
+    // Support compound durations like `1h30m` or `1d12h`, not just a single
+    // `(\d+)([smhd])` unit. Each segment is summed; an unparseable token or
+    // empty string falls back to the 30d default.
+    if (!ttl) return 30 * 24 * 60 * 60 * 1000;
+    const matches = ttl.match(/(\d+)([smhd])/g);
+    if (!matches) return 30 * 24 * 60 * 60 * 1000;
+    const unitMs: Record<string, number> = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+    let total = 0;
+    for (const segment of matches) {
+      const value = parseInt(segment.slice(0, -1), 10);
+      const unit = segment.slice(-1);
+      total += value * unitMs[unit];
     }
+    return total || 30 * 24 * 60 * 60 * 1000;
   }
 
   async requestEmailVerification(userId: string) {

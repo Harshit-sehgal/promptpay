@@ -660,6 +660,7 @@ model AdReport {
   resolvedBy   String?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([impressionId])
   @@index([userId])
@@ -967,6 +968,7 @@ model ApiKey {
   lastUsedAt   DateTime?
 
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   expiresAt DateTime? @db.Timestamptz
 
   @@index([ownerId])
@@ -992,6 +994,7 @@ model WebhookEvent {
   error            String?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([provider, eventId])
   @@index([provider, eventType])
@@ -1055,6 +1058,7 @@ model Referral {
   status     ReferralStatus @default(pending)
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   rewards ReferralReward[]
 
@@ -1077,6 +1081,7 @@ model ReferralReward {
   status      LedgerStatus @default(estimated)
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // DB-level guard: at most one reward per referral. The service-layer check-then-create
   // in processReferralRewards is racy when markPayoutPaid is invoked concurrently or

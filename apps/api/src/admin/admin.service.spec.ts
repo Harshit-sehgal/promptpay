@@ -22,6 +22,10 @@ const mockPrisma: any = {
     groupBy: vi.fn(),
     create: vi.fn(),
   },
+  payoutRequest: {
+    findUnique: vi.fn(),
+    updateMany: vi.fn(),
+  },
   $transaction: vi.fn(async (callback: any) => callback(mockPrisma)),
 };
 
@@ -195,6 +199,83 @@ describe('AdminService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(mockPrisma.advertiserLedger.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('approvePayout', () => {
+    it('approves a payout at the full requested amount and records the reviewer', async () => {
+      mockPrisma.payoutRequest.findUnique
+        .mockResolvedValueOnce({ requestedAmountMinor: 5000, currency: 'USD' }) // pre-update read
+        .mockResolvedValueOnce({ id: 'pay_1', status: 'approved', approvedAmountMinor: 5000 }); // post-update read
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.approvePayout('pay_1', 'admin_1', 'looks good');
+
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 'pay_1', status: { in: ['requested', 'under_review'] } },
+        data: {
+          status: 'approved',
+          reviewerId: 'admin_1',
+          reviewNote: 'looks good',
+          processedAt: expect.any(Date),
+          approvedAmountMinor: 5000,
+        },
+      });
+      expect(result.approvedAmountMinor).toBe(5000);
+    });
+
+    it('authorizes a partial approval below the requested amount', async () => {
+      mockPrisma.payoutRequest.findUnique
+        .mockResolvedValueOnce({ requestedAmountMinor: 5000, currency: 'USD' })
+        .mockResolvedValueOnce({ id: 'pay_1', status: 'approved', approvedAmountMinor: 3000 });
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.approvePayout('pay_1', 'admin_1', 'partial', 3000);
+
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ approvedAmountMinor: 3000 }),
+        }),
+      );
+      expect(result.approvedAmountMinor).toBe(3000);
+    });
+
+    it('rejects a partial approval that exceeds the requested amount', async () => {
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({ requestedAmountMinor: 5000, currency: 'USD' });
+
+      await expect(
+        service.approvePayout('pay_1', 'admin_1', 'too much', 9000),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-positive approved amount', async () => {
+      await expect(
+        service.approvePayout('pay_1', 'admin_1', 'bad', 0),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.approvePayout('pay_1', 'admin_1', 'bad', -100),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects approval when the payout is not in a reviewable state', async () => {
+      mockPrisma.payoutRequest.findUnique
+        .mockResolvedValueOnce({ requestedAmountMinor: 5000, currency: 'USD' })
+        .mockResolvedValueOnce({ id: 'pay_1', status: 'paid' }); // already paid → count 0
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.approvePayout('pay_1', 'admin_1', 'late'),
+      ).rejects.toThrow(/cannot be approved from status 'paid'/);
+    });
+
+    it('rejects approval for a missing payout', async () => {
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(service.approvePayout('ghost', 'admin_1')).rejects.toThrow(
+        'Payout not found',
+      );
     });
   });
 });

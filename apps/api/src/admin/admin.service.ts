@@ -855,6 +855,16 @@ export class AdminService {
       throw new BadRequestException('User has no outstanding recovery debt');
     }
 
+    // Minimum-amount gate: don't open a collection case (with all its
+    // operational overhead) for a trivial outstanding balance. Below this
+    // threshold the debt is immaterial and not worth pursuing.
+    const MIN_RECOVERY_DEBT_CASE_MINOR = 100; // $1.00
+    if (debt.outstandingDebtMinor < MIN_RECOVERY_DEBT_CASE_MINOR) {
+      throw new BadRequestException(
+        `Outstanding recovery debt (${debt.outstandingDebtMinor} minor) is below the minimum threshold for opening a case`,
+      );
+    }
+
     const status = params.status === 'in_collections'
       ? RecoveryDebtCaseStatus.in_collections
       : RecoveryDebtCaseStatus.open;

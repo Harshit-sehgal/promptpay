@@ -5,6 +5,7 @@ import { LedgerStatus } from '@waitlayer/shared';
 import { FraudService } from '../fraud/fraud.service';
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcryptjs';
 
 interface DeveloperSettingsUpdate {
@@ -35,6 +36,7 @@ export class DeveloperService {
     private fraud: FraudService,
     private audit: AuditService,
     private googleVerifier: GoogleTokenVerifier,
+    private email: EmailService,
   ) {}
 
   async getDashboard(userId: string) {
@@ -285,7 +287,7 @@ export class DeveloperService {
   }
 
   async exportData(userId: string) {
-    const [user, earnings, impressions, clicks, payouts] = await Promise.all([
+    const [user, earnings, impressions, clicks, payouts, consents] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -311,6 +313,10 @@ export class DeveloperService {
         orderBy: { createdAt: 'desc' },
         take: 1000,
       }),
+      this.prisma.consent.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
     // Audit: a full PII export (GDPR-style data dump). Records who pulled
     // the dump so bulk exfiltration via a compromised token is traceable
@@ -323,7 +329,7 @@ export class DeveloperService {
       targetType: 'user',
       targetId: userId,
     });
-    return { user, earnings, impressions, clicks, payouts };
+    return { profile: user, earnings, impressions, clicks, payouts, consent: consents };
   }
 
   async deleteAccount(userId: string, options: DeleteAccountOptions = {}) {
@@ -331,6 +337,14 @@ export class DeveloperService {
     if (!auditActor) {
       await this.verifySelfDeleteStepUp(userId, options);
     }
+
+    // Capture the email before anonymization so we can send the deletion
+    // confirmation to the user's real inbox.
+    const prior = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    const priorEmail = prior?.email;
 
     // Anonymize user data, revoke all sessions and API keys.
     // The FK ON DELETE SET NULL on api_keys.ownerId will null the owner
@@ -374,6 +388,21 @@ export class DeveloperService {
       targetType: 'user',
       targetId: userId,
     });
+
+    // Send a deletion confirmation email (non-blocking; silent email
+    // failures must never fail the deletion itself).
+    if (priorEmail && !priorEmail.startsWith('deleted-')) {
+      void this.email.sendAccountDeleted(priorEmail).catch((err) => {
+        this.audit.log({
+          actorId: auditActor?.actorId ?? userId,
+          actorRole: auditActor?.actorRole ?? 'developer',
+          action: 'delete_account_email_failed',
+          targetType: 'user',
+          targetId: userId,
+          afterSnap: { reason: err instanceof Error ? err.message : String(err) },
+        });
+      });
+    }
     return result;
   }
 

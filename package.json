@@ -17,14 +17,27 @@
     "db:push": "pnpm --filter @waitlayer/db push",
     "db:studio": "pnpm --filter @waitlayer/db studio",
     "start:api": "pnpm --filter waitlayer-api build && node apps/api/dist/apps/api/src/main.js",
-    "start:web": "pnpm --filter waitlayer-web build && cd apps/web && next start"
+    "start:web": "pnpm --filter waitlayer-web build && cd apps/web && next start",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@types/node": "^22.20.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
+    "prettier": "^3.6.2",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css,scss}": [
+      "prettier --write"
+    ]
   }
 }

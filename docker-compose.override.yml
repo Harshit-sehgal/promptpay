@@ -1,0 +1,44 @@
+# docker-compose.override.yml — LOCAL DEVELOPMENT ONLY (auto-loaded by Compose)
+#
+# This file is picked up automatically by `docker compose` alongside
+# docker-compose.yml. It overrides the API/Web build target to the `build`
+# stage (which contains the full source tree + dev tooling) and runs the
+# apps' dev scripts with source bind-mounted for hot reload. It also enables
+# the mock-Google sign-in path so you can log in locally without a real
+# Google account.
+#
+# It is NOT for production. `docker compose up` uses it automatically; rename
+# or delete this file to fall back to the production images defined in
+# docker-compose.yml. See docs/ONBOARDING.md for details.
+#
+# Requires no extra config — just run:  docker compose up
+
+services:
+  api:
+    build:
+      context: .
+      target: build
+    command: ["sh", "-c", "pnpm --filter waitlayer-api run dev"]
+    environment:
+      NODE_ENV: development
+      ALLOW_MOCK_GOOGLE: "true"
+      MOCK_GOOGLE_ENABLED: "1"
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages:/app/packages
+    ports:
+      - "4002:4002"
+
+  web:
+    build:
+      context: .
+      target: build
+    command: ["sh", "-c", "pnpm --filter waitlayer-web run dev"]
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_ALLOW_MOCK_AUTH: "true"
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+    ports:
+      - "3000:3000"
