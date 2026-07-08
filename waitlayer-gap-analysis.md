@@ -5,6 +5,13 @@
 **Analysis Rounds:** 13  
 **Files Examined:** 100+ source files across all packages and apps  
 
+> **Closure status (2026-07-09):** All 158 gaps have been verified against the
+> current source and closed. Genuinely-missing behavior was implemented; already-done items
+> were confirmed; a small set of pre-existing test/schema issues uncovered while running
+> the DB-backed suite were fixed. See **`FOUNDATION_STATUS.md` → "Recently Completed
+> (2026-07-09)"** for the per-gap record and the final verification output
+> (`typecheck` 14/14, `lint` 9/9 @ 0 warnings, `build` 9/9, `test` 371 passing).
+
 ---
 
 ## Executive Summary

@@ -214,6 +214,14 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ email: 'adv-b@waitlayer.com', password: 'Password123!' })
         .expect(200);
       advertiserBToken = advBRes.body.accessToken;
+
+      // Privacy-by-default: ads are off until the developer opts in. Enable
+      // ads for the test developer so the ad-serving loop can be exercised.
+      await request(app.getHttpServer())
+        .patch('/api/v1/developer/settings')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ adsEnabled: true })
+        .expect(200);
     });
 
     it('should rotate refresh token and reject reuse of old refresh token', async () => {
@@ -287,7 +295,7 @@ describe('End-to-End HTTP Integration Flow', () => {
 
     it('should complete the full password reset flow (forgot → reset → re-login)', async () => {
       const email = 'reset-flow@waitlayer.com';
-      const originalPassword = 'original-password-123';
+      const originalPassword = 'Original-password-123!';
       const newPassword = 'Brand-new-password-456!';
 
       // Register a dedicated user for this flow
@@ -886,6 +894,12 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ email: 'dev2@waitlayer.com', password: 'Password123!' })
         .expect(200);
       dev2Token = loginRes.body.accessToken;
+
+      await request(app.getHttpServer())
+        .patch('/api/v1/developer/settings')
+        .set('Authorization', `Bearer ${dev2Token}`)
+        .send({ adsEnabled: true })
+        .expect(200);
     });
 
     it('should register second developer device and get impression', async () => {

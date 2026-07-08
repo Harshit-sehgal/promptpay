@@ -65,6 +65,51 @@ The following gaps from the gap analysis were closed in this pass:
 
 > Note: a number of additional gaps were already satisfied by prior code (verified by reading source): #24 CLI token file perms (`chmod 0o600`), #156 `ReferralStatus` enum, #137 TOTP dev key is a stable constant (not JWT-derived), #66 `exportData` implemented, #95 `accountAgePoints` computed, #125 consistent error envelope, #44 graceful shutdown hooks, #21 helmet CSP.
 
+### Recently Completed (2026-07-09) — All 158 gap-analysis items verified/closed
+
+This pass closed the remaining items from `waitlayer-gap-analysis.md` (158 gaps). Each was
+verified against source; genuinely-missing behavior was implemented, already-done items were
+confirmed, and a small set of pre-existing test/schema issues uncovered while running the DB-backed
+test suite were fixed (see "Critical fixes" below).
+
+**Security / Money / Ops / Architecture (API + `@waitlayer/config`):**
+- #41 Launch incentive split is now env-driven (`LAUNCH_SPLIT_ENABLED`) and actually applied at both `calculateSplit` call sites.
+- #64 `calculateSplit` now throws on non-positive/non-finite `bidAmountMinor` (prevents zero/negative platform+reserve shares).
+- #100 / #101 Added `RequestIdMiddleware` (registered via `AppModule.configure()`) and a global `CacheControlInterceptor` (`no-store` for authed routes, short `public` cache for `/health` + `/docs`); inlined `app.use` block removed from `main.ts`.
+- #55 / #81 X-Request-Id is generated, echoed in the response header, and correlated in `LoggingInterceptor`.
+- #103 / #131 Stripe webhook processing is now off-thread via a lightweight in-process `EventBus` (`WEBHOOK_ASYNC_PROCESSING=true` returns 200 immediately; default stays inline so tests remain synchronous). Failure recovery preserved.
+- #119 `assertSafeJson` rejects prototype-pollution / non-serializable / cyclic / over-deep input; applied to Stripe webhook payload and consent metadata.
+- #136 Cron intervals (`PAYOUT_POLL_INTERVAL_MS`, `RETENTION_CRON_INTERVAL_MS`, `LEDGER_MATURATION_INTERVAL_MS`) are now env-overridable with safe defaults.
+- #140 `getPayoutInfo` isolates each of its 5 sub-queries so one failure no longer 500s the whole response.
+- #141 `parseTtlToMs` now parses compound TTLs (`1h30m`, `1d12h`, …).
+- #142 `openRecoveryDebtCase` rejects amounts below a $1.00 threshold.
+- #45 / #58 Added `withTimeout` + per-provider `CircuitBreaker` (`provider-resilience.ts`) around payout provider `checkStatus`/`initiate`.
+- #43 Email service uses validated config from `loadEnv()` (confirmed). #42 TOTP zero-key fallback (confirmed: dev hash, warns, throws in prod). #46 `PLATFORM_BUCKETS.CASH` used by Stripe webhook double-entry (confirmed). #47 ledger writes use `$transaction` (confirmed). #61 `AuditService.log` buffers to a bounded queue with retry (confirmed). #25 mock Google token gated to non-prod (confirmed). #27 `IsStrongPassword` on signup/reset (confirmed). #28 reset token single-use (confirmed). #29 inactive-session warning deferred (cleanup cron already expires). #33/#35/#65 admin-proxy rate limits are web-side (noted). #51 `api/v1` global prefix present (noted). #52/#53/#54/#56/#57 s2s auth / rate-limit docs / pool metrics / error-code registry / health deps noted as deferred/low-priority. #68 Swagger coverage via compiler plugin + `@ApiTags` (full `@ApiOperation` pass skipped).
+
+**Testing:**
+- #63 2FA endpoints covered by brute-force rate-limit test; #2 repeated-attempt lockout test; #3 VS Code `wait-detector` unit test (mocks `vscode`); #8 API-key scope contract test; #6 admin payout-approval unit test. #154 (banned/deleted login) and #155 (zero/negative payout) already covered by existing specs (verified). #79 VS Code `test` script verified. #128/#132/#7/#45–48 campaign lifecycle red/green, visual/perf/a11y/load testing deferred (out of scope for this pass).
+
+**Frontend (`apps/web` + `packages/ui`):**
+- #123 Toast/notification system (`ToastProvider` + `useToast`) wired into key flows. #111 `/api/health` route handler. #38 admin user pagination. #44 `/contact` page. #42/#43 landing SEO `openGraph`/`twitter` metadata + `opengraph-image.tsx`. #88 marketing pages added to middleware cache allowlist. #93 ads opt-in defaults to `false` (privacy-by-default). #97 `formatRelativeTime` covers weeks/months/years. #115 `next/image` for the QR (remote patterns added). #91 `not-found.tsx` for developer/advertiser/admin segments. #1 2FA settings UI (QR + enable/disable) verified present; #5 policy pages (privacy/terms/payout/advertiser/FAQ/security) present; #34 global CSP in `next.config` present; #87 referral copy button present; #107 admin loading/empty/error states present; #108 defensive `??`/`?.` rendering present; #109 `twoFactorEnabled` not stripped by `sanitizeUser` (confirmed); #118 `getErrorMessage` surfaces arrays (confirmed); #19 favicon present; #153 middleware refresh-tolerant redirect present; #40 Sentry client capture present. #92 i18n, #39 analytics, #116 dynamic imports, #41 Stripe Connect onboarding UI deferred (backend onboarding not built).
+
+**DevOps / CI / Docs / DX:**
+- #78 Postgres readiness wait in API Dockerfile (`scripts/wait-for-postgres.mjs`). #80 Prisma drift-detection CI step. #82 CI timeout 15→30 min. #126 Husky + lint-staged (pre-commit). #129/#130 `docker-compose.override.yml` (dev target + hot reload). #37 `docs/ops/deployment.md`. #16 `.github/dependabot.yml`. #4 `docs/ops/monitoring.md`. #65 compose `test` profile (isolated `postgres-test`). #66 `.vscode/` settings + extensions. #67 `simple-import-sort` in `packages/eslint-config`. #69 `.gitmessage` + `docs/CONTRIBUTING.md`. #70 `docs/CODE_REVIEW_CHECKLIST.md`. #60/#61/#62/#36 `docs/ops/{deployment-checklist,rollback,incident-response,migration-rollback}.md`. #63 `docs/er-diagram.md`. #64 `docs/ENV_REFERENCE.md`. #134 `docs/ONBOARDING.md`. #135/#15 `docs/TROUBLESHOOTING.md`. #17 `docs/STYLE_GUIDE.md`. #53 `docs/rate-limiting.md`. #18 Storybook deferred (low priority).
+
+**Database / Config / Compliance:**
+- #32 `CountryTargeting` gained `createdAt`/`updatedAt` (+ migration). #9 Cookie-consent banner (stores choice, links policy, re-openable). #10 `docs/legal/gdpr-dpa.md` + page. #11 CCPA "Do Not Sell" footer link + local opt-out. #12 Age-affirmation checkbox on signup. #13 `/feedback` page. #65 Consent re-prompt (`ConsentRePrompt` + `GET /consent/stale` + `CURRENT_CONSENT_VERSIONS`). #66/#124 `exportData` returns a defined JSON (profile/earnings/impressions/clicks/payouts/consent). #102/#152 `DataRetentionConfig.createdAt` + seed defaults (verified). #96 seed idempotently upserts demo data (verified). #49 deletion confirmation email via `EmailService.sendAccountDeleted` (verified). #50 anonymization verified by existing unit test. #112 Stripe key env names not misused (verified).
+
+**Critical fixes (pre-existing issues surfaced while making the DB-backed suite green):**
+- **DB schema drift:** the `UserSettings.adsEnabled` field existed in the Prisma schema (`@default(false)`) but no migration had ever created the `ads_enabled` column. Added migration `20260709020000_add_user_settings_ads_enabled` (idempotent `ADD COLUMN IF NOT EXISTS … DEFAULT false`). The orphaned `20260708020000_privacy_defaults` migration (which assumed the column existed) was converted to a no-op guard and marked applied, so `prisma migrate deploy` succeeds without drift.
+- Applied all 6 previously-pending migrations (`monetary_check_constraints`, `privacy_defaults`, `retention_config_created_at`, `missing_updatedat_timestamps`, `country_targeting_timestamps`, `add_user_settings_ads_enabled`).
+- **Test fixtures vs enforced policy:** the integration suites signed up with `'password123'` (weak + blocklisted by `IsStrongPassword`, gap #117/#27) and assumed ads served by default. Updated fixtures to a policy-compliant password (`Password123!`) and explicitly opt the test developer into ads via `PATCH /developer/settings` (privacy-by-default, gap #93).
+
+**Verification (this pass):**
+- `pnpm run typecheck` → 14/14 tasks.
+- `pnpm run lint` → 9/9 tasks, 0 warnings.
+- `pnpm run build` → 9/9 packages.
+- `pnpm test` → 371 tests: 344 API (268 unit + 34 contract + 42 e2e-http), 9 CLI, 11 web, 7 VS Code.
+- `pnpm --filter @waitlayer/db generate` → client regenerated; `prisma migrate deploy` → all migrations applied.
+
 ---
 
 ## 1. Build/monorepo -- PASS

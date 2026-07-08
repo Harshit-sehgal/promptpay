@@ -132,6 +132,14 @@ describe('API Contract Tests', () => {
         .expect(201);
       expect(() => SignupResponse.parse(res.body)).not.toThrow();
       devToken = res.body.accessToken;
+
+      // Privacy-by-default: ads are off until the developer opts in. Enable
+      // ads so the extension ad-serving contract flow can be exercised.
+      await request(app.getHttpServer())
+        .patch('/api/v1/developer/settings')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ adsEnabled: true })
+        .expect(200);
     });
 
     it('POST /auth/login → matches LoginResponse schema', async () => {
