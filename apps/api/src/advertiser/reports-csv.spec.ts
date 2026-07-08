@@ -9,7 +9,8 @@ describe('reportsToCsv', () => {
       status: 'active',
       impressions: 100,
       clicks: 5,
-      ctr: 5,
+      // The API returns CTR as a ratio (clicks/impressions). 0.05 = 5%.
+      ctr: 0.05,
       spendMinor: 2500,
       currency: 'USD',
     },
@@ -39,7 +40,8 @@ describe('reportsToCsv', () => {
     expect(csv).toContain('"Launch, ""Big"""');
   });
 
-  it('formats ctr to 2 decimals', () => {
+  it('converts a ratio CTR to a percentage in the ctr_percent column', () => {
+    // 1 click / 3 impressions ~ 0.3333 ratio -> 33.33% in the CSV column.
     const csv = reportsToCsv([
       {
         campaignId: 'x',
@@ -47,12 +49,17 @@ describe('reportsToCsv', () => {
         status: 'active',
         impressions: 3,
         clicks: 1,
-        ctr: 33.3333,
+        ctr: 0.3333,
         spendMinor: 10,
         currency: 'USD',
       },
     ]);
     expect(csv.split('\n')[1]).toContain(',33.33,');
+  });
+
+  it('converts a 5 percent ratio CTR to 5 in the ctr_percent column', () => {
+    const csv = reportsToCsv([rows[0]]);
+    expect(csv.split('\n')[1]).toContain(',5,');
   });
 
   it('handles an empty report', () => {

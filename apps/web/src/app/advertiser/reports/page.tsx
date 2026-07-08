@@ -52,7 +52,11 @@ function periodPreset(days: number): { from: string; to: string } {
 }
 
 const PRESETS = [
-  { key: '1d' as const, label: 'Last 24h', days: 1 },
+  // All presets use calendar-day (date-only) bounds; the backend treats a
+  // date-only `to` as inclusive through that calendar day. Labeling matches
+  // the actual calendar-day semantics rather than a misleading rolling "Last
+  // 24h" window (A-067).
+  { key: '1d' as const, label: '1 day', days: 1 },
   { key: '7d' as const, label: '7 days', days: 7 },
   { key: '30d' as const, label: '30 days', days: 30 },
   { key: '90d' as const, label: '90 days', days: 90 },
@@ -265,7 +269,7 @@ export default function AdvertiserReportsPage() {
             />
             <StatCard
               label="Avg CTR"
-              value={formatPercent(displayStats!.ctr)}
+              value={formatPercent(displayStats!.ctr * 100)}
             />
             <StatCard
               label="Total spend"
@@ -373,7 +377,7 @@ export default function AdvertiserReportsPage() {
                         <div>
                           <span className="md:hidden text-ink-400 text-[10px] uppercase block">CTR</span>
                           <span className={`font-mono text-sm ${row.ctr > 1 ? 'text-emerald-400' : 'text-ink-300'}`}>
-                            {formatPercent(row.ctr)}
+                            {formatPercent(row.ctr * 100)}
                           </span>
                         </div>
                         <div>
@@ -417,7 +421,7 @@ export default function AdvertiserReportsPage() {
                   <div className="grid grid-cols-2 md:col-span-7 md:grid-cols-4 gap-2">
                     <span className="text-white font-mono text-sm font-semibold">{formatNumber(data.summary.totalImpressions)}</span>
                     <span className="text-ink-300 font-mono text-sm">{formatNumber(data.summary.totalClicks)}</span>
-                    <span className="text-ink-300 font-mono text-sm">{formatPercent(data.summary.avgCtr)}</span>
+                    <span className="text-ink-300 font-mono text-sm">{formatPercent(data.summary.avgCtr * 100)}</span>
                     <span className="text-white font-mono text-sm font-semibold">
                       {formatCurrencyBreakdown(data.summary.totalSpendByCurrency ?? { USD: data.summary.totalSpendMinor })}
                     </span>
