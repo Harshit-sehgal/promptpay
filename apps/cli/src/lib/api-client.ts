@@ -185,11 +185,11 @@ export class ApiClient {
 
   async endWaitState(input: {
     waitStateId: string;
-    durationMs: number;
+    durationSeconds: number;
   }) {
     const payload = {
       waitStateId: input.waitStateId,
-      duration: String(input.durationMs),
+      durationSeconds: String(input.durationSeconds),
       idempotencyKey: 'cli-end-' + input.waitStateId,
     };
     const signature = this.signEventPayload(payload);

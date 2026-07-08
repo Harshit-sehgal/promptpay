@@ -184,7 +184,16 @@ const mockPrisma = {
     count: vi.fn(),
     create: vi.fn(),
     aggregate: vi.fn(),
-    groupBy: vi.fn(),
+    groupBy: vi.fn(async (args?: any) => {
+      const advertiserId = args?.where?.advertiserId?.in?.[0] || args?.where?.advertiserId || 'default-adv';
+      return [
+        {
+          advertiserId,
+          entryType: 'credit',
+          _sum: { amountMinor: 10000_00 },
+        },
+      ];
+    }),
     update: vi.fn(),
     findFirst: vi.fn(),
   },
@@ -363,6 +372,23 @@ describe('E2E Money Loop', () => {
     recordedLedgerEntries.platform = [];
     svc = makeServices();
     installLedgerCapture();
+
+    // Default mock for advertiser balance to prevent requestAd / billing checks failing
+    mockPrisma.advertiserLedger.groupBy.mockImplementation(async (args?: any) => {
+      const advertiserId = args?.where?.advertiserId?.in?.[0] || args?.where?.advertiserId || 'default-adv';
+      return [
+        {
+          advertiserId,
+          entryType: 'credit',
+          _sum: { amountMinor: 10000_00 },
+        },
+        {
+          advertiserId: undefined,
+          entryType: 'credit',
+          _sum: { amountMinor: 10000_00 },
+        },
+      ];
+    });
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -632,6 +658,10 @@ describe('E2E Money Loop', () => {
     const WAIT_STATE_ID = uid('ws');
 
     beforeEach(() => {
+      // Advertiser balance: credit of 1000 USD
+      mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
+        { advertiserId: ADS_PROFILE_ID, entryType: 'credit', _sum: { amountMinor: 1000_00 } },
+      ]);
       // Pre-seed the "developer" user and "advertiser" user exists
       mockPrisma.user.findUnique.mockImplementation((args: any) => {
         if (args?.where?.id === DEV_USER_ID || args?.where?.id === ADS_USER_ID) {
@@ -1416,6 +1446,9 @@ describe('E2E Money Loop', () => {
       await svc.extension.recordWaitStateStart(devUserId, { ...wsPayload, signature: hmacSign(wsPayload) });
 
       // ── Step 9: Request ad ──
+      mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
+        { advertiserId: advProfileId, entryType: 'credit', _sum: { amountMinor: 10000_00 } },
+      ]);
       mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: devUserId, adsEnabled: true });
       mockPrisma.device.findUnique.mockResolvedValue({
         id: deviceId, userId: devUserId, eventSecret: DEVICE_EVENT_SECRET, user: { status: 'active' },

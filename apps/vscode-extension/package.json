@@ -96,7 +96,7 @@
     "build": "pnpm run compile",
     "test": "vitest run"
   },
-  "main": "./out/apps/vscode-extension/src/extension.js",
+  "main": "./out/extension.js",
   "dependencies": {
     "@waitlayer/shared": "workspace:*"
   },

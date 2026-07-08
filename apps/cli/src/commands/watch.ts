@@ -46,9 +46,10 @@ export async function runWatch(opts: { once?: boolean }) {
   const endActiveWait = async () => {
     if (!activeWaitStateId || activeStartTime === null) return;
     const durationMs = Date.now() - activeStartTime;
-    console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms`));
+    const durationSeconds = Math.floor(durationMs / 1000);
+    console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms (${durationSeconds}s)`));
     try {
-      await api.endWaitState({ waitStateId: activeWaitStateId, durationMs });
+      await api.endWaitState({ waitStateId: activeWaitStateId, durationSeconds });
     } catch (err: unknown) {
       console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
     }

@@ -432,7 +432,7 @@ export class ExtensionService {
 
   async recordWaitStateEnd(userId: string, dto: {
     waitStateId: string;
-    duration: string | number;
+    durationSeconds: string | number;
     idempotencyKey: string;
     signature: string;
   }) {
@@ -468,12 +468,8 @@ export class ExtensionService {
       return existing;
     }
 
-    const claimedDurationMs = typeof dto.duration === 'string' ? parseInt(dto.duration, 10) : dto.duration;
-    if (Number.isNaN(claimedDurationMs) || claimedDurationMs < 0) {
-      throw new BadRequestException('Invalid duration value');
-    }
-    const claimedDuration = Math.floor(claimedDurationMs / 1000);
-    if (claimedDuration > WAIT_STATE_MAX_DURATION_SECONDS) {
+    const claimedDurationSeconds = typeof dto.durationSeconds === 'string' ? parseInt(dto.durationSeconds, 10) : dto.durationSeconds;
+    if (Number.isNaN(claimedDurationSeconds) || claimedDurationSeconds < 0 || claimedDurationSeconds > WAIT_STATE_MAX_DURATION_SECONDS) {
       throw new BadRequestException('Invalid duration value');
     }
 
@@ -485,10 +481,10 @@ export class ExtensionService {
     // the extension side. The stored duration is the server-computed value
     // — the claimed value is only used for the consistency check.
     const serverDuration = Math.floor((Date.now() - start.createdAt.getTime()) / 1000);
-    const drift = Math.abs(serverDuration - claimedDuration);
+    const drift = Math.abs(serverDuration - claimedDurationSeconds);
     if (drift > WAIT_STATE_DURATION_TOLERANCE_SECONDS) {
       throw new BadRequestException(
-        `Duration mismatch (claimed=${claimedDuration}s, server=${serverDuration}s, tolerance=${WAIT_STATE_DURATION_TOLERANCE_SECONDS}s)`,
+        `Duration mismatch (claimed=${claimedDurationSeconds}s, server=${serverDuration}s, tolerance=${WAIT_STATE_DURATION_TOLERANCE_SECONDS}s)`,
       );
     }
     const duration = serverDuration;

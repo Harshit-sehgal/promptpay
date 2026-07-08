@@ -7,6 +7,7 @@ import { generateTotp } from '@waitlayer/shared';
 
 // ── Prisma mock ──
 const mockPrisma = {
+  $transaction: vi.fn((cb) => cb(mockPrisma)),
   user: {
     findUnique: vi.fn(),
     create: vi.fn(),

@@ -54,23 +54,12 @@ export function activate(context: vscode.ExtensionContext) {
   detector.onSignal(async (signal) => {
     if (signal.type === 'wait_start') {
       const event = signal.event;
-      if (!(await config.adsEnabled())) return;
-      if (await config.inQuietHours()) return;
-
-      // Enforce frequency cap
-      const maxAdsPerHour = await config.getMaxAdsPerHour();
-      const now = Date.now();
-      adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
-      if (adTimestamps.length >= maxAdsPerHour) {
-        console.warn('WaitLayer: frequency cap reached, skipping ad');
-        return;
-      }
-
       activeWaitStateId = event.waitStateId;
 
+      let deviceId: string;
       try {
         // 1. Get or register device (obtains UUID)
-        const deviceId = await api.getOrRegisterDevice();
+        deviceId = await api.getOrRegisterDevice();
         const idempotencyKey = `ws-start-${event.waitStateId}`;
 
         // 2. Register wait state start with API
@@ -81,6 +70,26 @@ export function activate(context: vscode.ExtensionContext) {
           toolType: 'vscode',
           idempotencyKey,
         });
+      } catch (err: unknown) {
+        activeWaitStateId = null;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`WaitLayer: failed to record wait state start — ${msg}`);
+        return; // If we can't record the start, we can't do anything else.
+      }
+
+      // Decouple ad request and display from wait start recording
+      try {
+        if (!(await config.adsEnabled())) return;
+        if (await config.inQuietHours()) return;
+
+        // Enforce frequency cap
+        const maxAdsPerHour = await config.getMaxAdsPerHour();
+        const now = Date.now();
+        adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
+        if (adTimestamps.length >= maxAdsPerHour) {
+          console.warn('WaitLayer: frequency cap reached, skipping ad');
+          return;
+        }
 
         // 3. Request an ad
         const ad = await api.requestAd({
@@ -104,40 +113,33 @@ export function activate(context: vscode.ExtensionContext) {
 
           // 5. Show ad in panel. Track when the impression became visible
           const impressionShownAt = Date.now();
-          try {
-            panel.show({
-              headline: ad.title,
-              message: ad.message,
-              ctaText: 'Visit site',
-              ctaUrl: ad.destinationUrl,
-              impressionToken: ad.impressionToken,
-            }, async (clicked) => {
-              try {
-                // Always qualify first — CPM bills here; CPC uses qualifiedAt as a gate.
-                const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
-                await api.recordImpressionEnd(ad.impressionToken, visibleDurationMs);
-                if (clicked) {
-                  await api.recordClick(ad.impressionToken);
-                }
-              } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
-              } finally {
-                panel.hide();
-                status.showIdle();
+          panel.show({
+            headline: ad.title,
+            message: ad.message,
+            ctaText: 'Visit site',
+            ctaUrl: ad.destinationUrl,
+            impressionToken: ad.impressionToken,
+          }, async (clicked) => {
+            try {
+              // Always qualify first — CPM bills here; CPC uses qualifiedAt as a gate.
+              const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
+              await api.recordImpressionEnd(ad.impressionToken, visibleDurationMs);
+              if (clicked) {
+                await api.recordClick(ad.impressionToken);
               }
-            });
-          } catch (err: unknown) {
-            panel.hide();
-            status.showIdle();
-            throw err;
-          }
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
+            } finally {
+              panel.hide();
+            }
+          });
         }
       } catch (err: unknown) {
         // Don't disrupt the IDE with a modal, but make the failure visible in
         // the extension's output channel
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: ad request failed — ${msg}`);
+        console.warn(`WaitLayer: ad request/display failed — ${msg}`);
       }
     } else if (signal.type === 'wait_end') {
       const event = signal.event;
@@ -146,7 +148,7 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           await api.waitStateEnd({
             waitStateId: event.waitStateId,
-            durationMs: event.durationMs,
+            durationSeconds: Math.floor(event.durationMs / 1000),
             idempotencyKey: `ws-end-${event.waitStateId}`,
           });
         } catch (err: unknown) {

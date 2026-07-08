@@ -185,12 +185,12 @@ export class ApiClient {
 
   async waitStateEnd(input: {
     waitStateId: string;
-    durationMs: number;
+    durationSeconds: number;
     idempotencyKey: string;
   }): Promise<void> {
     const payload = {
       waitStateId: input.waitStateId,
-      duration: String(input.durationMs),
+      durationSeconds: String(input.durationSeconds),
       idempotencyKey: input.idempotencyKey,
     };
     await this.post('/extension/wait-state/end', {
