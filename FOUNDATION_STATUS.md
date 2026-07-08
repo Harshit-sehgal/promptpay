@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-07 (current hardening pass)
+Last updated: 2026-07-08 (current hardening pass)
 
 ---
 
@@ -12,15 +12,15 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 |---|--------|--------|--------------|
 | 1 | Build/monorepo | PASS | `pnpm run build` / `pnpm run typecheck` succeeds; all workspace packages compile |
 | 2 | API contract | PASS | **Zod 3.25 schemas** integrated via `contract-tests.spec.ts` verifying live HTTP responses |
-| 3 | Auth + roles | PASS | Real Postgres integration covers signup/login/refresh/replay/password-reset; unit tests cover TOTP 2FA enforcement and encrypted secret storage |
+| 3 | Auth + roles | PASS | Real Postgres integration covers signup/login/refresh/replay/password-reset; unit tests cover non-active account credential freeze, TOTP 2FA enforcement, and encrypted secret storage |
 | 4 | Authorization | PASS | Integration test asserts 403s on cross-tenant access |
 | 5 | Campaign lifecycle | PASS | Real DB end-to-end: draft → submitted → approved → active |
 | 6 | Ledger/money flow | PASS | Integration asserts CPM and CPC 60/30/10 splits with guarded campaign spend |
 | 7 | Payouts | Partial | Lifecycle, partial allocations, provider-failure release, and production stub guards tested; PayPal Payouts, Stripe Connect, and Wise call their real APIs when configured, Razorpay and Payoneer remain dev/test stubs blocked in production |
 | 8 | Frontend | PASS | All pages compile; payload shapes align with DTOs |
-| 9 | VS Code extension | PASS | Builds clean; device event secret is persisted and used for event signing |
+| 9 | VS Code extension | PASS | Builds/lints clean; device event secret is persisted and used for event signing |
 | 10 | CLI + signing | PASS | Builds clean; all payload/response shapes verified |
-| 11 | Tests/readiness | PASS | **273 tests across 18 files** (unit + service-level + contract + E2E HTTP) |
+| 11 | Tests/readiness | PASS | **326 tests across 27 files** (unit + service-level + contract + E2E HTTP) |
 | 12 | Stripe/webhooks | Partial | Controller + provider wired; needs STRIPE_* env to send/receive |
 | 13 | Referral system | PASS | Service + frontend wired; reward emitted on payout |
 | 14 | API keys | PASS | Service + guard + developer UI complete |
@@ -69,6 +69,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - Google OAuth via ID token verification when `GOOGLE_CLIENT_ID` is configured; mock verification available when not set (dev/test only)
 - JWT access tokens (`aud: 'access'`, `jti`) and refresh tokens (`aud: 'refresh'`, `jti`, `family`)
 - Refresh tokens are looked up by `jti`, the bcrypt hash is verified, and reuse revokes the entire token family
+- Login, Google OAuth login, refresh rotation, access-token validation, and password reset reject non-active account statuses (`restricted`, `banned`, `deleted`) without issuing or rotating credentials
 - Role-based guards: `@Roles('admin')`, `@Roles('support')`, `@Roles('advertiser')`, `@Roles('developer')`
 - Session table tracks `tokenFamily` and `tokenHash` per token
 - Password hashing via bcryptjs with salt rounds 12
@@ -116,6 +117,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 **What changed:**
 - `submitCampaign` no longer required any pre-approved creative — it transitions draft creatives to `pending_review`, so the lifecycle is: draft → submit → (admin approves creative) → admin approves campaign → active
+- Creative destination URLs are enforced at the service layer as public `https://` domain-name URLs with no URL credentials, no localhost/IP/internal hostnames, and a truthful `displayDomain`. Serving filters out unsafe legacy approved creatives before selecting an ad.
 
 ---
 
@@ -197,10 +199,14 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 **API contracts (verified by source diff):**
 - Advertiser `createCreative()` sends the backend DTO shape (`title`, `sponsoredMessage`, `destinationUrl`, `displayDomain`), not the legacy `headline/message/ctaText/ctaUrl` shape
+- Explicit advertiser profile creation is JWT-user only and no longer pre-creates the profile before calling `createProfile()`. API keys are scoped to existing advertiser profiles and are rejected on profile creation.
+- Advertiser campaign creation no longer sends the UI-only `landingUrl` field to the backend `CreateCampaignDto`, which rejects unknown fields.
 - Country targeting sends `[{countryCode, include}]` as a JSON array, matching the backend `setCountryTargeting` payload
 - Admin ledger page calls `/ledger/admin/breakdown` and `/ledger/admin/history` (admin-only), with both flat totals **and** nested objects (`earningsLedger`, `advertiserLedger`, `platformLedger`) — backend now returns both shapes for the UI
 - Admin recovery-debt page calls `/admin/recovery-debt`, `/admin/recovery-debt/users/:userId/open`, and `/admin/recovery-debt/cases/:id/resolve` through the same-origin proxy.
 - The same-origin proxy now applies its explicit allowlist to the upstream path after stripping `/api`, so browser calls like `/api/admin/overview` and `/api/admin/recovery-debt` match their configured `/admin/...` allowlist entries.
+- Same-origin Route Handlers reject cross-origin mutating requests and stream request bodies through a 100kb limiter before proxying or parsing auth JSON.
+- Same-origin Route Handlers refuse to send cookies or bearer credentials to non-HTTPS remote `NEXT_PUBLIC_API_URL` origins; loopback HTTP is allowed for local development only.
 - `services.ts` exposes `googleLogin`, `refresh`, `getMe`, dashboard APIs, payout APIs, ledger APIs, referral APIs, admin APIs, and api-key APIs
 
 ---
@@ -208,6 +214,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 ## 9. VS Code extension -- PASS
 
 - Full lifecycle wired: register-device → wait-state start → ad-request → ad-rendered → impression-qualified → click → impression-end → wait-state end
+- Restricted/deleted/banned account status cannot authenticate through normal JWT credentials, receive served ads, or create billable impression/click outcomes.
 - `wait-detector.ts` observes VS Code loading/idle states and emits a `WaitStateEvent` per detection
 - `ad-panel.ts` renders the sponsored ad in a webview panel
 - `status-bar.ts` shows earnings and ad-serving state
@@ -216,13 +223,15 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - If the local secret is lost and the API requires recovery, VS Code prompts for a one-time support/admin recovery token and submits it only in the registration request body
 - Login/logout clear stored device registration state so a new authenticated user re-registers and receives a user-scoped device secret
 - Persists access/refresh tokens via `SecretStorage`; refresh interceptor retries once on 401 with a single in-flight refresh
+- Configured API transport refuses cleartext remote endpoints and non-HTTP protocols before sending bearer tokens, refresh tokens, device secrets, or signed event payloads; loopback HTTP remains available for local development.
 - Ad webview CSP uses per-render nonces for script/style and does not allow `unsafe-inline`
-- Advertiser CTA clicks are posted through `acquireVsCodeApi().postMessage()`; the extension host opens only the original validated `http`/`https` URL
+- Advertiser CTA clicks are posted through `acquireVsCodeApi().postMessage()`; the extension host opens only the original validated HTTPS URL
 - Balance display reads `bal.available.amountMinor / 100` (backend returns `{available: {amountMinor, currency}, pending: {...}, total: {...}, paidOut: {...}}`)
 
 **Verified:**
 - All extension routes (`register-device`, `wait-state/start`, `wait-state/end`, `ad-request`, `ad-rendered`, `impression-qualified`, `click`) send payloads that match the backend DTO fields exactly, with a per-device HMAC signature over the canonical payload (without the signature field) where applicable
 - Response shapes parsed by the extension match the backend (`{ad: {impressionToken, campaignId, creativeId, title, message, label, displayDomain, destinationUrl}}`)
+- Transport policy tests cover HTTPS remote, loopback HTTP, remote cleartext rejection, and non-HTTP scheme rejection.
 - `rg "unsafe-inline" apps/vscode-extension/src` returns no matches after the CSP change
 
 ---
@@ -242,6 +251,7 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - `getOrRegisterDevice()` submits any existing local event secret as proof when re-registering, and accepts a one-time support/admin token through `WAITLAYER_DEVICE_RECOVERY_TOKEN`
 - `reportWaitState()` normalizes user-supplied tool names through `normalizeToolType()` so values land in the `ToolType` enum (`claude_code`, `codex_cli`, `terminal`, etc.); arbitrary strings fall back to `terminal` instead of being rejected by `forbidNonWhitelisted`
 - Error parsing in `raw()` extracts `message` from NestJS exception responses (`{message, error, statusCode}`)
+- `raw()` refuses to send bearer/device credentials over cleartext remote endpoints; only loopback HTTP is allowed for local development
 
 **Verified:**
 - CLI builds clean (`pnpm --filter waitlayer-cli build`)
@@ -251,14 +261,19 @@ No silently-failing domains. Where anything remains partial, it is called out be
 
 ## 11. Tests/readiness -- PASS
 
-**273 tests across 18 files (unit tests all pass; integration tests require real Postgres + JWT_SECRET env):**
+**326 tests across 27 files (unit tests all pass; integration tests require real Postgres + JWT_SECRET env):**
 
 | File | Tests | Type | Coverage |
 |------|-------|------|----------|
-| `auth/auth.service.spec.ts` | 32 | Unit | signup, login, refresh, replay detection, verification, password reset, TOTP enforcement, encrypted TOTP secret storage |
+| `advertiser/advertiser.controller.spec.ts` | 3 | Unit | explicit profile creation does not pre-create rows, rejects API keys, and requires an authenticated principal |
+| `auth/auth.service.spec.ts` | 37 | Unit | signup, login, non-active credential freeze, refresh, replay detection, verification, password reset, TOTP enforcement, encrypted TOTP secret storage |
+| `auth/strategies/jwt.strategy.spec.ts` | 3 | Unit | access-token audience/session validation and restricted-account rejection |
 | `auth/totp.spec.ts` | 6 | Unit | RFC 6238 TOTP secret generation, code verification, time-window tolerance, otpauth URL generation, and timing-safe checks |
 | `auth/strategies/google-token-verifier.spec.ts` | 3 | Unit | env constraints; mock token verifier |
+| `campaign/campaign.service.spec.ts` | 3 | Unit | creative URL policy is enforced on create/update and derives truthful display domains |
 | `common/guards/brute-force.guard.spec.ts` | 5 | Unit | Redis-ready brute-force dimensions, reset, production fail-closed behavior |
+| `common/guards/roles.guard.spec.ts` | 5 | Unit | API-key role resolution takes precedence over synthesized users and rejects elevated human roles |
+| `common/utils/external-url-policy.spec.ts` | 10 | Unit | public HTTPS URL policy rejects cleartext, credentialed, IP, localhost/internal, and deceptive display-domain inputs |
 | `fraud/fraud.service.spec.ts` | 10 | Unit | trust score, rate limit, self-click, flags |
 | `ledger/ledger.service.spec.ts` | 27 | Unit | splits, guarded spend, balances, history, hold days |
 | `payout/payout.service.spec.ts` | 29 | Unit | payout-method destination/currency validation, allocation validation, partial split, provider routing, production provider guards, recovery-debt availability, optional 2FA payout gate |
@@ -266,18 +281,23 @@ No silently-failing domains. Where anything remains partial, it is called out be
 | `payout/providers/stripe-connect.provider.spec.ts` | 7 | Unit | Stripe Connect readiness, connected-account destination validation, payout creation, status mapping |
 | `payout/providers/wise.provider.spec.ts` | 6 | Unit | Wise readiness, email-destination validation, stub response, transfer creation, PII-safe logging |
 | `developer/developer.service.spec.ts` | 5 | Unit | self-service deletion step-up plus account erasure clears MFA secrets, revokes credentials, and logs the supplied actor |
+| `developer/api-key.service.spec.ts` | 4 | Unit | API-key minting and validation require an active owner; restricted-owner keys are rejected |
 | `health/health.controller.spec.ts` | 2 | Unit | `/health` remains probe-safe while `/health/metrics` requires admin JWT roles |
-| `integration/e2e-money-loop.spec.ts` | 40 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement, password/Google/support-gated secret recovery, and recovery-debt case operations |
+| `integration/e2e-money-loop.spec.ts` | 43 | Service-level E2E | Campaign through payout via mocked Prisma; per-device signing enforcement, password/Google/support-gated secret recovery, restricted-account no-earn controls, click target evidence, and recovery-debt case operations |
 | `integration/stripe-webhook.spec.ts` | 4 | Real HTTP + Postgres | Stripe payout webhook signature raw-body path, idempotency, paid reconciliation, and failure release behavior |
 | `integration/e2e-http-flow.spec.ts` | 42 | **Real HTTP + Postgres** | Full stack from signup to payout |
 | `integration/contract-tests.spec.ts` | 32 | **Contract** | Zod validation of API response shapes |
 | `apps/cli/src/lib/normalize-tool.test.ts` | 7 | Unit | CLI tool-name normalization |
+| `apps/cli/src/lib/api-client.test.ts` | 2 | Unit | CLI transport policy rejects cleartext remote hosts and non-HTTP schemes before sending credentials |
+| `apps/web/src/app/api/auth/_lib/request-guards.test.ts` | 11 | Unit | Web same-origin mutation guard, streaming body-size limits, and upstream API transport policy for auth/proxy Route Handlers |
+| `apps/vscode-extension/test/transport-policy.test.ts` | 4 | Unit | VS Code extension transport policy rejects cleartext remote hosts and non-HTTP schemes before sending credentials |
 | `payout/payout-cron.service.spec.ts` | 10 | Unit | PayoutCronService poll, complete, fail, error isolation |
 
 **What the real HTTP integration test actually exercises (with `JWT_SECRET` and `DATABASE_URL` set):**
 - Real NestJS `Test.createTestingModule({imports: [AppModule]})`
 - App created with `setGlobalPrefix('api/v1')` and the same `ValidationPipe` as production
 - `BruteForceGuard` and `ThrottleByRouteGuard` overridden for speed
+- Integration app setup forces in-memory throttling by blanking `REDIS_URL` before `AppModule` compiles, so repeated local runs do not inherit Redis counters from a prior test run.
 - Supertest drives real HTTP against the Nest runtime
 - Real Prisma against the developer database (`TRUNCATE ... CASCADE` in `beforeAll` to reset state)
 - Phase 1: signup → login → refresh token rotation → token reuse detection (revokes family) → email-checkpoint trust score recompute
@@ -323,6 +343,8 @@ No silently-failing domains. Where anything remains partial, it is called out be
 - `ApiKeyService`: `generateApiKey()`, `validateApiKey()`, `revokeApiKey()`
 - Controller: `POST /developer/api-keys`, `GET /developer/api-keys`, `DELETE /developer/api-keys/:id`
 - `ApiKeyGuard` validates the `X-Api-Key` header for machine-to-machine authentication
+- `RolesGuard` evaluates API-key auth before synthesized users, so scoped machine keys cannot inherit elevated human roles while developer/advertiser machine routes still work
+- API-key minting and validation require the owner account to be `active`; restricted, banned, deleted, or missing owners cannot create or continue using machine credentials.
 - Plaintext key only returned on initial creation; subsequent reads return only the prefix and metadata
 - Developer frontend page lists, creates, and revokes keys
 
@@ -475,8 +497,8 @@ Three rounds of code quality improvements were applied across 16 files (178 inse
 ### Verification
 
 All quality gates pass cleanly:
-- Typecheck: 13/13 tasks — PASS
-- Lint: 8/8 tasks, 0 errors, 0 warnings — PASS
+- Typecheck: 14/14 tasks — PASS
+- Lint: 9/9 tasks, 0 errors, 0 warnings — PASS
 - Build: 9/9 packages — PASS
 
 ---
@@ -484,9 +506,9 @@ All quality gates pass cleanly:
 ## Commands Verified This Pass
 
 - `pnpm install --frozen-lockfile` — PASS
-- `pnpm run lint` — PASS (8/8 tasks, 0 warnings)
-- `pnpm run typecheck` — PASS (13/13 tasks)
-- `pnpm run test` — PASS, 273 tests / 18 files (266 API + 7 CLI)
+- `pnpm run lint` — PASS (9/9 tasks, 0 warnings)
+- `pnpm run typecheck` — PASS (14/14 tasks)
+- `pnpm run test` — PASS, 326 tests / 27 files (302 API + 9 CLI + 11 web + 4 VS Code)
 - `pnpm run build` — PASS (9/9 packages)
 - `pnpm audit --prod` — PASS, 0 known production vulnerabilities
 - `pnpm audit` — PASS, 0 known vulnerabilities

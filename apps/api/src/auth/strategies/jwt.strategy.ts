@@ -4,7 +4,7 @@ import { ExtractJwt, Strategy, JwtFromRequestFunction } from 'passport-jwt';
 import { type Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../config/prisma.service';
-import { UserStatus } from '@waitlayer/shared';
+import { isActiveAccountStatus } from '../../common/utils/account-status';
 
 /**
  * Dual-source JWT extraction: Authorization header OR httpOnly `access_token`
@@ -60,7 +60,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       where: { id: payload.sub },
       select: { id: true, email: true, role: true, status: true, trustLevel: true },
     });
-    if (!user || user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+    if (!user || !isActiveAccountStatus(user.status)) {
       throw new UnauthorizedException('User is not active');
     }
     return user;

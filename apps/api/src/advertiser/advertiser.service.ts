@@ -5,6 +5,7 @@ import { CampaignService } from '../campaign/campaign.service';
 import { AuditService } from '../audit/audit.service';
 import { CampaignStatus, AD_SERVING, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 import { getErrorCode } from '../common/utils/errors';
+import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
 
 /** Valid campaign status transitions */
 const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
@@ -70,7 +71,8 @@ export class AdvertiserService {
     // catches the loser. Translate P2002 to ConflictException so the second caller
     // sees a clean 409, not a raw Prisma error leaked as a 500.
     try {
-      const profile = await this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl: dto.websiteUrl } });
+      const websiteUrl = normalizeOptionalPublicHttpsUrl(dto.websiteUrl, 'websiteUrl');
+      const profile = await this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl } });
 
       void this.audit.log({
         actorId: userId,

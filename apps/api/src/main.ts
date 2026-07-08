@@ -92,6 +92,13 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Wire NestJS shutdown hooks so modules implementing OnApplicationShutdown
+  // (BruteForceGuard, RetentionCronService, SessionCleanupCronService) get a
+  // final pass on SIGTERM/SIGINT. Without this, Docker stop / kubectl
+  // stops SIGKILL after the default 10s, leaking the brute-force in-memory
+  // tracker, the cleanup interval, and any open Redis connection.
+  app.enableShutdownHooks();
+
   // ── OpenAPI / Swagger docs ───────────────────────────────
   // Machine-readable API contract + interactive UI at /api/v1/docs. This is
   // read-only documentation; it never alters requests. Useful for the web,
@@ -111,5 +118,20 @@ async function bootstrap() {
   await app.listen(env.API_PORT);
   console.log(`🚀 WaitLayer API running on http://localhost:${env.API_PORT}`);
 }
+
+// Surface unhandled failures explicitly and then fail fast. Registering these
+// handlers changes Node's default behavior; if we only logged here the process
+// would keep running after an unknown-corrupted state. In a financial app,
+// preserving the stack in logs is useful, but continuing is not.
+process.on('unhandledRejection', (reason) => {
+  console.error('[WaitLayer] Unhandled promise rejection:', reason);
+  setImmediate(() => {
+    throw reason instanceof Error ? reason : new Error(String(reason));
+  });
+});
+process.on('uncaughtException', (err) => {
+  console.error('[WaitLayer] Uncaught exception:', err);
+  process.exit(1);
+});
 
 bootstrap();

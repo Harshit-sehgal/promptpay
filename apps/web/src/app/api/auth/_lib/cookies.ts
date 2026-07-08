@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server';
  */
 export const COOKIE_ACCESS = 'access_token';
 export const COOKIE_REFRESH = 'refresh_token';
+const DEFAULT_API_BASE_URL = 'http://localhost:4000/api/v1';
 
 /**
  * JWT access token TTL — must match JWT_ACCESS_TTL on the API (15m default).
@@ -186,5 +187,22 @@ export function clearAuthCookies(response: NextResponse, headers: Headers): Next
 export function apiBaseUrl(): string {
   // Default `localhost:4000` matches the API's API_PORT default (4000). The
   // earlier `localhost:4002` default drifted from the actual API port.
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+  const rawUrl = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL;
+  const url = new URL(rawUrl);
+  const hostname = normalizeUrlHostname(url.hostname);
+  const isLoopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+    throw new Error(
+      `WaitLayer web refuses to send credentials over ${url.protocol}. ` +
+      'Set NEXT_PUBLIC_API_URL to an https:// endpoint, or http://localhost for local development.',
+    );
+  }
+
+  return url.toString().replace(/\/+$/, '');
+}
+
+function normalizeUrlHostname(hostname: string): string {
+  const lower = hostname.toLowerCase();
+  return lower.startsWith('[') && lower.endsWith(']') ? lower.slice(1, -1) : lower;
 }

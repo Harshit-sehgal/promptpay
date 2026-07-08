@@ -11,6 +11,8 @@ import * as bcrypt from 'bcryptjs';
 import { PROHIBITED_DATA_FIELDS, MINIMUM_VISIBLE_DURATION_MS, verifySignature } from '@waitlayer/shared';
 import { isUniqueConstraintViolation, isSerializationError } from '../common/utils/errors';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import { normalizeCreativeDestination } from '../common/utils/external-url-policy';
+import { isActiveAccountStatus } from '../common/utils/account-status';
 
 /**
  * When the extension reports a wait_state_end, its claimed duration must
@@ -515,9 +517,15 @@ export class ExtensionService {
     this.enforcePrivacyOn(dto);
 
     // Verify device belongs to user
-    const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
+    const device = await this.prisma.device.findUnique({
+      where: { id: dto.deviceId },
+      include: { user: { select: { status: true } } },
+    });
     if (!device || device.userId !== userId) {
       throw new ForbiddenException('Device does not belong to this user');
+    }
+    if (!isActiveAccountStatus(device.user.status)) {
+      return { ad: null, reason: 'account_not_active' };
     }
 
     // Verify HMAC signature with device-specific secret
@@ -599,8 +607,25 @@ export class ExtensionService {
       take: 50,
     });
 
-    // Filter by budget and category preferences
-    const eligible = campaigns.filter((c) => {
+    // Filter by budget, category preferences, and URL safety. The write path
+    // validates new creatives, but this keeps older approved DB rows from
+    // being served if they predate the policy or were imported manually.
+    const campaignsWithSafeCreatives = campaigns.map((c) => ({
+      ...c,
+      creatives: c.creatives.flatMap((creative) => {
+        try {
+          const normalized = normalizeCreativeDestination(creative);
+          return [{ ...creative, ...normalized }];
+        } catch (err) {
+          this.logger.warn(
+            `Skipping unsafe creative ${creative.id}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          return [];
+        }
+      }),
+    }));
+
+    const eligible = campaignsWithSafeCreatives.filter((c) => {
       if (c.creatives.length === 0) return false;
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
       // Category filter
@@ -872,6 +897,9 @@ export class ExtensionService {
         campaign: {
           select: { id: true, bidAmountMinor: true, currency: true, advertiserId: true, bidType: true },
         },
+        user: {
+          select: { status: true },
+        },
       },
     });
     if (!impression) throw new NotFoundException('Impression not found');
@@ -886,6 +914,19 @@ export class ExtensionService {
     const { signature: _, ...payload } = dto;
     if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
       throw new ForbiddenException('Invalid request signature');
+    }
+
+    if (!isActiveAccountStatus(impression.user.status)) {
+      await this.prisma.adImpression.update({
+        where: { id: impression.id },
+        data: {
+          qualifiedAt: new Date(dto.qualifiedAt),
+          visibleDurationMs: dto.visibleDurationMs,
+          isBillable: false,
+          invalidationReason: 'account_not_active',
+        },
+      });
+      return { qualified: false, impressionId: impression.id, reason: 'account_not_active' };
     }
 
     // Must meet minimum visible duration. Also clamp against the elapsed
@@ -1088,6 +1129,9 @@ export class ExtensionService {
         campaign: {
           select: { id: true, bidAmountMinor: true, currency: true, advertiserId: true, bidType: true },
         },
+        user: {
+          select: { status: true },
+        },
       },
     });
     if (!impression) throw new NotFoundException('Impression not found');
@@ -1105,6 +1149,10 @@ export class ExtensionService {
     const { signature: _, ...payload } = dto;
     if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
       throw new ForbiddenException('Invalid request signature');
+    }
+
+    if (!isActiveAccountStatus(impression.user.status)) {
+      return { clicked: false, reason: 'account_not_active' };
     }
 
     // Idempotency check: a duplicate is valid only for the same user+impression.
@@ -1144,6 +1192,11 @@ export class ExtensionService {
     // Trust level for hold days
     const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
     const trustLevel = trustScore?.level || 'new';
+    const creative = await this.prisma.adCreative.findUnique({
+      where: { id: impression.creativeId },
+      select: { destinationUrl: true },
+    });
+    if (!creative) throw new NotFoundException('Creative not found');
 
     const holdDays = this.ledger.getHoldDays(trustLevel);
     // RESTRICTED → holdDays = -1 (indefinite). Never compute a past
@@ -1163,7 +1216,7 @@ export class ExtensionService {
             campaignId: impression.campaignId,
             creativeId: impression.creativeId,
             clickedAt: new Date(dto.clickedAt),
-            targetUrl: '',
+            targetUrl: creative.destinationUrl,
             idempotencyKey: dto.idempotencyKey,
           },
         });

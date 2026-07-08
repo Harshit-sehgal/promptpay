@@ -61,7 +61,6 @@ export default function NewCampaignPage() {
         budgetTotalMinor,
         currency: 'USD',
         category,
-        landingUrl,
       });
 
       const campaignId = campaignRes.data.id;

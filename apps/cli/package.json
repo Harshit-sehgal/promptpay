@@ -2,7 +2,7 @@
   "name": "waitlayer-cli",
   "version": "0.0.1",
   "private": true,
-  "bin": "./dist/index.js",
+  "bin": "./dist/apps/cli/src/index.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",

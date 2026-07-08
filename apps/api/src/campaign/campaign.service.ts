@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, ForbiddenException, NotFoundException,
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { MAX_AD_MESSAGE_LENGTH, PROHIBITED_CATEGORIES } from '@waitlayer/shared';
+import { normalizeCreativeDestination, normalizeCreativeUpdate } from '../common/utils/external-url-policy';
 
 /**
  * Actor carrying the caller's identity for ownership checks at the service
@@ -48,13 +49,15 @@ export class CampaignService {
       throw new BadRequestException('Creatives can only be added to draft/rejected campaigns');
     }
 
+    const creativeDestination = normalizeCreativeDestination(dto);
+
     const creative = await this.prisma.adCreative.create({
       data: {
         campaignId,
         title: dto.title,
         sponsoredMessage: dto.sponsoredMessage,
-        destinationUrl: dto.destinationUrl,
-        displayDomain: dto.displayDomain,
+        destinationUrl: creativeDestination.destinationUrl,
+        displayDomain: creativeDestination.displayDomain,
       },
     });
 
@@ -90,11 +93,14 @@ export class CampaignService {
       );
     }
 
+    const creativeDestination = normalizeCreativeUpdate(dto, creative.destinationUrl);
+
     // Updating a creative resets it to draft status for re-review
     const updated = await this.prisma.adCreative.update({
       where: { id: creativeId },
       data: {
         ...dto,
+        ...creativeDestination,
         status: 'draft',
         rejectionReason: null,
       },

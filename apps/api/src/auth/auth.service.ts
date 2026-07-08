@@ -10,11 +10,12 @@ import type { StringValue } from 'ms';
 import { PrismaService } from '../config/prisma.service';
 import { Prisma } from '@waitlayer/db';
 import { SignUpDto, LoginDto, GoogleOAuthDto } from './dto';
-import { UserRole, UserStatus, DEFAULT_COMPANY_NAME, generateTotpSecret, buildOtpAuthUrl, verifyTotp } from '@waitlayer/shared';
+import { UserRole, DEFAULT_COMPANY_NAME, generateTotpSecret, buildOtpAuthUrl, verifyTotp } from '@waitlayer/shared';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { FraudService } from '../fraud/fraud.service';
 import { EmailService } from '../email/email.service';
 import { AuditService } from '../audit/audit.service';
+import { isActiveAccountStatus } from '../common/utils/account-status';
 
 interface TokenPayload {
   sub: string;
@@ -181,7 +182,7 @@ export class AuthService {
     // bcrypt.compare, so a banned/deleted account's password is never
     // disclosed via the "Account is not active" oracle that previously
     // fired only after a successful compare. ──
-    if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+    if (!isActiveAccountStatus(user.status)) {
       // Always throw the same generic message to avoid status enumeration.
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -246,7 +247,7 @@ export class AuthService {
 
     if (user) {
       // Existing Google user — just login
-      if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+      if (!isActiveAccountStatus(user.status)) {
         throw new UnauthorizedException('Invalid credentials');
       }
       this.assertTwoFactorSatisfied(user, dto.twoFactorToken);
@@ -412,7 +413,7 @@ export class AuthService {
 
     // Rotate: issue new token pair
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user || user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+    if (!user || !isActiveAccountStatus(user.status)) {
       throw new UnauthorizedException('Account is not active');
     }
 
@@ -695,7 +696,7 @@ export class AuthService {
     };
 
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+    if (!user || !isActiveAccountStatus(user.status)) {
       return generic;
     }
 
@@ -737,7 +738,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user) throw new BadRequestException('Invalid or expired reset token');
 
-    if (user.status === UserStatus.BANNED || user.status === UserStatus.DELETED) {
+    if (!isActiveAccountStatus(user.status)) {
       // Do not disclose account status; treat as invalid token.
       throw new BadRequestException('Invalid or expired reset token');
     }

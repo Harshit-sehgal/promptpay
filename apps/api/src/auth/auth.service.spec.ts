@@ -211,6 +211,22 @@ describe('AuthService', () => {
         UnauthorizedException,
       );
     });
+
+    it('does not issue tokens for restricted accounts', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-restricted',
+        email: 'restricted@test.com',
+        role: 'developer',
+        status: 'restricted',
+        passwordHash: await (await import('bcryptjs')).hash('mypassword', 12),
+      });
+
+      await expect(
+        service.login({ email: 'restricted@test.com', password: 'mypassword' }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('refresh — token rotation', () => {
@@ -314,6 +330,30 @@ describe('AuthService', () => {
       const { service } = makeService();
       await expect(service.refresh('not-a-valid-jwt')).rejects.toThrow(UnauthorizedException);
     });
+
+    it('does not rotate refresh tokens for restricted accounts', async () => {
+      const { service, createRefreshToken } = makeService();
+      const family = 'fam-restricted';
+      const oldRefresh = await createRefreshToken('u-restricted', 'developer', family, '30d', 'sess-restricted');
+
+      mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.session.findUnique.mockResolvedValue({
+        id: 'sess-restricted',
+        userId: 'u-restricted',
+        tokenFamily: family,
+        tokenHash: await (await import('bcryptjs')).hash(oldRefresh, 4),
+        revoked: true,
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-restricted',
+        status: 'restricted',
+        role: 'developer',
+        email: 'restricted@test.com',
+      });
+
+      await expect(service.refresh(oldRefresh)).rejects.toThrow(UnauthorizedException);
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('access token — jti (session tracking)', () => {
@@ -414,6 +454,15 @@ describe('AuthService', () => {
       expect(email.sendPasswordReset).not.toHaveBeenCalled();
     });
 
+    it('returns a generic message and does not send email for restricted accounts', async () => {
+      const { service, email } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({ ...resetUser, status: 'restricted' });
+
+      const res = await service.requestPasswordReset('reset@test.com');
+      expect(res.message).toContain('If an account exists');
+      expect(email.sendPasswordReset).not.toHaveBeenCalled();
+    });
+
     it('issues a token and sends the reset email for a valid account', async () => {
       const { service, email } = makeService();
       mockPrisma.user.findUnique.mockResolvedValue(resetUser);
@@ -487,6 +536,17 @@ describe('AuthService', () => {
         service.resetPassword((reqRes as any).token, 'new-password-123'),
       ).rejects.toThrow('Invalid or expired reset token');
     });
+
+    it('rejects reset for restricted accounts', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(resetUser);
+      const reqRes = await service.requestPasswordReset('reset@test.com');
+
+      mockPrisma.user.findUnique.mockResolvedValue({ ...resetUser, status: 'restricted' });
+      await expect(
+        service.resetPassword((reqRes as any).token, 'new-password-123'),
+      ).rejects.toThrow('Invalid or expired reset token');
+    });
   });
 
   describe('googleOAuth flow', () => {
@@ -527,6 +587,28 @@ describe('AuthService', () => {
         status: 'active',
         twoFactorEnabled: true,
         twoFactorSecret: 'JBSWY3DPEHPK3PXP',
+      });
+
+      await expect(service.googleOAuth({ idToken: 'some-token' })).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
+    });
+
+    it('does not issue tokens for restricted Google accounts', async () => {
+      const { service, googleVerifier } = makeService();
+      googleVerifier.verify.mockResolvedValue({
+        sub: 'google-restricted',
+        email: 'google-restricted@test.com',
+        email_verified: true,
+        name: 'Restricted Google User',
+      });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-google-restricted',
+        email: 'google-restricted@test.com',
+        googleId: 'google-restricted',
+        role: 'developer',
+        status: 'restricted',
       });
 
       await expect(service.googleOAuth({ idToken: 'some-token' })).rejects.toThrow(

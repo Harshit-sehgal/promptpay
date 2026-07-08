@@ -20,7 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Frequency cap tracking
   let adTimestamps: number[] = [];
-  let sessionId = crypto.randomUUID();
+  const sessionId = crypto.randomUUID();
 
   // Register all commands
   const commands: vscode.Disposable[] = [

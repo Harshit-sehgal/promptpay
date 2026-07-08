@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiBaseUrl, applyAuthCookies, clearAuthCookies, COOKIE_REFRESH } from '../_lib/cookies';
+import { rejectCrossOriginMutation } from '../_lib/request-guards';
 
 export async function POST(req: NextRequest) {
   try {
+    const blockedOrigin = rejectCrossOriginMutation(req);
+    if (blockedOrigin) return blockedOrigin;
 
     // Read the refresh token from the httpOnly cookie.
     const refreshToken = req.cookies.get(COOKIE_REFRESH)?.value;

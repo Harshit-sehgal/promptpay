@@ -61,8 +61,10 @@
     "vscode:prepublish": "pnpm run compile",
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
+    "lint": "eslint src/ test/",
     "typecheck": "tsc --noEmit",
-    "build": "pnpm run compile"
+    "build": "pnpm run compile",
+    "test": "vitest run"
   },
   "main": "./out/extension.js",
   "dependencies": {
@@ -72,6 +74,7 @@
     "@types/node": "^22.20.0",
     "@types/vscode": "^1.90.0",
     "@waitlayer/eslint-config": "workspace:*",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.9"
   }
 }

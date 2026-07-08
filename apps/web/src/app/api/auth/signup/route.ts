@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiBaseUrl, applyAuthCookies, stripAuthTokens } from '../_lib/cookies';
+import { readLimitedJsonBody, rejectCrossOriginMutation } from '../_lib/request-guards';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const blockedOrigin = rejectCrossOriginMutation(req);
+    if (blockedOrigin) return blockedOrigin;
+    const bodyResult = await readLimitedJsonBody(req);
+    if (!bodyResult.ok) return bodyResult.response;
+    const body = bodyResult.body;
 
     const signupRes = await fetch(`${apiBaseUrl()}/auth/signup`, {
       method: 'POST',

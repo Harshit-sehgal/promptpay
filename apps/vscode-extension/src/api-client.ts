@@ -3,6 +3,7 @@ import * as http from 'http';
 import * as vscode from 'vscode';
 import { signPayload } from '@waitlayer/shared';
 import { ConfigurationManager } from './config';
+import { requestHostnameForUrl, resolveCredentialSafeUrl } from './transport-policy';
 
 export interface Ad {
   impressionToken: string;
@@ -316,10 +317,6 @@ export class ApiClient {
 
   // ── HTTP ──
 
-  private url(path: string): string {
-    return `${this.config.getApiUrl()}${path}`;
-  }
-
   private async post<T>(path: string, body: Record<string, unknown>, skipAuth = false): Promise<T> {
     const bodyStr = JSON.stringify(body);
 
@@ -367,40 +364,20 @@ export class ApiClient {
     isRetry = false,
     skipAuth = false,
   ): void {
-    const url = new URL(path.startsWith('http') ? path : this.url(path));
-    // ── HTTPS-only enforcement (defense in depth) ───────────────────────────
-    // The Bearer access/refresh tokens and optional per-device event signature
-    // travel in the Authorization/X-WaitLayer-* / request-body envelope.
-    // Sending those over plaintext HTTP would let an
-    // on-path attacker recover a long-lived refresh token (30d) and forge
-    // every subsequent event/wait-state/ad payload.
-    //
-    // EXCEPTION: localhost and 127.* hosts are allowed over plain HTTP for
-    // local development (the default apiUrl is 'http://localhost:4000/api/v1').
-    //
-    // Fail closed the moment we discover an http:// origin for a non-local
-    // hostname. If the user (or an attacker with workspace write access —
-    // any other extension can update `waitlayer.apiUrl` to an http URL) has
-    // configured the extension to connect over plain HTTP to a remote host,
-    // reject at the socket-binding decision before any data is written.
-    const hostname = url.hostname.toLowerCase();
-    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname.startsWith('127.');
-    if (url.protocol !== 'https:' && !isLocalHost) {
-      reject(
-        new Error(
-          `WaitLayer refuses to send credentials over ${url.protocol} to host '${hostname}'. ` +
-          `The apiUrl must be https:// for remote hosts. Set the VS Code setting ` +
-          `'waitlayer.apiUrl' to a secure origin.`,
-        ),
-      );
+    let url: URL;
+    try {
+      url = resolveCredentialSafeUrl(this.config.getApiUrl(), path);
+    } catch (err) {
+      reject(err);
       return;
     }
+    const requestHostname = requestHostnameForUrl(url);
     const transport = url.protocol === 'https:' ? https : http;
     const req = transport.request(
       {
         method,
-        hostname: url.hostname,
-        port: url.port,
+        hostname: requestHostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
         path: url.pathname + url.search,
         headers: {
           ...headers,

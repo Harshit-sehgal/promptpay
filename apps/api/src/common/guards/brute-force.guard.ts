@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { RedisWindowCounter } from '../rate-limit/redis-window-counter';
@@ -48,7 +48,7 @@ let configuredRedisUrl: string | undefined;
 let failClosed = false;
 
 @Injectable()
-export class BruteForceGuard implements CanActivate {
+export class BruteForceGuard implements CanActivate, OnApplicationShutdown {
   constructor(config: ConfigService) {
     BruteForceGuard.configure(config);
   }
@@ -57,6 +57,15 @@ export class BruteForceGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<RequestLike>();
     await BruteForceGuard.assertCanAttempt(req);
     return true;
+  }
+
+  /** NestJS lifecycle hook: runs when the application receives SIGTERM/SIGINT. */
+  onApplicationShutdown(_signal?: string): Promise<void> {
+    return BruteForceGuard.shutdown();
+  }
+
+  static shutdown(): Promise<void> {
+    return shutdownGuard();
   }
 
   static configure(config: ConfigService): void {
@@ -71,13 +80,8 @@ export class BruteForceGuard implements CanActivate {
 
   static async resetForTests(): Promise<void> {
     tracker.clear();
-    const counter = redisCounter;
-    redisCounter = null;
-    configuredRedisUrl = undefined;
+    await shutdownGuard();
     failClosed = false;
-    if (counter) {
-      await counter.disconnect().catch(() => undefined);
-    }
   }
 
   static async assertCanAttempt(req: RequestLike, target?: string): Promise<void> {
@@ -210,6 +214,21 @@ export function stopCleanup(): void {
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
     cleanupInterval = null;
+  }
+}
+
+/**
+ * Full shutdown: clears the cleanup interval AND disconnects the Redis
+ * counter. Called by NestJS's OnApplicationShutdown lifecycle via the guard
+ * instance, and by tests via `resetForTests()`.
+ */
+export async function shutdownGuard(): Promise<void> {
+  stopCleanup();
+  const counter = redisCounter;
+  redisCounter = null;
+  configuredRedisUrl = undefined;
+  if (counter) {
+    await counter.disconnect().catch(() => undefined);
   }
 }
 

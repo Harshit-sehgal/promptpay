@@ -12,7 +12,7 @@ export class CreateProfileDto {
   billingEmail!: string;
 
   @IsOptional()
-  @IsUrl()
+  @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(500)
   websiteUrl?: string;
 }

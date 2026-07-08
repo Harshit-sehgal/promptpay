@@ -130,14 +130,14 @@ export class WaitStateDetector {
     this.disposables.push(windowListener);
 
     // ── 3. Task execution monitoring ──
-    const taskStartListener = vscode.tasks.onDidStartTask((e) => {
+    const taskStartListener = vscode.tasks.onDidStartTask((_e) => {
       this.activeTaskCount++;
       if (this.activeTaskCount === 1 && !this.inWait) {
         this.enterWait('task');
         this.taskWaitStart = Date.now();
       }
     });
-    const taskEndListener = vscode.tasks.onDidEndTask((e) => {
+    const taskEndListener = vscode.tasks.onDidEndTask((_e) => {
       this.activeTaskCount = Math.max(0, this.activeTaskCount - 1);
       if (this.activeTaskCount === 0 && this.inWait && this.taskWaitStart > 0) {
         const duration = Date.now() - this.taskWaitStart;
@@ -204,7 +204,7 @@ export class WaitStateDetector {
 
   // ── Private implementation ──
 
-  private trackTerminal(terminal: vscode.Terminal) {
+  private trackTerminal(_terminal: vscode.Terminal) {
     // We can't read terminal output directly, but we can track its process ID
     // and watch for terminal state changes via the creation/destruction lifecycle
     this.lastTerminalActiveTime = Date.now();

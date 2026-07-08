@@ -183,6 +183,7 @@ Mitigation:
 - Manual campaign approval.
 - Prohibited categories.
 - Landing page checks.
+- Creative destination URLs must be public `https://` domain-name URLs without URL credentials, localhost/IP/internal hosts, or deceptive display domains.
 - User report flow.
 - Admin pause controls.
 - Periodic landing page rechecks.
@@ -366,6 +367,105 @@ Mitigation:
 - Allow same-user same-fingerprint password accounts to rotate a lost local secret only after password re-authentication.
 - Allow linked Google accounts to rotate a lost local secret only after matching Google ID-token re-authentication.
 - Allow support/admin-issued one-time recovery tokens for non-Google passwordless accounts; store only token hashes, expire them quickly, revoke older unused tokens for the same device, consume them before secret rotation, and audit issuance/rejections.
+- CLI and VS Code extension transports reject non-HTTPS remote endpoints before sending bearer/device credentials; only loopback HTTP is allowed for local development.
 - Build provider-native re-authentication for future non-Google providers to reduce support-token usage.
 
 Owner: Security/Extension Engineering
+
+## Risk 17: Web session proxy abuse or login CSRF
+
+Impact: high
+
+Likelihood: medium
+
+Signals:
+
+- Cross-origin POST/PATCH/DELETE requests hit same-origin API Route Handlers.
+- Login/signup/google endpoints receive unusual Origin/Referer combinations.
+- Oversized or chunked request bodies target the Next.js auth/proxy layer before reaching NestJS body limits.
+- Browser-visible API responses unexpectedly contain token or secret-shaped fields.
+
+Mitigation:
+
+- Keep auth cookies httpOnly, SameSite=Lax, and Secure in production.
+- Reject cross-origin mutating Route Handler requests with Origin/Referer checks.
+- Enforce the explicit proxy path allowlist before upstream dispatch.
+- Stream auth/proxy request bodies through a 100kb limiter before JSON parsing or forwarding.
+- Refuse non-HTTPS remote `NEXT_PUBLIC_API_URL` origins before server-side Route Handlers send cookies or bearer credentials upstream; only loopback HTTP is allowed for local development.
+- Strip token and secret fields from same-origin proxy responses as defense in depth.
+
+Owner: Security/Web Engineering
+
+## Risk 18: API-key scopes drift into human-role authorization
+
+Impact: high
+
+Likelihood: medium
+
+Signals:
+
+- API-key requests unexpectedly pass or fail role-gated routes after guard changes.
+- Machine-to-machine advertiser calls are rejected because the key owner's human role differs from the scoped advertiser context.
+- API-key requests reach support/admin-only endpoints.
+- API-key requests create or rebind advertiser profiles instead of staying scoped to an existing advertiser.
+- Scope metadata is added to a controller without corresponding API-key guard tests.
+
+Mitigation:
+
+- Evaluate `req.apiKey` before synthesized `req.user` in role checks.
+- Deny API-key access to elevated human roles (`admin`, `support`, `super_admin`) regardless of owner role.
+- Require explicit `@AllowApiKey()` plus route-level `@RequiredScopes(...)` for API-key-enabled controllers.
+- Keep advertiser API keys server-scoped to an owned `advertiserId` and reject generic keys on advertiser routes.
+- Reject advertiser profile creation through API keys; profile creation is an interactive JWT user action.
+- Require API-key owners to remain `active`; restricted, banned, deleted, or missing owners cannot mint or validate API keys.
+- Maintain unit tests for API-key role precedence, elevated-role denial, and scope-less key denial.
+
+Owner: Security/Backend Engineering
+
+## Risk 19: Advertiser destination URLs become phishing or internal-network launch vectors
+
+Impact: high
+
+Likelihood: medium
+
+Signals:
+
+- Approved creatives point to localhost, IP literals, internal hostnames, or plain HTTP destinations.
+- `displayDomain` differs from the actual destination hostname.
+- Click records do not retain the destination URL shown to the user.
+- Old manually imported creatives bypass current DTO validation and continue serving.
+
+Mitigation:
+
+- Enforce public `https://` destination URLs at the API service layer, not only via DTO decorators.
+- Reject URL credentials, localhost, IP literals, single-label/internal hostnames, and reserved internal suffixes.
+- Require `displayDomain` to match the destination hostname, with only `www.` normalization allowed.
+- Derive a truthful display domain when an update changes the destination URL without sending one.
+- Filter unsafe legacy creatives out of ad serving before campaign selection.
+- Persist the creative destination URL into click records as billing and review evidence.
+
+Owner: Security/Marketplace Engineering
+
+## Risk 20: Restricted accounts continue earning or using long-lived credentials
+
+Impact: high
+
+Likelihood: medium
+
+Signals:
+
+- Restricted users continue receiving ads or creating billable impressions/clicks.
+- API keys owned by restricted accounts keep succeeding after account review.
+- Support recovery tokens or machine credentials are used after a fraud restriction.
+- Ledger entries keep growing for users whose status is no longer active.
+
+Mitigation:
+
+- Freeze normal JWT credential issuance, refresh, and access-token validation for all non-active account statuses.
+- Require active account status before serving ads or creating billable impression/click outcomes.
+- Require active account status before API-key minting and validation.
+- Persist restricted impression qualification as non-billable with an explicit invalidation reason.
+- Keep payout and referral reward paths blocked for restricted/banned users.
+- Provide any future restricted-account appeal or compliance workflow through an explicit support-reviewed path rather than general app sessions.
+
+Owner: Security/Fraud Engineering

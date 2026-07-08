@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import * as os from 'os';
+import * as http from 'http';
 import * as https from 'https';
 import { signPayload } from '@waitlayer/shared';
 import { Credentials, getCredentials, setCredentials, storeDeviceEventSecret, getDeviceEventSecret } from './credentials';
@@ -237,22 +238,34 @@ export class ApiClient {
     // does not verify an X-WaitLayer-Signature header. Emitting one would
     // leak the per-device HMAC signing key to anyone reading headers
     // (proxies, browser DevTools, server access logs that capture headers).
-    const url = new URL(path.startsWith('http') ? path : API_URL + path);
+    const isAbsoluteUrl = /^[a-z][a-z\d+\-.]*:\/\//i.test(path);
+    const url = new URL(isAbsoluteUrl ? path : API_URL + path);
     const bodyStr = body ? JSON.stringify(body) : '';
 
     return new Promise<T>((resolve, reject) => {
-      if (url.protocol !== 'https:') {
+      // Credentials must never traverse a real network in cleartext. Enforce
+      // https: for any remote host. Loopback http (`localhost`, 127.0.0.1, ::1)
+      // is the single safe exception: it never leaves the machine, so pointing
+      // the CLI at a local dev server (WAITLAYER_API_URL=http://localhost:4002)
+      // is permitted. Any other protocol is refused.
+      const requestHostname =
+        url.hostname.startsWith('[') && url.hostname.endsWith(']')
+          ? url.hostname.slice(1, -1)
+          : url.hostname;
+      const isLoopback =
+        requestHostname === 'localhost' || requestHostname === '127.0.0.1' || requestHostname === '::1';
+      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
         throw new Error(
           `CLI refuses to send credentials over ${url.protocol}. ` +
-          'Set WAITLAYER_API_URL to an https:// endpoint.',
+          'Set WAITLAYER_API_URL to an https:// endpoint, or http://localhost for local development.',
         );
       }
-      const transport = https;
+      const transport = url.protocol === 'https:' ? https : http;
       const req = transport.request(
         {
           method,
-          hostname: url.hostname,
-          port: url.port || 443,
+          hostname: requestHostname,
+          port: url.port || (url.protocol === 'https:' ? 443 : 80),
           path: url.pathname + url.search,
           headers: {
             'Content-Type': 'application/json',

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { COOKIE_ACCESS, COOKIE_REFRESH } from '../auth/_lib/cookies';
+import { apiBaseUrl, COOKIE_ACCESS, COOKIE_REFRESH } from '../auth/_lib/cookies';
+import {
+  MAX_API_ROUTE_BODY_BYTES,
+  readLimitedTextBody,
+  rejectCrossOriginMutation,
+} from '../auth/_lib/request-guards';
 
 /**
  * Catch-all proxy: forwards every API request from the browser to the
@@ -14,18 +19,13 @@ import { COOKIE_ACCESS, COOKIE_REFRESH } from '../auth/_lib/cookies';
  * pattern for httpOnly-cookie-based SPA auth.
  */
 
-// Default API base URL — `localhost:4000` matches the API's `API_PORT`
-// default (4000) in packages/config. The earlier `localhost:4002` default
-// drifted from the actual API port and only worked when env override set it.
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-
 /**
  * Maximum body size this proxy will accept (in bytes). Mirrors the
  * API server's `json({ limit: '100kb' })` in apps/api/src/main.ts.
  * Anything larger is rejected with 413 to prevent OOM/DoS — Next.js does
  * NOT implicitly cap `req.text()` the way built-in body parsers do.
  */
-const MAX_PROXY_BODY_BYTES = 100_000;
+const MAX_PROXY_BODY_BYTES = MAX_API_ROUTE_BODY_BYTES;
 
 /**
  * Path prefixes the proxy is permitted to forward. Anything not on this list
@@ -98,7 +98,7 @@ function upstreamUrl(pathname: string): string {
   // upstream gets `/api/v1/...` which is what the API controller paths use
   // (global prefix `api/v1` then the controller path).
   const pathWithoutApi = pathname.replace(/^\/api/, '');
-  return `${API_BASE}${pathWithoutApi}`;
+  return `${apiBaseUrl()}${pathWithoutApi}`;
 }
 
 function proxyPath(pathname: string): string {
@@ -125,6 +125,8 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
   try {
     const pathname = req.nextUrl.pathname;
     const pathWithoutApi = proxyPath(pathname);
+    const blockedOrigin = rejectCrossOriginMutation(req);
+    if (blockedOrigin) return blockedOrigin;
 
     // Reject paths not on the explicit allowlist — the web UI never needs them
     // and they could reach upstream endpoints the browser shouldn't access.
@@ -136,25 +138,6 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
         { message: 'Forbidden', code: 'PROXY_PATH_NOT_ALLOWED' },
         { status: 403 },
       );
-    }
-
-    // ── Body-size guard (DoS prevention) ────────────────────────────────
-    // Next.js does NOT implicitly cap `req.text()` on Route Handlers the
-    // way it does for built-in body parsers. A 1GiB POST would cause a 1GiB
-    // allocation in this Node worker before any auth check or upstream
-    // dispatch fires. Reject oversized bodies up front, mirroring the API
-    // server's 100kb limit (apps/api/src/main.ts body-parser caps).
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      const contentLengthRaw = req.headers.get('content-length');
-      if (contentLengthRaw) {
-        const contentLength = Number(contentLengthRaw);
-        if (Number.isFinite(contentLength) && contentLength > MAX_PROXY_BODY_BYTES) {
-          return NextResponse.json(
-            { message: 'Payload too large', code: 'BODY_TOO_LARGE' },
-            { status: 413, headers: { 'X-Max-Body-Bytes': String(MAX_PROXY_BODY_BYTES) } },
-          );
-        }
-      }
     }
 
     const url = upstreamUrl(pathname);
@@ -172,19 +155,12 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
     let body: string | undefined;
     if (req.method !== 'GET' && req.method !== 'DELETE') {
       try {
-        // Enforce the actual byte length after read in case the client omitted
-        // Content-Length (transfer-encoding: chunked). If the buffered body
-        // exceeds MAX_PROXY_BODY_BYTES, refuse to forward.
-        body = await req.text();
-
-        // First-line defense: explicit cap on byte-length (Content-Length
-        // header may lie). Reject anything past the limit before forwarding.
-        if (body && Buffer.byteLength(body, 'utf-8') > MAX_PROXY_BODY_BYTES) {
-          return NextResponse.json(
-            { message: 'Payload too large', code: 'BODY_TOO_LARGE' },
-            { status: 413, headers: { 'X-Max-Body-Bytes': String(MAX_PROXY_BODY_BYTES) } },
-          );
-        }
+        // Next.js Route Handlers do not implicitly cap request bodies. Read
+        // the stream through a byte counter so oversized chunked uploads stop
+        // before the worker buffers the full payload.
+        const bodyResult = await readLimitedTextBody(req, MAX_PROXY_BODY_BYTES);
+        if (!bodyResult.ok) return bodyResult.response;
+        body = bodyResult.text;
 
         // Intercept /auth/refresh: the browser can't read the httpOnly
         // refresh_token cookie, so it sends an empty body. The proxy

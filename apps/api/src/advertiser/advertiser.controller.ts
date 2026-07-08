@@ -54,8 +54,11 @@ export class AdvertiserController {
   @RequiredScopes('advertiser:write')
   async createProfile(@Req() req: Request, @Body() dto: CreateProfileDto) {
     const ctx = resolveApiContext(req);
-    // Ensures the advertiser profile exists before creating/updating
-    ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    // Profile creation is an interactive user action. API keys are scoped to
+    // an existing advertiser profile and must not create or rebind profiles.
+    if (ctx.auth === 'apikey') {
+      throw new ForbiddenException('API keys cannot create advertiser profiles');
+    }
     return this.service.createProfile(ctx.userId, dto);
   }
 

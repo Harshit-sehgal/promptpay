@@ -49,8 +49,15 @@ async function cleanDb(prisma: PrismaService) {
 describe('API Contract Tests', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let previousRedisUrl: string | undefined;
 
   beforeAll(async () => {
+    // Integration tests run many auth requests quickly and may be repeated
+    // within one Redis TTL. Force per-process in-memory throttling so local
+    // verification does not inherit counters from a previous test run.
+    previousRedisUrl = process.env.REDIS_URL;
+    process.env.REDIS_URL = '';
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -94,6 +101,11 @@ describe('API Contract Tests', () => {
   afterAll(async () => {
     if (prisma) await cleanDb(prisma);
     if (app) await app.close();
+    if (previousRedisUrl === undefined) {
+      delete process.env.REDIS_URL;
+    } else {
+      process.env.REDIS_URL = previousRedisUrl;
+    }
   });
 
   // ── Shared state ──

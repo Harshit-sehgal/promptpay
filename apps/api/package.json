@@ -29,6 +29,7 @@
     "@sentry/nestjs": "^10.63.0",
     "@sentry/profiling-node": "^10.63.0",
     "@types/cookie-parser": "^1.4.10",
+    "@waitlayer/config": "workspace:*",
     "@waitlayer/db": "workspace:*",
     "@waitlayer/shared": "workspace:*",
     "bcryptjs": "^3.0.3",

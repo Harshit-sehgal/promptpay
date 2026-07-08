@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiBaseUrl, clearAuthCookies, COOKIE_ACCESS } from '../_lib/cookies';
+import { rejectCrossOriginMutation } from '../_lib/request-guards';
 
 export async function POST(req: NextRequest) {
   try {
+    const blockedOrigin = rejectCrossOriginMutation(req);
+    if (blockedOrigin) return blockedOrigin;
 
     // Forward the access token to the API's /auth/logout so it can revoke
     // the server-side session row. The API's `JwtStrategy` checks the session

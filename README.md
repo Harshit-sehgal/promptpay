@@ -42,10 +42,10 @@ pnpm --filter waitlayer-web dev
 ## Quality Gates
 
 ```bash
-pnpm run typecheck   # 13/13 tasks
-pnpm run lint        # 8/8 tasks, 0 warnings
+pnpm run typecheck   # 14/14 tasks
+pnpm run lint        # 9/9 tasks, 0 warnings
 pnpm run build       # 9/9 packages
-pnpm run test        # 273 tests: 266 API + 7 CLI (API tests require running database)
+pnpm run test        # 326 tests: 302 API + 9 CLI + 11 web + 4 VS Code (API tests require running database)
 pnpm audit --prod    # production dependency vulnerability audit
 ```
 

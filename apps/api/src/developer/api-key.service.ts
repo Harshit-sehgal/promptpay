@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { ALLOWED_API_KEY_SCOPES } from './dto/api-key.dto';
+import { isActiveAccountStatus } from '../common/utils/account-status';
 
 @Injectable()
 export class ApiKeyService {
@@ -17,6 +18,14 @@ export class ApiKeyService {
    * The database stores only the SHA-256 hash of the key.
    */
   async generateApiKey(userId: string, scopes: string[], advertiserId?: string, expiresAt?: string) {
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { status: true },
+    });
+    if (!owner || !isActiveAccountStatus(owner.status)) {
+      throw new ForbiddenException('Account is not eligible to create API keys');
+    }
+
     // Reject unknown scopes at the service layer too — defense-in-depth on top
     // of the DTO enum check (scopes flow as `string[]` from the DTO).
     const allowed = new Set<string>(ALLOWED_API_KEY_SCOPES);
@@ -131,15 +140,15 @@ export class ApiKeyService {
       throw new BadRequestException('Invalid API key');
     }
 
-    // Reject keys whose owner has been soft-deleted or banned. A deleted
+    // Reject keys whose owner has been restricted, soft-deleted, or banned. A deleted
     // user's keys may have ownerId set to NULL by the FK SET NULL or may
     // still reference a row with status='deleted'. Either case invalidates
     // the key — the credential lives as long as the user does.
-    if (!apiKey.owner || apiKey.owner.status === 'banned' || apiKey.owner.status === 'deleted') {
+    if (!apiKey.owner || !isActiveAccountStatus(apiKey.owner.status)) {
       throw new BadRequestException('Invalid API key');
     }
 
-// Update lastUsedAt asynchronously, throttled to once per 60s — at peak
+    // Update lastUsedAt asynchronously, throttled to once per 60s — at peak
     // a service-to-service client can hit the API hundreds of times per
     // second, and every write is a DB row update on the hot path. A
     // 60-second granularity gives the audit log a useful freshness signal

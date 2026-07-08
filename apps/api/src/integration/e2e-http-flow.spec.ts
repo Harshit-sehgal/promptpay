@@ -33,8 +33,14 @@ describe('End-to-End HTTP Integration Flow', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let ledgerService: LedgerService;
+  let previousRedisUrl: string | undefined;
 
   beforeAll(async () => {
+    // Keep repeated local E2E runs deterministic: production can use Redis,
+    // but tests should not inherit Redis throttle counters from prior runs.
+    previousRedisUrl = process.env.REDIS_URL;
+    process.env.REDIS_URL = '';
+
     // Override throttlers & brute force guards for rapid E2E testing
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -86,6 +92,11 @@ describe('End-to-End HTTP Integration Flow', () => {
     }
     if (app) {
       await app.close();
+    }
+    if (previousRedisUrl === undefined) {
+      delete process.env.REDIS_URL;
+    } else {
+      process.env.REDIS_URL = previousRedisUrl;
     }
   });
 

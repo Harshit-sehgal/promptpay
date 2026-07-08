@@ -5,8 +5,8 @@ import { ROLES_KEY } from '../decorators/roles.decorator';
 /**
  * JWT path reads `req.user.role`. API-key path is more restrictive:
  * API keys are scoped to a specific owner and DO NOT elevate to admin/
- * super_admin. Routes that require admin/super_admin reject API-key auth
- * outright (returns false → 403 via RolesGuard). Routes that accept the
+ * support/super_admin. Routes that require admin/support/super_admin reject
+ * API-key auth outright (returns false → 403 via RolesGuard). Routes that accept the
  * developer/advertiser/user roles let API-key-auth through and rely on
  * the scope check in ApiKeyGuard for fine-grained auth.
  *
@@ -28,19 +28,21 @@ export class RolesGuard implements CanActivate {
       apiKey?: { scopes: string[] };
     }>();
 
-    if (req.user?.role) {
-      return requiredRoles.includes(req.user.role);
-    }
-
     if (req.apiKey) {
-      // Never let an API key act as admin / super_admin — that's a JWT
-      // role reserved for humans performing administrative actions.
-      const adminOnly = ['admin', 'super_admin'];
-      if (requiredRoles.every((r) => adminOnly.includes(r))) return false;
+      // Never let an API key act as an elevated human role. ApiKeyGuard
+      // synthesizes req.user from the key owner so handlers can still read
+      // @CurrentUser('id'), therefore this API-key branch must run before
+      // the JWT-style req.user branch below.
+      const humanOnlyRoles = ['admin', 'support', 'super_admin'];
+      if (requiredRoles.some((r) => humanOnlyRoles.includes(r))) return false;
       // For owner (developer/advertiser/user) routes, accept the API key
       // provided it has any scope assigned. Fine-grained scope checks
       // happen in ApiKeyGuard → RequiredScopes decorator.
       return req.apiKey.scopes.length > 0;
+    }
+
+    if (req.user?.role) {
+      return requiredRoles.includes(req.user.role);
     }
 
     return false;
