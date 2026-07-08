@@ -110,4 +110,32 @@ describe('WisePayoutProvider', () => {
       vi.unstubAllGlobals();
     });
   });
+
+  describe('checkStatus', () => {
+    it('maps a successful Wise transfer state to paid', async () => {
+      const p = makeProvider({ token: 'tok', profileId: '123' });
+      vi.stubGlobal('fetch', vi.fn(async () =>
+        new Response(JSON.stringify({ status: 'outgoing_payment_sent', created: '2026-01-01T00:00:00.000Z' }), { status: 200 }),
+      ));
+
+      const res = await p.checkStatus('transfer_1');
+
+      expect(res.status).toBe('paid');
+      expect(res.paidAt?.toISOString()).toBe('2026-01-01T00:00:00.000Z');
+      vi.unstubAllGlobals();
+    });
+
+    it('maps failed Wise transfer states to failed and leaves unknown states processing', async () => {
+      const p = makeProvider({ token: 'tok', profileId: '123' });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'funds_refunded' }), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'incoming_payment_waiting' }), { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(p.checkStatus('transfer_2')).resolves.toMatchObject({ status: 'failed' });
+      await expect(p.checkStatus('transfer_3')).resolves.toMatchObject({ status: 'processing' });
+      vi.unstubAllGlobals();
+    });
+  });
 });

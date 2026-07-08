@@ -17,6 +17,8 @@ const ACTIVE_RECOVERY_DEBT_CASE_STATUSES = [
   RecoveryDebtCaseStatus.in_collections,
 ];
 
+type CurrencyAmountGroup = { currency: string; _sum: { amountMinor: number | null } };
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -32,10 +34,24 @@ export class AdminService {
       this.prisma.user.count({ where: { status: 'active' } }),
       this.prisma.campaign.count({ where: { status: 'active' } }),
       this.prisma.adImpression.count({ where: { isBillable: true } }),
-      this.prisma.earningsLedger.aggregate({ where: { status: 'paid', entryType: 'credit' }, _sum: { amountMinor: true } }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        where: { status: 'paid', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
       this.prisma.fraudFlag.count({ where: { status: 'open' } }),
     ]);
-    return { activeUsers: users, activeCampaigns: campaigns, totalBillableImpressions: impressions, totalPayoutsMinor: payouts._sum.amountMinor || 0, openFraudFlags: fraudFlags };
+    const totalPayoutsByCurrency = Object.fromEntries(
+      payouts.map((row) => [row.currency, row._sum.amountMinor ?? 0]),
+    );
+    return {
+      activeUsers: users,
+      activeCampaigns: campaigns,
+      totalBillableImpressions: impressions,
+      totalPayoutsMinor: totalPayoutsByCurrency.USD ?? 0,
+      totalPayoutsByCurrency,
+      openFraudFlags: fraudFlags,
+    };
   }
 
   async getMoneyIntegrityReport() {
@@ -44,22 +60,25 @@ export class AdminService {
       select: { id: true, name: true, budgetSpentMinor: true, currency: true }
     });
     const advertiserDebits = await this.prisma.advertiserLedger.groupBy({
-      by: ['campaignId'],
+      by: ['campaignId', 'currency'],
       where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } },
       _sum: { amountMinor: true }
     });
-    const debitMap = new Map(advertiserDebits.map(d => [d.campaignId, d._sum.amountMinor ?? 0]));
+    const debitMap = new Map(
+      advertiserDebits.map(d => [`${d.campaignId}:${d.currency}`, d._sum.amountMinor ?? 0]),
+    );
 
-    const campaignDiscrepancies: Array<{ campaignId: string; campaignName: string; budgetSpentMinor: number; ledgerDebits: number; diff: number }> = [];
+    const campaignDiscrepancies: Array<{ campaignId: string; campaignName: string; budgetSpentMinor: number; ledgerDebits: number; diff: number; currency: string }> = [];
     for (const c of campaigns) {
-      const debits = debitMap.get(c.id) ?? 0;
+      const debits = debitMap.get(`${c.id}:${c.currency}`) ?? 0;
       if (c.budgetSpentMinor !== debits) {
         campaignDiscrepancies.push({
           campaignId: c.id,
           campaignName: c.name,
           budgetSpentMinor: c.budgetSpentMinor,
           ledgerDebits: debits,
-          diff: c.budgetSpentMinor - debits
+          diff: c.budgetSpentMinor - debits,
+          currency: c.currency,
         });
       }
     }
@@ -75,55 +94,110 @@ export class AdminService {
       totalReserveCredit,
       totalReserveReversal,
     ] = await Promise.all([
-      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', status: { in: ['estimated', 'pending', 'confirmed', 'held', 'paid', 'reversed'] } } }),
-      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit', status: 'confirmed' } }),
-      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } } }),
-      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'refund', status: { in: ['confirmed', 'paid'] } } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
+      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', status: { in: ['estimated', 'pending', 'confirmed', 'held', 'paid'] } } }),
+      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit', status: 'confirmed' } }),
+      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } } }),
+      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'refund', status: { in: ['confirmed', 'paid'] } } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
     ]);
 
-    const netEarnings = (totalEarningsCredit._sum.amountMinor || 0) - (totalEarningsDebit._sum.amountMinor || 0);
-    const netAdvertiser = (totalAdvertiserDebit._sum.amountMinor || 0) - (totalAdvertiserRefund._sum.amountMinor || 0);
-    const netPlatform = (totalPlatformCredit._sum.amountMinor || 0) - (totalPlatformReversal._sum.amountMinor || 0);
-    const netReserve = (totalReserveCredit._sum.amountMinor || 0) - (totalReserveReversal._sum.amountMinor || 0);
+    const netEarningsByCurrency = netCurrencyAmounts(totalEarningsCredit, totalEarningsDebit);
+    const netAdvertiserByCurrency = netCurrencyAmounts(totalAdvertiserDebit, totalAdvertiserRefund);
+    const netPlatformByCurrency = netCurrencyAmounts(totalPlatformCredit, totalPlatformReversal);
+    const netReserveByCurrency = netCurrencyAmounts(totalReserveCredit, totalReserveReversal);
 
-    const splitSum = netEarnings + netPlatform + netReserve;
-    const globalDiscrepancy = netAdvertiser - splitSum;
+    const currencies = new Set([
+      ...Object.keys(netEarningsByCurrency),
+      ...Object.keys(netAdvertiserByCurrency),
+      ...Object.keys(netPlatformByCurrency),
+      ...Object.keys(netReserveByCurrency),
+    ]);
+    const globalReconciliationByCurrency = Object.fromEntries(
+      Array.from(currencies).sort().map((currency) => {
+        const netEarnings = netEarningsByCurrency[currency] ?? 0;
+        const netAdvertiser = netAdvertiserByCurrency[currency] ?? 0;
+        const netPlatform = netPlatformByCurrency[currency] ?? 0;
+        const netReserve = netReserveByCurrency[currency] ?? 0;
+        const splitSum = netEarnings + netPlatform + netReserve;
+        return [
+          currency,
+          {
+            netAdvertiserSpendMinor: netAdvertiser,
+            netDeveloperEarningsMinor: netEarnings,
+            netPlatformFeeMinor: netPlatform,
+            netReserveMinor: netReserve,
+            splitSumMinor: splitSum,
+            discrepancyMinor: netAdvertiser - splitSum,
+          },
+        ];
+      }),
+    );
+    const usdGlobal = globalReconciliationByCurrency.USD ?? {
+      netAdvertiserSpendMinor: 0,
+      netDeveloperEarningsMinor: 0,
+      netPlatformFeeMinor: 0,
+      netReserveMinor: 0,
+      splitSumMinor: 0,
+      discrepancyMinor: 0,
+    };
+    const globalDiscrepancy = Object.values(globalReconciliationByCurrency)
+      .some((row) => row.discrepancyMinor !== 0);
 
     // 3. Developer Negative Balances
     const users = await this.prisma.user.findMany({ where: { role: 'developer' }, select: { id: true, email: true } });
-    const negativeDeveloperBalances: Array<{ userId: string; email: string; balanceMinor: number }> = [];
-    for (const u of users) {
-      const [credits, debits] = await Promise.all([
-        this.prisma.earningsLedger.aggregate({
-          where: { userId: u.id, status: 'confirmed', entryType: 'credit' },
+    const userIds = users.map((u) => u.id);
+    const [developerCreditGroups, developerDebitGroups] = userIds.length > 0
+      ? await Promise.all([
+        this.prisma.earningsLedger.groupBy({
+          by: ['userId', 'currency'],
+          where: { userId: { in: userIds }, status: 'confirmed', entryType: 'credit' },
           _sum: { amountMinor: true },
         }),
-        this.prisma.earningsLedger.aggregate({
-          where: { userId: u.id, status: 'confirmed', entryType: 'debit' },
+        this.prisma.earningsLedger.groupBy({
+          by: ['userId', 'currency'],
+          where: { userId: { in: userIds }, status: 'confirmed', entryType: 'debit' },
           _sum: { amountMinor: true },
         }),
-      ]);
-      const balance = (credits._sum.amountMinor || 0) - (debits._sum.amountMinor || 0);
+      ])
+      : [[], []];
+    const developerBalances = new Map<string, number>();
+    for (const row of developerCreditGroups) {
+      const key = `${row.userId}:${row.currency}`;
+      developerBalances.set(key, (developerBalances.get(key) ?? 0) + (row._sum.amountMinor ?? 0));
+    }
+    for (const row of developerDebitGroups) {
+      const key = `${row.userId}:${row.currency}`;
+      developerBalances.set(key, (developerBalances.get(key) ?? 0) - (row._sum.amountMinor ?? 0));
+    }
+    const userEmailById = new Map(users.map((u) => [u.id, u.email]));
+    const negativeDeveloperBalances: Array<{ userId: string; email: string; balanceMinor: number; currency: string }> = [];
+    for (const [key, balance] of developerBalances) {
       if (balance < 0) {
-        negativeDeveloperBalances.push({ userId: u.id, email: u.email, balanceMinor: balance });
+        const [userId, currency] = key.split(':');
+        negativeDeveloperBalances.push({
+          userId,
+          email: userEmailById.get(userId) ?? userId,
+          balanceMinor: balance,
+          currency,
+        });
       }
     }
 
     return {
       timestamp: new Date().toISOString(),
-      status: (campaignDiscrepancies.length === 0 && globalDiscrepancy === 0 && negativeDeveloperBalances.length === 0) ? 'healthy' : 'unhealthy',
+      status: (campaignDiscrepancies.length === 0 && !globalDiscrepancy && negativeDeveloperBalances.length === 0) ? 'healthy' : 'unhealthy',
       globalReconciliation: {
-        netAdvertiserSpendMinor: netAdvertiser,
-        netDeveloperEarningsMinor: netEarnings,
-        netPlatformFeeMinor: netPlatform,
-        netReserveMinor: netReserve,
-        splitSumMinor: splitSum,
-        discrepancyMinor: globalDiscrepancy,
+        netAdvertiserSpendMinor: usdGlobal.netAdvertiserSpendMinor,
+        netDeveloperEarningsMinor: usdGlobal.netDeveloperEarningsMinor,
+        netPlatformFeeMinor: usdGlobal.netPlatformFeeMinor,
+        netReserveMinor: usdGlobal.netReserveMinor,
+        splitSumMinor: usdGlobal.splitSumMinor,
+        discrepancyMinor: usdGlobal.discrepancyMinor,
       },
+      globalReconciliationByCurrency,
       campaignDiscrepancies,
       negativeDeveloperBalances,
     };
@@ -169,10 +243,14 @@ export class AdminService {
       throw new BadRequestException('Campaign must be in submitted status to approve');
     }
 
-    // Must have at least one approved creative and remaining budget to activate
+    // Must have at least one approved creative, remaining budget, and funded
+    // advertiser balance to activate. The serving path enforces the same
+    // balance floor, so approval must not label an unfunded campaign active.
     const hasApprovedCreative = campaign.creatives.some((c) => c.status === 'approved');
     const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
-    const canActivate = hasApprovedCreative && hasBudget;
+    const advertiserBalance = await this.getAdvertiserBalance(campaign.advertiserId, campaign.currency);
+    const hasFundedBalance = advertiserBalance > 0;
+    const canActivate = hasApprovedCreative && hasBudget && hasFundedBalance;
 
     // Set status: 'approved' if no approved creatives yet or no budget, 'active' if ready to serve
     const newStatus = canActivate ? 'active' : 'approved';
@@ -188,6 +266,9 @@ export class AdminService {
     }
     if (!hasBudget) {
       blockers.push('Campaign budget is fully spent. Add more budget to activate.');
+    }
+    if (!hasFundedBalance) {
+      blockers.push('Advertiser has no funded balance. Deposit funds before activation.');
     }
 
     // CAS-gated status flip: `updateMany` where `{ id, status: 'submitted' }`
@@ -230,6 +311,25 @@ export class AdminService {
     };
   }
 
+  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+    const sums = await this.prisma.advertiserLedger.groupBy({
+      by: ['entryType'],
+      where: {
+        advertiserId,
+        currency,
+        status: 'confirmed',
+      },
+      _sum: { amountMinor: true },
+    });
+    let credits = 0;
+    let debits = 0;
+    for (const row of sums) {
+      if (row.entryType === 'credit') credits += row._sum.amountMinor ?? 0;
+      if (row.entryType === 'debit') debits += row._sum.amountMinor ?? 0;
+    }
+    return credits - debits;
+  }
+
   async rejectCampaign(campaignId: string, reviewerId: string, reason: string) {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.status !== 'submitted') {
@@ -253,7 +353,15 @@ export class AdminService {
   }
 
   async getPendingPayouts() {
-    return this.prisma.payoutRequest.findMany({ where: { status: { in: ['requested', 'under_review'] } }, include: { user: { select: { email: true, name: true, trustLevel: true } }, payoutAccount: true }, orderBy: { createdAt: 'asc' } });
+    return this.prisma.payoutRequest.findMany({
+      where: { status: { in: ['requested', 'under_review', 'approved', 'processing'] } },
+      include: {
+        user: { select: { email: true, name: true, trustLevel: true } },
+        payoutAccount: true,
+        transactions: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async approvePayout(
@@ -370,6 +478,10 @@ export class AdminService {
       );
     }
     return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+  }
+
+  async processPayout(payoutId: string) {
+    return this.payoutService.processPayout(payoutId);
   }
 
   async markPayoutPaid(payoutId: string, data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string }) {
@@ -942,7 +1054,7 @@ export class AdminService {
 
     // ── Daily revenue/spend (from earnings ledger credits) ──
     const rawRevenue = await this.prisma.earningsLedger.findMany({
-      where: { createdAt: { gte: periodStart }, entryType: 'credit' },
+      where: { createdAt: { gte: periodStart }, entryType: 'credit', currency: 'USD' },
       select: { createdAt: true, amountMinor: true, status: true },
     });
     const revenueByDay = new Map<string, { estimated: number; confirmed: number; paid: number }>();
@@ -957,7 +1069,7 @@ export class AdminService {
 
     // ── Daily advertiser spend ──
     const rawSpend = await this.prisma.advertiserLedger.findMany({
-      where: { createdAt: { gte: periodStart }, entryType: 'debit' },
+      where: { createdAt: { gte: periodStart }, entryType: 'debit', currency: 'USD' },
       select: { createdAt: true, amountMinor: true },
     });
     const spendByDay = new Map<string, number>();
@@ -987,7 +1099,7 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.payoutRequest.count(),
       this.prisma.payoutRequest.count({ where: { status: { in: ['requested', 'under_review'] } } }),
-      this.prisma.earningsLedger.aggregate({ where: { status: 'paid', entryType: 'credit' }, _sum: { amountMinor: true } }),
+      this.prisma.earningsLedger.aggregate({ where: { status: 'paid', entryType: 'credit', currency: 'USD' }, _sum: { amountMinor: true } }),
     ]);
 
     // ── Fill in daily time-series (fill missing days with zeros) ──
@@ -1016,7 +1128,7 @@ export class AdminService {
     const [prevImpressions, prevSignups, prevRevenue] = await Promise.all([
       this.prisma.adImpression.count({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart } } }),
       this.prisma.user.count({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart } } }),
-      this.prisma.earningsLedger.aggregate({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart }, entryType: 'credit' }, _sum: { amountMinor: true } }),
+      this.prisma.earningsLedger.aggregate({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart }, entryType: 'credit', currency: 'USD' }, _sum: { amountMinor: true } }),
     ]);
 
     const currentImpressions = rawImpressions.length;
@@ -1029,14 +1141,15 @@ export class AdminService {
     // ── Platform ledger breakdown ──
     const platform = await this.prisma.platformLedger.aggregate({
       _sum: { amountMinor: true },
-      where: { bucket: 'platform_fee', entryType: 'credit' },
+      where: { bucket: 'platform_fee', entryType: 'credit', currency: 'USD' },
     });
     const reserve = await this.prisma.platformLedger.aggregate({
       _sum: { amountMinor: true },
-      where: { bucket: 'fraud_reserve', entryType: 'credit' },
+      where: { bucket: 'fraud_reserve', entryType: 'credit', currency: 'USD' },
     });
 
     return {
+      currency: 'USD',
       period: { days, from: floorDay(periodStart), to: floorDay(now) },
       daily,
       totals: {
@@ -1123,6 +1236,34 @@ export class AdminService {
 
   // ── Archive Refunds ──
 
+  async getPendingArchiveRefunds() {
+    return this.prisma.advertiserLedger.findMany({
+      where: {
+        entryType: 'refund',
+        status: 'pending',
+        idempotencyKey: { startsWith: 'archive_refund_' },
+      },
+      include: {
+        advertiser: {
+          select: {
+            id: true,
+            companyName: true,
+            billingEmail: true,
+          },
+        },
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            archivedAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   /**
    * Confirm an archived campaign's refund obligation row after the admin has
    * manually issued the Stripe refund in the Stripe dashboard.
@@ -1137,6 +1278,11 @@ export class AdminService {
     entryId: string;
     stripeRefundPaymentIntentId: string;
   }) {
+    const stripeRefundPaymentIntentId = params.stripeRefundPaymentIntentId.trim();
+    if (!stripeRefundPaymentIntentId) {
+      throw new BadRequestException('stripeRefundPaymentIntentId is required');
+    }
+
     const entry = await this.prisma.advertiserLedger.findUnique({
       where: { id: params.entryId },
     });
@@ -1162,7 +1308,7 @@ export class AdminService {
         where: { id: params.entryId, status: 'pending' },
         data: {
           status: 'confirmed',
-          stripePaymentIntentId: params.stripeRefundPaymentIntentId,
+          stripePaymentIntentId: stripeRefundPaymentIntentId,
         },
       });
       if (claimed.count === 0) return;
@@ -1179,9 +1325,9 @@ export class AdminService {
             amountMinor: entry.amountMinor,
             currency: entry.currency,
             bucket: 'cash',
-            referenceId: params.stripeRefundPaymentIntentId,
+            referenceId: stripeRefundPaymentIntentId,
             idempotencyKey: `archive_refund_plat_${params.entryId}`,
-            description: `Archive refund confirmed — Stripe refund ${params.stripeRefundPaymentIntentId}`,
+            description: `Archive refund confirmed — Stripe refund ${stripeRefundPaymentIntentId}`,
           },
         });
       } catch (err: unknown) {
@@ -1215,6 +1361,20 @@ function normalizeOptionalCurrency(value: string | undefined): string | undefine
     throw new BadRequestException('currency must be a 3-letter ISO currency code');
   }
   return currency;
+}
+
+function netCurrencyAmounts(
+  credits: CurrencyAmountGroup[],
+  debits: CurrencyAmountGroup[],
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of credits) {
+    totals[row.currency] = (totals[row.currency] ?? 0) + (row._sum.amountMinor ?? 0);
+  }
+  for (const row of debits) {
+    totals[row.currency] = (totals[row.currency] ?? 0) - (row._sum.amountMinor ?? 0);
+  }
+  return totals;
 }
 
 function recoveryDebtCaseKey(userId: string, currency: string): string {

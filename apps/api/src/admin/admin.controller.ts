@@ -92,6 +92,11 @@ export class AdminController {
     return this.service.rejectPayout(id, userId, dto.reason);
   }
 
+  @Post('payouts/:id/process')
+  processPayout(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.processPayout(id);
+  }
+
   @Post('payouts/:id/mark-paid')
   markPayoutPaid(
     @Param('id', ParseUUIDPipe) id: string,
@@ -224,6 +229,11 @@ export class AdminController {
   }
 
   // ── Archive Refunds ──
+
+  @Get('refunds/archive/pending')
+  getPendingArchiveRefunds() {
+    return this.service.getPendingArchiveRefunds();
+  }
 
   /**
    * Confirm an archive refund obligation row after the admin manually issues

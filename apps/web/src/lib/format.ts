@@ -7,6 +7,19 @@ export function formatCurrency(minorUnits: number, currency = 'USD'): string {
   }).format(minorUnits / 100);
 }
 
+/** Format grouped minor-unit totals without mixing currencies */
+export function formatCurrencyBreakdown(totalsByCurrency: Record<string, number>): string {
+  const entries = Object.entries(totalsByCurrency)
+    .filter(([, minorUnits]) => minorUnits !== 0)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  if (entries.length === 0) return formatCurrency(0);
+
+  return entries
+    .map(([currency, minorUnits]) => formatCurrency(minorUnits, currency))
+    .join(' / ');
+}
+
 /** Format a number with commas */
 export function formatNumber(num: number): string {
   return new Intl.NumberFormat('en-US').format(num);

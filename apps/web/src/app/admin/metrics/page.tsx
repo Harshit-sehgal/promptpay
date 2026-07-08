@@ -23,6 +23,7 @@ interface DailyPoint {
 }
 
 interface MetricsData {
+  currency?: string;
   period: { days: number; from: string; to: string };
   daily: DailyPoint[];
   totals: {
@@ -117,6 +118,7 @@ export default function AdminMetricsPage() {
 
   // Campaign status totals for distribution bar
   const campaignTotal = data?.campaigns.total ?? 1;
+  const reportingCurrency = data?.currency ?? 'USD';
 
   return (
     <>
@@ -190,16 +192,16 @@ export default function AdminMetricsPage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <StatCard
-              label="Developer earnings"
-              value={formatCurrency(data.totals.estimatedRevenueMinor)}
+              label={`Developer earnings (${reportingCurrency})`}
+              value={formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency)}
             />
             <StatCard
-              label="Advertiser spend"
-              value={formatCurrency(data.totals.advertiserSpendMinor)}
+              label={`Advertiser spend (${reportingCurrency})`}
+              value={formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency)}
             />
             <StatCard
-              label="Paid out"
-              value={formatCurrency(data.totals.paidRevenueMinor)}
+              label={`Paid out (${reportingCurrency})`}
+              value={formatCurrency(data.totals.paidRevenueMinor, reportingCurrency)}
             />
             <StatCard
               label="Pending payouts"
@@ -273,7 +275,7 @@ export default function AdminMetricsPage() {
                     </span>
                   </h3>
                   <span className="text-ink-400 text-xs">
-                    {formatCurrency(data.totals.estimatedRevenueMinor)}
+                    {formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency)}
                   </span>
                 </div>
                 <div className="flex items-end gap-1 h-20 mb-2">
@@ -299,7 +301,7 @@ export default function AdminMetricsPage() {
                     </span>
                   </h3>
                   <span className="text-ink-400 text-xs">
-                    {formatCurrency(data.totals.advertiserSpendMinor)}
+                    {formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency)}
                   </span>
                 </div>
                 <div className="flex items-end gap-1 h-20 mb-2">
@@ -418,26 +420,26 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between text-sm py-2 border-b border-ink-600/10">
                   <span className="text-ink-300">Platform fees</span>
                   <span className="text-white font-mono">
-                    {formatCurrency(data.platformRevenue.platformFeeMinor)}
+                    {formatCurrency(data.platformRevenue.platformFeeMinor, reportingCurrency)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm py-2 border-b border-ink-600/10">
                   <span className="text-ink-300">Fraud reserve</span>
                   <span className="text-white font-mono">
-                    {formatCurrency(data.platformRevenue.fraudReserveMinor)}
+                    {formatCurrency(data.platformRevenue.fraudReserveMinor, reportingCurrency)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm py-2">
                   <span className="text-ink-200 font-semibold">Total</span>
                   <span className="text-brand-400 font-mono text-base font-semibold">
-                    {formatCurrency(data.platformRevenue.totalMinor)}
+                    {formatCurrency(data.platformRevenue.totalMinor, reportingCurrency)}
                   </span>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-ink-600/20">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-ink-400">Paid out to developers</span>
-                  <span className="text-white font-mono">{formatCurrency(data.payouts.totalPaidMinor)}</span>
+                  <span className="text-white font-mono">{formatCurrency(data.payouts.totalPaidMinor, reportingCurrency)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm mt-2">
                   <span className="text-ink-400">Total payouts processed</span>
@@ -462,8 +464,8 @@ export default function AdminMetricsPage() {
                     <th className="text-right px-4 py-2">Signups</th>
                     <th className="text-right px-4 py-2">Dev signups</th>
                     <th className="text-right px-4 py-2">Adv signups</th>
-                    <th className="text-right px-4 py-2">Est. earnings</th>
-                    <th className="text-right px-4 py-2">Adv. spend</th>
+                    <th className="text-right px-4 py-2">Est. earnings ({reportingCurrency})</th>
+                    <th className="text-right px-4 py-2">Adv. spend ({reportingCurrency})</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -491,10 +493,10 @@ export default function AdminMetricsPage() {
                         {formatNumber(d.advertiserSignups)}
                       </td>
                       <td className="px-4 py-2 text-violet-400 font-mono text-right">
-                        {formatCurrency(d.estimatedRevenueMinor)}
+                        {formatCurrency(d.estimatedRevenueMinor, reportingCurrency)}
                       </td>
                       <td className="px-4 py-2 text-amber-400 font-mono text-right">
-                        {formatCurrency(d.advertiserSpendMinor)}
+                        {formatCurrency(d.advertiserSpendMinor, reportingCurrency)}
                       </td>
                     </tr>
                   ))}

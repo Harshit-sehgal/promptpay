@@ -32,17 +32,22 @@ export class ReferralService {
         referralCount: 0,
         referralLink: null,
         rewardsEarnedMinor: 0,
+        rewardsEarnedByCurrency: {},
         referrals: [],
       };
     }
 
-    const [referralCount, rewardsAgg] = await Promise.all([
+    const [referralCount, rewardGroups] = await Promise.all([
       this.prisma.referral.count({ where: { referrerId: userId } }),
-      this.prisma.referralReward.aggregate({
+      this.prisma.referralReward.groupBy({
+        by: ['currency'],
         where: { userId, status: { notIn: ['reversed', 'void'] } },
         _sum: { amountMinor: true },
       }),
     ]);
+    const rewardsEarnedByCurrency = Object.fromEntries(
+      rewardGroups.map((row) => [row.currency, row._sum.amountMinor ?? 0]),
+    );
 
     const referrals = await this.prisma.referral.findMany({
       where: { referrerId: userId },
@@ -57,7 +62,8 @@ export class ReferralService {
       referralCode: code,
       referralCount,
       referralLink: `${this.webBaseUrl}/auth/signup?ref=${code}`,
-      rewardsEarnedMinor: rewardsAgg._sum.amountMinor || 0,
+      rewardsEarnedMinor: rewardsEarnedByCurrency.USD ?? 0,
+      rewardsEarnedByCurrency,
       referrals: referrals.map((r) => ({
         id: r.id,
         referredEmail: r.referred.email,

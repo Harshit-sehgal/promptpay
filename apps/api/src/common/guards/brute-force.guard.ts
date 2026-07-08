@@ -30,10 +30,10 @@ export interface RequestLike {
  *    `x-forwarded-for` header directly because an attacker controls it.
  *    Express's `trust proxy` must be configured in main.ts so `req.ip`
  *    resolves the expected downstream address.
- *  - Only `UnauthorizedException` increments the counter. Conflict,
- *    BadRequest, and other non-auth failures do not count toward lockout -
- *    counting "email already registered" as a brute-force strike is a
- *    self-DoS / framing vector.
+ *  - Controllers decide which failures increment the counter. Password/token
+ *    credential failures count; business validation such as "email already
+ *    registered" must not, because that would create a self-DoS / framing
+ *    vector.
  *
  * This runs after ThrottlerGuard: rate limits prevent flooding, this guard
  * catches credential stuffing patterns that stay under rate limits.
@@ -292,6 +292,7 @@ function isAuthRoute(path: string): boolean {
     path.includes('/auth/signup') ||
     path.includes('/auth/google') ||
     path.includes('/auth/password') ||
+    path.includes('/auth/2fa') ||
     path.includes('/auth/verify-email')
   );
 }

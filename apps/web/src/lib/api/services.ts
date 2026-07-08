@@ -83,8 +83,18 @@ export const adminApi = {
   approveCampaign: (id: string, reason?: string) => api.post(`/admin/campaigns/${id}/approve`, { reason }),
   rejectCampaign: (id: string, reason: string) => api.post(`/admin/campaigns/${id}/reject`, { reason }),
   getPendingPayouts: () => api.get('/admin/payouts/pending'),
-  approvePayout: (id: string, note?: string) => api.post(`/admin/payouts/${id}/approve`, { note }),
+  approvePayout: (id: string, note?: string, approvedAmountMinor?: number) =>
+    api.post(`/admin/payouts/${id}/approve`, {
+      note,
+      ...(approvedAmountMinor !== undefined ? { approvedAmountMinor } : {}),
+    }),
   rejectPayout: (id: string, reason: string) => api.post(`/admin/payouts/${id}/reject`, { reason }),
+  processPayout: (id: string) => api.post(`/admin/payouts/${id}/process`),
+  markPayoutPaid: (
+    id: string,
+    data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string },
+  ) => api.post(`/admin/payouts/${id}/mark-paid`, data),
+  getMoneyIntegrity: () => api.get('/admin/money-integrity'),
   getFraudFlags: (params?: Record<string, unknown>) => api.get('/admin/fraud', { params }),
   getFraudStats: () => api.get('/admin/fraud/stats'),
   resolveFraudFlag: (
@@ -113,6 +123,13 @@ export const adminApi = {
   ) => api.post(`/admin/recovery-debt/cases/${id}/resolve`, data),
   getAuditLog: (params?: Record<string, unknown>) => api.get('/admin/audit-log', { params }),
   getMetrics: (days?: number) => api.get('/admin/metrics', { params: { days } }),
+  getToolIntegrations: () => api.get('/admin/tools'),
+  toggleToolIntegration: (slug: string, isActive: boolean) =>
+    api.post(`/admin/tools/${slug}/toggle`, { isActive: String(isActive) }),
+  getWebhookEvents: (params?: Record<string, unknown>) => api.get('/admin/webhooks', { params }),
+  getPendingArchiveRefunds: () => api.get('/admin/refunds/archive/pending'),
+  confirmArchiveRefund: (id: string, stripeRefundPaymentIntentId: string) =>
+    api.post(`/admin/refunds/archive/${id}/confirm`, { stripeRefundPaymentIntentId }),
 };
 
 export const payoutApi = {

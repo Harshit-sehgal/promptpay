@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose/jwt/verify';
+import { errors, jwtVerify } from 'jose';
 
 const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', '/dashboard'];
 
@@ -50,14 +50,13 @@ export async function middleware(request: NextRequest) {
   }
 
   const accessCookie = request.cookies.get('access_token');
+  const refreshCookie = request.cookies.get('refresh_token');
   const token = accessCookie?.value;
 
   if (!token) {
-    // No access_token cookie at all — redirect to login.
-    // (Caller may still have a valid refresh_token cookie; the client-side
-    //  flow will refresh and re-issue, but middleware can't do that server-
-    //  side without calling the API — so we just redirect and let the
-    //  client recover via the 401 interceptor on the /auth/me call.)
+    if (refreshCookie?.value) {
+      return NextResponse.next();
+    }
     return redirectToLogin(pathname, request);
   }
 
@@ -68,10 +67,10 @@ export async function middleware(request: NextRequest) {
     const secret = new TextEncoder().encode(process.env.JWT_SECRET);
     await jwtVerify(token, secret, { clockTolerance: '30s' });
     return NextResponse.next();
-  } catch {
-    // Token expired, tampered, or forged — redirect to login. The client
-    // will recover via the refresh Route Handler if the refresh cookie is
-    // still valid.
+  } catch (err) {
+    if (err instanceof errors.JWTExpired && refreshCookie?.value) {
+      return NextResponse.next();
+    }
     return redirectToLogin(pathname, request);
   }
 }

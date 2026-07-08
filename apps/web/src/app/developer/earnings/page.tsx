@@ -5,7 +5,7 @@ import type { AxiosResponse } from 'axios';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
 import { ledgerApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
-import { formatCurrency, formatRelativeTime } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 interface EarningsEntry {
   id: string;
@@ -41,9 +41,9 @@ export default function DevEarningsPage() {
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
-  const totalsByStatus = data?.entries.reduce<Record<string, number>>((acc, e) => {
-    if (!acc[e.status]) acc[e.status] = 0;
-    acc[e.status] += e.amountMinor;
+  const totalsByStatus = data?.entries.reduce<Record<string, Record<string, number>>>((acc, e) => {
+    if (!acc[e.status]) acc[e.status] = {};
+    acc[e.status][e.currency] = (acc[e.status][e.currency] ?? 0) + e.amountMinor;
     return acc;
   }, {}) || {};
 
@@ -58,27 +58,27 @@ export default function DevEarningsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Estimated"
-          value={formatCurrency(totalsByStatus.estimated || 0)}
+          value={formatCurrencyBreakdown(totalsByStatus.estimated || {})}
           subtitle="Pending hold period"
           variant="light"
         />
         <StatCard
           label="Pending"
-          value={formatCurrency(totalsByStatus.pending || 0)}
+          value={formatCurrencyBreakdown(totalsByStatus.pending || {})}
           subtitle="Awaiting confirmation"
           valueColor="text-amber-600"
           variant="light"
         />
         <StatCard
           label="Confirmed"
-          value={formatCurrency(totalsByStatus.confirmed || 0)}
+          value={formatCurrencyBreakdown(totalsByStatus.confirmed || {})}
           valueColor="text-emerald-600"
           subtitle="Available for payout"
           variant="light"
         />
         <StatCard
           label="Held"
-          value={formatCurrency(totalsByStatus.held || 0)}
+          value={formatCurrencyBreakdown(totalsByStatus.held || {})}
           valueColor="text-rose-600"
           subtitle="Under review"
           variant="light"

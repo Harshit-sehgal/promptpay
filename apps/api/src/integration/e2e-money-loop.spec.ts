@@ -511,18 +511,21 @@ describe('E2E Money Loop', () => {
 
       // --- Step 5: Advertiser submits campaign ---
       // Reset campaign.findUnique for submitCampaign (must include creatives)
-      mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: campaignId,
-        advertiserId: advertiserProfileId,
-        status: 'draft',
-        creatives: [{ id: creativeId, status: 'approved' }],
-        submittedAt: null,
-      });
-      mockPrisma.campaign.update.mockResolvedValue({
-        id: campaignId,
-        status: 'submitted',
-        submittedAt: new Date(),
-      });
+      mockPrisma.campaign.findUnique
+        .mockResolvedValueOnce({
+          id: campaignId,
+          advertiserId: advertiserProfileId,
+          status: 'draft',
+          creatives: [{ id: creativeId, status: 'approved' }],
+          submittedAt: null,
+        })
+        .mockResolvedValueOnce({
+          id: campaignId,
+          advertiserId: advertiserProfileId,
+          status: 'submitted',
+          submittedAt: new Date(),
+        });
+      mockPrisma.campaign.updateMany.mockResolvedValue({ count: 1 });
 
       const submitted = await svc.advertiser.submitCampaign(campaignId, advertiserProfileId);
       expect(submitted.status).toBe('submitted');
@@ -2195,21 +2198,48 @@ describe('E2E Money Loop', () => {
     it('allows campaign submit when creatives exist and are not approved', async () => {
       const advId = uid('advp');
       const campId = uid('camp');
-      mockPrisma.campaign.findUnique.mockResolvedValue({
+      mockPrisma.campaign.findUnique
+        .mockResolvedValueOnce({
         id: campId, advertiserId: advId, status: 'draft',
         creatives: [{ id: uid('cr'), status: 'draft' }],
-      });
+        })
+        .mockResolvedValueOnce({
+          id: campId, advertiserId: advId, status: 'submitted',
+        });
+      mockPrisma.campaign.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.adCreative.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.campaign.update.mockResolvedValue({
-        id: campId, status: 'submitted',
-      });
 
       const res = await svc.advertiser.submitCampaign(campId, advId);
       expect(res.status).toBe('submitted');
+      expect(mockPrisma.campaign.updateMany).toHaveBeenCalledWith({
+        where: { id: campId, advertiserId: advId, status: 'draft' },
+        data: { status: 'submitted', submittedAt: expect.any(Date) },
+      });
       expect(mockPrisma.adCreative.updateMany).toHaveBeenCalledWith({
         where: { campaignId: campId, status: 'draft' },
         data: { status: 'pending_review' },
       });
+    });
+
+    it('does not submit a campaign if a concurrent archive wins the status race', async () => {
+      const advId = uid('advp');
+      const campId = uid('camp');
+      mockPrisma.campaign.findUnique
+        .mockResolvedValueOnce({
+          id: campId, advertiserId: advId, status: 'draft',
+          creatives: [{ id: uid('cr'), status: 'draft' }],
+        })
+        .mockResolvedValueOnce({
+          id: campId, advertiserId: advId, status: 'archived',
+        });
+      mockPrisma.campaign.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await expect(
+        svc.advertiser.submitCampaign(campId, advId),
+      ).rejects.toThrow(/current status is archived/);
+
+      expect(mockPrisma.adCreative.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.campaign.update).not.toHaveBeenCalled();
     });
 
     it('handles idempotent wait-state-start (returns existing record)', async () => {

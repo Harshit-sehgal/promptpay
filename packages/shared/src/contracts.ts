@@ -286,6 +286,7 @@ export const PayoutAvailableResponse = z.object({
   totalMinor: z.number().nonnegative(),
   currency: z.string(),
   count: z.number().nonnegative(),
+  totalsByCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
 });
 
 // ══════════════════════════════════════════════════════════
@@ -297,18 +298,22 @@ export const LedgerBalanceResponse = z.object({
   available: z.object({
     amountMinor: z.number().nonnegative(),
     currency: z.string(),
+    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
   }),
   pending: z.object({
     amountMinor: z.number().nonnegative(),
     currency: z.string(),
+    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
   }),
   total: z.object({
     amountMinor: z.number().nonnegative(),
     currency: z.string(),
+    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
   }),
   paidOut: z.object({
     amountMinor: z.number().nonnegative(),
     currency: z.string(),
+    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
   }),
 });
 

@@ -19,6 +19,7 @@ const mockPrisma = {
     count: vi.fn(),
     create: vi.fn(),
     aggregate: vi.fn(),
+    groupBy: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
     findFirst: vi.fn(),
@@ -30,6 +31,7 @@ const mockPrisma = {
     count: vi.fn(),
     create: vi.fn(),
     aggregate: vi.fn(),
+    groupBy: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
     findFirst: vi.fn(),
@@ -96,23 +98,26 @@ describe('LedgerService', () => {
     // responsibility (it reserves funds via PayoutAllocation). These tests pin the
     // actual contract so a regression that silently changes the semantics is caught.
     it('returns confirmed credit earnings minus confirmed recovery debits', async () => {
-      mockPrisma.earningsLedger.aggregate
-        .mockResolvedValueOnce({ _sum: { amountMinor: 250_00 } })
-        .mockResolvedValueOnce({ _sum: { amountMinor: 40_00 } });
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 250_00 } }])
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 40_00 } }]);
 
       const result = await service.getAvailableBalance('u-1');
 
       expect(result.amountMinor).toBe(210_00);
       expect(result.currency).toBe('USD');
+      expect(result.byCurrency).toEqual({ USD: 210_00 });
       // Must aggregate confirmed credits and must never touch payoutRequest.
-      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledWith(
+      expect(mockPrisma.earningsLedger.groupBy).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.earningsLedger.groupBy).toHaveBeenCalledWith(
         expect.objectContaining({
+          by: ['currency'],
           where: { userId: 'u-1', status: 'confirmed', entryType: 'credit' },
         }),
       );
-      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenCalledWith(
+      expect(mockPrisma.earningsLedger.groupBy).toHaveBeenCalledWith(
         expect.objectContaining({
+          by: ['currency'],
           where: { userId: 'u-1', status: 'confirmed', entryType: 'debit' },
         }),
       );
@@ -120,26 +125,45 @@ describe('LedgerService', () => {
     });
 
     it('returns 0 when there are no confirmed earnings', async () => {
-      mockPrisma.earningsLedger.aggregate
-        .mockResolvedValueOnce({ _sum: { amountMinor: null } })
-        .mockResolvedValueOnce({ _sum: { amountMinor: null } });
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
 
       const result = await service.getAvailableBalance('u-1');
 
       expect(result.amountMinor).toBe(0);
       expect(result.currency).toBe('USD');
+      expect(result.byCurrency).toEqual({});
       expect(mockPrisma.payoutRequest.aggregate).not.toHaveBeenCalled();
+    });
+
+    it('keeps confirmed balances separated by currency', async () => {
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 250_00 } },
+          { currency: 'EUR', _sum: { amountMinor: 100_00 } },
+        ])
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 40_00 } },
+          { currency: 'EUR', _sum: { amountMinor: 10_00 } },
+        ]);
+
+      const result = await service.getAvailableBalance('u-1');
+
+      expect(result.amountMinor).toBe(210_00);
+      expect(result.byCurrency).toEqual({ USD: 210_00, EUR: 90_00 });
     });
   });
 
   describe('getPendingBalance', () => {
     it('returns sum of pending and estimated earnings', async () => {
-      mockPrisma.earningsLedger.aggregate.mockResolvedValue({
-        _sum: { amountMinor: 50_00 },
-      });
+      mockPrisma.earningsLedger.groupBy.mockResolvedValue([
+        { currency: 'USD', _sum: { amountMinor: 50_00 } },
+      ]);
 
       const result = await service.getPendingBalance('u-1');
       expect(result.amountMinor).toBe(50_00);
+      expect(result.byCurrency).toEqual({ USD: 50_00 });
     });
   });
 
@@ -716,6 +740,69 @@ describe('LedgerService', () => {
       expect(mockPrisma.platformLedger.findUnique).not.toHaveBeenCalled();
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.earningsLedger.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getPlatformBreakdown', () => {
+    it('keeps platform-wide ledger totals separated by currency', async () => {
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 1000 } },
+          { currency: 'EUR', _sum: { amountMinor: 2000 } },
+        ])
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 100 } },
+          { currency: 'EUR', _sum: { amountMinor: 250 } },
+        ])
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 75 } },
+          { currency: 'EUR', _sum: { amountMinor: 125 } },
+        ]);
+      mockPrisma.advertiserLedger.groupBy
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 1800 } },
+          { currency: 'EUR', _sum: { amountMinor: 2600 } },
+        ])
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 300 } },
+          { currency: 'EUR', _sum: { amountMinor: 400 } },
+        ]);
+      mockPrisma.platformLedger.groupBy
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 500 } },
+          { currency: 'EUR', _sum: { amountMinor: 700 } },
+        ])
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 50 } }])
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 200 } },
+          { currency: 'EUR', _sum: { amountMinor: 300 } },
+        ])
+        .mockResolvedValueOnce([{ currency: 'EUR', _sum: { amountMinor: 25 } }]);
+
+      const result = await service.getPlatformBreakdown();
+
+      expect(result.totalEarnings).toBe(900);
+      expect(result.totalAdvertiserSpend).toBe(1500);
+      expect(result.totalPlatformFee).toBe(450);
+      expect(result.totalReserve).toBe(200);
+      expect(result.byCurrency).toEqual({
+        totalEarnings: { USD: 900, EUR: 1750 },
+        totalAdvertiserSpend: { USD: 1500, EUR: 2200 },
+        totalPlatformFee: { USD: 450, EUR: 700 },
+        totalReserve: { USD: 200, EUR: 275 },
+      });
+      expect(result.earningsLedger.pendingMinor).toBe(75);
+      expect(result.earningsLedger.pendingByCurrency).toEqual({ USD: 75, EUR: 125 });
+      expect(mockPrisma.earningsLedger.groupBy).toHaveBeenCalledWith({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', status: { in: ['confirmed', 'paid'] } },
+      });
+      expect(mockPrisma.earningsLedger.groupBy).toHaveBeenCalledWith({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', status: 'pending' },
+      });
     });
   });
 });

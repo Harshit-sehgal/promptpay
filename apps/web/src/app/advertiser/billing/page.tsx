@@ -31,11 +31,23 @@ interface BillingData {
   entries: LedgerEntry[];
 }
 
+const DEPOSIT_CURRENCIES = [
+  { code: 'usd', label: 'USD' },
+  { code: 'eur', label: 'EUR' },
+  { code: 'gbp', label: 'GBP' },
+  { code: 'cad', label: 'CAD' },
+  { code: 'aud', label: 'AUD' },
+  { code: 'inr', label: 'INR' },
+  { code: 'brl', label: 'BRL' },
+  { code: 'mxn', label: 'MXN' },
+  { code: 'sgd', label: 'SGD' },
+] as const;
+
 const FIXED_AMOUNTS = [
-  { label: '$50', minor: 5000 },
-  { label: '$100', minor: 10000 },
-  { label: '$250', minor: 25000 },
-  { label: '$500', minor: 50000 },
+  { minor: 5000 },
+  { minor: 10000 },
+  { minor: 25000 },
+  { minor: 50000 },
 ];
 
 const MIN_DEPOSIT_MINOR = 100; // $1.00
@@ -49,6 +61,7 @@ export default function AdvertiserBillingPage() {
   const [selectedMinor, setSelectedMinor] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
   const [showCustom, setShowCustom] = useState(false);
+  const [depositCurrency, setDepositCurrency] = useState<(typeof DEPOSIT_CURRENCIES)[number]['code']>('usd');
   const [depositing, setDepositing] = useState(false);
   const [depositError, setDepositError] = useState<string | null>(null);
 
@@ -80,7 +93,7 @@ export default function AdvertiserBillingPage() {
     setDepositError(null);
 
     try {
-      const res = await advertiserApi.createDepositSession(amountMinor);
+      const res = await advertiserApi.createDepositSession(amountMinor, depositCurrency);
       const { url } = res.data as { sessionId: string; url: string };
       // Redirect to Stripe Checkout
       window.location.href = url;
@@ -92,6 +105,7 @@ export default function AdvertiserBillingPage() {
 
   const validAmount = getDepositAmount();
   const canDeposit = validAmount !== null && validAmount >= MIN_DEPOSIT_MINOR && !depositing;
+  const displayDepositCurrency = depositCurrency.toUpperCase();
 
   return (
     <>
@@ -150,6 +164,27 @@ export default function AdvertiserBillingPage() {
               Add funds to your account via Stripe. Your balance is used to run ad campaigns.
             </p>
 
+            <div className="mb-4">
+              <label htmlFor="deposit-currency" className="block text-ink-400 text-xs uppercase tracking-wide mb-1.5">
+                Deposit currency
+              </label>
+              <select
+                id="deposit-currency"
+                value={depositCurrency}
+                onChange={(event) => {
+                  setDepositCurrency(event.target.value as (typeof DEPOSIT_CURRENCIES)[number]['code']);
+                  setDepositError(null);
+                }}
+                className="bg-ink-700 border border-ink-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500"
+              >
+                {DEPOSIT_CURRENCIES.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {currency.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Amount presets */}
             <div className="flex flex-wrap gap-2 mb-4">
               {FIXED_AMOUNTS.map((amt) => (
@@ -167,7 +202,7 @@ export default function AdvertiserBillingPage() {
                       : 'bg-ink-700 border-ink-600 text-ink-200 hover:border-ink-500 hover:text-white'
                   }`}
                 >
-                  {amt.label}
+                  {formatCurrency(amt.minor, displayDepositCurrency)}
                 </button>
               ))}
               <button
@@ -191,7 +226,7 @@ export default function AdvertiserBillingPage() {
               <div className="mb-4">
                 <div className="relative max-w-[200px]">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300 text-sm font-medium">
-                    $
+                    {displayDepositCurrency}
                   </span>
                   <input
                     type="number"
@@ -206,13 +241,15 @@ export default function AdvertiserBillingPage() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && canDeposit) handleDeposit();
                     }}
-                    className="w-full bg-ink-700 border border-ink-600 rounded-lg pl-7 pr-3 py-2.5 text-white text-sm placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all"
-                    aria-label="Custom deposit amount in dollars"
+                    className="w-full bg-ink-700 border border-ink-600 rounded-lg pl-14 pr-3 py-2.5 text-white text-sm placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all"
+                    aria-label={`Custom deposit amount in ${displayDepositCurrency}`}
                     inputMode="numeric"
                     autoComplete="off"
                   />
                 </div>
-                <p className="text-ink-400 text-xs mt-1.5">Minimum deposit: $1.00</p>
+                <p className="text-ink-400 text-xs mt-1.5">
+                  Minimum deposit: {formatCurrency(MIN_DEPOSIT_MINOR, displayDepositCurrency)}
+                </p>
               </div>
             )}
 
@@ -235,7 +272,7 @@ export default function AdvertiserBillingPage() {
                   Opening Stripe Checkout…
                 </>
               ) : validAmount ? (
-                <>Deposit {formatCurrency(validAmount)} via Stripe</>
+                <>Deposit {formatCurrency(validAmount, displayDepositCurrency)} via Stripe</>
               ) : (
                 'Select an amount to deposit'
               )}

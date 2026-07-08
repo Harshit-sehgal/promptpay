@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
-import { formatCurrency, formatRelativeTime } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 interface CreativeSummary {
   status: string;
@@ -91,8 +91,18 @@ export default function AdvertiserCampaignsPage() {
     }
   };
 
-  const totalBudget = data?.campaigns.reduce((sum, c) => sum + c.budgetTotalMinor, 0) || 0;
-  const totalSpent = data?.campaigns.reduce((sum, c) => sum + c.budgetSpentMinor, 0) || 0;
+  const totalBudgetByCurrency = data?.campaigns.reduce<Record<string, number>>((totals, campaign) => {
+    totals[campaign.currency] = (totals[campaign.currency] ?? 0) + campaign.budgetTotalMinor;
+    return totals;
+  }, {}) || {};
+  const totalSpentByCurrency = data?.campaigns.reduce<Record<string, number>>((totals, campaign) => {
+    totals[campaign.currency] = (totals[campaign.currency] ?? 0) + campaign.budgetSpentMinor;
+    return totals;
+  }, {}) || {};
+  const campaignCurrencies = Object.keys(totalBudgetByCurrency);
+  const singleCurrency = campaignCurrencies.length === 1 ? campaignCurrencies[0] : null;
+  const totalBudget = singleCurrency ? totalBudgetByCurrency[singleCurrency] : 0;
+  const totalSpent = singleCurrency ? totalSpentByCurrency[singleCurrency] ?? 0 : 0;
 
   return (
 <>
@@ -120,12 +130,12 @@ export default function AdvertiserCampaignsPage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <StatCard label="Total campaigns" value={data.campaigns.length.toString()} />
-              <StatCard label="Total budget" value={formatCurrency(totalBudget)} />
+              <StatCard label="Total budget" value={formatCurrencyBreakdown(totalBudgetByCurrency)} />
               <StatCard
                 label="Budget spent"
-                value={formatCurrency(totalSpent)}
+                value={formatCurrencyBreakdown(totalSpentByCurrency)}
                 valueColor="text-brand-500"
-                subtitle={totalBudget > 0 ? `${((totalSpent / totalBudget) * 100).toFixed(1)}% used` : undefined}
+                subtitle={singleCurrency && totalBudget > 0 ? `${((totalSpent / totalBudget) * 100).toFixed(1)}% used` : undefined}
               />
             </div>
 
@@ -218,7 +228,7 @@ export default function AdvertiserCampaignsPage() {
                       <div>
                         <p className="text-ink-500 text-xs">Budget</p>
                         <p className="text-white font-mono">
-                          {formatCurrency(campaign.budgetSpentMinor)} / {formatCurrency(campaign.budgetTotalMinor)}
+                          {formatCurrency(campaign.budgetSpentMinor, campaign.currency)} / {formatCurrency(campaign.budgetTotalMinor, campaign.currency)}
                         </p>
                         <div className="h-1.5 bg-ink-700 rounded-full mt-1.5 overflow-hidden">
                           <div

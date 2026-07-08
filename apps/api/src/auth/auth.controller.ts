@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Req,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -25,6 +26,10 @@ import {
   TwoFactorDisableDto,
 } from './dto';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
+
+function isCredentialFailure(err: unknown): boolean {
+  return err instanceof UnauthorizedException || err instanceof BadRequestException;
+}
 
 @Controller('auth')
 export class AuthController {
@@ -140,7 +145,7 @@ export class AuthController {
       await BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
-      if (err instanceof UnauthorizedException) {
+      if (isCredentialFailure(err)) {
         await BruteForceGuard.recordFailure(req);
       }
       throw err;
@@ -157,15 +162,35 @@ export class AuthController {
   @Post('2fa/enable')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  enableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorEnableDto) {
-    return this.authService.enableTwoFactor(userId, dto.token);
+  async enableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorEnableDto, @Req() req: Request) {
+    try {
+      await BruteForceGuard.assertCanAttempt(req, userId);
+      const result = await this.authService.enableTwoFactor(userId, dto.token);
+      await BruteForceGuard.resetOnSuccess(req, userId);
+      return result;
+    } catch (err: unknown) {
+      if (isCredentialFailure(err)) {
+        await BruteForceGuard.recordFailure(req, userId);
+      }
+      throw err;
+    }
   }
 
   @Post('2fa/disable')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  disableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorDisableDto) {
-    return this.authService.disableTwoFactor(userId, dto.token);
+  async disableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorDisableDto, @Req() req: Request) {
+    try {
+      await BruteForceGuard.assertCanAttempt(req, userId);
+      const result = await this.authService.disableTwoFactor(userId, dto.token);
+      await BruteForceGuard.resetOnSuccess(req, userId);
+      return result;
+    } catch (err: unknown) {
+      if (isCredentialFailure(err)) {
+        await BruteForceGuard.recordFailure(req, userId);
+      }
+      throw err;
+    }
   }
 
   @Post('password/forgot')
@@ -183,7 +208,7 @@ export class AuthController {
       await BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
-      if (err instanceof UnauthorizedException) {
+      if (isCredentialFailure(err)) {
         await BruteForceGuard.recordFailure(req);
       }
       throw err;

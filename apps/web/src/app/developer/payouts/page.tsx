@@ -5,7 +5,7 @@ import type { AxiosResponse } from 'axios';
 import { LoadingSpinner, StatusBadge, StatCard } from '@/components';
 import { payoutApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
-import { formatCurrency, formatRelativeTime } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 interface PayoutAccount {
   id: string;
@@ -19,6 +19,7 @@ interface PayoutAccount {
 interface PayoutInfo {
   payoutAccounts: PayoutAccount[];
   availableBalanceMinor: number;
+  availableBalanceByCurrency?: Record<string, number>;
   minimumThresholdMinor: number;
   currency: string;
 }
@@ -49,12 +50,23 @@ export default function DevPayoutsPage() {
   const [showMethodForm, setShowMethodForm] = useState(false);
   const [provider, setProvider] = useState('paypal_email');
   const [destination, setDestination] = useState('');
+  const [methodCurrency, setMethodCurrency] = useState('USD');
   const [submitting, setSubmitting] = useState(false);
 
   // Request payout form
   const [amount, setAmount] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [requestError, setRequestError] = useState('');
+
+  const availableBalanceByCurrency = info?.availableBalanceByCurrency ?? (
+    info ? { [info.currency]: info.availableBalanceMinor } : {}
+  );
+  const selectedAccount = info?.payoutAccounts.find((account) => account.id === selectedAccountId);
+  const selectedCurrency = selectedAccount?.currency || info?.currency || 'USD';
+  const selectedAvailableMinor = availableBalanceByCurrency[selectedCurrency] ?? 0;
+  const hasPayoutableBalance = Object.values(availableBalanceByCurrency).some(
+    (balanceMinor) => info ? balanceMinor >= info.minimumThresholdMinor : false,
+  );
 
   const fetchData = () => {
     setLoading(true);
@@ -86,7 +98,7 @@ export default function DevPayoutsPage() {
     }
 
     try {
-      await payoutApi.addMethod({ provider, destination, currency: 'USD' });
+      await payoutApi.addMethod({ provider, destination, currency: methodCurrency.trim().toUpperCase() || 'USD' });
       setDestination('');
       setShowMethodForm(false);
       fetchData();
@@ -110,7 +122,11 @@ export default function DevPayoutsPage() {
       return;
     }
     if (info && amountMinor < info.minimumThresholdMinor) {
-      setRequestError(`Minimum payout is $${info.minimumThresholdMinor / 100}`);
+      setRequestError(`Minimum payout is ${formatCurrency(info.minimumThresholdMinor, selectedCurrency)}`);
+      return;
+    }
+    if (amountMinor > selectedAvailableMinor) {
+      setRequestError(`Available ${selectedCurrency} balance is ${formatCurrency(selectedAvailableMinor, selectedCurrency)}`);
       return;
     }
 
@@ -118,7 +134,7 @@ export default function DevPayoutsPage() {
       await payoutApi.requestPayout({
         payoutAccountId: selectedAccountId,
         amountMinor,
-        currency: 'USD',
+        currency: selectedCurrency,
       });
       setAmount('');
       fetchData();
@@ -153,9 +169,9 @@ export default function DevPayoutsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <StatCard
               label="Available balance"
-              value={formatCurrency(info.availableBalanceMinor, info.currency)}
+              value={formatCurrencyBreakdown(availableBalanceByCurrency)}
               valueColor="text-brand-600"
-              subtitle={`Minimum payout: $${info.minimumThresholdMinor / 100}`}
+              subtitle={`Minimum payout: ${formatCurrency(info.minimumThresholdMinor, selectedCurrency)}`}
               variant="light"
             />
             <StatCard
@@ -174,9 +190,9 @@ export default function DevPayoutsPage() {
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Request payout</h2>
 
-            {info.availableBalanceMinor < info.minimumThresholdMinor ? (
+            {!hasPayoutableBalance ? (
               <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
-                You need at least <span className="font-semibold">${info.minimumThresholdMinor / 100}</span> in confirmed earnings before you can request a payout.
+                You need at least <span className="font-semibold">{formatCurrency(info.minimumThresholdMinor, selectedCurrency)}</span> in confirmed earnings before you can request a payout.
               </div>
             ) : info.payoutAccounts.length === 0 ? (
               <p className="text-surface-500 text-sm font-normal">
@@ -198,20 +214,20 @@ export default function DevPayoutsPage() {
                       <option value="">Select method...</option>
                       {info.payoutAccounts.map((acc) => (
                         <option key={acc.id} value={acc.id}>
-                          {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider} — {acc.destination}
+                          {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider} — {acc.destination} ({acc.currency})
                         </option>
                       ))}
                     </select>
                   </div>
                   <div>
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
-                      Amount (USD)
+                      Amount ({selectedCurrency})
                     </label>
                     <input
                       type="number"
                       step="0.01"
                       min={(info.minimumThresholdMinor / 100).toString()}
-                      max={(info.availableBalanceMinor / 100).toString()}
+                      max={(selectedAvailableMinor / 100).toString()}
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       required
@@ -247,7 +263,7 @@ export default function DevPayoutsPage() {
 
             {showMethodForm && (
               <form onSubmit={handleAddMethod} className="space-y-4 mb-6 p-5 bg-slate-50/50 border border-slate-100/85 rounded-xl">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
                       Provider
@@ -261,7 +277,7 @@ export default function DevPayoutsPage() {
                       <option value="manual">Manual</option>
                     </select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="md:col-span-2">
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
                       {provider === 'paypal_email' ? 'PayPal email' : 'Account details'}
                     </label>
@@ -276,6 +292,20 @@ export default function DevPayoutsPage() {
                       autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
                       inputMode={provider === 'paypal_email' ? 'email' : 'text'}
                       className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                      Currency
+                    </label>
+                    <input
+                      type="text"
+                      value={methodCurrency}
+                      onChange={(e) => setMethodCurrency(e.target.value.toUpperCase())}
+                      maxLength={3}
+                      pattern="[A-Z]{3}"
+                      required
+                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] uppercase placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
                     />
                   </div>
                 </div>
@@ -302,6 +332,7 @@ export default function DevPayoutsPage() {
                         {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider.replace('_', ' ')}
                       </p>
                       <p className="text-surface-500 text-xs font-mono mt-0.5 font-normal">{acc.destination}</p>
+                      <p className="text-surface-400 text-xs mt-0.5 font-normal">{acc.currency}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge status={acc.isVerified ? 'approved' : 'pending'} />

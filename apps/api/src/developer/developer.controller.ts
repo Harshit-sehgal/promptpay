@@ -2,12 +2,13 @@ import { Controller, Get, Post, Patch, Body, UseGuards, Query, HttpCode, HttpSta
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles, CurrentUser } from '../common/decorators';
-import { RequiredScopes } from '../common/decorators/allow-api-key.decorator';
+import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { DeveloperService } from './developer.service';
 import { UpdateSettingsDto, EarningsQueryDto, DeleteAccountDto } from './dto';
 
 @Controller('developer')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@AllowApiKey()
 @Roles('developer')
 export class DeveloperController {
   constructor(private service: DeveloperService) {}

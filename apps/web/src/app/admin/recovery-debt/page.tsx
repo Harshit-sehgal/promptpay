@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
-import { formatCurrency, formatRelativeTime } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 type RecoveryDebtCaseStatus = 'open' | 'in_collections' | 'recovered' | 'written_off' | 'closed';
 
@@ -138,7 +138,10 @@ export default function AdminRecoveryDebtPage() {
   };
 
   const items = data?.items || [];
-  const totalOutstanding = items.reduce((sum, row) => sum + row.outstandingDebtMinor, 0);
+  const outstandingByCurrency = items.reduce<Record<string, number>>((totals, row) => {
+    totals[row.currency] = (totals[row.currency] ?? 0) + row.outstandingDebtMinor;
+    return totals;
+  }, {});
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
   return (
@@ -162,7 +165,9 @@ export default function AdminRecoveryDebtPage() {
           </div>
           <div>
             <p className="text-ink-400 text-xs uppercase tracking-wider">Shown outstanding</p>
-            <p className="text-3xl font-bold text-red-300 font-mono">{formatCurrency(totalOutstanding)}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-red-300 font-mono break-words">
+              {formatCurrencyBreakdown(outstandingByCurrency)}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">

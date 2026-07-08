@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
-import { PayoutProviderHandler } from '../payout.service';
+import type { PayoutProviderHandler } from '../payout.service';
+import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 
 /**
  * Stripe Connect payout provider.
@@ -175,12 +176,12 @@ export class StripeProvider {
  * Replaces the former `StubPayoutProvider('Stripe Connect', ...)` placeholder.
  * When a developer adds a `stripe_connect` payout method, the `destination`
  * field stores their Stripe **connected account id** (e.g. `acct_1AbC...`).
- * On `initiate()` we call Stripe Connect's `payouts.create` *on the connected
- * account* (`stripeAccount` header) to push funds from that account's balance
- * to the developer's bank account. The returned Stripe Payout id is recorded as
- * `providerTxId` and the `payout.paid` / `payout.failed` webhooks (already
- * handled in `StripeWebhookController`) reconcile the `PayoutRequest` to a
- * terminal state.
+ * On `initiate()` we first transfer platform funds to the connected account,
+ * then call Stripe Connect's `payouts.create` *on the connected account*
+ * (`stripeAccount` header) to push funds from that account's balance to the
+ * developer's bank account. The returned Stripe Payout id is recorded as
+ * `providerTxId` and the `payout.paid` / `payout.failed` webhooks reconcile
+ * the `PayoutRequest` to a terminal state.
  *
  * Production readiness:
  *  - `STRIPE_SECRET_KEY` must be set (no-op provider otherwise).
@@ -240,20 +241,69 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
       throw new Error(`Refusing Stripe Connect payout with non-positive amount: ${amount}`);
     }
 
-    const payout = await this.stripe.payouts.create(
+    const transferGroup = `wl_payout_${params.payoutRequestId}`;
+    const transfer = await this.stripe.transfers.create(
       {
         amount,
         currency: params.currency.toLowerCase(),
+        destination: connectedAccount,
+        transfer_group: transferGroup,
         metadata: {
           payoutRequestId: params.payoutRequestId,
           provider: 'stripe_connect',
+          purpose: 'developer_payout_funding',
         },
       },
-      { stripeAccount: connectedAccount },
+      { idempotencyKey: `${transferGroup}_transfer` },
     );
 
+    let payout: Stripe.Payout;
+    try {
+      payout = await this.stripe.payouts.create(
+        {
+          amount,
+          currency: params.currency.toLowerCase(),
+          metadata: {
+            payoutRequestId: params.payoutRequestId,
+            provider: 'stripe_connect',
+            transferId: transfer.id,
+          },
+        },
+        {
+          stripeAccount: connectedAccount,
+          idempotencyKey: `${transferGroup}_payout`,
+        },
+      );
+    } catch (err: unknown) {
+      const payoutError = err instanceof Error ? err.message : String(err);
+      try {
+        await this.stripe.transfers.createReversal(
+          transfer.id,
+          {
+            amount,
+            metadata: {
+              payoutRequestId: params.payoutRequestId,
+              provider: 'stripe_connect',
+              reason: 'connected_account_payout_create_failed',
+            },
+          },
+          { idempotencyKey: `${transferGroup}_transfer_reversal` },
+        );
+      } catch (reversalErr: unknown) {
+        const reversalError = reversalErr instanceof Error ? reversalErr.message : String(reversalErr);
+        throw new PayoutProviderUnsafeFailure(
+          `Stripe Connect payout creation failed after transfer ${transfer.id}, and automatic transfer reversal failed. ` +
+          `Do not release payout allocations until Stripe is reconciled manually. payoutError=${payoutError}; reversalError=${reversalError}`,
+        );
+      }
+
+      throw new Error(
+        `Stripe Connect payout creation failed after transfer ${transfer.id}; transfer was reversed. payoutError=${payoutError}`,
+      );
+    }
+
     this.logger.log(
-      `Stripe Connect payout initiated: request=${params.payoutRequestId}, account=${connectedAccount}, amount=${amount} ${params.currency}, stripePayout=${payout.id}`,
+      `Stripe Connect payout initiated: request=${params.payoutRequestId}, account=${connectedAccount}, amount=${amount} ${params.currency}, stripeTransfer=${transfer.id}, stripePayout=${payout.id}`,
     );
 
     return { providerTxId: payout.id, status: payout.status ?? 'pending' };

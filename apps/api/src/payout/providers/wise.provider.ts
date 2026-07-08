@@ -217,9 +217,31 @@ export class WisePayoutProvider implements PayoutProviderHandler {
       status?: string;
       created?: string;
     };
-    // Map Wise transfer lifecycle to our coarse status.
-    const wiseStatus = data.status ?? 'processing';
+    // Map Wise transfer lifecycle to the coarse statuses the payout cron
+    // understands. Unknown states stay processing so a new provider state
+    // cannot accidentally terminalize a payout.
+    const wiseStatus = mapWiseTransferStatus(data.status);
     const paidAt = data.created ? new Date(data.created) : undefined;
     return { status: wiseStatus, paidAt };
   }
+}
+
+function mapWiseTransferStatus(status?: string): 'processing' | 'paid' | 'failed' {
+  const normalized = status?.trim().toLowerCase();
+  if (!normalized) return 'processing';
+
+  if (normalized === 'paid' || normalized === 'outgoing_payment_sent') {
+    return 'paid';
+  }
+
+  if (
+    normalized === 'failed' ||
+    normalized === 'cancelled' ||
+    normalized === 'canceled' ||
+    normalized === 'funds_refunded'
+  ) {
+    return 'failed';
+  }
+
+  return 'processing';
 }

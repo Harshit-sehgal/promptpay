@@ -165,12 +165,12 @@ export default function AdminCampaignsPage() {
                   <div>
                     <p className="text-ink-500 text-xs">Bid</p>
                     <p className="text-white font-mono">
-                      {formatCurrency(c.bidAmountMinor)}/{c.bidType === 'cpm' ? '1k imp' : 'click'}
+                      {formatCurrency(c.bidAmountMinor, c.currency)}/{c.bidType === 'cpm' ? '1k imp' : 'click'}
                     </p>
                   </div>
                   <div>
                     <p className="text-ink-500 text-xs">Budget</p>
-                    <p className="text-white font-mono">{formatCurrency(c.budgetTotalMinor)}</p>
+                    <p className="text-white font-mono">{formatCurrency(c.budgetTotalMinor, c.currency)}</p>
                   </div>
                   <div>
                     <p className="text-ink-500 text-xs">Submitted</p>

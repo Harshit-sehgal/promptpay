@@ -12,6 +12,7 @@ const ADMIN_NAV = [
   { label: 'Payout requests', href: '/admin/payouts' },
   { label: 'Recovery debt', href: '/admin/recovery-debt' },
   { label: 'Ledger / Revenue', href: '/admin/ledger' },
+  { label: 'Operations', href: '/admin/operations' },
   { label: 'Audit log', href: '/admin/audit' },
 ];
 

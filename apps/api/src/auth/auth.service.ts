@@ -433,8 +433,8 @@ export class AuthService {
   /** ── Logout ── */
   async logout(userId: string, jti?: string) {
     if (jti) {
-      await this.prisma.session.update({
-        where: { id: jti },
+      await this.prisma.session.updateMany({
+        where: { id: jti, userId },
         data: { revoked: true },
       });
     } else {

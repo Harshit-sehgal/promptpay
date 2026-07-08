@@ -64,6 +64,7 @@ const ALLOWED_PATH_PREFIXES = [
 
   // Admin (gated by RoleGuard upstream; the proxy just forwards)
   '/admin/overview',
+  '/admin/money-integrity',
   '/admin/metrics',
   '/admin/users',
   '/admin/campaigns',
@@ -71,6 +72,9 @@ const ALLOWED_PATH_PREFIXES = [
   '/admin/fraud',
   '/admin/recovery-debt',
   '/admin/audit-log',
+  '/admin/tools',
+  '/admin/webhooks',
+  '/admin/refunds',
 
   // Payout
   '/payout/method',

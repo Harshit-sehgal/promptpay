@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
-import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatNumber, formatPercent } from '@/lib/format';
 
 // ── Types ──
 
@@ -32,6 +32,7 @@ interface ReportsData {
     totalImpressions: number;
     totalClicks: number;
     totalSpendMinor: number;
+    totalSpendByCurrency?: Record<string, number>;
     avgCtr: number;
     totalCampaigns: number;
   };
@@ -130,6 +131,7 @@ export default function AdvertiserReportsPage() {
       clicks: summary.totalClicks,
       ctr: summary.avgCtr,
       spend: summary.totalSpendMinor,
+      spendByCurrency: summary.totalSpendByCurrency,
       campaigns: summary.totalCampaigns,
     };
   }, [data]);
@@ -243,7 +245,7 @@ export default function AdvertiserReportsPage() {
             />
             <StatCard
               label="Total spend"
-              value={formatCurrency(displayStats!.spend)}
+              value={formatCurrencyBreakdown(displayStats!.spendByCurrency ?? { USD: displayStats!.spend })}
               valueColor="text-brand-500"
             />
             <StatCard
@@ -392,7 +394,9 @@ export default function AdvertiserReportsPage() {
                     <span className="text-white font-mono text-sm font-semibold">{formatNumber(data.summary.totalImpressions)}</span>
                     <span className="text-ink-300 font-mono text-sm">{formatNumber(data.summary.totalClicks)}</span>
                     <span className="text-ink-300 font-mono text-sm">{formatPercent(data.summary.avgCtr)}</span>
-                    <span className="text-white font-mono text-sm font-semibold">{formatCurrency(data.summary.totalSpendMinor)}</span>
+                    <span className="text-white font-mono text-sm font-semibold">
+                      {formatCurrencyBreakdown(data.summary.totalSpendByCurrency ?? { USD: data.summary.totalSpendMinor })}
+                    </span>
                   </div>
                   <div className="md:col-span-2" />
                 </div>

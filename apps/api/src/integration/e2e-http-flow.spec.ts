@@ -352,6 +352,17 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       expect(res.body.id).toBeDefined();
       advertiserId = res.body.id;
+      await prisma.advertiserLedger.create({
+        data: {
+          advertiserId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: 100000,
+          currency: 'USD',
+          idempotencyKey: 'e2e-http-advertiser-initial-deposit',
+          description: 'Initial deposit for HTTP e2e campaign serving',
+        },
+      });
     });
 
     it('should create a new draft CPM campaign', async () => {
@@ -606,9 +617,10 @@ describe('End-to-End HTTP Integration Flow', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ ...adReqPayload, signature })
-        .expect(200);
+        .send({ ...adReqPayload, signature });
+      console.log('DEBUG ad-request', res.status, JSON.stringify(res.body));
 
+      expect(res.status).toBe(200);
       expect(res.body.ad).toBeDefined();
       expect(res.body.ad.impressionToken).toBeDefined();
       expect(res.body.ad.campaignId).toBe(campaignId);
@@ -647,6 +659,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .post('/api/v1/extension/impression-qualified')
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...impressionPayload, signature });
+      console.log('DEBUG impression-qualified', res.status, JSON.stringify(res.body));
 
       expect(res.status).toBe(200);
       expect(res.body.qualified).toBe(true);
@@ -1083,12 +1096,22 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ note: 'Approving for payout' })
         .expect(201);
 
-      // 2. Mark payout as paid (executes ledger status change to paid)
+      // 2. Process payout through the configured provider (manual/paypal_email
+      // provider returns a processing transaction for admin reconciliation).
+      const processRes = await request(app.getHttpServer())
+        .post(`/api/v1/admin/payouts/${payoutId}/process`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .expect(201);
+
+      expect(processRes.body.status).toBe('processing');
+      expect(processRes.body.providerTxId).toBeDefined();
+
+      // 3. Mark payout as paid (executes ledger status change to paid)
       const markPaidRes = await request(app.getHttpServer())
         .post(`/api/v1/admin/payouts/${payoutId}/mark-paid`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
-          providerTxId: 'tx-paypal-12345',
+          providerTxId: processRes.body.providerTxId,
           paidAt: new Date().toISOString(),
           amountMinor: 1200,
           currency: 'USD',
@@ -1097,7 +1120,7 @@ describe('End-to-End HTTP Integration Flow', () => {
 
       expect(markPaidRes.body.status).toBe('paid');
 
-      // 3. Verify developer earnings entry transitions to status paid
+      // 4. Verify developer earnings entry transitions to status paid
       const entry = await prisma.earningsLedger.findUnique({ where: { id: earningEntryId } });
       expect(entry?.status).toBe('paid');
     });

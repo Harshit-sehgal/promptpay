@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsUUID, IsOptional, IsArray, IsNumber, Min, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsEnum, IsUUID, IsOptional, IsArray, IsNumber, Min, MinLength, MaxLength, Max, IsDateString } from 'class-validator';
 import { ToolType } from '@waitlayer/shared';
 
 export class AdRequestDto {
@@ -43,11 +43,13 @@ export class AdRenderedDto {
   @MinLength(1)
   impressionToken!: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsDateString()
   renderedAt!: string;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
   visibleSurface?: number;
 
   @IsString()
@@ -65,8 +67,7 @@ export class QualifiedImpressionDto {
   @MinLength(1)
   impressionToken!: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsDateString()
   qualifiedAt!: string;
 
   @IsNumber()
@@ -88,8 +89,7 @@ export class AdClickDto {
   @MinLength(1)
   impressionToken!: string;
 
-  @IsString()
-  @MinLength(1)
+  @IsDateString()
   clickedAt!: string;
 
   @IsString()

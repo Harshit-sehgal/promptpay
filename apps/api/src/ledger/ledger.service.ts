@@ -20,6 +20,30 @@ const EARNING_TRANSITIONS: Partial<Record<LedgerStatus, LedgerStatus[]>> = {
 export class LedgerService {
   constructor(private prisma: PrismaService) {}
 
+  private addCurrencyAmount(totals: Record<string, number>, currency: string | null | undefined, amountMinor: number) {
+    const key = (currency || 'USD').toUpperCase();
+    totals[key] = (totals[key] ?? 0) + amountMinor;
+  }
+
+  private addGroupedCurrencyTotals(
+    totals: Record<string, number>,
+    rows: Array<{ currency: string; _sum: { amountMinor: number | null } }>,
+    multiplier = 1,
+  ) {
+    for (const row of rows) {
+      this.addCurrencyAmount(totals, row.currency, (row._sum.amountMinor ?? 0) * multiplier);
+    }
+  }
+
+  private nonNegativeCurrencyTotals(totals: Record<string, number>): Record<string, number> {
+    return Object.fromEntries(
+      Object.entries(totals).map(([currency, amountMinor]) => [
+        currency,
+        Math.max(0, amountMinor),
+      ]),
+    );
+  }
+
   // ── Revenue Split ──
 
   /**
@@ -640,56 +664,68 @@ export class LedgerService {
   // ── Balance Queries ──
 
   /** Get total confirmed (available) earnings for a user */
-  async getAvailableBalance(userId: string): Promise<{ amountMinor: number; currency: string }> {
+  async getAvailableBalance(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
     const [credits, debits] = await Promise.all([
-      this.prisma.earningsLedger.aggregate({
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
         where: { userId, status: 'confirmed', entryType: 'credit' },
         _sum: { amountMinor: true },
       }),
-      this.prisma.earningsLedger.aggregate({
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
         where: { userId, status: 'confirmed', entryType: 'debit' },
         _sum: { amountMinor: true },
       }),
     ]);
+    const totals: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(totals, credits);
+    this.addGroupedCurrencyTotals(totals, debits, -1);
+    const byCurrency = this.nonNegativeCurrencyTotals(totals);
     return {
-      amountMinor: Math.max(
-        0,
-        (credits._sum.amountMinor || 0) - (debits._sum.amountMinor || 0),
-      ),
+      amountMinor: byCurrency.USD ?? 0,
       currency: 'USD',
+      byCurrency,
     };
   }
 
   /** Get total pending (estimated + confirmed) earnings for a user */
-  async getPendingBalance(userId: string): Promise<{ amountMinor: number; currency: string }> {
-    const result = await this.prisma.earningsLedger.aggregate({
+  async getPendingBalance(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
+    const result = await this.prisma.earningsLedger.groupBy({
+      by: ['currency'],
       where: { userId, status: { in: ['estimated', 'pending'] }, entryType: 'credit' },
       _sum: { amountMinor: true },
     });
+    const byCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(byCurrency, result);
     return {
-      amountMinor: result._sum.amountMinor || 0,
+      amountMinor: byCurrency.USD ?? 0,
       currency: 'USD',
+      byCurrency,
     };
   }
 
   /** Get all-time total earnings for a user (excluding reversed/void) */
-  async getTotalEarnings(userId: string): Promise<{ amountMinor: number; currency: string }> {
+  async getTotalEarnings(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
     const [credits, debits] = await Promise.all([
-      this.prisma.earningsLedger.aggregate({
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
         where: { userId, status: { notIn: ['reversed', 'void'] }, entryType: 'credit' },
         _sum: { amountMinor: true },
       }),
-      this.prisma.earningsLedger.aggregate({
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
         where: { userId, status: { notIn: ['reversed', 'void'] }, entryType: 'debit' },
         _sum: { amountMinor: true },
       }),
     ]);
+    const totals: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(totals, credits);
+    this.addGroupedCurrencyTotals(totals, debits, -1);
+    const byCurrency = this.nonNegativeCurrencyTotals(totals);
     return {
-      amountMinor: Math.max(
-        0,
-        (credits._sum.amountMinor || 0) - (debits._sum.amountMinor || 0),
-      ),
+      amountMinor: byCurrency.USD ?? 0,
       currency: 'USD',
+      byCurrency,
     };
   }
 
@@ -710,14 +746,18 @@ export class LedgerService {
   }
 
   /** Get paid-out total for a user */
-  async getPaidOutTotal(userId: string): Promise<{ amountMinor: number; currency: string }> {
-    const result = await this.prisma.earningsLedger.aggregate({
+  async getPaidOutTotal(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
+    const result = await this.prisma.earningsLedger.groupBy({
+      by: ['currency'],
       where: { userId, status: 'paid', entryType: 'credit' },
       _sum: { amountMinor: true },
     });
+    const byCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(byCurrency, result);
     return {
-      amountMinor: result._sum.amountMinor || 0,
+      amountMinor: byCurrency.USD ?? 0,
       currency: 'USD',
+      byCurrency,
     };
   }
 
@@ -854,50 +894,75 @@ export class LedgerService {
       totalReserveCredit,
       totalReserveReversal,
       totalEarningsDebit,
+      pendingEarnings,
     ] = await Promise.all([
-      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit' } }),
-      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
-      this.prisma.advertiserLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'refund' } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
-      this.prisma.platformLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
-      this.prisma.earningsLedger.aggregate({ _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
+      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', status: { in: ['confirmed', 'paid'] } } }),
+      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
+      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'refund' } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
+      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
+      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
+      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', status: 'pending' } }),
     ]);
 
-    const earningsMinor =
-      (totalEarnings._sum?.amountMinor ?? 0) -
-      (totalEarningsDebit._sum?.amountMinor ?? 0);
+    const earningsByCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(earningsByCurrency, totalEarnings);
+    this.addGroupedCurrencyTotals(earningsByCurrency, totalEarningsDebit, -1);
+
     // Advertiser spend = gross debits (billed) minus refunds (reversed fraud, archive)
-    const advertiserMinor =
-      (totalAdvertiserDebit._sum?.amountMinor ?? 0) -
-      (totalAdvertiserRefund._sum?.amountMinor ?? 0);
+    const advertiserByCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(advertiserByCurrency, totalAdvertiserDebit);
+    this.addGroupedCurrencyTotals(advertiserByCurrency, totalAdvertiserRefund, -1);
+
     // Platform fees = gross credits (billed) minus reversals (reversed fraud)
-    const platformMinor =
-      (totalPlatformCredit._sum?.amountMinor ?? 0) -
-      (totalPlatformReversal._sum?.amountMinor ?? 0);
+    const platformByCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(platformByCurrency, totalPlatformCredit);
+    this.addGroupedCurrencyTotals(platformByCurrency, totalPlatformReversal, -1);
+
     // Fraud reserve = gross credits minus reversals (released on false-positive)
-    const reserveMinor =
-      (totalReserveCredit._sum?.amountMinor ?? 0) -
-      (totalReserveReversal._sum?.amountMinor ?? 0);
+    const reserveByCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(reserveByCurrency, totalReserveCredit);
+    this.addGroupedCurrencyTotals(reserveByCurrency, totalReserveReversal, -1);
+
+    const pendingByCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(pendingByCurrency, pendingEarnings);
+
+    const earningsMinor = earningsByCurrency.USD ?? 0;
+    const pendingMinor = pendingByCurrency.USD ?? 0;
+    const advertiserMinor = advertiserByCurrency.USD ?? 0;
+    const platformMinor = platformByCurrency.USD ?? 0;
+    const reserveMinor = reserveByCurrency.USD ?? 0;
 
     return {
       totalEarnings: earningsMinor,
       totalAdvertiserSpend: advertiserMinor,
       totalPlatformFee: platformMinor,
       totalReserve: reserveMinor,
+      byCurrency: {
+        totalEarnings: earningsByCurrency,
+        totalAdvertiserSpend: advertiserByCurrency,
+        totalPlatformFee: platformByCurrency,
+        totalReserve: reserveByCurrency,
+      },
       // Nested structures for frontend page UI compatibility
       earningsLedger: {
         balanceMinor: earningsMinor,
-        pendingMinor: 0,
+        pendingMinor,
         confirmedMinor: earningsMinor,
+        byCurrency: earningsByCurrency,
+        pendingByCurrency,
       },
       advertiserLedger: {
         balanceMinor: advertiserMinor,
+        byCurrency: advertiserByCurrency,
       },
       platformLedger: {
         revenueMinor: platformMinor,
         reserveMinor: reserveMinor,
+        revenueByCurrency: platformByCurrency,
+        reserveByCurrency,
       },
     };
   }

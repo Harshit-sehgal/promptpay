@@ -4,12 +4,23 @@ import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { ledgerApi } from '@/lib/api/services';
-import { formatCurrency, formatRelativeTime } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 interface Breakdown {
-  earningsLedger: { balanceMinor: number; pendingMinor: number; confirmedMinor: number };
-  advertiserLedger: { balanceMinor: number };
-  platformLedger: { revenueMinor: number; reserveMinor: number };
+  earningsLedger: {
+    balanceMinor: number;
+    pendingMinor: number;
+    confirmedMinor: number;
+    byCurrency?: Record<string, number>;
+    pendingByCurrency?: Record<string, number>;
+  };
+  advertiserLedger: { balanceMinor: number; byCurrency?: Record<string, number> };
+  platformLedger: {
+    revenueMinor: number;
+    reserveMinor: number;
+    revenueByCurrency?: Record<string, number>;
+    reserveByCurrency?: Record<string, number>;
+  };
 }
 
 interface LedgerEntry {
@@ -66,22 +77,32 @@ export default function AdminLedgerPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <StatCard
                 label="Confirmed earnings (payable)"
-                value={formatCurrency(breakdown.earningsLedger.confirmedMinor)}
+                value={formatCurrencyBreakdown(
+                  breakdown.earningsLedger.byCurrency ?? { USD: breakdown.earningsLedger.confirmedMinor },
+                )}
                 valueColor="text-emerald-400"
               />
               <StatCard
                 label="Pending earnings"
-                value={formatCurrency(breakdown.earningsLedger.pendingMinor)}
+                value={formatCurrencyBreakdown(
+                  breakdown.earningsLedger.pendingByCurrency ?? { USD: breakdown.earningsLedger.pendingMinor },
+                )}
               />
               <StatCard
                 label="Advertiser balances"
-                value={formatCurrency(breakdown.advertiserLedger.balanceMinor)}
+                value={formatCurrencyBreakdown(
+                  breakdown.advertiserLedger.byCurrency ?? { USD: breakdown.advertiserLedger.balanceMinor },
+                )}
               />
               <StatCard
                 label="Platform revenue"
-                value={formatCurrency(breakdown.platformLedger.revenueMinor)}
+                value={formatCurrencyBreakdown(
+                  breakdown.platformLedger.revenueByCurrency ?? { USD: breakdown.platformLedger.revenueMinor },
+                )}
                 valueColor="text-brand-500"
-                subtitle={`Reserve: ${formatCurrency(breakdown.platformLedger.reserveMinor)}`}
+                subtitle={`Reserve: ${formatCurrencyBreakdown(
+                  breakdown.platformLedger.reserveByCurrency ?? { USD: breakdown.platformLedger.reserveMinor },
+                )}`}
               />
             </div>
 
@@ -91,19 +112,25 @@ export default function AdminLedgerPage() {
                 <div>
                   <p className="text-ink-400 text-xs uppercase">User share (60-80%)</p>
                   <p className="text-emerald-400 font-mono text-lg">
-                    {formatCurrency(breakdown.earningsLedger.confirmedMinor + breakdown.earningsLedger.pendingMinor)}
+                    {formatCurrencyBreakdown(
+                      breakdown.earningsLedger.byCurrency ?? { USD: breakdown.earningsLedger.confirmedMinor },
+                    )}
                   </p>
                 </div>
                 <div>
                   <p className="text-ink-400 text-xs uppercase">Platform (30-10%)</p>
                   <p className="text-brand-500 font-mono text-lg">
-                    {formatCurrency(breakdown.platformLedger.revenueMinor)}
+                    {formatCurrencyBreakdown(
+                      breakdown.platformLedger.revenueByCurrency ?? { USD: breakdown.platformLedger.revenueMinor },
+                    )}
                   </p>
                 </div>
                 <div>
                   <p className="text-ink-400 text-xs uppercase">Reserve (10%)</p>
                   <p className="text-amber-400 font-mono text-lg">
-                    {formatCurrency(breakdown.platformLedger.reserveMinor)}
+                    {formatCurrencyBreakdown(
+                      breakdown.platformLedger.reserveByCurrency ?? { USD: breakdown.platformLedger.reserveMinor },
+                    )}
                   </p>
                 </div>
               </div>

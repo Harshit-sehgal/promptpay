@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Min, Max, MaxLength, IsEnum, IsArray } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min, Max, MaxLength, IsEnum, IsArray, IsUUID, Length, Matches } from 'class-validator';
 import { PayoutProvider } from '@waitlayer/shared';
 
 export class AddPayoutMethodDto {
@@ -16,7 +16,7 @@ export class AddPayoutMethodDto {
 }
 
 export class RequestPayoutDto {
-  @IsString()
+  @IsUUID()
   payoutAccountId!: string;
 
   @IsInt()
@@ -24,7 +24,8 @@ export class RequestPayoutDto {
   amountMinor!: number;
 
   @IsString()
-  @MaxLength(3)
+  @Length(3, 3)
+  @Matches(/^[A-Z]{3}$/, { message: 'currency must be an uppercase ISO 4217 code' })
   currency!: string;
 
   /** Optional: specify exact earnings entry IDs to allocate.

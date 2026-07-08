@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { LoadingSpinner, StatCard } from '@/components';
-import { formatCurrency, formatNumber } from '@/lib/format';
+import { formatCurrencyBreakdown, formatNumber } from '@/lib/format';
 
 interface AdminOverview {
   activeUsers: number;
   activeCampaigns: number;
   totalBillableImpressions: number;
   totalPayoutsMinor: number;
+  totalPayoutsByCurrency?: Record<string, number>;
   openFraudFlags: number;
 }
 
@@ -29,6 +30,11 @@ export default function AdminDashboard() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const payoutTotals = data?.totalPayoutsByCurrency ?? (data ? { USD: data.totalPayoutsMinor } : {});
+  const payoutCurrencies = Object.keys(payoutTotals)
+    .filter((currency) => (payoutTotals[currency] ?? 0) !== 0)
+    .sort();
 
   return (
     <>
@@ -126,15 +132,17 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <p className="text-ink-400 text-xs uppercase tracking-wider">Total payouts</p>
-                <p className="text-white font-mono text-lg">{formatCurrency(data.totalPayoutsMinor)}</p>
+                <p className="text-white font-mono text-lg">{formatCurrencyBreakdown(payoutTotals)}</p>
               </div>
               <div>
-                <p className="text-ink-400 text-xs uppercase tracking-wider">Currency</p>
-                <p className="text-white font-mono text-lg">USD</p>
+                <p className="text-ink-400 text-xs uppercase tracking-wider">Payout currencies</p>
+                <p className="text-white font-mono text-lg">
+                  {payoutCurrencies.length > 0 ? payoutCurrencies.join(', ') : 'USD'}
+                </p>
               </div>
               <div>
                 <p className="text-ink-400 text-xs uppercase tracking-wider">Currency notes</p>
-                <p className="text-ink-300 text-xs">All payouts in USD. Multi-currency planned.</p>
+                <p className="text-ink-300 text-xs">Grouped by paid earnings ledger currency.</p>
               </div>
             </div>
           </div>

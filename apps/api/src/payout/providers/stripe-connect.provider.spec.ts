@@ -13,15 +13,31 @@ function makeProvider(opts: { secretKey?: string; nodeEnv?: string }) {
 }
 
 // Minimal Stripe SDK double that records the `stripeAccount` header used.
-function fakeStripe() {
+function fakeStripe(options: { payoutCreateFails?: boolean; reversalFails?: boolean } = {}) {
   const calls: { args: any; opts: any }[] = [];
   const retrieveCalls: { providerTxId: string; opts: any }[] = [];
+  const transferCalls: { args: any; opts: any }[] = [];
+  const reversalCalls: { transferId: string; args: any; opts: any }[] = [];
   return {
     calls,
     retrieveCalls,
+    transferCalls,
+    reversalCalls,
+    transfers: {
+      create: vi.fn(async (args: any, opts: any) => {
+        transferCalls.push({ args, opts });
+        return { id: 'tr_test_123' };
+      }),
+      createReversal: vi.fn(async (transferId: string, args: any, opts: any) => {
+        reversalCalls.push({ transferId, args, opts });
+        if (options.reversalFails) throw new Error('reversal failed');
+        return { id: 'trr_test_123' };
+      }),
+    },
     payouts: {
       create: vi.fn(async (args: any, opts: any) => {
         calls.push({ args, opts });
+        if (options.payoutCreateFails) throw new Error('payout create failed');
         return { id: 'po_test_123', status: 'pending' };
       }),
       retrieve: vi.fn(async (providerTxId: string, _params: any, opts: any) => {
@@ -54,7 +70,7 @@ describe('StripeConnectPayoutProvider', () => {
   });
 
   describe('initiate', () => {
-    it('creates a payout on the developer connected account and returns the Stripe payout id', async () => {
+    it('funds the connected account, creates a payout there, and returns the Stripe payout id', async () => {
       const provider = makeProvider({ secretKey: 'sk_test_xxx' });
       // Inject the fake Stripe client.
       (provider as any).stripe = fakeStripe();
@@ -67,11 +83,25 @@ describe('StripeConnectPayoutProvider', () => {
       });
 
       expect(res.providerTxId).toBe('po_test_123');
-      const { calls } = (provider as any).stripe as ReturnType<typeof fakeStripe>;
+      const { calls, transferCalls } = (provider as any).stripe as ReturnType<typeof fakeStripe>;
+      expect(transferCalls[0].args).toEqual({
+        amount: 2500,
+        currency: 'usd',
+        destination: 'acct_developer123',
+        transfer_group: 'wl_payout_req_1',
+        metadata: {
+          payoutRequestId: 'req_1',
+          provider: 'stripe_connect',
+          purpose: 'developer_payout_funding',
+        },
+      });
+      expect(transferCalls[0].opts.idempotencyKey).toBe('wl_payout_req_1_transfer');
       expect(calls[0].opts.stripeAccount).toBe('acct_developer123');
+      expect(calls[0].opts.idempotencyKey).toBe('wl_payout_req_1_payout');
       expect(calls[0].args.amount).toBe(2500);
       expect(calls[0].args.currency).toBe('usd');
       expect(calls[0].args.metadata.payoutRequestId).toBe('req_1');
+      expect(calls[0].args.metadata.transferId).toBe('tr_test_123');
     });
 
     it('refuses a non-acct_ destination so production money never goes to an unknown account', async () => {
@@ -100,6 +130,48 @@ describe('StripeConnectPayoutProvider', () => {
           currency: 'USD',
         }),
       ).rejects.toThrow(/non-positive amount/);
+    });
+
+    it('reverses the transfer if connected-account payout creation fails', async () => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      (provider as any).stripe = fakeStripe({ payoutCreateFails: true });
+
+      await expect(
+        provider.initiate({
+          payoutRequestId: 'req_4',
+          destination: 'acct_developer123',
+          amountMinor: 2500,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(/transfer was reversed/);
+
+      const { reversalCalls } = (provider as any).stripe as ReturnType<typeof fakeStripe>;
+      expect(reversalCalls[0]).toEqual({
+        transferId: 'tr_test_123',
+        args: {
+          amount: 2500,
+          metadata: {
+            payoutRequestId: 'req_4',
+            provider: 'stripe_connect',
+            reason: 'connected_account_payout_create_failed',
+          },
+        },
+        opts: { idempotencyKey: 'wl_payout_req_4_transfer_reversal' },
+      });
+    });
+
+    it('throws an unsafe failure if payout creation and transfer reversal both fail', async () => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      (provider as any).stripe = fakeStripe({ payoutCreateFails: true, reversalFails: true });
+
+      await expect(
+        provider.initiate({
+          payoutRequestId: 'req_5',
+          destination: 'acct_developer123',
+          amountMinor: 2500,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(/Do not release payout allocations/);
     });
   });
 

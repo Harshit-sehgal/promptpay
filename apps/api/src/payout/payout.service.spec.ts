@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PayoutService } from './payout.service';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
 
 const mockPrisma = {
   payoutAccount: {
@@ -37,6 +38,7 @@ const mockPrisma = {
     update: vi.fn(),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     aggregate: vi.fn(),
+    groupBy: vi.fn(),
     count: vi.fn().mockResolvedValue(0),
   },
   user: {
@@ -292,6 +294,16 @@ describe('PayoutService', () => {
 
       expect(res.status).toBe('requested');
       expect(mockPrisma.payoutAllocation.create).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.earningsLedger.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: 'user_123',
+            status: 'confirmed',
+            entryType: 'credit',
+            currency: 'USD',
+          }),
+        }),
+      );
       // The partial-allocation path uses updateMany gated on the
       // snapshot amountMinor (a CAS pin — see service code comment) so
       // concurrent splits return count=0 and the call retries against
@@ -314,42 +326,142 @@ describe('PayoutService', () => {
         }),
       });
     });
+
+    it('normalizes payout currency before balance checks and allocation', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', status: 'active', emailVerified: true });
+      mockPrisma.earningsLedger.aggregate
+        .mockResolvedValueOnce({ _sum: { amountMinor: 5000 } })
+        .mockResolvedValueOnce({ _sum: { amountMinor: 0 } });
+      mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 0 } });
+      mockPrisma.fraudFlag.count.mockResolvedValue(0);
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({ id: 'acc_123', userId: 'user_123', currency: 'USD' });
+      mockPrisma.payoutRequest.create.mockResolvedValue({ id: 'req_123', requestedAmountMinor: 2000 });
+      mockPrisma.payoutAllocation.findMany.mockResolvedValue([]);
+      mockPrisma.earningsLedger.findMany.mockResolvedValue([
+        {
+          id: 'earn_1',
+          userId: 'user_123',
+          campaignId: 'camp_1',
+          impressionId: 'imp_1',
+          clickId: null,
+          entryType: 'credit',
+          amountMinor: 2000,
+          status: 'confirmed',
+          currency: 'USD',
+          availableAt: new Date('2026-01-01T00:00:00.000Z'),
+          description: 'entry',
+        },
+      ]);
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+        id: 'req_123',
+        status: 'requested',
+        currency: 'USD',
+        allocations: [{ earningsEntryId: 'earn_1', amountMinor: 2000 }],
+      });
+
+      await service.requestPayout('user_123', {
+        payoutAccountId: 'acc_123',
+        amountMinor: 2000,
+        currency: 'usd',
+      });
+
+      expect(mockPrisma.earningsLedger.aggregate).toHaveBeenNthCalledWith(1, {
+        where: { userId: 'user_123', status: 'confirmed', entryType: 'credit', currency: 'USD' },
+        _sum: { amountMinor: true },
+      });
+      expect(mockPrisma.earningsLedger.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ currency: 'USD' }),
+        }),
+      );
+      expect(mockPrisma.payoutRequest.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ currency: 'USD' }),
+      });
+    });
   });
 
   describe('getPayoutInfo', () => {
     it('does not subtract already-paid allocations from confirmed availability', async () => {
-      mockPrisma.payoutAccount.findMany.mockResolvedValue([]);
+      mockPrisma.payoutAccount.findMany.mockResolvedValue([{ id: 'acc_usd', currency: 'USD' }]);
       mockPrisma.payoutRequest.findMany.mockResolvedValue([]);
-      mockPrisma.earningsLedger.aggregate
-        .mockResolvedValueOnce({ _sum: { amountMinor: 1000 } }) // confirmed credits
-        .mockResolvedValueOnce({ _sum: { amountMinor: 0 } }); // recovery debits
-      mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 0 } });
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 1000 } }]) // confirmed credits
+        .mockResolvedValueOnce([]); // recovery debits
+      mockPrisma.payoutAllocation.findMany.mockResolvedValue([]);
 
       const result = await service.getPayoutInfo('user_123');
 
       expect(result.availableBalanceMinor).toBe(1000);
-      expect(mockPrisma.payoutAllocation.aggregate).toHaveBeenCalledWith({
+      expect(result.availableBalanceByCurrency).toEqual({ USD: 1000 });
+      expect(mockPrisma.payoutAllocation.findMany).toHaveBeenCalledWith({
         where: {
           payoutRequest: {
             userId: 'user_123',
             status: { in: ['requested', 'under_review', 'approved', 'processing'] },
           },
         },
-        _sum: { amountMinor: true },
+        select: {
+          amountMinor: true,
+          earningsEntry: { select: { currency: true } },
+        },
       });
     });
 
     it('subtracts confirmed recovery debits from payout availability', async () => {
-      mockPrisma.payoutAccount.findMany.mockResolvedValue([]);
+      mockPrisma.payoutAccount.findMany.mockResolvedValue([{ id: 'acc_usd', currency: 'USD' }]);
       mockPrisma.payoutRequest.findMany.mockResolvedValue([]);
-      mockPrisma.earningsLedger.aggregate
-        .mockResolvedValueOnce({ _sum: { amountMinor: 1000 } }) // confirmed credits
-        .mockResolvedValueOnce({ _sum: { amountMinor: 250 } }); // recovery debits
-      mockPrisma.payoutAllocation.aggregate.mockResolvedValue({ _sum: { amountMinor: 0 } });
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 1000 } }]) // confirmed credits
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 250 } }]); // recovery debits
+      mockPrisma.payoutAllocation.findMany.mockResolvedValue([]);
 
       const result = await service.getPayoutInfo('user_123');
 
       expect(result.availableBalanceMinor).toBe(750);
+      expect(result.availableBalanceByCurrency).toEqual({ USD: 750 });
+    });
+
+    it('keeps availability separated by currency', async () => {
+      mockPrisma.payoutAccount.findMany.mockResolvedValue([{ id: 'acc_eur', currency: 'EUR' }]);
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([]);
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 1000 } },
+          { currency: 'EUR', _sum: { amountMinor: 2000 } },
+        ])
+        .mockResolvedValueOnce([
+          { currency: 'USD', _sum: { amountMinor: 300 } },
+          { currency: 'EUR', _sum: { amountMinor: 500 } },
+        ]);
+      mockPrisma.payoutAllocation.findMany.mockResolvedValue([
+        { amountMinor: 250, earningsEntry: { currency: 'EUR' } },
+      ]);
+
+      const result = await service.getPayoutInfo('user_123');
+
+      expect(result.currency).toBe('EUR');
+      expect(result.availableBalanceMinor).toBe(1250);
+      expect(result.availableBalanceByCurrency).toEqual({ USD: 700, EUR: 1250 });
+    });
+  });
+
+  describe('getAvailableForPayout', () => {
+    it('returns a currency breakdown instead of mixing confirmed earnings currencies', async () => {
+      mockPrisma.payoutAllocation.findMany.mockResolvedValue([]);
+      mockPrisma.earningsLedger.findMany.mockResolvedValue([
+        { id: 'usd_1', amountMinor: 1000, currency: 'USD' },
+        { id: 'eur_1', amountMinor: 2000, currency: 'EUR' },
+      ]);
+      mockPrisma.earningsLedger.groupBy.mockResolvedValue([
+        { currency: 'USD', _sum: { amountMinor: 300 } },
+        { currency: 'EUR', _sum: { amountMinor: 500 } },
+      ]);
+
+      const result = await service.getAvailableForPayout('user_123');
+
+      expect(result.totalMinor).toBe(700);
+      expect(result.currency).toBe('USD');
+      expect(result.totalsByCurrency).toEqual({ USD: 700, EUR: 1500 });
     });
   });
 
@@ -517,6 +629,79 @@ describe('PayoutService', () => {
       });
       expect(mockPrisma.payoutAllocation.deleteMany).toHaveBeenCalledWith({
         where: { payoutRequestId: 'req_failed' },
+      });
+    });
+
+    it('marks safe provider-thrown initiate failures as failed and releases allocations', async () => {
+      mockPayPalPayouts.initiate.mockRejectedValueOnce(new Error('provider unavailable'));
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.payoutRequest.findUnique
+        .mockResolvedValueOnce({
+          id: 'req_throw',
+          status: 'approved',
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
+        })
+        .mockResolvedValueOnce({
+          id: 'req_throw',
+          status: 'processing',
+          currency: 'USD',
+          approvedAmountMinor: 2000,
+          allocations: [{ amountMinor: 2000, earningsEntryId: 'earn_1' }],
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
+        })
+        .mockResolvedValueOnce({
+          id: 'req_throw',
+          status: 'failed',
+          allocations: [],
+        });
+
+      await expect(service.processPayout('req_throw')).rejects.toThrow(/provider unavailable/);
+
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenLastCalledWith({
+        where: { id: 'req_throw', status: { in: ['approved', 'processing'] } },
+        data: { status: 'failed' },
+      });
+      expect(mockPrisma.payoutAllocation.deleteMany).toHaveBeenCalledWith({
+        where: { payoutRequestId: 'req_throw' },
+      });
+      expect(mockPrisma.payoutTransaction.create).toHaveBeenCalledWith({
+        data: {
+          payoutRequestId: 'req_throw',
+          provider: 'paypal_payouts',
+          providerTxId: 'initiate_failed_req_throw',
+          status: 'failed',
+          failureReason: 'Provider initiate threw before a safe provider transaction was recorded: provider unavailable',
+        },
+      });
+    });
+
+    it('does not release allocations when provider reports an unsafe partial money movement', async () => {
+      mockStripeConnect.initiate.mockRejectedValueOnce(
+        new PayoutProviderUnsafeFailure('manual Stripe reconciliation required'),
+      );
+      mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.payoutRequest.findUnique
+        .mockResolvedValueOnce({
+          id: 'req_unsafe',
+          status: 'approved',
+          payoutAccount: { provider: 'stripe_connect', destination: 'acct_dev' },
+        })
+        .mockResolvedValueOnce({
+          id: 'req_unsafe',
+          status: 'processing',
+          currency: 'USD',
+          approvedAmountMinor: 2000,
+          allocations: [{ amountMinor: 2000, earningsEntryId: 'earn_1' }],
+          payoutAccount: { provider: 'stripe_connect', destination: 'acct_dev' },
+        });
+
+      await expect(service.processPayout('req_unsafe')).rejects.toThrow(/manual Stripe reconciliation required/);
+
+      expect(mockPrisma.payoutAllocation.deleteMany).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutTransaction.create).not.toHaveBeenCalled();
+      expect(mockPrisma.payoutRequest.updateMany).toHaveBeenCalledWith({
+        where: { id: 'req_unsafe', status: 'approved' },
+        data: { status: 'processing', processedAt: expect.any(Date) },
       });
     });
 

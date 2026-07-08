@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import { referralApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
 import { LoadingSpinner, StatusBadge } from '@/components';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrencyBreakdown, formatDate } from '@/lib/format';
 
 interface ReferralData {
   referralCode: string | null;
   referralCount: number;
   referralLink: string | null;
   rewardsEarnedMinor: number;
+  rewardsEarnedByCurrency?: Record<string, number>;
   referrals: ReferralInfo[];
 }
 
@@ -81,7 +82,9 @@ export default function ReferralPage() {
             </div>
             <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
               <p className="text-surface-500 text-sm mb-1.5 font-medium">Rewards earned</p>
-              <p className="text-3xl font-semibold text-emerald-600 font-mono">{formatCurrency(data.rewardsEarnedMinor)}</p>
+              <p className="text-3xl font-semibold text-emerald-600 font-mono">
+                {formatCurrencyBreakdown(data.rewardsEarnedByCurrency ?? { USD: data.rewardsEarnedMinor })}
+              </p>
             </div>
           </div>
 
@@ -135,7 +138,12 @@ export default function ReferralPage() {
                         <td className="px-5 py-3.5 text-surface-500 font-normal">{formatDate(r.createdAt)}</td>
                         <td className="px-5 py-3.5 text-right text-emerald-600 font-mono font-semibold">
                           {r.rewards.length > 0
-                            ? formatCurrency(r.rewards.reduce((s, rw) => s + rw.amountMinor, 0))
+                            ? formatCurrencyBreakdown(
+                                r.rewards.reduce<Record<string, number>>((totals, reward) => {
+                                  totals[reward.currency] = (totals[reward.currency] ?? 0) + reward.amountMinor;
+                                  return totals;
+                                }, {}),
+                              )
                             : '$0.00'}
                         </td>
                       </tr>

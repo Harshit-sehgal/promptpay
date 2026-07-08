@@ -7,6 +7,7 @@ import { ReferralService } from '../referral/referral.service';
 import { AuditService } from '../audit/audit.service';
 import { PAYOUT, PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 import { PayPalPayoutsProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
+import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
 
 const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.REQUESTED,
@@ -107,6 +108,20 @@ export class PayoutService {
     throw new BadRequestException(`Payout provider "${provider}" is not valid`);
   }
 
+  private addCurrencyAmount(totals: Record<string, number>, currency: string | null | undefined, amountMinor: number) {
+    const key = (currency || 'USD').toUpperCase();
+    totals[key] = (totals[key] ?? 0) + amountMinor;
+  }
+
+  private availableCurrencyTotals(totals: Record<string, number>): Record<string, number> {
+    return Object.fromEntries(
+      Object.entries(totals).map(([currency, amountMinor]) => [
+        currency,
+        Math.max(0, amountMinor),
+      ]),
+    );
+  }
+
   /** Add or update a payout method for a user */
   async addPayoutMethod(userId: string, dto: {
     provider: string;
@@ -180,43 +195,57 @@ export class PayoutService {
 
   /** Get payout info for a user */
   async getPayoutInfo(userId: string) {
-    const [accounts, payoutHistory, confirmedEarnings, confirmedDebits, allocatedTotal] = await Promise.all([
-      this.prisma.payoutAccount.findMany({ where: { userId, isActive: true } }),
+    const [accounts, payoutHistory, confirmedEarnings, confirmedDebits, allocatedRows] = await Promise.all([
+      this.prisma.payoutAccount.findMany({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } }),
       this.prisma.payoutRequest.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: 20,
         include: { allocations: true },
       }),
-      this.prisma.earningsLedger.aggregate({
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
         where: { userId, status: 'confirmed', entryType: 'credit' },
         _sum: { amountMinor: true },
       }),
-      this.prisma.earningsLedger.aggregate({
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
         where: { userId, status: 'confirmed', entryType: 'debit' },
         _sum: { amountMinor: true },
       }),
-      this.prisma.payoutAllocation.aggregate({
+      this.prisma.payoutAllocation.findMany({
         where: {
           payoutRequest: {
             userId,
             status: { in: RESERVED_PAYOUT_STATUSES },
           },
         },
-        _sum: { amountMinor: true },
+        select: {
+          amountMinor: true,
+          earningsEntry: { select: { currency: true } },
+        },
       }),
     ]);
 
-    const availableBalance =
-      (confirmedEarnings._sum.amountMinor || 0) -
-      (confirmedDebits._sum.amountMinor || 0) -
-      (allocatedTotal._sum.amountMinor || 0);
+    const rawBalancesByCurrency: Record<string, number> = {};
+    for (const row of confirmedEarnings) {
+      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, row._sum.amountMinor ?? 0);
+    }
+    for (const row of confirmedDebits) {
+      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
+    }
+    for (const row of allocatedRows) {
+      this.addCurrencyAmount(rawBalancesByCurrency, row.earningsEntry.currency, -row.amountMinor);
+    }
+    const availableBalanceByCurrency = this.availableCurrencyTotals(rawBalancesByCurrency);
+    const currency = (accounts[0]?.currency || 'USD').toUpperCase();
 
     return {
       payoutAccounts: accounts,
-      availableBalanceMinor: Math.max(0, availableBalance),
+      availableBalanceMinor: availableBalanceByCurrency[currency] ?? 0,
+      availableBalanceByCurrency,
       minimumThresholdMinor: PAYOUT.MINIMUM_THRESHOLD_MINOR,
-      currency: 'USD',
+      currency,
       payoutHistory,
     };
   }
@@ -245,23 +274,28 @@ export class PayoutService {
         },
         orderBy: { createdAt: 'asc' },
       }),
-      this.prisma.earningsLedger.aggregate({
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
         where: { userId, status: 'confirmed', entryType: 'debit' },
         _sum: { amountMinor: true },
       }),
     ]);
 
-    const totalCreditMinor = available.reduce((sum: number, e: { amountMinor: number }) => sum + e.amountMinor, 0);
-    const totalMinor = Math.max(
-      0,
-      totalCreditMinor - (confirmedDebits._sum.amountMinor || 0),
-    );
+    const totalsByCurrency: Record<string, number> = {};
+    for (const entry of available) {
+      this.addCurrencyAmount(totalsByCurrency, entry.currency, entry.amountMinor);
+    }
+    for (const row of confirmedDebits) {
+      this.addCurrencyAmount(totalsByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
+    }
+    const availableByCurrency = this.availableCurrencyTotals(totalsByCurrency);
 
     return {
       entries: available,
-      totalMinor,
+      totalMinor: availableByCurrency.USD ?? 0,
       currency: 'USD',
       count: available.length,
+      totalsByCurrency: availableByCurrency,
     };
   }
 
@@ -271,6 +305,7 @@ export class PayoutService {
     payoutRequestId: string,
     userId: string,
     amountMinor: number,
+    currency: string,
     specificEntryIds?: string[],
   ) {
     // Fetch candidate earnings: confirmed, credited, and not already allocated
@@ -295,6 +330,7 @@ export class PayoutService {
           userId,
           entryType: 'credit',
           status: 'confirmed',
+          currency,
           ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
         },
         orderBy: { createdAt: 'asc' },
@@ -315,6 +351,7 @@ export class PayoutService {
           userId,
           status: 'confirmed',
           entryType: 'credit',
+          currency,
           ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
         },
         orderBy: { createdAt: 'asc' },
@@ -461,20 +498,21 @@ export class PayoutService {
     if (dto.amountMinor < PAYOUT.MINIMUM_THRESHOLD_MINOR) {
       throw new BadRequestException(`Minimum payout is $${PAYOUT.MINIMUM_THRESHOLD_MINOR / 100}`);
     }
+    const currency = dto.currency.trim().toUpperCase();
 
     // ── Outer pre-checks (fast rejection) ──
     const [confirmedEarnings, confirmedDebits, allocatedTotal, openFlags, account] = await Promise.all([
       this.prisma.earningsLedger.aggregate({
-        where: { userId, status: 'confirmed', entryType: 'credit', currency: dto.currency },
+        where: { userId, status: 'confirmed', entryType: 'credit', currency },
         _sum: { amountMinor: true },
       }),
       this.prisma.earningsLedger.aggregate({
-        where: { userId, status: 'confirmed', entryType: 'debit', currency: dto.currency },
+        where: { userId, status: 'confirmed', entryType: 'debit', currency },
         _sum: { amountMinor: true },
       }),
       this.prisma.payoutAllocation.aggregate({
         where: {
-          earningsEntry: { currency: dto.currency },
+          earningsEntry: { currency },
           payoutRequest: {
             userId,
             status: { in: RESERVED_PAYOUT_STATUSES },
@@ -525,9 +563,9 @@ export class PayoutService {
     // could be paid to a EUR account (or vice versa), producing silently
     // mis-denominated payouts. Full multi-currency ledger accounting is a
     // follow-up; this guard blocks the cross-currency path today.
-    if ((account.currency ?? 'USD').toUpperCase() !== dto.currency.toUpperCase()) {
+    if ((account.currency ?? 'USD').toUpperCase() !== currency) {
       throw new BadRequestException(
-        `Payout currency ${dto.currency} does not match the payout account currency ${account.currency}`,
+        `Payout currency ${currency} does not match the payout account currency ${account.currency}`,
       );
     }
 
@@ -543,7 +581,7 @@ export class PayoutService {
           payoutAccountId: dto.payoutAccountId,
           status: 'requested',
           requestedAmountMinor: dto.amountMinor,
-          currency: dto.currency,
+          currency,
         },
       });
 
@@ -552,6 +590,7 @@ export class PayoutService {
         payoutRequest.id,
         userId,
         dto.amountMinor,
+        currency,
         dto.earningsEntryIds,
       );
 
@@ -570,7 +609,7 @@ export class PayoutService {
         targetId: payoutRequest.id,
         beforeSnap: {
           requestedAmountMinor: dto.amountMinor,
-          currency: dto.currency,
+          currency,
           allocationCount: dto.earningsEntryIds?.length ?? 0,
         },
       });
@@ -719,12 +758,28 @@ export class PayoutService {
 
     const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
 
-    const result = await provider.initiate({
-      payoutRequestId: payout.id,
-      destination: payout.payoutAccount.destination,
-      amountMinor: expectedAmount,
-      currency: payout.currency,
-    });
+    let result: { providerTxId: string; status: string };
+    try {
+      result = await provider.initiate({
+        payoutRequestId: payout.id,
+        destination: payout.payoutAccount.destination,
+        amountMinor: expectedAmount,
+        currency: payout.currency,
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof PayoutProviderUnsafeFailure) {
+        this.logger.error(`Unsafe payout provider failure for payout ${payout.id}: ${message}`);
+        throw new BadRequestException(message);
+      }
+
+      await this.markPayoutFailed(payout.id, {
+        provider: payout.payoutAccount.provider,
+        providerTxId: `initiate_failed_${payout.id}`,
+        failureReason: `Provider initiate threw before a safe provider transaction was recorded: ${message}`,
+      });
+      throw new BadRequestException(`Payout provider initiation failed: ${message}`);
+    }
 
     if (result.status === PayoutStatus.FAILED) {
       await this.markPayoutFailed(payout.id, {

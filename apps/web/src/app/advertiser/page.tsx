@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { LoadingSpinner } from '@/components';
-import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatNumber, formatPercent } from '@/lib/format';
 
 interface CreativeSummary {
   status: string;
@@ -27,6 +27,7 @@ interface DashboardCampaign {
 
 interface AdvertiserData {
   totalSpendMinor: number;
+  totalSpendByCurrency?: Record<string, number>;
   totalImpressions: number;
   totalClicks: number;
   ctr: number;
@@ -151,7 +152,9 @@ export default function AdvertisersPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
               <p className="text-ink-300 text-sm mb-1">Total spend</p>
-              <p className="text-3xl font-bold text-white font-mono">{formatCurrency(data.totalSpendMinor)}</p>
+              <p className="text-3xl font-bold text-white font-mono">
+                {formatCurrencyBreakdown(data.totalSpendByCurrency ?? { USD: data.totalSpendMinor })}
+              </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
               <p className="text-ink-300 text-sm mb-1">Impressions</p>
@@ -196,7 +199,7 @@ export default function AdvertisersPage() {
                     </div>
                     <div className="flex items-center gap-6 text-sm">
                       <span className="text-ink-300">
-                        Budget: {formatCurrency(campaign.budgetSpentMinor)} / {formatCurrency(campaign.budgetTotalMinor)}
+                        Budget: {formatCurrency(campaign.budgetSpentMinor, campaign.currency)} / {formatCurrency(campaign.budgetTotalMinor, campaign.currency)}
                       </span>
                       <span className="text-ink-300 uppercase">{campaign.bidType}</span>
                     </div>

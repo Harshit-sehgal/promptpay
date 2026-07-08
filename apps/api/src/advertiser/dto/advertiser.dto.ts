@@ -1,7 +1,7 @@
-import { IsEmail, IsString, IsOptional, IsUrl, IsIn, IsInt, IsBoolean, IsEnum, MaxLength, Min, Max } from 'class-validator';
+import { IsEmail, IsString, IsOptional, IsUrl, IsIn, IsInt, IsBoolean, IsEnum, MaxLength, Min, Max, Length, Matches } from 'class-validator';
 import { BidType } from '@waitlayer/shared';
 
-const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'jpy', 'inr', 'brl', 'mxn', 'sgd'] as const;
+const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'brl', 'mxn', 'sgd'] as const;
 
 export class CreateProfileDto {
   @IsString()
@@ -29,9 +29,11 @@ export class CreateCampaignDto {
   @IsEnum(BidType)
   bidType!: BidType;
 
+  @IsOptional()
   @IsString()
-  @MaxLength(10)
-  currency!: string;
+  @Length(3, 3)
+  @Matches(/^[A-Z]{3}$/, { message: 'currency must be an uppercase ISO 4217 code' })
+  currency?: string;
 
   @IsInt()
   @Min(1)
@@ -97,7 +99,7 @@ export class CreateCountryTargetingDto {
  *  This DTO closes that gap. */
 export class CreateDepositSessionDto {
   @IsInt()
-  @Min(100, { message: 'Minimum deposit is $1.00 (100 in minor units)' })
+  @Min(100, { message: 'Minimum deposit is 100 minor units' })
   amountMinor!: number;
 
   @IsOptional()

@@ -113,13 +113,18 @@ export class AdvertiserService {
       where: { campaignId: { in: campaigns.map((c: { id: string }) => c.id) }, isValid: true },
     });
 
-    const spend = await this.prisma.advertiserLedger.aggregate({
+    const spend = await this.prisma.advertiserLedger.groupBy({
+      by: ['currency'],
       where: { advertiserId, entryType: 'debit', status: { in: ['confirmed', 'paid'] } },
       _sum: { amountMinor: true },
     });
+    const totalSpendByCurrency = Object.fromEntries(
+      spend.map((row) => [row.currency, row._sum.amountMinor ?? 0]),
+    );
 
     return {
-      totalSpendMinor: spend._sum.amountMinor || 0,
+      totalSpendMinor: totalSpendByCurrency.USD ?? 0,
+      totalSpendByCurrency,
       totalImpressions,
       totalClicks,
       ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
@@ -232,6 +237,8 @@ export class AdvertiserService {
     // Validate campaign category (blocks prohibited categories)
     await this.campaignService.validateCampaignCategory(dto.category);
 
+    const currency = dto.currency?.trim().toUpperCase() || 'USD';
+
     const campaign = await this.prisma.campaign.create({
       data: {
         advertiserId,
@@ -240,7 +247,7 @@ export class AdvertiserService {
         bidType: dto.bidType as BidType,
         bidAmountMinor: dto.bidAmountMinor,
         budgetTotalMinor: dto.budgetTotalMinor,
-        currency: dto.currency || 'USD',
+        currency,
         frequencyCapPerHour: dto.frequencyCapPerHour ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_HOUR,
         frequencyCapPerDay: dto.frequencyCapPerDay ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_DAY,
       },
@@ -273,16 +280,23 @@ export class AdvertiserService {
 
     this.validateTransition(campaign.status, 'submitted');
 
-    // Update campaign status to submitted and set all draft creatives to pending_review
-    await this.prisma.adCreative.updateMany({
-      where: { campaignId, status: 'draft' },
-      data: { status: 'pending_review' },
-    });
+    const submitted = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const claimed = await tx.campaign.updateMany({
+        where: { id: campaignId, advertiserId, status: CampaignStatus.DRAFT },
+        data: { status: CampaignStatus.SUBMITTED, submittedAt: new Date() },
+      });
+      if (claimed.count === 0) return null;
 
-    const submitted = await this.prisma.campaign.update({
-      where: { id: campaignId },
-      data: { status: 'submitted', submittedAt: new Date() },
+      await tx.adCreative.updateMany({
+        where: { campaignId, status: 'draft' },
+        data: { status: 'pending_review' },
+      });
+
+      return tx.campaign.findUnique({ where: { id: campaignId } });
     });
+    if (!submitted) {
+      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be submitted from DRAFT status');
+    }
 
     void this.audit.log({
       actorId: advertiserId,
@@ -301,10 +315,14 @@ export class AdvertiserService {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
     this.validateTransition(campaign.status, 'paused');
-    const paused = await this.prisma.campaign.update({
-      where: { id: campaignId },
-      data: { status: 'paused', pausedAt: new Date() },
+    const claimed = await this.prisma.campaign.updateMany({
+      where: { id: campaignId, advertiserId, status: CampaignStatus.ACTIVE },
+      data: { status: CampaignStatus.PAUSED, pausedAt: new Date() },
     });
+    if (claimed.count === 0) {
+      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be paused from ACTIVE status');
+    }
+    const paused = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
 
     void this.audit.log({
       actorId: advertiserId,
@@ -339,10 +357,14 @@ export class AdvertiserService {
     }
 
     this.validateTransition(campaign.status, 'active');
-    const resumed = await this.prisma.campaign.update({
-      where: { id: campaignId },
-      data: { status: 'active', pausedAt: null, activatedAt: new Date() },
+    const claimed = await this.prisma.campaign.updateMany({
+      where: { id: campaignId, advertiserId, status: CampaignStatus.PAUSED },
+      data: { status: CampaignStatus.ACTIVE, pausedAt: null, activatedAt: new Date() },
     });
+    if (claimed.count === 0) {
+      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be resumed from PAUSED status');
+    }
+    const resumed = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
 
     void this.audit.log({
       actorId: advertiserId,
@@ -526,10 +548,14 @@ export class AdvertiserService {
     if (dto.bidAmountMinor !== undefined && dto.bidAmountMinor <= 0) {
       throw new BadRequestException('Bid amount must be positive');
     }
-    const updated = await this.prisma.campaign.update({
-      where: { id: campaignId },
+    const claimed = await this.prisma.campaign.updateMany({
+      where: { id: campaignId, advertiserId, status: CampaignStatus.DRAFT },
       data: dto,
     });
+    if (claimed.count === 0) {
+      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be edited in DRAFT status');
+    }
+    const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
 
     void this.audit.log({
       actorId: advertiserId,
@@ -541,6 +567,19 @@ export class AdvertiserService {
     });
 
     return updated;
+  }
+
+  private async throwCampaignStateConflict(
+    campaignId: string,
+    advertiserId: string,
+    message: string,
+  ): Promise<never> {
+    const current = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { advertiserId: true, status: true },
+    });
+    if (!current || current.advertiserId !== advertiserId) throw new ForbiddenException();
+    throw new BadRequestException(`${message}; current status is ${current.status}`);
   }
 
   /** Get reports for advertiser campaigns — aggregated by campaign */
@@ -582,7 +621,7 @@ export class AdvertiserService {
 
     // Get spend per campaign from advertiser ledger
     const spendRows = await this.prisma.advertiserLedger.groupBy({
-      by: ['campaignId'],
+      by: ['campaignId', 'currency'],
       where: {
         advertiserId,
         campaignId: { in: campaignIds },
@@ -592,7 +631,9 @@ export class AdvertiserService {
       },
       _sum: { amountMinor: true },
     });
-    const spendByCampaign = new Map(spendRows.map((r) => [r.campaignId, r._sum.amountMinor ?? 0]));
+    const spendByCampaignCurrency = new Map(
+      spendRows.map((r) => [`${r.campaignId}:${r.currency}`, r._sum.amountMinor ?? 0]),
+    );
 
     // Build campaign name lookup
 
@@ -630,7 +671,7 @@ export class AdvertiserService {
       const impressions = impByCampaign.get(campaign.id) ?? 0;
       const clicks = clicksByCampaign.get(campaign.id) ?? 0;
       const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
-      const spendMinor = spendByCampaign.get(campaign.id) ?? 0;
+      const spendMinor = spendByCampaignCurrency.get(`${campaign.id}:${campaign.currency}`) ?? 0;
       return {
         campaignId: campaign.id,
         campaignName: campaign.name,
@@ -646,7 +687,10 @@ export class AdvertiserService {
     // Summary
     const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
     const totalClicks = rows.reduce((s, r) => s + r.clicks, 0);
-    const totalSpendMinor = rows.reduce((s, r) => s + r.spendMinor, 0);
+    const totalSpendByCurrency = rows.reduce<Record<string, number>>((totals, row) => {
+      totals[row.currency] = (totals[row.currency] ?? 0) + row.spendMinor;
+      return totals;
+    }, {});
     const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
 
     return {
@@ -655,7 +699,8 @@ export class AdvertiserService {
       summary: {
         totalImpressions,
         totalClicks,
-        totalSpendMinor,
+        totalSpendMinor: totalSpendByCurrency.USD ?? 0,
+        totalSpendByCurrency,
         avgCtr,
         totalCampaigns: campaigns.length,
       },

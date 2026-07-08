@@ -21,7 +21,7 @@ import type { LucideIcon } from 'lucide-react';
 import { developerApi, referralApi } from '@/lib/api/services';
 import { getErrorMessage } from '@/lib/api/errors';
 import { LoadingSpinner } from '@/components';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrencyBreakdown } from '@/lib/format';
 
 interface DashboardData {
   estimatedEarnings: number;
@@ -31,6 +31,13 @@ interface DashboardData {
   recoveryDebt: number;
   availableForPayout: number;
   lifetimeEarnings: number;
+  estimatedEarningsByCurrency?: Record<string, number>;
+  confirmedEarningsByCurrency?: Record<string, number>;
+  pendingEarningsByCurrency?: Record<string, number>;
+  heldEarningsByCurrency?: Record<string, number>;
+  recoveryDebtByCurrency?: Record<string, number>;
+  availableForPayoutByCurrency?: Record<string, number>;
+  lifetimeEarningsByCurrency?: Record<string, number>;
   trustLevel: string;
   trustScore: number;
   payoutHoldStatus: {
@@ -51,6 +58,7 @@ interface ReferralSummary {
   referralCount: number;
   referralLink: string | null;
   rewardsEarnedMinor: number;
+  rewardsEarnedByCurrency?: Record<string, number>;
 }
 
 interface StatItem {
@@ -91,6 +99,14 @@ function StatusPill({ label, tone }: { label: string; tone: 'success' | 'warning
   );
 }
 
+function moneyBreakdown(byCurrency: Record<string, number> | undefined, legacyUsd: number): string {
+  return formatCurrencyBreakdown(byCurrency ?? { USD: legacyUsd });
+}
+
+function hasThresholdAmount(byCurrency: Record<string, number> | undefined, legacyUsd: number, thresholdMinor: number): boolean {
+  return Object.values(byCurrency ?? { USD: legacyUsd }).some((amountMinor) => amountMinor >= thresholdMinor);
+}
+
 export default function DeveloperDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [referral, setReferral] = useState<ReferralSummary | null>(null);
@@ -119,27 +135,27 @@ export default function DeveloperDashboard() {
     return [
       {
         label: 'Estimated today',
-        value: formatCurrency(data.estimatedEarnings),
+        value: moneyBreakdown(data.estimatedEarningsByCurrency, data.estimatedEarnings),
         detail: 'Live earning estimate',
         Icon: TrendingUp,
       },
       {
         label: 'Available payout',
-        value: formatCurrency(data.availableForPayout),
-        detail: 'Minimum payout $10.00',
+        value: moneyBreakdown(data.availableForPayoutByCurrency, data.availableForPayout),
+        detail: 'Minimum payout applies per currency',
         Icon: Wallet,
-        valueClass: data.availableForPayout >= 1000 ? 'text-emerald-600' : undefined,
+        valueClass: hasThresholdAmount(data.availableForPayoutByCurrency, data.availableForPayout, 1000) ? 'text-emerald-600' : undefined,
       },
       {
         label: 'Confirmed',
-        value: formatCurrency(data.confirmedEarnings),
+        value: moneyBreakdown(data.confirmedEarningsByCurrency, data.confirmedEarnings),
         detail: 'Ready after hold checks',
         Icon: CheckCircle2,
         valueClass: 'text-surface-900',
       },
       {
         label: 'Lifetime',
-        value: formatCurrency(data.lifetimeEarnings),
+        value: moneyBreakdown(data.lifetimeEarningsByCurrency, data.lifetimeEarnings),
         detail: 'All credited earnings',
         Icon: Star,
       },
@@ -215,8 +231,8 @@ export default function DeveloperDashboard() {
                   label={data.payoutHoldStatus.isHeld ? 'Payout hold active' : 'Payout clear'}
                   tone={data.payoutHoldStatus.isHeld ? 'warning' : 'success'}
                 />
-                {data.recoveryDebt > 0 && (
-                  <StatusPill label={`Recovery debt ${formatCurrency(data.recoveryDebt)}`} tone="warning" />
+                {hasThresholdAmount(data.recoveryDebtByCurrency, data.recoveryDebt, 1) && (
+                  <StatusPill label={`Recovery debt ${moneyBreakdown(data.recoveryDebtByCurrency, data.recoveryDebt)}`} tone="warning" />
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -229,7 +245,7 @@ export default function DeveloperDashboard() {
                     Improve trust
                   </Link>
                 )}
-                {data.availableForPayout >= 1000 && (
+                {hasThresholdAmount(data.availableForPayoutByCurrency, data.availableForPayout, 1000) && (
                   <Link
                     href="/developer/payouts"
                     className="inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-sm font-medium text-emerald-800 transition-colors hover:bg-emerald-100"
@@ -269,10 +285,10 @@ export default function DeveloperDashboard() {
               </div>
               <div className="divide-y divide-surface-100">
                 {[
-                  { label: 'Estimated', value: data.estimatedEarnings, Icon: TrendingUp, detail: 'Recorded but not confirmed' },
-                  { label: 'Pending', value: data.pendingEarnings, Icon: Clock3, detail: 'In review or hold window' },
-                  { label: 'Confirmed', value: data.confirmedEarnings, Icon: CheckCircle2, detail: 'Eligible for payout allocation' },
-                  { label: 'Held', value: data.heldEarnings, Icon: LockKeyhole, detail: 'Temporarily blocked for review' },
+                  { label: 'Estimated', value: moneyBreakdown(data.estimatedEarningsByCurrency, data.estimatedEarnings), Icon: TrendingUp, detail: 'Recorded but not confirmed' },
+                  { label: 'Pending', value: moneyBreakdown(data.pendingEarningsByCurrency, data.pendingEarnings), Icon: Clock3, detail: 'In review or hold window' },
+                  { label: 'Confirmed', value: moneyBreakdown(data.confirmedEarningsByCurrency, data.confirmedEarnings), Icon: CheckCircle2, detail: 'Eligible for payout allocation' },
+                  { label: 'Held', value: moneyBreakdown(data.heldEarningsByCurrency, data.heldEarnings), Icon: LockKeyhole, detail: 'Temporarily blocked for review' },
                 ].map((item) => (
                   <div key={item.label} className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-4">
                     <div className="flex items-start gap-3">
@@ -282,7 +298,7 @@ export default function DeveloperDashboard() {
                         <p className="mt-0.5 text-xs text-surface-500">{item.detail}</p>
                       </div>
                     </div>
-                    <p className="font-mono text-lg font-semibold text-surface-950">{formatCurrency(item.value)}</p>
+                    <p className="font-mono text-lg font-semibold text-surface-950">{item.value}</p>
                   </div>
                 ))}
               </div>
@@ -357,7 +373,9 @@ export default function DeveloperDashboard() {
                 </div>
                 <div className="px-5 py-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-surface-500">Rewards</p>
-                  <p className="mt-2 font-mono text-xl font-semibold text-emerald-600">{formatCurrency(referral.rewardsEarnedMinor)}</p>
+                  <p className="mt-2 font-mono text-xl font-semibold text-emerald-600">
+                    {moneyBreakdown(referral.rewardsEarnedByCurrency, referral.rewardsEarnedMinor)}
+                  </p>
                 </div>
               </div>
               {referral.referralLink && (

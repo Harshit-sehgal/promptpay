@@ -4,15 +4,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
-import { formatCurrency, formatRelativeTime } from '@/lib/format';
+import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 interface PendingPayout {
   id: string;
   userId: string;
   userEmail?: string;
+  status: 'requested' | 'under_review' | 'approved' | 'processing';
   requestedAmountMinor: number;
+  approvedAmountMinor?: number | null;
   currency: string;
   payoutAccount: { provider: string; destination: string };
+  transactions?: Array<{ providerTxId?: string | null; status: string }>;
   createdAt: string;
 }
 
@@ -54,6 +57,40 @@ export default function AdminPayoutsPage() {
     }
   };
 
+  const handleProcess = async (id: string) => {
+    setProcessing(id);
+    try {
+      await adminApi.processPayout(id);
+      fetchPayouts();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Process failed'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleMarkPaid = async (payout: PendingPayout) => {
+    const providerTxId = payout.transactions?.[0]?.providerTxId;
+    if (!providerTxId) {
+      setError('Missing provider transaction id. Process this payout first or reconcile it manually.');
+      return;
+    }
+    setProcessing(payout.id);
+    try {
+      await adminApi.markPayoutPaid(payout.id, {
+        providerTxId,
+        paidAt: new Date().toISOString(),
+        amountMinor: payout.approvedAmountMinor ?? payout.requestedAmountMinor,
+        currency: payout.currency,
+      });
+      fetchPayouts();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Mark-paid failed'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
   const handleReject = async () => {
     if (!rejectModalFor || !rejectReason.trim()) return;
     setProcessing(rejectModalFor.id);
@@ -69,7 +106,12 @@ export default function AdminPayoutsPage() {
     }
   };
 
-  const total = payouts.reduce((sum, p) => sum + p.requestedAmountMinor, 0);
+  const totalsByCurrency = payouts.reduce<Record<string, number>>((totals, payout) => {
+    const currency = payout.currency || 'USD';
+    totals[currency] = (totals[currency] ?? 0) + payout.requestedAmountMinor;
+    return totals;
+  }, {});
+  const totalSummary = formatCurrencyBreakdown(totalsByCurrency);
 
   return (
 <>
@@ -89,7 +131,9 @@ export default function AdminPayoutsPage() {
             </div>
             <div>
               <p className="text-ink-400 text-xs uppercase tracking-wider">Total amount</p>
-              <p className="text-3xl font-bold text-brand-500 font-mono">{formatCurrency(total)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-brand-500 font-mono break-words">
+                {totalSummary}
+              </p>
             </div>
           </div>
         </div>
@@ -120,22 +164,47 @@ export default function AdminPayoutsPage() {
                     <p className="text-ink-400 text-xs mt-1">
                       via {p.payoutAccount.provider} — {p.payoutAccount.destination}
                     </p>
+                    <p className="text-ink-500 text-xs mt-1 uppercase tracking-wider">
+                      {p.status.replace('_', ' ')}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setRejectModalFor(p)}
-                      disabled={processing === p.id}
-                      className="bg-ink-700 hover:bg-ink-600 text-red-400 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      Reject
-                    </button>
-                    <button
-                      onClick={() => handleApprove(p.id)}
-                      disabled={processing === p.id}
-                      className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                    >
-                      {processing === p.id ? 'Processing...' : 'Approve & pay'}
-                    </button>
+                    {p.status !== 'processing' && (
+                      <button
+                        onClick={() => setRejectModalFor(p)}
+                        disabled={processing === p.id}
+                        className="bg-ink-700 hover:bg-ink-600 text-red-400 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Reject
+                      </button>
+                    )}
+                    {(p.status === 'requested' || p.status === 'under_review') && (
+                      <button
+                        onClick={() => handleApprove(p.id)}
+                        disabled={processing === p.id}
+                        className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                      >
+                        {processing === p.id ? 'Working...' : 'Approve'}
+                      </button>
+                    )}
+                    {p.status === 'approved' && (
+                      <button
+                        onClick={() => handleProcess(p.id)}
+                        disabled={processing === p.id}
+                        className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                      >
+                        {processing === p.id ? 'Working...' : 'Process'}
+                      </button>
+                    )}
+                    {p.status === 'processing' && (
+                      <button
+                        onClick={() => handleMarkPaid(p)}
+                        disabled={processing === p.id}
+                        className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                      >
+                        {processing === p.id ? 'Working...' : 'Mark paid'}
+                      </button>
+                    )}
                   </div>
                 </div>
 

@@ -69,6 +69,20 @@ describe('BruteForceGuard', () => {
     await expect(BruteForceGuard.assertCanAttempt(req, target)).resolves.toBeUndefined();
   });
 
+  it('locks 2FA token attempts by user target', async () => {
+    const req = authReq('/auth/2fa/disable', '203.0.113.25');
+    const target = 'user_123';
+
+    for (let i = 0; i < 5; i += 1) {
+      await BruteForceGuard.recordFailure(req, target);
+    }
+
+    await expectHttpStatus(
+      BruteForceGuard.assertCanAttempt(req, target),
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  });
+
   it('ignores non-auth routes', async () => {
     const req = authReq('/developer/dashboard', '203.0.113.30');
 

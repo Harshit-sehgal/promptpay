@@ -51,7 +51,7 @@ export class DeveloperService {
   async getEarningsSummary(userId: string) {
     const entries = await this.prisma.earningsLedger.findMany({
       where: { userId },
-      select: { status: true, entryType: true, amountMinor: true },
+      select: { status: true, entryType: true, amountMinor: true, currency: true },
     });
     const summary = {
       estimatedEarnings: 0,
@@ -62,14 +62,21 @@ export class DeveloperService {
       recoveryDebt: 0,
       availableForPayout: 0,
       lifetimeEarnings: 0,
+      estimatedEarningsByCurrency: {} as Record<string, number>,
+      confirmedEarningsByCurrency: {} as Record<string, number>,
+      pendingEarningsByCurrency: {} as Record<string, number>,
+      heldEarningsByCurrency: {} as Record<string, number>,
+      recoveryDebtByCurrency: {} as Record<string, number>,
+      availableForPayoutByCurrency: {} as Record<string, number>,
+      lifetimeEarningsByCurrency: {} as Record<string, number>,
     };
     for (const entry of entries) {
       if (entry.entryType === 'debit') {
-        summary.recoveryDebt += entry.amountMinor;
+        addCurrencyAmount(summary.recoveryDebtByCurrency, entry.currency, entry.amountMinor);
         if (entry.status !== 'reversed' && entry.status !== 'void') {
-          summary.lifetimeEarnings -= entry.amountMinor;
+          addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, -entry.amountMinor);
           if (entry.status === 'confirmed') {
-            summary.confirmedEarnings -= entry.amountMinor;
+            addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, -entry.amountMinor);
           }
         }
         continue;
@@ -79,17 +86,24 @@ export class DeveloperService {
       // money that was earned but then clawed back (fraud reversal). Adding
       // them back into the displayed lifetime total inflates the metric.
       if (entry.status !== 'reversed') {
-        summary.lifetimeEarnings += entry.amountMinor;
+        addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, entry.amountMinor);
       }
-      if (entry.status === 'estimated') summary.estimatedEarnings += entry.amountMinor;
-      else if (entry.status === 'pending') summary.pendingEarnings += entry.amountMinor;
-      else if (entry.status === 'confirmed') summary.confirmedEarnings += entry.amountMinor;
-      else if (entry.status === 'held') summary.heldEarnings += entry.amountMinor;
+      if (entry.status === 'estimated') addCurrencyAmount(summary.estimatedEarningsByCurrency, entry.currency, entry.amountMinor);
+      else if (entry.status === 'pending') addCurrencyAmount(summary.pendingEarningsByCurrency, entry.currency, entry.amountMinor);
+      else if (entry.status === 'confirmed') addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, entry.amountMinor);
+      else if (entry.status === 'held') addCurrencyAmount(summary.heldEarningsByCurrency, entry.currency, entry.amountMinor);
       else if (entry.status === 'reversed') summary.reversedEarnings += entry.amountMinor;
     }
-    summary.confirmedEarnings = Math.max(0, summary.confirmedEarnings);
-    summary.availableForPayout = summary.confirmedEarnings;
-    summary.lifetimeEarnings = Math.max(0, summary.lifetimeEarnings);
+    summary.confirmedEarningsByCurrency = nonNegativeCurrencyTotals(summary.confirmedEarningsByCurrency);
+    summary.availableForPayoutByCurrency = { ...summary.confirmedEarningsByCurrency };
+    summary.lifetimeEarningsByCurrency = nonNegativeCurrencyTotals(summary.lifetimeEarningsByCurrency);
+    summary.estimatedEarnings = summary.estimatedEarningsByCurrency.USD ?? 0;
+    summary.confirmedEarnings = summary.confirmedEarningsByCurrency.USD ?? 0;
+    summary.pendingEarnings = summary.pendingEarningsByCurrency.USD ?? 0;
+    summary.heldEarnings = summary.heldEarningsByCurrency.USD ?? 0;
+    summary.recoveryDebt = summary.recoveryDebtByCurrency.USD ?? 0;
+    summary.availableForPayout = summary.availableForPayoutByCurrency.USD ?? 0;
+    summary.lifetimeEarnings = summary.lifetimeEarningsByCurrency.USD ?? 0;
     return summary;
   }
 
@@ -429,4 +443,18 @@ export class DeveloperService {
     if (score >= 50) return 'medium';
     return 'low';
   }
+}
+
+function addCurrencyAmount(totals: Record<string, number>, currency: string, amountMinor: number) {
+  const key = currency.toUpperCase();
+  totals[key] = (totals[key] ?? 0) + amountMinor;
+}
+
+function nonNegativeCurrencyTotals(totals: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(totals).map(([currency, amountMinor]) => [
+      currency,
+      Math.max(0, amountMinor),
+    ]),
+  );
 }
