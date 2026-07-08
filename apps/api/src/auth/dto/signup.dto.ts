@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional,IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsOptional,IsString, MaxLength } from 'class-validator';
 
 import { SIGNUP_ALLOWED_ROLES,UserRole } from '@waitlayer/shared';
 
@@ -32,4 +32,21 @@ export class SignUpDto {
   @IsString()
   @MaxLength(64)
   referrerCode?: string;
+
+  /**
+   * Required proof that the user is at least 18 and has accepted the current
+   * Terms of Service / Privacy Policy. Account creation is refused unless both
+   * are true (A-034). The policy version the client accepted is recorded so a
+   * future version bump can re-prompt via the consent re-prompt flow.
+   */
+  @IsBoolean()
+  ageConfirmed!: boolean;
+
+  @IsBoolean()
+  termsAccepted!: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  policyVersion?: string;
 }

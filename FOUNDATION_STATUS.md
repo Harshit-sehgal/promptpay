@@ -105,10 +105,12 @@ test suite were fixed (see "Critical fixes" below).
 
 **Verification (this pass):**
 - `pnpm run typecheck` → 14/14 tasks.
-- `pnpm run lint` → 9/9 tasks, 0 warnings.
-- `pnpm run build` → 9/9 packages.
-- `pnpm test` → 371 tests: 344 API (268 unit + 34 contract + 42 e2e-http), 9 CLI, 11 web, 7 VS Code.
+- `pnpm run lint` → 9/9 tasks (style warnings allowed; no errors).
+- `pnpm run build` → 9/9 packages (root `pnpm run build` and `pnpm --filter waitlayer-web build` both succeed).
+- `pnpm test` → full suite (API unit/contract/e2e-http + CLI + web + VS Code). Exact counts grow per pass and are regenerated, not hard-coded; DB-backed API specs require `DATABASE_URL` + `JWT_SECRET` (>=32 chars).
 - `pnpm --filter @waitlayer/db generate` → client regenerated; `prisma migrate deploy` → all migrations applied.
+
+> Note (2026-07-09): the root `pnpm run build` was failing on a pre-existing TypeScript error in `apps/web/src/app/developer/settings/page.tsx` (used `user.emailVerified`, which was missing from the frontend `User` type). A-001 is closed by adding `emailVerified` to the `auth-context` `User` type (the backend `User` model already has it). The Turbo `.next`/pages-manifest failure described in AGENTS.md did not reproduce once the type error was fixed.
 
 ---
 

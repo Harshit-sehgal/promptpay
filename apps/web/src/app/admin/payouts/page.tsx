@@ -9,12 +9,12 @@ import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/l
 interface PendingPayout {
   id: string;
   userId: string;
-  userEmail?: string;
+  user?: { email?: string | null; name?: string | null; trustLevel?: string | null };
   status: 'requested' | 'under_review' | 'approved' | 'processing';
   requestedAmountMinor: number;
   approvedAmountMinor?: number | null;
   currency: string;
-  payoutAccount: { provider: string; destination: string };
+  payoutAccount: { id: string; provider: string; destination: string; isVerified?: boolean };
   transactions?: Array<{ providerTxId?: string | null; status: string }>;
   createdAt: string;
 }
@@ -32,6 +32,14 @@ export default function AdminPayoutsPage() {
   const [processing, setProcessing] = useState<string | null>(null);
   const [rejectModalFor, setRejectModalFor] = useState<PendingPayout | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+
+  const [approveModalFor, setApproveModalFor] = useState<PendingPayout | null>(null);
+  const [approveAmount, setApproveAmount] = useState('');
+
+  const [reconcileModalFor, setReconcileModalFor] = useState<PendingPayout | null>(null);
+  const [reconcileProviderTxId, setReconcileProviderTxId] = useState('');
+  const [reconcileAmount, setReconcileAmount] = useState('');
+  const [reconcilePaidAt, setReconcilePaidAt] = useState('');
 
   const fetchPayouts = useCallback(() => {
     setLoading(true);
@@ -52,6 +60,79 @@ export default function AdminPayoutsPage() {
       fetchPayouts();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Approve failed'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const openApproveModal = (p: PendingPayout) => {
+    setApproveModalFor(p);
+    setApproveAmount((p.approvedAmountMinor ?? p.requestedAmountMinor / 100).toString());
+  };
+
+  const handleApproveWithAmount = async () => {
+    if (!approveModalFor) return;
+    const requestedMajor = approveModalFor.requestedAmountMinor / 100;
+    const trimmed = approveAmount.trim();
+    let amountMinor: number | undefined;
+    if (trimmed !== '') {
+      const major = parseFloat(trimmed);
+      if (isNaN(major) || major <= 0) {
+        setError('Enter a valid approval amount');
+        return;
+      }
+      amountMinor = Math.round(major * 100);
+      if (amountMinor > approveModalFor.requestedAmountMinor) {
+        setError('Approved amount cannot exceed the requested amount');
+        return;
+      }
+    }
+    setProcessing(approveModalFor.id);
+    try {
+      await adminApi.approvePayout(approveModalFor.id, undefined, amountMinor);
+      setApproveModalFor(null);
+      setApproveAmount('');
+      fetchPayouts();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Approve failed'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const openReconcileModal = (p: PendingPayout) => {
+    setReconcileModalFor(p);
+    setReconcileProviderTxId('');
+    setReconcileAmount((p.approvedAmountMinor ?? p.requestedAmountMinor / 100).toString());
+    setReconcilePaidAt(new Date().toISOString().slice(0, 16));
+  };
+
+  const handleReconcile = async () => {
+    if (!reconcileModalFor) return;
+    if (!reconcileProviderTxId.trim()) {
+      setError('Provider transaction id is required for manual reconciliation');
+      return;
+    }
+    const major = parseFloat(reconcileAmount);
+    if (isNaN(major) || major <= 0) {
+      setError('Enter a valid paid amount');
+      return;
+    }
+    setProcessing(reconcileModalFor.id);
+    try {
+      await adminApi.markPayoutPaid(reconcileModalFor.id, {
+        providerTxId: reconcileProviderTxId.trim(),
+        paidAt: new Date(reconcilePaidAt || Date.now()).toISOString(),
+        amountMinor: Math.round(major * 100),
+        currency: reconcileModalFor.currency,
+      });
+      setReconcileModalFor(null);
+      setReconcileProviderTxId('');
+      setReconcileAmount('');
+      setReconcilePaidAt('');
+      fetchPayouts();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Reconcile failed'));
     } finally {
       setProcessing(null);
     }
@@ -86,6 +167,18 @@ export default function AdminPayoutsPage() {
       fetchPayouts();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Mark-paid failed'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleVerifyAccount = async (payout: PendingPayout) => {
+    setProcessing(payout.id);
+    try {
+      await adminApi.verifyPayoutAccount(payout.payoutAccount.id, true);
+      fetchPayouts();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Verification failed'));
     } finally {
       setProcessing(null);
     }
@@ -163,6 +256,9 @@ export default function AdminPayoutsPage() {
                     </p>
                     <p className="text-ink-400 text-xs mt-1">
                       via {p.payoutAccount.provider} — {p.payoutAccount.destination}
+                      {p.payoutAccount.isVerified === false && (
+                        <span className="ml-2 text-amber-400">· unverified</span>
+                      )}
                     </p>
                     <p className="text-ink-500 text-xs mt-1 uppercase tracking-wider">
                       {p.status.replace('_', ' ')}
@@ -178,9 +274,18 @@ export default function AdminPayoutsPage() {
                         Reject
                       </button>
                     )}
+                    {p.payoutAccount.isVerified === false && (
+                      <button
+                        onClick={() => handleVerifyAccount(p)}
+                        disabled={processing === p.id}
+                        className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                      >
+                        {processing === p.id ? 'Working...' : 'Verify method'}
+                      </button>
+                    )}
                     {(p.status === 'requested' || p.status === 'under_review') && (
                       <button
-                        onClick={() => handleApprove(p.id)}
+                        onClick={() => openApproveModal(p)}
                         disabled={processing === p.id}
                         className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
                       >
@@ -205,11 +310,23 @@ export default function AdminPayoutsPage() {
                         {processing === p.id ? 'Working...' : 'Mark paid'}
                       </button>
                     )}
+                    {p.status === 'processing' && (
+                      <button
+                        onClick={() => openReconcileModal(p)}
+                        disabled={processing === p.id}
+                        className="bg-ink-700 hover:bg-ink-600 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                      >
+                        Reconcile
+                      </button>
+                    )}
                   </div>
                 </div>
 
                 <p className="text-ink-500 text-xs">
-                  User: <a href={`/admin/users?search=${encodeURIComponent(p.userId)}`} className="text-brand-400 hover:text-brand-300 underline">{p.userEmail || p.userId}</a>
+                  User: <a href={`/admin/users?search=${encodeURIComponent(p.user?.email || p.userId)}`} className="text-brand-400 hover:text-brand-300 underline">{p.user?.email || p.user?.name || p.userId}</a>
+                  {p.user?.trustLevel && (
+                    <span className="ml-2">· trust {p.user.trustLevel.replace(/_/g, ' ')}</span>
+                  )}
                   <span className="mx-2">·</span>
                   Requested {formatRelativeTime(p.createdAt)}
                 </p>
@@ -257,8 +374,111 @@ export default function AdminPayoutsPage() {
             </div>
           </div>
         )}
-      
-</>
-);
 
+        {/* Approve (partial) modal */}
+        {approveModalFor && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+            <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+              <h3 className="text-white font-semibold mb-2">Approve payout</h3>
+              <p className="text-ink-400 text-sm mb-4">
+                Requested{' '}
+                <span className="text-white">
+                  {formatCurrency(approveModalFor.requestedAmountMinor, approveModalFor.currency)}
+                </span>
+                . Leave the amount blank to approve the full requested amount, or enter a
+                lower amount for a partial approval.
+              </p>
+              <label className="text-ink-300 text-xs block mb-1">Approved amount ({approveModalFor.currency})</label>
+              <input
+                type="number"
+                step="0.01"
+                min={0}
+                max={approveModalFor.requestedAmountMinor / 100}
+                value={approveAmount}
+                onChange={(e) => setApproveAmount(e.target.value)}
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              />
+              <div className="flex items-center gap-3 justify-end">
+                <button
+                  onClick={() => { setApproveModalFor(null); setApproveAmount(''); }}
+                  className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApproveWithAmount}
+                  disabled={processing === approveModalFor.id}
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                >
+                  {processing === approveModalFor.id ? 'Working...' : 'Approve'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Manual reconciliation modal */}
+        {reconcileModalFor && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+            <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+              <h3 className="text-white font-semibold mb-2">Manual reconciliation</h3>
+              <p className="text-ink-400 text-sm mb-4">
+                Record an external provider payment for{' '}
+                <span className="text-white">
+                  {formatCurrency(reconcileModalFor.requestedAmountMinor, reconcileModalFor.currency)}
+                </span>
+                . No provider transaction id exists yet, so enter the details manually.
+              </p>
+              <div className="space-y-3 mb-4">
+                <div>
+                  <label className="text-ink-300 text-xs block mb-1">Provider transaction id</label>
+                  <input
+                    value={reconcileProviderTxId}
+                    onChange={(e) => setReconcileProviderTxId(e.target.value)}
+                    placeholder="txn_..."
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-ink-300 text-xs block mb-1">Paid amount ({reconcileModalFor.currency})</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    value={reconcileAmount}
+                    onChange={(e) => setReconcileAmount(e.target.value)}
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-ink-300 text-xs block mb-1">Paid at</label>
+                  <input
+                    type="datetime-local"
+                    value={reconcilePaidAt}
+                    onChange={(e) => setReconcilePaidAt(e.target.value)}
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 justify-end">
+                <button
+                  onClick={() => { setReconcileModalFor(null); setReconcileProviderTxId(''); setReconcileAmount(''); setReconcilePaidAt(''); }}
+                  className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReconcile}
+                  disabled={processing === reconcileModalFor.id}
+                  className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+                >
+                  {processing === reconcileModalFor.id ? 'Working...' : 'Mark paid'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </>
+    );
 }

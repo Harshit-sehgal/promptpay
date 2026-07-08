@@ -13,12 +13,13 @@ interface GoogleCredentialResponse {
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
   credential: string,
-  googleLoginFn: (idToken: string, role?: string) => Promise<unknown>,
+  googleLoginFn: (idToken: string, role?: string, twoFactorToken?: string, consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string }) => Promise<unknown>,
   role: string,
+  consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
 ): Promise<string | null> {
   try {
     // credential from GIS is the ID token itself
-    await googleLoginFn(credential, role);
+    await googleLoginFn(credential, role, undefined, consent);
     return null;
   } catch (err: unknown) {
     return getErrorMessage(err, 'Google sign-in failed');
@@ -40,6 +41,7 @@ export default function SignupPage() {
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const googleInitialized = useRef(false);
   const roleRef = useRef(role);
+  const ageConfirmedRef = useRef(ageConfirmed);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -61,11 +63,25 @@ export default function SignupPage() {
     roleRef.current = role;
   }, [role]);
 
+  // Keep ageConfirmedRef in sync so the Google callback closure sees the latest
+  // checkbox state without re-initializing the GIS button.
+  useEffect(() => {
+    ageConfirmedRef.current = ageConfirmed;
+  }, [ageConfirmed]);
+
   const handleMockGoogleSignup = async () => {
     setError('');
+    if (!ageConfirmed) {
+      setError('You must confirm you are at least 18 years old to continue.');
+      return;
+    }
     setLoading(true);
     try {
-      await googleLogin('mock-google-token-developer', role);
+      await googleLogin('mock-google-token-developer', role, undefined, {
+        ageConfirmed: true,
+        termsAccepted: true,
+        policyVersion: '2026-07-01',
+      });
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
     } catch (err: unknown) {
@@ -112,9 +128,23 @@ export default function SignupPage() {
           client_id: googleClientId,
           callback: async (response: GoogleCredentialResponse) => {
             setError('');
+            // A-034: Google signup is a self-service account creation, so the
+            // age/terms checkbox must be confirmed before we hand the token to
+            // the API. Without this check, clicking Google would create an
+            // account that bypasses the consent the email/password path enforces.
+            if (!ageConfirmedRef.current) {
+              setError('You must confirm you are at least 18 years old to continue.');
+              setLoading(false);
+              return;
+            }
             setLoading(true);
             // Use roleRef.current to avoid stale closure
-            const errorMsg = await handleGoogleCredential(response.credential, googleLogin, roleRef.current);
+            const errorMsg = await handleGoogleCredential(
+              response.credential,
+              googleLogin,
+              roleRef.current,
+              { ageConfirmed: true, termsAccepted: true, policyVersion: '2026-07-01' },
+            );
             setLoading(false);
             if (errorMsg) {
               setError(errorMsg);
@@ -161,7 +191,16 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      await signup({ email, password, role, name, referrerCode: referrerCode || undefined });
+      await signup({
+        email,
+        password,
+        role,
+        name,
+        referrerCode: referrerCode || undefined,
+        ageConfirmed,
+        termsAccepted: ageConfirmed,
+        policyVersion: '2026-07-01',
+      });
       const dashboard = localStorage.getItem('lastDashboard') || '/developer';
       router.push(dashboard);
     } catch (err: unknown) {

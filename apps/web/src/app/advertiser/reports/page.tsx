@@ -101,6 +101,22 @@ export default function AdvertiserReportsPage() {
 
   // ── Data fetching ──
 
+  const handleExportCsv = useCallback(() => {
+    if (!dateRange) return;
+    const params = new URLSearchParams({
+      from: dateRange.from,
+      to: dateRange.to,
+      format: 'csv',
+    });
+    if (campaignFilter) params.set('campaignId', campaignFilter);
+    const a = document.createElement('a');
+    a.href = `/api/advertiser/reports/export?${params.toString()}`;
+    a.download = 'campaign-report.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }, [dateRange, campaignFilter]);
+
   const fetchReports = useCallback(() => {
     if (!dateRange) return;
     setLoading(true);
@@ -216,6 +232,14 @@ export default function AdvertiserReportsPage() {
             <option key={r.campaignId} value={r.campaignId}>{r.campaignName}</option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={!dateRange}
+          className="ml-auto bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-1.5 rounded-lg transition-colors"
+        >
+          Export CSV
+        </button>
       </div>
 
       {/* Loading & error */}

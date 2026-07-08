@@ -48,6 +48,15 @@ interface PasswordResetPayload {
   fp: string;
 }
 
+/**
+ * Default policy version recorded when a signup path does not send an explicit
+ * `policyVersion`. Kept in sync with `CURRENT_CONSENT_VERSIONS` in the
+ * compliance service; if the compliance service bumps its required version
+ * without a matching client update, the consent re-prompt flow will surface
+ * the newer version for re-acceptance.
+ */
+const CURRENT_SIGNUP_POLICY_VERSION = '2026-07-01';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -83,6 +92,13 @@ export class AuthService {
 
   /** ── Sign Up ── */
   async signUp(dto: SignUpDto) {
+    // A-034: every self-service account creation must prove the user accepted
+    // the required age/terms/privacy consent. Refuse creation otherwise so the
+    // acceptance is auditable per user and policy version.
+    if (!dto.ageConfirmed || !dto.termsAccepted) {
+      throw new BadRequestException('You must confirm you are 18+ and accept the Terms and Privacy Policy to sign up');
+    }
+
     // Optimistic pre-check: catch sequential duplicate signups with a cheap
     // read before paying the bcrypt.hash cost on a doomed insert. Concurrent
     // signups race past this check; the P2002 catch below translates the
@@ -152,6 +168,26 @@ export class AuthService {
     });
 
     const tokens = await this.generateTokenPair(user.id, user.role);
+
+    // A-034: persist the accepted age/terms/privacy consent at the exact
+    // policy version the client agreed to, so future version bumps can
+    // re-prompt and the acceptance is auditable per user.
+    const consentVersion = dto.policyVersion ?? CURRENT_SIGNUP_POLICY_VERSION;
+    for (const purpose of ['terms_of_service', 'privacy_policy'] as const) {
+      await this.prisma.consent
+        .create({
+          data: { userId: user.id, purpose, version: consentVersion, granted: true, metadata: { method: 'signup' } },
+        })
+        .catch(() => undefined);
+      void this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'consent_granted',
+        targetType: 'consent',
+        targetId: purpose,
+        afterSnap: { version: consentVersion, method: 'signup' },
+      });
+    }
 
     // Audit log: new user registration (fire-and-forget)
     void this.audit.log({
@@ -288,6 +324,12 @@ export class AuthService {
     // 3. Create new user + companion records atomically. Mirror the
     // transactional `signUp` path so a failure mid-onboarding cannot leave an
     // orphaned user without its settings / trust score / advertiser profile.
+    // A-034: a brand-new Google account is still a self-service signup, so the
+    // client must have collected age/terms consent first. Existing Google
+    // users (matched by googleId above) keep their original acceptance.
+    if (!dto.ageConfirmed || !dto.termsAccepted) {
+      throw new BadRequestException('You must confirm you are 18+ and accept the Terms and Privacy Policy to sign up');
+    }
     const referralCode = await this.generateReferralCode();
     user = await this.prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
@@ -320,6 +362,25 @@ export class AuthService {
     });
 
     const tokens = await this.generateTokenPair(user.id, user.role);
+
+    // A-034: persist the accepted consent for the new Google account.
+    const consentVersion = dto.policyVersion ?? CURRENT_SIGNUP_POLICY_VERSION;
+    for (const purpose of ['terms_of_service', 'privacy_policy'] as const) {
+      await this.prisma.consent
+        .create({
+          data: { userId: user.id, purpose, version: consentVersion, granted: true, metadata: { method: 'google_signup' } },
+        })
+        .catch(() => undefined);
+      void this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'consent_granted',
+        targetType: 'consent',
+        targetId: purpose,
+        afterSnap: { version: consentVersion, method: 'google_signup' },
+      });
+    }
+
     return { user: this.sanitizeUser(user), ...tokens };
   }
 

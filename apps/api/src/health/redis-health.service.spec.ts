@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from 'redis';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RedisHealthService } from './redis-health.service';
 

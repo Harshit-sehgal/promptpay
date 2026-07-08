@@ -537,11 +537,11 @@ export class PayoutService {
     }
 
     // Minimum threshold check — per-currency floor from the currency policy.
+    const currency = dto.currency.trim().toUpperCase();
     const minPayout = payoutMinimumMinor(currency);
     if (dto.amountMinor < minPayout) {
       throw new BadRequestException(`Minimum payout is ${minPayout} ${currency} minor units`);
     }
-    const currency = dto.currency.trim().toUpperCase();
 
     // ── Outer pre-checks (fast rejection) ──
     const [confirmedEarnings, confirmedDebits, allocatedTotal, openFlags, account] = await Promise.all([
@@ -582,6 +582,16 @@ export class PayoutService {
     }
     if (!account || account.userId !== userId) {
       throw new BadRequestException('Invalid payout account');
+    }
+    // Payout destination verification is a money-movement safety gate: funds
+    // must only leave to a destination an operator (or the provider) has
+    // verified (ownership challenge, provider verification, etc.). An
+    // unverified account can still be shown in the UI but cannot be used to
+    // move money until verified.
+    if (!account.isVerified) {
+      throw new ForbiddenException(
+        'Payout destination is not verified yet. Add a verified payout method or wait for admin verification.',
+      );
     }
     // Destination-change cooldown (anti-account-takeover). A payout to a
     // destination that was just added or swapped must be protected by MFA.

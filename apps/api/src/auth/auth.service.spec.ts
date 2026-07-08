@@ -19,6 +19,7 @@ const mockPrisma = {
   trustScore: { create: vi.fn() },
   advertiser: { create: vi.fn() },
   referral: { create: vi.fn() },
+  consent: { create: vi.fn().mockResolvedValue({}) },
   session: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
@@ -117,6 +118,8 @@ describe('AuthService', () => {
         email: 'dev@test.com',
         password: 'password123',
         role: 'developer' as any,
+        ageConfirmed: true,
+        termsAccepted: true,
       });
       expect(result.accessToken).toBeDefined();
       expect(result.refreshToken).toBeDefined();
@@ -130,8 +133,53 @@ describe('AuthService', () => {
       const { service } = makeService();
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'exists', email: 'a@b.com' });
       await expect(
-        service.signUp({ email: 'a@b.com', password: 'pw', role: 'developer' as any }),
+        service.signUp({ email: 'a@b.com', password: 'pw', role: 'developer' as any, ageConfirmed: true, termsAccepted: true }),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('rejects signup without age/terms consent (A-034)', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.signUp({ email: 'x@x.com', password: 'password123', role: 'developer' as any }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.signUp({
+          email: 'x@x.com',
+          password: 'password123',
+          role: 'developer' as any,
+          ageConfirmed: true,
+          termsAccepted: false,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.create).not.toHaveBeenCalled();
+      expect(mockPrisma.consent.create).not.toHaveBeenCalled();
+    });
+
+    it('persists terms + privacy consent on accepted signup (A-034)', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'u-consent',
+        email: 'consent@test.com',
+        role: 'developer',
+        status: 'active',
+      });
+
+      await service.signUp({
+        email: 'consent@test.com',
+        password: 'password123',
+        role: 'developer' as any,
+        ageConfirmed: true,
+        termsAccepted: true,
+        policyVersion: '2026-07-01',
+      });
+
+      expect(mockPrisma.consent.create).toHaveBeenCalledTimes(2);
+      const purposes = mockPrisma.consent.create.mock.calls.map((c: any) => c[0].data.purpose);
+      expect(purposes).toContain('terms_of_service');
+      expect(purposes).toContain('privacy_policy');
     });
 
     it('rolls back user creation if subsequent onboarding step fails', async () => {
@@ -150,6 +198,8 @@ describe('AuthService', () => {
           email: 'dev@test.com',
           password: 'password123',
           role: 'developer' as any,
+          ageConfirmed: true,
+          termsAccepted: true,
         }),
       ).rejects.toThrow('DB write failed');
     });
@@ -697,9 +747,25 @@ describe('AuthService', () => {
         status: 'active',
       });
 
-      const res = await service.googleOAuth({ idToken: 'some-token', role: 'developer' as any });
+      const res = await service.googleOAuth({ idToken: 'some-token', role: 'developer' as any, ageConfirmed: true, termsAccepted: true });
       expect(res.user.id).toBe('u-new-google');
       expect(res.accessToken).toBeDefined();
+    });
+
+    it('rejects first-time Google signup without age/terms consent (A-034)', async () => {
+      const { service, googleVerifier } = makeService();
+      googleVerifier.verify.mockResolvedValue({
+        sub: 'google-789',
+        email: 'noconsent@test.com',
+        email_verified: true,
+        name: 'No Consent',
+      });
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.googleOAuth({ idToken: 'some-token', role: 'developer' as any }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.create).not.toHaveBeenCalled();
     });
   });
 

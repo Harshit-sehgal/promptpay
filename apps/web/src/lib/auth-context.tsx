@@ -22,6 +22,7 @@ interface User {
   trustLevel?: string | null;
   referralCode?: string | null;
   twoFactorEnabled?: boolean;
+  emailVerified?: boolean;
 }
 
 /** Construct a User from the raw API response data. */
@@ -35,6 +36,7 @@ function mapUser(raw: Record<string, unknown>): User {
     trustLevel: (raw.trustLevel as string | null) ?? 'new',
     referralCode: (raw.referralCode as string | null) ?? undefined,
     twoFactorEnabled: (raw.twoFactorEnabled as boolean | undefined) ?? false,
+    emailVerified: (raw.emailVerified as boolean | undefined) ?? false,
   };
 }
 
@@ -47,6 +49,9 @@ interface SignupPayload {
   name?: string;
   country?: string;
   referrerCode?: string;
+  ageConfirmed?: boolean;
+  termsAccepted?: boolean;
+  policyVersion?: string;
 }
 
 interface AuthContextValue {
@@ -55,7 +60,12 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (email: string, password: string, twoFactorToken?: string) => Promise<User>;
   signup: (data: SignupPayload) => Promise<User>;
-  googleLogin: (idToken: string, role?: string, twoFactorToken?: string) => Promise<User>;
+  googleLogin: (
+    idToken: string,
+    role?: string,
+    twoFactorToken?: string,
+    consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
+  ) => Promise<User>;
   logout: () => Promise<void>;
 }
 
@@ -118,11 +128,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return fullUser;
   }, []);
 
-  const googleLogin = useCallback(async (idToken: string, role?: string, twoFactorToken?: string) => {
+  const googleLogin = useCallback(async (
+    idToken: string,
+    role?: string,
+    twoFactorToken?: string,
+    consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
+  ) => {
     const data = (await authFetch('/auth/google', {
       idToken,
       role: role as 'developer' | 'advertiser' | undefined,
       ...(twoFactorToken ? { twoFactorToken } : {}),
+      ...(consent ? { ageConfirmed: consent.ageConfirmed, termsAccepted: consent.termsAccepted, policyVersion: consent.policyVersion } : {}),
     })) as { user: Record<string, unknown> };
     const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));

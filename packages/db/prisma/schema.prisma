@@ -452,6 +452,7 @@ model AdCreative {
   sponsoredMessage String
   destinationUrl   String
   displayDomain    String
+  ctaText          String?       @map("cta_text")
   status           CreativeStatus @default(draft)
   rejectionReason  String?
 

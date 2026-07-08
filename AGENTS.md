@@ -34,6 +34,16 @@ Observed verification state from the codebase audit:
 Important caveat: this is a snapshot. Re-run the commands before starting and
 before declaring the repo healthy.
 
+Additional recheck caveat from the current dirty tree:
+
+- Several older issue descriptions have partial code-level fixes in the current
+  worktree. Re-verify the named files before acting on A-007, A-019, A-024,
+  A-025, A-026, A-027, A-034, A-036, A-037, A-039, A-040, A-042, A-043, A-044,
+  A-047, A-048, A-049, A-050, A-052, A-053, A-054, and A-055. The residual
+  current gaps found in this pass are captured in A-062 through A-068, or in
+  current-status notes on the older entry, rather than assuming the older
+  wording is still exact.
+
 ## Project Baseline
 
 WaitLayer is a pnpm/Turborepo monorepo:
@@ -924,27 +934,21 @@ Done when:
 
 - A 1 click / 100 impression campaign displays `1.00%` everywhere.
 
-### A-025: Admin Users Page Expects Fields the API Does Not Return
+### A-025: Admin Users Page Response Mapping Was Fixed in the Current Tree
 
-Severity: medium.
+Severity: resolved pending verification.
 
-Evidence:
+Current source check:
 
 - `AdminService.getUsers()` returns `id`, `email`, `name`, `role`, `status`,
-  `trustLevel`, `country`, and `createdAt`.
-- `apps/web/src/app/admin/users/page.tsx` expects `displayName`, `trustScore`,
-  and `flagsOpen`.
+  `trustLevel`, `country`, `createdAt`, and a computed `openFlags` count.
+- `apps/web/src/app/admin/users/page.tsx` now renders `name`, `email`,
+  `trustLevel`, and `openFlags`, matching the current API shape.
 
-Likely impact:
+Residual risk:
 
-- Admin user table can show `undefined/100` trust values, missing names, and no
-  real open-flag count.
-
-Fix direction:
-
-- Either change the API to return the fields the UI needs, or update the UI to
-  render the actual response shape.
-- Include open fraud flag counts if ops needs triage from this page.
+- Keep or add a response-shape regression test so the admin users page cannot
+  drift back to stale field names.
 
 Desired goal:
 
@@ -954,36 +958,42 @@ Desired goal:
 Done when:
 
 - User rows show correct name/email, role, status, trust/trust score, and open
-  fraud count.
-- A response-shape test covers the admin users endpoint and page mapping.
+  fraud count in browser/API integration tests.
 
-### A-026: Admin Payout Queue Hides Important Backend Data and Recovery Paths
+### A-026: Admin Payout Page Does Not Compile and Has Amount-Unit Bugs
 
-Severity: medium.
+Severity: high.
 
 Evidence:
 
 - `AdminService.getPendingPayouts()` includes `user.email`, `user.name`,
   `trustLevel`, payout account, status, and latest transaction.
-- The admin payout page expects `userEmail` and falls back to `userId`.
-- The backend supports partial approval through `approvedAmountMinor`, but the
-  UI only exposes full approve.
-- Mark-paid requires an existing provider transaction id; the UI has no manual
-  reconciliation input even though manual payout providers are part of the
-  product flow.
+- `apps/web/src/app/admin/payouts/page.tsx` now contains partial-approval and
+  manual-reconciliation modal code, but `pnpm --filter waitlayer-web typecheck`
+  fails with `TS1128` at lines 484-487 because the file ends with stray
+  `}, } }` tokens.
+- `openApproveModal()` and `openReconcileModal()` compute defaults with
+  `p.approvedAmountMinor ?? p.requestedAmountMinor / 100`. When
+  `approvedAmountMinor` is set, the minor-unit amount is displayed as a major
+  amount. A `3000` minor-unit approval defaults to `3000`, not `30.00`.
+- `handleReconcile()` multiplies the displayed value by 100 before calling
+  `adminApi.markPayoutPaid()`, so a partial approval can attempt to reconcile
+  100x the approved amount and then fail backend cross-checks.
 
 Likely impact:
 
-- Admins have less context for payout risk review.
-- Manual/provider-failure payout reconciliation can get stuck in the UI.
-- Partial approval support exists but is not usable by operators.
+- The web app cannot typecheck/build while this syntax error remains.
+- Admin payout review, partial approval, and manual reconciliation are broken in
+  the browser even though the backend paths exist.
+- If the syntax is fixed without the amount-unit fix, partial payout
+  reconciliation can submit wrong values.
 
 Fix direction:
 
-- Map nested user data correctly in the payout page.
-- Add partial approval input with bounds validation.
-- Add a controlled manual reconciliation path for provider transaction id,
-  amount, currency, and paid timestamp when appropriate.
+- Remove the stray trailing tokens and run the web typecheck.
+- Convert `approvedAmountMinor` to major units before pre-filling modal inputs.
+- Add UI tests for full approval, partial approval, processing, and manual
+  mark-paid reconciliation.
 
 Desired goal:
 
@@ -992,33 +1002,39 @@ Desired goal:
 
 Done when:
 
-- Payout rows show developer email/name/trust level.
 - Partial approval is usable and cross-checked.
 - Manual payout reconciliation can mark paid without requiring a pre-created
   transaction that the UI cannot supply.
+- `pnpm --filter waitlayer-web typecheck` passes.
 
-### A-027: Device Recovery Token Flow Exists in API but Not in Admin UI/Proxy
+### A-027: Device Recovery Exists but Is Hidden and Requires Manual IDs
 
-Severity: medium-high.
+Severity: medium.
 
 Evidence:
 
 - `AdminController` exposes `POST /admin/devices/:id/recovery-token`.
-- The web proxy allowlist includes many `/admin/*` prefixes but not
+- The web proxy allowlist includes `/admin/devices`, and `adminApi` exposes
+  `issueDeviceRecoveryToken()`.
+- `apps/web/src/app/admin/devices/page.tsx` exists and can issue a token, but
+  `apps/web/src/app/admin/layout.tsx` does not include a navigation item for
   `/admin/devices`.
-- There is no admin service method or page for issuing device recovery tokens.
+- The page requires the operator to manually know both device UUID and user UUID;
+  there is no user/device detail view or lookup path from the user table.
 - CLI and VS Code clients explicitly prompt for/use support-issued recovery
   tokens.
 
 Likely impact:
 
-- Users who lose a per-device event secret are told to get a support token, but
-  support has no web UI route to issue it.
+- The support flow exists but is difficult to discover and depends on IDs that
+  the admin UI does not help operators find.
+- Legitimate device recovery can still fall back to ad hoc database/API lookup.
 
 Fix direction:
 
-- Add proxy allowlist and admin API client method for device recovery.
-- Add an admin/support UI flow from user/device details.
+- Add `/admin/devices` to the admin navigation.
+- Add an admin/support UI flow from user/device details or a searchable device
+  lookup.
 - Log/restrict issuance with reason, expiry, reviewer role, and one-time use.
 
 Desired goal:
@@ -1236,38 +1252,47 @@ Done when:
 - Launch review confirms no claim depends on a missing or manual-only path
   unless clearly disclosed.
 
-### A-034: Signup Age and Terms Consent Are UI-Only and Bypassable
+### A-034: Signup Consent Is Enforced in API/Web but Still Drifts Across Surfaces
 
 Severity: high.
 
 Evidence:
 
-- `apps/api/src/auth/dto/signup.dto.ts` has no `ageConfirmed`,
-  `termsAccepted`, policy version, or consent-version field.
-- `apps/web/src/app/auth/signup/page.tsx` blocks only the email/password form
-  on `ageConfirmed`; Google signup is triggered by the Google button/callback
-  and does not check or send that value.
-- `apps/cli/src/commands/auth.ts` can create developer or advertiser accounts
-  from the terminal without any age/terms confirmation.
-- `AuthService.googleOAuth()` creates new users from Google tokens without any
-  policy-consent input.
+- `apps/api/src/auth/dto/signup.dto.ts` now requires `ageConfirmed` and
+  `termsAccepted`, with optional `policyVersion`.
+- `AuthService.signUp()` rejects missing consent and persists
+  `terms_of_service` and `privacy_policy` consent records.
+- `AuthService.googleOAuth()` also rejects first-time Google signup without
+  `ageConfirmed` and `termsAccepted`, then persists consent records.
+- `apps/web/src/app/auth/signup/page.tsx` gates email/password and Google signup
+  on one `ageConfirmed` checkbox, then sends `termsAccepted: true`.
+- The visible checkbox copy says the user is 18+ and has read the Privacy
+  Policy; the Terms of Service agreement is only in a footer line, not a
+  separate required checkbox or explicit link at the control.
+- The web signup page hardcodes `policyVersion: '2026-07-01'` for
+  email/password, Google, and mock Google signup.
+- `apps/cli/src/commands/auth.ts` still calls `api.signup()` without
+  `ageConfirmed`, `termsAccepted`, or `policyVersion`; A-065 tracks the
+  resulting terminal signup breakage.
 
 Likely impact:
 
-- Minors or users who never accepted the Terms/Privacy policy can create
-  accounts through Google signup, CLI signup, or direct API calls.
-- Legal/compliance state is not auditable per user or policy version at account
-  creation.
+- Direct API and web Google signup are no longer broad consent bypasses, but
+  the web UI can still record Terms acceptance without an explicit terms
+  checkbox/link at the required control.
+- A backend policy-version bump requires signup-page code changes or new users
+  will keep recording the old `2026-07-01` version.
+- CLI signup fails against the current API contract unless the CLI is updated or
+  signup is intentionally removed from the terminal product.
 
 Fix direction:
 
-- Make age and required policy acceptance part of the API contract, not only a
-  React checkbox.
-- Require the same fields for email/password signup, Google OAuth first-time
-  account creation, and CLI signup.
-- Persist consent records with the exact policy versions accepted at signup.
-- Disable or clearly block signup surfaces that cannot collect the required
-  consent.
+- Split or rewrite the signup consent control so it explicitly covers age,
+  Terms of Service, and Privacy Policy at the point of acceptance.
+- Fetch current required policy versions from the API instead of hardcoding
+  `2026-07-01` in the signup page.
+- Update CLI signup to prompt for the same acceptance and send the required
+  fields, or remove/disable CLI signup until it can collect consent.
 
 Desired goal:
 
@@ -1279,11 +1304,11 @@ Done when:
 
 - API DTOs and services reject missing required signup consent for all signup
   paths.
-- Web Google signup cannot create an account unless the age/terms control has
-  been accepted.
-- CLI signup prompts for the same acceptance or refuses signup.
-- Tests cover email/password, Google, CLI/direct API, and missing-consent
-  rejection paths.
+- Web Google and email/password signup use server-provided policy versions.
+- CLI signup prompts for the same acceptance or refuses signup with a clear
+  message.
+- Tests cover email/password, Google, CLI/direct API, missing-consent rejection,
+  and policy-version bump behavior.
 
 ### A-035: Payout 2FA Policy and Client Support Are Inconsistent
 
@@ -1330,34 +1355,38 @@ Done when:
 - Security and payout-policy pages describe the exact behavior that is
   enforced in production.
 
-### A-036: CCPA Do-Not-Sell Opt-Out Is Only Stored in Browser Local Storage
+### A-036: CCPA Opt-Out Is Recorded but Not Enforced in Backend Behavior
 
 Severity: high.
 
 Evidence:
 
-- `apps/web/src/app/privacy/page.tsx` stores the CCPA opt-out flag only in
-  `window.localStorage` under `wl_ccpa_opt_out`.
-- There is no API route or service method that records a CCPA opt-out against a
-  user account.
-- The privacy page copy says the switch records the preference "on this
-  device", but a SaaS handling advertiser targeting needs server-side
-  enforcement if that preference is meaningful.
+- `apps/web/src/app/privacy/page.tsx` stores `wl_ccpa_opt_out` locally for all
+  visitors and, for authenticated users, posts `/consent` with
+  `purpose: 'ccpa_opt_out'`.
+- `ComplianceController` and `ComplianceService` can record and read arbitrary
+  consent purposes, so authenticated opt-out storage now exists.
+- `rg` finds no `ccpa_opt_out` or `ComplianceService.isConsented()` checks in
+  `ExtensionService.requestAd()`, advertiser reporting, campaign targeting, or
+  other backend data-sharing paths.
+- The unauthenticated path remains device-local by design and the page says so.
 
 Likely impact:
 
-- The opt-out does not follow the user across devices or browsers.
-- Backend ad-serving, reporting, and advertiser use of data cannot actually
-  honor the preference.
-- Operators have no auditable record of CCPA requests.
+- Authenticated opt-outs can follow the user across devices, but the backend
+  does not appear to change any product behavior based on the recorded flag.
+- Ad-serving, reporting, targeting, or advertiser data use can continue exactly
+  as before after opt-out.
+- Operators have a consent record, but no enforcement contract to audit.
 
 Fix direction:
 
-- Add a server-side privacy preference/consent record for authenticated users.
-- For logged-out users, either keep the device-only wording very explicit or
-  provide a request workflow tied to email/account identity.
-- Ensure ad-serving/reporting checks the preference if it affects sharing or
-  targeting.
+- Define what `ccpa_opt_out` must do in this product: ad selection, targeting,
+  reporting, data export, or advertiser sharing.
+- Enforce that behavior in backend paths, or make the UI/legal copy state that
+  the toggle is a recorded request rather than an immediate runtime control.
+- Keep logged-out local-only wording explicit or provide an identity-tied
+  request workflow.
 
 Desired goal:
 
@@ -1372,49 +1401,59 @@ Done when:
 - The UI distinguishes local-only preferences from account-level legal
   preferences.
 
-### A-037: Long-Lived API Keys Can Be Minted for Money and Data Scopes
+### A-037: API Keys Still Reach Advertiser Export/Delete Through `advertiser:write`
 
 Severity: high.
 
 Evidence:
 
-- `ALLOWED_API_KEY_SCOPES` includes `developer:write`, `payout:write`, and
-  `payout:read`.
-- `DeveloperController` is class-decorated with `@AllowApiKey()` and exposes
-  `export-data` and `delete-account` with `developer:write`.
-- `PayoutController` is class-decorated with `@AllowApiKey()` and exposes
-  `payout/method` and `payout/request` with `payout:write`.
-- The API-key creation endpoint lets an authenticated developer request any
-  allowed scopes; the web UI currently mints narrower keys, but the API surface
-  itself is broader.
+- `ALLOWED_API_KEY_SCOPES` no longer includes `payout:*` or `developer:write`,
+  and `api-key.service.spec.ts` covers rejection of those sensitive scopes.
+- `ALLOWED_API_KEY_SCOPES` still includes `advertiser:write`.
+- `AdvertiserController` is class-decorated with `@AllowApiKey()`, and
+  `/advertiser/export-data` plus `/advertiser/delete-account` use
+  `@RequiredScopes('advertiser:write')`.
+- The controller comment says API keys are deliberately not allowed to export or
+  erase an account, but there is no method-level JWT-only guard or API-key
+  rejection on those handlers.
+- `ApiKeyGuard` stamps `req.user` from the API-key owner and `JwtAuthGuard`
+  skips JWT validation when `req.apiKey` is present.
+- `RolesGuard` allows API-key auth for non-admin roles whenever the key has any
+  scope, leaving fine-grained enforcement to `@RequiredScopes`.
 
 Likely impact:
 
-- A leaked long-lived API key can add payout methods, request payouts, or export
-  personal data if it was minted with broad scopes.
-- Sensitive money-movement actions are not clearly separated from machine
-  integration credentials.
+- A long-lived key with `advertiser:write` can reach advertiser account export
+  and deletion despite comments claiming those paths are JWT-only.
+- Depending on owner/profile shape, a developer-owned key may also be able to
+  invoke advertiser deletion against the stamped owner id because the handler
+  reads `@CurrentUser('id')` directly rather than resolving advertiser context.
+- Sensitive privacy/destructive account operations remain mixed with
+  machine-to-machine campaign management credentials.
 
 Fix direction:
 
-- Remove payout and destructive/privacy scopes from self-service API keys unless
-  there is a deliberate machine-to-machine product for them.
-- Require short expiry, 2FA step-up, or separate admin approval for sensitive
-  API-key scopes.
-- Consider making export/delete/payout endpoints JWT-only.
-- Add UI disclosure and audit alerts for sensitive key issuance if retained.
+- Remove `@AllowApiKey()` from advertiser export/delete handlers or explicitly
+  reject `req.apiKey` before calling the service.
+- Split `advertiser:write` into campaign/profile-safe scopes and destructive
+  account/privacy scopes that are never self-service mintable.
+- Add controller/guard tests proving API keys cannot call export/delete even
+  when they have `advertiser:write`.
+- Keep payout and developer destructive scopes out of self-service API keys.
 
 Desired goal:
 
-- API keys used by extensions/automations cannot silently become durable payout
-  or account-data exfiltration credentials.
+- API keys used by extensions/automations cannot silently become durable account
+  export or deletion credentials.
 
 Done when:
 
-- Self-service API keys cannot call payout/write or privacy/destructive
-  endpoints unless an explicit, tested policy allows it.
-- Tests prove insufficient scopes and ordinary extension keys are rejected.
-- Sensitive API-key creation is visible in audit/admin surfaces.
+- API keys cannot call advertiser/developer export or delete endpoints unless an
+  explicit, tested product policy allows it.
+- Tests prove `advertiser:write` keys can manage intended campaign/profile
+  routes but cannot erase or export the account.
+- Sensitive API-key creation is visible in audit/admin surfaces if any sensitive
+  scopes are retained.
 
 ### A-038: Ad-Request Cache Is Not Scoped by User or Device
 
@@ -1574,32 +1613,30 @@ Done when:
 - Tests cover referral reward creation, idempotency, dashboard totals, and
   payout availability.
 
-### A-042: Health Endpoint Reports HTTP 200 Even When Dependencies Fail
+### A-042: Readiness Endpoint Now Fails Closed on Dependency Failure
 
-Severity: medium.
+Severity: resolved pending deployment verification.
 
-Evidence:
+Current source check:
 
-- `HealthController.check()` always returns an object with `status: 'ok'`.
-- Database failures are represented inside `database: { status: 'error' }` but
-  the response status remains HTTP 200.
-- Redis failures are represented in the JSON body while the HTTP status remains
-  200.
-- Docker and docker-compose healthchecks call `/api/v1/health` with `wget
-  --spider`, which only checks the HTTP status.
+- `HealthController.check()` remains a liveness endpoint that returns HTTP 200.
+- `HealthController.ready()` now checks Postgres and Redis and throws
+  `HttpException(..., 503)` when either required dependency is unavailable.
+- `apps/api/src/health/health.controller.spec.ts` covers DB-down and Redis-down
+  readiness failures.
 
-Likely impact:
+Residual risk:
 
-- Containers or load balancers can consider the API healthy while the database
-  or Redis-backed abuse controls are down.
-- Public status can say "ok" while critical dependencies are degraded.
+- Deployment artifacts still need to be verified to ensure Docker/Kubernetes or
+  load-balancer health checks call `/api/v1/health/ready`, not only
+  `/api/v1/health`.
+- Public status UI semantics should keep liveness and readiness distinct.
 
-Fix direction:
+Follow-up direction:
 
-- Split liveness and readiness: liveness can return 200 for process health,
-  readiness should fail non-200 when required dependencies are unavailable.
-- Point Docker/Kubernetes readiness checks at the dependency-aware endpoint.
-- Make the status page consume and display readiness semantics accurately.
+- Point Docker/Kubernetes readiness checks at `/health/ready`.
+- Make status pages consume readiness for traffic safety and liveness for
+  process uptime.
 
 Desired goal:
 
@@ -1613,34 +1650,42 @@ Done when:
 - The public status UI no longer treats `status: ok` as authoritative if
   dependencies are degraded.
 
-### A-043: Distributed Client Packaging Is Not Launch-Ready
+### A-043: Distributed Client Packaging Is Partially Wired but Not Publish-Ready
 
 Severity: medium.
 
 Evidence:
 
-- `apps/cli/package.json` has `"private": true`, so it cannot be published to
-  npm as-is.
-- The CLI `bin` points to `./dist/apps/cli/src/index.js`, which must be
-  verified against the actual `tsc` output before packaging.
-- `apps/vscode-extension/package.json` has a publisher and extension metadata
-  but no repository packaging/publishing script for `.vsix` or marketplace
-  release.
+- `apps/cli/package.json` is now `"private": false`, has
+  `bin.waitlayer: "./dist/index.js"`, a `files: ["dist"]` whitelist, and
+  `publishConfig.access: "public"`.
+- `scripts/verify-cli-bin.mjs` checks that the built CLI bin path exists after
+  build.
+- `.github/workflows/publish-cli.yml` builds the CLI, runs the bin verifier, and
+  performs `pnpm pack --dry-run`, but the real `npm publish` step is commented
+  out.
+- `apps/vscode-extension/package.json` has `package:vsix` and `publish:vsix`
+  scripts.
+- `.github/workflows/publish-vscode.yml` builds and packages a `.vsix`, but the
+  marketplace publish step is commented out.
+- Both publish workflow files are currently untracked in this dirty worktree, so
+  they are not guaranteed to exist in the committed branch.
 - A-013 separately covers the localhost default once a package is installed.
 
 Likely impact:
 
-- The landing/onboarding claim that users can install the terminal or VS Code
-  integrations is not backed by a release artifact pipeline.
-- Manual local builds can work while public install paths do not exist.
+- Client artifact packaging is closer, but public install still depends on
+  uncommenting/approving publish steps and committing the workflow files.
+- Release dry-runs can pass while no npm package or Marketplace extension is
+  actually published for users.
 
 Fix direction:
 
-- Add a real CLI release package configuration, package contents check, and
-  publish workflow.
-- Add VS Code `.vsix` packaging and marketplace/private-distribution workflow.
+- Commit the publish workflows and decide the explicit approval gate for real
+  `npm publish` and Marketplace publish.
 - Include smoke tests that install the packaged artifacts and run login/config
   commands against a production-like API URL.
+- Record where release artifacts are downloaded by users and how rollback works.
 
 Desired goal:
 
@@ -1653,36 +1698,42 @@ Done when:
 - Packaged artifacts have production-safe defaults and pass install smoke
   tests.
 
-### A-044: Advertisers Lack Equivalent Self-Service Privacy Export/Deletion
+### A-044: Advertiser Privacy Endpoints Exist but Are Not Safely Exposed in UI
 
 Severity: medium.
 
 Evidence:
 
-- Data export and account deletion are implemented under
-  `DeveloperController` as `/developer/export-data` and
-  `/developer/delete-account`.
-- `developerApi` exposes export/delete methods, and the developer settings page
-  has a data export UI.
-- There is no equivalent advertiser API or advertiser settings UI for export or
-  self-service deletion.
-- The admin erasure endpoint exists, but A-028 notes it is not exposed in the
-  admin Users UI either.
+- `AdvertiserController` now exposes `POST /advertiser/export-data` and
+  `POST /advertiser/delete-account`.
+- The Next.js proxy allowlist includes `/advertiser/export-data` and
+  `/advertiser/delete-account`, and `advertiserApi` has matching methods.
+- There is no advertiser settings/account page under `apps/web/src/app/advertiser`;
+  `rg` finds no `advertiserApi.exportData()` or `advertiserApi.deleteAccount()`
+  usage in advertiser UI pages.
+- Advertiser deletion only checks `confirmation === 'DELETE_MY_ACCOUNT'` in the
+  controller. Unlike `DeveloperService.deleteAccount()`, it does not require
+  password or Google step-up reauthentication before anonymizing the user.
+- The admin erasure endpoint exists, but A-028 notes it is still not exposed in
+  the admin Users UI.
 
 Likely impact:
 
-- Advertiser users do not have the same self-service privacy controls as
-  developer users.
-- GDPR/CCPA request handling for advertisers depends on support/admin manual
-  paths that are not complete in the product UI.
+- Advertiser export/delete paths are direct API-only from the current web
+  product; normal advertiser users have no discoverable account/privacy screen.
+- A stolen active advertiser session can delete the account with only a typed
+  confirmation string if the attacker reaches the endpoint.
+- GDPR/CCPA request handling for advertisers is only partially productized.
 
 Fix direction:
 
-- Add account/privacy settings for advertiser users.
-- Implement advertiser export that includes profile, campaigns, creatives,
-  billing ledger, deposits/refunds, reports, consent, and account data.
-- Implement guarded advertiser self-deletion/erasure or a clearly documented
-  request workflow with admin UI support.
+- Add account/privacy settings for advertiser users with export and deletion
+  controls.
+- Reuse the developer deletion step-up model for advertiser deletion, including
+  current password or Google reauthentication where applicable.
+- Keep money-retention/legal-hold records intact while anonymizing personal and
+  billing identity.
+- Add UI/proxy/API tests for advertiser export, deletion, and step-up failure.
 
 Desired goal:
 
@@ -1784,7 +1835,7 @@ Done when:
 - Successful recomputes refresh the affected row/stats.
 - The shared admin API surface includes the recompute operation.
 
-### A-047: Consent Re-Prompt Hardcodes Policy Versions
+### A-047: Signup Still Hardcodes Policy Version After Re-Prompt Fixes
 
 Severity: medium.
 
@@ -1795,28 +1846,36 @@ Evidence:
   `marketing_cookies`.
 - `apps/api/src/compliance/compliance.controller.ts` exposes
   `GET /consent/required-versions` and `GET /consent/stale`.
-- `apps/web/src/components/consent-reprompt.tsx` hardcodes
-  `const VERSION = '2026-07-01'` and posts that same version for every stale
-  purpose instead of using `/consent/required-versions`.
-- `apps/web/src/components/cookie-consent.tsx` also hardcodes
-  `version: '2026-07-01'` for `marketing_cookies`.
+- `apps/web/src/components/consent-reprompt.tsx` now fetches
+  `/consent/required-versions`, posts the required version per stale purpose,
+  and re-checks `/consent/stale` before dismissing.
+- `apps/web/src/components/cookie-consent.tsx` now fetches the required
+  `marketing_cookies` version before recording accepted cookie consent.
+- `apps/web/src/app/auth/signup/page.tsx` still hardcodes
+  `policyVersion: '2026-07-01'` for email/password signup, Google signup, and
+  mock Google signup.
+- Cookie decline stores only local `declined` state; it does not record an
+  authenticated server-side `marketing_cookies` revocation, leaving the stale
+  consent/re-prompt semantics unclear for users who decline optional cookies.
 
 Likely impact:
 
-- After a backend policy-version bump, the web banner can record the old version
-  while locally hiding the prompt via `setStale([])`.
-- If different consent purposes have different required versions, the UI cannot
-  record the correct per-purpose version.
-- Users may think they accepted the current terms/privacy policy while the
-  backend still treats their consent as stale on the next session.
+- After a backend policy-version bump, new web signups can keep recording the
+  old `2026-07-01` acceptance until the signup page is changed.
+- A user who declines optional marketing cookies may have only local decline
+  state, not an auditable account-level revocation.
+- Re-prompt and cookie acceptance are closer to the desired contract, but signup
+  and decline flows still drift from server-owned policy versions.
 
 Fix direction:
 
-- Fetch `/consent/required-versions` before recording consent and post the
-  purpose-specific version returned by the API.
-- Make cookie-banner consent use the same server-provided version source.
-- If accepting fails or a stale purpose remains stale after recording, keep the
-  prompt visible with an actionable error.
+- Fetch `/consent/required-versions` before signup submission and send the
+  correct terms/privacy version instead of a hardcoded constant.
+- For authenticated cookie decline, record `marketing_cookies` with
+  `granted: false` and the server-required version, or explicitly define why
+  decline is local-only.
+- Keep the existing re-check behavior that prevents dismissing stale consent
+  when server recording fails.
 
 Desired goal:
 
@@ -1827,45 +1886,44 @@ Done when:
 - A policy-version bump in `ComplianceService` requires no web code change.
 - The re-prompt flow records per-purpose versions and confirms the stale list is
   clear before dismissing.
-- Tests cover accepting stale consent after changing the required version.
+- Signup and cookie decline flows also use server-owned versions.
+- Tests cover accepting stale consent, declining optional cookies, and signing
+  up after changing the required version.
 
-### A-048: Payout Account Verification Is Display-Only
+### A-048: Payout Account Verification Gate Was Added in the Current Tree
 
-Severity: high.
+Severity: resolved pending verification.
 
-Evidence:
+Current source check:
 
 - `packages/db/prisma/schema.prisma` has `PayoutAccount.isVerified` with
   `@default(false)`.
-- `PayoutService.addPayoutMethod()` creates the payout account but does not set
-  `isVerified` or start a provider/admin verification workflow.
-- `PayoutService.requestPayout()` validates user status, verified email, optional
-  2FA, balance, fraud flags, account ownership, cooldown, and currency, but it
-  does not require `account.isVerified`.
-- `apps/web/src/app/developer/payouts/page.tsx` renders payout accounts as
-  approved/pending based on `acc.isVerified`, but the payout-method selector
-  includes all active accounts and does not block pending accounts.
-- No scanned API/web path updates `PayoutAccount.isVerified` for developer-added
-  payout accounts.
+- `PayoutService.requestPayout()` now rejects `!account.isVerified` before
+  creating a payout request.
+- `apps/web/src/app/developer/payouts/page.tsx` blocks selected unverified
+  payout methods and disables them in the selector.
+- `AdminController` exposes `POST /admin/payout-accounts/:id/verify`, and
+  `AdminService.setPayoutAccountVerified()` updates `isVerified` with an audit
+  event.
+- `apps/web/src/app/admin/payouts/page.tsx` exposes a "Verify method" action for
+  unverified payout accounts, though A-026 currently blocks the admin payout
+  page from compiling.
+- `apps/api/src/payout/payout.service.spec.ts` covers rejection of unverified
+  payout destinations.
 
-Likely impact:
+Residual risk:
 
-- A newly added payout destination is shown as pending but can still be used to
-  request a payout.
-- The `isVerified` field gives users/admins a false sense of money-movement
-  gating.
-- Destination-verification, anti-takeover review, and provider onboarding are
-  not actually enforced before funds can move.
+- The web typecheck failure in A-026 prevents relying on the admin verification
+  UI until that page builds.
+- Provider-specific automated verification is still a product/process decision,
+  but the platform now has an admin gate.
 
-Fix direction:
+Follow-up direction:
 
 - Define what payout account verification means per provider: email challenge,
   provider account verification, admin approval, or trusted provider callback.
-- Block `requestPayout()` unless the selected account is verified, or remove the
-  field/UI label and make the product policy explicit.
-- Add admin/provider endpoints to verify or reject payout accounts with audit
-  logs.
-- Filter/disable unverified payout accounts in the developer payout request UI.
+- Keep admin verification/rejection visible after A-026 is fixed.
+- Add provider-specific verification where required for scale.
 
 Desired goal:
 
@@ -1878,39 +1936,32 @@ Done when:
 - Verification/rejection actions are audited and visible to developers/admins.
 - Tests cover payout request rejection for an unverified payout account.
 
-### A-049: Web Logout Can Show Success Before Server Revocation/Cookie Clear
+### A-049: Web Logout Now Waits for Server Revocation/Cookie Clear
 
-Severity: high.
+Severity: resolved pending verification.
 
-Evidence:
+Current source check:
 
 - `apps/web/src/app/api/auth/logout/route.ts` is intentionally conservative:
   if the API logout call cannot be reached or returns a non-401 failure, it
   returns an error and does not clear auth cookies.
-- `apps/web/src/lib/auth-context.tsx` calls `api.post('/auth/logout')` without
-  awaiting it, logs failures in `.catch()`, immediately removes
-  `lastDashboard`, and immediately sets `user` to `null`.
-- If the route handler returns 502/5xx, the browser UI still behaves as if the
-  user logged out, but the httpOnly cookies remain because the route handler did
-  not clear them.
+- `apps/web/src/lib/auth-context.tsx` now awaits `api.post('/auth/logout')`
+  before removing `lastDashboard` or setting `user` to `null`.
+- On logout failure, `auth-context` logs a warning and rethrows, keeping the
+  session visibly active instead of silently dropping local state.
 
-Likely impact:
+Residual risk:
 
-- Users get a false sense that logout/revocation succeeded.
-- A reload can rehydrate the session from still-present cookies and appear to
-  "log back in" unexpectedly.
-- An access token/session that the API failed to revoke remains usable until
-  expiry or refresh failure.
+- This still needs a browser/route-handler regression test proving a 502 from
+  `/api/auth/logout` leaves the user visible and cookies uncleared.
+- A full web typecheck is currently blocked by A-026, so logout verification
+  should be re-run after the web compile blocker is fixed.
 
-Fix direction:
+Follow-up direction:
 
-- Make `logout()` async and only clear local auth state after `/api/auth/logout`
-  returns success.
-- Surface a retryable logout error if revocation/cookie clearing fails.
-- Consider a "force local sign-out" escape hatch only when the user explicitly
-  accepts that server revocation is not confirmed.
 - Add tests for API logout 502/500: local user state should not be cleared and
   protected pages should not claim logout succeeded.
+- Make logout UI surfaces display the rethrown error clearly.
 
 Desired goal:
 
@@ -1924,33 +1975,28 @@ Done when:
 - Reload after a failed logout does not surprise the user with a resurrected
   session.
 
-### A-050: Advertiser Report Date Ranges Exclude Most of the End Day
+### A-050: Date-Only Report End-Day Inclusion Was Fixed in the Current Tree
 
-Severity: medium-high.
+Severity: resolved pending verification.
 
-Evidence:
+Current source check:
 
 - `apps/web/src/app/advertiser/reports/page.tsx` sends date-only strings from
   `periodPreset()` via `toISOString().slice(0, 10)`.
-- `AdvertiserController.getReports()` parses `to` with `new Date(to)`.
-- `AdvertiserService.getReports()` applies that value directly as
-  `createdAt: { gte, lte }`.
-- A date-only `to=2026-07-09` parses to midnight at the start of that day, so
-  events later on July 9 are excluded.
+- `AdvertiserService.getReports()` now treats date-only `to` values as an
+  exclusive next-day UTC bound (`lt` next day) while preserving `lte` for full
+  ISO datetimes.
 
-Likely impact:
+Residual risk:
 
-- "Last 24h", "7 days", and custom ranges can under-report impressions, clicks,
-  and spend for the selected end day.
-- Advertisers can see spend/CTR totals that do not match billing ledger rows
-  for the same apparent period.
+- Add/keep API tests for an event at noon on the selected date-only `to` day.
+- A-067 still tracks the separate misleading "Last 24h" preset, which now sends
+  calendar date bounds rather than a rolling 24-hour ISO range.
 
-Fix direction:
+Follow-up direction:
 
-- Treat date-only `to` values as an exclusive next-day bound (`lt` next day) or
-  expand to end-of-day consistently.
 - Prefer explicit ISO datetimes for "last 24h" instead of date-only strings.
-- Add tests for an event at noon on the selected `to` day.
+- Keep date-only/custom range tests around end-day inclusion.
 
 Desired goal:
 
@@ -2008,37 +2054,38 @@ Done when:
 - Tests cover creative/targeting/submit failure after the campaign row is
   created.
 
-### A-052: Advertiser CTAs Land on Developer Signup by Default
+### A-052: Advertiser Role CTAs Mostly Fixed; Generic CTAs Still Default Developer
 
-Severity: medium-high.
+Severity: medium.
 
 Evidence:
 
-- The landing page has advertiser-facing calls to action, including "Start
-  Advertiser Campaign", but they link to `/auth/signup` without a role hint.
-- The pricing page's advertiser card has "Start advertising" and also links to
-  `/auth/signup` without a role hint.
 - `apps/web/src/app/auth/signup/page.tsx` initializes `role` to `developer`.
-- The signup page only reads `ref` from the query string, and a referral code
-  explicitly forces the role back to `developer`.
-- There is no code path that reads something like `?role=advertiser` and
-  selects the advertiser tab before the user fills the form.
+- The signup page now reads `?role=advertiser` / `?role=developer` and selects
+  the matching tab; referral links still force developer.
+- The main landing page "Start Advertiser Campaign" CTA links to
+  `/auth/signup?role=advertiser`.
+- The pricing page advertiser card "Start advertising" links to
+  `/auth/signup?role=advertiser`.
+- Several mixed-audience/generic CTAs still link to `/auth/signup`, including
+  the landing hero "Start earning" and pricing "Get started" / bottom CTA,
+  which correctly default to developer only if the copy is developer-leaning.
 
 Likely impact:
 
-- Advertisers arriving from advertiser copy can accidentally create developer
-  accounts.
-- The first advertiser conversion path depends on the user noticing and
-  manually switching the role tab.
-- Google signup from that page will pass the currently selected role, so the
-  wrong default can create the wrong account type before any dashboard recovery
-  is possible.
+- The strongest advertiser-specific CTAs now preselect advertiser, but any
+  generic CTA near mixed developer/advertiser copy still needs copy/link review
+  to avoid accidentally defaulting advertiser visitors to developer signup.
+- Google signup still uses the currently selected role, so any remaining
+  advertiser-intended link without a role hint can create the wrong account
+  type.
 
 Fix direction:
 
-- Add explicit advertiser signup links, for example `/auth/signup?role=advertiser`.
-- Teach the signup page to accept only valid role query values and initialize
-  the segmented control from them.
+- Audit every public `/auth/signup` link and classify it as developer-specific,
+  advertiser-specific, or intentionally generic.
+- Add explicit advertiser signup links anywhere the surrounding copy is
+  advertiser-specific.
 - Keep referral links developer-only unless the product intentionally supports
   advertiser referrals.
 
@@ -2053,36 +2100,28 @@ Done when:
 - Invalid role query values fall back safely.
 - Tests cover developer, advertiser, referral, and invalid-role signup URLs.
 
-### A-053: Redis Health Probe Can Latch a Failed Connection Forever
+### A-053: Redis Health Probe Recovery Was Added in the Current Tree
 
-Severity: medium.
+Severity: resolved pending verification.
 
-Evidence:
+Current source check:
 
-- `apps/api/src/health/redis-health.service.ts` stores the first connection
-  attempt in `this.connectPromise`.
-- If `client.connect()` rejects, `this.connectPromise` remains set to the
-  rejected promise.
-- Later health checks call `ensureClient()`, see `this.connectPromise`, and
-  await the same rejected promise instead of creating a fresh Redis client.
-- If an existing client becomes not ready, `ensureClient()` can also return the
-  old fulfilled promise rather than resetting the client and reconnecting.
+- `RedisHealthService.disposeClient()` clears `connectPromise` and `client`.
+- `ensureClient()` drops stale non-ready clients before reconnecting.
+- Failed connect promises clear the cached promise/client.
+- `check()` disposes the client after connect or ping failure so the next probe
+  can reconnect.
+- `apps/api/src/health/redis-health.service.spec.ts` covers initial connection
+  failure recovery and ping-failure reconnect.
 
-Likely impact:
+Residual risk:
 
-- A transient Redis outage or startup race can make `/health` report Redis
-  errors until the API process restarts, even after Redis is healthy again.
-- Public status and operator readiness checks become less trustworthy.
-- This compounds A-042 because the endpoint already returns HTTP 200 for
-  dependency failures.
+- Needs verification against a real Redis outage/recovery, not only mocks.
 
-Fix direction:
+Follow-up direction:
 
-- Clear `connectPromise` and `client` on connection failure.
-- On ping failure or `!client.isReady`, dispose the stale client and retry with
-  bounded backoff.
-- Add tests for Redis unavailable on first check, then available on a later
-  check.
+- Add an integration check with Redis stopped and restarted if deployment
+  readiness depends on it.
 
 Desired goal:
 
@@ -2094,43 +2133,41 @@ Done when:
 - Redis health recovers without restarting the API.
 - Tests cover initial failure, reconnect success, and stale-client failure.
 
-### A-054: Confirmed Archive Refunds Do Not Reduce Advertiser Spendable Balance
+### A-054: Archive Refunds Now Reduce Spendable Balance; Billing Display Still Differs
 
-Severity: high.
+Severity: resolved pending billing-display follow-up.
 
-Evidence:
+Current source check:
 
 - `AdvertiserService.archiveCampaign()` records unspent archived budget as an
   advertiser ledger row with `entryType: 'refund'` and `status: 'pending'`.
 - `AdminService.confirmArchiveRefund()` flips that row to `confirmed` after the
   admin manually issues the Stripe refund and writes the platform cash debit.
-- Advertiser balance helpers ignore confirmed `refund` rows:
-  `AdvertiserService.getAdvertiserBalance()`,
-  `ExtensionService.getAdvertiserBalance()`, `CampaignService` balance checks,
-  and the advertiser billing view all compute balance from only `credit` and
-  `debit` entries.
-- `ExtensionService.requestAd()` has the same issue in its advertiser
-  eligibility prefilter, where only credits add and debits subtract.
+- `apps/api/src/common/utils/advertiser-balance.ts` centralizes spendable
+  balance as confirmed credits minus confirmed debits minus confirmed refunds.
+- `AdvertiserService`, `CampaignService`, `AdminService`, and
+  `ExtensionService` call the centralized balance helper for activation,
+  resume, approval, ad serving, and billing guards.
+- `getAdvertiserBalancesByCurrency()` also subtracts confirmed refund rows when
+  filtering ad-serving eligibility.
+- `apps/api/src/common/utils/advertiser-balance.spec.ts` covers pending refund
+  exclusion and confirmed refund subtraction.
+- `AdvertiserService.getBilling()` still computes the displayed billing summary
+  from only `credit` and `debit`; that residual UI/API display mismatch is
+  tracked separately as A-066.
 
-Likely impact:
+Residual risk:
 
-- After cash is refunded externally, the advertiser can still appear to have
-  the same spendable platform balance.
-- A refunded advertiser may resume/activate campaigns or receive ad delivery
-  using money that has already left the platform.
-- Billing pages can show a refund row in history while the available balance
-  does not decrease, making reconciliation misleading.
+- Billing/dashboard totals still need to reconcile deposits, debits, refunds,
+  disputes, and spendable balance by currency (A-066).
+- Keep integration coverage for deposit → archive → confirm refund → ad-serving
+  in place or add it if missing.
 
-Fix direction:
+Follow-up direction:
 
-- Define the advertiser balance formula explicitly: confirmed credits minus
-  confirmed debits minus confirmed refunds, plus/minus any dispute/reversal
-  states the ledger supports.
-- Centralize the balance calculation instead of duplicating it across
-  advertiser, campaign, extension, admin, and UI response code.
-- Add an integration test: deposit, archive campaign, confirm refund, then
-  verify balance, activation/resume, and ad-serving eligibility all reflect the
-  refunded cash outflow.
+- Make advertiser billing display use the same centralized balance formula
+  (A-066).
+- Keep dispute semantics aligned with the centralized formula (A-063).
 
 Desired goal:
 
@@ -2144,41 +2181,37 @@ Done when:
 - Billing/dashboard totals reconcile deposits, debits, refunds, disputes, and
   spendable balance by currency.
 
-### A-055: Advertiser Balance Is Not Atomically Reserved or Guarded During Billing
+### A-055: Account-Level Billing Guard Was Added; Needs Concurrency Test
 
-Severity: high.
+Severity: resolved pending concurrency verification.
 
-Evidence:
+Current source check:
 
 - `ExtensionService.requestAd()` filters campaigns with a read-only advertiser
-  balance precheck before serving an ad.
-- `recordQualifiedImpression()` and `recordClick()` call
-  `getAdvertiserBalance()` before the billing transaction, but the transaction
-  only atomically increments `campaign.budgetSpentMinor` and inserts ledger
-  rows.
-- There is no advertiser-level balance row, reservation, advisory lock, or SQL
-  condition that prevents two concurrent billable events on different campaigns
-  from both reading the same available balance and both inserting debits.
-- Campaign-level budget is protected, but account-level cash is not.
+  balance precheck before serving an ad; that is still only an eligibility
+  optimization.
+- `recordQualifiedImpression()` now opens a transaction, obtains a
+  `pg_advisory_xact_lock` keyed by advertiser+currency, re-checks spendable
+  balance inside the locked transaction, and only then increments campaign
+  spend and writes ledger rows.
+- `recordClick()` applies the same advertiser+currency advisory lock and
+  in-transaction balance check for CPC billing.
+- The balance check uses the centralized formula from A-054, including
+  confirmed refunds.
+- `rg` did not find an obvious dedicated regression test proving two concurrent
+  billable events across different campaigns cannot overdraw one small
+  advertiser balance.
 
-Likely impact:
+Residual risk:
 
-- Two campaigns under the same advertiser can concurrently spend the same
-  remaining balance.
-- Advertiser ledger can go negative even when every individual campaign stayed
-  within its own budget.
-- Developer earnings and platform fees can be created from advertiser funds
-  that were not actually available.
+- Code-level locking is present, but a real concurrent CPM/CPC regression test
+  should prove one of two events is rejected when only one bid remains funded.
 
-Fix direction:
+Follow-up direction:
 
-- Introduce an advertiser/currency balance reservation model, or perform
-  billing under an advertiser+currency lock with an in-transaction balance
-  check.
-- Use the same balance formula from A-054, including refunds/disputes, inside
-  the atomic guard.
 - Add concurrent CPM and CPC tests with two active campaigns sharing one small
   advertiser balance.
+- Keep CPM qualification and CPC click paths on the same account-level guard.
 
 Desired goal:
 
@@ -2487,6 +2520,329 @@ Done when:
 - Tests cover pending impressions, qualified impressions, hourly caps, daily
   caps, and cap reset windows.
 
+### A-062: Stripe Webhook Failure Paths Can Be Acknowledged Without Reconciliation
+
+Severity: critical.
+
+Evidence:
+
+- `StripeWebhookController.handleWebhook()` is annotated with
+  `@HttpCode(HttpStatus.OK)`.
+- Missing Stripe signature, missing raw body, and signature verification failure
+  all return `{ received: false, reason: ... }` instead of throwing or setting a
+  non-2xx status.
+- `handlePaymentSuccess()` returns early when checkout metadata lacks
+  `advertiserId` or the advertiser row is missing, but those early returns do
+  not mark the `webhookEvent` row `processed`, `failed`, or `pending`.
+- `WEBHOOK_ASYNC_PROCESSING=true` acknowledges the event immediately with
+  `{ received: true, reason: 'accepted_async' }` and then runs an in-process
+  `setImmediate()` handler. If that handler fails it resets the row to
+  `pending`, but there is no background worker that drains pending webhook rows;
+  Stripe already received HTTP 200.
+
+Likely impact:
+
+- A legitimate Stripe deposit/refund/dispute/payout event can be dropped from
+  the provider's retry perspective while the platform fails to reconcile money.
+- Webhook secret/raw-body misconfiguration can produce successful HTTP
+  responses and no ledger updates, which is dangerous during launch.
+- Async webhook mode is not crash-safe: a process death after the 200 response
+  can leave the only durable record in `processing` or `pending` until a manual
+  replay.
+
+Fix direction:
+
+- Return a non-2xx response for verification/configuration failures before an
+  event is durably accepted.
+- For accepted events, ensure every branch reaches a terminal `processed`,
+  durable `failed`, or retryable state with an explicit error reason.
+- If async mode remains, add a durable worker that claims and processes pending
+  webhook rows independently of provider redelivery.
+- Add integration tests for missing signature, bad signature, missing raw body,
+  missing advertiser metadata, missing advertiser row, async handler failure,
+  and process-restart replay.
+
+Desired goal:
+
+- Stripe receives HTTP 200 only after the event is durably accepted and either
+  processed or guaranteed to be retried by the platform.
+
+Done when:
+
+- Misconfigured or invalid webhook requests return non-2xx.
+- Accepted-but-failed events are visible in admin operations and automatically
+  retry without requiring a new Stripe delivery.
+- Deposits cannot be lost silently due to missing metadata or async process
+  failure.
+
+### A-063: Partial Stripe Disputes Freeze or Write Off Entire Deposits
+
+Severity: high.
+
+Evidence:
+
+- `handleDispute()` creates a `hold` advertiser-ledger row for
+  `Math.min(entry.amountMinor, details.amountMinor)`, which is amount-level.
+- The same transaction then flips the parent deposit credit row to
+  `status: 'held'` regardless of whether the dispute amount is smaller than the
+  deposit amount.
+- The centralized spendable-balance helper counts only `status: 'confirmed'`
+  credits, so a partially disputed deposit is fully removed from spendable
+  balance.
+- `handleDisputeClosed()` lost-dispute handling writes a parent reversal for
+  `details.amountMinor`, then marks the parent credit row `status: 'reversed'`,
+  again excluding the entire original credit.
+
+Likely impact:
+
+- A partial dispute can freeze the advertiser's whole deposit instead of only
+  the disputed amount.
+- A lost partial dispute can write off the whole deposit from advertiser
+  spendable balance while platform cash is debited only for the smaller dispute
+  amount, making ledgers inconsistent.
+- Active campaigns may stop serving because unrelated, undisputed funding was
+  hidden by a whole-row status flip.
+
+Fix direction:
+
+- Split deposit credit rows before holding/reversing a disputed slice, or model
+  dispute holds at amount level without changing whole parent-row status.
+- Keep undisputed remainder credits confirmed and spendable.
+- Add tests for a $100 deposit with a $10 dispute created, won, lost, and
+  re-delivered.
+
+Desired goal:
+
+- Dispute lifecycle changes only the disputed amount, never unrelated funding.
+
+Done when:
+
+- Partial disputes freeze exactly the disputed amount.
+- Winning a partial dispute restores exactly that amount.
+- Losing a partial dispute reverses exactly that amount and leaves the remaining
+  deposit credit spendable.
+
+### A-064: CLI Watch Uses Different Session IDs for Wait Start and Ad Request
+
+Severity: high.
+
+Evidence:
+
+- `apps/cli/src/lib/api-client.ts` `reportWaitState()` sends
+  `sessionId: 'cli-' + Date.now()` when it records `/extension/wait-state/start`.
+- `apps/cli/src/commands/watch.ts` later calls `requestAd()` with
+  `sessionId: \`cli-${waitStateId}\`` for the same wait state.
+- `ExtensionService.requestAd()` requires a matching wait-state start row with
+  the same `userId`, `deviceId`, `sessionId`, `waitStateId`, and
+  `eventType: 'wait_state_start'`.
+- The imported `runAdFlow()` helper is not used by `runWatch()`.
+
+Likely impact:
+
+- Terminal/CLI ad requests fail with "No matching active wait state start" even
+  after the CLI successfully records the wait-state start.
+- The terminal earning path can appear implemented but cannot actually progress
+  from wait-state start to ad request to render/qualification.
+- This is the current residual form of the older CLI ad-flow gap.
+
+Fix direction:
+
+- Generate one stable session id in `runWatch()` and pass it to both
+  wait-state start and ad request.
+- Either use `runAdFlow()` or remove the unused import and cover the watch
+  command directly.
+- Add a CLI unit/integration test that asserts the same session id reaches
+  start, ad-request, render, qualify, and wait-end calls.
+
+Desired goal:
+
+- The CLI watch command can complete the same developer earning path as the VS
+  Code extension.
+
+Done when:
+
+- CLI watch start and ad request use one session id.
+- A test proves the API accepts the CLI start -> ad request flow.
+- The CLI can qualify an impression after the required visible duration.
+
+### A-065: CLI Signup Cannot Satisfy Required Consent Fields
+
+Severity: high.
+
+Evidence:
+
+- `SignUpDto` requires `ageConfirmed` and `termsAccepted` booleans.
+- `AuthService.signUp()` rejects account creation when either field is missing
+  or false.
+- `apps/cli/src/commands/auth.ts` calls `api.signup()` with email, password,
+  role, name, and optional referral code only.
+- `apps/cli/src/lib/api-client.ts` `signup()` does not accept or forward
+  `ageConfirmed`, `termsAccepted`, or `policyVersion`.
+
+Likely impact:
+
+- CLI self-service signup fails against the current API validation.
+- Developers installing the terminal client first cannot create an account from
+  the CLI even though the command offers signup.
+- The older consent-bypass risk has become a broken-client risk in the current
+  tree: the API is stricter, but this client was not updated.
+
+Fix direction:
+
+- Add explicit CLI prompts for age confirmation and terms/privacy acceptance.
+- Forward `ageConfirmed: true`, `termsAccepted: true`, and the current
+  server-required policy version.
+- Fetch the required policy versions from `/consent/required-versions` or share
+  the version constant through a package instead of hard-coding a stale value.
+
+Desired goal:
+
+- Every signup surface enforces and records the same age/terms/privacy consent.
+
+Done when:
+
+- CLI signup succeeds only after explicit consent.
+- The consent rows are created for CLI signups with the current policy version.
+- Tests cover declined consent, accepted consent, and policy-version forwarding.
+
+### A-066: Advertiser Billing Display Still Ignores Confirmed Refunds
+
+Severity: high.
+
+Evidence:
+
+- The current code has a centralized `getAdvertiserBalance()` helper that
+  subtracts confirmed `refund` rows for spend eligibility.
+- `AdvertiserService.getBilling()` still performs its own grouped query with
+  `entryType: { in: ['credit', 'debit'] }` and computes
+  `balanceMinor = totalDepositsMinor - totalChargesMinor`.
+- Confirmed archive refunds created by `AdminService.confirmArchiveRefund()` are
+  `entryType: 'refund'`, `status: 'confirmed'`, so they are listed in recent
+  entries but excluded from billing totals and balance cards.
+- The advertiser billing page renders `balanceMinor`, `totalDepositsMinor`, and
+  `totalChargesMinor` from that endpoint.
+
+Likely impact:
+
+- After a refund is confirmed, the billing page can still show a higher account
+  balance than the spendable balance used by campaign serving.
+- Advertisers may see a refund row in history while the summary balance does
+  not decrease.
+- Support and advertisers can disagree about whether refunded funds are still
+  available.
+
+Fix direction:
+
+- Reuse the centralized advertiser balance helper or extend the billing
+  aggregate to include refunds.
+- Add `totalRefundsMinor` / `refundsByCurrency` to the billing response so the
+  balance math is explicit.
+- Add an integration/UI test for deposit -> archive -> refund confirm ->
+  billing page balance.
+
+Desired goal:
+
+- Advertiser billing totals match the spendable-balance formula used for ad
+  serving and campaign activation.
+
+Done when:
+
+- Confirmed refund rows reduce displayed advertiser balance.
+- Billing summary exposes deposits, charges, refunds, and final balance by
+  currency.
+- The displayed balance matches the backend delivery eligibility balance.
+
+### A-067: Advertiser Reports Show Misleading CTR and Date Presets
+
+Severity: medium.
+
+Evidence:
+
+- `AdvertiserService.getReports()` returns `ctr` and `avgCtr` as ratios
+  (`clicks / impressions`), e.g. `0.10` for 10%.
+- `apps/web/src/lib/format.ts` `formatPercent()` only appends `%`; it does not
+  multiply by 100.
+- `apps/web/src/app/advertiser/reports/page.tsx` passes `row.ctr` and
+  `summary.avgCtr` directly to `formatPercent()`, so 10% displays as `0.1%`.
+- `apps/api/src/advertiser/reports-csv.ts` writes a `ctr_percent` column but
+  serializes `Number(r.ctr.toFixed(2))`, producing the ratio rounded to two
+  decimals rather than a percent.
+- The reports page labels the `1d` preset "Last 24h", but `periodPreset()`
+  sends date-only `from`/`to` values. The backend treats date-only `to` as an
+  inclusive calendar day, not a rolling 24-hour timestamp range.
+
+Likely impact:
+
+- Advertisers see CTR values 100x too low in reports and exported CSV.
+- The same API contract is displayed differently between the advertiser overview
+  and reports pages.
+- "Last 24h" reports can include more than 24 hours of events, which makes
+  spend/CTR comparisons misleading.
+
+Fix direction:
+
+- Choose one API contract: ratio or percent. If the API returns ratios, multiply
+  by 100 in reports UI and CSV export.
+- Rename the preset to a calendar-day label or send full ISO timestamps for a
+  true rolling 24-hour window.
+- Add tests for 1 click / 10 impressions and for the `1d` preset query bounds.
+
+Desired goal:
+
+- Advertiser reports and exports show CTR and date ranges exactly as labeled.
+
+Done when:
+
+- 1 click out of 10 impressions displays and exports as `10%`.
+- Overview, reports, and CSV share the same CTR convention.
+- "Last 24h" either sends rolling ISO timestamps or is renamed to match its
+  actual calendar-day behavior.
+
+### A-068: Reports Daily Trend Still Loads All Event Timestamps Into Memory
+
+Severity: medium.
+
+Evidence:
+
+- `AdvertiserService.getReports()` now uses `groupBy()` for campaign-level
+  impression and click totals.
+- The same method still builds `dailyTrend` by calling
+  `adImpression.findMany({ select: { createdAt: true } })` and
+  `adClick.findMany({ select: { createdAt: true } })` for every matching event
+  in the requested range.
+- `params.page` and `params.limit` are accepted in the service signature but are
+  not applied to the event timestamp queries.
+- The reports page offers 90-day and custom date ranges, and the export route
+  reuses `getReports()`.
+
+Likely impact:
+
+- Large advertisers can force the API to load millions of event timestamps into
+  Node memory just to draw a daily trend chart.
+- The report endpoint can become slow or OOM despite the campaign totals being
+  database-aggregated.
+- The older raw-row report issue is only partially fixed in the current tree.
+
+Fix direction:
+
+- Aggregate daily impressions/clicks in SQL using date bucketing, or maintain a
+  rollup table.
+- Cap custom date ranges or page the event timeline separately from campaign
+  summary rows.
+- Add a regression test that asserts report generation does not call raw
+  `findMany()` for every event row in a large date range.
+
+Desired goal:
+
+- Advertiser reporting remains bounded in memory for large customers and long
+  ranges.
+
+Done when:
+
+- Daily trend is generated by database aggregation or bounded rollups.
+- Custom ranges have explicit limits or a safe asynchronous export path.
+- Large synthetic report tests pass without loading raw event rows into memory.
+
 ## End-to-End SaaS Readiness Checks
 
 Do not declare WaitLayer SaaS-ready until these flows pass against a fresh,
@@ -2498,9 +2854,9 @@ Required path:
 
 1. Public landing page loads with correct links to signup, login, pricing,
    policies, contact, and developer onboarding.
-2. Developer signs up through each supported signup surface and the API records
-   required age, terms, privacy, and consent-version proof before account
-   creation.
+2. Developer signs up through each supported signup surface, including CLI if
+   offered, and the API records required age, terms, privacy, and
+   consent-version proof before account creation.
 3. Developer receives or requests email verification, clicks the verification
    link, and the app reflects verified status.
 4. Developer logs in, reaches `/developer`, and sees dashboard/settings without
@@ -2512,7 +2868,9 @@ Required path:
 7. Client logs in or uses the intended integration credential, including 2FA
    when enabled.
 8. Client registers a device and receives a per-device event secret.
-9. Client starts and ends a wait state with signed payloads.
+9. Client starts and ends a wait state with signed payloads, using one stable
+   device/session/wait-state identity across start, ad request, render,
+   qualify, and end.
 10. Approved/funded advertiser campaign is eligible and ad request returns a
    valid creative for the correct account/device/currency context.
 11. Client renders an ad, qualifies an impression only after server-enforced
@@ -2528,7 +2886,9 @@ Required path:
 16. Admin reviews/approves/processes payout, including partial-approval
     accounting if partial approval remains supported, or the automated provider
     processes it.
-17. Payout is marked paid by provider webhook or audited admin action.
+17. Payout is marked paid by provider webhook or audited admin action, and
+   webhook failure/retry behavior is durable enough that money events are not
+   acknowledged and then lost.
 18. Developer payout history, ledger balance, payoutable referral reward logic,
     privacy/category preferences, and export data all reflect the final state.
 19. A policy-version bump in the API re-prompts existing users and records the
@@ -2550,7 +2910,8 @@ Required path:
 3. Advertiser profile is created or auto-created with usable billing identity.
 4. Advertiser deposits funds through Stripe Checkout.
 5. Stripe webhook confirms deposit, advertiser ledger is credited, platform cash
-   ledger is credited, and billing page shows confirmed balance.
+   ledger is credited, invalid webhook/configuration failures do not return
+   false-success HTTP 200 responses, and billing page shows confirmed balance.
 6. Advertiser creates campaign with valid category, bid, budget, destination
    URL, creative, and targeting; partial failures leave a recoverable draft
    rather than a silent duplicate.
@@ -2564,14 +2925,16 @@ Required path:
     overdraw account-level cash, and respect campaign budget, frequency caps,
     country/tool targeting, and fraud rules.
 12. Advertiser dashboard and reports show correct spend, impressions, clicks,
-    CTR, date ranges, and currency breakdown.
+    CTR, date ranges, currency breakdown, CSV export values, and bounded
+    memory behavior for daily trends.
 13. Advertiser can pause, resume, edit eligible drafts/rejections, and archive
     campaigns.
 14. Archive creates the expected refund obligation; admin confirms manual Stripe
     refund or an automated provider handles it, and confirmed refunds reduce
-    advertiser spendable balance.
+    advertiser spendable balance and displayed billing balance.
 15. Refunds/disputes webhooks update advertiser ledger, platform cash ledger,
-    campaign eligibility, spendable balance, and fraud/recovery queues.
+    campaign eligibility, spendable balance, and fraud/recovery queues. Partial
+    disputes must freeze/write off only the disputed amount.
 16. Advertiser can export account/campaign/billing data and has a documented
     erasure/request path that preserves required money-retention records.
 
@@ -2596,40 +2959,39 @@ Required path:
 8. Ops/readiness health checks fail closed when required dependencies such as
    Postgres or Redis are unavailable, and recover when dependencies come back
    without restarting the API.
-9. Ops has runbooks for failed webhooks, failed payout providers, migration
-   rollback, and money reconciliation.
+9. Ops has runbooks and product controls for failed/retryable webhooks, failed
+   payout providers, migration rollback, and money reconciliation.
 
 Admin flow fails SaaS readiness if an operational action exists only as a raw API
 call, direct database mutation, or tribal-knowledge script.
 
 ## Recommended Fix Order
 
-1. Fix A-002, A-004, A-005, A-015, A-016, A-017, A-027, A-049, and any related
+1. Fix A-002, A-004, A-005, A-015, A-016, A-017, and any related
    proxy/env tests because they are web auth/proxy/config contract bugs.
-2. Fix A-034, A-036, A-044, A-047, and A-052 so signup and privacy obligations
-   are enforced across roles, versions, and surfaces.
-3. Fix A-013, A-014, A-040, and A-043 so developer clients can be installed,
-   connect, authenticate, and complete the intended earning path.
-4. Fix A-035, A-037, and A-048 so 2FA/API-key/payout-destination behavior
-   matches the money-movement security policy.
-5. Fix A-019, A-020, A-021, A-022, A-023, A-024, A-038, A-039, A-050, A-051,
-   A-054, A-055, A-056, A-059, A-060, and A-061 to make the
-   advertiser/developer money campaign/ad-serving/billing/reporting loop
-   coherent.
+2. Fix A-034, A-036, A-044, A-047, A-052, and A-065 so signup and privacy
+   obligations are enforced across roles, versions, and surfaces.
+3. Fix A-013, A-014, A-040, A-043, and A-064 so developer clients can be
+   installed, connect, authenticate, and complete the intended earning path.
+4. Fix A-035 and A-037 so 2FA and API-key behavior match the money-movement
+   security policy.
+5. Fix A-019, A-020, A-021, A-022, A-023, A-024, A-038, A-039, A-051,
+   A-056, A-059, A-060, A-061, A-062, A-063, A-066, A-067, and
+   A-068 to make the advertiser/developer money campaign/ad-serving/billing/
+   reporting loop coherent.
 6. Fix A-041 so referral rewards match payout accounting.
 7. Fix A-003 and A-012 so tests and schema setup become trustworthy.
 8. Fix A-001 so root, CI, and Docker builds are release-safe.
 9. Add the A-006 regression tests while fixing those contract bugs.
-10. Fix A-025, A-026, A-028, A-045, A-046, and the admin portions of the E2E
+10. Fix A-026, A-027, A-028, A-045, A-046, and the admin portions of the E2E
     readiness checks.
-11. Fix A-042 and A-053 before relying on container/load-balancer readiness.
-12. Address A-007, A-008, A-009, A-030, A-031, and A-032 as product hardening
+11. Address A-007, A-008, A-009, A-030, A-031, and A-032 as product hardening
     and scale work.
-13. Fix A-057 and A-058 before launch copy claims developer category blocking,
+12. Fix A-057 and A-058 before launch copy claims developer category blocking,
     fine-grained category control, or reliable local quiet hours.
-14. Update stale status docs for A-010 and public claims in A-033 only after
+13. Update stale status docs for A-010 and public claims in A-033 only after
     commands and E2E checks are genuinely green.
-15. Keep A-011 in mind throughout: do not combine unrelated fixes.
+14. Keep A-011 in mind throughout: do not combine unrelated fixes.
 
 ## Required Verification Before Calling the Repo Healthy
 

@@ -4,6 +4,8 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { SentryModule } from '@sentry/nestjs/setup';
 
+import { loadEnv } from '@waitlayer/config';
+
 import { AdminModule } from './admin/admin.module';
 import { AdvertiserModule } from './advertiser/advertiser.module';
 import { AuditModule } from './audit/audit.module';
@@ -31,7 +33,14 @@ import { ReferralModule } from './referral/referral.module';
     // SentryModule is a no-op when Sentry is not configured (no DSN)
     SentryModule.forRoot(),
 
-    ConfigModule.forRoot({ isGlobal: true }),
+    // Wire the validated, defaulted environment from `@waitlayer/config` into
+    // Nest's ConfigService so every service reads the same values that were
+    // validated at boot (A-017). `loadEnv` returns the schema defaults (e.g.
+    // WEB_BASE_URL defaults to http://localhost:3000 in non-production), so
+    // `configService.get('WEB_BASE_URL')` returns a value even when the var is
+    // unset — instead of `undefined` as before. Explicit env vars still
+    // override the defaults (process.env has higher precedence than `load`).
+    ConfigModule.forRoot({ isGlobal: true, load: [() => loadEnv(process.env)] }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

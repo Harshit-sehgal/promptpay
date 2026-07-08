@@ -1,0 +1,35 @@
+name: Publish VS Code Extension
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish-vscode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Build VS Code extension
+        run: pnpm --filter waitlayer-vscode build
+      # Packages a .vsix (no publish). Publishing to the Marketplace is an
+      # explicit follow-up step gated behind a marketplace secret (A-043).
+      - name: Package VSIX
+        run: npx --yes @vscode/vsce@latest package --no-dependencies
+        working-directory: apps/vscode-extension
+      # Uncomment to publish to the Marketplace after the .vsix is reviewed:
+      # - name: Publish to Marketplace
+      #   run: npx --yes @vscode/vsce@latest publish --no-dependencies
+      #   working-directory: apps/vscode-extension
+      #   env:
+      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}

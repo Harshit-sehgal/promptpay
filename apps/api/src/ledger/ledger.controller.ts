@@ -18,6 +18,8 @@ export class LedgerController {
 
   /** Developer: own earnings balance only */
   @Get('balance')
+  @UseGuards(RolesGuard)
+  @Roles('developer')
   @RequiredScopes('ledger:read')
   getBalance(@CurrentUser('id') userId: string) {
     return Promise.all([
@@ -35,6 +37,8 @@ export class LedgerController {
 
   /** Developer: own earnings breakdown only */
   @Get('breakdown')
+  @UseGuards(RolesGuard)
+  @Roles('developer')
   @RequiredScopes('ledger:read')
   getBreakdown(@CurrentUser('id') userId: string) {
     return this.ledgerService.getEarningsBreakdown(userId);
@@ -42,6 +46,8 @@ export class LedgerController {
 
   /** Developer: own earnings history only. Ignores ledgerKind if set (no privilege escalation). */
   @Get('history')
+  @UseGuards(RolesGuard)
+  @Roles('developer')
   @RequiredScopes('ledger:read')
   getHistory(
     @CurrentUser('id') userId: string,

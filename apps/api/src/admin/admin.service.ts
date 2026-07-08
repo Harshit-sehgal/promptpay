@@ -210,7 +210,23 @@ export class AdminService {
     if (params.status) where.status = params.status as UserStatus;
     if (params.role) where.role = params.role as UserRole;
     if (params.search) where.OR = [{ email: { contains: params.search, mode: 'insensitive' } }, { name: { contains: params.search, mode: 'insensitive' } }];
-    return this.prisma.user.findMany({ where, select: { id: true, email: true, name: true, role: true, status: true, trustLevel: true, country: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 50 });
+    const users = await this.prisma.user.findMany({
+      where,
+      select: { id: true, email: true, name: true, role: true, status: true, trustLevel: true, country: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    // Attach the open fraud-flag count per user so the admin ops view can triage
+    // accounts with active flags without a separate round-trip per row.
+    const openFlags = await this.prisma.fraudFlag.groupBy({
+      by: ['userId'],
+      where: { status: 'open', userId: { in: users.map((u) => u.id) } },
+      _count: { _all: true },
+    });
+    const openFlagsByUser = new Map(openFlags.map((f) => [f.userId, f._count._all]));
+
+    return users.map((u) => ({ ...u, openFlags: openFlagsByUser.get(u.id) ?? 0 }));
   }
 
   /**
@@ -233,6 +249,50 @@ export class AdminService {
       },
     });
     return { erased: true, userId: targetUserId };
+  }
+
+  /**
+   * Admin-initiated account status change (ban / restrict / unban). Used by the
+   * admin users UI for account-lifecycle operations. Erasing stays a separate,
+   * explicitly-confirmed path (eraseUser) because it is irreversible.
+   */
+  private static readonly ALLOWED_ADMIN_STATUSES: UserStatus[] = [
+    'active',
+    'restricted',
+    'banned',
+  ];
+
+  async setUserStatus(
+    actorId: string,
+    actorRole: string,
+    targetUserId: string,
+    status: string,
+  ) {
+    if (!AdminService.ALLOWED_ADMIN_STATUSES.includes(status as UserStatus)) {
+      throw new BadRequestException(`Invalid target status: ${status}`);
+    }
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target) throw new BadRequestException('Target user not found');
+    if (target.role === 'super_admin') {
+      throw new BadRequestException('Cannot change the status of a super-admin account');
+    }
+    if (target.status === status) {
+      return target;
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { status: status as UserStatus },
+    });
+    await this.audit.log({
+      actorId,
+      actorRole,
+      action: 'admin_set_user_status',
+      targetType: 'user',
+      targetId: targetUserId,
+      beforeSnap: { status: target.status },
+      afterSnap: { status },
+    });
+    return updated;
   }
 
   async getPendingCampaigns() {
@@ -1244,6 +1304,51 @@ export class AdminService {
       this.prisma.webhookEvent.count({ where }),
     ]);
     return { events, total, page, limit };
+  }
+
+  // ── Payout account verification ──
+
+  /**
+   * Verify or reject a developer's payout destination before it can be used to
+   * move money. Payout requests to unverified accounts are rejected by
+   * PayoutService, so this is the operator-side gate that unlocks them. Both
+   * actions are audited and scoped to admin/support roles upstream.
+   */
+  async setPayoutAccountVerified(
+    reviewerId: string,
+    reviewerRole: string,
+    payoutAccountId: string,
+    verified: boolean,
+    reason?: string,
+  ) {
+    const account = await this.prisma.payoutAccount.findUnique({
+      where: { id: payoutAccountId },
+      include: { user: { select: { id: true, email: true } } },
+    });
+    if (!account) throw new BadRequestException('Payout account not found');
+
+    const updated = await this.prisma.payoutAccount.update({
+      where: { id: payoutAccountId },
+      data: { isVerified: verified },
+    });
+
+    await this.audit.log({
+      actorId: reviewerId,
+      actorRole: reviewerRole,
+      action: verified ? 'payout_account_verified' : 'payout_account_rejected',
+      targetType: 'payout_account',
+      targetId: payoutAccountId,
+      beforeSnap: { isVerified: account.isVerified },
+      afterSnap: {
+        isVerified: verified,
+        provider: account.provider,
+        destination: account.destination,
+        userEmail: account.user?.email,
+        reason: reason ?? null,
+      },
+    });
+
+    return updated;
   }
 
   // ── Archive Refunds ──

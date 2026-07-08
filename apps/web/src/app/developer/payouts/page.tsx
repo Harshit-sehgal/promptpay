@@ -4,7 +4,8 @@ import type { AxiosResponse } from 'axios';
 import { FormEvent,useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard,StatusBadge } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
-import { payoutApi } from '@/lib/api/services';
+import { authApi, payoutApi } from '@/lib/api/services';
+import { useAuth } from '@/lib/auth-context';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 interface PayoutAccount {
@@ -41,10 +42,13 @@ interface PayoutHistoryResponse {
 }
 
 export default function DevPayoutsPage() {
+  const { user, isAuthenticated } = useAuth();
   const [info, setInfo] = useState<PayoutInfo | null>(null);
   const [requests, setRequests] = useState<PayoutRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
 
   // Add payout method form
   const [showMethodForm, setShowMethodForm] = useState(false);
@@ -86,6 +90,21 @@ export default function DevPayoutsPage() {
     fetchData();
   }, []);
 
+  // A-015: payouts are blocked until the email is verified. Surface the block
+  // and a self-service resend action inline so developers are never stuck.
+  const handleRequestVerification = async () => {
+    setVerifyBusy(true);
+    setVerifyMsg(null);
+    try {
+      await authApi.requestEmailVerification();
+      setVerifyMsg('Verification email sent. Check your inbox to confirm.');
+    } catch (err: unknown) {
+      setVerifyMsg(getErrorMessage(err, 'Could not send verification email.'));
+    } finally {
+      setVerifyBusy(false);
+    }
+  };
+
   const handleAddMethod = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -121,6 +140,10 @@ export default function DevPayoutsPage() {
       setRequestError('Enter a valid amount');
       return;
     }
+    if (selectedAccount && !selectedAccount.isVerified) {
+      setRequestError('This payout method is pending verification and cannot be used yet.');
+      return;
+    }
     if (info && amountMinor < info.minimumThresholdMinor) {
       setRequestError(`Minimum payout is ${formatCurrency(info.minimumThresholdMinor, selectedCurrency)}`);
       return;
@@ -145,6 +168,25 @@ export default function DevPayoutsPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {isAuthenticated && !user?.emailVerified && (
+        <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-amber-800 font-semibold text-[14px]">Verify your email to request payouts</p>
+            <p className="text-amber-700 text-xs mt-0.5">
+              Payouts are blocked until your email address is confirmed.
+            </p>
+            {verifyMsg && <p className="text-amber-700 text-xs mt-2">{verifyMsg}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={handleRequestVerification}
+            disabled={verifyBusy}
+            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+          >
+            {verifyBusy ? 'Sending…' : 'Resend verification email'}
+          </button>
+        </div>
+      )}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Payouts</h1>
         <p className="text-surface-500 text-[15px] font-normal">
@@ -213,8 +255,12 @@ export default function DevPayoutsPage() {
                     >
                       <option value="">Select method...</option>
                       {info.payoutAccounts.map((acc) => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider} — {acc.destination} ({acc.currency})
+                        <option
+                          key={acc.id}
+                          value={acc.id}
+                          disabled={!acc.isVerified}
+                        >
+                          {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider} — {acc.destination} ({acc.currency}){acc.isVerified ? '' : ' (pending verification)'}
                         </option>
                       ))}
                     </select>

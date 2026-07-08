@@ -2,6 +2,8 @@ import { errors, jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
+import { validateWebEnv } from '@/lib/web-env';
+
 const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', '/dashboard'];
 
 // Static/marketing pages that can be publicly cached at the edge
@@ -44,6 +46,12 @@ const STATIC_CACHEABLE_PATHS = [
  * We verify with `clockTolerance` to avoid edge-case clock-skew false rejects.
  */
 export async function middleware(request: NextRequest) {
+  // Fail fast in production if the web env (in particular JWT_SECRET, which
+  // must match the API's) is missing/unsafe. In dev/test this is a no-op
+  // (A-016). Throwing here surfaces the misconfiguration instead of silently
+  // bouncing every logged-in user to /login.
+  validateWebEnv();
+
   const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED_PREFIXES.some(

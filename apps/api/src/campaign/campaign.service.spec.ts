@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
+import { CreativeResponse } from '@waitlayer/shared';
 import { PrismaService } from '../config/prisma.service';
 import { CampaignService } from './campaign.service';
 
@@ -90,5 +91,55 @@ describe('CampaignService creative URL policy', () => {
         rejectionReason: null,
       }),
     });
+  });
+
+  it('stores ctaText on create when provided (A-022)', async () => {
+    ctx.prisma.campaign.findUnique.mockResolvedValue({ id: 'camp-1', status: 'draft' });
+    ctx.prisma.adCreative.create.mockImplementation(async (args: { data: Record<string, unknown> }) => ({
+      id: 'creative-2',
+      ...args.data,
+    }));
+
+    await ctx.service.createCreative('camp-1', {
+      title: 'Safe ad',
+      sponsoredMessage: 'Try this developer tool',
+      destinationUrl: 'https://www.example.com/offer',
+      displayDomain: 'example.com',
+      ctaText: 'Learn more',
+    }, { role: 'admin' });
+
+    expect(ctx.prisma.adCreative.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ctaText: 'Learn more' }) }),
+    );
+  });
+
+  it('CreativeResponse contract accepts ctaText (A-022)', () => {
+    const parsed = CreativeResponse.parse({
+      id: 'creative-1',
+      campaignId: 'camp-1',
+      title: 't',
+      sponsoredMessage: 'm',
+      destinationUrl: 'https://e.com',
+      displayDomain: 'e.com',
+      ctaText: 'Learn more',
+      status: 'approved',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    expect(parsed.ctaText).toBe('Learn more');
+
+    // ctaText is optional/nullable.
+    const without = CreativeResponse.parse({
+      id: 'creative-2',
+      campaignId: 'camp-1',
+      title: 't',
+      sponsoredMessage: 'm',
+      destinationUrl: 'https://e.com',
+      displayDomain: 'e.com',
+      status: 'draft',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    expect(without.ctaText).toBeUndefined();
   });
 });

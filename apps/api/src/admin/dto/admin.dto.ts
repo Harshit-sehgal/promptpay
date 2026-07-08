@@ -271,3 +271,15 @@ export class AuditLogQueryDto {
   @Max(100)
   limit?: number;
 }
+
+// ── Payout account verification ─
+
+export class PayoutAccountVerifyDto {
+  @IsIn([true, false])
+  verified!: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}

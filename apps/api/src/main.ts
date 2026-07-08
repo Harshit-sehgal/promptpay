@@ -11,11 +11,11 @@ import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 
 import { loadEnv } from '@waitlayer/config';
 
-import { PrismaService } from './config/prisma.service';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
-import { verifyMigrationsApplied } from './config/migration-check';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { verifyMigrationsApplied } from './config/migration-check';
+import { PrismaService } from './config/prisma.service';
 
 async function bootstrap() {
   // Validate env on startup. Non-production environments allow

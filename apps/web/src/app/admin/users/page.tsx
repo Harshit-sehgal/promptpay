@@ -9,11 +9,34 @@ import { formatRelativeTime } from '@/lib/format';
 interface User {
   id: string;
   email: string;
-  displayName?: string;
+  name?: string | null;
   role: string;
-  trustScore: number;
-  flagsOpen: number;
+  status: string;
+  trustLevel: string;
+  country?: string | null;
+  openFlags: number;
   createdAt: string;
+}
+
+const TRUST_LEVEL_SCORE: Record<string, number> = {
+  new: 10,
+  low_trust: 30,
+  normal: 60,
+  high_trust: 85,
+  restricted: 20,
+  banned: 0,
+};
+
+function trustColorClass(level: string): string {
+  switch (level) {
+    case 'high_trust': return 'text-emerald-400';
+    case 'normal': return 'text-blue-400';
+    case 'low_trust': return 'text-amber-400';
+    case 'new': return 'text-ink-400';
+    case 'restricted':
+    case 'banned': return 'text-red-400';
+    default: return 'text-ink-400';
+  }
 }
 
 type UsersResponse = User[] | { users?: User[] };
@@ -28,6 +51,10 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [actionUser, setActionUser] = useState<User | null>(null);
+  const [actionKind, setActionKind] = useState<'erase' | 'restrict' | 'ban' | 'unban' | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 15;
 
@@ -42,6 +69,37 @@ export default function AdminUsersPage() {
   const totalPages = Math.max(1, Math.ceil(users.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const visibleUsers = users.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const runAction = async () => {
+    if (!actionUser || !actionKind) return;
+    setBusy(true);
+    try {
+      if (actionKind === 'erase') {
+        await adminApi.eraseUser(actionUser.id);
+      } else if (actionKind === 'restrict') {
+        await adminApi.setUserStatus(actionUser.id, 'restricted');
+      } else if (actionKind === 'ban') {
+        await adminApi.setUserStatus(actionUser.id, 'banned');
+      } else if (actionKind === 'unban') {
+        await adminApi.setUserStatus(actionUser.id, 'active');
+      }
+      setActionUser(null);
+      setActionKind(null);
+      setConfirmText('');
+      const res = await adminApi.getUsers({ search: search || undefined, role: roleFilter || undefined });
+      setUsers(normalizeUsers(res.data as UsersResponse));
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Action failed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openAction = (u: User, kind: 'erase' | 'restrict' | 'ban' | 'unban') => {
+    setActionUser(u);
+    setActionKind(kind);
+    setConfirmText('');
+  };
 
   return (
 <>
@@ -88,47 +146,55 @@ export default function AdminUsersPage() {
                 <tr>
                   <th className="text-left px-4 py-3 text-ink-300 font-medium">User</th>
                   <th className="text-left px-4 py-3 text-ink-300 font-medium">Role</th>
+                  <th className="text-left px-4 py-3 text-ink-300 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-ink-300 font-medium">Trust</th>
                   <th className="text-left px-4 py-3 text-ink-300 font-medium">Flags</th>
                   <th className="text-right px-4 py-3 text-ink-300 font-medium">Joined</th>
+                  <th className="text-right px-4 py-3 text-ink-300 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-600/20">
                 {visibleUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-ink-700/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-white text-sm">{u.displayName || u.email}</p>
-                        <p className="text-ink-500 text-xs">{u.email}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={u.role} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`font-mono text-sm ${
-                          u.trustScore >= 70
-                            ? 'text-emerald-400'
-                            : u.trustScore >= 40
-                            ? 'text-amber-400'
-                            : 'text-red-400'
-                        }`}
-                      >
-                        {u.trustScore}/100
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {u.flagsOpen > 0 ? (
-                        <span className="text-red-400 text-xs font-medium">{u.flagsOpen} open</span>
-                      ) : (
-                        <span className="text-ink-500 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-ink-400 text-xs">
-                      {formatRelativeTime(u.createdAt)}
-                    </td>
-                  </tr>
+                <tr key={u.id} className="hover:bg-ink-700/30 transition-colors">
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="text-white text-sm">{u.name || u.email}</p>
+                      <p className="text-ink-500 text-xs">{u.email}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={u.role} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs font-medium ${
+                        u.status === 'banned'
+                          ? 'text-red-400'
+                          : u.status === 'restricted'
+                          ? 'text-amber-400'
+                          : 'text-emerald-400'
+                      }`}
+                    >
+                      {u.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`font-mono text-sm ${trustColorClass(u.trustLevel)}`}>
+                      {TRUST_LEVEL_SCORE[u.trustLevel] ?? 0}/100
+                      <span className="ml-1 text-ink-500 text-xs normal-case">({u.trustLevel})</span>
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.openFlags > 0 ? (
+                      <span className="text-red-400 text-xs font-medium">{u.openFlags} open</span>
+                    ) : (
+                      <span className="text-ink-500 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right text-ink-400 text-xs">
+                    {formatRelativeTime(u.createdAt)}
+                  </td>
+                </tr>
                 ))}
               </tbody>
             </table>

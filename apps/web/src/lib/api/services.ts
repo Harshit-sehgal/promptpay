@@ -71,6 +71,9 @@ export const developerApi = {
 export const advertiserApi = {
   getDashboard: () => api.get('/advertiser/dashboard'),
   getBilling: () => api.get('/advertiser/billing'),
+  exportData: () => api.post('/advertiser/export-data'),
+  deleteAccount: (data: { confirmation: 'DELETE_MY_ACCOUNT'; currentPassword?: string; googleIdToken?: string }) =>
+    api.post('/advertiser/delete-account', data),
   createCampaign: (data: Record<string, unknown>) =>
     api.post('/advertiser/campaigns', data).then((r) => ok(CreateCampaignResponse.parse(r.data))),
   submitCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/submit`),
@@ -84,6 +87,9 @@ export const advertiserApi = {
 export const adminApi = {
   getOverview: () => api.get('/admin/overview'),
   getUsers: (params?: Record<string, unknown>) => api.get('/admin/users', { params }),
+  setUserStatus: (id: string, status: string) =>
+    api.post(`/admin/users/${id}/status`, { status }),
+  eraseUser: (id: string) => api.post(`/admin/users/${id}/erase`),
   getPendingCampaigns: () => api.get('/admin/campaigns/pending'),
   approveCampaign: (id: string, reason?: string) => api.post(`/admin/campaigns/${id}/approve`, { reason }),
   rejectCampaign: (id: string, reason: string) => api.post(`/admin/campaigns/${id}/reject`, { reason }),
@@ -126,6 +132,8 @@ export const adminApi = {
       note?: string;
     },
   ) => api.post(`/admin/recovery-debt/cases/${id}/resolve`, data),
+  recomputeTrustScore: (userId: string) =>
+    api.post(`/admin/fraud/compute-trust/${userId}`),
   getAuditLog: (params?: Record<string, unknown>) => api.get('/admin/audit-log', { params }),
   getMetrics: (days?: number) => api.get('/admin/metrics', { params: { days } }),
   getToolIntegrations: () => api.get('/admin/tools'),
@@ -139,6 +147,8 @@ export const adminApi = {
     deviceId: string,
     data: { userId: string; reason: string; expiresInMinutes?: number },
   ) => api.post(`/admin/devices/${deviceId}/recovery-token`, data),
+  verifyPayoutAccount: (id: string, verified: boolean, reason?: string) =>
+    api.post(`/admin/payout-accounts/${id}/verify`, { verified, reason }),
 };
 
 export const payoutApi = {

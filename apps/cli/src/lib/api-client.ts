@@ -9,7 +9,6 @@ import { Credentials, getCredentials, getDeviceEventSecret,setCredentials, store
 import { normalizeToolType } from './tool-types';
 
 const PRODUCTION_API_URL = 'https://api.waitlayer.com/api/v1';
-const DEV_API_URL = 'http://localhost:4002/api/v1';
 
 /**
  * Resolve the API base URL for the CLI. Packaged/distributed clients default

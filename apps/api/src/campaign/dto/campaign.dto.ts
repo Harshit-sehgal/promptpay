@@ -18,6 +18,11 @@ export class CreateCreativeDto {
   @IsString()
   @MaxLength(100)
   displayDomain!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  ctaText?: string;
 }
 
 export class UpdateCreativeDto {
@@ -40,4 +45,9 @@ export class UpdateCreativeDto {
   @IsString()
   @MaxLength(100)
   displayDomain?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  ctaText?: string;
 }

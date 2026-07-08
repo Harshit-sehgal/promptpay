@@ -1,14 +1,23 @@
 {
   "name": "waitlayer-cli",
   "version": "0.0.1",
-  "private": true,
-  "bin": "./dist/apps/cli/src/index.js",
+  "private": false,
+  "bin": {
+    "waitlayer": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pack:check": "node ../../scripts/verify-cli-bin.mjs"
   },
   "dependencies": {
     "@waitlayer/shared": "workspace:*",

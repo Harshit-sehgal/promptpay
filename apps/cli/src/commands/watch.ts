@@ -24,7 +24,7 @@ interface WaitState {
  *
  * This CLI command tails the file and reports wait-state events to the API.
  */
-export async function runWatch(opts: { once?: boolean }) {
+export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   const creds = getCredentials();
   if (!creds) {
     console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
@@ -32,6 +32,7 @@ export async function runWatch(opts: { once?: boolean }) {
   }
 
   const api = new ApiClient(creds);
+  const serveAds = opts.ads ?? true;
 
   console.log(chalk.cyan('WaitLayer watch') + chalk.dim(` — watching ${STATE_FILE}`));
   console.log(chalk.dim('Press Ctrl+C to stop.'));
@@ -40,6 +41,8 @@ export async function runWatch(opts: { once?: boolean }) {
   // Track the current waitStateId we reported so we can send end when the file is removed
   let activeWaitStateId: string | null = null;
   let activeStartTime: number | null = null;
+  // Impression token for the ad served during the active wait state, if any.
+  let activeImpressionToken: string | null = null;
 
   /** End the current active wait state and reset tracking. Shared by both
    *  the file-empty and ENOENT paths — ensures the wait-end logic lives in
@@ -54,8 +57,23 @@ export async function runWatch(opts: { once?: boolean }) {
     } catch (err: unknown) {
       console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
     }
+    // If an ad was served and the wait state lasted long enough to satisfy the
+    // minimum visible duration, qualify the impression so it bills (A-040).
+    if (activeImpressionToken && durationMs >= 5000) {
+      try {
+        await api.recordImpressionQualified({
+          impressionToken: activeImpressionToken,
+          qualifiedAt: new Date().toISOString(),
+          visibleDurationMs: durationMs,
+          idempotencyKey: `imp-${activeImpressionToken}`,
+        });
+      } catch (err: unknown) {
+        console.error(chalk.red(`ad qualify error: ${getErrorMessage(err)}`));
+      }
+    }
     activeWaitStateId = null;
     activeStartTime = null;
+    activeImpressionToken = null;
     lastState = null;
   };
 
@@ -89,6 +107,30 @@ export async function runWatch(opts: { once?: boolean }) {
         waitStateId,
         toolType: state.tool,
       });
+
+      // Optionally serve an ad during the wait state so the developer can earn.
+      if (serveAds) {
+        try {
+          const ad = await api.requestAd({
+            deviceId,
+            sessionId: `cli-${waitStateId}`,
+            waitStateId,
+            toolType: state.tool,
+            idempotencyKey: `cli-ad-${waitStateId}`,
+          });
+          if (ad) {
+            activeImpressionToken = ad.impressionToken;
+            await api.recordAdRendered({
+              impressionToken: ad.impressionToken,
+              renderedAt: new Date().toISOString(),
+              idempotencyKey: `render-${ad.impressionToken}`,
+            });
+            console.log(chalk.dim(`[ad] ${ad.title} — ${ad.displayDomain}`));
+          }
+        } catch (err: unknown) {
+          console.error(chalk.red(`ad error: ${getErrorMessage(err)}`));
+        }
+      }
 
       activeWaitStateId = waitStateId;
       activeStartTime = state.startTime;

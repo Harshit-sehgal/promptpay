@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { describe, expect, it } from 'vitest';
 
-import { applyAuthCookies, clearAuthCookies, COOKIE_ACCESS, COOKIE_REFRESH, readAuthCookie } from './cookies';
+import { applyAuthCookies, clearAuthCookies, COOKIE_ACCESS, readAuthCookie } from './cookies';
 
 function fakeReq(cookies: Record<string, string>) {
   return {

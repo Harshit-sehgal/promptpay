@@ -94,7 +94,9 @@
     "lint": "eslint src/ test/",
     "typecheck": "tsc --noEmit",
     "build": "pnpm run compile",
-    "test": "vitest run"
+    "test": "vitest run",
+    "package:vsix": "vsce package --no-dependencies",
+    "publish:vsix": "vsce publish --no-dependencies"
   },
   "main": "./out/extension.js",
   "dependencies": {

@@ -9,6 +9,7 @@ import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode } from '../common/utils/errors';
 import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
 import { PrismaService } from '../config/prisma.service';
+import { reportsToCsv } from './reports-csv';
 
 /** Valid campaign status transitions */
 const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
@@ -62,6 +63,110 @@ export class AdvertiserService {
     const advertiser = await this.prisma.advertiser.findUnique({ where: { id: advertiserId } });
     if (!advertiser) throw new NotFoundException('Advertiser not found');
     return advertiser;
+  }
+
+  /**
+   * A-044: self-service data export for advertisers. Mirrors the developer
+   * export but scoped to advertiser-relevant data: profile, campaigns,
+   * creatives, billing ledger, deposits/refunds, and consent records.
+   */
+  async exportData(userId: string) {
+    const advertiser = await this.prisma.advertiser.findUnique({ where: { userId } });
+    const advertiserId = advertiser?.id;
+
+    const [user, campaigns, creatives, ledger, consents] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true, email: true, name: true, role: true, status: true,
+          trustLevel: true, country: true, emailVerified: true, googleVerified: true,
+          githubVerified: true, referralCode: true, createdAt: true,
+        },
+      }),
+      advertiserId
+        ? this.prisma.campaign.findMany({ where: { advertiserId }, take: 1000 })
+        : [],
+      advertiserId
+        ? this.prisma.adCreative.findMany({
+            where: { campaign: { advertiserId } },
+            take: 2000,
+          })
+        : [],
+      advertiserId
+        ? this.prisma.advertiserLedger.findMany({
+            where: { advertiserId },
+            orderBy: { createdAt: 'desc' },
+            take: 10000,
+          })
+        : [],
+      this.prisma.consent.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
+    ]);
+
+    void this.audit.log({
+      actorId: userId,
+      actorRole: 'advertiser',
+      action: 'export_data',
+      targetType: 'user',
+      targetId: userId,
+    });
+
+    return {
+      profile: user,
+      advertiser,
+      campaigns,
+      creatives,
+      billingLedger: ledger,
+      consent: consents,
+    };
+  }
+
+  /**
+   * A-044: self-service account deletion/erasure for advertisers. The
+   * advertiser is also a User, so we anonymize both the User row and the
+   * Advertiser profile, revoke sessions and API keys, and audit the action.
+   * Money-retention/legal-hold rows (ledger, payouts) are intentionally left
+   * intact for audit/compliance — only the personal identity is erased.
+   */
+  async deleteAccount(userId: string) {
+    const prior = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+    const priorEmail = prior?.email;
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          status: 'deleted',
+          email: `deleted-${userId}@waitlayer.com`,
+          passwordHash: null,
+          googleId: null,
+          githubId: null,
+          googleVerified: false,
+          githubVerified: false,
+          emailVerified: false,
+          twoFactorEnabled: false,
+          twoFactorSecret: null,
+          name: null,
+          referralCode: null,
+          country: null,
+        },
+      }),
+      this.prisma.advertiser.updateMany({
+        where: { userId },
+        data: { companyName: 'Deleted Advertiser', billingEmail: `deleted-${userId}@waitlayer.com`, websiteUrl: null },
+      }),
+      this.prisma.session.updateMany({ where: { userId }, data: { revoked: true } }),
+      this.prisma.apiKey.updateMany({ where: { ownerId: userId }, data: { isActive: false } }),
+    ]);
+
+    void this.audit.log({
+      actorId: userId,
+      actorRole: 'advertiser',
+      action: 'delete_account',
+      targetType: 'user',
+      targetId: userId,
+    });
+
+    return { deleted: true };
   }
 
   async createProfile(userId: string, dto: { companyName: string; billingEmail: string; websiteUrl?: string }) {
@@ -311,6 +416,39 @@ export class AdvertiserService {
     });
 
     return submitted;
+  }
+
+  /**
+   * Reset a REJECTED campaign back to DRAFT so the advertiser can edit the
+   * creative and resubmit (issue A-021). This is the missing half of the
+   * draft → submit → reject → resubmit recovery loop: `rejected` is declared
+   * as transitioning only to `draft` in CAMPAIGN_TRANSITIONS, so a rejected
+   * campaign cannot be edited or resubmitted until it is reset to draft.
+   */
+  async resetCampaignToDraft(campaignId: string, advertiserId: string) {
+    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+    if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
+    this.validateTransition(campaign.status, 'draft');
+
+    const claimed = await this.prisma.campaign.updateMany({
+      where: { id: campaignId, advertiserId, status: CampaignStatus.REJECTED },
+      data: { status: CampaignStatus.DRAFT },
+    });
+    if (claimed.count === 0) {
+      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be reset to draft from REJECTED status');
+    }
+
+    const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
+
+    void this.audit.log({
+      actorId: advertiserId,
+      actorRole: 'advertiser',
+      action: 'reset_campaign_to_draft',
+      targetType: 'campaign',
+      targetId: campaignId,
+    });
+
+    return updated;
   }
 
   /** Pause an active campaign */
@@ -613,21 +751,19 @@ export class AdvertiserService {
     // parsed by `new Date(...)` as midnight at the START of that day, which
     // would exclude every impression/click that happened later on the selected
     // end day (issue A-050). Treat a date-only `to` as inclusive-of-the-day by
-    // using an exclusive next-day lower bound (`lt`); ISO datetimes are kept
+    // using an exclusive next-day UTC lower bound (`lt`); ISO datetimes are kept
     // as an inclusive upper bound (`lte`). "Last 24h" callers should pass a
-    // full ISO datetime for `from`/`to`.
+    // full ISO datetime for `from`/`to`. The next-day bound is computed in UTC
+    // (not local time) so it lines up with how `new Date(params.to)` parses a
+    // date-only string (UTC midnight).
     const createdAt: { gte?: Date; lte?: Date; lt?: Date } = {};
     if (gte) createdAt.gte = gte;
     if (params.to) {
       if (params.to.includes('T')) {
         createdAt.lte = lte;
       } else {
-        const toDate = new Date(params.to);
-        createdAt.lt = new Date(
-          toDate.getFullYear(),
-          toDate.getMonth(),
-          toDate.getDate() + 1,
-        );
+        const toUtc = new Date(`${params.to}T00:00:00.000Z`);
+        createdAt.lt = new Date(toUtc.getTime() + 24 * 60 * 60 * 1000);
       }
     }
     const timeFilter = Object.keys(createdAt).length > 0 ? { createdAt } : {};
@@ -733,7 +869,19 @@ export class AdvertiserService {
         avgCtr,
         totalCampaigns: campaigns.length,
       },
+      page: 1,
+      limit: rows.length || 1,
+      total: rows.length,
     };
+  }
+
+  /** Serialize the campaign report rows to CSV for advertiser export. */
+  async exportReportsCsv(
+    advertiserId: string,
+    params: { campaignId?: string; from?: string; to?: string },
+  ): Promise<string> {
+    const result = await this.getReports(advertiserId, { ...params, limit: 1000 });
+    return reportsToCsv(result.rows);
   }
 
   // ── Private ──

@@ -38,7 +38,7 @@ const MAX_PROXY_BODY_BYTES = MAX_API_ROUTE_BODY_BYTES;
  * service method is added, the corresponding prefix must be added here or
  * the call will 403.
  */
-const ALLOWED_PATH_PREFIXES = [
+export const ALLOWED_PATH_PREFIXES = [
   // Auth (non-token-bearing endpoints that go through the proxy, not dedicated
   // Route Handlers)
   '/auth/me',
@@ -58,8 +58,8 @@ const ALLOWED_PATH_PREFIXES = [
   '/developer/settings',
   '/developer/trust',
   '/developer/export-data',
-  '/developer/delete-account',
   '/developer/api-keys',
+  '/developer/delete-account',
 
   // Advertiser
   '/advertiser/dashboard',
@@ -67,6 +67,8 @@ const ALLOWED_PATH_PREFIXES = [
   '/advertiser/campaigns',
   '/advertiser/reports',
   '/advertiser/deposit-session',
+  '/advertiser/export-data',
+  '/advertiser/delete-account',
 
   // Admin (gated by RoleGuard upstream; the proxy just forwards)
   '/admin/overview',
@@ -82,6 +84,7 @@ const ALLOWED_PATH_PREFIXES = [
   '/admin/tools',
   '/admin/webhooks',
   '/admin/refunds',
+  '/admin/payout-accounts',
 
   // Payout
   '/payout/method',
@@ -219,11 +222,17 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       // `eventSecret` used for device signing).
       const allowSetupSecret = pathWithoutApi === '/auth/2fa/setup';
       responseBody = stripSensitiveFields(responseBody, allowSetupSecret);
-    } else {
-      responseBody = await upstreamRes.text();
+      return NextResponse.json(responseBody, { status: responseStatus });
     }
 
-    return NextResponse.json(responseBody, { status: responseStatus });
+    // Non-JSON upstream responses (e.g. CSV exports) are forwarded verbatim
+    // with their original content-type so the browser can download them
+    // directly instead of wrapping plain text in a JSON envelope.
+    const textBody = await upstreamRes.text();
+    return new NextResponse(textBody, {
+      status: responseStatus,
+      headers: { 'Content-Type': contentType || 'text/plain' },
+    });
   } catch (proxyErr) {
     console.error('[WaitLayer] Proxy error:', proxyErr instanceof Error ? proxyErr.message : String(proxyErr));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
@@ -246,7 +255,7 @@ const SENSITIVE_FIELDS = new Set([
   'eventSecret',
 ]);
 
-function stripSensitiveFields(value: unknown, allowSetupSecret = false): unknown {
+export function stripSensitiveFields(value: unknown, allowSetupSecret = false): unknown {
   if (value === null || value === undefined) return value;
   if (Array.isArray(value)) {
     return value.map((v) => stripSensitiveFields(v, allowSetupSecret));
@@ -268,4 +277,12 @@ function stripSensitiveFields(value: unknown, allowSetupSecret = false): unknown
     return stripped;
   }
   return value;
+}
+
+/** Whether the proxy is permitted to forward an upstream path (after the
+ *  `/api` prefix is stripped). Exported for tests (A-006). */
+export function isProxyPathAllowed(pathWithoutApi: string): boolean {
+  return ALLOWED_PATH_PREFIXES.some(
+    (prefix) => pathWithoutApi === prefix || pathWithoutApi.startsWith(`${prefix}/`),
+  );
 }

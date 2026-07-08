@@ -5,9 +5,11 @@ import { GET, POST } from './route';
 
 const BASE = 'https://app.example';
 
-function makeReq(path: string, init: RequestInit = {}): NextRequest {
+type ReqInit = { method?: string; body?: string; headers?: HeadersInit };
+
+function makeReq(path: string, init: ReqInit = {}): NextRequest {
   const method = init.method ?? (init.body ? 'POST' : 'GET');
-  return new NextRequest(new URL(BASE + path), { method, ...init });
+  return new NextRequest(new URL(BASE + path), { method, body: init.body, headers: init.headers });
 }
 
 function jsonResponse(body: unknown, status = 200) {

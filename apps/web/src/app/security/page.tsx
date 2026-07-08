@@ -34,7 +34,7 @@ export default function SecurityPage() {
           <section className="space-y-3">
             <h2 className="text-xl font-bold text-surface-900 font-sans">Two-Factor Authentication (2FA)</h2>
             <p className="text-surface-500 text-sm leading-relaxed font-light">
-              We support standard QR-code based TOTP two-factor authentication. Enabling 2FA is highly recommended for all developer accounts, and is mandatory before requesting any financial payouts. 2FA verification is also fully integrated into our VS Code extension and command-line interfaces.
+              We support standard QR-code based TOTP two-factor authentication. Enabling 2FA is highly recommended for all developer accounts. When an operator enables the <code className="text-surface-700">PAYOUT_REQUIRE_2FA</code> policy, 2FA is mandatory before requesting any financial payouts. 2FA verification is also integrated into our VS Code extension; the CLI prompts for your 2FA code during login when it is required.
             </p>
           </section>
 

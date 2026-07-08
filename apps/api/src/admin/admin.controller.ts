@@ -12,6 +12,7 @@ import {
   AuditLogQueryDto,
   FraudFlagsQueryDto,
   IssueDeviceRecoveryTokenDto,
+  PayoutAccountVerifyDto,
   MarkPayoutPaidDto,
   OpenRecoveryDebtCaseDto,
   RecoveryDebtCasesQueryDto,
@@ -147,6 +148,16 @@ export class AdminController {
     return this.service.eraseUser(actorId, actorRole, id);
   }
 
+  @Post('users/:id/status')
+  setUserStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') actorId: string,
+    @CurrentUser('role') actorRole: string,
+    @Body('status') status: string,
+  ) {
+    return this.service.setUserStatus(actorId, actorRole, id, status);
+  }
+
   // ── Device Recovery ──
 
   @Post('devices/:id/recovery-token')
@@ -229,6 +240,25 @@ export class AdminController {
   @Get('webhooks')
   getWebhookEvents(@Query() query: WebhookEventsQueryDto) {
     return this.service.getWebhookEvents(query);
+  }
+
+  // ── Payout account verification ─
+
+  @Post('payout-accounts/:id/verify')
+  @Roles('admin', 'support', 'super_admin')
+  verifyPayoutAccount(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: PayoutAccountVerifyDto,
+  ) {
+    return this.service.setPayoutAccountVerified(
+      reviewerId,
+      reviewerRole,
+      id,
+      dto.verified,
+      dto.reason,
+    );
   }
 
   // ── Archive Refunds ──

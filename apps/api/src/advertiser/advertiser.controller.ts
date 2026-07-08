@@ -5,12 +5,13 @@ import { ApiTags } from '@nestjs/swagger';
 
 import { depositMinimumMinor } from '@waitlayer/shared';
 
-import { Roles } from '../common/decorators';
+import { CurrentUser, Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { StripeProvider } from '../payout/providers';
 import { AdvertiserService } from './advertiser.service';
+import { DeleteAccountDto } from '../developer/dto';
 import { CreateCampaignDto, CreateDepositSessionDto,CreateProfileDto, UpdateCampaignDto } from './dto';
 
 /**
@@ -124,6 +125,14 @@ export class AdvertiserController {
     return this.service.submitCampaign(id, advertiserId);
   }
 
+  @Post('campaigns/:id/reset')
+  @RequiredScopes('campaigns:write')
+  async resetCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.resetCampaignToDraft(id, advertiserId);
+  }
+
   @Post('campaigns/:id/pause')
   @RequiredScopes('campaigns:write')
   async pauseCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -172,6 +181,24 @@ export class AdvertiserController {
     return this.service.getReports(advertiserId, { campaignId, from, to });
   }
 
+  @Get('reports/export')
+  @RequiredScopes('reports:read')
+  async exportReports(
+    @Req() req: Request,
+    @Query('campaignId') campaignId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('format') format?: string,
+  ) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    if (format === 'csv') {
+      const csv = await this.service.exportReportsCsv(advertiserId, { campaignId, from, to });
+      return csv;
+    }
+    return this.service.getReports(advertiserId, { campaignId, from, to });
+  }
+
   @Post('deposit-session')
   @RequiredScopes('advertiser:write')
   async createDepositSession(
@@ -206,5 +233,29 @@ export class AdvertiserController {
       successUrl: `${webBaseUrl}/advertiser?deposit=success`,
       cancelUrl: `${webBaseUrl}/advertiser?deposit=cancelled`,
     });
+  }
+
+  // ── Self-service privacy: export & erasure (A-044) ──
+  // These are JWT-only, role-scoped to the advertiser themselves — machine
+  // API keys are deliberately NOT allowed to export or erase an account.
+
+  @Post('export-data')
+  @HttpCode(HttpStatus.OK)
+  @RequiredScopes('advertiser:write')
+  exportData(@CurrentUser('id') userId: string) {
+    return this.service.exportData(userId);
+  }
+
+  @Post('delete-account')
+  @HttpCode(HttpStatus.OK)
+  @RequiredScopes('advertiser:write')
+  deleteAccount(
+    @CurrentUser('id') userId: string,
+    @Body() dto: DeleteAccountDto,
+  ) {
+    if (dto.confirmation !== 'DELETE_MY_ACCOUNT') {
+      throw new BadRequestException('Confirmation string must be exactly DELETE_MY_ACCOUNT');
+    }
+    return this.service.deleteAccount(userId);
   }
 }

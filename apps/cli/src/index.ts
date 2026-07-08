@@ -1,11 +1,11 @@
 import { Command } from 'commander';
 
-import { resolveApiBaseUrl } from './lib/api-client';
 import { runAuth } from './commands/auth';
 import { runConfig } from './commands/config';
 import { runLogout } from './commands/logout';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
+import { resolveApiBaseUrl } from './lib/api-client';
 
 const API_URL = resolveApiBaseUrl();
 const API_HOSTNAME = (() => {
@@ -47,6 +47,7 @@ program
   .command('watch')
   .description('Run daemon that reports wait states in real time')
   .option('--once', 'Report existing wait state once and exit (test mode)')
+  .option('--no-ads', 'Disable ad serving during wait states')
   .action((opts) => runWatch(opts));
 
 program

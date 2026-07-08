@@ -354,6 +354,7 @@ export const CreativeResponse = z.object({
   sponsoredMessage: z.string(),
   destinationUrl: z.string(),
   displayDomain: z.string(),
+  ctaText: z.string().nullable().optional(),
   status: CreativeStatusSchema,
   rejectionReason: z.string().nullable().optional(),
   createdAt: z.string(),

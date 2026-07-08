@@ -74,6 +74,7 @@ interface ServedAd {
   label: string;
   displayDomain: string;
   destinationUrl: string;
+  ctaText: string | null;
 }
 
 @Injectable()
@@ -726,6 +727,7 @@ export class ExtensionService {
       label: 'Sponsored',
       displayDomain: creative.displayDomain,
       destinationUrl: creative.destinationUrl,
+      ctaText: creative.ctaText ?? null,
     };
 
     // ── Atomic claim ──

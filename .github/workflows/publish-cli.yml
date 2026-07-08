@@ -1,0 +1,36 @@
+name: Publish CLI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Build CLI
+        run: pnpm --filter waitlayer-cli build
+      - name: Verify bin artifacts
+        run: pnpm --filter waitlayer-cli pack:check
+      # Dry-run only by default. The actual publish is gated behind an
+      # explicit, separate job / manual approval so this pipeline never
+      # publishes unintentionally (A-043).
+      - name: Pack (dry run)
+        run: pnpm --filter waitlayer-cli pack --dry-run
+      # Uncomment to publish for real after the dry-run is reviewed:
+      # - run: pnpm --filter waitlayer-cli publish --no-git-checks --access public
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

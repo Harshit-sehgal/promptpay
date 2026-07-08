@@ -1,23 +1,61 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import api from '@/lib/api/client';
+import { useAuth } from '@/lib/auth-context';
+
+// Decision (A-009): server-side anonymous consent is intentionally NOT
+// required for logged-out visitors. A logged-out CCPA opt-out is stored
+// device-local only and the copy below says so explicitly. Authenticated
+// users additionally record the preference server-side (A-036) via the
+// consent ledger so the choice is auditable and honored across devices.
 const CCPA_KEY = 'wl_ccpa_opt_out';
+const CCPA_PURPOSE = 'ccpa_opt_out';
+const CCPA_VERSION = '2026-07-01';
 
 export default function PrivacyPage() {
+  const { isAuthenticated } = useAuth();
   const [ccpaOptOut, setCcpaOptOut] = useState(false);
+
+  const loadServerState = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/consent/${CCPA_PURPOSE}/status`);
+      if (typeof data === 'boolean') setCcpaOptOut(data);
+    } catch {
+      // Fall back to the device-local value.
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setCcpaOptOut(window.localStorage.getItem(CCPA_KEY) === 'true');
     }
-  }, []);
+    if (isAuthenticated) void loadServerState();
+  }, [isAuthenticated, loadServerState]);
 
-  const toggleCcpa = () => {
+  const toggleCcpa = async () => {
     const next = !ccpaOptOut;
     setCcpaOptOut(next);
+
+    // Always keep the device-local copy (works for logged-out + as a cache).
     window.localStorage.setItem(CCPA_KEY, String(next));
+
+    // Authenticated users also record the preference server-side so it is
+    // durable and honored across devices (A-036).
+    if (isAuthenticated) {
+      try {
+        await api.post('/consent', {
+          purpose: CCPA_PURPOSE,
+          version: CCPA_VERSION,
+          granted: next,
+        });
+      } catch {
+        // Server sync is best-effort; the local copy remains authoritative
+        // for this device.
+      }
+    }
   };
 
   return (
@@ -84,9 +122,14 @@ export default function PrivacyPage() {
             </button>
           </div>
           <p className="text-surface-400 text-[12px] mt-3">
-            {ccpaOptOut
-              ? 'Opt-out recorded on this device.'
-              : 'You have not opted out on this device.'}
+            {isAuthenticated
+              ? ccpaOptOut
+                ? 'Opt-out recorded on your account and this device.'
+                : 'You have not opted out.'
+              : ccpaOptOut
+                ? 'Opt-out recorded on this device.'
+                : 'You have not opted out on this device.'}
+            {!isAuthenticated && ' This preference is stored locally on this browser only.'}
           </p>
         </section>
       </div>

@@ -21,9 +21,16 @@ export class RequestPayoutDto {
   payoutAccountId!: string;
 
   @IsInt()
-  @Min((args) => payoutMinimumMinor((args.object as RequestPayoutDto).currency), {
+  // The per-currency payout minimum (see `payoutMinimumMinor()` in
+  // @waitlayer/shared) is enforced in the service once the currency is
+  // parsed. class-validator's `@Min` takes a static number, not a
+  // per-field-value callback; the static floor below is a defensive lower
+  // bound. See A-031.
+  @Min(payoutMinimumMinor(null), {
     message: (args) =>
-      `Minimum payout is ${payoutMinimumMinor((args.object as RequestPayoutDto).currency)} minor units`,
+      `Minimum payout is ${payoutMinimumMinor(
+        (args.object as RequestPayoutDto).currency,
+      )} minor units`,
   })
   amountMinor!: number;
 

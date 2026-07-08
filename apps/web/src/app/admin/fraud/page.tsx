@@ -217,11 +217,12 @@ export default function AdminFraudPage() {
   const handleRecomputeTrust = async (userId: string) => {
     setRecomputeUserId(userId);
     try {
-      await fetch(`/api/admin/fraud/compute-trust/${userId}`, { method: 'POST' });
+      await adminApi.recomputeTrustScore(userId);
       // Refresh data to show updated trust level
       fetchData();
     } catch (err: unknown) {
-      console.warn('[AdminFraud] Trust recompute failed:', err instanceof Error ? err.message : String(err));
+      // The shared client rejects on any non-2xx, so a 500 (or any failure)
+      // now surfaces visibly instead of looking like a success.
       setError(getErrorMessage(err, 'Trust recompute failed'));
     } finally {
       setRecomputeUserId(null);

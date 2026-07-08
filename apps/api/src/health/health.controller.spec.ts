@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { HttpException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';

@@ -1,5 +1,5 @@
-import { NextRequest } from 'next/server';
 import { SignJWT } from 'jose';
+import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { middleware } from './middleware';

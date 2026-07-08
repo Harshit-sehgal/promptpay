@@ -27,6 +27,9 @@ const mockPrisma: any = {
     findUnique: vi.fn(),
     updateMany: vi.fn(),
   },
+  fraudFlag: {
+    groupBy: vi.fn(),
+  },
   $transaction: vi.fn(async (callback: any) => callback(mockPrisma)),
 };
 
@@ -277,6 +280,32 @@ describe('AdminService', () => {
       await expect(service.approvePayout('ghost', 'admin_1')).rejects.toThrow(
         'Payout not found',
       );
+    });
+  });
+
+  describe('getUsers response shape', () => {
+    it('returns the actual user fields plus an open fraud-flag count', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([
+        { id: 'u1', email: 'a@x.com', name: 'Alice', role: 'developer', status: 'active', trustLevel: 'high_trust', country: 'US', createdAt: new Date() },
+        { id: 'u2', email: 'b@x.com', name: null, role: 'advertiser', status: 'active', trustLevel: 'low_trust', country: null, createdAt: new Date() },
+      ]);
+      mockPrisma.fraudFlag.groupBy.mockResolvedValue([
+        { userId: 'u1', _count: { _all: 2 } },
+      ]);
+
+      const users = await service.getUsers({});
+
+      expect(users).toHaveLength(2);
+      expect(users[0]).toMatchObject({
+        id: 'u1',
+        email: 'a@x.com',
+        name: 'Alice',
+        role: 'developer',
+        trustLevel: 'high_trust',
+        openFlags: 2,
+      });
+      // A user with no open flags reports 0, not undefined.
+      expect(users[1].openFlags).toBe(0);
     });
   });
 });

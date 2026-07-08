@@ -51,10 +51,10 @@ A `Makefile` wraps common workflows: `make dev`, `make build`, `make typecheck`,
 
 ```bash
 pnpm run typecheck   # 14/14 tasks
-pnpm run lint        # 9/9 tasks, 0 warnings
+pnpm run lint        # 9/9 tasks (style warnings allowed)
 pnpm run build      # 9/9 packages
-pnpm run test       # 371 tests: 344 API (268 unit + 34 contract + 42 e2e-http) + 9 CLI + 11 web + 7 VS Code
-                        # API integration/contract/e2e suites require DATABASE_URL + JWT_SECRET (>=32 chars)
+pnpm run test       # full suite (API unit/contract/e2e-http + CLI + web + VS Code)
+                        # DB-backed API specs require DATABASE_URL + JWT_SECRET (>=32 chars)
 pnpm audit --prod    # production dependency vulnerability audit
 ```
 

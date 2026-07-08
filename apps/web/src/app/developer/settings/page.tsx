@@ -5,7 +5,8 @@ import Image from 'next/image';
 import { FormEvent,useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
-import { authApi,developerApi } from '@/lib/api/services';
+import { authApi, developerApi } from '@/lib/api/services';
+import { useAuth } from '@/lib/auth-context';
 
 import { useToast } from '@waitlayer/ui';
 
@@ -37,6 +38,7 @@ interface CreateApiKeyResponse extends DeveloperApiKey {
 }
 
 export default function DevSettingsPage() {
+  const { user, isAuthenticated } = useAuth();
   const [settings, setSettings] = useState<DevSettings | null>(null);
   const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +49,9 @@ export default function DevSettingsPage() {
   const [apiKeyBusy, setApiKeyBusy] = useState(false);
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [copiedApiKey, setCopiedApiKey] = useState(false);
+  const [emailVerified, setEmailVerified] = useState<boolean>(!!user?.emailVerified);
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
   const toast = useToast();
 
   // Editable copies
@@ -143,6 +148,11 @@ export default function DevSettingsPage() {
     fetchSettings();
   }, []);
 
+  // Keep the local email-verified flag in sync with the authenticated user.
+  useEffect(() => {
+    if (isAuthenticated) setEmailVerified(!!user?.emailVerified);
+  }, [isAuthenticated, user?.emailVerified]);
+
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -221,6 +231,23 @@ export default function DevSettingsPage() {
     setCopiedApiKey(true);
     toast.success('API key copied to clipboard');
     setTimeout(() => setCopiedApiKey(false), 2000);
+  };
+
+  // A-015: self-service email verification request / resend. Payouts are
+  // blocked until the email is verified, so developers must be able to trigger
+  // the verification email themselves.
+  const handleRequestVerification = async () => {
+    setVerifyBusy(true);
+    setVerifyMsg(null);
+    try {
+      await authApi.requestEmailVerification();
+      setVerifyMsg('Verification email sent. Check your inbox to confirm.');
+      toast.success('Verification email sent.');
+    } catch (err: unknown) {
+      setVerifyMsg(getErrorMessage(err, 'Could not send verification email.'));
+    } finally {
+      setVerifyBusy(false);
+    }
   };
 
   return (
@@ -360,6 +387,25 @@ export default function DevSettingsPage() {
                 <div>
                   <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Email</p>
                   <p className="text-surface-900 font-medium text-[15px]">{settings.email}</p>
+                </div>
+                <div>
+                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Email verification</p>
+                  {emailVerified ? (
+                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">Verified</span>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="bg-amber-50 border border-amber-200/60 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-full">Not verified</span>
+                      <button
+                        type="button"
+                        onClick={handleRequestVerification}
+                        disabled={verifyBusy}
+                        className="text-brand-600 hover:text-brand-700 disabled:opacity-50 font-medium text-xs"
+                      >
+                        {verifyBusy ? 'Sending…' : 'Resend verification email'}
+                      </button>
+                    </div>
+                  )}
+                  {verifyMsg && <p className="text-surface-500 text-xs mt-2">{verifyMsg}</p>}
                 </div>
                 {settings.displayName && (
                   <div>

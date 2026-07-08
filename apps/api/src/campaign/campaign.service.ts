@@ -32,6 +32,7 @@ export class CampaignService {
     sponsoredMessage: string;
     destinationUrl: string;
     displayDomain: string;
+    ctaText?: string;
   }, actor?: ServiceActor) {
     // Defense-in-depth ownership check — the controller is the primary gate,
     // but this service-layer check prevents internal/future callers from
@@ -61,6 +62,7 @@ export class CampaignService {
         sponsoredMessage: dto.sponsoredMessage,
         destinationUrl: creativeDestination.destinationUrl,
         displayDomain: creativeDestination.displayDomain,
+        ctaText: dto.ctaText ?? null,
       },
     });
 
@@ -83,6 +85,7 @@ export class CampaignService {
     sponsoredMessage?: string;
     destinationUrl?: string;
     displayDomain?: string;
+    ctaText?: string;
   }, actor?: ServiceActor) {
     const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
     if (!creative) throw new NotFoundException('Creative not found');

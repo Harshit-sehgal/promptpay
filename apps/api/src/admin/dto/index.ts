@@ -5,6 +5,7 @@ export {
   FraudFlagsQueryDto,
   IssueDeviceRecoveryTokenDto,
   MarkPayoutPaidDto,
+  PayoutAccountVerifyDto,
   OpenRecoveryDebtCaseDto,
   RecoveryDebtCasesQueryDto,
   RejectCampaignDto,
