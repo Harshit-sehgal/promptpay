@@ -13,8 +13,8 @@ const envSchema = z.object({
   REDIS_URL: z.string().optional(),
 
   // API
-  API_PORT: z.coerce.number().default(4000),
-  API_BASE_URL: z.string().default('http://localhost:4000'),
+  API_PORT: z.coerce.number().default(4002),
+  API_BASE_URL: z.string().default('http://localhost:4002'),
 
   // Web
   WEB_PORT: z.coerce.number().default(3000),
@@ -81,6 +81,12 @@ const envSchema = z.object({
   // have MFA (TOTP) enrolled. Off by default so existing developer flows are
   // unaffected until 2FA adoption is broad enough.
   PAYOUT_REQUIRE_2FA: z.string().optional(),
+  // Payout security: anti-account-takeover control. When > 0, a payout sent to
+  // a destination that was added/changed within this many hours requires the
+  // account to have MFA enrolled. This blocks an attacker who gains a session
+  // from silently repointing payouts to a fresh destination. Off (0) by
+  // default so existing developer flows are unaffected until enabled.
+  PAYOUT_DESTINATION_COOLDOWN_HOURS: z.string().optional(),
 
   // PayPal (payouts — later)
   PAYPAL_CLIENT_ID: z.string().optional(),

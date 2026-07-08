@@ -1006,31 +1006,32 @@ export class ExtensionService {
     }
 
     if (impression.campaign.bidType === 'cpc') {
-      const updated = await this.prisma.adImpression.update({
-        where: { id: impression.id },
+      const claim = await this.prisma.adImpression.updateMany({
+        where: { id: impression.id, qualifiedAt: null },
         data: {
           qualifiedAt: new Date(dto.qualifiedAt),
           visibleDurationMs: dto.visibleDurationMs,
           isBillable: true,
         },
       });
-      return { qualified: true, impressionId: updated.id };
+      if (claim.count === 0) {
+        return { qualified: true, impressionId: impression.id, alreadyQualified: true };
+      }
+      return { qualified: true, impressionId: impression.id };
     }
 
-    if (impression.campaign.bidType !== 'cpc') {
-      const advertiserBalance = await this.getAdvertiserBalance(impression.campaign.advertiserId, impression.campaign.currency);
-      if (advertiserBalance < impression.campaign.bidAmountMinor) {
-        await this.prisma.adImpression.update({
-          where: { id: impression.id },
-          data: {
-            qualifiedAt: new Date(dto.qualifiedAt),
-            visibleDurationMs: dto.visibleDurationMs,
-            isBillable: false,
-            invalidationReason: 'insufficient_advertiser_balance',
-          },
-        });
-        return { qualified: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
-      }
+    const advertiserBalance = await this.getAdvertiserBalance(impression.campaign.advertiserId, impression.campaign.currency);
+    if (advertiserBalance < impression.campaign.bidAmountMinor) {
+      await this.prisma.adImpression.update({
+        where: { id: impression.id },
+        data: {
+          qualifiedAt: new Date(dto.qualifiedAt),
+          visibleDurationMs: dto.visibleDurationMs,
+          isBillable: false,
+          invalidationReason: 'insufficient_advertiser_balance',
+        },
+      });
+      return { qualified: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
     }
 
     // Look up the user's trust level for hold days
@@ -1256,6 +1257,13 @@ export class ExtensionService {
     // `availableAt` for restricted users; null ⇒ never matures. See ledger.service.ts.
     const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
     const split = isCpcBid ? this.ledger.calculateSplit(impression.campaign.bidAmountMinor) : null;
+
+    if (isCpcBid) {
+      const advertiserBalance = await this.getAdvertiserBalance(impression.campaign.advertiserId, impression.campaign.currency);
+      if (advertiserBalance < impression.campaign.bidAmountMinor) {
+        throw new BadRequestException('Insufficient advertiser balance');
+      }
+    }
 
     let click: { id: string };
     try {

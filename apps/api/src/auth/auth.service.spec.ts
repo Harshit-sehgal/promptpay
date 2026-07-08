@@ -131,6 +131,26 @@ describe('AuthService', () => {
         service.signUp({ email: 'a@b.com', password: 'pw', role: 'developer' as any }),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('rolls back user creation if subsequent onboarding step fails', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'u-1',
+        email: 'dev@test.com',
+        role: 'developer',
+        status: 'active',
+      });
+      mockPrisma.userSettings.create.mockRejectedValueOnce(new Error('DB write failed'));
+
+      await expect(
+        service.signUp({
+          email: 'dev@test.com',
+          password: 'password123',
+          role: 'developer' as any,
+        }),
+      ).rejects.toThrow('DB write failed');
+    });
   });
 
   describe('login', () => {

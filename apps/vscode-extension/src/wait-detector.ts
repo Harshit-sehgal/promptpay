@@ -49,8 +49,7 @@ export class WaitStateDetector {
   private lastEditTime = 0;
   private getInactivityTimeoutMs: () => number;
 
-  /** User must be idle this long (with window focused) before we infer a wait. */
-  private readonly inactivityThresholdMs = 15_000;
+  /** Tracks whether we are currently inside an inferred wait state. */
   private inWait = false;
   private waitStart = 0;
   private waitStateId = '';
@@ -157,8 +156,11 @@ export class WaitStateDetector {
       this.trackTerminal(t);
     });
     const termCloseListener = vscode.window.onDidCloseTerminal((_) => {
-      // Terminal burst activity often precedes AI output
-      if (!this.inWait) {
+      // Terminal burst activity often precedes AI output. Only treat it as a
+      // wait when the user is actually coding (a focused, active text editor)
+      // — otherwise terminal-only work (builds, logs, shells) would wrongly
+      // trigger ads. This ties the terminal signal to a real coding context.
+      if (!this.inWait && this.windowFocused && vscode.window.activeTextEditor) {
         this.enterWait('terminal');
         // Short wait — terminal activity bursts are brief
         setTimeout(() => {

@@ -282,33 +282,39 @@ export class AuthService {
       );
     }
 
-    // 3. Create new user
+    // 3. Create new user + companion records atomically. Mirror the
+    // transactional `signUp` path so a failure mid-onboarding cannot leave an
+    // orphaned user without its settings / trust score / advertiser profile.
     const referralCode = await this.generateReferralCode();
-    user = await this.prisma.user.create({
-      data: {
-        email,
-        googleId,
-        name,
-        role,
-        googleVerified: true,
-        emailVerified: true,
-        referralCode,
-        // No passwordHash — social login only
-      },
-    });
-
-    // Developer onboarding: create settings + trust score
-    if (role === UserRole.DEVELOPER) {
-      await this.prisma.userSettings.create({ data: { userId: user.id } });
-      await this.prisma.trustScore.create({ data: { userId: user.id } });
-    }
-
-    // Advertiser onboarding: create advertiser profile stub
-    if (role === UserRole.ADVERTISER) {
-      await this.prisma.advertiser.create({
-        data: { userId: user.id, companyName: name || DEFAULT_COMPANY_NAME, billingEmail: email },
+    user = await this.prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email,
+          googleId,
+          name,
+          role,
+          googleVerified: true,
+          emailVerified: true,
+          referralCode,
+          // No passwordHash — social login only
+        },
       });
-    }
+
+      // Developer onboarding: create settings + trust score
+      if (role === UserRole.DEVELOPER) {
+        await tx.userSettings.create({ data: { userId: createdUser.id } });
+        await tx.trustScore.create({ data: { userId: createdUser.id } });
+      }
+
+      // Advertiser onboarding: create advertiser profile stub
+      if (role === UserRole.ADVERTISER) {
+        await tx.advertiser.create({
+          data: { userId: createdUser.id, companyName: name || DEFAULT_COMPANY_NAME, billingEmail: email },
+        });
+      }
+
+      return createdUser;
+    });
 
     const tokens = await this.generateTokenPair(user.id, user.role);
     return { user: this.sanitizeUser(user), ...tokens };

@@ -81,7 +81,7 @@
         },
         "waitlayer.apiUrl": {
           "type": "string",
-          "default": "http://localhost:4000/api/v1",
+          "default": "http://localhost:4002/api/v1",
           "description": "WaitLayer API base URL"
         }
       }

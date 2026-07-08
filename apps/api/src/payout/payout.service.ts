@@ -502,6 +502,24 @@ export class PayoutService {
     if (!account || account.userId !== userId) {
       throw new BadRequestException('Invalid payout account');
     }
+    // Destination-change cooldown (anti-account-takeover). A payout to a
+    // destination that was just added or swapped must be protected by MFA.
+    // Without this, a stolen session can repoint payouts to a fresh account
+    // and drain earnings before the owner notices. Off unless an operator
+    // sets PAYOUT_DESTINATION_COOLDOWN_HOURS.
+    const cooldownHours = Number(
+      this.config.get<string>('PAYOUT_DESTINATION_COOLDOWN_HOURS') ?? '0',
+    );
+    if (cooldownHours > 0) {
+      const ageHours = (Date.now() - account.createdAt.getTime()) / 3_600_000;
+      if (ageHours < cooldownHours && !user.twoFactorEnabled) {
+        const waitHours = Math.ceil(cooldownHours - ageHours);
+        throw new ForbiddenException(
+          `Payouts to a recently changed destination require two-factor authentication. ` +
+            `Enable 2FA or wait ~${waitHours}h.`,
+        );
+      }
+    }
     // Currency safety: a payout can only move funds in the destination
     // account's currency. Without this, a USD-denominated earnings balance
     // could be paid to a EUR account (or vice versa), producing silently
