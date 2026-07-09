@@ -159,9 +159,7 @@ Remaining (require a human decision or external verification — not code-comple
 without fabricating changes): A-030 (product decision: launch payout providers —
 UI now surfaces provider launch status; automated rails still invite-only),
 A-033 (ongoing: landing-claim runtime verification — mapping test anchors claims to
-the two real client codebases but does not auto-verify live integration), A-062
-(opt-in webhook reclaim cron exists; enable `WEBHOOK_RECLAIM_CRON=true` only in
-multi-instance deployments).
+the two real client codebases but does not auto-verify live integration).
 
 Partial (critical paths fixed): A-040 now fully resolved: watch.ts uses the tested
 runAdFlow() helper.
@@ -638,9 +636,10 @@ Done when:
 
 ### A-011: Large Dirty Worktree Raises Review Risk
 
-**Resolved 2026-07-09** (current working tree). `git status --short` shows only
-`M pnpm-lock.yaml`; the large multi-package dirty worktree from the session has
-been committed and organized. The review-risk condition no longer applies.
+**Resolved 2026-07-09** (this session). The accumulated multi-package dirty
+worktree (49 modified + 15 untracked files) was committed in organized, reviewable
+commits grouped by domain (deps, db, api, web, cli, docs). The review-risk
+condition no longer applies.
 
 Severity: medium (was).
 
