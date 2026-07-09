@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } f
 import { ConfigService } from '@nestjs/config';
 
 import { EarningsLedger, PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
-import { PAYOUT, payoutMinimumMinor,PayoutProvider, PayoutStatus } from '@waitlayer/shared';
+import { isProviderSupportedForCurrency, PAYOUT, payoutMinimumMinor,PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
@@ -180,6 +180,12 @@ export class PayoutService {
     const currency = dto.currency?.trim().toUpperCase() || 'USD';
     if (!/^[A-Z]{3}$/.test(currency)) {
       throw new BadRequestException('Payout currency must be a 3-letter ISO currency code');
+    }
+
+    if (!isProviderSupportedForCurrency(provider, currency)) {
+      throw new BadRequestException(
+        `Payout provider "${provider}" cannot settle payouts in ${currency}`,
+      );
     }
 
     if ([PayoutProvider.PAYPAL_EMAIL, PayoutProvider.PAYPAL_PAYOUTS, PayoutProvider.WISE].includes(provider)) {

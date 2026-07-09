@@ -7,6 +7,7 @@ import { LoadingSpinner, StatCard,StatusBadge } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, payoutApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
+import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
 interface PayoutAccount {
@@ -145,7 +146,7 @@ export default function DevPayoutsPage() {
       setRequestError('Enable two-factor authentication before requesting a payout.');
       return;
     }
-    const amountMinor = Math.round(parseFloat(amount) * 100);
+    const amountMinor = majorToMinor(parseFloat(amount), selectedCurrency);
     if (isNaN(amountMinor) || amountMinor <= 0) {
       setRequestError('Enter a valid amount');
       return;
@@ -301,13 +302,13 @@ export default function DevPayoutsPage() {
                     </label>
                     <input
                       type="number"
-                      step="0.01"
-                      min={(info.minimumThresholdMinor / 100).toString()}
-                      max={(selectedAvailableMinor / 100).toString()}
+                      step={minorToMajorInputValue(1, selectedCurrency)}
+                      min={minorToMajorInputValue(info.minimumThresholdMinor, selectedCurrency)}
+                      max={minorToMajorInputValue(selectedAvailableMinor, selectedCurrency)}
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       required
-                      placeholder={`${(info.minimumThresholdMinor / 100).toFixed(2)}`}
+                      placeholder={minorToMajorInputValue(info.minimumThresholdMinor, selectedCurrency)}
                       className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
                     />
                   </div>

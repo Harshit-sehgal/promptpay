@@ -79,7 +79,6 @@ export const advertiserApi = {
     api.post('/advertiser/delete-account', data),
   createCampaign: (data: Record<string, unknown>) =>
     api.post('/advertiser/campaigns', data).then((r) => ok(CreateCampaignResponse.parse(r.data))),
-  getCampaign: (id: string) => api.get(`/advertiser/campaigns/${id}`),
   updateCampaign: (id: string, data: Record<string, unknown>) =>
     api.patch(`/advertiser/campaigns/${id}`, data),
   submitCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/submit`),
