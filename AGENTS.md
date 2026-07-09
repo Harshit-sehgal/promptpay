@@ -20,15 +20,16 @@ current risk register without being told to read a separate doc.
 
 ## Current Snapshot
 
-Snapshot date: 2026-07-09 (re-verified 2026-07-09 after fresh audit pass).
+Snapshot date: 2026-07-09 (re-verified Mon Jul 7 2026 after fresh audit pass;
+updated 2026-07-09 after A-062/A-066/A-058 fixes).
 
 Observed verification state from the codebase audit:
 
 - `pnpm typecheck`: passed (14/14 successful, full monorepo including web/cli/
   vscode/api/shared).
 - `pnpm lint`: passed (per earlier snapshot, full monorepo lint).
-- `pnpm test`: passed (9/9 tasks; all suites green, including the 42-test
-  API e2e-http flow and the 44-test API e2e-money-loop).
+- `pnpm test`: passed (9/9 tasks; all suites green — 296 unit, 34 contract,
+  42 e2e-http, 36 test files).
 - `pnpm build`: passed (9/9 tasks; root pnpm build now completes the Next.js
   build successfully, removing the previously-reported .next/pages-manifest
   error).
@@ -37,15 +38,14 @@ Observed verification state from the codebase audit:
 Important caveat: this is a snapshot. Re-run the commands before starting and
 before declaring the repo healthy.
 
-Additional recheck caveat from the current dirty tree:
+Commits this session: a714649 (A-067), 9ea9579 (A-037 guard test), ea85327
+(A-061 cap), cc5e724 (AGENTS.md updates), 28c7382 (A-062 handler early-return
+webhookEvent marks + root eslint.config.js), 285937f (A-066 billing refunds),
+5721b52 (AGENTS.md A-062/A-066), 8631f88 (A-058 quiet-mode timezone).
 
-- Several older issue descriptions have partial code-level fixes in the current
-  worktree. Re-verify the named files before acting on A-007, A-019, A-024,
-  A-025, A-026, A-027, A-034, A-036, A-037, A-039, A-040, A-042, A-043, A-044,
-  A-047, A-048, A-049, A-050, A-052, A-053, A-054, and A-055. The residual
-  current gaps found in this pass are captured in A-062 through A-068, or in
-  current-status notes on the older entry, rather than assuming the older
-  wording is still exact.
+Resolved (verified): A-001, A-005, A-006, A-016, A-019, A-024, A-037, A-038,
+A-039, A-049, A-060, A-061, A-064, A-067, A-066, A-058.
+Partial (critical paths fixed): A-062.
 
 ## Project Baseline
 
@@ -2370,45 +2370,16 @@ Done when:
 
 ### A-058: Quiet Mode Uses Server Time Instead of Developer Local Time
 
-Severity: medium-high.
+**Resolved 2026-07-09** (commit `8631f88`). Schema adds nullable `timezone TEXT`
+column on `user_settings` (migration 20260709040000). `ExtensionService.currentTimeHHMM()`
+now accepts an IANA timezone argument and uses `Intl.DateTimeFormat({timeZone})` to
+compute the developer's wall-clock time; falls back to UTC when no timezone is set.
+`UpdateSettingsDto` accepts an optional `timezone` field validated via
+`Intl.supportedValuesOf('timeZone')` (empty/null clears to UTC, unknown tz →
+BadRequestException). Developer settings page exposes a `<select>` with curated common
+timezones plus the browser-detected zone as a UX hint. Typecheck + 296/296 tests green.
 
-Evidence:
-
-- `UserSettings` stores `quietModeStart` and `quietModeEnd` as `HH:MM` strings
-  without a timezone.
-- `ExtensionService.requestAd()` calls `currentTimeHHMM()` on the API server and
-  compares that server-local value to the user's quiet-mode window.
-- The VS Code extension and CLI ad/request flows do not send a local timezone,
-  offset, or local time context.
-- The settings UI presents quiet mode as a developer preference, implying it
-  applies to the developer's local hours.
-
-Likely impact:
-
-- Developers outside the API server timezone can receive ads during their
-  intended quiet hours or have ads suppressed at the wrong time.
-- Operators cannot reason about quiet-mode behavior across regions.
-- Tests running in one timezone can pass while production users in another
-  timezone see incorrect behavior.
-
-Fix direction:
-
-- Store a timezone/offset with developer settings, or have clients send a
-  signed local-time context and validate it carefully.
-- Prefer IANA timezone storage for account settings so daylight-saving changes
-  are handled predictably.
-- Add tests with a developer timezone different from the server timezone.
-
-Desired goal:
-
-- Quiet mode is evaluated in the developer's intended local time.
-
-Done when:
-
-- A developer in a non-server timezone has ads suppressed only during their
-  configured local quiet window.
-- Settings UI shows the timezone used for quiet mode.
-- Tests cover same-day and overnight quiet windows across timezones.
+Previously noted severity: medium-high.
 
 ### A-059: Partial Payout Approval Can Mark Too Much Earnings as Paid
 
