@@ -26,6 +26,20 @@ export function resolveApiBaseUrl(env: NodeJS.ProcessEnv = process.env): string 
 
 const API_URL = resolveApiBaseUrl();
 
+/**
+ * Best-effort ISO-3166-1 alpha-2 country code from the host locale (e.g.
+ * `en_US.UTF-8` -> `US`). Used for privacy-safe, developer-opt-in country
+ * targeting (A-056). Returns undefined when no locale-derived country is
+ * available; the server falls back to the profile country.
+ */
+export function detectCountryCode(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? env.LANGUAGE;
+  if (!raw) return undefined;
+  const match = raw.split(/[.\s]/)[0]?.split('_')[1];
+  if (match && /^[A-Za-z]{2}$/.test(match)) return match.toUpperCase();
+  return undefined;
+}
+
 interface RegisterDeviceResponse {
   id: string;
   eventSecret?: string;
@@ -124,7 +138,7 @@ export class ApiClient {
     throw new Error('Failed to register CLI device');
   }
 
-  async login(input: { email: string; password: string }) {
+  async login(input: { email: string; password: string; twoFactorToken?: string }) {
     const res = await this.raw<{
       accessToken: string;
       refreshToken: string;
@@ -250,13 +264,19 @@ export class ApiClient {
     waitStateId: string;
     toolType: string;
     idempotencyKey: string;
+    country?: string;
   }): Promise<Ad | null> {
+    // A-056: send a best-effort ISO country code so country-targeted campaigns
+    // can be enforced without server-side geolocation. Falls back to the
+    // developer's profile country server-side when omitted.
+    const country = input.country ?? detectCountryCode();
     const payload = {
       deviceId: input.deviceId,
       sessionId: input.sessionId,
       waitStateId: input.waitStateId,
       toolType: input.toolType,
       idempotencyKey: input.idempotencyKey,
+      ...(country ? { country } : {}),
     };
     const signature = await this.signEventPayload(payload);
     const res = await this.raw<{ ad: Ad | null }>('POST', '/extension/ad-request', {

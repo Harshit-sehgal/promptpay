@@ -5,6 +5,12 @@ import { getCredentials,setCredentials } from '../lib/credentials';
 import { getErrorMessage } from '../lib/errors';
 import { prompt } from '../lib/prompt';
 
+interface LoginResult {
+  accessToken: string;
+  refreshToken: string;
+  user: { id: string; role: string; referralCode?: string };
+}
+
 export async function runAuth(opts: { email?: string; signup?: boolean }) {
   const existing = getCredentials();
   if (existing) {
@@ -43,19 +49,56 @@ async function handleLogin(email: string) {
   const api = new ApiClient();
   try {
     const res = await api.login({ email, password });
-    setCredentials({
-      email,
-      accessToken: res.accessToken,
-      refreshToken: res.refreshToken,
-      userId: res.user.id,
-      role: res.user.role,
-    });
-    console.log(chalk.green(`✓ Signed in as ${email} (role: ${res.user.role})`));
+    persistLogin(email, res);
+    printLoginSuccess(email, res.user.role);
   } catch (err: unknown) {
+    if (isTwoFactorChallenge(err)) {
+      const twoFactorToken = await prompt('Two-factor code:', { silent: true });
+      if (!twoFactorToken) {
+        console.error(chalk.red('2FA code required'));
+        process.exit(1);
+      }
+
+      console.log(chalk.dim('Verifying 2FA...'));
+      try {
+        const res = await api.login({ email, password, twoFactorToken });
+        persistLogin(email, res);
+        printLoginSuccess(email, res.user.role);
+        return;
+      } catch (twoFactorErr: unknown) {
+        const msg = getErrorMessage(twoFactorErr, 'Login failed');
+        console.error(chalk.red(`✗ ${msg}`));
+        process.exit(1);
+      }
+    }
+
     const msg = getErrorMessage(err, 'Login failed');
     console.error(chalk.red(`✗ ${msg}`));
     process.exit(1);
   }
+}
+
+function persistLogin(email: string, res: LoginResult) {
+  setCredentials({
+    email,
+    accessToken: res.accessToken,
+    refreshToken: res.refreshToken,
+    userId: res.user.id,
+    role: res.user.role,
+  });
+}
+
+function printLoginSuccess(email: string, role: string) {
+  console.log(chalk.green(`✓ Signed in as ${email} (role: ${role})`));
+}
+
+function isTwoFactorChallenge(err: unknown): boolean {
+  const body = err as { twoFactorRequired?: unknown; message?: unknown };
+  return (
+    body?.twoFactorRequired === true ||
+    body?.message === 'Invalid two-factor authentication code' ||
+    body?.message === 'Two-factor authentication code required'
+  );
 }
 
 async function handleSignup(email: string, _opts: { email?: string }) {
@@ -95,9 +138,11 @@ async function handleSignup(email: string, _opts: { email?: string }) {
     process.exit(1);
   }
 
-  // A-065: Fetch the current required consent versions from the server so the
-  // recorded acceptance carries the live policy version, not a hard-coded date.
-  let policyVersion = '2026-07-01'; // fallback if the fetch fails
+  // A-065/A-047: Fetch the current required consent versions from the server
+  // so recorded acceptance carries the live policy version. Fail closed if the
+  // version cannot be loaded; posting a hard-coded fallback would drift after a
+  // policy bump and the API will reject stale client versions anyway.
+  let policyVersion: string | null = null;
   const api = new ApiClient();
   try {
     const versions = await api.getRequiredConsentVersions();
@@ -106,9 +151,17 @@ async function handleSignup(email: string, _opts: { email?: string }) {
     } else if (versions?.privacy_policy) {
       policyVersion = versions.privacy_policy;
     }
-  } catch {
-    // Silently fall back to the default — the re-prompt flow will surface any
-    // version mismatch after login.
+    if (!policyVersion) {
+      throw new Error('required consent versions missing from server response');
+    }
+  } catch (err: unknown) {
+    const msg = getErrorMessage(err, 'could not load required consent versions');
+    console.error(chalk.red(`Cannot create account: ${msg}`));
+    process.exit(1);
+  }
+  if (!policyVersion) {
+    console.error(chalk.red('Cannot create account: required consent versions missing from server response'));
+    process.exit(1);
   }
 
   console.log(chalk.dim('Signing up...'));
