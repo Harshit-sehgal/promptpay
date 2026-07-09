@@ -1191,59 +1191,115 @@ export class AdminService {
     // Date-floor helper for grouping by day
     const floorDay = (d: Date): string => d.toISOString().slice(0, 10);
 
-    // ── Daily impression trend ──
-    const rawImpressions = await this.prisma.adImpression.findMany({
-      where: { createdAt: { gte: periodStart } },
-      select: { createdAt: true, isBillable: true },
-    });
+    // A-007: All daily aggregation is computed in the DATABASE via SQL
+    // date_trunc instead of loading raw event rows into Node.js memory.
+    // This ensures bounded memory usage for the admin dashboard even with
+    // high event volume over long date ranges. The pattern matches A-068.
+
+    // ── Daily impression trend (database aggregated) ──
+    const dailyImpressions = await this.prisma.$queryRaw<
+      { day: Date; total: bigint; billable: bigint }[]
+    >`
+      SELECT date_trunc('day', "createdAt") AS day,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE "isBillable")::int AS billable
+      FROM ad_impressions
+      WHERE "createdAt" >= ${periodStart}
+      GROUP BY day
+      ORDER BY day
+    `;
     const impressionByDay = new Map<string, { total: number; billable: number }>();
-    for (const imp of rawImpressions) {
-      const day = floorDay(imp.createdAt);
-      const bucket = impressionByDay.get(day) ?? { total: 0, billable: 0 };
-      bucket.total++;
-      if (imp.isBillable) bucket.billable++;
-      impressionByDay.set(day, bucket);
+    let totalImpressions = 0;
+    let totalBillable = 0;
+    for (const imp of dailyImpressions) {
+      const dayStr = imp.day.toISOString().slice(0, 10);
+      const total = Number(imp.total);
+      const billable = Number(imp.billable);
+      impressionByDay.set(dayStr, { total, billable });
+      totalImpressions += total;
+      totalBillable += billable;
     }
 
-    // ── Daily signup trend ──
-    const rawSignups = await this.prisma.user.findMany({
-      where: { createdAt: { gte: periodStart } },
-      select: { createdAt: true, role: true },
-    });
+    // ── Daily signup trend (database aggregated) ──
+    const dailySignups = await this.prisma.$queryRaw<
+      { day: Date; total: bigint; developer: bigint; advertiser: bigint }[]
+    >`
+      SELECT date_trunc('day', "createdAt") AS day,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE "role" = 'developer')::int AS developer,
+             COUNT(*) FILTER (WHERE "role" = 'advertiser')::int AS advertiser
+      FROM users
+      WHERE "createdAt" >= ${periodStart}
+      GROUP BY day
+      ORDER BY day
+    `;
     const signupsByDay = new Map<string, { total: number; developer: number; advertiser: number }>();
-    for (const u of rawSignups) {
-      const day = floorDay(u.createdAt);
-      const bucket = signupsByDay.get(day) ?? { total: 0, developer: 0, advertiser: 0 };
-      bucket.total++;
-      if (u.role === 'developer') bucket.developer++;
-      if (u.role === 'advertiser') bucket.advertiser++;
-      signupsByDay.set(day, bucket);
+    let totalSignups = 0;
+    for (const sig of dailySignups) {
+      const dayStr = sig.day.toISOString().slice(0, 10);
+      const entry = {
+        total: Number(sig.total),
+        developer: Number(sig.developer),
+        advertiser: Number(sig.advertiser),
+      };
+      signupsByDay.set(dayStr, entry);
+      totalSignups += entry.total;
     }
 
-    // ── Daily revenue/spend (from earnings ledger credits) ──
-    const rawRevenue = await this.prisma.earningsLedger.findMany({
-      where: { createdAt: { gte: periodStart }, entryType: 'credit', currency: 'USD' },
-      select: { createdAt: true, amountMinor: true, status: true },
-    });
+    // ── Daily revenue from earnings ledger credits (database aggregated) ──
+    const dailyRevenue = await this.prisma.$queryRaw<
+      { day: Date; estimated: bigint; confirmed: bigint; paid: bigint; total: bigint }[]
+    >`
+      SELECT date_trunc('day', "createdAt") AS day,
+             COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'estimated'), 0)::int AS estimated,
+             COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'confirmed'), 0)::int AS confirmed,
+             COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'paid'), 0)::int AS paid,
+             COALESCE(SUM("amountMinor"), 0)::int AS total
+      FROM earnings_ledger
+      WHERE "createdAt" >= ${periodStart}
+        AND "entryType" = 'credit'
+        AND "currency" = 'USD'
+      GROUP BY day
+      ORDER BY day
+    `;
     const revenueByDay = new Map<string, { estimated: number; confirmed: number; paid: number }>();
-    for (const r of rawRevenue) {
-      const day = floorDay(r.createdAt);
-      const bucket = revenueByDay.get(day) ?? { estimated: 0, confirmed: 0, paid: 0 };
-      if (r.status === 'estimated') bucket.estimated += r.amountMinor;
-      else if (r.status === 'confirmed') bucket.confirmed += r.amountMinor;
-      else if (r.status === 'paid') bucket.paid += r.amountMinor;
-      revenueByDay.set(day, bucket);
+    let totalEstimatedRevenue = 0;
+    let totalConfirmedRevenue = 0;
+    let totalPaidRevenue = 0;
+    let totalRevenueAmount = 0;
+    for (const rev of dailyRevenue) {
+      const dayStr = rev.day.toISOString().slice(0, 10);
+      const estimated = Number(rev.estimated);
+      const confirmed = Number(rev.confirmed);
+      const paid = Number(rev.paid);
+      const total = Number(rev.total);
+      revenueByDay.set(dayStr, { estimated, confirmed, paid });
+      totalEstimatedRevenue += estimated;
+      totalConfirmedRevenue += confirmed;
+      totalPaidRevenue += paid;
+      totalRevenueAmount += total;
     }
 
-    // ── Daily advertiser spend ──
-    const rawSpend = await this.prisma.advertiserLedger.findMany({
-      where: { createdAt: { gte: periodStart }, entryType: 'debit', currency: 'USD' },
-      select: { createdAt: true, amountMinor: true },
-    });
+    // ── Daily advertiser spend (database aggregated) ──
+    const dailySpend = await this.prisma.$queryRaw<
+      { day: Date; spend: bigint }[]
+    >`
+      SELECT date_trunc('day', "createdAt") AS day,
+             COALESCE(SUM("amountMinor"), 0)::int AS spend
+      FROM advertiser_ledger
+      WHERE "createdAt" >= ${periodStart}
+        AND "entryType" = 'debit'
+        AND "currency" = 'USD'
+      GROUP BY day
+      ORDER BY day
+    `;
     const spendByDay = new Map<string, number>();
-    for (const s of rawSpend) {
-      const day = floorDay(s.createdAt);
-      spendByDay.set(day, (spendByDay.get(day) ?? 0) + s.amountMinor);
+    let totalAdvertiserSpend = 0;
+    for (const row of dailySpend) {
+      const dayStr = row.day.toISOString().slice(0, 10);
+      const spend = Number(row.spend);
+      spendByDay.set(dayStr, spend);
+      totalAdvertiserSpend += spend;
     }
 
     // ── Campaign status distribution ──
@@ -1299,9 +1355,11 @@ export class AdminService {
       this.prisma.earningsLedger.aggregate({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart }, entryType: 'credit', currency: 'USD' }, _sum: { amountMinor: true } }),
     ]);
 
-    const currentImpressions = rawImpressions.length;
-    const currentSignups = rawSignups.length;
-    const currentRevenue = rawRevenue.reduce((sum, r) => sum + r.amountMinor, 0);
+    // A-007: totals now computed from the database-aggregated data instead of
+    // from raw arrays that were previously loaded into Node.js memory.
+    const currentImpressions = totalImpressions;
+    const currentSignups = totalSignups;
+    const currentRevenue = totalRevenueAmount;
 
     const calcPct = (current: number, prev: number): number | null =>
       prev > 0 ? Math.round(((current - prev) / prev) * 1000) / 10 : null;
@@ -1322,12 +1380,12 @@ export class AdminService {
       daily,
       totals: {
         impressions: currentImpressions,
-        billableImpressions: rawImpressions.filter((i) => i.isBillable).length,
+        billableImpressions: totalBillable,
         signups: currentSignups,
-        estimatedRevenueMinor: rawRevenue.filter((r) => r.status === 'estimated').reduce((s, r) => s + r.amountMinor, 0),
-        confirmedRevenueMinor: rawRevenue.filter((r) => r.status === 'confirmed').reduce((s, r) => s + r.amountMinor, 0),
-        paidRevenueMinor: rawRevenue.filter((r) => r.status === 'paid').reduce((s, r) => s + r.amountMinor, 0),
-        advertiserSpendMinor: rawSpend.reduce((s, r) => s + r.amountMinor, 0),
+        estimatedRevenueMinor: totalEstimatedRevenue,
+        confirmedRevenueMinor: totalConfirmedRevenue,
+        paidRevenueMinor: totalPaidRevenue,
+        advertiserSpendMinor: totalAdvertiserSpend,
       },
       vsPreviousPeriod: {
         impressionsChangePct: calcPct(currentImpressions, prevImpressions),

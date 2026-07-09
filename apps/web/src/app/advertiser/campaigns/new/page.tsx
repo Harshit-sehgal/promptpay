@@ -53,6 +53,7 @@ export default function NewCampaignPage() {
       return;
     }
 
+    let campaignCreated: string | null = null;
     try {
       const campaignRes: { data: CampaignCreateResponse } = await advertiserApi.createCampaign({
         name,
@@ -64,6 +65,12 @@ export default function NewCampaignPage() {
       });
 
       const campaignId = campaignRes.data.id;
+
+      // A-051: Track that the campaign was created using a local variable
+      // (NOT React state, which would be stale in the catch closure). If a
+      // later step fails, we offer a recovery path via the edit page rather
+      // than a misleading "Failed to create campaign" error.
+      campaignCreated = campaignId;
 
       // Add first creative
       const finalCtaUrl = ctaUrl || landingUrl;
@@ -101,7 +108,18 @@ export default function NewCampaignPage() {
       setSuccess(true);
       setTimeout(() => router.push('/advertiser/campaigns'), 1500);
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Failed to create campaign'));
+      // A-051: If the campaign was created but a later step (creative,
+      // targeting, or submit) failed, show a recovery message instead of
+      // a generic failure message. Uses the local `campaignCreated` variable
+      // (not React state) so the catch block sees the try-block assignment.
+      if (campaignCreated) {
+        setError(
+          `Campaign was saved as a draft, but submission failed: ${getErrorMessage(err, '')}. ` +
+          `You can edit and resubmit the draft from the campaigns list.`,
+        );
+      } else {
+        setError(getErrorMessage(err, 'Failed to create campaign'));
+      }
     } finally {
       setSubmitting(false);
     }
