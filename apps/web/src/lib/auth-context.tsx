@@ -1,17 +1,8 @@
 'use client';
 
-import { createContext, ReactNode,useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import api from '@/lib/api/client';
-
-/** Map user role to their dashboard path */
-function getDashboardPath(role: string): string {
-  switch (role) {
-    case 'advertiser': return '/advertiser';
-    case 'admin':
-    case 'super_admin': return '/admin';
-    default: return '/developer';
-  }
-}
+import { getDashboardPath, SignupRole } from '@/lib/auth-routing';
 
 interface User {
   id: string;
@@ -23,6 +14,8 @@ interface User {
   referralCode?: string | null;
   twoFactorEnabled?: boolean;
   emailVerified?: boolean;
+  googleVerified?: boolean;
+  hasPassword?: boolean;
 }
 
 /** Construct a User from the raw API response data. */
@@ -37,10 +30,10 @@ function mapUser(raw: Record<string, unknown>): User {
     referralCode: (raw.referralCode as string | null) ?? undefined,
     twoFactorEnabled: (raw.twoFactorEnabled as boolean | undefined) ?? false,
     emailVerified: (raw.emailVerified as boolean | undefined) ?? false,
+    googleVerified: (raw.googleVerified as boolean | undefined) ?? false,
+    hasPassword: (raw.hasPassword as boolean | undefined) ?? undefined,
   };
 }
-
-type SignupRole = 'developer' | 'advertiser';
 
 interface SignupPayload {
   email: string;

@@ -259,9 +259,7 @@ export default function DevSettingsPage() {
     setNewApiKey(null);
 
     try {
-      const res = (await developerApi.createApiKey({
-        scopes: ['ledger:read'],
-      })) as AxiosResponse<CreateApiKeyResponse>;
+      const res = (await developerApi.createLedgerApiKey()) as AxiosResponse<CreateApiKeyResponse>;
       setNewApiKey(res.data.plainKey);
       const keysRes = (await developerApi.listApiKeys()) as AxiosResponse<DeveloperApiKey[]>;
       setApiKeys(keysRes.data || []);
@@ -746,7 +744,7 @@ export default function DevSettingsPage() {
               <div>
                 <h2 className="text-surface-900 font-bold text-[16px]">API keys</h2>
                 <p className="text-surface-500 text-xs mt-1">
-                  Manage API keys for programmatic access to your account, ledger, and reports.
+                  Manage read-only ledger keys for reporting integrations. Extension and CLI sign-in still use your user session.
                 </p>
               </div>
               <button
@@ -755,7 +753,7 @@ export default function DevSettingsPage() {
                 disabled={apiKeyBusy}
                 className="bg-surface-900 hover:bg-surface-800 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
               >
-                {apiKeyBusy ? 'Working...' : 'New key'}
+                {apiKeyBusy ? 'Working...' : 'New ledger key'}
               </button>
             </div>
 
@@ -768,7 +766,7 @@ export default function DevSettingsPage() {
             {newApiKey && (
               <div className="bg-emerald-50 border border-emerald-200/70 rounded-lg p-4 mb-5">
                 <p className="text-emerald-700 text-xs font-semibold uppercase tracking-wider mb-2">
-                  New API key
+                  New ledger API key
                 </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 min-w-0 bg-white border border-emerald-200/70 rounded-md px-3 py-2 text-surface-900 text-xs break-all font-mono">
@@ -834,6 +832,11 @@ export default function DevSettingsPage() {
                 </table>
               </div>
             )}
+            <p className="text-surface-400 text-xs mt-3 leading-relaxed">
+              Ledger keys can read earnings and payout ledger data with the
+              <code className="mx-1 rounded bg-surface-100 px-1 py-0.5 font-mono text-[11px]">x-api-key</code>
+              header. They cannot register extension devices, change settings, export data, delete your account, or request payouts.
+            </p>
           </div>
 
           {/* Actions */}

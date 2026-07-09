@@ -6,6 +6,8 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
+import { authoritativePayoutAmountMinor, minorToMajorInputValue } from './amounts';
+
 interface PendingPayout {
   id: string;
   userId: string;
@@ -53,26 +55,13 @@ export default function AdminPayoutsPage() {
     fetchPayouts();
   }, [fetchPayouts]);
 
-  const handleApprove = async (id: string) => {
-    setProcessing(id);
-    try {
-      await adminApi.approvePayout(id);
-      fetchPayouts();
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Approve failed'));
-    } finally {
-      setProcessing(null);
-    }
-  };
-
   const openApproveModal = (p: PendingPayout) => {
     setApproveModalFor(p);
-    setApproveAmount((p.approvedAmountMinor ?? p.requestedAmountMinor / 100).toString());
+    setApproveAmount(minorToMajorInputValue(authoritativePayoutAmountMinor(p)));
   };
 
   const handleApproveWithAmount = async () => {
     if (!approveModalFor) return;
-    const requestedMajor = approveModalFor.requestedAmountMinor / 100;
     const trimmed = approveAmount.trim();
     let amountMinor: number | undefined;
     if (trimmed !== '') {
@@ -103,7 +92,7 @@ export default function AdminPayoutsPage() {
   const openReconcileModal = (p: PendingPayout) => {
     setReconcileModalFor(p);
     setReconcileProviderTxId('');
-    setReconcileAmount((p.approvedAmountMinor ?? p.requestedAmountMinor / 100).toString());
+    setReconcileAmount(minorToMajorInputValue(authoritativePayoutAmountMinor(p)));
     setReconcilePaidAt(new Date().toISOString().slice(0, 16));
   };
 
@@ -393,7 +382,7 @@ export default function AdminPayoutsPage() {
                 type="number"
                 step="0.01"
                 min={0}
-                max={approveModalFor.requestedAmountMinor / 100}
+                max={minorToMajorInputValue(approveModalFor.requestedAmountMinor)}
                 value={approveAmount}
                 onChange={(e) => setApproveAmount(e.target.value)}
                 className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"

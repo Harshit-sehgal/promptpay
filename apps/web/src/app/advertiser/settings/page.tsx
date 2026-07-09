@@ -1,21 +1,24 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-import { advertiserApi } from '@/lib/api/services';
+import { useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
+import { advertiserApi } from '@/lib/api/services';
+import { useAuth } from '@/lib/auth-context';
+
 import { useToast } from '@waitlayer/ui';
 
 export default function AdvertiserSettingsPage() {
   const router = useRouter();
   const toast = useToast();
+  const { user } = useAuth();
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const isGoogleOnlyAccount = user?.googleVerified === true && user?.hasPassword === false;
 
   const handleExport = async () => {
     setExportBusy(true);
@@ -42,10 +45,21 @@ export default function AdvertiserSettingsPage() {
       setDeleteError('Type DELETE_MY_ACCOUNT to confirm.');
       return;
     }
+    if (isGoogleOnlyAccount) {
+      setDeleteError(
+        'Google-only advertiser deletion requires support-assisted verification. Contact support@waitlayer.com from your account email to complete erasure.',
+      );
+      return;
+    }
+    if (user?.hasPassword === true && !currentPassword) {
+      setDeleteError('Current password is required to delete your account.');
+      return;
+    }
+
     // A-044: step-up reauthentication before irreversible erasure. Password
-    // accounts must provide their current password. Google-only accounts
-    // without a password will get a backend error directing them to contact
-    // support (Google ID token reauth is not wired in the advertiser UI yet).
+    // accounts must provide their current password. Google-only accounts are
+    // blocked above with an explicit support-assisted verification path until
+    // Google ID-token reauth is wired in this UI.
     setDeleteBusy(true);
     setDeleteError(null);
     try {
@@ -102,14 +116,30 @@ export default function AdvertiserSettingsPage() {
             This permanently erases your personal identity. Ledger, payout, and audit records are
             retained for compliance. This action cannot be undone.
           </p>
-          <input
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            placeholder="Current password (required for deletion)"
-            autoComplete="current-password"
-            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 mb-3 focus:outline-none focus:border-rose-400"
-          />
+          {isGoogleOnlyAccount ? (
+            <div className="bg-amber-50 border border-amber-200/70 rounded-xl p-4 mb-3">
+              <p className="text-amber-800 text-sm font-medium">Google-only deletion needs support verification</p>
+              <p className="text-amber-700 text-xs mt-1 leading-relaxed">
+                This account does not have a password step-up. Email{' '}
+                <a
+                  href="mailto:support@waitlayer.com?subject=Advertiser%20account%20erasure"
+                  className="font-semibold underline underline-offset-2"
+                >
+                  support@waitlayer.com
+                </a>{' '}
+                from your account address to complete advertiser erasure.
+              </p>
+            </div>
+          ) : (
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Current password (required for deletion)"
+              autoComplete="current-password"
+              className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 mb-3 focus:outline-none focus:border-rose-400"
+            />
+          )}
           <input
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
@@ -119,7 +149,7 @@ export default function AdvertiserSettingsPage() {
           <button
             type="button"
             onClick={handleDelete}
-            disabled={deleteBusy || confirmText !== 'DELETE_MY_ACCOUNT'}
+            disabled={deleteBusy || confirmText !== 'DELETE_MY_ACCOUNT' || isGoogleOnlyAccount}
             className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-[14px] transition-colors"
           >
             {deleteBusy ? 'Deleting…' : 'Delete my account'}

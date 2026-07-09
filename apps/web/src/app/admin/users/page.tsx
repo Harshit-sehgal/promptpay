@@ -194,6 +194,36 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3 text-right text-ink-400 text-xs">
                     {formatRelativeTime(u.createdAt)}
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-2">
+                      {u.status === 'banned' ? (
+                        <button
+                          type="button"
+                          onClick={() => openAction(u, 'unban')}
+                          className="text-emerald-400 hover:text-emerald-300 text-xs font-medium"
+                        >
+                          Unban
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openAction(u, u.status === 'restricted' ? 'restrict' : 'ban')}
+                          className="text-amber-400 hover:text-amber-300 text-xs font-medium"
+                        >
+                          {u.status === 'restricted' ? 'Restrict' : 'Ban'}
+                        </button>
+                      )}
+                      {u.role !== 'super_admin' && u.role !== 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => openAction(u, 'erase')}
+                          className="text-red-400 hover:text-red-300 text-xs font-medium"
+                        >
+                          Erase
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
                 ))}
               </tbody>
@@ -227,7 +257,62 @@ export default function AdminUsersPage() {
             </div>
           </div>
         )}
-       
+
+        {/* A-028: account lifecycle actions are now reachable from the UI with a
+            confirmation modal. Erasure is irreversible and requires typing a
+            confirmation phrase; super-admins cannot be erased from the UI. */}
+        {actionUser && actionKind && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-ink-800 border border-ink-600/40 rounded-xl p-6 w-full max-w-md">
+              <h2 className="text-white font-semibold text-lg mb-2">
+                {actionKind === 'erase'
+                  ? 'Erase account'
+                  : actionKind === 'ban'
+                  ? 'Ban user'
+                  : actionKind === 'unban'
+                  ? 'Unban user'
+                  : 'Restrict user'}
+              </h2>
+              <p className="text-ink-300 text-sm mb-4">
+                {actionKind === 'erase' ? (
+                  <>This permanently anonymizes <span className="text-white">{actionUser.email}</span> and cannot be undone.</>
+                ) : (
+                  <>Apply this action to <span className="text-white">{actionUser.email}</span>?</>
+                )}
+              </p>
+              {actionKind === 'erase' && (
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder='Type "ERASE" to confirm'
+                  className="w-full bg-ink-900 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm mb-4 focus:outline-none focus:border-red-500"
+                />
+              )}
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setActionUser(null); setActionKind(null); setConfirmText(''); }}
+                  className="text-ink-300 hover:text-white text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || (actionKind === 'erase' && confirmText !== 'ERASE')}
+                  onClick={runAction}
+                  className={`text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-40 ${
+                    actionKind === 'erase'
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-brand-500 hover:bg-brand-600 text-white'
+                  }`}
+                >
+                  {busy ? 'Working…' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 </>
 );
 }
