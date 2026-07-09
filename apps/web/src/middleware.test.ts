@@ -52,4 +52,22 @@ describe('protected-route middleware JWT_SECRET (A-016)', () => {
     const res = await middleware(makeReq(token));
     expect(isRedirect(res)).toBe(true);
   });
+
+  it('redirects a forged refresh cookie with no access token (bypass closed)', async () => {
+    process.env.JWT_SECRET = SECRET;
+    const req = makeReq();
+    // Attacker tries to satisfy the old "any refresh value passes" branch.
+    req.cookies.set('refresh_token', 'forged-value');
+    const res = await middleware(req);
+    expect(isRedirect(res)).toBe(true);
+  });
+
+  it('passes through a valid signed refresh cookie with no access token', async () => {
+    process.env.JWT_SECRET = SECRET;
+    const refresh = await makeToken(SECRET); // any secret-signed JWT works as refresh
+    const req = makeReq();
+    req.cookies.set('refresh_token', refresh);
+    const res = await middleware(req);
+    expect(isRedirect(res)).toBe(false);
+  });
 });

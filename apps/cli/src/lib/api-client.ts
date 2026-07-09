@@ -3,7 +3,13 @@ import * as http from 'http';
 import * as https from 'https';
 import * as os from 'os';
 
-import { Credentials, getCredentials, getDeviceEventSecret,setCredentials, storeDeviceEventSecret } from './credentials';
+import {
+  Credentials,
+  getCredentials,
+  getDeviceEventSecret,
+  setCredentials,
+  storeDeviceEventSecret,
+} from './credentials';
 import { signPayload } from './signing';
 import { normalizeToolType } from './tool-types';
 
@@ -24,6 +30,31 @@ export function resolveApiBaseUrl(env: NodeJS.ProcessEnv = process.env): string 
 }
 
 const API_URL = resolveApiBaseUrl();
+
+/**
+ * Detect a loopback/localhost API origin. A packaged CLI should point at the
+ * production SaaS origin; reaching loopback means the user is either doing
+ * local development (via WAITLAYER_API_URL) or has a misconfiguration that
+ * will silently fail to reach the real API. Surface it loudly (A-013).
+ */
+function isLoopbackUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return (
+      host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost')
+    );
+  } catch {
+    return false;
+  }
+}
+
+if (isLoopbackUrl(API_URL)) {
+  console.warn(
+    `[WaitLayer] WARNING: the CLI is pointed at a loopback address (${API_URL}). ` +
+      'It will not reach the production WaitLayer API. Set WAITLAYER_API_URL to the ' +
+      'production origin (https://api.waitlayer.com/api/v1) unless you are running a local API.',
+  );
+}
 
 /**
  * Best-effort ISO-3166-1 alpha-2 country code from the host locale (e.g.
@@ -75,7 +106,9 @@ export class ApiClient {
       this.deviceEventSecret = await getDeviceEventSecret();
     }
     if (!this.deviceEventSecret) {
-      throw new Error('WaitLayer device is not registered with an event secret. Run device registration again.');
+      throw new Error(
+        'WaitLayer device is not registered with an event secret. Run device registration again.',
+      );
     }
     return signPayload(payload, this.deviceEventSecret);
   }
@@ -95,7 +128,9 @@ export class ApiClient {
     const totalMemGb = Math.round(os.totalmem() / (1024 * 1024 * 1024));
     const fingerprint = crypto
       .createHash('sha256')
-      .update(`cli-${hostname}-${username}-${platform}-${arch}-${homedir}-${ostype}-${osrelease}-${totalMemGb}`)
+      .update(
+        `cli-${hostname}-${username}-${platform}-${arch}-${homedir}-${ostype}-${osrelease}-${totalMemGb}`,
+      )
       .digest('hex');
     const recoverySupportToken = process.env.WAITLAYER_DEVICE_RECOVERY_TOKEN?.trim();
     const registrationPayload = {
@@ -109,12 +144,16 @@ export class ApiClient {
 
     let res: RegisterDeviceResponse;
     try {
-      res = await this.raw<RegisterDeviceResponse>('POST', '/extension/register-device', registrationPayload);
+      res = await this.raw<RegisterDeviceResponse>(
+        'POST',
+        '/extension/register-device',
+        registrationPayload,
+      );
     } catch (err: unknown) {
       if (isDeviceRecoveryError(err) && !recoverySupportToken) {
         throw new Error(
           `${getRequestErrorMessage(err)}. ` +
-          'If support issued a device recovery token, rerun with WAITLAYER_DEVICE_RECOVERY_TOKEN set to that one-time token.',
+            'If support issued a device recovery token, rerun with WAITLAYER_DEVICE_RECOVERY_TOKEN set to that one-time token.',
         );
       }
       throw err;
@@ -241,10 +280,7 @@ export class ApiClient {
     });
   }
 
-  async endWaitState(input: {
-    waitStateId: string;
-    durationSeconds: number;
-  }) {
+  async endWaitState(input: { waitStateId: string; durationSeconds: number }) {
     const payload = {
       waitStateId: input.waitStateId,
       durationSeconds: String(input.durationSeconds),
@@ -331,7 +367,8 @@ export class ApiClient {
   // 401 on its now-stale refresh-token argument and both requests fail,
   // even though the first refresh succeeded. Matches the VSCode extension's
   // pattern (see apps/vscode-extension/src/api-client.ts refreshTokens).
-  private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
+  private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null =
+    null;
 
   private async refreshTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
     if (!this.creds?.refreshToken) {
@@ -386,11 +423,13 @@ export class ApiClient {
           ? url.hostname.slice(1, -1)
           : url.hostname;
       const isLoopback =
-        requestHostname === 'localhost' || requestHostname === '127.0.0.1' || requestHostname === '::1';
+        requestHostname === 'localhost' ||
+        requestHostname === '127.0.0.1' ||
+        requestHostname === '::1';
       if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
         throw new Error(
           `CLI refuses to send credentials over ${url.protocol}. ` +
-          'Set WAITLAYER_API_URL to an https:// endpoint, or http://localhost for local development.',
+            'Set WAITLAYER_API_URL to an https:// endpoint, or http://localhost for local development.',
         );
       }
       const transport = url.protocol === 'https:' ? https : http;
@@ -427,7 +466,10 @@ export class ApiClient {
               } else {
                 // NestJS returns { message, error, statusCode }
                 const parsedObject = isRecord(parsed) ? parsed : {};
-                const msg = typeof parsedObject.message === 'string' ? parsedObject.message : 'request failed';
+                const msg =
+                  typeof parsedObject.message === 'string'
+                    ? parsedObject.message
+                    : 'request failed';
                 reject({ status: res.statusCode, message: msg, ...parsedObject });
               }
             } catch {

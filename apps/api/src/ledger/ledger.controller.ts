@@ -5,6 +5,7 @@ import { CurrentUser } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { LedgerHistoryQueryDto } from './dto';
 import { LedgerService } from './ledger.service';
@@ -49,27 +50,20 @@ export class LedgerController {
   @UseGuards(RolesGuard)
   @Roles('developer')
   @RequiredScopes('ledger:read')
-  getHistory(
-    @CurrentUser('id') userId: string,
-    @Query() query: LedgerHistoryQueryDto,
-  ) {
+  getHistory(@CurrentUser('id') userId: string, @Query() query: LedgerHistoryQueryDto) {
     // Force ledgerKind to 'earnings' — developers can only see their own earnings.
     // Platform/advertiser ledgers are exposed only via /admin/ledger/* endpoints.
-    return this.ledgerService.getEarningsHistory(
-      userId,
-      query.page ?? 1,
-      query.limit ?? 20,
-      { ledgerKind: 'earnings', status: query.status },
-    );
+    return this.ledgerService.getEarningsHistory(userId, query.page ?? 1, query.limit ?? 20, {
+      ledgerKind: 'earnings',
+      status: query.status,
+    });
   }
 
   /** Admin: platform-wide ledger history (all ledger kinds) */
   @Get('admin/history')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, RejectApiKeyGuard)
   @Roles('admin', 'super_admin')
-  getAdminHistory(
-    @Query() query: LedgerHistoryQueryDto,
-  ) {
+  getAdminHistory(@Query() query: LedgerHistoryQueryDto) {
     return this.ledgerService.getHistoryForAdmin(
       { ledgerKind: query.ledgerKind, status: query.status },
       query.page ?? 1,
@@ -79,7 +73,7 @@ export class LedgerController {
 
   /** Admin: platform-wide breakdown */
   @Get('admin/breakdown')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, RejectApiKeyGuard)
   @Roles('admin', 'super_admin')
   getAdminBreakdown() {
     return this.ledgerService.getPlatformBreakdown();

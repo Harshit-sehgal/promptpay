@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { apiBaseUrl, COOKIE_ACCESS, COOKIE_REFRESH,readAuthCookie } from '../auth/_lib/cookies';
+import { apiBaseUrl, COOKIE_ACCESS, COOKIE_REFRESH, readAuthCookie } from '../auth/_lib/cookies';
 import {
   MAX_API_ROUTE_BODY_BYTES,
   readLimitedTextBody,
@@ -193,7 +193,10 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
           body = JSON.stringify({ refreshToken });
         }
       } catch (parseErr) {
-        console.warn('[WaitLayer] Proxy body parse failed:', parseErr instanceof Error ? parseErr.message : String(parseErr));
+        console.warn(
+          '[WaitLayer] Proxy body parse failed:',
+          parseErr instanceof Error ? parseErr.message : String(parseErr),
+        );
         body = undefined;
       }
     }
@@ -234,17 +237,33 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       headers: { 'Content-Type': contentType || 'text/plain' },
     });
   } catch (proxyErr) {
-    console.error('[WaitLayer] Proxy error:', proxyErr instanceof Error ? proxyErr.message : String(proxyErr));
+    console.error(
+      '[WaitLayer] Proxy error:',
+      proxyErr instanceof Error ? proxyErr.message : String(proxyErr),
+    );
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }
 
 /**
- * Recursively delete `accessToken`, `refreshToken`, `password`, `passwordHash`,
- * and `secret` keys from an arbitrary JSON value. This is defense-in-depth:
- * the auth Route Handlers already strip tokens from login/signup/google/refresh
- * responses, but a non-auth endpoint that accidentally projects a secret should
- * not leak it through the catch-all proxy.
+ * Recursively delete sensitive keys from an arbitrary JSON value. This is
+ * defense-in-depth: the auth Route Handlers already strip tokens from
+ * login/signup/google/refresh responses, but a non-auth endpoint that
+ * accidentally projects a secret should not leak it through the catch-all
+ * proxy.
+ *
+ * The set covers the obvious tokens (`accessToken`, `refreshToken`,
+ * `password(Hash)`) plus a broad family of secret-shaped field names that
+ * endpoints sometimes project by accident: API keys/secrets, private keys,
+ * cloud credential pairs, reset/verification tokens, mnemonics/seed phrases,
+ * and one-time recovery codes.
+ *
+ * Note: the admin device-recovery flow intentionally surfaces its one-time
+ * token via the field `recoverySupportToken` (NOT the generic `token`), and
+ * API-key creation surfaces the plain key via `plainKey`. Those specific
+ * display fields are deliberately NOT in this set so the web UI can show them
+ * once; the generic `token` name, however, is stripped because it is almost
+ * always an auth/credential secret when returned from an arbitrary endpoint.
  */
 const SENSITIVE_FIELDS = new Set([
   'accessToken',
@@ -253,6 +272,27 @@ const SENSITIVE_FIELDS = new Set([
   'passwordHash',
   'secret',
   'eventSecret',
+  'token',
+  'apiKey',
+  'apiSecret',
+  'privateKey',
+  'private_key',
+  'secretKey',
+  'secret_key',
+  'accessKey',
+  'accessKeyId',
+  'secretAccessKey',
+  'resetToken',
+  'resetPasswordToken',
+  'passwordResetToken',
+  'verificationToken',
+  'emailVerificationToken',
+  'mnemonic',
+  'mnemonicPhrase',
+  'seedPhrase',
+  'recoveryCode',
+  'otpSecret',
+  'recoverySeed',
 ]);
 
 export function stripSensitiveFields(value: unknown, allowSetupSecret = false): unknown {

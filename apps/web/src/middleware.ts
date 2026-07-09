@@ -75,8 +75,27 @@ export async function middleware(request: NextRequest) {
     request.cookies.get('__Host-refresh_token') ?? request.cookies.get('refresh_token');
   const token = accessCookie?.value;
 
+  // The edge gate must not trust the mere *presence* of a refresh cookie value
+  // (a forged `refresh_token=anything` cookie would otherwise bypass the
+  // redirect). A valid refresh cookie is one signed by our own JWT_SECRET —
+  // even if expired, the client-side interceptor will silently refresh it.
+  // Anything else (bad signature, malformed) is treated as absent.
+  const hasValidRefresh = async (): Promise<boolean> => {
+    if (!refreshCookie?.value) return false;
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    try {
+      await jwtVerify(refreshCookie.value, secret, { clockTolerance: '30s' });
+      return true;
+    } catch (e) {
+      // Signature is valid but the token is expired → still a legitimate
+      // (ours) token the client can refresh. Any other error means the
+      // cookie is forged/garbage and must not grant passage.
+      return e instanceof errors.JWTExpired;
+    }
+  };
+
   if (!token) {
-    if (refreshCookie?.value) {
+    if (await hasValidRefresh()) {
       return NextResponse.next();
     }
     return redirectToLogin(pathname, request);
@@ -90,7 +109,7 @@ export async function middleware(request: NextRequest) {
     await jwtVerify(token, secret, { clockTolerance: '30s' });
     return NextResponse.next();
   } catch (err) {
-    if (err instanceof errors.JWTExpired && refreshCookie?.value) {
+    if (err instanceof errors.JWTExpired && (await hasValidRefresh())) {
       return NextResponse.next();
     }
     return redirectToLogin(pathname, request);

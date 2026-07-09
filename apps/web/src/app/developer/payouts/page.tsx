@@ -8,9 +8,14 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, payoutApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
-import { COMING_SOON_PAYOUT_PROVIDERS } from '@/lib/payout-providers';
+import { AVAILABLE_PAYOUT_PROVIDERS, COMING_SOON_PAYOUT_PROVIDERS } from '@/lib/payout-providers';
 
-import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
+import {
+  CURRENCY_POLICY,
+  majorToMinor,
+  minorToMajorInputValue,
+  PayoutProvider,
+} from '@waitlayer/shared';
 
 interface PayoutAccount {
   id: string;
@@ -73,6 +78,13 @@ export default function DevPayoutsPage() {
     (info ? { [info.currency]: info.availableBalanceMinor } : {});
   const selectedAccount = info?.payoutAccounts.find((account) => account.id === selectedAccountId);
   const selectedCurrency = selectedAccount?.currency || info?.currency || 'USD';
+  // A-031: only offer currencies the selected provider can actually settle,
+  // matching the server-side isProviderSupportedForCurrency check so the user
+  // cannot submit an invalid provider/currency combination.
+  const supportedMethodCurrencies = Object.values(CURRENCY_POLICY)
+    .filter((policy) => policy.providers.some((p) => p === (provider as PayoutProvider)))
+    .map((policy) => policy.code)
+    .sort();
   const selectedAvailableMinor = availableBalanceByCurrency[selectedCurrency] ?? 0;
   const hasPayoutableBalance = Object.values(availableBalanceByCurrency).some((balanceMinor) =>
     info ? balanceMinor >= info.minimumThresholdMinor : false,
@@ -80,6 +92,14 @@ export default function DevPayoutsPage() {
   const payoutTwoFactorEnabled = user?.twoFactorEnabled === true || info?.twoFactorEnabled === true;
   const requestBlockedByTwoFactor =
     info?.requiresTwoFactorForPayout === true && !payoutTwoFactorEnabled;
+
+  // Keep the chosen currency valid for the (possibly changed) provider.
+  useEffect(() => {
+    if (supportedMethodCurrencies.length === 0) return;
+    if (!supportedMethodCurrencies.includes(methodCurrency)) {
+      setMethodCurrency(supportedMethodCurrencies[0]);
+    }
+  }, [provider, supportedMethodCurrencies, methodCurrency]);
 
   const fetchData = () => {
     setLoading(true);
@@ -371,17 +391,30 @@ export default function DevPayoutsPage() {
                       onChange={(e) => setProvider(e.target.value)}
                       className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] font-normal"
                     >
-                      <option value="paypal_email">PayPal (email)</option>
-                      <option value="manual">Manual</option>
+                      <option value="">Select provider...</option>
+                      {AVAILABLE_PAYOUT_PROVIDERS.map((p) => (
+                        <option key={p.provider} value={p.provider}>
+                          {p.label}
+                        </option>
+                      ))}
+                      <option disabled>──────────</option>
+                      <option disabled value="">
+                        Coming soon:
+                      </option>
+                      {COMING_SOON_PAYOUT_PROVIDERS.map((p) => (
+                        <option key={p.provider} value={p.provider} disabled>
+                          {p.label} — {p.note}
+                        </option>
+                      ))}
                     </select>
-                    {/* A-030: only paypal_email/manual are selectable at launch.
-                        Surface launch status so developers know the manual,
-                        admin-processed path is expected and automated rails are
-                        coming later. Does not change selectable options. */}
+                    {/* A-030: only available providers are selectable.
+                        Coming-soon providers are shown as disabled options with
+                        invite-only labels. Automated rails (PayPal Payouts,
+                        Stripe Connect, Wise) are invite-only at launch. */}
                     <p className="text-surface-500 text-xs mt-1.5 font-normal">
-                      Available now, admin-processed. Automated providers (
-                      {COMING_SOON_PAYOUT_PROVIDERS.map((p) => p.label).join(', ')}) are coming soon
-                      / invite-only.
+                      {COMING_SOON_PAYOUT_PROVIDERS.length > 0
+                        ? `Automated providers (${COMING_SOON_PAYOUT_PROVIDERS.map((p) => p.label).join(', ')}) are invite-only at launch.`
+                        : 'Add a payout method to start receiving earnings.'}
                     </p>
                   </div>
                   <div className="md:col-span-2">
@@ -403,15 +436,17 @@ export default function DevPayoutsPage() {
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
                       Currency
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={methodCurrency}
-                      onChange={(e) => setMethodCurrency(e.target.value.toUpperCase())}
-                      maxLength={3}
-                      pattern="[A-Z]{3}"
-                      required
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] uppercase placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
-                    />
+                      onChange={(e) => setMethodCurrency(e.target.value)}
+                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] font-normal"
+                    >
+                      {supportedMethodCurrencies.map((code) => (
+                        <option key={code} value={code}>
+                          {code}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <button

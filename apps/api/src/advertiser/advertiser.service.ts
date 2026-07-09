@@ -337,8 +337,13 @@ export class AdvertiserService {
       },
     });
 
+    // A-024: count impressions and clicks over the same population (this
+    // advertiser's campaigns) so CTR = validClicks / totalImpressions is
+    // internally consistent. Impressions are not restricted to billable here
+    // because a valid click can only arise from a served impression; mixing a
+    // billable-only denominator with an isValid numerator would skew the ratio.
     const totalImpressions = await this.prisma.adImpression.count({
-      where: { campaign: { advertiserId }, isBillable: true },
+      where: { campaign: { advertiserId } },
     });
 
     const totalClicks = await this.prisma.adClick.count({

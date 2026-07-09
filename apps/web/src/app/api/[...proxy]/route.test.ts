@@ -31,7 +31,11 @@ describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await POST(makeReq('/api/developer/delete-account', { body: JSON.stringify({ confirmation: 'DELETE_MY_ACCOUNT' }) }));
+    const res = await POST(
+      makeReq('/api/developer/delete-account', {
+        body: JSON.stringify({ confirmation: 'DELETE_MY_ACCOUNT' }),
+      }),
+    );
 
     expect(res.status).toBe(200);
     const calledUrl = (fetchMock.mock.calls[0][0] as string) ?? '';
@@ -42,7 +46,11 @@ describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ token: 'abc' }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await POST(makeReq('/api/admin/devices/device-uuid/recovery-token', { body: JSON.stringify({ userId: 'u', reason: 'lost' }) }));
+    const res = await POST(
+      makeReq('/api/admin/devices/device-uuid/recovery-token', {
+        body: JSON.stringify({ userId: 'u', reason: 'lost' }),
+      }),
+    );
 
     expect(res.status).toBe(200);
     const calledUrl = (fetchMock.mock.calls[0][0] as string) ?? '';
@@ -71,7 +79,9 @@ describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
   });
 
   it('preserves the TOTP setup secret for /auth/2fa/setup (A-005)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ secret: 'TOTPSECRET', otpauthUrl: 'otp://x' }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ secret: 'TOTPSECRET', otpauthUrl: 'otp://x' }));
     vi.stubGlobal('fetch', fetchMock);
 
     const res = await POST(makeReq('/api/auth/2fa/setup'));
@@ -82,7 +92,9 @@ describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
   });
 
   it('strips unrelated secret fields from other routes', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ secret: 'LEAK', name: 'dev', eventSecret: 'evt' }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ secret: 'LEAK', name: 'dev', eventSecret: 'evt' }));
     vi.stubGlobal('fetch', fetchMock);
 
     const res = await GET(makeReq('/api/developer/settings'));
@@ -90,6 +102,54 @@ describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
 
     expect(body.secret).toBeUndefined();
     expect(body.eventSecret).toBeUndefined();
+    expect(body.name).toBe('dev');
+  });
+
+  it('strips a broad family of secret-shaped fields (token/apiKey/privateKey/reset)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        token: 'jwt',
+        apiKey: 'wl_xxx',
+        apiSecret: 'sec',
+        privateKey: 'pk',
+        private_key: 'pk2',
+        resetToken: 'rt',
+        verificationToken: 'vt',
+        mnemonic: 'word word',
+        passwordResetToken: 'prt',
+        name: 'dev',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await GET(makeReq('/api/developer/settings'));
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body.token).toBeUndefined();
+    expect(body.apiKey).toBeUndefined();
+    expect(body.apiSecret).toBeUndefined();
+    expect(body.privateKey).toBeUndefined();
+    expect(body.private_key).toBeUndefined();
+    expect(body.resetToken).toBeUndefined();
+    expect(body.verificationToken).toBeUndefined();
+    expect(body.mnemonic).toBeUndefined();
+    expect(body.passwordResetToken).toBeUndefined();
+    expect(body.name).toBe('dev');
+  });
+
+  it('still forwards intentional one-time display fields (recoverySupportToken/plainKey)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ recoverySupportToken: 'once', plainKey: 'wl_abc', name: 'dev' }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await GET(makeReq('/api/developer/settings'));
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body.recoverySupportToken).toBe('once');
+    expect(body.plainKey).toBe('wl_abc');
     expect(body.name).toBe('dev');
   });
 });
