@@ -29,6 +29,15 @@ export class AdRequestDto {
   @IsString({ each: true })
   blockedCategories?: string[];
 
+  // Optional ISO-3166-1 alpha-2 country code, supplied by the client so
+  // country targeting can be enforced without server-side geolocation
+  // (issue A-056). Falls back to the developer's profile country.
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  @MinLength(2)
+  country?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(128)

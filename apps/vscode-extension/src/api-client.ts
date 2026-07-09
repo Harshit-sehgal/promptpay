@@ -19,6 +19,18 @@ export interface Ad {
   ctaText?: string | null;
 }
 
+/**
+ * Best-effort ISO-3166-1 alpha-2 country code from the host locale (A-056).
+ * Returns undefined when unavailable; the server falls back to profile country.
+ */
+function detectCountryCode(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? env.LANGUAGE;
+  if (!raw) return undefined;
+  const match = raw.split(/[.\s]/)[0]?.split('_')[1];
+  if (match && /^[A-Za-z]{2}$/.test(match)) return match.toUpperCase();
+  return undefined;
+}
+
 interface AmountEntry {
   amountMinor: number;
   currency: string;
@@ -208,13 +220,18 @@ export class ApiClient {
     waitStateId: string;
     toolType: string;
     idempotencyKey: string;
+    country?: string;
   }): Promise<Ad | null> {
+    // A-056: include a best-effort country code for privacy-safe country
+    // targeting. The server falls back to the profile country when omitted.
+    const country = input.country ?? detectCountryCode();
     const payload = {
       deviceId: input.deviceId,
       sessionId: input.sessionId,
       waitStateId: input.waitStateId,
       toolType: input.toolType,
       idempotencyKey: input.idempotencyKey,
+      ...(country ? { country } : {}),
     };
     const res = await this.post<ServerAdResponse>('/extension/ad-request', {
       ...payload,

@@ -769,13 +769,17 @@ export class StripeWebhookController implements OnModuleInit {
           this.logger.warn(`Duplicate dispute hold ${holdIdempotencyKey} — skipping create`);
         }
 
-        // CAS flip the parent credit row to `held`, only if still `confirmed`.
-        // An already-`held` row (re-delivery / second dispute) reports
-        // count === 0 and we proceed — the hold entry write above is also
-        // idempotent, so the whole freeze is safe to re-run.
+        // Issue A-063: a PARTIAL dispute must freeze only the disputed slice,
+        // not the entire deposit credit. Keep the parent credit `confirmed` but
+        // decrement its amount by the held amount; the separate `hold` ledger
+        // row (created above) carries exactly `holdAmount`. The centralized
+        // balance helper counts only `confirmed` `credit` rows, so spendable
+        // balance drops by the disputed amount and the undisputed remainder
+        // stays available. Idempotent by dispute+entry via the hold row's
+        // idempotencyKey; re-runs find the parent already decremented.
         await tx.advertiserLedger.updateMany({
           where: { id: entry.id, status: 'confirmed' },
-          data: { status: 'held', stripeDisputeId: dispute.id },
+          data: { amountMinor: { decrement: holdAmount } },
         });
       });
     }
@@ -899,8 +903,15 @@ export class StripeWebhookController implements OnModuleInit {
       return;
     }
 
-    // We only process the 'hold' rows for this specific dispute.
-    // The parent credit row is handled as a final aggregate step.
+    // Issue A-063: settle each `hold` row created at freeze time. The parent
+    // deposit credit was already decremented by the held amount at freeze, so
+    // we only operate on the hold slices here:
+    //  - Won: restore the disputed funds as a fresh `confirmed` credit and
+    //    retire the hold row. The parent credit keeps its decremented balance
+    //    plus this restored slice = the original deposit.
+    //  - Lost: retire the hold row and write off ONLY the disputed slice (a
+    //    `reversal` ledger row + platform cash debit). The parent credit keeps
+    //    its decremented balance, so the undisputed remainder stays spendable.
     const holdEntries = await this.prisma.advertiserLedger.findMany({
       where: {
         stripeDisputeId: dispute.id,
@@ -910,101 +921,56 @@ export class StripeWebhookController implements OnModuleInit {
     });
 
     for (const hold of holdEntries) {
-      const settleIdempotencyKey = `stripe_dispute_${won ? 'release' : 'reversal'}_${dispute.id}_${hold.id}`;
-      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        try {
-          await tx.advertiserLedger.create({
-            data: {
-              advertiserId: hold.advertiserId,
-              campaignId: hold.campaignId,
-              stripePaymentIntentId: details.paymentIntentId,
-              stripeDisputeId: dispute.id,
-              entryType: won ? 'release' : 'reversal',
-              status: won ? 'confirmed' : 'reversed',
-              amountMinor: hold.amountMinor,
-              currency: hold.currency,
-              idempotencyKey: settleIdempotencyKey,
-              description: won
-                ? `Dispute won — released hold ${dispute.id}`
-                : `Dispute lost — written off ${dispute.id}`,
-            },
-          });
-        } catch (err: unknown) {
-          if (getErrorCode(err) !== 'P2002') throw err;
-        }
-
-        await tx.advertiserLedger.updateMany({
-          where: { id: hold.id, status: 'held' },
-          data: { status: won ? 'confirmed' : 'reversed' },
-        });
-      });
-    }
-
-    // ── Parent Credit Row Reconciliation ──
-    // We only flip the parent if it is currently held.
-    const parentEntry = await this.prisma.advertiserLedger.findFirst({
-      where: {
-        stripePaymentIntentId: details.paymentIntentId,
-        entryType: 'credit',
-        status: 'held',
-      },
-    });
-
-    if (parentEntry) {
+      const settleIdempotencyKey = `stripe_dispute_${won ? 'won' : 'lost'}_${dispute.id}_${hold.id}`;
       await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         if (won) {
-          // Parent flips to confirmed ONLY if no other holds remain for this PI.
-          const remainingHolds = await tx.advertiserLedger.aggregate({
-            where: {
-              stripePaymentIntentId: details.paymentIntentId,
-              entryType: 'hold',
-              status: 'held',
-            },
-            _sum: { amountMinor: true },
-          });
-
-          if ((remainingHolds._sum.amountMinor ?? 0) === 0) {
-            await tx.advertiserLedger.updateMany({
-              where: { id: parentEntry.id, status: 'held' },
-              data: { status: 'confirmed', stripeDisputeId: null },
-            });
-          }
-        } else {
-          // Lost: Parent is written off.
-          const writeOffKey = `stripe_dispute_parent_rev_${dispute.id}_${parentEntry.id}`;
           try {
             await tx.advertiserLedger.create({
               data: {
-                advertiserId: parentEntry.advertiserId,
-                campaignId: parentEntry.campaignId,
+                advertiserId: hold.advertiserId,
+                campaignId: hold.campaignId,
+                stripePaymentIntentId: details.paymentIntentId,
+                stripeDisputeId: dispute.id,
+                entryType: 'credit',
+                status: 'confirmed',
+                amountMinor: hold.amountMinor,
+                currency: hold.currency,
+                idempotencyKey: settleIdempotencyKey,
+                description: `Dispute won — funds restored ${dispute.id}`,
+              },
+            });
+          } catch (err: unknown) {
+            if (getErrorCode(err) !== 'P2002') throw err;
+          }
+        } else {
+          try {
+            await tx.advertiserLedger.create({
+              data: {
+                advertiserId: hold.advertiserId,
+                campaignId: hold.campaignId,
                 stripePaymentIntentId: details.paymentIntentId,
                 stripeDisputeId: dispute.id,
                 entryType: 'reversal',
                 status: 'reversed',
-                amountMinor: details.amountMinor,
-                currency: parentEntry.currency,
-                idempotencyKey: writeOffKey,
-                description: `Dispute lost — parent write-off ${dispute.id}`,
+                amountMinor: hold.amountMinor,
+                currency: hold.currency,
+                idempotencyKey: settleIdempotencyKey,
+                description: `Dispute lost — written off ${dispute.id}`,
               },
             });
           } catch (err: unknown) {
             if (getErrorCode(err) !== 'P2002') throw err;
           }
 
-          await tx.advertiserLedger.updateMany({
-            where: { id: parentEntry.id, status: 'held' },
-            data: { status: 'reversed', stripeDisputeId: null },
-          });
-
-          // Platform cash side: debit the cash bucket.
-          const platKey = `stripe_dispute_lost_plat_${dispute.id}_${parentEntry.id}`;
+          // Platform cash side: debit the cash bucket for the disputed slice.
+          const platKey = `stripe_dispute_lost_plat_${dispute.id}_${hold.id}`;
           try {
             await tx.platformLedger.create({
               data: {
                 entryType: 'reversal',
                 status: 'confirmed',
-                amountMinor: details.amountMinor,
-                currency: parentEntry.currency,
+                amountMinor: hold.amountMinor,
+                currency: hold.currency,
                 bucket: 'cash',
                 referenceId: details.paymentIntentId,
                 idempotencyKey: platKey,
@@ -1015,6 +981,12 @@ export class StripeWebhookController implements OnModuleInit {
             if (getErrorCode(err) !== 'P2002') throw err;
           }
         }
+
+        // Retire the hold row either way.
+        await tx.advertiserLedger.updateMany({
+          where: { id: hold.id, status: 'held' },
+          data: { status: 'reversed' },
+        });
       });
     }
 

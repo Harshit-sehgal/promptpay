@@ -601,6 +601,7 @@ export class ExtensionService {
       toolType: string;
       allowedCategories?: string[];
       blockedCategories?: string[];
+      country?: string;
       idempotencyKey: string;
       signature: string;
     },
@@ -704,6 +705,15 @@ export class ExtensionService {
       ? Array.from(new Set([...persistedBlocked, ...dto.blockedCategories]))
       : persistedBlocked;
 
+    // A-056: resolve the requesting developer's country for country-targeting
+    // enforcement. Prefer the client-supplied value (privacy-safe developer
+    // opt-in, no server geolocation), then fall back to the profile country.
+    const userCountry =
+      normalizeCountryCode(dto.country) ??
+      (await this.prisma.user
+        .findUnique({ where: { id: userId }, select: { country: true } })
+        .then((u) => normalizeCountryCode(u?.country)));
+
     // Idempotency: return same ad if we already served one for this
     // user/device/waitStateId. Keys are NAMESPACED by userId + deviceId so two
     // different users who collide on a client-generated waitStateId or
@@ -783,6 +793,10 @@ export class ExtensionService {
       if (effectiveBlocked.length && effectiveBlocked.includes(c.category)) return false;
       if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category))
         return false;
+      // Country-targeting filter (issue A-056). Campaigns with no targeting
+      // rows serve everywhere; include-lists restrict to listed countries and
+      // exclude-lists block listed countries.
+      if (!this.isCountryEligible(c, userCountry)) return false;
       // Per-campaign frequency caps (issue A-061). A cap of 0/undefined means
       // "no limit"; a positive cap is enforced against the user's served
       // impressions in the trailing hour and day.
@@ -1866,6 +1880,36 @@ export class ExtensionService {
     }
     return now >= start || now <= end;
   }
+
+  /**
+   * Country-targeting eligibility (issue A-056). The campaign's `countryTargeting`
+   * rows are include/exclude rules keyed by ISO-3166-1 alpha-2 code:
+   *  - No rules -> serve everywhere.
+   *  - Only `include: true` rules -> serve only to those listed countries. If the
+   *    developer's country is unknown we cannot confirm a match, so we do NOT serve.
+   *  - Only `include: false` (exclude) rules -> serve everywhere except those
+   *    listed. An unknown developer country is allowed (we can't confirm exclusion).
+   */
+  private isCountryEligible(
+    campaign: { countryTargeting?: { countryCode: string; include: boolean }[] },
+    userCountry?: string,
+  ): boolean {
+    const rules = campaign.countryTargeting;
+    if (!rules || rules.length === 0) return true;
+    const includes = rules.filter((r) => r.include);
+    const excludes = rules.filter((r) => !r.include);
+    if (includes.length > 0) {
+      if (!userCountry) return false;
+      return includes.some((r) => normalizeCountryCode(r.countryCode) === userCountry);
+    }
+    if (!userCountry) return true;
+    return !excludes.some((r) => normalizeCountryCode(r.countryCode) === userCountry);
+  }
+}
+
+function normalizeCountryCode(country: string | null | undefined): string | undefined {
+  const normalized = country?.trim().toUpperCase();
+  return normalized && /^[A-Z]{2}$/.test(normalized) ? normalized : undefined;
 }
 
 function hasMatchingSecret(candidate: string | undefined, expected: string): boolean {

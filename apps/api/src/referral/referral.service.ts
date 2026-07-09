@@ -212,7 +212,7 @@ export class ReferralService {
       if (insideReward) return null;
 
       try {
-        const [platformEntry, reward, earningsEntry] = await Promise.all([
+        const [platformEntry, reward] = await Promise.all([
           tx.platformLedger.create({
             data: {
               entryType: 'credit',

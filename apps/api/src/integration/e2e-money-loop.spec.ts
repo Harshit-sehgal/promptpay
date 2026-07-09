@@ -433,6 +433,7 @@ describe('E2E Money Loop', () => {
         _sum: { amountMinor: 10000_00 },
       }));
     });
+    mockPrisma.consent.findFirst.mockResolvedValue(null);
   });
 
   // ──────────────────────────────────────────────────────────────
@@ -749,6 +750,80 @@ describe('E2E Money Loop', () => {
       });
     });
 
+    function mockAdRequestCandidate(
+      countryTargeting: Array<{ countryCode: string; include: boolean }> = [],
+    ) {
+      mockPrisma.userSettings.findUnique.mockResolvedValue({
+        userId: DEV_USER_ID,
+        adsEnabled: true,
+      });
+
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: DEVICE_ID,
+        userId: DEV_USER_ID,
+        eventSecret: DEVICE_EVENT_SECRET,
+        user: { status: 'active' },
+      });
+
+      mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
+        if (where.eventType === 'wait_state_start') {
+          return Promise.resolve({
+            userId: DEV_USER_ID,
+            deviceId: DEVICE_ID,
+            sessionId: SESSION_ID,
+            waitStateId: WAIT_STATE_ID,
+            eventType: 'wait_state_start',
+            createdAt: new Date(Date.now() - 1000),
+          });
+        }
+        return Promise.resolve(null);
+      });
+
+      mockPrisma.adImpression.findFirst.mockResolvedValue(null);
+      mockPrisma.adImpression.findMany.mockResolvedValue([]);
+
+      mockPrisma.campaign.findMany.mockResolvedValue([
+        {
+          id: CAMPAIGN_ID,
+          advertiserId: ADS_PROFILE_ID,
+          name: 'Test Campaign',
+          status: 'active',
+          category: 'developer_tools',
+          bidType: 'cpm',
+          bidAmountMinor: 2_00,
+          budgetTotalMinor: 1_000_00,
+          budgetSpentMinor: 0,
+          currency: 'USD',
+          frequencyCapPerHour: 2,
+          frequencyCapPerDay: 6,
+          creatives: [
+            {
+              id: CREATIVE_ID,
+              campaignId: CAMPAIGN_ID,
+              title: 'Best AI Tools',
+              sponsoredMessage: 'Try our AI-powered code completion!',
+              displayDomain: 'example.com',
+              destinationUrl: 'https://example.com/ai-tools',
+              status: 'approved',
+            },
+          ],
+          countryTargeting,
+        },
+      ]);
+
+      mockPrisma.adImpression.create.mockResolvedValue({
+        id: uid('imp'),
+        campaignId: CAMPAIGN_ID,
+        creativeId: CREATIVE_ID,
+        userId: DEV_USER_ID,
+        deviceId: DEVICE_ID,
+        sessionId: SESSION_ID,
+        impressionTokenHash: 'will-be-set-by-service',
+        isBillable: false,
+        createdAt: new Date(),
+      });
+    }
+
     it('registers a device', async () => {
       mockPrisma.device.findUnique.mockResolvedValue(null); // not already registered
       mockPrisma.device.findFirst.mockResolvedValue(null); // no duplicate fingerprint
@@ -911,6 +986,64 @@ describe('E2E Money Loop', () => {
       expect(result.ad.destinationUrl).toBe('https://example.com/ai-tools');
     });
 
+    it('does not serve a country-targeted campaign when the requester country is outside the include list', async () => {
+      mockAdRequestCandidate([{ countryCode: 'US', include: true }]);
+
+      const payload = {
+        deviceId: DEVICE_ID,
+        sessionId: SESSION_ID,
+        waitStateId: WAIT_STATE_ID,
+        toolType: 'claude_code',
+        country: 'CA',
+        idempotencyKey: 'idem-ad-country-miss',
+      };
+      const signed = { ...payload, signature: hmacSign(payload) };
+
+      const result = await svc.extension.requestAd(DEV_USER_ID, signed);
+
+      expect(result).toEqual({ ad: null, reason: 'no_eligible_campaign' });
+      expect(mockPrisma.adImpression.create).not.toHaveBeenCalled();
+    });
+
+    it('does not serve a country-targeted campaign when the requester country is excluded', async () => {
+      mockAdRequestCandidate([{ countryCode: 'CA', include: false }]);
+
+      const payload = {
+        deviceId: DEVICE_ID,
+        sessionId: SESSION_ID,
+        waitStateId: WAIT_STATE_ID,
+        toolType: 'claude_code',
+        country: 'CA',
+        idempotencyKey: 'idem-ad-country-excluded',
+      };
+      const signed = { ...payload, signature: hmacSign(payload) };
+
+      const result = await svc.extension.requestAd(DEV_USER_ID, signed);
+
+      expect(result).toEqual({ ad: null, reason: 'no_eligible_campaign' });
+      expect(mockPrisma.adImpression.create).not.toHaveBeenCalled();
+    });
+
+    it('serves a country-targeted campaign when the client country matches case-insensitively', async () => {
+      mockAdRequestCandidate([{ countryCode: 'US', include: true }]);
+
+      const payload = {
+        deviceId: DEVICE_ID,
+        sessionId: SESSION_ID,
+        waitStateId: WAIT_STATE_ID,
+        toolType: 'claude_code',
+        country: 'us',
+        idempotencyKey: 'idem-ad-country-hit',
+      };
+      const signed = { ...payload, signature: hmacSign(payload) };
+
+      const result = await svc.extension.requestAd(DEV_USER_ID, signed);
+
+      expect(result.ad).toBeDefined();
+      expect(result.ad?.campaignId).toBe(CAMPAIGN_ID);
+      expect(mockPrisma.adImpression.create).toHaveBeenCalledTimes(1);
+    });
+
     it('does not serve ads to restricted developer accounts', async () => {
       mockPrisma.device.findUnique.mockResolvedValue({
         id: DEVICE_ID,
@@ -932,6 +1065,36 @@ describe('E2E Money Loop', () => {
       expect(result).toEqual({ ad: null, reason: 'account_not_active' });
       expect(mockPrisma.device.findUnique).toHaveBeenCalled();
       expect(mockPrisma.campaign.findMany).not.toHaveBeenCalled();
+    });
+
+    it('does not serve ads to authenticated developers with a CCPA opt-out', async () => {
+      mockPrisma.device.findUnique.mockResolvedValue({
+        id: DEVICE_ID,
+        userId: DEV_USER_ID,
+        eventSecret: DEVICE_EVENT_SECRET,
+        user: { status: 'active' },
+      });
+      mockPrisma.consent.findFirst.mockResolvedValue({
+        userId: DEV_USER_ID,
+        purpose: 'ccpa_opt_out',
+        version: '2026-07-01',
+        granted: true,
+      });
+
+      const payload = {
+        deviceId: DEVICE_ID,
+        sessionId: SESSION_ID,
+        waitStateId: WAIT_STATE_ID,
+        toolType: 'claude_code',
+        idempotencyKey: 'idem-ad-ccpa-opt-out',
+      };
+      const signed = { ...payload, signature: hmacSign(payload) };
+
+      const result = await svc.extension.requestAd(DEV_USER_ID, signed);
+
+      expect(result).toEqual({ ad: null, reason: 'ccpa_opt_out' });
+      expect(mockPrisma.campaign.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.waitStateEvent.findFirst).not.toHaveBeenCalled();
     });
   });
 

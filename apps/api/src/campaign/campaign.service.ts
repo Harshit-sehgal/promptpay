@@ -218,7 +218,11 @@ export class CampaignService {
     await this.prisma.$transaction([
       this.prisma.countryTargeting.deleteMany({ where: { campaignId } }),
       this.prisma.countryTargeting.createMany({
-        data: targets.map(t => ({ campaignId, countryCode: t.countryCode, include: t.include })),
+        data: targets.map(t => ({
+          campaignId,
+          countryCode: t.countryCode.trim().toUpperCase(),
+          include: t.include,
+        })),
       }),
     ]);
 
