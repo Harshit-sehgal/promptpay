@@ -851,12 +851,14 @@ export class ExtensionService {
   }
 
   /**
-   * Read the set of distinct campaigns shown to this user in the last hour,
-   * counting only billable impressions. Non-billable impressions (fraud-flagged,
-   * budget-exhausted) must not consume the cap — otherwise a burst of rejected
-   * impressions blocks the user from earning legitimate ones for the rest of
-   * the hour. Read outside the critical section: it's read-mostly and the
-   * authoritative cap gate lives in claimImpression's transaction.
+   * Read the set of distinct campaigns already successfully shown (billable)
+   * to this user in the last hour, used as a pre-filter so we don't re-offer a
+   * campaign the user was just billed for. This is a campaign-de-dup read, NOT
+   * the developer hourly cap — the authoritative maxAdsPerHour gate lives in
+   * claimImpression's serializable transaction (issue A-061), where it counts
+   * every served impression regardless of billable status. Read outside the
+   * critical section: it's read-mostly and the authoritative cap gate lives
+   * in claimImpression's transaction.
    */
   private async recentBillableCampaignIds(userId: string, oneHourAgo: Date): Promise<string[]> {
     const recent = await this.prisma.adImpression.findMany({
@@ -916,12 +918,18 @@ export class ExtensionService {
         });
         if (existing) return { status: 'duplicate' as const };
 
-        // Authoritative cap count inside the lock — billable impressions in
-        // the last hour. Non-billable impressions don't consume the cap.
+        // Authoritative cap count inside the lock (issue A-061). The developer
+        // `maxAdsPerHour` setting is an AD EXPOSURE cap, not a billing cap, so it
+        // counts every impression we have SERVED in the trailing hour —
+        // billable or not. Counting only `isBillable: true` here let a rapid
+        // burst of concurrent wait states each pass the cap (none had
+        // qualified/become-billable yet) and over-serve past the user's selected
+        // max. Fraud/budget-rejected impressions still "count" as ad exposure
+        // from the user's perspective; that's the contract the setting
+        // describes. The advisory lock makes this count-then-insert atomic.
         const recentCount = await tx.adImpression.count({
           where: {
             userId: args.userId,
-            isBillable: true,
             createdAt: { gte: args.oneHourAgo },
           },
         });
