@@ -1,6 +1,6 @@
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
-import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 
 // ── Shared signing utility (no mocking needed — it's pure crypto) ──
@@ -187,7 +187,8 @@ const mockPrisma = {
     create: vi.fn(),
     aggregate: vi.fn(),
     groupBy: vi.fn(async (args?: any) => {
-      const advertiserId = args?.where?.advertiserId?.in?.[0] || args?.where?.advertiserId || 'default-adv';
+      const advertiserId =
+        args?.where?.advertiserId?.in?.[0] || args?.where?.advertiserId || 'default-adv';
       // The mock must include `currency` in every returned row so the per-currency
       // balance helpers (`getAdvertiserBalancesByCurrency`, `getAdvertiserBalance`)
       // can compose `advertiserId:currency` keys and match campaigns by currency.
@@ -305,15 +306,24 @@ function installLedgerCapture() {
   // When PrismaService methods are called, capture the `data` argument
   mockPrisma.advertiserLedger.create.mockImplementation((args: any) => {
     recordedLedgerEntries.advertiser.push(args.data);
-    return Promise.resolve({ id: 'adv-ledger-' + recordedLedgerEntries.advertiser.length, ...args.data });
+    return Promise.resolve({
+      id: 'adv-ledger-' + recordedLedgerEntries.advertiser.length,
+      ...args.data,
+    });
   });
   mockPrisma.earningsLedger.create.mockImplementation((args: any) => {
     recordedLedgerEntries.earnings.push(args.data);
-    return Promise.resolve({ id: 'earn-ledger-' + recordedLedgerEntries.earnings.length, ...args.data });
+    return Promise.resolve({
+      id: 'earn-ledger-' + recordedLedgerEntries.earnings.length,
+      ...args.data,
+    });
   });
   mockPrisma.platformLedger.create.mockImplementation((args: any) => {
     recordedLedgerEntries.platform.push(args.data);
-    return Promise.resolve({ id: 'plat-ledger-' + recordedLedgerEntries.platform.length, ...args.data });
+    return Promise.resolve({
+      id: 'plat-ledger-' + recordedLedgerEntries.platform.length,
+      ...args.data,
+    });
   });
 }
 
@@ -511,12 +521,16 @@ describe('E2E Money Loop', () => {
         updatedAt: new Date(),
       });
 
-      const creative = await svc.campaign.createCreative(campaignId, {
-        title: 'Best AI Tools',
-        sponsoredMessage: 'Try our AI-powered code completion — free for 30 days!',
-        destinationUrl: 'https://example.com/ai-tools',
-        displayDomain: 'example.com',
-      }, { role: 'admin' });
+      const creative = await svc.campaign.createCreative(
+        campaignId,
+        {
+          title: 'Best AI Tools',
+          sponsoredMessage: 'Try our AI-powered code completion — free for 30 days!',
+          destinationUrl: 'https://example.com/ai-tools',
+          displayDomain: 'example.com',
+        },
+        { role: 'admin' },
+      );
       expect(creative.id).toBe(creativeId);
 
       // --- Step 4: Admin approves creative ---
@@ -618,7 +632,7 @@ describe('E2E Money Loop', () => {
   });
 
   describe('Advertiser billing', () => {
-    it('reports advertiser-ledger balance without counting refund obligations as spendable credit', async () => {
+    it('reports advertiser-ledger balance matching the centralized spendable-balance formula (credits − debits − refunds) (A-066)', async () => {
       const advertiserId = uid('adv');
       const createdAt = new Date('2026-07-07T00:00:00.000Z');
 
@@ -626,6 +640,7 @@ describe('E2E Money Loop', () => {
       mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
         { currency: 'USD', entryType: 'credit', _sum: { amountMinor: 10_000 } },
         { currency: 'USD', entryType: 'debit', _sum: { amountMinor: 2_500 } },
+        { currency: 'USD', entryType: 'refund', _sum: { amountMinor: 500 } },
       ]);
       mockPrisma.advertiserLedger.findMany.mockResolvedValue([
         {
@@ -644,10 +659,22 @@ describe('E2E Money Loop', () => {
           id: uid('al'),
           campaignId: uid('camp'),
           entryType: 'refund',
-          status: 'pending',
-          amountMinor: 1_000,
+          status: 'confirmed',
+          amountMinor: 500,
           currency: 'USD',
-          description: 'Unspent-budget refund obligation',
+          description: 'Stripe refund',
+          stripePaymentIntentId: 'pi_123',
+          stripeDisputeId: null,
+          createdAt,
+        },
+        {
+          id: uid('al'),
+          campaignId: uid('camp'),
+          entryType: 'debit',
+          status: 'confirmed',
+          amountMinor: 2_500,
+          currency: 'USD',
+          description: 'Campaign spend',
           stripePaymentIntentId: null,
           stripeDisputeId: null,
           createdAt,
@@ -656,23 +683,26 @@ describe('E2E Money Loop', () => {
 
       const result = await svc.advertiser.getBilling(advertiserId);
 
-      expect(result.balanceMinor).toBe(7_500);
+      // 10_000 − 2_500 − 500 = 7_000 (A-066: refunds reduce displayed balance)
+      expect(result.balanceMinor).toBe(7_000);
       expect(result.totalDepositsMinor).toBe(10_000);
       expect(result.totalChargesMinor).toBe(2_500);
+      expect(result.totalRefundsMinor).toBe(500);
       expect(result.balances).toEqual([
         {
           currency: 'USD',
-          balanceMinor: 7_500,
+          balanceMinor: 7_000,
           totalDepositsMinor: 10_000,
           totalChargesMinor: 2_500,
+          totalRefundsMinor: 500,
         },
       ]);
-      expect(result.entries).toHaveLength(2);
+      expect(result.entries).toHaveLength(3);
       expect(mockPrisma.advertiserLedger.groupBy).toHaveBeenCalledWith({
         by: ['currency', 'entryType'],
         where: {
           advertiserId,
-          entryType: { in: ['credit', 'debit'] },
+          entryType: { in: ['credit', 'debit', 'refund'] },
           status: 'confirmed',
         },
         _sum: { amountMinor: true },
@@ -697,7 +727,12 @@ describe('E2E Money Loop', () => {
     beforeEach(() => {
       // Advertiser balance: credit of 1000 USD
       mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
-        { advertiserId: ADS_PROFILE_ID, currency: 'USD', entryType: 'credit', _sum: { amountMinor: 1000_00 } },
+        {
+          advertiserId: ADS_PROFILE_ID,
+          currency: 'USD',
+          entryType: 'credit',
+          _sum: { amountMinor: 1000_00 },
+        },
       ]);
       // Pre-seed the "developer" user and "advertiser" user exists
       mockPrisma.user.findUnique.mockImplementation((args: any) => {
@@ -781,7 +816,10 @@ describe('E2E Money Loop', () => {
 
     it('requests an ad and returns an impression token', async () => {
       // User settings: ads enabled
-      mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: DEV_USER_ID, adsEnabled: true });
+      mockPrisma.userSettings.findUnique.mockResolvedValue({
+        userId: DEV_USER_ID,
+        adsEnabled: true,
+      });
 
       // Device ownership
       mockPrisma.device.findUnique.mockResolvedValue({
@@ -928,7 +966,10 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
         deviceId: DEVICE_ID,
         sessionId: uid('sess'),
-        impressionTokenHash: require('crypto').createHash('sha256').update(IMPRESSION_TOKEN).digest('hex'),
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(IMPRESSION_TOKEN)
+          .digest('hex'),
         renderedAt: new Date(Date.now() - 6000),
         qualifiedAt: null,
         visibleDurationMs: null,
@@ -1077,7 +1118,10 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
         deviceId: DEVICE_ID,
         sessionId: uid('sess'),
-        impressionTokenHash: require('crypto').createHash('sha256').update(IMPRESSION_TOKEN).digest('hex'),
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(IMPRESSION_TOKEN)
+          .digest('hex'),
         renderedAt: new Date(Date.now() - 6000),
         qualifiedAt: null,
         visibleDurationMs: null,
@@ -1146,7 +1190,10 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
         deviceId: uid('dev'),
         sessionId: uid('sess'),
-        impressionTokenHash: require('crypto').createHash('sha256').update(IMPRESSION_TOKEN).digest('hex'),
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(IMPRESSION_TOKEN)
+          .digest('hex'),
         qualifiedAt: new Date(),
         campaign: {
           id: CAMPAIGN_ID,
@@ -1168,7 +1215,8 @@ describe('E2E Money Loop', () => {
       // Fraud click patterns: allowed
       // First adClick.count call: duplicate check (must be 0)
       // Second adClick.count call: rate limit (5 clicks/hour is fine)
-      mockPrisma.adClick.count.mockResolvedValueOnce(0) // no existing click for this impression
+      mockPrisma.adClick.count
+        .mockResolvedValueOnce(0) // no existing click for this impression
         .mockResolvedValueOnce(5); // 5 clicks in last hour (under 30 limit)
       mockPrisma.adImpression.count.mockResolvedValue(10); // 10 impressions → CTR 50%, not >50%
 
@@ -1225,9 +1273,11 @@ describe('E2E Money Loop', () => {
       const result = await svc.extension.recordClick(DEV_USER_ID, signed);
       expect(result.clicked).toBe(true);
       const clickId = result.clickId;
-      expect(mockPrisma.adClick.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ targetUrl: 'https://click.example.com/offer' }),
-      }));
+      expect(mockPrisma.adClick.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ targetUrl: 'https://click.example.com/offer' }),
+        }),
+      );
 
       // CPC campaigns generate advertiser debit + developer credit + platform fee + reserve
       const advDebit = recordedLedgerEntries.advertiser.find((e: any) => e.entryType === 'debit');
@@ -1240,12 +1290,16 @@ describe('E2E Money Loop', () => {
       expect(devCredit.amountMinor).toBe(180); // 60% of 300
       expect(devCredit.clickId).toBe(clickId);
 
-      const platformEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'platform_fee');
+      const platformEntry = recordedLedgerEntries.platform.find(
+        (e: any) => e.bucket === 'platform_fee',
+      );
       expect(platformEntry).toBeDefined();
       expect(platformEntry.amountMinor).toBe(90); // 30% of 300
       expect(platformEntry.referenceId).toBe(clickId);
 
-      const reserveEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'fraud_reserve');
+      const reserveEntry = recordedLedgerEntries.platform.find(
+        (e: any) => e.bucket === 'fraud_reserve',
+      );
       expect(reserveEntry).toBeDefined();
       expect(reserveEntry.amountMinor).toBe(30); // 10% of 300
       expect(reserveEntry.referenceId).toBe(clickId);
@@ -1381,70 +1435,112 @@ describe('E2E Money Loop', () => {
       // ── Step 1: Create advertiser profile ──
       mockPrisma.advertiser.findUnique.mockResolvedValue(null);
       mockPrisma.user.findUnique.mockResolvedValue({
-        id: advUserId, email: 'biz@e2e.com', name: 'E2E Corp', role: 'advertiser', status: 'active',
+        id: advUserId,
+        email: 'biz@e2e.com',
+        name: 'E2E Corp',
+        role: 'advertiser',
+        status: 'active',
       });
       mockPrisma.advertiser.create.mockResolvedValue({
-        id: advProfileId, userId: advUserId, companyName: 'E2E Corp', billingEmail: 'biz@e2e.com',
+        id: advProfileId,
+        userId: advUserId,
+        companyName: 'E2E Corp',
+        billingEmail: 'biz@e2e.com',
       });
       await svc.advertiser.createProfile(advUserId, {
-        companyName: 'E2E Corp', billingEmail: 'biz@e2e.com',
+        companyName: 'E2E Corp',
+        billingEmail: 'biz@e2e.com',
       });
 
       // ── Step 2: Create campaign ──
       mockPrisma.blockedCategory.findFirst.mockResolvedValue(null);
       mockPrisma.campaign.create.mockResolvedValue({
-        id: campaignId, advertiserId: advProfileId, name: 'E2E Campaign',
-        category: 'developer_tools', bidType: 'cpm', bidAmountMinor: 5_00,
-        budgetTotalMinor: 500_00, budgetSpentMinor: 0, currency: 'USD', status: 'draft',
+        id: campaignId,
+        advertiserId: advProfileId,
+        name: 'E2E Campaign',
+        category: 'developer_tools',
+        bidType: 'cpm',
+        bidAmountMinor: 5_00,
+        budgetTotalMinor: 500_00,
+        budgetSpentMinor: 0,
+        currency: 'USD',
+        status: 'draft',
       });
       await svc.advertiser.createCampaign(advProfileId, {
-        name: 'E2E Campaign', category: 'developer_tools', bidType: 'cpm',
-        bidAmountMinor: 5_00, budgetTotalMinor: 500_00,
+        name: 'E2E Campaign',
+        category: 'developer_tools',
+        bidType: 'cpm',
+        bidAmountMinor: 5_00,
+        budgetTotalMinor: 500_00,
       });
 
       // ── Step 3: Create creative ──
       mockPrisma.campaign.findUnique.mockResolvedValue({ id: campaignId, status: 'draft' });
       mockPrisma.adCreative.create.mockResolvedValue({
-        id: creativeId, campaignId, title: 'E2E Ad', sponsoredMessage: 'E2E test ad message',
-        destinationUrl: 'https://e2e.example.com', displayDomain: 'e2e.example.com', status: 'draft',
+        id: creativeId,
+        campaignId,
+        title: 'E2E Ad',
+        sponsoredMessage: 'E2E test ad message',
+        destinationUrl: 'https://e2e.example.com',
+        displayDomain: 'e2e.example.com',
+        status: 'draft',
       });
-      await svc.campaign.createCreative(campaignId, {
-        title: 'E2E Ad', sponsoredMessage: 'E2E test ad message',
-        destinationUrl: 'https://e2e.example.com', displayDomain: 'e2e.example.com',
-      }, { role: 'admin' });
+      await svc.campaign.createCreative(
+        campaignId,
+        {
+          title: 'E2E Ad',
+          sponsoredMessage: 'E2E test ad message',
+          destinationUrl: 'https://e2e.example.com',
+          displayDomain: 'e2e.example.com',
+        },
+        { role: 'admin' },
+      );
 
       // ── Step 4: Admin approves creative ──
       mockPrisma.adCreative.findUnique.mockResolvedValue({
-        id: creativeId, campaignId, status: 'draft',
+        id: creativeId,
+        campaignId,
+        status: 'draft',
       });
       mockPrisma.adCreative.update.mockResolvedValue({
-        id: creativeId, campaignId, status: 'approved',
+        id: creativeId,
+        campaignId,
+        status: 'approved',
       });
       mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: campaignId, status: 'draft',
+        id: campaignId,
+        status: 'draft',
         creatives: [{ id: creativeId, status: 'approved' }],
       });
       await svc.campaign.approveCreative(creativeId);
 
       // ── Step 5: Submit campaign ──
       mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: campaignId, advertiserId: advProfileId, status: 'draft',
+        id: campaignId,
+        advertiserId: advProfileId,
+        status: 'draft',
         creatives: [{ id: creativeId, status: 'approved' }],
       });
       mockPrisma.campaign.update.mockResolvedValue({
-        id: campaignId, status: 'submitted', submittedAt: new Date(),
+        id: campaignId,
+        status: 'submitted',
+        submittedAt: new Date(),
       });
       await svc.advertiser.submitCampaign(campaignId, advProfileId);
 
       // ── Step 6: Admin approves campaign → active ──
-       mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: campaignId, status: 'submitted',
+      mockPrisma.campaign.findUnique.mockResolvedValue({
+        id: campaignId,
+        status: 'submitted',
         budgetSpentMinor: 0,
         budgetTotalMinor: 50000,
         creatives: [{ id: creativeId, status: 'approved' }],
       });
       mockPrisma.campaignApproval.create.mockResolvedValue({
-        id: uid('ca'), campaignId, reviewerId: adminUserId, decision: 'approved',
+        id: uid('ca'),
+        campaignId,
+        reviewerId: adminUserId,
+        decision: 'approved',
       });
       mockPrisma.$transaction.mockImplementationOnce(async (arg: any) => {
         if (typeof arg === 'function') return arg(mockPrisma);
@@ -1459,36 +1555,67 @@ describe('E2E Money Loop', () => {
       mockPrisma.device.findUnique.mockResolvedValue(null);
       mockPrisma.device.findFirst.mockResolvedValue(null);
       mockPrisma.device.create.mockResolvedValue({
-        id: deviceId, userId: devUserId, fingerprintHash: 'fp-e2e',
-        toolType: 'claude_code', extensionVersion: '1.0.0', platform: 'linux',
+        id: deviceId,
+        userId: devUserId,
+        fingerprintHash: 'fp-e2e',
+        toolType: 'claude_code',
+        extensionVersion: '1.0.0',
+        platform: 'linux',
       });
       await svc.extension.registerDevice(devUserId, {
-        toolType: 'claude_code', fingerprintHash: 'fp-e2e',
-        extensionVersion: '1.0.0', platform: 'linux',
+        toolType: 'claude_code',
+        fingerprintHash: 'fp-e2e',
+        extensionVersion: '1.0.0',
+        platform: 'linux',
       });
 
       // ── Step 8: Wait-state-start ──
       mockPrisma.device.findUnique.mockResolvedValue({
-        id: deviceId, userId: devUserId, eventSecret: DEVICE_EVENT_SECRET, fingerprintHash: 'fp-e2e', toolType: 'claude_code',
+        id: deviceId,
+        userId: devUserId,
+        eventSecret: DEVICE_EVENT_SECRET,
+        fingerprintHash: 'fp-e2e',
+        toolType: 'claude_code',
       });
       mockPrisma.waitStateEvent.findUnique.mockResolvedValue(null);
       mockPrisma.waitStateEvent.create.mockResolvedValue({
-        id: uid('wse'), userId: devUserId, deviceId, sessionId,
-        eventType: 'wait_state_start', waitStateId, toolType: 'claude_code',
-        idempotencyKey: 'idem-e2e-ws', createdAt: new Date(),
+        id: uid('wse'),
+        userId: devUserId,
+        deviceId,
+        sessionId,
+        eventType: 'wait_state_start',
+        waitStateId,
+        toolType: 'claude_code',
+        idempotencyKey: 'idem-e2e-ws',
+        createdAt: new Date(),
       });
       const wsPayload = {
-        deviceId, sessionId, toolType: 'claude_code', waitStateId, idempotencyKey: 'idem-e2e-ws',
+        deviceId,
+        sessionId,
+        toolType: 'claude_code',
+        waitStateId,
+        idempotencyKey: 'idem-e2e-ws',
       };
-      await svc.extension.recordWaitStateStart(devUserId, { ...wsPayload, signature: hmacSign(wsPayload) });
+      await svc.extension.recordWaitStateStart(devUserId, {
+        ...wsPayload,
+        signature: hmacSign(wsPayload),
+      });
 
       // ── Step 9: Request ad ──
       mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
-        { advertiserId: advProfileId, currency: 'USD', entryType: 'credit', _sum: { amountMinor: 10000_00 } },
+        {
+          advertiserId: advProfileId,
+          currency: 'USD',
+          entryType: 'credit',
+          _sum: { amountMinor: 10000_00 },
+        },
       ]);
       mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: devUserId, adsEnabled: true });
       mockPrisma.device.findUnique.mockResolvedValue({
-        id: deviceId, userId: devUserId, eventSecret: DEVICE_EVENT_SECRET, user: { status: 'active' },
+        id: deviceId,
+        userId: devUserId,
+        eventSecret: DEVICE_EVENT_SECRET,
+        user: { status: 'active' },
       });
       mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
         if (where.eventType === 'wait_state_start') {
@@ -1513,67 +1640,124 @@ describe('E2E Money Loop', () => {
       mockPrisma.adImpression.count.mockResolvedValue(0);
       mockPrisma.campaign.findMany.mockResolvedValue([
         {
-          id: campaignId, advertiserId: advProfileId, name: 'E2E Campaign',
-          status: 'active', category: 'developer_tools', bidType: 'cpm',
-          bidAmountMinor: 5_00, budgetTotalMinor: 500_00, budgetSpentMinor: 0,
-          currency: 'USD', frequencyCapPerHour: 2, frequencyCapPerDay: 6,
-          creatives: [{
-            id: creativeId, campaignId, title: 'E2E Ad',
-            sponsoredMessage: 'E2E test ad message',
-            displayDomain: 'e2e.example.com',
-            destinationUrl: 'https://e2e.example.com', status: 'approved',
-          }],
+          id: campaignId,
+          advertiserId: advProfileId,
+          name: 'E2E Campaign',
+          status: 'active',
+          category: 'developer_tools',
+          bidType: 'cpm',
+          bidAmountMinor: 5_00,
+          budgetTotalMinor: 500_00,
+          budgetSpentMinor: 0,
+          currency: 'USD',
+          frequencyCapPerHour: 2,
+          frequencyCapPerDay: 6,
+          creatives: [
+            {
+              id: creativeId,
+              campaignId,
+              title: 'E2E Ad',
+              sponsoredMessage: 'E2E test ad message',
+              displayDomain: 'e2e.example.com',
+              destinationUrl: 'https://e2e.example.com',
+              status: 'approved',
+            },
+          ],
           countryTargeting: [],
         },
       ]);
       mockPrisma.adImpression.create.mockResolvedValue({
-        id: impressionId, campaignId, creativeId, userId: devUserId,
-        deviceId, sessionId, impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
-        isBillable: false, createdAt: new Date(),
+        id: impressionId,
+        campaignId,
+        creativeId,
+        userId: devUserId,
+        deviceId,
+        sessionId,
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(impressionToken)
+          .digest('hex'),
+        isBillable: false,
+        createdAt: new Date(),
       });
       const adPayload = {
-        deviceId, sessionId, waitStateId, toolType: 'claude_code', idempotencyKey: 'idem-e2e-ad',
+        deviceId,
+        sessionId,
+        waitStateId,
+        toolType: 'claude_code',
+        idempotencyKey: 'idem-e2e-ad',
       };
-      const adResult = await svc.extension.requestAd(devUserId, { ...adPayload, signature: hmacSign(adPayload) });
+      const adResult = await svc.extension.requestAd(devUserId, {
+        ...adPayload,
+        signature: hmacSign(adPayload),
+      });
       expect(adResult.ad).toBeDefined();
       expect(adResult.ad.campaignId).toBe(campaignId);
 
       // ── Step 10: Record rendered ──
       mockPrisma.adImpression.findUnique.mockResolvedValue({
-        id: impressionId, userId: devUserId, deviceId,
-        impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
+        id: impressionId,
+        userId: devUserId,
+        deviceId,
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(impressionToken)
+          .digest('hex'),
         renderedAt: null,
       });
       mockPrisma.adImpression.update.mockResolvedValue({
-        id: impressionId, renderedAt: new Date(),
+        id: impressionId,
+        renderedAt: new Date(),
       });
       const rendPayload = {
-        impressionToken, renderedAt: new Date().toISOString(),
+        impressionToken,
+        renderedAt: new Date().toISOString(),
         idempotencyKey: 'idem-e2e-rend',
       };
-      await svc.extension.recordRendered(devUserId, { ...rendPayload, signature: hmacSign(rendPayload) });
+      await svc.extension.recordRendered(devUserId, {
+        ...rendPayload,
+        signature: hmacSign(rendPayload),
+      });
 
       // ── Step 11: Qualified impression → MONEY MOVES ──
       mockPrisma.adImpression.count.mockResolvedValue(5); // under fraud limit
       mockPrisma.trustScore.findUnique.mockResolvedValue({
-        userId: devUserId, score: 55, level: 'normal',
+        userId: devUserId,
+        score: 55,
+        level: 'normal',
       });
       mockPrisma.adImpression.findUnique.mockResolvedValue({
-        id: impressionId, campaignId, creativeId, userId: devUserId,
-        deviceId, sessionId,
-        impressionTokenHash: require('crypto').createHash('sha256').update(impressionToken).digest('hex'),
-        renderedAt: new Date(Date.now() - 6000), qualifiedAt: null, isBillable: false,
+        id: impressionId,
+        campaignId,
+        creativeId,
+        userId: devUserId,
+        deviceId,
+        sessionId,
+        impressionTokenHash: require('crypto')
+          .createHash('sha256')
+          .update(impressionToken)
+          .digest('hex'),
+        renderedAt: new Date(Date.now() - 6000),
+        qualifiedAt: null,
+        isBillable: false,
         campaign: {
-          id: campaignId, bidAmountMinor: 5_00, currency: 'USD',
-          advertiserId: advProfileId, bidType: 'cpm',
+          id: campaignId,
+          bidAmountMinor: 5_00,
+          currency: 'USD',
+          advertiserId: advProfileId,
+          bidType: 'cpm',
         },
         user: { status: 'active' },
       });
       mockPrisma.adImpression.update.mockResolvedValue({
-        id: impressionId, isBillable: true, qualifiedAt: new Date(), visibleDurationMs: 8000,
+        id: impressionId,
+        isBillable: true,
+        qualifiedAt: new Date(),
+        visibleDurationMs: 8000,
       });
       mockPrisma.campaign.update.mockResolvedValue({
-        id: campaignId, budgetSpentMinor: 5_00,
+        id: campaignId,
+        budgetSpentMinor: 5_00,
       });
 
       // Capture the $transaction call for ledger verification
@@ -1590,23 +1774,30 @@ describe('E2E Money Loop', () => {
       });
 
       const qualPayload = {
-        impressionToken, qualifiedAt: new Date().toISOString(),
-        visibleDurationMs: 8000, idempotencyKey: 'idem-e2e-qual',
+        impressionToken,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 8000,
+        idempotencyKey: 'idem-e2e-qual',
       };
       const qualResult = await svc.extension.recordQualifiedImpression(devUserId, {
-        ...qualPayload, signature: hmacSign(qualPayload),
+        ...qualPayload,
+        signature: hmacSign(qualPayload),
       });
       expect(qualResult.qualified).toBe(true);
 
       // ── FINAL ASSERTIONS: All ledger entries correct ──
       // Advertiser debit: full bid amount
-      const advDebits = recordedLedgerEntries.advertiser.filter((e: any) => e.entryType === 'debit');
+      const advDebits = recordedLedgerEntries.advertiser.filter(
+        (e: any) => e.entryType === 'debit',
+      );
       expect(advDebits.length).toBeGreaterThanOrEqual(1);
       const totalAdvCharged = advDebits.reduce((sum: number, e: any) => sum + e.amountMinor, 0);
       expect(totalAdvCharged).toBe(5_00); // $5.00 charged to advertiser
 
       // Developer earnings: 60% of bid (300 cents)
-      const devCredits = recordedLedgerEntries.earnings.filter((e: any) => e.entryType === 'credit');
+      const devCredits = recordedLedgerEntries.earnings.filter(
+        (e: any) => e.entryType === 'credit',
+      );
       expect(devCredits.length).toBeGreaterThanOrEqual(1);
       const devEarning = devCredits.find((e: any) => e.impressionId === impressionId);
       expect(devEarning).toBeDefined();
@@ -1642,12 +1833,18 @@ describe('E2E Money Loop', () => {
       const deviceId = uid('dev');
       mockPrisma.waitStateEvent.findUnique.mockResolvedValue(null); // not idempotent
       mockPrisma.device.findUnique.mockResolvedValue({
-        id: deviceId, userId, eventSecret: DEVICE_EVENT_SECRET, fingerprintHash: 'fp-test', toolType: 'claude_code',
+        id: deviceId,
+        userId,
+        eventSecret: DEVICE_EVENT_SECRET,
+        fingerprintHash: 'fp-test',
+        toolType: 'claude_code',
       });
 
       const payload = {
-        deviceId, sessionId: uid('sess'),
-        toolType: 'claude_code', waitStateId: uid('ws'),
+        deviceId,
+        sessionId: uid('sess'),
+        toolType: 'claude_code',
+        waitStateId: uid('ws'),
         idempotencyKey: 'idem-bad-sig',
       };
       // Sign with wrong secret
@@ -1944,7 +2141,10 @@ describe('E2E Money Loop', () => {
         reason: 'Verified identity through support workflow',
         expiresInMinutes: 15,
       });
-      const tokenHash = crypto.createHash('sha256').update(issued.recoverySupportToken, 'utf8').digest('hex');
+      const tokenHash = crypto
+        .createHash('sha256')
+        .update(issued.recoverySupportToken, 'utf8')
+        .digest('hex');
       mockPrisma.deviceRecoveryToken.findUnique.mockResolvedValue({
         id: issued.tokenId,
         userId,
@@ -2035,7 +2235,12 @@ describe('E2E Money Loop', () => {
       mockPrisma.earningsLedger.groupBy
         .mockResolvedValueOnce([
           { userId, currency: 'USD', _sum: { amountMinor: 1500 }, _count: { _all: 2 } },
-          { userId: 'settled-user', currency: 'USD', _sum: { amountMinor: 300 }, _count: { _all: 1 } },
+          {
+            userId: 'settled-user',
+            currency: 'USD',
+            _sum: { amountMinor: 300 },
+            _count: { _all: 1 },
+          },
         ])
         .mockResolvedValueOnce([
           { userId, currency: 'USD', _sum: { amountMinor: 500 } },
@@ -2198,7 +2403,8 @@ describe('E2E Money Loop', () => {
 
     it('rejects wait-state-start for device not owned by user', async () => {
       mockPrisma.device.findUnique.mockResolvedValue({
-        id: uid('dev'), userId: 'other-user',
+        id: uid('dev'),
+        userId: 'other-user',
         eventSecret: DEVICE_EVENT_SECRET,
       });
 
@@ -2211,22 +2417,24 @@ describe('E2E Money Loop', () => {
       };
       const signed = { ...payload, signature: hmacSign(payload) };
 
-      await expect(
-        svc.extension.recordWaitStateStart(uid('u'), signed),
-      ).rejects.toThrow(/Device does not belong/);
+      await expect(svc.extension.recordWaitStateStart(uid('u'), signed)).rejects.toThrow(
+        /Device does not belong/,
+      );
     });
 
     it('rejects campaign submit without approved creative', async () => {
       const advId = uid('advp');
       const campId = uid('camp');
       mockPrisma.campaign.findUnique.mockResolvedValue({
-        id: campId, advertiserId: advId, status: 'draft',
+        id: campId,
+        advertiserId: advId,
+        status: 'draft',
         creatives: [], // no creatives
       });
 
-      await expect(
-        svc.advertiser.submitCampaign(campId, advId),
-      ).rejects.toThrow(/at least one creative/);
+      await expect(svc.advertiser.submitCampaign(campId, advId)).rejects.toThrow(
+        /at least one creative/,
+      );
     });
 
     it('allows campaign submit when creatives exist and are not approved', async () => {
@@ -2234,11 +2442,15 @@ describe('E2E Money Loop', () => {
       const campId = uid('camp');
       mockPrisma.campaign.findUnique
         .mockResolvedValueOnce({
-        id: campId, advertiserId: advId, status: 'draft',
-        creatives: [{ id: uid('cr'), status: 'draft' }],
+          id: campId,
+          advertiserId: advId,
+          status: 'draft',
+          creatives: [{ id: uid('cr'), status: 'draft' }],
         })
         .mockResolvedValueOnce({
-          id: campId, advertiserId: advId, status: 'submitted',
+          id: campId,
+          advertiserId: advId,
+          status: 'submitted',
         });
       mockPrisma.campaign.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.adCreative.updateMany.mockResolvedValue({ count: 1 });
@@ -2260,17 +2472,21 @@ describe('E2E Money Loop', () => {
       const campId = uid('camp');
       mockPrisma.campaign.findUnique
         .mockResolvedValueOnce({
-          id: campId, advertiserId: advId, status: 'draft',
+          id: campId,
+          advertiserId: advId,
+          status: 'draft',
           creatives: [{ id: uid('cr'), status: 'draft' }],
         })
         .mockResolvedValueOnce({
-          id: campId, advertiserId: advId, status: 'archived',
+          id: campId,
+          advertiserId: advId,
+          status: 'archived',
         });
       mockPrisma.campaign.updateMany.mockResolvedValueOnce({ count: 0 });
 
-      await expect(
-        svc.advertiser.submitCampaign(campId, advId),
-      ).rejects.toThrow(/current status is archived/);
+      await expect(svc.advertiser.submitCampaign(campId, advId)).rejects.toThrow(
+        /current status is archived/,
+      );
 
       expect(mockPrisma.adCreative.updateMany).not.toHaveBeenCalled();
       expect(mockPrisma.campaign.update).not.toHaveBeenCalled();
@@ -2298,8 +2514,10 @@ describe('E2E Money Loop', () => {
       });
 
       const payload = {
-        deviceId, sessionId,
-        toolType: 'claude_code', waitStateId,
+        deviceId,
+        sessionId,
+        toolType: 'claude_code',
+        waitStateId,
         idempotencyKey: 'idem-dup',
       };
       const signed = { ...payload, signature: hmacSign(payload) };
@@ -2364,7 +2582,10 @@ describe('E2E Money Loop', () => {
       };
       const signedImpPayload = { ...signedImp, signature: hmacSign(signedImp) };
 
-      const impResult = await svc.extension.recordQualifiedImpression(cpcDevUserId, signedImpPayload);
+      const impResult = await svc.extension.recordQualifiedImpression(
+        cpcDevUserId,
+        signedImpPayload,
+      );
       expect(impResult.qualified).toBe(true);
 
       // Verify NO ledger entries were created during qualification
@@ -2426,12 +2647,16 @@ describe('E2E Money Loop', () => {
       expect(devCredit.amountMinor).toBe(300); // 60% of 5_00
       expect(devCredit.clickId).toBe(clickId);
 
-      const platformEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'platform_fee');
+      const platformEntry = recordedLedgerEntries.platform.find(
+        (e: any) => e.bucket === 'platform_fee',
+      );
       expect(platformEntry).toBeDefined();
       expect(platformEntry.amountMinor).toBe(150); // 30% of 5_00
       expect(platformEntry.referenceId).toBe(clickId);
 
-      const reserveEntry = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'fraud_reserve');
+      const reserveEntry = recordedLedgerEntries.platform.find(
+        (e: any) => e.bucket === 'fraud_reserve',
+      );
       expect(reserveEntry).toBeDefined();
       expect(reserveEntry.amountMinor).toBe(50); // 10% of 5_00
       expect(reserveEntry.referenceId).toBe(clickId);
@@ -2520,9 +2745,18 @@ describe('E2E Money Loop', () => {
           currency: 'USD',
           frequencyCapPerHour: 2,
           frequencyCapPerDay: 6,
-          creatives: [{ id: 'cr-1', title: 'Ad Title', sponsoredMessage: 'Ad msg', displayDomain: 'domain.com', destinationUrl: 'https://domain.com/offer', status: 'approved' }],
+          creatives: [
+            {
+              id: 'cr-1',
+              title: 'Ad Title',
+              sponsoredMessage: 'Ad msg',
+              displayDomain: 'domain.com',
+              destinationUrl: 'https://domain.com/offer',
+              status: 'approved',
+            },
+          ],
           countryTargeting: [],
-        }
+        },
       ]);
 
       const reqPayload = {
@@ -2572,9 +2806,9 @@ describe('E2E Money Loop', () => {
       };
       const signed = { ...endPayload, signature: hmacSign(endPayload) };
 
-      await expect(
-        svc.extension.recordWaitStateEnd('usr-hacker', signed)
-      ).rejects.toThrow(ForbiddenException);
+      await expect(svc.extension.recordWaitStateEnd('usr-hacker', signed)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 });

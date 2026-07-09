@@ -1,12 +1,19 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger,NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 import { BidType, Prisma } from '@waitlayer/db';
 import { AD_SERVING, CampaignStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
-import { CampaignService } from '../campaign/campaign.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import { CampaignService } from '../campaign/campaign.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode } from '../common/utils/errors';
 import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
@@ -85,14 +92,21 @@ export class AdvertiserService {
       this.prisma.user.findUnique({
         where: { id: userId },
         select: {
-          id: true, email: true, name: true, role: true, status: true,
-          trustLevel: true, country: true, emailVerified: true, googleVerified: true,
-          githubVerified: true, referralCode: true, createdAt: true,
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          status: true,
+          trustLevel: true,
+          country: true,
+          emailVerified: true,
+          googleVerified: true,
+          githubVerified: true,
+          referralCode: true,
+          createdAt: true,
         },
       }),
-      advertiserId
-        ? this.prisma.campaign.findMany({ where: { advertiserId }, take: 1000 })
-        : [],
+      advertiserId ? this.prisma.campaign.findMany({ where: { advertiserId }, take: 1000 }) : [],
       advertiserId
         ? this.prisma.adCreative.findMany({
             where: { campaign: { advertiserId } },
@@ -155,11 +169,15 @@ export class AdvertiserService {
       }
     } else if (user.googleId) {
       if (!options.googleIdToken) {
-        throw new UnauthorizedException('Google reauthentication is required to delete your account');
+        throw new UnauthorizedException(
+          'Google reauthentication is required to delete your account',
+        );
       }
       const payload = await this.googleVerifier.verify(options.googleIdToken);
       if (payload.sub !== user.googleId) {
-        throw new UnauthorizedException('Google reauthentication token does not match this account');
+        throw new UnauthorizedException(
+          'Google reauthentication token does not match this account',
+        );
       }
     } else {
       // No password and no Google link — extremely unlikely for a real account,
@@ -190,7 +208,11 @@ export class AdvertiserService {
       }),
       this.prisma.advertiser.updateMany({
         where: { userId },
-        data: { companyName: 'Deleted Advertiser', billingEmail: `deleted-${userId}@waitlayer.com`, websiteUrl: null },
+        data: {
+          companyName: 'Deleted Advertiser',
+          billingEmail: `deleted-${userId}@waitlayer.com`,
+          websiteUrl: null,
+        },
       }),
       this.prisma.session.updateMany({ where: { userId }, data: { revoked: true } }),
       this.prisma.apiKey.updateMany({ where: { ownerId: userId }, data: { isActive: false } }),
@@ -207,7 +229,10 @@ export class AdvertiserService {
     return { deleted: true };
   }
 
-  async createProfile(userId: string, dto: { companyName: string; billingEmail: string; websiteUrl?: string }) {
+  async createProfile(
+    userId: string,
+    dto: { companyName: string; billingEmail: string; websiteUrl?: string },
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
     if (user.role !== 'advertiser') throw new ForbiddenException('Not an advertiser account');
@@ -218,7 +243,9 @@ export class AdvertiserService {
     // sees a clean 409, not a raw Prisma error leaked as a 500.
     try {
       const websiteUrl = normalizeOptionalPublicHttpsUrl(dto.websiteUrl, 'websiteUrl');
-      const profile = await this.prisma.advertiser.create({ data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl } });
+      const profile = await this.prisma.advertiser.create({
+        data: { userId, companyName: dto.companyName, billingEmail: dto.billingEmail, websiteUrl },
+      });
 
       void this.audit.log({
         actorId: userId,
@@ -246,8 +273,8 @@ export class AdvertiserService {
       where: { advertiserId },
       include: {
         creatives: {
-          select: { id: true, status: true }
-        }
+          select: { id: true, status: true },
+        },
       },
     });
 
@@ -293,7 +320,7 @@ export class AdvertiserService {
         by: ['currency', 'entryType'],
         where: {
           advertiserId,
-          entryType: { in: ['credit', 'debit'] },
+          entryType: { in: ['credit', 'debit', 'refund'] },
           status: 'confirmed',
         },
         _sum: { amountMinor: true },
@@ -317,12 +344,16 @@ export class AdvertiserService {
       }),
     ]);
 
-    const byCurrency = new Map<string, {
-      currency: string;
-      balanceMinor: number;
-      totalDepositsMinor: number;
-      totalChargesMinor: number;
-    }>();
+    const byCurrency = new Map<
+      string,
+      {
+        currency: string;
+        balanceMinor: number;
+        totalDepositsMinor: number;
+        totalChargesMinor: number;
+        totalRefundsMinor: number;
+      }
+    >();
 
     for (const row of totals) {
       const currency = row.currency.toUpperCase();
@@ -331,11 +362,15 @@ export class AdvertiserService {
         balanceMinor: 0,
         totalDepositsMinor: 0,
         totalChargesMinor: 0,
+        totalRefundsMinor: 0,
       };
       const amount = row._sum.amountMinor ?? 0;
       if (row.entryType === 'credit') current.totalDepositsMinor += amount;
       if (row.entryType === 'debit') current.totalChargesMinor += amount;
-      current.balanceMinor = current.totalDepositsMinor - current.totalChargesMinor;
+      if (row.entryType === 'refund') current.totalRefundsMinor += amount;
+      // Use the centralized formula: credits − debits − refunds (A-066, A-054).
+      current.balanceMinor =
+        current.totalDepositsMinor - current.totalChargesMinor - current.totalRefundsMinor;
       byCurrency.set(currency, current);
     }
 
@@ -349,32 +384,41 @@ export class AdvertiserService {
       balanceMinor: 0,
       totalDepositsMinor: 0,
       totalChargesMinor: 0,
+      totalRefundsMinor: 0,
     };
 
     return {
       ...primary,
+      totalRefundsMinor: primary.totalRefundsMinor,
       balances,
       entries,
     };
   }
 
   /** Create a new campaign (always starts in DRAFT) */
-  async createCampaign(advertiserId: string, dto: {
-    name: string;
-    category: string;
-    bidType: string;
-    bidAmountMinor: number;
-    budgetTotalMinor: number;
-    currency?: string;
-    frequencyCapPerHour?: number;
-    frequencyCapPerDay?: number;
-  }) {
+  async createCampaign(
+    advertiserId: string,
+    dto: {
+      name: string;
+      category: string;
+      bidType: string;
+      bidAmountMinor: number;
+      budgetTotalMinor: number;
+      currency?: string;
+      frequencyCapPerHour?: number;
+      frequencyCapPerDay?: number;
+    },
+  ) {
     // Validate budget
     if (dto.budgetTotalMinor < AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR) {
-      throw new BadRequestException(`Minimum budget is $${AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100}`);
+      throw new BadRequestException(
+        `Minimum budget is $${AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100}`,
+      );
     }
     if (dto.budgetTotalMinor > AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR) {
-      throw new BadRequestException(`Maximum budget is $${AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100}`);
+      throw new BadRequestException(
+        `Maximum budget is $${AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100}`,
+      );
     }
     if (dto.bidAmountMinor <= 0) {
       throw new BadRequestException('Bid amount must be positive');
@@ -405,7 +449,12 @@ export class AdvertiserService {
       action: 'create_campaign',
       targetType: 'campaign',
       targetId: campaign.id,
-      beforeSnap: { name: dto.name, category: dto.category, bidType: dto.bidType, budgetTotalMinor: dto.budgetTotalMinor },
+      beforeSnap: {
+        name: dto.name,
+        category: dto.category,
+        bidType: dto.bidType,
+        budgetTotalMinor: dto.budgetTotalMinor,
+      },
     });
 
     return campaign;
@@ -441,7 +490,11 @@ export class AdvertiserService {
       return tx.campaign.findUnique({ where: { id: campaignId } });
     });
     if (!submitted) {
-      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be submitted from DRAFT status');
+      await this.throwCampaignStateConflict(
+        campaignId,
+        advertiserId,
+        'Campaign can only be submitted from DRAFT status',
+      );
     }
 
     void this.audit.log({
@@ -473,7 +526,11 @@ export class AdvertiserService {
       data: { status: CampaignStatus.DRAFT },
     });
     if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be reset to draft from REJECTED status');
+      await this.throwCampaignStateConflict(
+        campaignId,
+        advertiserId,
+        'Campaign can only be reset to draft from REJECTED status',
+      );
     }
 
     const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
@@ -499,7 +556,11 @@ export class AdvertiserService {
       data: { status: CampaignStatus.PAUSED, pausedAt: new Date() },
     });
     if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be paused from ACTIVE status');
+      await this.throwCampaignStateConflict(
+        campaignId,
+        advertiserId,
+        'Campaign can only be paused from ACTIVE status',
+      );
     }
     const paused = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
 
@@ -524,7 +585,9 @@ export class AdvertiserService {
 
     const hasApprovedCreative = campaign.creatives.some((c) => c.status === 'approved');
     if (!hasApprovedCreative) {
-      throw new BadRequestException('Cannot resume campaign: at least one approved creative is required');
+      throw new BadRequestException(
+        'Cannot resume campaign: at least one approved creative is required',
+      );
     }
     if (campaign.budgetSpentMinor >= campaign.budgetTotalMinor) {
       throw new BadRequestException('Cannot resume campaign: budget has been fully spent');
@@ -532,7 +595,9 @@ export class AdvertiserService {
 
     const balance = await this.getAdvertiserBalance(advertiserId, campaign.currency);
     if (balance <= 0) {
-      throw new BadRequestException('Cannot resume campaign: advertiser has no funded balance. Please deposit funds first.');
+      throw new BadRequestException(
+        'Cannot resume campaign: advertiser has no funded balance. Please deposit funds first.',
+      );
     }
 
     this.validateTransition(campaign.status, 'active');
@@ -541,7 +606,11 @@ export class AdvertiserService {
       data: { status: CampaignStatus.ACTIVE, pausedAt: null, activatedAt: new Date() },
     });
     if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be resumed from PAUSED status');
+      await this.throwCampaignStateConflict(
+        campaignId,
+        advertiserId,
+        'Campaign can only be resumed from PAUSED status',
+      );
     }
     const resumed = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
 
@@ -622,7 +691,10 @@ export class AdvertiserService {
       });
       if (claimed.count === 0) {
         // Lost race to another archiver — already archived.
-        return { archived: false as const, refundEntry: null as { id: string; amountMinor: number } | null };
+        return {
+          archived: false as const,
+          refundEntry: null as { id: string; amountMinor: number } | null,
+        };
       }
 
       // Re-read the now-archived row inside the tx to get the authoritative
@@ -673,7 +745,12 @@ export class AdvertiserService {
         }
       }
 
-      return { archived: true as const, refundEntry, unspentMinor, currency: locked?.currency ?? campaign.currency };
+      return {
+        archived: true as const,
+        refundEntry,
+        unspentMinor,
+        currency: locked?.currency ?? campaign.currency,
+      };
     });
 
     if (!result.archived) {
@@ -695,20 +772,28 @@ export class AdvertiserService {
       action: 'archive_campaign',
       targetType: 'campaign',
       targetId: campaignId,
-      beforeSnap: { oldStatus: campaign.status, refundObligationMinor: result.unspentMinor, currency: result.currency },
+      beforeSnap: {
+        oldStatus: campaign.status,
+        refundObligationMinor: result.unspentMinor,
+        currency: result.currency,
+      },
     });
 
     return { campaign: updated, refundEntry: result.refundEntry ?? null, archived: true };
   }
 
   /** Update campaign details (only in DRAFT status) */
-  async updateCampaign(campaignId: string, advertiserId: string, dto: {
-    name?: string;
-    bidAmountMinor?: number;
-    budgetTotalMinor?: number;
-    frequencyCapPerHour?: number;
-    frequencyCapPerDay?: number;
-  }) {
+  async updateCampaign(
+    campaignId: string,
+    advertiserId: string,
+    dto: {
+      name?: string;
+      bidAmountMinor?: number;
+      budgetTotalMinor?: number;
+      frequencyCapPerHour?: number;
+      frequencyCapPerDay?: number;
+    },
+  ) {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
     if (campaign.status !== 'draft') {
@@ -718,10 +803,14 @@ export class AdvertiserService {
     // an update can be used to bypass them. Mirror the same checks.
     if (dto.budgetTotalMinor !== undefined) {
       if (dto.budgetTotalMinor < AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR) {
-        throw new BadRequestException(`Minimum budget is $${AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100}`);
+        throw new BadRequestException(
+          `Minimum budget is $${AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100}`,
+        );
       }
       if (dto.budgetTotalMinor > AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR) {
-        throw new BadRequestException(`Maximum budget is $${AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100}`);
+        throw new BadRequestException(
+          `Maximum budget is $${AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100}`,
+        );
       }
     }
     if (dto.bidAmountMinor !== undefined && dto.bidAmountMinor <= 0) {
@@ -732,7 +821,11 @@ export class AdvertiserService {
       data: dto,
     });
     if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(campaignId, advertiserId, 'Campaign can only be edited in DRAFT status');
+      await this.throwCampaignStateConflict(
+        campaignId,
+        advertiserId,
+        'Campaign can only be edited in DRAFT status',
+      );
     }
     const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
 

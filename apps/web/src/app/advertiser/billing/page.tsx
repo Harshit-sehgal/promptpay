@@ -20,6 +20,7 @@ interface BillingBalance {
   balanceMinor: number;
   totalDepositsMinor: number;
   totalChargesMinor: number;
+  totalRefundsMinor: number;
 }
 
 interface BillingData {
@@ -27,6 +28,7 @@ interface BillingData {
   currency: string;
   totalDepositsMinor: number;
   totalChargesMinor: number;
+  totalRefundsMinor: number;
   balances?: BillingBalance[];
   entries: LedgerEntry[];
 }
@@ -43,12 +45,7 @@ const DEPOSIT_CURRENCIES = [
   { code: 'sgd', label: 'SGD' },
 ] as const;
 
-const FIXED_AMOUNTS = [
-  { minor: 5000 },
-  { minor: 10000 },
-  { minor: 25000 },
-  { minor: 50000 },
-];
+const FIXED_AMOUNTS = [{ minor: 5000 }, { minor: 10000 }, { minor: 25000 }, { minor: 50000 }];
 
 const MIN_DEPOSIT_MINOR = 100; // $1.00
 
@@ -61,14 +58,16 @@ export default function AdvertiserBillingPage() {
   const [selectedMinor, setSelectedMinor] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
   const [showCustom, setShowCustom] = useState(false);
-  const [depositCurrency, setDepositCurrency] = useState<(typeof DEPOSIT_CURRENCIES)[number]['code']>('usd');
+  const [depositCurrency, setDepositCurrency] =
+    useState<(typeof DEPOSIT_CURRENCIES)[number]['code']>('usd');
   const [depositing, setDepositing] = useState(false);
   const [depositError, setDepositError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    advertiserApi.getBilling()
+    advertiserApi
+      .getBilling()
       .then((res) => {
         setData(res.data as BillingData);
       })
@@ -111,9 +110,7 @@ export default function AdvertiserBillingPage() {
     <>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-1">Billing</h1>
-        <p className="text-ink-300 text-sm">
-          Deposit history, charges, and account balance
-        </p>
+        <p className="text-ink-300 text-sm">Deposit history, charges, and account balance</p>
       </div>
 
       {loading && !data && <LoadingSpinner />}
@@ -126,7 +123,7 @@ export default function AdvertiserBillingPage() {
       {data && (
         <>
           {/* Stats cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <StatCard
               label="Account balance"
               value={formatCurrency(data.balanceMinor, data.currency)}
@@ -140,13 +137,23 @@ export default function AdvertiserBillingPage() {
               label="Total charges"
               value={formatCurrency(data.totalChargesMinor, data.currency)}
             />
+            <StatCard
+              label="Total refunds"
+              value={formatCurrency(data.totalRefundsMinor ?? 0, data.currency)}
+              valueColor={data.totalRefundsMinor ? 'text-amber-400' : 'text-ink-300'}
+            />
           </div>
           {data.balances && data.balances.length > 1 && (
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4 mb-8">
-              <p className="text-ink-300 text-xs uppercase tracking-wide mb-3">Balances by currency</p>
+              <p className="text-ink-300 text-xs uppercase tracking-wide mb-3">
+                Balances by currency
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {data.balances.map((balance) => (
-                  <div key={balance.currency} className="flex items-center justify-between bg-ink-700/50 rounded-lg px-3 py-2">
+                  <div
+                    key={balance.currency}
+                    className="flex items-center justify-between bg-ink-700/50 rounded-lg px-3 py-2"
+                  >
                     <span className="text-ink-300 text-sm">{balance.currency}</span>
                     <span className="text-white font-mono text-sm">
                       {formatCurrency(balance.balanceMinor, balance.currency)}
@@ -165,14 +172,19 @@ export default function AdvertiserBillingPage() {
             </p>
 
             <div className="mb-4">
-              <label htmlFor="deposit-currency" className="block text-ink-400 text-xs uppercase tracking-wide mb-1.5">
+              <label
+                htmlFor="deposit-currency"
+                className="block text-ink-400 text-xs uppercase tracking-wide mb-1.5"
+              >
                 Deposit currency
               </label>
               <select
                 id="deposit-currency"
                 value={depositCurrency}
                 onChange={(event) => {
-                  setDepositCurrency(event.target.value as (typeof DEPOSIT_CURRENCIES)[number]['code']);
+                  setDepositCurrency(
+                    event.target.value as (typeof DEPOSIT_CURRENCIES)[number]['code'],
+                  );
                   setDepositError(null);
                 }}
                 className="bg-ink-700 border border-ink-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500"
@@ -266,8 +278,19 @@ export default function AdvertiserBillingPage() {
               {depositing ? (
                 <>
                   <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   Opening Stripe Checkout…
                 </>
@@ -286,9 +309,16 @@ export default function AdvertiserBillingPage() {
 
             <div className="mt-4 flex items-center gap-2 text-ink-400 text-xs">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
               </svg>
-              <span>Securely processed by Stripe. Funds are available immediately after payment.</span>
+              <span>
+                Securely processed by Stripe. Funds are available immediately after payment.
+              </span>
             </div>
           </div>
 
