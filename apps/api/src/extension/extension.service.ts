@@ -692,6 +692,18 @@ export class ExtensionService {
       return { ad: null, reason: 'quiet_mode' };
     }
 
+    // A-057: merge the developer's PERSISTED blocked categories (stored on
+    // UserSettings) with any per-request client-supplied arrays. Server-side
+    // enforcement is the source of truth — an omission on the client cannot
+    // relax a developer preference. Union the two blocked sets so a category
+    // blocked on either side is excluded. We DO NOT union `allowedCategories`
+    // (there is no persisted allow-list, only the per-request client filter);
+    // persisted preferences can only further RESTRICT delivery, never widen it.
+    const persistedBlocked = settings?.blockedCategories ?? [];
+    const effectiveBlocked = dto.blockedCategories?.length
+      ? Array.from(new Set([...persistedBlocked, ...dto.blockedCategories]))
+      : persistedBlocked;
+
     // Idempotency: return same ad if we already served one for this
     // user/device/waitStateId. Keys are NAMESPACED by userId + deviceId so two
     // different users who collide on a client-generated waitStateId or
@@ -768,7 +780,7 @@ export class ExtensionService {
       if (c.creatives.length === 0) return false;
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
       // Category filter
-      if (dto.blockedCategories?.length && dto.blockedCategories.includes(c.category)) return false;
+      if (effectiveBlocked.length && effectiveBlocked.includes(c.category)) return false;
       if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category))
         return false;
       // Per-campaign frequency caps (issue A-061). A cap of 0/undefined means

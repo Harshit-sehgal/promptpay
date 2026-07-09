@@ -17,6 +17,7 @@ interface DevSettings {
   quietModeEnd?: string;
   maxAdsPerHour: number;
   timezone?: string | null;
+  blockedCategories?: string[];
   referralCode?: string;
   email: string;
   displayName?: string;
@@ -116,6 +117,7 @@ export default function DevSettingsPage() {
   const [quietModeEnd, setQuietModeEnd] = useState('08:00');
   const [maxAdsPerHour, setMaxAdsPerHour] = useState(6);
   const [timezone, setTimezone] = useState<string>(''); // '' = UTC unset / server default
+  const [blockedCategories, setBlockedCategories] = useState<string[]>([]);
 
   // 2FA state
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -143,6 +145,7 @@ export default function DevSettingsPage() {
         setQuietModeEnd(s.quietModeEnd ?? '08:00');
         setMaxAdsPerHour(s.maxAdsPerHour ?? 6);
         setTimezone(s.timezone ?? '');
+        setBlockedCategories(s.blockedCategories ?? []);
         setTwoFactorEnabled(s.twoFactorEnabled ?? false);
       })
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load settings')))
@@ -223,6 +226,7 @@ export default function DevSettingsPage() {
         quietModeEnd,
         maxAdsPerHour,
         timezone,
+        blockedCategories,
       });
       setSuccess(true);
       toast.success('Settings saved successfully.');
@@ -458,6 +462,48 @@ export default function DevSettingsPage() {
                   <span className="text-brand-600 font-mono font-bold">{maxAdsPerHour} / hr</span>
                   <span>12</span>
                 </div>
+              </div>
+
+              {/* A-057: blocked category preferences persisted server-side */}
+              <div>
+                <label className="text-surface-700 text-sm font-medium mb-1.5 block">
+                  Blocked categories
+                </label>
+                <p className="text-surface-500 text-xs mb-2">
+                  Comma-separated category slugs (e.g. gambling, crypto). Ads from these categories
+                  will never appear. These preferences are stored server-side and enforced even from
+                  CLI/VSCode clients.
+                </p>
+                <input
+                  type="text"
+                  placeholder="e.g. gambling, crypto, adult"
+                  value={blockedCategories.join(', ')}
+                  onChange={(e) => {
+                    const slugs = e.target.value
+                      .split(',')
+                      .map((s) =>
+                        s
+                          .trim()
+                          .toLowerCase()
+                          .replace(/[^a-z0-9_-]/g, ''),
+                      )
+                      .filter(Boolean);
+                    setBlockedCategories(slugs);
+                  }}
+                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                />
+                {blockedCategories.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {blockedCategories.map((slug) => (
+                      <span
+                        key={slug}
+                        className="bg-surface-100 border border-surface-200 rounded-md px-2.5 py-1 text-surface-600 text-xs font-medium"
+                      >
+                        {slug}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

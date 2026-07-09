@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsInt,
@@ -47,6 +48,17 @@ export class UpdateSettingsDto {
   @IsString()
   @MaxLength(64)
   timezone?: string;
+
+  /**
+   * A-057: per-developer persisted blocked category slugs. Merged with any
+   * per-request client-supplied arrays during ad selection so enforcement is
+   * guaranteed server-side even when the client omits them.
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  blockedCategories?: string[];
 }
 
 export class EarningsQueryDto {

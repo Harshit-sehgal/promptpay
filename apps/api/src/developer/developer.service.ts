@@ -24,6 +24,7 @@ interface DeveloperSettingsUpdate {
   maxAdsPerHour?: number;
   // `null` clears the stored tz (back to UTC); a string sets it.
   timezone?: string | null;
+  blockedCategories?: string[];
 }
 
 interface DeleteAccountAuditActor {
@@ -209,6 +210,7 @@ export class DeveloperService {
     if (dto.quietModeStart !== undefined) data.quietModeStart = dto.quietModeStart;
     if (dto.quietModeEnd !== undefined) data.quietModeEnd = dto.quietModeEnd;
     if (dto.maxAdsPerHour !== undefined) data.maxAdsPerHour = dto.maxAdsPerHour;
+    if (dto.blockedCategories !== undefined) data.blockedCategories = dto.blockedCategories;
     if (dto.timezone !== undefined) {
       // A-058: validate the IANA timezone string against the runtime's known
       // tz set so an attacker can't stash an arbitrary 64-char string (and so

@@ -344,6 +344,10 @@ model UserSettings {
   quietModeEnd   String  @default("08:00")
   maxAdsPerHour  Int     @default(6)
   timezone       String?
+  // A-057: per-developer persisted blocked category slugs. The API loads
+  // these during ad selection and merges them with any per-request client-
+  // supplied arrays, guaranteeing enforcement even when the client omits them.
+  blockedCategories String[] @default([]) @map("blocked_categories")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
