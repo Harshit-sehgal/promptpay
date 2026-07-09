@@ -53,11 +53,22 @@ export class UpdateSettingsDto {
    * A-057: per-developer persisted blocked category slugs. Merged with any
    * per-request client-supplied arrays during ad selection so enforcement is
    * guaranteed server-side even when the client omits them.
+   *
+   * Boundary validation: each entry must be a lowercase slug (letters,
+   * numbers, hyphens). This rejects typo'd or free-text preferences (e.g.
+   * "Finance!", "") before they can be persisted as a blocking rule that
+   * would never match a real campaign category. Full taxonomy-membership
+   * validation against the advertiser Category table is a follow-up product
+   * step (sharing one taxonomy with the advertiser category picker).
    */
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   @MaxLength(64, { each: true })
+  @Matches(/^[a-z0-9][a-z0-9-]*$/, {
+    each: true,
+    message: 'blockedCategories entries must be lowercase slug strings (letters, numbers, hyphens)',
+  })
   blockedCategories?: string[];
 }
 

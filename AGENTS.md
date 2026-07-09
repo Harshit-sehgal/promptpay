@@ -2228,7 +2228,7 @@ Done when:
 
 ### A-049: Web Logout Now Waits for Server Revocation/Cookie Clear
 
-Severity: resolved pending verification.
+Severity: resolved (verified by route-handler test).
 
 Current source check:
 
@@ -2242,10 +2242,12 @@ Current source check:
 
 Residual risk:
 
-- This still needs a browser/route-handler regression test proving a 502 from
-  `/api/auth/logout` leaves the user visible and cookies uncleared.
-- `pnpm --filter waitlayer-web typecheck` currently passes, but logout failure
-  behavior still needs a route-handler/browser regression test.
+- A route-handler regression test now exists
+  (`apps/web/src/app/api/auth/logout/route.test.ts`, 4 tests) proving a 502
+  network error and a 5xx both leave auth cookies uncleared (session stays
+  alive), while a 2xx/401 clears them. A full browser UI test of the rethrown
+  error surfacing in the logout button is still a nice-to-have but not required
+  for correctness.
 
 Follow-up direction:
 
@@ -2587,6 +2589,17 @@ Residual risk:
   stored preferences that may not match real campaign categories.
 - There is still no advertiser-visible taxonomy picker shared with the developer
   setting, so category names/slugs can drift across surfaces.
+
+Verification (2026-07-09):
+
+- `UpdateSettingsDto.blockedCategories` now enforces a lowercase-slug format
+  (`/^[a-z0-9][a-z0-9-]*$/`, each entry) so typo'd or free-text preferences
+  (`"Finance!"`, `""`, `"UPPER"`) are rejected at the DTO boundary before they
+  can be persisted as a never-matching blocking rule.
+- `apps/api/src/developer/dto/developer.dto.spec.ts` (5 tests) covers valid
+  slugs, omitted field, free-text, uppercase, and empty-string rejection.
+- Full taxonomy-membership validation against the advertiser `Category` table
+  (shared with the category picker) remains a product follow-up.
 
 Follow-up direction:
 
