@@ -9,6 +9,7 @@ const ADVERTISER_NAV = [
   { label: 'Create campaign', href: '/advertiser/campaigns/new' },
   { label: 'Reports', href: '/advertiser/reports' },
   { label: 'Billing', href: '/advertiser/billing' },
+  { label: 'Settings', href: '/advertiser/settings' },
 ];
 
 export default function AdvertiserLayout({ children }: { children: React.ReactNode }) {

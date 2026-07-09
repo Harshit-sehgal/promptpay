@@ -63,7 +63,7 @@ export default function ComparisonPage() {
 
           <div className="flex items-center gap-3">
             <Link href="/auth/login" className="text-surface-600 hover:text-surface-900 text-[14px] font-medium transition-colors px-3 py-1.5">Log in</Link>
-            <Link href="/auth/signup" className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors">Get started</Link>
+            <Link href="/auth/signup?role=developer" className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors">Start earning</Link>
           </div>
         </div>
       </nav>
@@ -186,7 +186,7 @@ export default function ComparisonPage() {
             Install the extension or CLI in under 2 minutes. No credit card required.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <Link href="/auth/signup" className="bg-white hover:bg-surface-50 text-surface-900 font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm">
+            <Link href="/auth/signup?role=developer" className="bg-white hover:bg-surface-50 text-surface-900 font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm">
               Sign up free →
             </Link>
             <Link href="/pricing" className="text-white/90 hover:text-white font-medium px-5 py-3 text-[15px] transition-colors">

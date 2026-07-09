@@ -17,7 +17,7 @@ export default function ContactPage() {
           </Link>
           <div className="flex items-center gap-3">
             <Link href="/auth/login" className="text-surface-600 hover:text-surface-900 text-[14px] font-medium transition-colors px-3 py-1.5">Log in</Link>
-            <Link href="/auth/signup" className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors">Get started</Link>
+            <Link href="/auth/signup?role=developer" className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors">Start earning</Link>
           </div>
         </div>
       </nav>

@@ -100,10 +100,10 @@ export default function HomePage() {
               Log in
             </Link>
             <Link
-              href="/auth/signup"
+              href="/auth/signup?role=developer"
               className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              Get started
+              Start earning
             </Link>
           </div>
         </div>
@@ -126,7 +126,7 @@ export default function HomePage() {
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link
-              href="/auth/signup"
+              href="/auth/signup?role=developer"
               className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20"
             >
               Start earning →
@@ -235,7 +235,7 @@ export default function HomePage() {
               { title: 'Verified developer attention', desc: 'Reach developers while they are actively building — not scrolling feeds or browsing passively.', Icon: IconTarget },
               { title: 'Transparent performance', desc: 'Real CPM, CPC, CTR, and invalid traffic reporting. Know what you pay for.', Icon: IconChart },
               { title: 'Fraud protection', desc: 'Rate limits, trust scoring, minimum visible duration, and manual review before campaigns go live.', Icon: IconShield },
-              { title: 'Country & tool targeting', desc: 'Target by country, tool type (VS Code, terminal, etc.), and developer category.', Icon: IconGlobe },
+              { title: 'Category & country targeting', desc: 'Target by developer category and country where a developer country is available. Tool type is captured for reporting, not campaign targeting.', Icon: IconGlobe },
               { title: 'Self-serve campaigns', desc: 'Create and manage campaigns directly. Set budgets, frequency caps, and category filters.', Icon: IconSettings },
               { title: 'Invalid traffic credits', desc: 'When fraud is detected, you get credits back. You only pay for valid impressions.', Icon: IconRefresh },
             ].map((item) => (
@@ -469,7 +469,7 @@ export default function HomePage() {
                         *Estimates assume 20 active working days/month. High trust score status qualifies you for immediate payouts without hold periods.
                       </p>
                       <Link
-                        href="/auth/signup"
+                        href="/auth/signup?role=developer"
                         className="mt-5 w-full inline-flex items-center justify-center bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors"
                       >
                         Create Developer Account
@@ -561,7 +561,7 @@ export default function HomePage() {
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link
-              href="/auth/signup"
+              href="/auth/signup?role=developer"
               className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-8 py-3.5 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20"
             >
               Sign up free →

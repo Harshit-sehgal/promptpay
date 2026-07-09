@@ -20,7 +20,7 @@ const PLAN_FEATURES = [
   { label: 'Trust score & fraud protection', dev: true, adv: true },
   { label: 'Ad frequency & quiet mode controls', dev: true, adv: false },
   { label: 'Campaign creation & management', dev: false, adv: true },
-  { label: 'Country & tool targeting', dev: false, adv: true },
+  { label: 'Country & category targeting', dev: false, adv: true },
   { label: 'Real-time performance reports', dev: false, adv: true },
   { label: 'Invalid traffic credits', dev: false, adv: true },
   { label: 'Priority support', dev: false, adv: false },
@@ -46,7 +46,7 @@ export default function PricingPage() {
 
           <div className="flex items-center gap-3">
             <Link href="/auth/login" className="text-surface-600 hover:text-surface-900 text-[14px] font-medium transition-colors px-3 py-1.5">Log in</Link>
-            <Link href="/auth/signup" className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors">Get started</Link>
+            <Link href="/auth/signup?role=developer" className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors">Start earning</Link>
           </div>
         </div>
       </nav>
@@ -75,7 +75,7 @@ export default function PricingPage() {
             <p className="text-5xl font-bold text-surface-900 mb-2">Free</p>
             <p className="text-surface-400 text-[14px] mb-8">Always. No credit card needed.</p>
             <Link
-              href="/auth/signup"
+              href="/auth/signup?role=developer"
               className="block w-full text-center bg-surface-900 hover:bg-surface-700 text-white font-medium px-6 py-3 rounded-xl text-[15px] transition-colors mb-8"
             >
               Start earning →
@@ -250,8 +250,11 @@ export default function PricingPage() {
             Join developers earning from AI wait time, or advertisers reaching them while they build.
           </p>
           <div className="flex items-center justify-center gap-3">
-            <Link href="/auth/signup" className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20">
-              Sign up free →
+            <Link href="/auth/signup?role=developer" className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20">
+              Start earning →
+            </Link>
+            <Link href="/auth/signup?role=advertiser" className="bg-surface-900 hover:bg-surface-700 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors">
+              Start advertising →
             </Link>
             <Link href="/comparison" className="text-surface-500 hover:text-surface-700 font-medium px-5 py-3 text-[15px] transition-colors">
               Compare tools
