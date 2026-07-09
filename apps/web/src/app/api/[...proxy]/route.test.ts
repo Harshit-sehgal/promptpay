@@ -49,6 +49,17 @@ describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
     expect(calledUrl).toContain('/admin/devices/device-uuid/recovery-token');
   });
 
+  it('forwards /admin/devices lookup (A-027)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ devices: [], total: 0 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await GET(makeReq('/api/admin/devices?search=dev%40example.com'));
+
+    expect(res.status).toBe(200);
+    const calledUrl = (fetchMock.mock.calls[0][0] as string) ?? '';
+    expect(calledUrl).toContain('/admin/devices?search=dev%40example.com');
+  });
+
   it('rejects paths outside the allowlist with 403', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

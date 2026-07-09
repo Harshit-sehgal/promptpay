@@ -9,6 +9,7 @@ const ADMIN_NAV = [
   { label: 'Users', href: '/admin/users' },
   { label: 'Campaign approvals', href: '/admin/campaigns' },
   { label: 'Fraud review', href: '/admin/fraud' },
+  { label: 'Device recovery', href: '/admin/devices' },
   { label: 'Payout requests', href: '/admin/payouts' },
   { label: 'Recovery debt', href: '/admin/recovery-debt' },
   { label: 'Ledger / Revenue', href: '/admin/ledger' },

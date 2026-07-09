@@ -22,6 +22,8 @@ function ok<T>(parsed: T, status = 200): AxiosLikeResponse<T> {
   return { data: parsed, status };
 }
 
+export const DEVELOPER_LEDGER_API_KEY_SCOPES = ['ledger:read'] as const;
+
 /**
  * The web client coerces request bodies through Zod at the API boundary so
  * a missing/wrong field on the front end throws at the call site rather
@@ -63,6 +65,7 @@ export const developerApi = {
   deleteAccount: (data: { confirmation: 'DELETE_MY_ACCOUNT'; currentPassword?: string; googleIdToken?: string }) =>
     api.post('/developer/delete-account', data),
   listApiKeys: () => api.get('/developer/api-keys'),
+  createLedgerApiKey: () => api.post('/developer/api-keys', { scopes: [...DEVELOPER_LEDGER_API_KEY_SCOPES] }),
   createApiKey: (data: { scopes: string[]; advertiserId?: string; expiresAt?: string }) =>
     api.post('/developer/api-keys', data),
   revokeApiKey: (id: string) => api.delete(`/developer/api-keys/${id}`),
@@ -143,6 +146,7 @@ export const adminApi = {
   getPendingArchiveRefunds: () => api.get('/admin/refunds/archive/pending'),
   confirmArchiveRefund: (id: string, stripeRefundPaymentIntentId: string) =>
     api.post(`/admin/refunds/archive/${id}/confirm`, { stripeRefundPaymentIntentId }),
+  getDevices: (params?: Record<string, unknown>) => api.get('/admin/devices', { params }),
   issueDeviceRecoveryToken: (
     deviceId: string,
     data: { userId: string; reason: string; expiresInMinutes?: number },

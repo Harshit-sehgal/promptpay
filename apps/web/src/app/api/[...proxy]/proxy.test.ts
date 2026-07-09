@@ -12,6 +12,7 @@ describe('proxy allowlist (A-006)', () => {
     expect(isProxyPathAllowed('/auth/verify-email/request')).toBe(true);
     expect(isProxyPathAllowed('/advertiser/campaigns')).toBe(true);
     expect(isProxyPathAllowed('/admin/users')).toBe(true);
+    expect(isProxyPathAllowed('/admin/devices')).toBe(true);
     expect(isProxyPathAllowed('/payout/request')).toBe(true);
     expect(isProxyPathAllowed('/ledger/balance')).toBe(true);
     expect(isProxyPathAllowed('/health')).toBe(true);

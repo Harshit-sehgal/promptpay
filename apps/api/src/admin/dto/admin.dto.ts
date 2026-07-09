@@ -146,6 +146,33 @@ export class IssueDeviceRecoveryTokenDto {
   expiresInMinutes?: number;
 }
 
+export class AdminDevicesQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  toolType?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}
+
 // ── Recovery debt operations ──
 
 export class RecoveryDebtCasesQueryDto {

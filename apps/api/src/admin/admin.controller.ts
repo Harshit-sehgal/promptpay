@@ -7,14 +7,15 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { AdminService } from './admin.service';
 import {
+  AdminDevicesQueryDto,
   ApproveCampaignDto,
   ApprovePayoutDto,
   AuditLogQueryDto,
   FraudFlagsQueryDto,
   IssueDeviceRecoveryTokenDto,
-  PayoutAccountVerifyDto,
   MarkPayoutPaidDto,
   OpenRecoveryDebtCaseDto,
+  PayoutAccountVerifyDto,
   RecoveryDebtCasesQueryDto,
   RejectCampaignDto,
   RejectPayoutDto,
@@ -159,6 +160,12 @@ export class AdminController {
   }
 
   // ── Device Recovery ──
+
+  @Get('devices')
+  @Roles('admin', 'support', 'super_admin')
+  getDevices(@Query() query: AdminDevicesQueryDto) {
+    return this.service.getDevices(query);
+  }
 
   @Post('devices/:id/recovery-token')
   @Roles('admin', 'support', 'super_admin')

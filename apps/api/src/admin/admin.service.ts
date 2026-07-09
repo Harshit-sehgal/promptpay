@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { BadRequestException,Injectable } from '@nestjs/common';
 
-import { FraudFlagStatus, FraudSeverity, Prisma, RecoveryDebtCaseStatus, UserRole, UserStatus } from '@waitlayer/db';
+import { FraudFlagStatus, FraudSeverity, Prisma, RecoveryDebtCaseStatus, ToolTypeEnum, UserRole, UserStatus } from '@waitlayer/db';
 
 import { AuditService } from '../audit/audit.service';
 import { getErrorCode } from '../common/utils/errors';
@@ -708,6 +708,102 @@ export class AdminService {
   }
 
   // ── Device Recovery ──
+
+  async getDevices(params: {
+    search?: string;
+    userId?: string;
+    toolType?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params.limit ?? 25));
+    const skip = (page - 1) * limit;
+    const search = params.search?.trim();
+    const toolType = normalizeOptionalToolType(params.toolType);
+
+    const filters: Prisma.DeviceWhereInput[] = [];
+    if (params.userId) filters.push({ userId: params.userId });
+    if (toolType) filters.push({ toolType });
+    if (search) {
+      const searchToolType = normalizeOptionalToolType(search, false);
+      filters.push({
+        OR: [
+          { id: { contains: search, mode: 'insensitive' } },
+          { userId: { contains: search, mode: 'insensitive' } },
+          { fingerprintHash: { contains: search, mode: 'insensitive' } },
+          { platform: { contains: search, mode: 'insensitive' } },
+          { extensionVersion: { contains: search, mode: 'insensitive' } },
+          { user: { is: { email: { contains: search, mode: 'insensitive' } } } },
+          { user: { is: { name: { contains: search, mode: 'insensitive' } } } },
+          ...(searchToolType ? [{ toolType: searchToolType }] : []),
+        ],
+      });
+    }
+
+    const where: Prisma.DeviceWhereInput = filters.length > 0 ? { AND: filters } : {};
+    const [devices, total] = await Promise.all([
+      this.prisma.device.findMany({
+        where,
+        orderBy: { lastSeenAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          userId: true,
+          fingerprintHash: true,
+          eventSecret: true,
+          toolType: true,
+          extensionVersion: true,
+          platform: true,
+          createdAt: true,
+          lastSeenAt: true,
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              status: true,
+            },
+          },
+          recoveryTokens: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: {
+              id: true,
+              reason: true,
+              expiresAt: true,
+              usedAt: true,
+              revokedAt: true,
+              createdAt: true,
+            },
+          },
+        },
+      }),
+      this.prisma.device.count({ where }),
+    ]);
+
+    return {
+      devices: devices.map((device) => ({
+        id: device.id,
+        userId: device.userId,
+        fingerprintHash: device.fingerprintHash,
+        hasEventSecret: Boolean(device.eventSecret),
+        toolType: device.toolType,
+        extensionVersion: device.extensionVersion,
+        platform: device.platform,
+        createdAt: device.createdAt,
+        lastSeenAt: device.lastSeenAt,
+        user: device.user,
+        latestRecoveryToken: device.recoveryTokens[0] ?? null,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
+  }
 
   async issueDeviceRecoveryToken(params: {
     deviceId: string;
@@ -1464,6 +1560,16 @@ export class AdminService {
 
 function hashDeviceRecoveryToken(token: string): string {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+function normalizeOptionalToolType(toolType?: string, throwOnInvalid = true): ToolTypeEnum | undefined {
+  const normalized = toolType?.trim();
+  if (!normalized) return undefined;
+  if ((Object.values(ToolTypeEnum) as string[]).includes(normalized)) {
+    return normalized as ToolTypeEnum;
+  }
+  if (!throwOnInvalid) return undefined;
+  throw new BadRequestException(`Unsupported toolType '${normalized}'`);
 }
 
 function sanitizeOptionalString(value: string | undefined): string | undefined {

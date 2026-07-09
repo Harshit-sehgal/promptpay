@@ -7,6 +7,10 @@ const mockPrisma: any = {
   campaign: {
     findMany: vi.fn(),
   },
+  device: {
+    count: vi.fn(),
+    findMany: vi.fn(),
+  },
   user: {
     findMany: vi.fn(),
   },
@@ -306,6 +310,78 @@ describe('AdminService', () => {
       });
       // A user with no open flags reports 0, not undefined.
       expect(users[1].openFlags).toBe(0);
+    });
+  });
+
+  describe('getDevices', () => {
+    it('returns searchable devices without exposing event secrets', async () => {
+      const createdAt = new Date('2026-07-01T00:00:00Z');
+      const lastSeenAt = new Date('2026-07-02T00:00:00Z');
+      mockPrisma.device.findMany.mockResolvedValue([
+        {
+          id: 'device-1',
+          userId: 'user-1',
+          fingerprintHash: 'fingerprint-1',
+          eventSecret: 'server-side-secret',
+          toolType: 'vscode',
+          extensionVersion: '1.2.3',
+          platform: 'linux',
+          createdAt,
+          lastSeenAt,
+          user: {
+            id: 'user-1',
+            email: 'dev@example.com',
+            name: 'Dev User',
+            role: 'developer',
+            status: 'active',
+          },
+          recoveryTokens: [
+            {
+              id: 'token-1',
+              reason: 'lost machine',
+              expiresAt: new Date('2026-07-02T01:00:00Z'),
+              usedAt: null,
+              revokedAt: null,
+              createdAt: lastSeenAt,
+            },
+          ],
+        },
+      ]);
+      mockPrisma.device.count.mockResolvedValue(1);
+
+      const result = await service.getDevices({ search: 'dev@example.com', limit: 10 });
+
+      expect(mockPrisma.device.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        orderBy: { lastSeenAt: 'desc' },
+        skip: 0,
+        take: 10,
+        where: expect.objectContaining({ AND: expect.any(Array) }),
+      }));
+      expect(result).toMatchObject({
+        total: 1,
+        page: 1,
+        limit: 10,
+        totalPages: 1,
+        devices: [
+          {
+            id: 'device-1',
+            userId: 'user-1',
+            fingerprintHash: 'fingerprint-1',
+            hasEventSecret: true,
+            toolType: 'vscode',
+            extensionVersion: '1.2.3',
+            platform: 'linux',
+            user: { email: 'dev@example.com' },
+            latestRecoveryToken: { id: 'token-1' },
+          },
+        ],
+      });
+      expect(result.devices[0]).not.toHaveProperty('eventSecret');
+    });
+
+    it('rejects unsupported tool type filters', async () => {
+      await expect(service.getDevices({ toolType: 'not-a-tool' })).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.device.findMany).not.toHaveBeenCalled();
     });
   });
 });

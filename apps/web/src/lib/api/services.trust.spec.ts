@@ -1,5 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-
+import { beforeEach,describe, expect, it, vi } from 'vitest';
 import api from '@/lib/api/client';
 import { adminApi } from '@/lib/api/services';
 
@@ -21,5 +20,19 @@ describe('adminApi.recomputeTrustScore', () => {
       new Error('Request failed with status code 500'),
     );
     await expect(adminApi.recomputeTrustScore('user-123')).rejects.toThrow();
+  });
+});
+
+describe('adminApi.getDevices', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('calls the admin device lookup endpoint with query params', async () => {
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { devices: [], total: 0 } });
+
+    await adminApi.getDevices({ search: 'dev@example.com', limit: 25 });
+
+    expect(api.get).toHaveBeenCalledWith('/admin/devices', {
+      params: { search: 'dev@example.com', limit: 25 },
+    });
   });
 });

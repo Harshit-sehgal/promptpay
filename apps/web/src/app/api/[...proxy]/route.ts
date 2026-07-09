@@ -116,12 +116,12 @@ export const ALLOWED_PATH_PREFIXES = [
   '/feedback',
 ];
 
-function upstreamUrl(pathname: string): string {
+function upstreamUrl(pathname: string, search = ''): string {
   // `pathname` starts with `/api/...` — strip the `/api` prefix so the
   // upstream gets `/api/v1/...` which is what the API controller paths use
   // (global prefix `api/v1` then the controller path).
   const pathWithoutApi = pathname.replace(/^\/api/, '');
-  return `${apiBaseUrl()}${pathWithoutApi}`;
+  return `${apiBaseUrl()}${pathWithoutApi}${search}`;
 }
 
 function proxyPath(pathname: string): string {
@@ -163,7 +163,7 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const url = upstreamUrl(pathname);
+    const url = upstreamUrl(pathname, req.nextUrl.search);
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
     // Forward the access token from the httpOnly cookie as a Bearer header
