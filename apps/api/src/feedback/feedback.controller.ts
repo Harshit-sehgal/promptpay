@@ -1,9 +1,9 @@
+import { Request } from 'express';
 import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
 
-import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto } from './dto/feedback.dto';
+import { FeedbackService } from './feedback.service';
 
 /**
  * Public feedback ingestion. Intentionally NOT protected by JwtAuthGuard — a

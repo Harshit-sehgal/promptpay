@@ -701,9 +701,7 @@ export class ExtensionService {
     // (there is no persisted allow-list, only the per-request client filter);
     // persisted preferences can only further RESTRICT delivery, never widen it.
     const persistedBlocked = settings?.blockedCategories ?? [];
-    const effectiveBlocked = dto.blockedCategories?.length
-      ? Array.from(new Set([...persistedBlocked, ...dto.blockedCategories]))
-      : persistedBlocked;
+    const effectiveBlocked = mergeBlockedCategories(persistedBlocked, dto.blockedCategories);
 
     // A-056: resolve the requesting developer's country for country-targeting
     // enforcement. Prefer the client-supplied value (privacy-safe developer
@@ -790,7 +788,7 @@ export class ExtensionService {
       if (c.creatives.length === 0) return false;
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
       // Category filter
-      if (effectiveBlocked.length && effectiveBlocked.includes(c.category)) return false;
+      if (isCategoryBlocked(effectiveBlocked, c.category)) return false;
       if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category))
         return false;
       // Country-targeting filter (issue A-056). Campaigns with no targeting
@@ -1942,4 +1940,31 @@ export function adIdempotencyCacheKey(
   idempotencyKey: string,
 ): string {
   return `${userId}:${deviceId}:${idempotencyKey}`;
+}
+
+/**
+ * Merge a developer's PERSISTED blocked categories (stored on UserSettings)
+ * with any per-request client-supplied array (issue A-057). Server-side
+ * enforcement is the source of truth — a client omission cannot relax a
+ * developer preference. The union of the two blocked sets means a category
+ * blocked on either side is excluded. Exported for focused unit testing.
+ */
+export function mergeBlockedCategories(
+  persisted: string[] | undefined,
+  requested?: string[] | null,
+): string[] {
+  const persistedBlocked = persisted ?? [];
+  if (requested && requested.length > 0) {
+    return Array.from(new Set([...persistedBlocked, ...requested]));
+  }
+  return persistedBlocked;
+}
+
+/**
+ * True when the given campaign category is present in the effective blocked
+ * set. Exact-match only — a typo'd or differently-cased preference does not
+ * suppress an unrelated category (issue A-057). Exported for unit testing.
+ */
+export function isCategoryBlocked(blocked: string[], category: string): boolean {
+  return blocked.length > 0 && blocked.includes(category);
 }

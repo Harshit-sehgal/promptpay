@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../src/index';
 
 // Stable IDs so the seed is idempotent (re-running upserts the same rows).
 const DEMO_ADVERTISER_USER_ID = '11111111-1111-1111-1111-111111111111';

@@ -1,6 +1,6 @@
-import { Test } from '@nestjs/testing';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
 
 import { loadEnv } from '@waitlayer/config';
 

@@ -1,10 +1,19 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger,NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { MAX_AD_MESSAGE_LENGTH, PROHIBITED_CATEGORIES } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
-import { normalizeCreativeDestination, normalizeCreativeUpdate } from '../common/utils/external-url-policy';
+import {
+  normalizeCreativeDestination,
+  normalizeCreativeUpdate,
+} from '../common/utils/external-url-policy';
 import { PrismaService } from '../config/prisma.service';
 
 /**
@@ -23,17 +32,24 @@ export interface ServiceActor {
 export class CampaignService {
   private readonly logger = new Logger(CampaignService.name);
 
-  constructor(private prisma: PrismaService, private audit: AuditService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+  ) {}
 
   // ── Creative Management ──
 
-  async createCreative(campaignId: string, dto: {
-    title: string;
-    sponsoredMessage: string;
-    destinationUrl: string;
-    displayDomain: string;
-    ctaText?: string;
-  }, actor?: ServiceActor) {
+  async createCreative(
+    campaignId: string,
+    dto: {
+      title: string;
+      sponsoredMessage: string;
+      destinationUrl: string;
+      displayDomain: string;
+      ctaText?: string;
+    },
+    actor?: ServiceActor,
+  ) {
     // Defense-in-depth ownership check — the controller is the primary gate,
     // but this service-layer check prevents internal/future callers from
     // creating creatives on any campaign without proving ownership.
@@ -66,27 +82,35 @@ export class CampaignService {
       },
     });
 
-    void this.audit.log({
-      actorId: actor?.userId ?? 'unknown',
-      actorRole: actor?.role ?? 'advertiser',
-      action: 'create_creative',
-      targetType: 'creative',
-      targetId: creative.id,
-      beforeSnap: { campaignId },
-    }).catch((auditErr) => {
-      this.logger.error(`Audit log failed for create_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
-    });
+    void this.audit
+      .log({
+        actorId: actor?.userId ?? 'unknown',
+        actorRole: actor?.role ?? 'advertiser',
+        action: 'create_creative',
+        targetType: 'creative',
+        targetId: creative.id,
+        beforeSnap: { campaignId },
+      })
+      .catch((auditErr) => {
+        this.logger.error(
+          `Audit log failed for create_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+        );
+      });
 
     return creative;
   }
 
-  async updateCreative(creativeId: string, dto: {
-    title?: string;
-    sponsoredMessage?: string;
-    destinationUrl?: string;
-    displayDomain?: string;
-    ctaText?: string;
-  }, actor?: ServiceActor) {
+  async updateCreative(
+    creativeId: string,
+    dto: {
+      title?: string;
+      sponsoredMessage?: string;
+      destinationUrl?: string;
+      displayDomain?: string;
+      ctaText?: string;
+    },
+    actor?: ServiceActor,
+  ) {
     const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
     if (!creative) throw new NotFoundException('Creative not found');
 
@@ -112,16 +136,20 @@ export class CampaignService {
       },
     });
 
-    void this.audit.log({
-      actorId: actor?.userId ?? 'unknown',
-      actorRole: actor?.role ?? 'advertiser',
-      action: 'update_creative',
-      targetType: 'creative',
-      targetId: creativeId,
-      beforeSnap: { campaignId: creative.campaignId },
-    }).catch((auditErr) => {
-      this.logger.error(`Audit log failed for update_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
-    });
+    void this.audit
+      .log({
+        actorId: actor?.userId ?? 'unknown',
+        actorRole: actor?.role ?? 'advertiser',
+        action: 'update_creative',
+        targetType: 'creative',
+        targetId: creativeId,
+        beforeSnap: { campaignId: creative.campaignId },
+      })
+      .catch((auditErr) => {
+        this.logger.error(
+          `Audit log failed for update_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+        );
+      });
 
     return updated;
   }
@@ -169,16 +197,20 @@ export class CampaignService {
 
     // Admin creative approval/rejection — actorId flows from controller in
     // the future; for now fall back to 'admin' so the audit row is well-formed.
-    void this.audit.log({
-      actorId: 'admin',
-      actorRole: 'admin',
-      action: 'approve_creative',
-      targetType: 'creative',
-      targetId: creativeId,
-      beforeSnap: { campaignId: creative.campaignId, oldStatus: creative.status },
-    }).catch((auditErr) => {
-      this.logger.error(`Audit log failed for approve_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
-    });
+    void this.audit
+      .log({
+        actorId: 'admin',
+        actorRole: 'admin',
+        action: 'approve_creative',
+        targetType: 'creative',
+        targetId: creativeId,
+        beforeSnap: { campaignId: creative.campaignId, oldStatus: creative.status },
+      })
+      .catch((auditErr) => {
+        this.logger.error(
+          `Audit log failed for approve_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+        );
+      });
 
     return { creative: updated, campaignActivated };
   }
@@ -188,28 +220,43 @@ export class CampaignService {
     const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
     if (!creative) throw new NotFoundException('Creative not found');
 
+    // A reviewer-supplied reason is required so the rejection is auditable and
+    // advertiser-visible. Without this guard a creative could be rejected with
+    // an empty placeholder, defeating A-045's "cannot reject without a reason".
+    if (!reason || reason.trim().length === 0) {
+      throw new BadRequestException('A non-empty rejection reason is required');
+    }
+
     const rejected = await this.prisma.adCreative.update({
       where: { id: creativeId },
       data: { status: 'rejected', rejectionReason: reason },
     });
 
-    void this.audit.log({
-      actorId: 'admin',
-      actorRole: 'admin',
-      action: 'reject_creative',
-      targetType: 'creative',
-      targetId: creativeId,
-      beforeSnap: { campaignId: creative.campaignId, reason },
-    }).catch((auditErr) => {
-      this.logger.error(`Audit log failed for reject_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
-    });
+    void this.audit
+      .log({
+        actorId: 'admin',
+        actorRole: 'admin',
+        action: 'reject_creative',
+        targetType: 'creative',
+        targetId: creativeId,
+        beforeSnap: { campaignId: creative.campaignId, reason },
+      })
+      .catch((auditErr) => {
+        this.logger.error(
+          `Audit log failed for reject_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+        );
+      });
 
     return rejected;
   }
 
   // ── Country Targeting ──
 
-  async setCountryTargeting(campaignId: string, targets: Array<{ countryCode: string; include: boolean }>, actor?: ServiceActor) {
+  async setCountryTargeting(
+    campaignId: string,
+    targets: Array<{ countryCode: string; include: boolean }>,
+    actor?: ServiceActor,
+  ) {
     await this.assertCampaignOwnership(campaignId, actor);
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign) throw new NotFoundException('Campaign not found');
@@ -218,7 +265,7 @@ export class CampaignService {
     await this.prisma.$transaction([
       this.prisma.countryTargeting.deleteMany({ where: { campaignId } }),
       this.prisma.countryTargeting.createMany({
-        data: targets.map(t => ({
+        data: targets.map((t) => ({
           campaignId,
           countryCode: t.countryCode.trim().toUpperCase(),
           include: t.include,
@@ -226,16 +273,20 @@ export class CampaignService {
       }),
     ]);
 
-    void this.audit.log({
-      actorId: actor?.userId ?? 'unknown',
-      actorRole: actor?.role ?? 'advertiser',
-      action: 'set_country_targeting',
-      targetType: 'campaign',
-      targetId: campaignId,
-      beforeSnap: { countryCount: targets.length },
-    }).catch((auditErr) => {
-      this.logger.error(`Audit log failed for set_country_targeting: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`);
-    });
+    void this.audit
+      .log({
+        actorId: actor?.userId ?? 'unknown',
+        actorRole: actor?.role ?? 'advertiser',
+        action: 'set_country_targeting',
+        targetType: 'campaign',
+        targetId: campaignId,
+        beforeSnap: { countryCount: targets.length },
+      })
+      .catch((auditErr) => {
+        this.logger.error(
+          `Audit log failed for set_country_targeting: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+        );
+      });
 
     return this.prisma.countryTargeting.findMany({ where: { campaignId } });
   }
@@ -253,7 +304,13 @@ export class CampaignService {
       }),
       this.prisma.campaign.findUnique({
         where: { id: campaignId },
-        select: { id: true, name: true, status: true, budgetTotalMinor: true, budgetSpentMinor: true },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          budgetTotalMinor: true,
+          budgetSpentMinor: true,
+        },
       }),
     ]);
 

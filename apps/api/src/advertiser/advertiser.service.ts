@@ -34,9 +34,17 @@ import { reportsToCsv } from './reports-csv';
  * Exported so the date-bound semantics can be unit-tested without invoking the
  * SQL aggregation path (A-068).
  */
+// A-032: bound advertiser report/export queries so a single request cannot
+// pull unbounded rows or an arbitrarily wide date range (memory/DoS safety).
+// These are product-tunable caps; the web UI sends no `page`/`limit` today, so
+// its behavior is unchanged (all campaigns are returned unless a caller asks).
+const REPORT_MAX_LIMIT = 1000;
+const REPORT_MAX_RANGE_DAYS = 366;
+
 export function buildReportsDateFilter(
   from: string | undefined,
   to: string | undefined,
+  maxRangeDays: number = REPORT_MAX_RANGE_DAYS,
 ): { gte?: Date; lte?: Date; lt?: Date } {
   const gte = from ? new Date(from) : undefined;
   const lte = to ? new Date(to) : undefined;
@@ -55,6 +63,19 @@ export function buildReportsDateFilter(
     } else {
       const toUtc = new Date(`${to}T00:00:00.000Z`);
       createdAt.lt = new Date(toUtc.getTime() + 24 * 60 * 60 * 1000);
+    }
+  }
+
+  // Reject report ranges wider than the allowed span (A-032). The effective
+  // upper bound is `lte` for ISO datetimes or the next-day `lt` for date-only
+  // `to` (inclusive of the whole end day).
+  const effectiveTo = createdAt.lte ?? createdAt.lt;
+  if (gte && effectiveTo) {
+    const spanDays = (effectiveTo.getTime() - gte.getTime()) / (24 * 60 * 60 * 1000);
+    if (spanDays > maxRangeDays) {
+      throw new BadRequestException(
+        `Report date range exceeds the maximum allowed span of ${maxRangeDays} days`,
+      );
     }
   }
   return createdAt;
@@ -224,8 +245,6 @@ export class AdvertiserService {
       // but fail closed rather than allow unauthenticated erasure.
       throw new UnauthorizedException('Unable to verify account ownership for deletion');
     }
-
-    const priorEmail = user.email;
 
     await this.prisma.$transaction([
       this.prisma.user.update({
@@ -902,10 +921,26 @@ export class AdvertiserService {
     const campaignWhere: Prisma.CampaignWhereInput = { advertiserId };
     if (params.campaignId) campaignWhere.id = params.campaignId;
 
-    const campaigns = await this.prisma.campaign.findMany({
+    // A-032: apply caller-supplied pagination only when explicitly requested.
+    // The web UI never sends `page`/`limit`, so it keeps receiving every
+    // campaign; API consumers are capped at REPORT_MAX_LIMIT rows per page.
+    const page =
+      Number.isInteger(params.page) && (params.page as number) > 0 ? (params.page as number) : 1;
+    const limit =
+      Number.isInteger(params.limit) && (params.limit as number) > 0
+        ? Math.min(params.limit as number, REPORT_MAX_LIMIT)
+        : undefined;
+    const totalCampaigns = await this.prisma.campaign.count({ where: campaignWhere });
+
+    const campaignQuery: Prisma.CampaignFindManyArgs = {
       where: campaignWhere,
       select: { id: true, name: true, status: true, currency: true },
-    });
+    };
+    if (limit !== undefined) {
+      campaignQuery.skip = (page - 1) * limit;
+      campaignQuery.take = limit;
+    }
+    const campaigns = await this.prisma.campaign.findMany(campaignQuery);
     const campaignIds = campaigns.map((campaign) => campaign.id);
 
     // Parse + normalize the date range into a Prisma `createdAt` filter
@@ -1033,11 +1068,11 @@ export class AdvertiserService {
         totalSpendMinor: totalSpendByCurrency.USD ?? 0,
         totalSpendByCurrency,
         avgCtr,
-        totalCampaigns: campaigns.length,
+        totalCampaigns,
       },
-      page: 1,
-      limit: rows.length || 1,
-      total: rows.length,
+      page,
+      limit: limit ?? (rows.length || 1),
+      total: totalCampaigns,
     };
   }
 

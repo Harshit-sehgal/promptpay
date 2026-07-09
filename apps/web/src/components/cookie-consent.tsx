@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@waitlayer/ui';
 
 const STORAGE_KEY = 'wl_cookie_consent';
+const VISITOR_ID_KEY = 'wl_visitor_id';
 const OPEN_EVENT = 'wl:open-cookie-settings';
 
 type Choice = 'accepted' | 'declined';
@@ -21,6 +22,21 @@ function readStored(): Choice | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Returns a stable, per-browser pseudonymous visitor id used to anchor
+ * logged-out (anonymous) server-side consent (A-009). The raw id never leaves
+ * the browser beyond this hashed value; the API only stores its sha256.
+ */
+function getVisitorId(): string {
+  if (typeof window === 'undefined') return '';
+  let id = window.localStorage.getItem(VISITOR_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    window.localStorage.setItem(VISITOR_ID_KEY, id);
+  }
+  return id;
 }
 
 export default function CookieConsent() {
@@ -69,6 +85,24 @@ export default function CookieConsent() {
     });
   };
 
+  // Privacy-minimized server-side record for LOGGED-OUT visitors (A-009). The
+  // raw visitor id stays in localStorage; the API stores only its sha256 hash.
+  // Non-fatal: a failure must never block the user from dismissing the banner,
+  // so the local persistence below remains the source of truth for the UI.
+  const recordAnonymousConsent = async (granted: boolean) => {
+    if (!marketingVersion) return;
+    try {
+      await api.post('/consent/anonymous', {
+        visitorId: getVisitorId(),
+        purpose: 'marketing_cookies',
+        version: marketingVersion,
+        granted,
+      });
+    } catch {
+      // Keep the existing browser-local preference even if the server write fails.
+    }
+  };
+
   const choose = async (choice: Choice) => {
     setSyncError(null);
     if (isAuthenticated) {
@@ -78,6 +112,8 @@ export default function CookieConsent() {
         setSyncError('Could not save cookie preferences to your account. Please try again.');
         return;
       }
+    } else {
+      await recordAnonymousConsent(choice === 'accepted');
     }
     persist(choice);
     success('Cookie preferences saved');
@@ -97,9 +133,12 @@ export default function CookieConsent() {
     >
       <div className="mx-auto max-w-3xl bg-white border border-surface-200 rounded-2xl shadow-lg shadow-surface-300/30 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
         <p className="text-surface-600 text-[13px] leading-relaxed flex-1">
-          We use essential cookies to keep you signed in and optional analytics
-          cookies to improve WaitLayer. See our{' '}
-          <Link href="/privacy" className="text-brand-500 hover:text-brand-600 font-medium underline underline-offset-2">
+          We use essential cookies to keep you signed in and optional analytics cookies to improve
+          WaitLayer. See our{' '}
+          <Link
+            href="/privacy"
+            className="text-brand-500 hover:text-brand-600 font-medium underline underline-offset-2"
+          >
             Privacy Policy
           </Link>{' '}
           for details.

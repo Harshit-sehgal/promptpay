@@ -8,7 +8,16 @@ import { PayoutService } from './payout.service';
 
 function makePayoutService(prismaOverrides: Record<string, unknown> = {}, require2fa = false) {
   const prisma = {
-    user: { findUnique: vi.fn().mockResolvedValue({ id: 'u1', status: 'active', emailVerified: true, twoFactorEnabled: false }) },
+    user: {
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({
+          id: 'u1',
+          status: 'active',
+          emailVerified: true,
+          twoFactorEnabled: false,
+        }),
+    },
     earningsLedger: {
       // available = confirmed credits − confirmed debits − allocated. Mock the
       // real credit/debit semantics so the verification guard (not the
@@ -29,7 +38,9 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}, requir
     ...prismaOverrides,
   };
   const config = {
-    get: vi.fn((key: string) => (key === 'PAYOUT_REQUIRE_2FA' ? (require2fa ? 'true' : undefined) : undefined)),
+    get: vi.fn((key: string) =>
+      key === 'PAYOUT_REQUIRE_2FA' ? (require2fa ? 'true' : undefined) : undefined,
+    ),
   } as unknown as ConstructorParameters<typeof PayoutService>[4];
   const service = new PayoutService(
     prisma as never,
@@ -106,6 +117,59 @@ describe('PayoutService.requestPayout payout-account verification', () => {
   });
 });
 
+describe('PayoutService.requestPayout 2FA enforcement (A-035)', () => {
+  const verifiedAccount = {
+    id: 'acc1',
+    userId: 'u1',
+    isVerified: true,
+    currency: 'USD',
+    createdAt: new Date(),
+  };
+
+  function twoFactorUser(enabled: boolean) {
+    return {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'u1',
+          status: 'active',
+          emailVerified: true,
+          twoFactorEnabled: enabled,
+        }),
+      },
+      payoutAccount: { findUnique: vi.fn().mockResolvedValue(verifiedAccount) },
+    };
+  }
+
+  it('allows a payout when PAYOUT_REQUIRE_2FA is true and 2FA is enrolled', async () => {
+    const { prisma, service } = makePayoutService(twoFactorUser(true), true);
+
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000,
+        currency: 'USD',
+      }),
+    ).rejects.not.toThrow(ForbiddenException);
+
+    // Reaching the account lookup proves the 2FA gate did not block.
+    expect(prisma.payoutAccount.findUnique).toHaveBeenCalled();
+  });
+
+  it('allows a payout when PAYOUT_REQUIRE_2FA is false even with 2FA enrolled', async () => {
+    const { prisma, service } = makePayoutService(twoFactorUser(true), false);
+
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000,
+        currency: 'USD',
+      }),
+    ).rejects.not.toThrow(ForbiddenException);
+
+    expect(prisma.payoutAccount.findUnique).toHaveBeenCalled();
+  });
+});
+
 describe('PayoutService.getPayoutInfo payout policy metadata', () => {
   it('returns the payout 2FA policy and the user enrollment state', async () => {
     const { service } = makePayoutService(
@@ -177,7 +241,8 @@ describe('PayoutService.processPayout partial approvals', () => {
       allocations: [allocation],
     };
 
-    const payoutRequestFindUnique = vi.fn()
+    const payoutRequestFindUnique = vi
+      .fn()
       .mockResolvedValueOnce({ id: 'payout-1', status: 'approved', payoutAccount })
       .mockResolvedValueOnce(payoutForProcessing);
 

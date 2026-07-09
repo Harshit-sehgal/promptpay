@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1110,20 +1109,26 @@ model ReferralReward {
 // `granted = false` rather than mutating history, so the audit trail is intact.
 model Consent {
   id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Nullable to support privacy-minimized ANONYMOUS (logged-out) consent where
+  // no authenticated user exists. Authenticated consent always sets `userId`.
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   // e.g. "privacy_policy", "marketing_cookies", "terms_of_service"
   purpose     String
   // Version of the policy/terms the consent applies to (e.g. "2026-07-01").
   version     String
   granted     Boolean  @default(true)
-  // Optional free-text or structured context (IP hash, method of capture).
+  // Optional free-text or structured context (method of capture).
   metadata    Json?
+  // sha256 of a client-generated pseudonymous visitor id for anonymous,
+  // logged-out consent. Never stores the raw id, IP, or other PII (A-009).
+  visitorIdHash String?
 
   createdAt DateTime @default(now())
 
   @@index([userId, purpose])
   @@index([purpose, version])
+  @@index([visitorIdHash])
   @@map("consents")
 }
 

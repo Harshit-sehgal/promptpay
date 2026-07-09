@@ -4,6 +4,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { ApiKeyService } from './api-key.service';
+import { REMOVED_SENSITIVE_API_KEY_SCOPES } from './dto/api-key.dto';
 
 function makeService() {
   const prisma = {
@@ -64,9 +65,9 @@ describe('ApiKeyService account-status policy', () => {
   it('rejects API-key minting for restricted users', async () => {
     ctx.prisma.user.findUnique.mockResolvedValue({ status: 'restricted' });
 
-    await expect(
-      ctx.service.generateApiKey('user-1', ['reports:read']),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(ctx.service.generateApiKey('user-1', ['reports:read'])).rejects.toThrow(
+      ForbiddenException,
+    );
     expect(ctx.prisma.apiKey.create).not.toHaveBeenCalled();
   });
 
@@ -132,6 +133,22 @@ describe('ApiKeyService account-status policy', () => {
     });
 
     await expect(ctx.service.validateApiKey('wl_test')).rejects.toThrow(BadRequestException);
+    expect(ctx.prisma.apiKey.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an active key carrying ANY removed sensitive scope at validation time (A-070)', async () => {
+    for (const scope of REMOVED_SENSITIVE_API_KEY_SCOPES) {
+      ctx.prisma.apiKey.findUnique.mockResolvedValue({
+        id: 'key-1',
+        isActive: true, // active + non-expired + active owner: only the scope is disqualifying
+        expiresAt: null,
+        lastUsedAt: null,
+        scopes: ['reports:read', scope],
+        owner: { id: 'user-1', status: 'active', trustLevel: 'normal', role: 'developer' },
+      });
+
+      await expect(ctx.service.validateApiKey('wl_test')).rejects.toThrow(BadRequestException);
+    }
     expect(ctx.prisma.apiKey.update).not.toHaveBeenCalled();
   });
 

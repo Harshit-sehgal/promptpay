@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
-import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto } from './dto/feedback.dto';
+import { FeedbackService } from './feedback.service';
 
 function makeService() {
   const audit = {
@@ -39,10 +39,9 @@ describe('FeedbackService', () => {
 
   it('rejects out-of-range ratings', async () => {
     await expect(
-      ctx.service.submitFeedback(
-        { message: 'great', rating: 9 } as CreateFeedbackDto,
-        { ip: '1.2.3.4' },
-      ),
+      ctx.service.submitFeedback({ message: 'great', rating: 9 } as CreateFeedbackDto, {
+        ip: '1.2.3.4',
+      }),
     ).rejects.toThrow(BadRequestException);
   });
 

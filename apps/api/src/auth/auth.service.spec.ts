@@ -1,5 +1,5 @@
-import { beforeEach,describe, expect, it, vi } from 'vitest';
-import { BadRequestException,ConflictException, UnauthorizedException } from '@nestjs/common';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
@@ -83,9 +83,9 @@ describe('AuthService', () => {
 
   describe('constructor — JWT secret validation', () => {
     it('rejects JWT_SECRET shorter than 32 characters', () => {
-      expect(
-        () => makeService({ JWT_SECRET: 'too-short' }),
-      ).toThrow('JWT_SECRET must be defined and at least 32 characters');
+      expect(() => makeService({ JWT_SECRET: 'too-short' })).toThrow(
+        'JWT_SECRET must be defined and at least 32 characters',
+      );
     });
 
     it('accepts JWT_SECRET of 32+ characters', () => {
@@ -164,7 +164,13 @@ describe('AuthService', () => {
       const { service } = makeService();
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'exists', email: 'a@b.com' });
       await expect(
-        service.signUp({ email: 'a@b.com', password: 'pw', role: 'developer' as any, ageConfirmed: true, termsAccepted: true }),
+        service.signUp({
+          email: 'a@b.com',
+          password: 'pw',
+          role: 'developer' as any,
+          ageConfirmed: true,
+          termsAccepted: true,
+        }),
       ).rejects.toThrow(ConflictException);
     });
 
@@ -229,6 +235,28 @@ describe('AuthService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
 
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.user.create).not.toHaveBeenCalled();
+      expect(mockPrisma.consent.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects signup when the accepted policyVersion does not match the server-required versions (A-047 fail-closed)', async () => {
+      const { service } = makeService();
+
+      await expect(
+        service.signUp({
+          email: 'mismatch@test.com',
+          password: 'password123',
+          role: 'developer' as any,
+          ageConfirmed: true,
+          termsAccepted: true,
+          // Off-by-one-day version the client accepted but the server rejects.
+          policyVersion: '2026-07-02',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      // Fail-closed: no account or consent rows may be created when the
+      // version the client asserted is not the current required version.
       expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
       expect(mockPrisma.user.create).not.toHaveBeenCalled();
       expect(mockPrisma.consent.create).not.toHaveBeenCalled();
@@ -319,9 +347,9 @@ describe('AuthService', () => {
         twoFactorSecret: 'JBSWY3DPEHPK3PXP',
       });
 
-      await expect(service.login({ email: '2fa@test.com', password: 'mypassword' })).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login({ email: '2fa@test.com', password: 'mypassword' }),
+      ).rejects.toThrow(UnauthorizedException);
       expect(mockPrisma.session.create).not.toHaveBeenCalled();
     });
 
@@ -496,7 +524,13 @@ describe('AuthService', () => {
 
     it('revokes all sessions if no session found for token', async () => {
       const { service, createRefreshToken } = makeService();
-      const oldRefresh = await createRefreshToken('u-5', 'developer', 'fam-ghost', '30d', 'sess-ghost');
+      const oldRefresh = await createRefreshToken(
+        'u-5',
+        'developer',
+        'fam-ghost',
+        '30d',
+        'sess-ghost',
+      );
 
       mockPrisma.session.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.session.findUnique.mockResolvedValue(null);
@@ -515,7 +549,13 @@ describe('AuthService', () => {
     it('does not rotate refresh tokens for restricted accounts', async () => {
       const { service, createRefreshToken } = makeService();
       const family = 'fam-restricted';
-      const oldRefresh = await createRefreshToken('u-restricted', 'developer', family, '30d', 'sess-restricted');
+      const oldRefresh = await createRefreshToken(
+        'u-restricted',
+        'developer',
+        family,
+        '30d',
+        'sess-restricted',
+      );
 
       mockPrisma.session.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.session.findUnique.mockResolvedValue({
@@ -569,7 +609,11 @@ describe('AuthService', () => {
   describe('email verification flow', () => {
     it('should generate verification token and send email if not already verified', async () => {
       const { service, email } = makeService();
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-verify', email: 'test@verify.com', emailVerified: false });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-verify',
+        email: 'test@verify.com',
+        emailVerified: false,
+      });
 
       const res = await service.requestEmailVerification('u-verify');
       expect(res.token).toBeDefined();
@@ -579,14 +623,24 @@ describe('AuthService', () => {
 
     it('should throw BadRequestException on request if already verified', async () => {
       const { service } = makeService();
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-verify', email: 'test@verify.com', emailVerified: true });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-verify',
+        email: 'test@verify.com',
+        emailVerified: true,
+      });
 
-      await expect(service.requestEmailVerification('u-verify')).rejects.toThrow(BadRequestException);
+      await expect(service.requestEmailVerification('u-verify')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should confirm verification, update flag, and recalculate trust score', async () => {
       const { service, fraud } = makeService();
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-verify', email: 'test@verify.com', emailVerified: false });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-verify',
+        email: 'test@verify.com',
+        emailVerified: false,
+      });
       mockPrisma.user.update.mockResolvedValue({ id: 'u-verify', emailVerified: true });
 
       const reqRes = await service.requestEmailVerification('u-verify');
@@ -601,9 +655,27 @@ describe('AuthService', () => {
       expect(fraud.computeTrustScore).toHaveBeenCalledWith('u-verify');
     });
 
-    it('should throw BadRequestException if token is invalid or expired', async () => {
-      const { service } = makeService();
-      await expect(service.confirmEmailVerification('invalid-token')).rejects.toThrow(BadRequestException);
+    it('should throw BadRequestException if token is expired (A-015)', async () => {
+      const { service, jwt } = makeService();
+      const expired = await jwt.signAsync(
+        { sub: 'u-verify', email: 'test@verify.com', action: 'email-verification' },
+        { secret: 'test-secret-at-least-32-characters-long', expiresIn: '-1h' } as any,
+      );
+      await expect(service.confirmEmailVerification(expired)).rejects.toThrow(BadRequestException);
+    });
+
+    it('should not send a new verification email or create state when re-requesting for an already-verified user (A-015)', async () => {
+      const { service, email } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-verify',
+        email: 'test@verify.com',
+        emailVerified: true,
+      });
+
+      await expect(service.requestEmailVerification('u-verify')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(email.sendEmailVerification).not.toHaveBeenCalled();
     });
   });
 
@@ -680,7 +752,10 @@ describe('AuthService', () => {
       const reqRes = await service.requestPasswordReset('reset@test.com');
 
       // Password changed since the token was issued → fingerprint mismatch
-      mockPrisma.user.findUnique.mockResolvedValue({ ...resetUser, passwordHash: '$2a$12$different-hash' });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...resetUser,
+        passwordHash: '$2a$12$different-hash',
+      });
 
       await expect(
         service.resetPassword((reqRes as any).token, 'new-password-123'),
@@ -823,7 +898,12 @@ describe('AuthService', () => {
         status: 'active',
       });
 
-      const res = await service.googleOAuth({ idToken: 'some-token', role: 'developer' as any, ageConfirmed: true, termsAccepted: true });
+      const res = await service.googleOAuth({
+        idToken: 'some-token',
+        role: 'developer' as any,
+        ageConfirmed: true,
+        termsAccepted: true,
+      });
       expect(res.user.id).toBe('u-new-google');
       expect(res.accessToken).toBeDefined();
       const purposes = mockPrisma.consent.create.mock.calls.map((c: any) => c[0].data.purpose);

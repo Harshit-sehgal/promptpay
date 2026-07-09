@@ -1,6 +1,5 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
-
 import { Request } from 'express';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 
 interface RequestWithOptionalApiKey extends Request {
   apiKey?: unknown;

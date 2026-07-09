@@ -10,11 +10,14 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../lib/api-client', () => ({
-  ApiClient: vi.fn(() => ({
-    login: mocks.login,
-    signup: mocks.signup,
-    getRequiredConsentVersions: mocks.getRequiredConsentVersions,
-  })),
+  // `function` (not arrow) so `new ApiClient()` works under vitest.
+  ApiClient: vi.fn(function () {
+    return {
+      login: mocks.login,
+      signup: mocks.signup,
+      getRequiredConsentVersions: mocks.getRequiredConsentVersions,
+    };
+  }),
 }));
 
 vi.mock('../lib/credentials', () => ({
@@ -44,9 +47,11 @@ describe('runAuth login', () => {
     mocks.getCredentials.mockReturnValue(null);
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined) => {
-      throw new Error(`process.exit:${code ?? ''}`);
-    });
+    exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((code?: string | number | null | undefined) => {
+        throw new Error(`process.exit:${code ?? ''}`);
+      });
   });
 
   afterEach(() => {
@@ -77,9 +82,7 @@ describe('runAuth login', () => {
   });
 
   it('prompts for a 2FA code and retries login when the API returns a 2FA challenge', async () => {
-    mocks.prompt
-      .mockResolvedValueOnce('password-1')
-      .mockResolvedValueOnce('123456');
+    mocks.prompt.mockResolvedValueOnce('password-1').mockResolvedValueOnce('123456');
     mocks.login
       .mockRejectedValueOnce({
         status: 401,
@@ -112,9 +115,7 @@ describe('runAuth login', () => {
   });
 
   it('does not persist credentials when the 2FA challenge is cancelled', async () => {
-    mocks.prompt
-      .mockResolvedValueOnce('password-1')
-      .mockResolvedValueOnce('');
+    mocks.prompt.mockResolvedValueOnce('password-1').mockResolvedValueOnce('');
     mocks.login.mockRejectedValueOnce({
       status: 401,
       message: 'Two-factor authentication code required',
@@ -138,9 +139,11 @@ describe('runAuth signup consent versions', () => {
     mocks.getCredentials.mockReturnValue(null);
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null | undefined) => {
-      throw new Error(`process.exit:${code ?? ''}`);
-    });
+    exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((code?: string | number | null | undefined) => {
+        throw new Error(`process.exit:${code ?? ''}`);
+      });
   });
 
   afterEach(() => {
@@ -166,5 +169,66 @@ describe('runAuth signup consent versions', () => {
 
     expect(mocks.signup).not.toHaveBeenCalled();
     expect(mocks.setCredentials).not.toHaveBeenCalled();
+  });
+
+  it('does not create an account when age or terms consent is declined', async () => {
+    mocks.prompt
+      .mockResolvedValueOnce('CLI User')
+      .mockResolvedValueOnce('password-1')
+      .mockResolvedValueOnce('password-1')
+      .mockResolvedValueOnce('1')
+      .mockResolvedValueOnce('')
+      .mockResolvedValueOnce('n') // age declined
+      .mockResolvedValueOnce('y');
+
+    await expect(runAuth({ email: 'dev@example.com', signup: true })).rejects.toThrow(
+      'process.exit:1',
+    );
+
+    // Declining consent must short-circuit before any version fetch or signup.
+    expect(mocks.getRequiredConsentVersions).not.toHaveBeenCalled();
+    expect(mocks.signup).not.toHaveBeenCalled();
+    expect(mocks.setCredentials).not.toHaveBeenCalled();
+  });
+
+  it('forwards accepted consent and the live policy version to signup', async () => {
+    mocks.prompt
+      .mockResolvedValueOnce('CLI User')
+      .mockResolvedValueOnce('password-1')
+      .mockResolvedValueOnce('password-1')
+      .mockResolvedValueOnce('1')
+      .mockResolvedValueOnce('')
+      .mockResolvedValueOnce('y')
+      .mockResolvedValueOnce('y');
+    mocks.getRequiredConsentVersions.mockResolvedValueOnce({
+      terms_of_service: '2026-07-09',
+      privacy_policy: '2026-07-09',
+    });
+    mocks.signup.mockResolvedValueOnce({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: { id: 'user_123', role: 'developer', referralCode: null },
+    });
+
+    await runAuth({ email: 'dev@example.com', signup: true });
+
+    expect(mocks.getRequiredConsentVersions).toHaveBeenCalledTimes(1);
+    expect(mocks.signup).toHaveBeenCalledWith({
+      email: 'dev@example.com',
+      password: 'password-1',
+      role: 'developer',
+      name: 'CLI User',
+      referrerCode: undefined,
+      ageConfirmed: true,
+      termsAccepted: true,
+      policyVersion: '2026-07-09',
+    });
+    expect(mocks.setCredentials).toHaveBeenCalledWith({
+      email: 'dev@example.com',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      userId: 'user_123',
+      role: 'developer',
+    });
   });
 });

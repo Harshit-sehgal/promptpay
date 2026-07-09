@@ -1,7 +1,6 @@
 import { errors, jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-
 import { validateWebEnv } from '@/lib/web-env';
 
 const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', '/dashboard'];
@@ -61,14 +60,19 @@ export async function middleware(request: NextRequest) {
     // Set long-lived cache headers for static policy pages
     if (STATIC_CACHEABLE_PATHS.some((p) => pathname === p)) {
       const res = NextResponse.next();
-      res.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800');
+      res.headers.set(
+        'Cache-Control',
+        'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+      );
       return res;
     }
     return NextResponse.next();
   }
 
-  const accessCookie = request.cookies.get('__Host-access_token') ?? request.cookies.get('access_token');
-  const refreshCookie = request.cookies.get('__Host-refresh_token') ?? request.cookies.get('refresh_token');
+  const accessCookie =
+    request.cookies.get('__Host-access_token') ?? request.cookies.get('access_token');
+  const refreshCookie =
+    request.cookies.get('__Host-refresh_token') ?? request.cookies.get('refresh_token');
   const token = accessCookie?.value;
 
   if (!token) {

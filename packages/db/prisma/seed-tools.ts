@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../src/index';
 
 const TOOLS = [
   { slug: 'vscode', name: 'VS Code', type: 'vscode' as const, minVersion: null },

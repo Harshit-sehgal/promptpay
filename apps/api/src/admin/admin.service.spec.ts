@@ -10,6 +10,11 @@ const mockPrisma: any = {
   device: {
     count: vi.fn(),
     findMany: vi.fn(),
+    findUnique: vi.fn(),
+  },
+  deviceRecoveryToken: {
+    updateMany: vi.fn(),
+    create: vi.fn(),
   },
   user: {
     findMany: vi.fn(),
@@ -39,14 +44,16 @@ const mockPrisma: any = {
 
 describe('AdminService', () => {
   let service: AdminService;
+  const mockAudit = { log: vi.fn().mockResolvedValue(undefined) };
+  const mockFraud = { computeTrustScore: vi.fn() };
 
   beforeEach(() => {
     vi.clearAllMocks();
     service = new AdminService(
       mockPrisma,
+      mockAudit as any,
       {} as any,
-      {} as any,
-      {} as any,
+      mockFraud as any,
       {} as any,
     );
   });
@@ -249,22 +256,25 @@ describe('AdminService', () => {
     });
 
     it('rejects a partial approval that exceeds the requested amount', async () => {
-      mockPrisma.payoutRequest.findUnique.mockResolvedValue({ requestedAmountMinor: 5000, currency: 'USD' });
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+        requestedAmountMinor: 5000,
+        currency: 'USD',
+      });
 
-      await expect(
-        service.approvePayout('pay_1', 'admin_1', 'too much', 9000),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.approvePayout('pay_1', 'admin_1', 'too much', 9000)).rejects.toThrow(
+        BadRequestException,
+      );
 
       expect(mockPrisma.payoutRequest.updateMany).not.toHaveBeenCalled();
     });
 
     it('rejects a non-positive approved amount', async () => {
-      await expect(
-        service.approvePayout('pay_1', 'admin_1', 'bad', 0),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.approvePayout('pay_1', 'admin_1', 'bad', -100),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.approvePayout('pay_1', 'admin_1', 'bad', 0)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.approvePayout('pay_1', 'admin_1', 'bad', -100)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('rejects approval when the payout is not in a reviewable state', async () => {
@@ -273,43 +283,79 @@ describe('AdminService', () => {
         .mockResolvedValueOnce({ id: 'pay_1', status: 'paid' }); // already paid → count 0
       mockPrisma.payoutRequest.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.approvePayout('pay_1', 'admin_1', 'late'),
-      ).rejects.toThrow(/cannot be approved from status 'paid'/);
+      await expect(service.approvePayout('pay_1', 'admin_1', 'late')).rejects.toThrow(
+        /cannot be approved from status 'paid'/,
+      );
     });
 
     it('rejects approval for a missing payout', async () => {
       mockPrisma.payoutRequest.findUnique.mockResolvedValue(null);
 
-      await expect(service.approvePayout('ghost', 'admin_1')).rejects.toThrow(
-        'Payout not found',
-      );
+      await expect(service.approvePayout('ghost', 'admin_1')).rejects.toThrow('Payout not found');
     });
   });
 
   describe('getUsers response shape', () => {
     it('returns the actual user fields plus an open fraud-flag count', async () => {
+      const createdAt1 = new Date('2026-07-01T00:00:00Z');
+      const createdAt2 = new Date('2026-07-02T00:00:00Z');
       mockPrisma.user.findMany.mockResolvedValue([
-        { id: 'u1', email: 'a@x.com', name: 'Alice', role: 'developer', status: 'active', trustLevel: 'high_trust', country: 'US', createdAt: new Date() },
-        { id: 'u2', email: 'b@x.com', name: null, role: 'advertiser', status: 'active', trustLevel: 'low_trust', country: null, createdAt: new Date() },
+        {
+          id: 'u1',
+          email: 'a@x.com',
+          name: 'Alice',
+          role: 'developer',
+          status: 'active',
+          trustLevel: 'high_trust',
+          country: 'US',
+          createdAt: createdAt1,
+        },
+        {
+          id: 'u2',
+          email: 'b@x.com',
+          name: null,
+          role: 'advertiser',
+          status: 'active',
+          trustLevel: 'low_trust',
+          country: null,
+          createdAt: createdAt2,
+        },
       ]);
-      mockPrisma.fraudFlag.groupBy.mockResolvedValue([
-        { userId: 'u1', _count: { _all: 2 } },
-      ]);
+      mockPrisma.fraudFlag.groupBy.mockResolvedValue([{ userId: 'u1', _count: { _all: 2 } }]);
 
       const users = await service.getUsers({});
 
       expect(users).toHaveLength(2);
+      // A-025: the returned user objects must include the exact fields the
+      // admin ops view renders — id, role, status, email, name, trustLevel,
+      // country, createdAt, plus a computed numeric openFlags count.
+      for (const u of users) {
+        expect(u).toHaveProperty('id');
+        expect(u).toHaveProperty('role');
+        expect(u).toHaveProperty('status');
+        expect(u).toHaveProperty('email');
+        expect(u).toHaveProperty('name');
+        expect(u).toHaveProperty('trustLevel');
+        expect(u).toHaveProperty('country');
+        expect(u).toHaveProperty('createdAt');
+        expect(u).toHaveProperty('openFlags');
+        expect(typeof u.openFlags).toBe('number');
+      }
       expect(users[0]).toMatchObject({
         id: 'u1',
         email: 'a@x.com',
         name: 'Alice',
         role: 'developer',
+        status: 'active',
         trustLevel: 'high_trust',
+        country: 'US',
         openFlags: 2,
       });
+      expect(users[0].createdAt).toBe(createdAt1);
+      expect(users[1].createdAt).toBe(createdAt2);
       // A user with no open flags reports 0, not undefined.
       expect(users[1].openFlags).toBe(0);
+      expect(users[1].country).toBeNull();
     });
   });
 
@@ -351,12 +397,14 @@ describe('AdminService', () => {
 
       const result = await service.getDevices({ search: 'dev@example.com', limit: 10 });
 
-      expect(mockPrisma.device.findMany).toHaveBeenCalledWith(expect.objectContaining({
-        orderBy: { lastSeenAt: 'desc' },
-        skip: 0,
-        take: 10,
-        where: expect.objectContaining({ AND: expect.any(Array) }),
-      }));
+      expect(mockPrisma.device.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { lastSeenAt: 'desc' },
+          skip: 0,
+          take: 10,
+          where: expect.objectContaining({ AND: expect.any(Array) }),
+        }),
+      );
       expect(result).toMatchObject({
         total: 1,
         page: 1,
@@ -380,8 +428,96 @@ describe('AdminService', () => {
     });
 
     it('rejects unsupported tool type filters', async () => {
-      await expect(service.getDevices({ toolType: 'not-a-tool' })).rejects.toThrow(BadRequestException);
+      await expect(service.getDevices({ toolType: 'not-a-tool' })).rejects.toThrow(
+        BadRequestException,
+      );
       expect(mockPrisma.device.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('issueDeviceRecoveryToken (A-027)', () => {
+    const validDevice = {
+      id: 'device-1',
+      userId: 'user-1',
+      fingerprintHash: 'fp-1',
+      eventSecret: 'secret-1',
+      user: { id: 'user-1', email: 'dev@example.com', role: 'developer', status: 'active' },
+    };
+
+    it('issues a non-empty recovery token for a developer device', async () => {
+      mockPrisma.device.findUnique.mockResolvedValue(validDevice);
+      mockPrisma.deviceRecoveryToken.updateMany.mockResolvedValue({ count: 0 });
+      mockPrisma.deviceRecoveryToken.create.mockResolvedValue({ id: 'token-new' });
+
+      const result = await service.issueDeviceRecoveryToken({
+        deviceId: 'device-1',
+        userId: 'user-1',
+        reviewerId: 'admin-1',
+        reviewerRole: 'admin',
+        reason: 'lost laptop',
+      });
+
+      expect(mockPrisma.device.findUnique).toHaveBeenCalledWith({
+        where: { id: 'device-1' },
+        select: expect.objectContaining({ id: true, userId: true, eventSecret: true }),
+      });
+      // Token is created, prior active tokens revoked, and audit row written.
+      expect(mockPrisma.deviceRecoveryToken.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ revokedAt: expect.any(Date) }) }),
+      );
+      expect(mockPrisma.deviceRecoveryToken.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ reason: 'lost laptop' }) }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'device_recovery_token_issued', targetId: 'device-1' }),
+      );
+      expect(typeof result.recoverySupportToken).toBe('string');
+      expect(result.recoverySupportToken.length).toBeGreaterThan(0);
+      expect(result.tokenId).toBe('token-new');
+      expect(result.userId).toBe('user-1');
+      expect(result.deviceId).toBe('device-1');
+    });
+
+    it('rejects an invalid device id (not found for the user)', async () => {
+      mockPrisma.device.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.issueDeviceRecoveryToken({
+          deviceId: 'ghost',
+          userId: 'user-1',
+          reviewerId: 'admin-1',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.deviceRecoveryToken.create).not.toHaveBeenCalled();
+      expect(mockAudit.log).not.toHaveBeenCalled();
+    });
+
+    it('rejects a device that does not belong to the requested user', async () => {
+      mockPrisma.device.findUnique.mockResolvedValue({ ...validDevice, userId: 'other-user' });
+
+      await expect(
+        service.issueDeviceRecoveryToken({
+          deviceId: 'device-1',
+          userId: 'user-1',
+          reviewerId: 'admin-1',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('recomputeTrustScore (A-046)', () => {
+    it('surfaces a failure when FraudService.computeTrustScore throws', async () => {
+      mockFraud.computeTrustScore.mockRejectedValue(new Error('fraud db down'));
+
+      await expect(service.recomputeTrustScore('user-1')).rejects.toThrow('fraud db down');
+    });
+
+    it('returns the updated trust score on success so callers can refresh', async () => {
+      mockFraud.computeTrustScore.mockResolvedValue(82);
+
+      await expect(service.recomputeTrustScore('user-1')).resolves.toBe(82);
+      expect(mockFraud.computeTrustScore).toHaveBeenCalledWith('user-1');
     });
   });
 });

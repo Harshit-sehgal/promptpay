@@ -2,13 +2,15 @@
 
 import type { AxiosResponse } from 'axios';
 import Link from 'next/link';
-import { FormEvent,useEffect, useState } from 'react';
-import { LoadingSpinner, StatCard,StatusBadge } from '@/components';
+import { FormEvent, useEffect, useState } from 'react';
+import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, payoutApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
-import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
+import { COMING_SOON_PAYOUT_PROVIDERS } from '@/lib/payout-providers';
+
+import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
 
 interface PayoutAccount {
   id: string;
@@ -66,14 +68,14 @@ export default function DevPayoutsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [requestError, setRequestError] = useState('');
 
-  const availableBalanceByCurrency = info?.availableBalanceByCurrency ?? (
-    info ? { [info.currency]: info.availableBalanceMinor } : {}
-  );
+  const availableBalanceByCurrency =
+    info?.availableBalanceByCurrency ??
+    (info ? { [info.currency]: info.availableBalanceMinor } : {});
   const selectedAccount = info?.payoutAccounts.find((account) => account.id === selectedAccountId);
   const selectedCurrency = selectedAccount?.currency || info?.currency || 'USD';
   const selectedAvailableMinor = availableBalanceByCurrency[selectedCurrency] ?? 0;
-  const hasPayoutableBalance = Object.values(availableBalanceByCurrency).some(
-    (balanceMinor) => info ? balanceMinor >= info.minimumThresholdMinor : false,
+  const hasPayoutableBalance = Object.values(availableBalanceByCurrency).some((balanceMinor) =>
+    info ? balanceMinor >= info.minimumThresholdMinor : false,
   );
   const payoutTwoFactorEnabled = user?.twoFactorEnabled === true || info?.twoFactorEnabled === true;
   const requestBlockedByTwoFactor =
@@ -124,7 +126,11 @@ export default function DevPayoutsPage() {
     }
 
     try {
-      await payoutApi.addMethod({ provider, destination, currency: methodCurrency.trim().toUpperCase() || 'USD' });
+      await payoutApi.addMethod({
+        provider,
+        destination,
+        currency: methodCurrency.trim().toUpperCase() || 'USD',
+      });
       setDestination('');
       setShowMethodForm(false);
       fetchData();
@@ -156,11 +162,15 @@ export default function DevPayoutsPage() {
       return;
     }
     if (info && amountMinor < info.minimumThresholdMinor) {
-      setRequestError(`Minimum payout is ${formatCurrency(info.minimumThresholdMinor, selectedCurrency)}`);
+      setRequestError(
+        `Minimum payout is ${formatCurrency(info.minimumThresholdMinor, selectedCurrency)}`,
+      );
       return;
     }
     if (amountMinor > selectedAvailableMinor) {
-      setRequestError(`Available ${selectedCurrency} balance is ${formatCurrency(selectedAvailableMinor, selectedCurrency)}`);
+      setRequestError(
+        `Available ${selectedCurrency} balance is ${formatCurrency(selectedAvailableMinor, selectedCurrency)}`,
+      );
       return;
     }
 
@@ -182,7 +192,9 @@ export default function DevPayoutsPage() {
       {isAuthenticated && !user?.emailVerified && (
         <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-amber-800 font-semibold text-[14px]">Verify your email to request payouts</p>
+            <p className="text-amber-800 font-semibold text-[14px]">
+              Verify your email to request payouts
+            </p>
             <p className="text-amber-700 text-xs mt-0.5">
               Payouts are blocked until your email address is confirmed.
             </p>
@@ -201,7 +213,9 @@ export default function DevPayoutsPage() {
       {info && requestBlockedByTwoFactor && (
         <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-amber-800 font-semibold text-[14px]">Enable 2FA to request payouts</p>
+            <p className="text-amber-800 font-semibold text-[14px]">
+              Enable 2FA to request payouts
+            </p>
             <p className="text-amber-700 text-xs mt-0.5">
               Your operator requires two-factor authentication before money can leave your account.
             </p>
@@ -261,11 +275,16 @@ export default function DevPayoutsPage() {
 
             {requestBlockedByTwoFactor ? (
               <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
-                Two-factor authentication is required before requesting a payout. Enable 2FA in settings, then return here.
+                Two-factor authentication is required before requesting a payout. Enable 2FA in
+                settings, then return here.
               </div>
             ) : !hasPayoutableBalance ? (
               <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
-                You need at least <span className="font-semibold">{formatCurrency(info.minimumThresholdMinor, selectedCurrency)}</span> in confirmed earnings before you can request a payout.
+                You need at least{' '}
+                <span className="font-semibold">
+                  {formatCurrency(info.minimumThresholdMinor, selectedCurrency)}
+                </span>{' '}
+                in confirmed earnings before you can request a payout.
               </div>
             ) : info.payoutAccounts.length === 0 ? (
               <p className="text-surface-500 text-sm font-normal">
@@ -286,12 +305,10 @@ export default function DevPayoutsPage() {
                     >
                       <option value="">Select method...</option>
                       {info.payoutAccounts.map((acc) => (
-                        <option
-                          key={acc.id}
-                          value={acc.id}
-                          disabled={!acc.isVerified}
-                        >
-                          {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider} — {acc.destination} ({acc.currency}){acc.isVerified ? '' : ' (pending verification)'}
+                        <option key={acc.id} value={acc.id} disabled={!acc.isVerified}>
+                          {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider} —{' '}
+                          {acc.destination} ({acc.currency})
+                          {acc.isVerified ? '' : ' (pending verification)'}
                         </option>
                       ))}
                     </select>
@@ -308,14 +325,15 @@ export default function DevPayoutsPage() {
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       required
-                      placeholder={minorToMajorInputValue(info.minimumThresholdMinor, selectedCurrency)}
+                      placeholder={minorToMajorInputValue(
+                        info.minimumThresholdMinor,
+                        selectedCurrency,
+                      )}
                       className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
                     />
                   </div>
                 </div>
-                {requestError && (
-                  <p className="text-red-600 text-sm font-normal">{requestError}</p>
-                )}
+                {requestError && <p className="text-red-600 text-sm font-normal">{requestError}</p>}
                 <button
                   type="submit"
                   className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-all"
@@ -339,7 +357,10 @@ export default function DevPayoutsPage() {
             </div>
 
             {showMethodForm && (
-              <form onSubmit={handleAddMethod} className="space-y-4 mb-6 p-5 bg-slate-50/50 border border-slate-100/85 rounded-xl">
+              <form
+                onSubmit={handleAddMethod}
+                className="space-y-4 mb-6 p-5 bg-slate-50/50 border border-slate-100/85 rounded-xl"
+              >
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
@@ -353,6 +374,15 @@ export default function DevPayoutsPage() {
                       <option value="paypal_email">PayPal (email)</option>
                       <option value="manual">Manual</option>
                     </select>
+                    {/* A-030: only paypal_email/manual are selectable at launch.
+                        Surface launch status so developers know the manual,
+                        admin-processed path is expected and automated rails are
+                        coming later. Does not change selectable options. */}
+                    <p className="text-surface-500 text-xs mt-1.5 font-normal">
+                      Available now, admin-processed. Automated providers (
+                      {COMING_SOON_PAYOUT_PROVIDERS.map((p) => p.label).join(', ')}) are coming soon
+                      / invite-only.
+                    </p>
                   </div>
                   <div className="md:col-span-2">
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
@@ -363,9 +393,7 @@ export default function DevPayoutsPage() {
                       value={destination}
                       onChange={(e) => setDestination(e.target.value)}
                       required
-                      placeholder={
-                        provider === 'paypal_email' ? 'you@example.com' : 'Account ID'
-                      }
+                      placeholder={provider === 'paypal_email' ? 'you@example.com' : 'Account ID'}
                       autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
                       inputMode={provider === 'paypal_email' ? 'email' : 'text'}
                       className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
@@ -398,17 +426,25 @@ export default function DevPayoutsPage() {
 
             {info.payoutAccounts.length === 0 ? (
               <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl font-normal">
-                No payout methods yet. Add a PayPal email or manual method to start receiving payouts.
+                No payout methods yet. Add a PayPal email or manual method to start receiving
+                payouts.
               </div>
             ) : (
               <div className="space-y-3">
                 {info.payoutAccounts.map((acc) => (
-                  <div key={acc.id} className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5">
+                  <div
+                    key={acc.id}
+                    className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5"
+                  >
                     <div>
                       <p className="text-surface-900 font-medium capitalize text-[14px]">
-                        {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider.replace('_', ' ')}
+                        {acc.provider === 'paypal_email'
+                          ? 'PayPal'
+                          : acc.provider.replace('_', ' ')}
                       </p>
-                      <p className="text-surface-500 text-xs font-mono mt-0.5 font-normal">{acc.destination}</p>
+                      <p className="text-surface-500 text-xs font-mono mt-0.5 font-normal">
+                        {acc.destination}
+                      </p>
                       <p className="text-surface-400 text-xs mt-0.5 font-normal">{acc.currency}</p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -430,12 +466,17 @@ export default function DevPayoutsPage() {
             ) : (
               <div className="space-y-3">
                 {requests.map((req) => (
-                  <div key={req.id} className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5">
+                  <div
+                    key={req.id}
+                    className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5"
+                  >
                     <div>
                       <p className="text-surface-900 font-mono font-semibold text-[15px]">
                         {formatCurrency(req.requestedAmountMinor, req.currency)}
                       </p>
-                      <p className="text-surface-500 text-xs mt-0.5 font-normal">Requested {formatRelativeTime(req.createdAt)}</p>
+                      <p className="text-surface-500 text-xs mt-0.5 font-normal">
+                        Requested {formatRelativeTime(req.createdAt)}
+                      </p>
                     </div>
                     <StatusBadge status={req.status} />
                   </div>

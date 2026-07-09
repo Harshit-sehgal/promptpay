@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { reportsToCsv, type ReportRow } from './reports-csv';
+
+import { type ReportRow, reportsToCsv } from './reports-csv';
 
 describe('reportsToCsv', () => {
   const rows: ReportRow[] = [

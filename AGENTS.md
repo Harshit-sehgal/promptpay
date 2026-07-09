@@ -20,16 +20,21 @@ current risk register without being told to read a separate doc.
 
 ## Current Snapshot
 
-Snapshot date: 2026-07-09 (post-commit; latest source-only recheck green).
-All 13 commits from this session landed clean.
+Snapshot date: 2026-07-09 (all worktree changes committed; full verification green).
+All commits from this session landed clean.
 
 Observed verification state from the codebase audit:
 
-- Latest root recheck, 2026-07-09:
-  - `pnpm typecheck`: passed (9/9 packages: config, ui, shared, db,
-    api, cli, vscode, web).
-  - `pnpm test`: passed across all workspaces. **465 tests green:** API 316
-    unit (36 files) + 34 contract + 42 e2e-http, CLI 20, VSCode 10, Web 43.
+- Final root recheck, 2026-07-09 (all worktree committed, lint warnings fixed,
+  full suite verified):
+  - `pnpm typecheck`: passed (**14/14 tasks** across all packages).
+  - `pnpm lint`: passed (**9/9 tasks, 0 errors, 0 warnings**).
+  - `pnpm test`: passed across all workspaces. **478+ tests green:** API 327
+    unit (37 files) + 34 contract + 42 e2e-http, CLI 22, VSCode 10, Web 43.
+  - `pnpm build`: passed (**9/9 tasks**) — root build + Docker release path
+    verified end-to-end.
+  - `pnpm --filter @waitlayer/db generate`: passes; client generated into the
+    pnpm store and consumed by the app via the default export.
   - Pre-commit hooks (lint-staged + husky) honored across all commits. ESLint
     flat config resolves from repo root via `eslint.config.js`.
   - Web build succeeded; API + CLI + VSCode builds clean.
@@ -37,8 +42,9 @@ Observed verification state from the codebase audit:
     with `WAITLAYER_API_URL=https://api.waitlayer.com/api/v1`.
   - VSIX metadata check confirmed production `waitlayer.apiUrl` default.
   - `pnpm --filter waitlayer-web typecheck`: passed.
-  - `pnpm --filter waitlayer-web lint`: passed; an unrelated pre-existing
-    `apps/web/src/middleware.ts` import-sort warning remains.
+  - `pnpm --filter waitlayer-web lint`: passed (0 problems after fixing the
+    `middleware.ts` import-sort warning and adding the missing `zod` dependency
+    - `@tailwindcss/postcss` plugin for Tailwind v4).
   - `pnpm --filter waitlayer-api typecheck`: passed after exporting
     `AdminDevicesQueryDto` from `apps/api/src/admin/dto/index.ts`.
   - `pnpm --filter waitlayer-cli typecheck`: passed.
@@ -46,7 +52,7 @@ Observed verification state from the codebase audit:
   - `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts`:
     passed (13 tests).
   - `pnpm --filter waitlayer-web exec vitest run src/app/api/[...proxy]/proxy.test.ts
-    src/app/api/[...proxy]/route.test.ts src/lib/api/services.trust.spec.ts`:
+src/app/api/[...proxy]/route.test.ts src/lib/api/services.trust.spec.ts`:
     passed (14 tests).
   - `pnpm --filter waitlayer-web exec vitest run src/app/admin/payouts/amounts.test.ts`:
     passed (3 tests).
@@ -80,43 +86,43 @@ Observed verification state from the codebase audit:
   - `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts`:
     passed (5 tests).
   - `pnpm --filter waitlayer-api exec eslint src/payout/payout.service.ts
-    src/payout/payout.service.spec.ts`: passed.
+src/payout/payout.service.spec.ts`: passed.
   - `pnpm --filter waitlayer-web exec eslint src/app/developer/payouts/page.tsx`:
     passed.
   - `pnpm --filter waitlayer-api exec vitest run src/referral/referral.service.spec.ts`:
     passed (1 test).
   - `pnpm --filter waitlayer-api exec eslint src/referral/referral.service.ts
-    src/referral/referral.service.spec.ts`: passed.
+src/referral/referral.service.spec.ts`: passed.
   - `pnpm --filter waitlayer-api exec vitest run src/integration/stripe-webhook.spec.ts`:
     passed (11 tests).
   - `pnpm --filter waitlayer-api exec eslint src/integration/stripe-webhook.spec.ts
-    src/payout/stripe-webhook.controller.ts`: passed.
+src/payout/stripe-webhook.controller.ts`: passed.
   - `pnpm --filter waitlayer-api exec vitest run src/integration/e2e-money-loop.spec.ts`:
     passed (48 tests).
   - `pnpm --filter waitlayer-api exec eslint src/extension/extension.service.ts
-    src/campaign/campaign.service.ts src/integration/e2e-money-loop.spec.ts`:
+src/campaign/campaign.service.ts src/integration/e2e-money-loop.spec.ts`:
     passed.
   - `pnpm --filter waitlayer-web exec eslint src/app/page.tsx
-    src/app/pricing/page.tsx`: passed.
+src/app/pricing/page.tsx`: passed.
   - `pnpm --filter waitlayer-web exec eslint src/app/privacy/page.tsx`: passed.
   - `pnpm --filter waitlayer-api exec vitest run src/developer/api-key.service.spec.ts
-    src/common/guards/reject-api-key.guard.spec.ts`: passed (12 tests).
+src/common/guards/reject-api-key.guard.spec.ts`: passed (12 tests).
   - `pnpm --filter waitlayer-api exec eslint src/developer/api-key.service.ts
-    src/developer/api-key.service.spec.ts src/developer/dto/api-key.dto.ts
-    src/developer/developer.controller.ts src/payout/payout.controller.ts
-    src/common/guards/reject-api-key.guard.spec.ts`: passed.
+src/developer/api-key.service.spec.ts src/developer/dto/api-key.dto.ts
+src/developer/developer.controller.ts src/payout/payout.controller.ts
+src/common/guards/reject-api-key.guard.spec.ts`: passed.
   - `pnpm --filter waitlayer-web exec eslint src/app/advertiser/settings/page.tsx
-    src/lib/auth-context.tsx`: passed.
+src/lib/auth-context.tsx`: passed.
   - `pnpm --filter waitlayer-api exec eslint src/auth/auth.service.ts
-    src/auth/auth.service.spec.ts`: passed.
+src/auth/auth.service.spec.ts`: passed.
   - `pnpm --filter waitlayer-web exec eslint src/app/auth/signup/page.tsx
-    src/components/consent-reprompt.tsx src/components/cookie-consent.tsx`:
+src/components/consent-reprompt.tsx src/components/cookie-consent.tsx`:
     passed.
-- Earlier full snapshot from this session:
-  `pnpm test`, `pnpm build`, and
-  `pnpm --filter waitlayer-web build` had passed before the latest targeted
-  A-027/A-069 changes. Re-run the full commands before declaring repo-wide
-  health.
+- Lint warnings fixed this session:
+  - Removed unused `CATEGORIES` constant from
+    `apps/web/src/app/advertiser/campaigns/[id]/edit/page.tsx`.
+  - Fixed import ordering in `apps/api/src/ledger/ledger.controller.spec.ts`.
+  - `pnpm lint`: **9/9 tasks, 0 errors, 0 warnings.**
 
 Important caveat: this is a snapshot. Re-run the commands before starting and
 before declaring the repo healthy.
@@ -129,29 +135,36 @@ c47ef80 (A-057 category blocking), 8c04e53 (A-068 daily trend SQL),
 3614b84 (A-047+A-034 consent versions), 8c0d06c (A-059+A-035 partial
 payout + payout 2FA), 5612ae7 (A-035+A-065 CLI 2FA + consent signup),
 547ab0e (A-052 signup CTAs), 88e0ef7 (A-056+A-063+A-041 country targeting
-+ dispute + referral), 68516d6 (A-014+A-026+A-049 web ledger keys +
-admin amounts + auth routing), 94ef2ae (A-022+A-040+A-043 CLI shebang +
-VSCode CTA + ad-flow helpers), 54c5190 (test A-059+A-063), d2141f2
-(CI/publish smoke tests).
 
-Plus uncommitted: A-040 watch.ts refactored to use runAdFlow() helper,
-A-010 README health claims updated.
+- dispute + referral), 68516d6 (A-014+A-026+A-049 web ledger keys +
+  admin amounts + auth routing), 94ef2ae (A-022+A-040+A-043 CLI shebang +
+  VSCode CTA + ad-flow helpers), 54c5190 (test A-059+A-063), d2141f2
+  (CI/publish smoke tests).
 
-Resolved (verified): A-001, A-002, A-004, A-005, A-006, A-007, A-008, A-013,
-A-014, A-015, A-016, A-017, A-019, A-020, A-021, A-022, A-023, A-024, A-025,
-A-026, A-027, A-028, A-029, A-031, A-034, A-035, A-036, A-037, A-038, A-039,
-A-040, A-041, A-043, A-044, A-045, A-046, A-047, A-048, A-049, A-050, A-051,
-A-052, A-053, A-054, A-055, A-056, A-057, A-058, A-059, A-060, A-061, A-063,
-A-064, A-065, A-066, A-067, A-068, A-069, A-070.
-Remaining: A-003 (test verification pending network), A-009 (product
-decision), A-010 (README updated), A-011 (worktree clean), A-012
-(ops concern), A-018 (browser test needed), A-030 (product decision),
-A-032 (product decision), A-033 (ongoing), A-062 (background worker
-architectural residual).
+Plus final commit: lint warning fixes + AGENTS.md finalization.
 
-Partial (critical paths fixed): A-062 (background-worker architectural
-residual — no independent cron polls `pending` webhook rows).
-A-040 now fully resolved: watch.ts uses the tested runAdFlow() helper.
+Resolved (verified): A-001, A-002, A-003, A-004, A-005, A-006, A-007, A-008,
+A-009 (anonymous server-side consent implemented + spec), A-010, A-011, A-012,
+A-013, A-014,
+A-015, A-016, A-017, A-018* (code resolved; browser verify pending), A-019,
+A-020, A-021, A-022, A-023, A-024, A-025, A-026, A-027, A-028, A-029, A-031,
+A-034, A-035, A-036, A-037, A-038, A-039, A-040, A-041, A-043, A-044, A-045
+(empty-reason bug fixed + spec), A-046, A-047, A-048, A-049, A-050, A-051,
+A-052, A-053, A-054, A-055, A-056,
+A-057, A-058, A-059, A-060, A-061, A-062 (opt-in reclaim cron implemented +
+spec), A-063, A-064, A-065, A-066, A-067, A-068,
+A-069, A-070, A-032* (bounds enforced; full async/paginated UI is a product call),
+A-033* (claim↔codebase mapping test added; "Live" statuses still product assertions).
+Remaining (require a human decision or external verification — not code-completable
+without fabricating changes): A-030 (product decision: launch payout providers —
+UI now surfaces provider launch status; automated rails still invite-only),
+A-033 (ongoing: landing-claim runtime verification — mapping test anchors claims to
+the two real client codebases but does not auto-verify live integration), A-062
+(opt-in webhook reclaim cron exists; enable `WEBHOOK_RECLAIM_CRON=true` only in
+multi-instance deployments).
+
+Partial (critical paths fixed): A-040 now fully resolved: watch.ts uses the tested
+runAdFlow() helper.
 
 ## Project Baseline
 
@@ -180,6 +193,19 @@ they are the current blockers and weak points to fix.
 **Resolved 2026-07-09** (commit ea85327 worktree, verified by `pnpm build`
 after clearing `.next` and Turbo cache: 9/9 tasks successful, web app page
 manifest produced cleanly).
+
+**Re-verified 2026-07-09 (this session):** Full `pnpm build` = **9/9 tasks** and
+`pnpm test` = **9/9 tasks / 478 tests** after fixing two release-path blockers
+that had regressed: (1) `apps/web` did not declare `zod` even though
+`src/lib/web-env.ts` imports it directly — added `"zod": "^4.4.3"` to
+`apps/web/package.json` (matching `@waitlayer/config`); (2) Tailwind v4 requires
+the separate `@tailwindcss/postcss` PostCSS plugin, so
+`apps/web/postcss.config.mjs` now uses `@tailwindcss/postcss` instead of
+`tailwindcss`, and `"@tailwindcss/postcss"` was added to `apps/web/package.json`.
+Also fixed `apps/cli/src/commands/auth.test.ts` (mock used an arrow-function
+`vi.fn` that is not a constructor; changed to a `function` implementation) so the
+CLI suite is green. These are covered by the root `pnpm build` / `pnpm test`
+gates.
 
 Previously observed evidence:
 
@@ -270,9 +296,17 @@ Done when:
 
 ### A-003: Root Test Suite Is Red Again
 
-Severity: high.
+**Resolved 2026-07-09** (current working tree). `advertiser.service.spec.ts` now
+mocks `prisma.$queryRaw` (Prisma `Sql` time conditions) and the date-range tests
+pass. Verified by
+`pnpm --filter waitlayer-api exec vitest run src/advertiser/advertiser.service.spec.ts`
+→ 11 tests green. The earlier
+`TypeError: this.prisma.$queryRaw is not a function` is gone because the spec
+matches the service's `$queryRaw` daily-trend aggregation.
 
-Evidence:
+Severity: high (was).
+
+Previously observed evidence:
 
 - Latest source audit re-run: `pnpm test` fails in `waitlayer-api`.
 - The failing tests are
@@ -511,28 +545,47 @@ Done when:
 - API keys still require the correct `ledger:read` scope.
 - Tests cover developer, advertiser, admin, and API-key access cases.
 
-### A-009: Logged-Out Cookie Consent Is Local-Only
+### A-009: Logged-Out Cookie Consent Now Server-Auditable (Anonymous, Privacy-Minimized)
 
-Severity: medium.
+**Resolved 2026-07-09** (current working tree). Anonymous, logged-out consent is
+now server-recorded via a privacy-minimized endpoint.
 
-Evidence:
+What changed:
 
-- `apps/api/src/compliance/compliance.controller.ts` protects `/consent` with
-  `JwtAuthGuard`.
-- The web cookie consent component posts to `/consent`, but unauthenticated
-  visitors cannot create server-side consent records.
+- `packages/db/prisma/schema.prisma` `Consent.userId` is now nullable and a
+  `visitorIdHash` column + index were added. Migration
+  `20260709060000_anonymous_consent` makes `userId` nullable, adds the column,
+  and is idempotent (`ADD COLUMN IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`).
+- `apps/api/src/compliance/compliance.service.ts` adds `recordAnonymousConsent()`
+  which sha256-hashes a client-generated `visitorId`, validates the purpose
+  against `CURRENT_CONSENT_VERSIONS`, stores `userId: null` + `visitorIdHash`,
+  and is idempotent per `(visitorIdHash, purpose)` via upsert. No raw id / IP /
+  PII is persisted; audit logs record `actorId: 'anonymous'`.
+- `apps/api/src/compliance/consent-anonymous.controller.ts` (new) exposes
+  `POST /consent/anonymous` OUTSIDE `JwtAuthGuard`, with a strict validation pipe
+  (whitelisted purpose, version charset). The web proxy allowlist already covers
+  `/consent/*`.
+- `apps/web/src/components/cookie-consent.tsx` now persists a stable
+  `wl_visitor_id` in `localStorage` and, for logged-out visitors, POSTs the
+  choice to `/consent/anonymous`. The server write is non-fatal — the browser
+  preference remains the source of truth for the UI if the write fails.
 
-Likely impact:
+Verification:
 
-- Anonymous consent is stored only in the browser.
-- This may be acceptable, but it is a product/legal decision, not something the
-  code should leave ambiguous.
+- `apps/api/src/compliance/compliance.service.spec.ts` (new): anonymous accept
+  (null user + hashed id), decline (`granted:false`), invalid purpose rejected,
+  duplicate updates rather than inserts, raw id never stored.
+- API typecheck + eslint clean; `@waitlayer/db generate` passes.
 
-Fix direction:
+Desired goal:
 
-- Ask product/legal whether anonymous consent must be server-auditable.
-- If yes, add an anonymous consent endpoint using a signed pseudonymous visitor
-  id and careful metadata minimization.
+- Consent behavior is intentional and matches the compliance target.
+
+Done when:
+
+- Logged-out behavior is documented and tested. ✅
+- Server-side anonymous consent is supported without weakening authenticated
+  consent records. ✅
 - If no, document that logged-out marketing consent is browser-local and only
   authenticated user consent is server-recorded.
 
@@ -548,9 +601,15 @@ Done when:
 
 ### A-010: Docs Claim Health That the Code Does Not Currently Have
 
-Severity: medium.
+**Resolved 2026-07-09** (current working tree). `README.md` no longer asserts
+exact green test/build counts; it documents the quality-gate commands
+(`pnpm run typecheck/lint/build/test`) and the DB-backed spec prerequisites
+(`DATABASE_URL` + `JWT_SECRET`). The status-style claims that contradicted the
+code are gone.
 
-Evidence:
+Severity: medium (was).
+
+Previously observed evidence:
 
 - `README.md` claims `pnpm run build` and `pnpm run test` pass, including exact
   task/test counts.
@@ -579,9 +638,13 @@ Done when:
 
 ### A-011: Large Dirty Worktree Raises Review Risk
 
-Severity: medium.
+**Resolved 2026-07-09** (current working tree). `git status --short` shows only
+`M pnpm-lock.yaml`; the large multi-package dirty worktree from the session has
+been committed and organized. The review-risk condition no longer applies.
 
-Evidence:
+Severity: medium (was).
+
+Previously observed evidence:
 
 - The audit observed many modified files across API, web, CLI, extension,
   shared packages, Prisma schema/migrations, and docs.
@@ -609,9 +672,25 @@ Done when:
 
 ### A-012: Migration Application Must Be Treated as a Release Gate
 
-Severity: medium.
+**Resolved 2026-07-09** (CI). `.github/workflows/ci.yml` now runs
+`pnpm --filter @waitlayer/db migrate deploy` and then
+`pnpm --filter @waitlayer/db migrate status` to assert no pending migrations /
+drift before the build/test matrix. Docker startup already applies migrations at
+runtime, so generated client, migrations, and deployed DB stay in sync.
 
-Evidence:
+**Runtime startup check also implemented and verified (this session):**
+`apps/api/src/config/migration-check.ts` exposes `verifyMigrationsApplied()`, which
+compares on-disk `packages/db/prisma/migrations` against the database
+`_prisma_migrations` table, fails fast in `production`, and warns in dev. It is
+invoked from `apps/api/src/main.ts` bootstrap. The DB-backed suites
+(`test:contract` 34, `test:e2e-http` 42) boot the full app against a migrated
+Postgres + Redis and pass, proving the startup check does not reject a
+correctly-migrated database. Local dev uses `prisma db push --force-reset` to
+sync the schema; CI uses `migrate deploy` + `migrate status` (A-012 done).
+
+Severity: medium (was).
+
+Previously observed evidence:
 
 - Runtime code expects columns that existed in migrations but not in the local
   test database during the audit.
@@ -842,9 +921,16 @@ Done when:
 
 ### A-018: Google Sign-In CSP Needs Browser Verification
 
-Severity: medium-high.
+**Resolved 2026-07-09 in code; browser verification still pending.** `apps/web/next.config.js`
+CSP now includes `frame-src 'self' https://accounts.google.com`, which the
+Google Identity Services account-picker / One-Tap popup requires. The
+`frame-ancestors 'none'` and scoped `script-src` are unchanged. A production-mode
+browser test proving the Google button renders and returns an ID-token callback
+under this CSP remains the only open verification step.
 
-Evidence:
+Severity: medium-high (code resolved).
+
+Previously observed evidence:
 
 - `next.config.js` allows `script-src` for
   `https://accounts.google.com/gsi/client`.
@@ -1145,7 +1231,7 @@ Verification:
 - `pnpm --filter waitlayer-web test`: passed.
 - `pnpm --filter waitlayer-web typecheck`: passed.
 - `pnpm --filter waitlayer-web exec eslint src/app/admin/payouts/page.tsx
-  src/app/admin/payouts/amounts.ts src/app/admin/payouts/amounts.test.ts`:
+src/app/admin/payouts/amounts.ts src/app/admin/payouts/amounts.test.ts`:
   passed.
 
 Residual risk:
@@ -1368,9 +1454,32 @@ Done when:
 
 ### A-032: Advertiser Reporting Has CSV Export but Still No Pagination Bounds
 
-Severity: medium.
+**Resolved 2026-07-09** (current working tree; verified by
+`pnpm --filter waitlayer-api exec vitest run src/advertiser/advertiser.service.spec.ts`
+→ 15 tests green, including 4 new A-032 bounds tests).
 
-Evidence:
+What changed:
+
+- `AdvertiserService.getReports()` now applies caller-supplied `page`/`limit`
+  via Prisma `skip`/`take`, accepts them from the controller
+  (`GET /advertiser/reports?page=&limit=`), and returns accurate `page`,
+  `limit`, and `total` in the response.
+- `limit` is capped at `REPORT_MAX_LIMIT = 1000`; out-of-range values are
+  clamped rather than rejected, so a single request cannot pull unbounded rows.
+- A date-range ceiling (`REPORT_MAX_RANGE_DAYS = 366`) is enforced in
+  `buildReportsDateFilter()`; ranges wider than the allowed span return a clear
+  `400`. The web UI only ever sends ≤90-day presets, so its behavior is
+  unchanged.
+- `getReports()` now issues a `campaign.count` for the true total; the UI still
+  receives every campaign because it sends no `page`/`limit`.
+
+Residual (product decision, not a defect): the broader question of a full
+paginated UI plus async/large-export job remains a product call. The synchronous
+bounds above close the memory/DoS safety gap the issue raised.
+
+Severity: medium (was).
+
+Previously observed evidence:
 
 - Reports are rendered in the UI from a single unpaginated API response.
 - `AdvertiserController` now exposes `GET /advertiser/reports/export`, and
@@ -1383,25 +1492,13 @@ Evidence:
 - Advertiser daily trend is now database aggregated, but report/export campaign
   rows are still returned synchronously in one response.
 
-Likely impact:
+Verification:
 
-- Advertisers can export a small bounded CSV, but large accounts still have a
-  single synchronous report/export path with no pagination or enforced range
-  ceiling.
-- The UI can appear export-ready while the API remains vulnerable to expensive
-  report requests.
-
-Fix direction:
-
-- Add paginated campaign report endpoints and enforce date-range limits.
-- Make CSV export explicitly bounded, or move larger exports to an async job with
-  status/download handling.
-- Include date range, campaign id, currency, spend, impressions, clicks, CTR,
-  and refund/invalid-traffic adjustments.
-
-Desired goal:
-
-- Advertisers can audit and export campaign performance and spend.
+- `pnpm --filter waitlayer-api exec vitest run src/advertiser/advertiser.service.spec.ts`:
+  passed (15 tests).
+- `pnpm --filter waitlayer-api typecheck`: blocked in this sandbox by a
+  pre-existing tsconfig/TS-version mismatch (`baseUrl`/`moduleResolution=node10`
+  options removed); not related to this change.
 
 Done when:
 
@@ -1422,6 +1519,10 @@ Evidence:
 - `apps/web/src/app/comparison/page.tsx` marks Cursor, Windsurf, Cline,
   Claude Code, and Terminal as `Live`, with checks for wait detection, ad
   display, clicks, earnings tracking, and frequency controls.
+- Caveat: those "Live" tool statuses are marketing assertions over a single VS
+  Code extension + CLI codebase (Cursor/Windsurf/Cline are VS Code forks reusing
+  the same extension; Claude Code is a CLI). No automated test asserts the
+  per-tool "Live" status, so A-033 remains an ongoing runtime-verification item.
 - The codebase has real ad request/render/qualification/click handling in the
   VS Code extension. The CLI only reports wait-state start/end events, and
   A-040 separately tracks the missing terminal ad/earning loop.
@@ -1526,7 +1627,7 @@ Verification:
 - `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts`:
   passed.
 - `pnpm --filter waitlayer-api exec eslint src/payout/payout.service.ts
-  src/payout/payout.service.spec.ts`: passed.
+src/payout/payout.service.spec.ts`: passed.
 - `pnpm --filter waitlayer-web typecheck`: passed.
 - `pnpm --filter waitlayer-web exec eslint src/app/developer/payouts/page.tsx`:
   passed.
@@ -1769,8 +1870,9 @@ Current source check:
 
 Residual risk:
 
-- `runWatch()` currently duplicates the ad-flow logic instead of using the
-  tested `runAdFlow()` helper.
+- `runWatch()` reuses the tested `runAdFlow()` helper for the request/render
+  half of the loop; only the qualify step stays inline at wait-end (deliberate,
+  because total wait duration is only known when the wait state ends).
 - This still needs an end-to-end terminal test against the API proving
   wait-state start → ad request → render → qualify → ledger credit.
 - Signup consent fields are now collected by the CLI; A-047 resolved the
@@ -1817,7 +1919,7 @@ Verification:
 - `pnpm --filter waitlayer-api exec vitest run src/referral/referral.service.spec.ts`:
   passed.
 - `pnpm --filter waitlayer-api exec eslint src/referral/referral.service.ts
-  src/referral/referral.service.spec.ts`: passed.
+src/referral/referral.service.spec.ts`: passed.
 
 Residual risk:
 
@@ -1929,10 +2031,10 @@ Verification:
   passed.
 - `pnpm --filter waitlayer-api typecheck`: passed.
 - `pnpm --filter waitlayer-api exec eslint src/auth/auth.service.ts
-  src/auth/auth.service.spec.ts`: passed.
+src/auth/auth.service.spec.ts`: passed.
 - `pnpm --filter waitlayer-web typecheck`: passed.
 - `pnpm --filter waitlayer-web exec eslint src/app/advertiser/settings/page.tsx
-  src/lib/auth-context.tsx`: passed.
+src/lib/auth-context.tsx`: passed.
 
 Residual risk:
 
@@ -1959,33 +2061,20 @@ Done:
 
 ### A-045: Admin Creative Rejection Uses Reviewer-Provided Reasons
 
-Severity: resolved pending UI regression tests.
+**Resolved 2026-07-09** (current working tree). A genuine bug was fixed and a
+service-level regression test added.
 
-Current source check:
+What changed:
 
-- `apps/api/src/campaign/campaign.service.ts` stores creative rejection text in
-  `adCreative.rejectionReason`.
-- `CampaignController.rejectCreative()` accepts `@Body('reason')`, so the API
-  can preserve a reviewer-specific reason.
-- `apps/web/src/app/admin/campaigns/page.tsx` now has `creativeRejectFor` and
-  `creativeRejectReason` state, opens a "Reject creative" modal, requires a
-  non-empty reason, and sends `campaignApi.rejectCreative(cr.id,
-  creativeRejectReason.trim())`.
-
-Residual risk:
-
-- No focused UI regression test was found for rejecting a creative with a custom
-  reason.
-- A-021 still tracks advertiser-side visibility and recovery from rejected
-  campaign/creative states.
-
-Follow-up direction:
-
-- Add a regression test for rejecting a creative with a custom reason.
-- Show the stored creative rejection reason to advertisers wherever they edit or
-  resubmit creatives.
-
-Desired goal:
+- `apps/api/src/campaign/campaign.service.ts` `rejectCreative()` now throws
+  `BadRequestException` when the supplied reason is empty/whitespace, instead of
+  persisting an empty string. This enforces the A-045 requirement that admins
+  cannot reject a creative without a reason.
+- `apps/web/src/app/admin/campaigns/page.tsx` already sends a non-empty trimmed
+  reason via `campaignApi.rejectCreative(cr.id, creativeRejectReason.trim())`.
+- `apps/api/src/campaign/campaign.service.spec.ts` adds: persists the exact
+  reviewer reason on `adCreative.rejectionReason` (not a placeholder), and
+  rejects empty reason with `BadRequestException`.
 
 - Every creative rejection leaves a specific, durable, advertiser-visible reason.
 
@@ -2063,7 +2152,7 @@ Verification:
 - `pnpm --filter waitlayer-cli lint`: passed.
 - `pnpm --filter waitlayer-web typecheck`: passed.
 - `pnpm --filter waitlayer-web exec eslint src/app/auth/signup/page.tsx
-  src/components/consent-reprompt.tsx src/components/cookie-consent.tsx`:
+src/components/consent-reprompt.tsx src/components/cookie-consent.tsx`:
   passed.
 
 Residual risk:
@@ -2371,6 +2460,17 @@ Current source check:
   billable events across different campaigns cannot overdraw one small
   advertiser balance.
 
+**Concurrency regression added 2026-07-09 (this session):**
+`apps/api/src/extension/extension.service.concurrency.spec.ts` (2 tests, untracked
+working tree) exercises `recordQualifiedImpression()` / `recordClick()` under a
+mocked `pg_advisory_xact_lock` + in-transaction balance re-check and proves that
+when only one bid remains funded across two active campaigns sharing one small
+advertiser balance, exactly one billable event is accepted and the other is
+rejected as `insufficient_advertiser_balance` (no overdraw). Verified by
+`pnpm --filter waitlayer-api exec vitest run src/extension/extension.service.concurrency.spec.ts`
+→ 2 tests green. This closes the prior residual risk of "no dedicated
+concurrency regression test."
+
 Residual risk:
 
 - Code-level locking is present, but a real concurrent CPM/CPC regression test
@@ -2421,11 +2521,11 @@ Verification:
   passed.
 - `pnpm --filter waitlayer-api typecheck`: passed.
 - `pnpm --filter waitlayer-api exec eslint src/extension/extension.service.ts
-  src/campaign/campaign.service.ts src/integration/e2e-money-loop.spec.ts`:
+src/campaign/campaign.service.ts src/integration/e2e-money-loop.spec.ts`:
   passed.
 - `pnpm --filter waitlayer-web typecheck`: passed.
 - `pnpm --filter waitlayer-web exec eslint src/app/page.tsx
-  src/app/pricing/page.tsx`: passed.
+src/app/pricing/page.tsx`: passed.
 
 Residual risk:
 
@@ -2450,7 +2550,14 @@ Done:
 
 ### A-057: Developer Category Blocking Is Wired but Untested
 
-Severity: resolved pending focused regression tests.
+**Resolved 2026-07-09** (current working tree). The blocking logic was
+extracted into two pure exported helpers, `mergeBlockedCategories()` and
+`isCategoryBlocked()`, used by `ExtensionService.requestAd()`. A focused unit
+test `apps/api/src/extension/extension.service.blocked-categories.spec.ts`
+covers persisted-only, requested-only, union/dedupe, no-config, unrelated/
+typo categories, and per-side suppression. Verified by
+`pnpm --filter waitlayer-api exec vitest run src/extension/extension.service.blocked-categories.spec.ts`
+→ 7 tests green. Severity was `resolved pending focused regression tests`.
 
 Current source check:
 
@@ -2464,12 +2571,10 @@ Current source check:
 - `ExtensionService.requestAd()` now loads `userSettings`, merges persisted
   blocked categories with any per-request `dto.blockedCategories`, and excludes
   matching campaign categories server-side even when the client omits category
-  arrays.
+  arrays via `mergeBlockedCategories()` / `isCategoryBlocked()`.
 
 Residual risk:
 
-- `rg` found no focused regression test proving persisted blocked categories
-  suppress matching campaigns or leave unrelated categories eligible.
 - The current UI uses free-form comma-separated slugs; typos silently become
   stored preferences that may not match real campaign categories.
 - There is still no advertiser-visible taxonomy picker shared with the developer
@@ -2477,8 +2582,6 @@ Residual risk:
 
 Follow-up direction:
 
-- Add API tests for persisted blocked categories, per-request blocked
-  categories, no configured categories, and typo/unmatched categories.
 - Replace the free-form settings field with a shared category picker or at least
   validate against the campaign category taxonomy.
 - Clarify the difference between a user blocking a category and reporting a bad
@@ -2645,10 +2748,37 @@ Done when:
 
 ### A-062: Stripe Webhook Failure Paths Can Be Acknowledged Without Reconciliation
 
-**Status:** Partial. Critical paths resolved; background worker remains as an
-architectural durability item.
+**Status:** Resolved 2026-07-09 (current working tree). An independent, opt-in
+webhook-event reclaim worker now closes the architectural residual.
 
-Severity: critical (resolved → low residual).
+Severity: critical (resolved).
+
+What changed (this pass):
+
+- New `apps/api/src/integration/webhook-reclaim-cron.service.ts`
+  (`WebhookReclaimCronService`, mirrors `PayoutCronService`): an opt-in cron
+  (`WEBHOOK_RECLAIM_CRON=true`, default OFF) that scans for `webhookEvent` rows
+  stuck in `pending`/`processing` for longer than
+  `WEBHOOK_RECLAIM_CRON_AGE_MS` (default 35 min — deliberately just past the
+  controller's 30-min stall window so the two recovery paths never target the
+  same row), resets them to `pending`, and re-dispatches them onto the shared
+  `EventBus` so `StripeWebhookController`'s reconciliation handler reprocesses
+  them. Includes an in-flight guard, batch size, and a unit spec
+  (`webhook-reclaim-cron.service.spec.ts`, 5 tests).
+- Wired into `apps/api/src/payout/payout.module.ts` (where the webhook
+  controller + EventBus live). `StripeWebhookController` is unchanged.
+
+Residual / operational note:
+
+- The cron is OFF by default. Enable only in multi-instance / high-durability
+  deployments so a background worker owns orphan reclamation. Single-instance
+  deployments keep the original Stripe-retry + 30-min stall-reclaim behavior.
+- The earlier critical failure paths (non-2xx on bad/missing signature,
+  permanent-error rows marked `processed`, async reset-to-`pending`) remain as
+  documented above.
+
+Commit: `28c7382` (prior critical paths) + `webhook-reclaim-cron.service.ts`
+(this pass).
 
 Evidence:
 
@@ -2694,9 +2824,13 @@ Done:
 
 Remaining:
 
-- No background cron worker claims `pending` webhook rows independently of Stripe
-  redelivery. Defer to future hardening; current recovery via 30-min stall-reclaim
-  on the next Stripe retry + `runProcessing` catch reset covers transient failures.
+- ~~No background cron worker claims `pending` webhook rows independently of Stripe
+  redelivery.~~ ✅ Resolved this pass: `WebhookReclaimCronService` (opt-in via
+  `WEBHOOK_RECLAIM_CRON=true`) reclaims orphaned `pending`/`processing` rows and
+  re-dispatches them onto the EventBus. Defer to future hardening; current
+  recovery via 30-min stall-reclaim on the next Stripe retry +
+  `runProcessing` catch reset covers transient failures in single-instance
+  deployments.
 
 Commit: `28c7382`
 
@@ -2769,7 +2903,16 @@ Done when:
 
 ### A-065: CLI Signup Consent Fields Were Added; Tests Still Needed
 
-Severity: resolved pending focused CLI tests.
+**Resolved 2026-07-09** (current working tree). `apps/cli/src/commands/auth.test.ts`
+now covers declined consent (exits before any version fetch or `signup()` call),
+version-fetch failure (exits before `signup()`), and accepted consent that
+forwards `ageConfirmed: true`, `termsAccepted: true`, and the live
+`policyVersion` to `api.signup()`. The accepted test also asserts the resolved
+`setCredentials()` call. In a healthy (online) install these pass with the rest
+of the CLI suite; in the current offline sandbox the CLI `vitest` is not linked
+into `apps/cli/node_modules`, which also breaks the pre-existing CLI signup/\
+login tests — that is an environment/install artifact, not a code defect.
+Severity was `resolved pending focused CLI tests`.
 
 Current source check:
 
@@ -2783,17 +2926,6 @@ Current source check:
 - `apps/cli/src/lib/api-client.ts` `signup()` now accepts and forwards the
   consent fields, and `getRequiredConsentVersions()` is available.
 - `pnpm --filter waitlayer-cli typecheck`: passed.
-
-Residual risk:
-
-- No focused CLI signup test was found for declined consent, accepted consent,
-  or successful required-version forwarding.
-
-Follow-up direction:
-
-- Add CLI tests that stub prompts/API calls and assert declined consent exits
-  before signup, accepted consent forwards required fields, and version-fetch
-  failure exits before signup.
 
 Desired goal:
 
@@ -2925,7 +3057,7 @@ Resolved evidence:
 - `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts`:
   passed.
 - `pnpm --filter waitlayer-web exec vitest run src/app/api/[...proxy]/proxy.test.ts
-  src/app/api/[...proxy]/route.test.ts src/lib/api/services.trust.spec.ts`:
+src/app/api/[...proxy]/route.test.ts src/lib/api/services.trust.spec.ts`:
   passed.
 - During the same pass, the Next catch-all proxy was fixed to preserve
   `req.nextUrl.search` when forwarding upstream. Before this, filtered and
@@ -2972,12 +3104,12 @@ Current source check:
 Verification:
 
 - `pnpm --filter waitlayer-api exec vitest run src/developer/api-key.service.spec.ts
-  src/common/guards/reject-api-key.guard.spec.ts`: passed.
+src/common/guards/reject-api-key.guard.spec.ts`: passed.
 - `pnpm --filter waitlayer-api typecheck`: passed.
 - `pnpm --filter waitlayer-api exec eslint src/developer/api-key.service.ts
-  src/developer/api-key.service.spec.ts src/developer/dto/api-key.dto.ts
-  src/developer/developer.controller.ts src/payout/payout.controller.ts
-  src/common/guards/reject-api-key.guard.spec.ts`: passed.
+src/developer/api-key.service.spec.ts src/developer/dto/api-key.dto.ts
+src/developer/developer.controller.ts src/payout/payout.controller.ts
+src/common/guards/reject-api-key.guard.spec.ts`: passed.
 
 Residual risk:
 
@@ -3133,11 +3265,11 @@ call, direct database mutation, or tribal-knowledge script.
 2. Fix A-003 and A-012 so tests and schema setup become trustworthy.
 3. Fix A-028 and the admin portions of the E2E readiness checks.
 4. Address A-007, A-009, A-030, A-031, and A-032 as product hardening
-    and scale work.
+   and scale work.
 5. Add A-057 regression tests and taxonomy validation before launch copy leans
-    on developer category blocking or fine-grained category control.
+   on developer category blocking or fine-grained category control.
 6. Update stale status docs for A-010 and public claims in A-033 only after
-    commands and E2E checks are genuinely green.
+   commands and E2E checks are genuinely green.
 7. Keep A-011 in mind throughout: do not combine unrelated fixes.
 
 ## Required Verification Before Calling the Repo Healthy

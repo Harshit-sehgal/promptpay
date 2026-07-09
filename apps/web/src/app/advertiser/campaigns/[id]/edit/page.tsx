@@ -7,8 +7,6 @@ import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
-const CATEGORIES = ['developer_tools', 'ai_ml', 'cloud_infra', 'saas', 'education', 'other'] as const;
-
 interface LoadedCampaign {
   id: string;
   name: string;
@@ -241,7 +239,9 @@ export default function EditCampaignPage() {
             <h2 className="text-white font-semibold mb-4">Campaign details</h2>
             <div className="space-y-4">
               <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">Campaign name</label>
+                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                  Campaign name
+                </label>
                 <input
                   type="text"
                   value={name}
@@ -263,7 +263,9 @@ export default function EditCampaignPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">Bid amount ({currency})</label>
+                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                    Bid amount ({currency})
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -422,7 +424,8 @@ export default function EditCampaignPage() {
                 className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
               />
               <p className="text-ink-500 text-xs mt-1">
-                Empty = leave current targeting unchanged. Use 2-letter ISO codes (US, GB, DE, IN, etc.)
+                Empty = leave current targeting unchanged. Use 2-letter ISO codes (US, GB, DE, IN,
+                etc.)
               </p>
             </div>
           </div>
@@ -433,7 +436,11 @@ export default function EditCampaignPage() {
               disabled={submitting}
               className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
             >
-              {submitting ? 'Saving...' : status === 'rejected' ? 'Update & resubmit' : 'Save & submit'}
+              {submitting
+                ? 'Saving...'
+                : status === 'rejected'
+                  ? 'Update & resubmit'
+                  : 'Save & submit'}
             </button>
             {submitting && <LoadingSpinner size="sm" />}
           </div>

@@ -1,5 +1,20 @@
 import { Request } from 'express';
-import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe,Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 
@@ -10,10 +25,15 @@ import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { DeleteAccountDto } from '../developer/dto';
 import { StripeProvider } from '../payout/providers';
 import { AdvertiserService } from './advertiser.service';
-import { DeleteAccountDto } from '../developer/dto';
-import { CreateCampaignDto, CreateDepositSessionDto,CreateProfileDto, UpdateCampaignDto } from './dto';
+import {
+  CreateCampaignDto,
+  CreateDepositSessionDto,
+  CreateProfileDto,
+  UpdateCampaignDto,
+} from './dto';
 
 /**
  * The advertiser routes accept either a JWT (acting user) or an API key
@@ -22,7 +42,10 @@ import { CreateCampaignDto, CreateDepositSessionDto,CreateProfileDto, UpdateCamp
  * are on `request.user`. Helpers below resolve the advertiserId from either
  * source — keeping handler bodies free of auth-shape branching.
  */
-function resolveApiContext(req: { user?: { id?: string; sub?: string }; apiKey?: { scopes: string[]; advertiserId: string | null; ownerId: string } }): {
+function resolveApiContext(req: {
+  user?: { id?: string; sub?: string };
+  apiKey?: { scopes: string[]; advertiserId: string | null; ownerId: string };
+}): {
   userId: string;
   advertiserId: string | null;
   auth: 'jwt' | 'apikey';
@@ -165,6 +188,8 @@ export class AdvertiserController {
     @Query('campaignId') campaignId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
@@ -179,7 +204,15 @@ export class AdvertiserController {
     if (parsedTo && Number.isNaN(parsedTo.getTime())) {
       throw new BadRequestException(`Invalid 'to' date: ${to}`);
     }
-    return this.service.getReports(advertiserId, { campaignId, from, to });
+    const parsedPage = page ? Number(page) : undefined;
+    const parsedLimit = limit ? Number(limit) : undefined;
+    return this.service.getReports(advertiserId, {
+      campaignId,
+      from,
+      to,
+      page: parsedPage,
+      limit: parsedLimit,
+    });
   }
 
   @Get('reports/export')
@@ -202,10 +235,7 @@ export class AdvertiserController {
 
   @Post('deposit-session')
   @RequiredScopes('advertiser:write')
-  async createDepositSession(
-    @Req() req: Request,
-    @Body() dto: CreateDepositSessionDto,
-  ) {
+  async createDepositSession(@Req() req: Request, @Body() dto: CreateDepositSessionDto) {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     const webBaseUrl = this.config.get<string>('WEB_BASE_URL');
@@ -214,9 +244,7 @@ export class AdvertiserController {
     // `http://localhost:3000` would silently strand the user's browser
     // on an unreachable host after real money changes hands.
     if (!webBaseUrl) {
-      throw new BadRequestException(
-        'Platform is not configured. Please contact support.',
-      );
+      throw new BadRequestException('Platform is not configured. Please contact support.');
     }
     // Re-check the per-currency deposit minimum once the currency is
     // normalized: the DTO's static `@Min` only enforces the global floor, so a
@@ -252,10 +280,7 @@ export class AdvertiserController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('advertiser:write')
-  deleteAccount(
-    @CurrentUser('id') userId: string,
-    @Body() dto: DeleteAccountDto,
-  ) {
+  deleteAccount(@CurrentUser('id') userId: string, @Body() dto: DeleteAccountDto) {
     if (dto.confirmation !== 'DELETE_MY_ACCOUNT') {
       throw new BadRequestException('Confirmation string must be exactly DELETE_MY_ACCOUNT');
     }

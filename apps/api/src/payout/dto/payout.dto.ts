@@ -1,6 +1,18 @@
-import { IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, Length, Matches,Max, MaxLength, Min } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
-import { PayoutProvider, payoutMinimumMinor } from '@waitlayer/shared';
+import { payoutMinimumMinor, PayoutProvider } from '@waitlayer/shared';
 
 export class AddPayoutMethodDto {
   @IsEnum(PayoutProvider)
