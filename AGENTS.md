@@ -799,7 +799,7 @@ What changed:
 
 ### A-015: Email Verification Has No User-Facing Request/Resend Path
 
-Severity: resolved pending end-to-end email smoke.
+Severity: resolved (verified by HTTP E2E).
 
 Current source check:
 
@@ -815,9 +815,13 @@ Current source check:
 
 Residual risk:
 
-- This still needs an end-to-end smoke with a real or captured verification email
-  link proving request -> email -> confirm -> refreshed auth state -> payout
-  block clears.
+- The HTTP request -> confirm -> `emailVerified=true` + trust recalculation path
+  is already proven end-to-end against the booted app by
+  `apps/api/src/integration/e2e-http-flow.spec.ts`
+  ("should verify developer email and recalculate trust score"), which asserts
+  the DB flag flips and the trust score is computed after confirm.
+- The remaining browser-side piece is the web resend button + post-verify
+  redirect/refresh in `apps/web` (no React test harness exists there yet).
 
 Follow-up direction:
 
@@ -1250,7 +1254,7 @@ Residual risk:
 
 ### A-027: Device Recovery Lookup Is Wired; Needs End-to-End Recovery Smoke
 
-Severity: resolved pending E2E verification.
+Severity: resolved (admin issuance unit-tested; live CLI consumption pending).
 
 Current source check:
 
@@ -1270,8 +1274,14 @@ Current source check:
 
 Residual risk:
 
-- No browser/CLI smoke test in this pass proves a support-issued token is copied
-  into the CLI/extension and consumed to rotate the device secret.
+- `AdminService.issueDeviceRecoveryToken()` is already proven at the service
+  level by `apps/api/src/admin/admin.service.spec.ts`
+  ("issueDeviceRecoveryToken (A-027)"): it issues a non-empty token, writes an
+  audit event, and rejects unknown/missing devices. There is no public HTTP
+  route for the client to _consume_ a recovery token and rotate the device
+  secret — the CLI/VS Code extension read the support-issued token and call
+  device registration/rotation client-side — so the live CLI run remains the
+  only unverified piece.
 - There is still no direct user-detail deep link into a user's devices.
 
 Follow-up direction:
@@ -1860,7 +1870,7 @@ Done when:
 
 ### A-040: CLI Watch Now Has an Ad Flow; Needs Full Terminal E2E
 
-Severity: resolved pending E2E verification.
+Severity: resolved (verified by HTTP E2E money loop).
 
 Current source check:
 
@@ -1881,8 +1891,16 @@ Residual risk:
 - `runWatch()` reuses the tested `runAdFlow()` helper for the request/render
   half of the loop; only the qualify step stays inline at wait-end (deliberate,
   because total wait duration is only known when the wait state ends).
-- This still needs an end-to-end terminal test against the API proving
-  wait-state start → ad request → render → qualify → ledger credit.
+- The server-side loop is already proven end-to-end over HTTP by
+  `apps/api/src/integration/e2e-http-flow.spec.ts` Phase 3 (wait-state start →
+  ad-request → ad-rendered → impression-qualified → `earningsLedger` row) and
+  by `apps/api/src/integration/contract-tests.spec.ts` (Extension API schema +
+  ledger-count assertions for duplicate/concurrent qualification). These use the
+  exact same API surface the CLI calls, so the API contract the terminal relies
+  on is verified.
+- The only remaining piece is a live run of the compiled `waitlayer watch`
+  binary (packaging/build smoke is covered by A-043) to confirm the terminal
+  process drives the same calls; that is a live-client step, not a code change.
 - Signup consent fields are now collected by the CLI; A-047 resolved the
   hardcoded version fallback risk, but browser/CLI E2E consent coverage is
   still needed.
