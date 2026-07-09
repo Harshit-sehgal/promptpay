@@ -20,16 +20,19 @@ current risk register without being told to read a separate doc.
 
 ## Current Snapshot
 
-Snapshot date: 2026-07-09.
+Snapshot date: 2026-07-09 (re-verified 2026-07-09 after fresh audit pass).
 
 Observed verification state from the codebase audit:
 
-- `pnpm typecheck`: passed.
-- `pnpm lint`: passed.
-- `pnpm test`: failed with API test failures.
-- `pnpm build`: failed at the root/Turbo level during the Next.js build.
-- `pnpm --filter waitlayer-web build`: passed when run directly after the root
-  build failure.
+- `pnpm typecheck`: passed (14/14 successful, full monorepo including web/cli/
+  vscode/api/shared).
+- `pnpm lint`: passed (per earlier snapshot, full monorepo lint).
+- `pnpm test`: passed (9/9 tasks; all suites green, including the 42-test
+  API e2e-http flow and the 44-test API e2e-money-loop).
+- `pnpm build`: passed (9/9 tasks; root pnpm build now completes the Next.js
+  build successfully, removing the previously-reported .next/pages-manifest
+  error).
+- `pnpm --filter waitlayer-web build`: passed when run directly.
 
 Important caveat: this is a snapshot. Re-run the commands before starting and
 before declaring the repo healthy.
@@ -68,9 +71,11 @@ they are the current blockers and weak points to fix.
 
 ### A-001: Root Build and Docker Release Path Are Broken
 
-Severity: critical.
+**Resolved 2026-07-09** (commit ea85327 worktree, verified by `pnpm build`
+after clearing `.next` and Turbo cache: 9/9 tasks successful, web app page
+manifest produced cleanly).
 
-Evidence:
+Previously observed evidence:
 
 - `pnpm build` fails from the repo root under Turbo while Next.js is collecting
   page data with a missing `.next/server/pages-manifest.json`.
@@ -232,7 +237,11 @@ Done when:
 
 ### A-005: TOTP Manual Setup Secret Is Stripped by the Proxy
 
-Severity: high.
+**Resolved 2026-07-04** — proxy scrubber is now route-aware (`allowSetupSecret`
+in proxy scrubbing test passes; `/auth/2fa/setup` preserves `secret`/`otpauthUrl` while
+other routes still strip `secret` fields).
+
+Previously noted severity: high.
 
 Evidence:
 
@@ -269,7 +278,12 @@ Done when:
 
 ### A-006: Web Proxy and Auth Route Tests Do Not Cover the Fragile Contracts
 
-Severity: medium-high.
+**Resolved 2026-07-05** — web test suite covers: cookie naming (secure/non-secure
+with legacy double-prefix cleanup), proxy allowlisted/denied routes, proxy
+response scrubbing (incl. TOTP 2FA setup exception), logout 502/5xx cookie
+preservation, JWT_SECRET middleware tests. 21 tests pass across 6 test files.
+
+Previously noted severity: medium-high.
 
 Evidence:
 
@@ -621,7 +635,12 @@ Done when:
 
 ### A-016: Web Runtime Environment Is Not Validated Like the API
 
-Severity: high.
+**Resolved 2026-07-05** — web middleware has `protected-route middleware`
+JWT_SECRET tests covering: missing/mismatched/valid JWT_SECRET; middleware
+redirects on missing or mismatched secret. Web build+typecheck CI pipeline
+verifies Next.js config consistency.
+
+Previously noted severity: high.
 
 Evidence:
 
@@ -735,7 +754,12 @@ Done when:
 
 ### A-019: Approved Campaigns Can Get Stuck After Later Funding
 
-Severity: high.
+**Resolved 2026-07-04** — Stripe webhook `handlePaymentSuccess`
+(`apps/api/src/payout/stripe-webhook.controller.ts` lines 377-398) now
+auto-activates any `approved` campaign with an approved creative, remaining
+budget, and positive same-currency balance after crediting the deposit.
+
+Previously noted severity: high.
 
 Evidence:
 
@@ -908,7 +932,14 @@ Done when:
 
 ### A-024: Advertiser CTR Is Displayed 100x Too High on Overview
 
-Severity: medium.
+**Resolved** — API returns CTR as ratio (clicks/impressions, e.g. 0.10 for
+10%); overview applies `formatPercent(data.ctr * 100, 2)` which renders
+1 click / 100 impressions as `1.00%`. Verified by reading
+`apps/api/src/advertiser/advertiser.service.ts:276` and
+`apps/web/src/app/advertiser/page.tsx:169`. (Reports page was the
+divergence and was fixed by A-067.)
+
+Previously noted severity: medium.
 
 Evidence:
 
@@ -1403,7 +1434,13 @@ Done when:
 
 ### A-037: API Keys Still Reach Advertiser Export/Delete Through `advertiser:write`
 
-Severity: high.
+**Resolved 2026-07-09** (commit 9ea9579) — `RejectApiKeyGuard` is wired on
+`POST /advertiser/export-data` and `POST /advertiser/delete-account`; new
+`reject-api-key.guard.spec.ts` proves the guard rejects requests carrying
+`req.apiKey`, passes JWT-only requests, and passes unauthenticated-shaped
+requests (leaving auth to JwtAuthGuard/RolesGuard).
+
+Previously noted severity: high.
 
 Evidence:
 
@@ -1457,7 +1494,12 @@ Done when:
 
 ### A-038: Ad-Request Cache Is Not Scoped by User or Device
 
-Severity: medium.
+**Resolved 2026-07-04** — extension service uses `LRUCache` with
+`adCacheKey(userId, deviceId, waitStateId)` (and a separate
+`adIdempotencyCacheKey`) so two different users can no longer collide on
+client-generated keys to receive each other's served ad / impression token.
+
+Previously noted severity: medium.
 
 Evidence:
 
@@ -1496,7 +1538,11 @@ Done when:
 
 ### A-039: Ad Serving Checks Advertiser Balance Across All Currencies
 
-Severity: medium.
+**Resolved 2026-07-04** — requestAd filters per-currency via
+`getAdvertiserBalancesByCurrency`, mapping each candidate campaign against its
+own currency balance; coverage in `e2e-money-loop`.
+
+Previously noted severity: medium.
 
 Evidence:
 
@@ -2419,7 +2465,12 @@ Done when:
 
 ### A-060: Minimum Visible Duration Can Be Claimed Without Waiting
 
-Severity: high.
+**Resolved 2026-07-05** — server records `renderedAt` itself in
+`recordRendered` (not trusting client-provided timestamp). `recordQualifiedImpression`
+rejects immediate render→qualify with `minimum_duration_not_met` (covered by
+e2e-money-loop + contract-tests Zod shape).
+
+Previously noted severity: high.
 
 Evidence:
 
@@ -2468,7 +2519,15 @@ Done when:
 
 ### A-061: Developer and Campaign Frequency Caps Are Not Enforced End-to-End
 
-Severity: high.
+**Resolved 2026-07-09** (commit ea85327) — campaign `frequencyCapPerHour` /
+`frequencyCapPerDay` enforcement reads all served impressions for the trailing
+hour/day (not just billable). The developer `maxAdsPerHour` authoritative
+cap gate in `claimImpression` now counts every served impression under the
+advisory lock (not just `isBillable: true`) so a rapid burst of parallel ad
+requests cannot bypass the user-selected cap. Test coverage:
+`e2e-money-loop`.
+
+Previously noted severity: high.
 
 Evidence:
 
@@ -2624,7 +2683,12 @@ Done when:
 
 ### A-064: CLI Watch Uses Different Session IDs for Wait Start and Ad Request
 
-Severity: high.
+**Resolved 2026-07-04** — `apps/cli/src/commands/watch.ts` computes one
+session id `cli-${waitStateId}` and reuses it across `reportWaitState`,
+`requestAd`, and `endWaitState` so the API can correlate them by the
+userId/deviceId/sessionId/waitStateId quartet.
+
+Previously noted severity: high.
 
 Evidence:
 
@@ -2754,7 +2818,15 @@ Done when:
 
 ### A-067: Advertiser Reports Show Misleading CTR and Date Presets
 
-Severity: medium.
+**Resolved 2026-07-09** (commit a714649) — reports page multiplies the
+ratio CTR by 100 before `formatPercent()` so 10% displays as "10.00%"
+in the Avg CTR stat card, per-row CTR, and totals row. CSV export writes
+the percentage to the `ctr_percent` column instead of the raw ratio.
+Preset label changed from "Last 24h" to "1 day" so the displayed period
+matches the calendar-day (date-only) bounds the API receives.
+`reports-csv.spec.ts` updated for the real ratio→percent contract.
+
+Previously noted severity: medium.
 
 Evidence:
 
