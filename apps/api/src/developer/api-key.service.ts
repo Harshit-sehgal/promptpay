@@ -1,10 +1,17 @@
 import { createHash, randomBytes } from 'crypto';
-import { BadRequestException, ForbiddenException,Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
 import { PrismaService } from '../config/prisma.service';
-import { ALLOWED_API_KEY_SCOPES } from './dto/api-key.dto';
+import {
+  ALLOWED_API_KEY_SCOPES,
+  REMOVED_SENSITIVE_API_KEY_SCOPES,
+  UNSUPPORTED_API_KEY_SCOPES,
+} from './dto/api-key.dto';
+
+const REMOVED_SENSITIVE_SCOPE_SET = new Set<string>(REMOVED_SENSITIVE_API_KEY_SCOPES);
+const UNSUPPORTED_SCOPE_SET = new Set<string>(UNSUPPORTED_API_KEY_SCOPES);
 
 @Injectable()
 export class ApiKeyService {
@@ -146,6 +153,18 @@ export class ApiKeyService {
     // still reference a row with status='deleted'. Either case invalidates
     // the key — the credential lives as long as the user does.
     if (!apiKey.owner || !isActiveAccountStatus(apiKey.owner.status)) {
+      throw new BadRequestException('Invalid API key');
+    }
+
+    // Legacy/manual rows may still carry scopes that current self-service
+    // issuance deliberately forbids or that no API-key route supports anymore.
+    // Reject them at validation time so old long-lived keys cannot reach
+    // money/privacy routes or keep pretending to work for extension/CLI auth.
+    if (
+      apiKey.scopes.some((scope) => (
+        REMOVED_SENSITIVE_SCOPE_SET.has(scope) || UNSUPPORTED_SCOPE_SET.has(scope)
+      ))
+    ) {
       throw new BadRequestException('Invalid API key');
     }
 

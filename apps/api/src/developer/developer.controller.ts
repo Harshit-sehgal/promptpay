@@ -4,6 +4,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { CurrentUser,Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { DeveloperService } from './developer.service';
 import { DeleteAccountDto,EarningsQueryDto, UpdateSettingsDto } from './dto';
@@ -44,6 +45,7 @@ export class DeveloperController {
   }
 
   @Patch('settings')
+  @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('developer:write')
   updateSettings(
     @CurrentUser('id') userId: string,
@@ -54,6 +56,7 @@ export class DeveloperController {
 
   @Post('export-data')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('developer:write')
   exportData(@CurrentUser('id') userId: string) {
     return this.service.exportData(userId);
@@ -61,6 +64,7 @@ export class DeveloperController {
 
   @Post('delete-account')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('developer:write')
   deleteAccount(@CurrentUser('id') userId: string, @Body() dto: DeleteAccountDto) {
     return this.service.deleteAccount(userId, {

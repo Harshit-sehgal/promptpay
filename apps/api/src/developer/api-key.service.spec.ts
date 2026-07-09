@@ -81,18 +81,29 @@ describe('ApiKeyService account-status policy', () => {
     expect(ctx.prisma.apiKey.create).not.toHaveBeenCalled();
   });
 
-  it('still mints ordinary extension/integration keys', async () => {
+  it('rejects minting unsupported extension/report-write scopes', async () => {
+    ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
+
+    for (const scope of ['extension:read', 'extension:write', 'reports:write']) {
+      await expect(ctx.service.generateApiKey('user-1', [scope])).rejects.toThrow(
+        BadRequestException,
+      );
+    }
+    expect(ctx.prisma.apiKey.create).not.toHaveBeenCalled();
+  });
+
+  it('still mints ordinary ledger/report read keys', async () => {
     ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
     ctx.prisma.apiKey.create.mockResolvedValue({
       id: 'key-2',
       keyPrefix: 'wl_abcdef0',
-      scopes: ['extension:write', 'ledger:read'],
+      scopes: ['ledger:read', 'reports:read'],
       expiresAt: null,
       createdAt: new Date('2026-07-08T00:00:00.000Z'),
     });
 
     await expect(
-      ctx.service.generateApiKey('user-1', ['extension:write', 'ledger:read']),
+      ctx.service.generateApiKey('user-1', ['ledger:read', 'reports:read']),
     ).resolves.toMatchObject({ id: 'key-2' });
   });
 
@@ -102,7 +113,36 @@ describe('ApiKeyService account-status policy', () => {
       isActive: true,
       expiresAt: null,
       lastUsedAt: null,
+      scopes: ['reports:read'],
       owner: { id: 'user-1', status: 'restricted', trustLevel: 'restricted', role: 'developer' },
+    });
+
+    await expect(ctx.service.validateApiKey('wl_test')).rejects.toThrow(BadRequestException);
+    expect(ctx.prisma.apiKey.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects existing legacy keys that still carry sensitive removed scopes', async () => {
+    ctx.prisma.apiKey.findUnique.mockResolvedValue({
+      id: 'key-1',
+      isActive: true,
+      expiresAt: null,
+      lastUsedAt: null,
+      scopes: ['reports:read', 'payout:write'],
+      owner: { id: 'user-1', status: 'active', trustLevel: 'normal', role: 'developer' },
+    });
+
+    await expect(ctx.service.validateApiKey('wl_test')).rejects.toThrow(BadRequestException);
+    expect(ctx.prisma.apiKey.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects existing legacy keys that carry unsupported extension scopes', async () => {
+    ctx.prisma.apiKey.findUnique.mockResolvedValue({
+      id: 'key-1',
+      isActive: true,
+      expiresAt: null,
+      lastUsedAt: null,
+      scopes: ['ledger:read', 'extension:write'],
+      owner: { id: 'user-1', status: 'active', trustLevel: 'normal', role: 'developer' },
     });
 
     await expect(ctx.service.validateApiKey('wl_test')).rejects.toThrow(BadRequestException);
@@ -115,6 +155,7 @@ describe('ApiKeyService account-status policy', () => {
       isActive: true,
       expiresAt: null,
       lastUsedAt: null,
+      scopes: ['reports:read'],
       owner: { id: 'user-1', status: 'active', trustLevel: 'normal', role: 'developer' },
     });
     ctx.prisma.apiKey.update.mockResolvedValue({});

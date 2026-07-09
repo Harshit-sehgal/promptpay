@@ -1,7 +1,10 @@
 import type { Request } from 'express';
 import { describe, expect, it } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 
+import { DeveloperController } from '../../developer/developer.controller';
+import { PayoutController } from '../../payout/payout.controller';
 import { RejectApiKeyGuard } from './reject-api-key.guard';
 
 /**
@@ -34,5 +37,35 @@ describe('RejectApiKeyGuard (A-037)', () => {
     // A bare request with neither user nor apiKey should not trip THIS guard;
     // JwtAuthGuard / RolesGuard are responsible for authentication.
     expect(guard.canActivate(buildContext({}))).toBe(true);
+  });
+});
+
+describe('sensitive API-key route boundaries (A-070)', () => {
+  function guardsFor(method: (...args: never[]) => unknown): unknown[] {
+    return Reflect.getMetadata(GUARDS_METADATA, method) ?? [];
+  }
+
+  it('keeps payout money/destination routes JWT-only even though the controller allows API keys', () => {
+    expect(guardsFor(PayoutController.prototype.addPayoutMethod)).toContain(
+      RejectApiKeyGuard,
+    );
+    expect(guardsFor(PayoutController.prototype.getPayoutInfo)).toContain(
+      RejectApiKeyGuard,
+    );
+    expect(guardsFor(PayoutController.prototype.requestPayout)).toContain(
+      RejectApiKeyGuard,
+    );
+  });
+
+  it('keeps developer privacy/destructive write routes JWT-only', () => {
+    expect(guardsFor(DeveloperController.prototype.updateSettings)).toContain(
+      RejectApiKeyGuard,
+    );
+    expect(guardsFor(DeveloperController.prototype.exportData)).toContain(
+      RejectApiKeyGuard,
+    );
+    expect(guardsFor(DeveloperController.prototype.deleteAccount)).toContain(
+      RejectApiKeyGuard,
+    );
   });
 });

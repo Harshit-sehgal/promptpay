@@ -1,26 +1,37 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique,IsArray, IsDateString, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsDateString, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 // Self-service API keys are scoped for machine-to-machine *integrations*
-// (extension/CLI ad events, reporting, campaign management), NOT money
-// movement or account-takeover-capable actions. Sensitive scopes that move
-// real money (`payout:*`) or destroy/exfiltrate account data
-// (`developer:write` → export-data/delete-account) are intentionally NOT
-// mintable here — those endpoints remain JWT-only so a leaked long-lived key
-// can never add a payout method, request a payout, export personal data, or
-// delete the account. They are kept as a single source of truth below so the
-// danger is explicit; if M2M payout/export is ever a deliberate product, add
-// it back behind short-expiry + 2FA-step-up issuance, not the default list.
+// against routes that actually opt in to API-key auth. Extension/CLI ad events
+// remain user-session + device-signature flows, not API-key flows.
+//
+// Sensitive scopes that move real money (`payout:*`) or destroy/exfiltrate
+// account data (`developer:write` -> export-data/delete-account) are
+// intentionally NOT mintable here. Those endpoints remain JWT-only so a leaked
+// long-lived key can never add a payout method, request a payout, export
+// personal data, or delete the account. They are kept as a single source of
+// truth below so the danger is explicit; if M2M payout/export is ever a
+// deliberate product, add it back behind short-expiry + 2FA-step-up issuance,
+// not the default list.
 const ALLOWED_API_KEY_SCOPES = [
   'campaigns:read',
   'campaigns:write',
   'reports:read',
-  'reports:write',
   'ledger:read',
   'advertiser:read',
   'advertiser:write',
   'developer:read',
+] as const;
+
+const REMOVED_SENSITIVE_API_KEY_SCOPES = [
+  'payout:read',
+  'payout:write',
+  'developer:write',
+] as const;
+
+const UNSUPPORTED_API_KEY_SCOPES = [
   'extension:read',
   'extension:write',
+  'reports:write',
 ] as const;
 
 export class CreateApiKeyDto {
@@ -49,4 +60,4 @@ export class RevokeApiKeyDto {
   reason?: string;
 }
 
-export { ALLOWED_API_KEY_SCOPES };
+export { ALLOWED_API_KEY_SCOPES, REMOVED_SENSITIVE_API_KEY_SCOPES, UNSUPPORTED_API_KEY_SCOPES };
