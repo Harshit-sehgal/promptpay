@@ -2,7 +2,7 @@
 
 import type { AxiosResponse } from 'axios';
 import Image from 'next/image';
-import { FormEvent,useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, developerApi } from '@/lib/api/services';
@@ -16,6 +16,7 @@ interface DevSettings {
   quietModeStart?: string;
   quietModeEnd?: string;
   maxAdsPerHour: number;
+  timezone?: string | null;
   referralCode?: string;
   email: string;
   displayName?: string;
@@ -35,6 +36,60 @@ interface DeveloperApiKey {
 
 interface CreateApiKeyResponse extends DeveloperApiKey {
   plainKey: string;
+}
+
+// A-058: common IANA timezones offered for quiet mode. The browser can detect
+// the user's local zone via `Intl.DateTimeFormat().resolvedOptions().timeZone`
+// and surface it; if it isn't in the curated list below we prepend it.
+const COMMON_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Toronto',
+  'America/Sao_Paulo',
+  'America/Mexico_City',
+  'Europe/London',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Europe/Madrid',
+  'Europe/Moscow',
+  'Africa/Lagos',
+  'Africa/Johannesburg',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Karachi',
+  'Asia/Dhaka',
+  'Asia/Bangkok',
+  'Asia/Singapore',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Australia/Sydney',
+  'Australia/Melbourne',
+  'Pacific/Auckland',
+];
+
+// The browser-detected local timezone, surfaced as a UX hint so the user can
+// pick the same zone as their IDE clock. Safe to compute once at module load.
+const detectedTimezone = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
+
+// A-058: returns the union of the curated common timezones and the browser-
+// detected one (so a user whose local tz isn't in the common list still sees
+// it as a selectable option). Duplicates are removed.
+function buildTimezoneOptions(common: string[]): Set<string> {
+  const set = new Set(common);
+  if (detectedTimezone && detectedTimezone !== 'unknown') set.add(detectedTimezone);
+  // 'UTC' is offered as the "default" labelled option, not in the list.
+  set.delete('UTC');
+  return set;
 }
 
 export default function DevSettingsPage() {
@@ -60,6 +115,7 @@ export default function DevSettingsPage() {
   const [quietModeStart, setQuietModeStart] = useState('22:00');
   const [quietModeEnd, setQuietModeEnd] = useState('08:00');
   const [maxAdsPerHour, setMaxAdsPerHour] = useState(6);
+  const [timezone, setTimezone] = useState<string>(''); // '' = UTC unset / server default
 
   // 2FA state
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -86,6 +142,7 @@ export default function DevSettingsPage() {
         setQuietModeStart(s.quietModeStart ?? '22:00');
         setQuietModeEnd(s.quietModeEnd ?? '08:00');
         setMaxAdsPerHour(s.maxAdsPerHour ?? 6);
+        setTimezone(s.timezone ?? '');
         setTwoFactorEnabled(s.twoFactorEnabled ?? false);
       })
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load settings')))
@@ -165,6 +222,7 @@ export default function DevSettingsPage() {
         quietModeStart,
         quietModeEnd,
         maxAdsPerHour,
+        timezone,
       });
       setSuccess(true);
       toast.success('Settings saved successfully.');
@@ -285,7 +343,9 @@ export default function DevSettingsPage() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-surface-900 font-semibold text-[14px]">Show ads while waiting</p>
+                  <p className="text-surface-900 font-semibold text-[14px]">
+                    Show ads while waiting
+                  </p>
                   <p className="text-surface-500 text-xs mt-0.5">
                     Turn off to stop earning — no ads will appear in your IDE
                   </p>
@@ -310,9 +370,7 @@ export default function DevSettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-surface-900 font-semibold text-[14px]">Quiet mode</p>
-                  <p className="text-surface-500 text-xs mt-0.5">
-                    Suppress ads during set hours
-                  </p>
+                  <p className="text-surface-500 text-xs mt-0.5">Suppress ads during set hours</p>
                 </div>
                 <button
                   type="button"
@@ -332,30 +390,55 @@ export default function DevSettingsPage() {
               </div>
 
               {quietMode && (
-                <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-surface-200">
-                  <div>
-                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                      Quiet start
-                    </label>
-                    <input
-                      type="time"
-                      value={quietModeStart}
-                      onChange={(e) => setQuietModeStart(e.target.value)}
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
-                    />
+                <>
+                  <div className="grid grid-cols-2 gap-4 pl-4 border-l-2 border-surface-200">
+                    <div>
+                      <label className="text-surface-700 text-sm font-medium mb-1.5 block">
+                        Quiet start
+                      </label>
+                      <input
+                        type="time"
+                        value={quietModeStart}
+                        onChange={(e) => setQuietModeStart(e.target.value)}
+                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-surface-700 text-sm font-medium mb-1.5 block">
+                        Quiet end
+                      </label>
+                      <input
+                        type="time"
+                        value={quietModeEnd}
+                        onChange={(e) => setQuietModeEnd(e.target.value)}
+                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                      />
+                    </div>
                   </div>
-                  <div>
+                  {/* A-058: quiet mode is evaluated in the developer's selected
+                      timezone. Without a timezone we fall back to UTC, which is
+                      rarely the developer's local wall-clock. */}
+                  <div className="pl-4 border-l-2 border-surface-200">
                     <label className="text-surface-700 text-sm font-medium mb-1.5 block">
-                      Quiet end
+                      Timezone
                     </label>
-                    <input
-                      type="time"
-                      value={quietModeEnd}
-                      onChange={(e) => setQuietModeEnd(e.target.value)}
+                    <select
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
                       className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
-                    />
+                    >
+                      <option value="">UTC (default)</option>
+                      {[...buildTimezoneOptions(COMMON_TIMEZONES)].map((tz) => (
+                        <option key={tz} value={tz}>
+                          {tz}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-surface-500 text-xs mt-1.5">
+                      Your quiet hours are evaluated in this timezone. Detected: {detectedTimezone}
+                    </p>
                   </div>
-                </div>
+                </>
               )}
 
               <div>
@@ -385,16 +468,24 @@ export default function DevSettingsPage() {
             <div className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Email</p>
+                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                    Email
+                  </p>
                   <p className="text-surface-900 font-medium text-[15px]">{settings.email}</p>
                 </div>
                 <div>
-                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Email verification</p>
+                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                    Email verification
+                  </p>
                   {emailVerified ? (
-                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">Verified</span>
+                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">
+                      Verified
+                    </span>
                   ) : (
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="bg-amber-50 border border-amber-200/60 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-full">Not verified</span>
+                      <span className="bg-amber-50 border border-amber-200/60 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                        Not verified
+                      </span>
                       <button
                         type="button"
                         onClick={handleRequestVerification}
@@ -409,24 +500,38 @@ export default function DevSettingsPage() {
                 </div>
                 {settings.displayName && (
                   <div>
-                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Name</p>
-                    <p className="text-surface-900 font-medium text-[15px]">{settings.displayName}</p>
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                      Name
+                    </p>
+                    <p className="text-surface-900 font-medium text-[15px]">
+                      {settings.displayName}
+                    </p>
                   </div>
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 border-t border-surface-100 pt-4">
                 {settings.referralCode && (
                   <div>
-                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">Referral code</p>
-                    <p className="text-surface-900 font-mono font-bold text-[15px] tracking-wider">{settings.referralCode}</p>
+                    <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                      Referral code
+                    </p>
+                    <p className="text-surface-900 font-mono font-bold text-[15px] tracking-wider">
+                      {settings.referralCode}
+                    </p>
                   </div>
                 )}
                 <div>
-                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">GitHub</p>
+                  <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                    GitHub
+                  </p>
                   {settings.githubLinked ? (
-                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">Linked</span>
+                    <span className="bg-emerald-50 border border-emerald-200/60 text-emerald-600 text-xs font-semibold px-2.5 py-1 rounded-full">
+                      Linked
+                    </span>
                   ) : (
-                    <span className="bg-surface-100 border border-surface-200 text-surface-500 text-xs font-semibold px-2.5 py-1 rounded-full">Not linked</span>
+                    <span className="bg-surface-100 border border-surface-200 text-surface-500 text-xs font-semibold px-2.5 py-1 rounded-full">
+                      Not linked
+                    </span>
                   )}
                 </div>
               </div>
@@ -435,7 +540,9 @@ export default function DevSettingsPage() {
 
           {/* Two-factor authentication */}
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">Two-factor authentication (2FA)</h2>
+            <h2 className="text-surface-900 font-bold text-[16px] mb-5">
+              Two-factor authentication (2FA)
+            </h2>
             <div className="space-y-6">
               {twoFactorError && (
                 <div className="bg-red-50 border border-red-200/60 rounded-xl p-4">
@@ -450,7 +557,9 @@ export default function DevSettingsPage() {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-surface-900 font-semibold text-[14px]">Status: {twoFactorEnabled ? 'Enabled' : 'Disabled'}</p>
+                  <p className="text-surface-900 font-semibold text-[14px]">
+                    Status: {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+                  </p>
                   <p className="text-surface-500 text-xs mt-0.5">
                     Secure your account with TOTP two-factor authentication. Required for payouts.
                   </p>
@@ -481,9 +590,14 @@ export default function DevSettingsPage() {
                 <div className="border-t border-surface-100 pt-5 mt-5 space-y-5">
                   {!twoFactorEnabled ? (
                     <>
-                      <p className="text-surface-900 font-semibold text-[14px]">Set up Authenticator app</p>
+                      <p className="text-surface-900 font-semibold text-[14px]">
+                        Set up Authenticator app
+                      </p>
                       <ol className="list-decimal pl-5 text-surface-600 text-xs space-y-2">
-                        <li>Scan the QR code below or manually enter the key into your authenticator app (Google Authenticator, Authy, etc.).</li>
+                        <li>
+                          Scan the QR code below or manually enter the key into your authenticator
+                          app (Google Authenticator, Authy, etc.).
+                        </li>
                         <li>Enter the 6-digit code from your app below to verify setup.</li>
                       </ol>
 
@@ -500,7 +614,9 @@ export default function DevSettingsPage() {
                           </div>
                         )}
                         <div className="space-y-2 text-center sm:text-left">
-                          <p className="text-surface-500 text-xs uppercase font-semibold">Secret Key</p>
+                          <p className="text-surface-500 text-xs uppercase font-semibold">
+                            Secret Key
+                          </p>
                           <code className="bg-surface-50 border border-surface-200 rounded-md px-3 py-1.5 text-surface-900 text-xs font-mono select-all block break-all">
                             {totpSecret}
                           </code>
@@ -533,7 +649,9 @@ export default function DevSettingsPage() {
                     </>
                   ) : (
                     <div className="max-w-xs space-y-3">
-                      <p className="text-surface-900 font-semibold text-[14px]">Confirm Disabling 2FA</p>
+                      <p className="text-surface-900 font-semibold text-[14px]">
+                        Confirm Disabling 2FA
+                      </p>
                       <p className="text-surface-500 text-xs">
                         Enter the current code from your authenticator app to disable 2FA.
                       </p>
@@ -581,7 +699,9 @@ export default function DevSettingsPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <div>
                 <h2 className="text-surface-900 font-bold text-[16px]">API keys</h2>
-                <p className="text-surface-500 text-xs mt-1">Manage API keys for programmatic access to your account, ledger, and reports.</p>
+                <p className="text-surface-500 text-xs mt-1">
+                  Manage API keys for programmatic access to your account, ledger, and reports.
+                </p>
               </div>
               <button
                 type="button"
@@ -601,7 +721,9 @@ export default function DevSettingsPage() {
 
             {newApiKey && (
               <div className="bg-emerald-50 border border-emerald-200/70 rounded-lg p-4 mb-5">
-                <p className="text-emerald-700 text-xs font-semibold uppercase tracking-wider mb-2">New API key</p>
+                <p className="text-emerald-700 text-xs font-semibold uppercase tracking-wider mb-2">
+                  New API key
+                </p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 min-w-0 bg-white border border-emerald-200/70 rounded-md px-3 py-2 text-surface-900 text-xs break-all font-mono">
                     {newApiKey}
@@ -629,7 +751,9 @@ export default function DevSettingsPage() {
                       <th className="px-4 py-3 text-left text-surface-500 font-medium">Key</th>
                       <th className="px-4 py-3 text-left text-surface-500 font-medium">Scopes</th>
                       <th className="px-4 py-3 text-left text-surface-500 font-medium">Created</th>
-                      <th className="px-4 py-3 text-left text-surface-500 font-medium">Last used</th>
+                      <th className="px-4 py-3 text-left text-surface-500 font-medium">
+                        Last used
+                      </th>
                       <th className="px-4 py-3 text-right text-surface-500 font-medium">Action</th>
                     </tr>
                   </thead>
@@ -637,9 +761,7 @@ export default function DevSettingsPage() {
                     {apiKeys.map((key) => (
                       <tr key={key.id}>
                         <td className="px-4 py-3 font-mono text-surface-900">{key.keyPrefix}...</td>
-                        <td className="px-4 py-3 text-surface-600">
-                          {key.scopes.join(', ')}
-                        </td>
+                        <td className="px-4 py-3 text-surface-600">{key.scopes.join(', ')}</td>
                         <td className="px-4 py-3 text-surface-500">
                           {new Date(key.createdAt).toLocaleDateString()}
                         </td>

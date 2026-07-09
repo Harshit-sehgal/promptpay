@@ -343,6 +343,7 @@ model UserSettings {
   quietModeStart String  @default("22:00")
   quietModeEnd   String  @default("08:00")
   maxAdsPerHour  Int     @default(6)
+  timezone       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

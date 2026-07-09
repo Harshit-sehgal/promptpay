@@ -1,5 +1,11 @@
 import * as bcrypt from 'bcryptjs';
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 import { LedgerStatus } from '@waitlayer/shared';
@@ -16,6 +22,8 @@ interface DeveloperSettingsUpdate {
   quietModeStart?: string;
   quietModeEnd?: string;
   maxAdsPerHour?: number;
+  // `null` clears the stored tz (back to UTC); a string sets it.
+  timezone?: string | null;
 }
 
 interface DeleteAccountAuditActor {
@@ -42,14 +50,27 @@ export class DeveloperService {
   ) {}
 
   async getDashboard(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { trustLevel: true, status: true, role: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { trustLevel: true, status: true, role: true },
+    });
     if (!user) throw new NotFoundException('User not found');
     if (user.role !== 'developer') throw new ForbiddenException('Not a developer account');
     const earnings = await this.getEarningsSummary(userId);
     const trustScore = await this.prisma.trustScore.findUnique({ where: { userId } });
     const settings = await this.ensureSettings(userId);
-    const isHeld = user.trustLevel === 'new' || user.trustLevel === 'restricted' || user.trustLevel === 'banned';
-    return { ...earnings, trustLevel: user.trustLevel, payoutHoldStatus: { isHeld, reason: isHeld ? `Account trust level: ${user.trustLevel}` : undefined }, settings, trustScore: trustScore?.score ?? 40 };
+    const isHeld =
+      user.trustLevel === 'new' || user.trustLevel === 'restricted' || user.trustLevel === 'banned';
+    return {
+      ...earnings,
+      trustLevel: user.trustLevel,
+      payoutHoldStatus: {
+        isHeld,
+        reason: isHeld ? `Account trust level: ${user.trustLevel}` : undefined,
+      },
+      settings,
+      trustScore: trustScore?.score ?? 40,
+    };
   }
 
   async getEarningsSummary(userId: string) {
@@ -80,7 +101,11 @@ export class DeveloperService {
         if (entry.status !== 'reversed' && entry.status !== 'void') {
           addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, -entry.amountMinor);
           if (entry.status === 'confirmed') {
-            addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, -entry.amountMinor);
+            addCurrencyAmount(
+              summary.confirmedEarningsByCurrency,
+              entry.currency,
+              -entry.amountMinor,
+            );
           }
         }
         continue;
@@ -92,15 +117,23 @@ export class DeveloperService {
       if (entry.status !== 'reversed') {
         addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, entry.amountMinor);
       }
-      if (entry.status === 'estimated') addCurrencyAmount(summary.estimatedEarningsByCurrency, entry.currency, entry.amountMinor);
-      else if (entry.status === 'pending') addCurrencyAmount(summary.pendingEarningsByCurrency, entry.currency, entry.amountMinor);
-      else if (entry.status === 'confirmed') addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, entry.amountMinor);
-      else if (entry.status === 'held') addCurrencyAmount(summary.heldEarningsByCurrency, entry.currency, entry.amountMinor);
+      if (entry.status === 'estimated')
+        addCurrencyAmount(summary.estimatedEarningsByCurrency, entry.currency, entry.amountMinor);
+      else if (entry.status === 'pending')
+        addCurrencyAmount(summary.pendingEarningsByCurrency, entry.currency, entry.amountMinor);
+      else if (entry.status === 'confirmed')
+        addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, entry.amountMinor);
+      else if (entry.status === 'held')
+        addCurrencyAmount(summary.heldEarningsByCurrency, entry.currency, entry.amountMinor);
       else if (entry.status === 'reversed') summary.reversedEarnings += entry.amountMinor;
     }
-    summary.confirmedEarningsByCurrency = nonNegativeCurrencyTotals(summary.confirmedEarningsByCurrency);
+    summary.confirmedEarningsByCurrency = nonNegativeCurrencyTotals(
+      summary.confirmedEarningsByCurrency,
+    );
     summary.availableForPayoutByCurrency = { ...summary.confirmedEarningsByCurrency };
-    summary.lifetimeEarningsByCurrency = nonNegativeCurrencyTotals(summary.lifetimeEarningsByCurrency);
+    summary.lifetimeEarningsByCurrency = nonNegativeCurrencyTotals(
+      summary.lifetimeEarningsByCurrency,
+    );
     summary.estimatedEarnings = summary.estimatedEarningsByCurrency.USD ?? 0;
     summary.confirmedEarnings = summary.confirmedEarningsByCurrency.USD ?? 0;
     summary.pendingEarnings = summary.pendingEarningsByCurrency.USD ?? 0;
@@ -111,7 +144,10 @@ export class DeveloperService {
     return summary;
   }
 
-  async getEarnings(userId: string, params: { status?: string; from?: string; to?: string; page?: number; limit?: number }) {
+  async getEarnings(
+    userId: string,
+    params: { status?: string; from?: string; to?: string; page?: number; limit?: number },
+  ) {
     const where: Prisma.EarningsLedgerWhereInput = { userId };
     if (params.status) where.status = params.status as LedgerStatus;
     if (params.from || params.to) {
@@ -120,9 +156,15 @@ export class DeveloperService {
         ...(params.to ? { lte: new Date(params.to) } : {}),
       };
     }
-    const page = params.page ?? 1; const limit = params.limit ?? 20;
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
     const [entries, total] = await Promise.all([
-      this.prisma.earningsLedger.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      this.prisma.earningsLedger.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
       this.prisma.earningsLedger.count({ where }),
     ]);
     return { entries, total, page, limit };
@@ -167,6 +209,22 @@ export class DeveloperService {
     if (dto.quietModeStart !== undefined) data.quietModeStart = dto.quietModeStart;
     if (dto.quietModeEnd !== undefined) data.quietModeEnd = dto.quietModeEnd;
     if (dto.maxAdsPerHour !== undefined) data.maxAdsPerHour = dto.maxAdsPerHour;
+    if (dto.timezone !== undefined) {
+      // A-058: validate the IANA timezone string against the runtime's known
+      // tz set so an attacker can't stash an arbitrary 64-char string (and so
+      // a typo doesn't silently fall back to UTC). Empty string (or explicit
+      // null) clears the field (back to UTC default); a non-empty value must be
+      // a known tz.
+      if (dto.timezone === '' || dto.timezone === null) {
+        data.timezone = null;
+      } else if (!isKnownTimezone(dto.timezone)) {
+        throw new BadRequestException(
+          `Unknown timezone '${dto.timezone}' — provide an IANA timezone identifier (e.g. America/New_York).`,
+        );
+      } else {
+        data.timezone = dto.timezone;
+      }
+    }
 
     return this.prisma.userSettings.upsert({
       where: { userId },
@@ -293,9 +351,18 @@ export class DeveloperService {
       this.prisma.user.findUnique({
         where: { id: userId },
         select: {
-          id: true, email: true, name: true, role: true, status: true,
-          trustLevel: true, country: true, emailVerified: true, googleVerified: true,
-          githubVerified: true, referralCode: true, createdAt: true,
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          status: true,
+          trustLevel: true,
+          country: true,
+          emailVerified: true,
+          googleVerified: true,
+          githubVerified: true,
+          referralCode: true,
+          createdAt: true,
         },
       }),
       // Capped at reasonable limits per entity to prevent OOM/stall on
@@ -440,10 +507,16 @@ export class DeveloperService {
 
     if (user.googleId) {
       if (!options.googleIdToken) {
-        throw new UnauthorizedException('Google re-authentication is required to delete this account');
+        throw new UnauthorizedException(
+          'Google re-authentication is required to delete this account',
+        );
       }
       const payload = await this.googleVerifier.verify(options.googleIdToken);
-      if (!payload.email_verified || payload.sub !== user.googleId || payload.email !== user.email) {
+      if (
+        !payload.email_verified ||
+        payload.sub !== user.googleId ||
+        payload.email !== user.email
+      ) {
         void this.audit.log({
           actorId: userId,
           actorRole: 'developer',
@@ -485,9 +558,33 @@ function addCurrencyAmount(totals: Record<string, number>, currency: string, amo
 
 function nonNegativeCurrencyTotals(totals: Record<string, number>): Record<string, number> {
   return Object.fromEntries(
-    Object.entries(totals).map(([currency, amountMinor]) => [
-      currency,
-      Math.max(0, amountMinor),
-    ]),
+    Object.entries(totals).map(([currency, amountMinor]) => [currency, Math.max(0, amountMinor)]),
   );
+}
+
+/**
+ * A-058: returns true iff the supplied string is a real IANA timezone the
+ * runtime can resolve (used for quiet-mode local-time evaluation). Caches the
+ * tz-set per-process because `Intl.supportedValuesOf('timeZone')` would
+ * otherwise rebuild it on every settings update. Falls back to destructured
+ * validation if `supportedValuesOf` is unavailable (older runtimes) by probing
+ * `Intl.DateTimeFormat` — an unknown tz throws RangeError there.
+ */
+const KNOWN_TIMEZONES = (() => {
+  try {
+    return new Set(Intl.supportedValuesOf('timeZone'));
+  } catch {
+    return null as Set<string> | null;
+  }
+})();
+
+function isKnownTimezone(timezone: string): boolean {
+  if (!timezone) return false;
+  if (KNOWN_TIMEZONES) return KNOWN_TIMEZONES.has(timezone);
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
 }

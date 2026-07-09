@@ -1,18 +1,33 @@
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { LRUCache } from 'lru-cache';
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger,NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 import { BidType, Prisma, ToolTypeEnum } from '@waitlayer/db';
-import { MINIMUM_VISIBLE_DURATION_MS, PROHIBITED_DATA_FIELDS, verifySignature } from '@waitlayer/shared';
+import {
+  MINIMUM_VISIBLE_DURATION_MS,
+  PROHIBITED_DATA_FIELDS,
+  verifySignature,
+} from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
-import { ComplianceService } from '../compliance/compliance.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
-import { getAdvertiserBalance, getAdvertiserBalancesByCurrency } from '../common/utils/advertiser-balance';
 import { isActiveAccountStatus } from '../common/utils/account-status';
-import { isSerializationError,isUniqueConstraintViolation } from '../common/utils/errors';
+import {
+  getAdvertiserBalance,
+  getAdvertiserBalancesByCurrency,
+} from '../common/utils/advertiser-balance';
+import { isSerializationError, isUniqueConstraintViolation } from '../common/utils/errors';
 import { normalizeCreativeDestination } from '../common/utils/external-url-policy';
+import { ComplianceService } from '../compliance/compliance.service';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
@@ -47,7 +62,12 @@ class AdvertiserBalanceExhaustedError extends Error {
  */
 function advertiserCurrencyLockKey(advertiserId: string, currency: string): bigint {
   return BigInt(
-    '0x' + crypto.createHash('sha256').update(`adv:${advertiserId}:${currency}`).digest('hex').slice(0, 8),
+    '0x' +
+      crypto
+        .createHash('sha256')
+        .update(`adv:${advertiserId}:${currency}`)
+        .digest('hex')
+        .slice(0, 8),
   );
 }
 
@@ -112,17 +132,20 @@ export class ExtensionService {
 
   // ── Device Registration ──
 
-  async registerDevice(userId: string, dto: {
-    toolType: string;
-    fingerprintHash: string;
-    extensionVersion?: string;
-    platform?: string;
-    publicKey?: string;
-    existingEventSecret?: string;
-    recoveryPassword?: string;
-    recoveryGoogleIdToken?: string;
-    recoverySupportToken?: string;
-  }) {
+  async registerDevice(
+    userId: string,
+    dto: {
+      toolType: string;
+      fingerprintHash: string;
+      extensionVersion?: string;
+      platform?: string;
+      publicKey?: string;
+      existingEventSecret?: string;
+      recoveryPassword?: string;
+      recoveryGoogleIdToken?: string;
+      recoverySupportToken?: string;
+    },
+  ) {
     // Privacy: reject payloads containing prohibited data fields
     this.enforcePrivacyOn(dto);
     // Check for duplicate device (same user + same fingerprint = re-registration).
@@ -170,7 +193,10 @@ export class ExtensionService {
       // one-time recovery token for future non-Google passwordless accounts.
       // That avoids restoring the removed global-HMAC fallback while still
       // giving real users a way out.
-      const hasExistingSecretProof = hasMatchingSecret(dto.existingEventSecret, existingDevice.eventSecret);
+      const hasExistingSecretProof = hasMatchingSecret(
+        dto.existingEventSecret,
+        existingDevice.eventSecret,
+      );
       let recoveryMode: 'event_secret' | 'password' | 'google' | 'support' = 'event_secret';
       if (!hasExistingSecretProof) {
         recoveryMode = await this.assertDeviceRecoveryProof(userId, dto, existingDevice.id);
@@ -190,7 +216,8 @@ export class ExtensionService {
       await this.audit.log({
         actorId: userId,
         actorRole: 'developer',
-        action: recoveryMode === 'event_secret' ? 'device_secret_rotated' : 'device_secret_recovered',
+        action:
+          recoveryMode === 'event_secret' ? 'device_secret_rotated' : 'device_secret_recovered',
         targetType: 'device',
         targetId: existingDevice.id,
         afterSnap: { recoveryMode },
@@ -260,7 +287,11 @@ export class ExtensionService {
 
   private async assertDeviceRecoveryProof(
     userId: string,
-    dto: { recoveryPassword?: string; recoveryGoogleIdToken?: string; recoverySupportToken?: string },
+    dto: {
+      recoveryPassword?: string;
+      recoveryGoogleIdToken?: string;
+      recoverySupportToken?: string;
+    },
     deviceId: string,
   ): Promise<'password' | 'google' | 'support'> {
     const proofCount = [
@@ -269,7 +300,9 @@ export class ExtensionService {
       dto.recoverySupportToken,
     ].filter(Boolean).length;
     if (proofCount === 0) {
-      throw new UnauthorizedException('Cannot recover device secret without the existing device secret, account password, Google re-auth token, or support recovery token');
+      throw new UnauthorizedException(
+        'Cannot recover device secret without the existing device secret, account password, Google re-auth token, or support recovery token',
+      );
     }
     if (proofCount > 1) {
       throw new BadRequestException('Provide only one device recovery proof');
@@ -301,7 +334,9 @@ export class ExtensionService {
           targetId: deviceId,
           afterSnap: { reason: 'password_unavailable' },
         });
-        throw new UnauthorizedException('Password re-authentication is required to recover this device');
+        throw new UnauthorizedException(
+          'Password re-authentication is required to recover this device',
+        );
       }
 
       const passwordOk = await bcrypt.compare(dto.recoveryPassword, user.passwordHash);
@@ -329,11 +364,17 @@ export class ExtensionService {
           targetId: deviceId,
           afterSnap: { reason: 'google_unavailable' },
         });
-        throw new UnauthorizedException('Google re-authentication is not available for this account');
+        throw new UnauthorizedException(
+          'Google re-authentication is not available for this account',
+        );
       }
 
       const googlePayload = await this.googleVerifier.verify(dto.recoveryGoogleIdToken);
-      if (!googlePayload.email_verified || googlePayload.sub !== user.googleId || googlePayload.email !== user.email) {
+      if (
+        !googlePayload.email_verified ||
+        googlePayload.sub !== user.googleId ||
+        googlePayload.email !== user.email
+      ) {
         await this.audit.log({
           actorId: userId,
           actorRole: 'developer',
@@ -411,14 +452,17 @@ export class ExtensionService {
 
   // ── Wait State Events ──
 
-  async recordWaitStateStart(userId: string, dto: {
-    deviceId: string;
-    sessionId: string;
-    toolType: string;
-    waitStateId: string;
-    idempotencyKey: string;
-    signature: string;
-  }) {
+  async recordWaitStateStart(
+    userId: string,
+    dto: {
+      deviceId: string;
+      sessionId: string;
+      toolType: string;
+      waitStateId: string;
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
     this.enforcePrivacyOn(dto);
     // Verify device belongs to this user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
@@ -428,7 +472,7 @@ export class ExtensionService {
 
     // Verify HMAC signature with device-specific secret
     const { signature: _, ...payload } = dto;
-    if (!await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature)) {
+    if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
 
@@ -462,12 +506,15 @@ export class ExtensionService {
     });
   }
 
-  async recordWaitStateEnd(userId: string, dto: {
-    waitStateId: string;
-    durationSeconds: string | number;
-    idempotencyKey: string;
-    signature: string;
-  }) {
+  async recordWaitStateEnd(
+    userId: string,
+    dto: {
+      waitStateId: string;
+      durationSeconds: string | number;
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
     this.enforcePrivacyOn(dto);
     // Resolve the start event FIRST so we can verify with the device's secret
     const start = await this.prisma.waitStateEvent.findFirst({
@@ -481,7 +528,7 @@ export class ExtensionService {
 
     // Verify HMAC signature with device-specific secret
     const { signature: _, ...payload } = dto;
-    if (!await this.verifyDeviceSignature(start.deviceId, payload, dto.signature)) {
+    if (!(await this.verifyDeviceSignature(start.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
 
@@ -500,8 +547,15 @@ export class ExtensionService {
       return existing;
     }
 
-    const claimedDurationSeconds = typeof dto.durationSeconds === 'string' ? parseInt(dto.durationSeconds, 10) : dto.durationSeconds;
-    if (Number.isNaN(claimedDurationSeconds) || claimedDurationSeconds < 0 || claimedDurationSeconds > WAIT_STATE_MAX_DURATION_SECONDS) {
+    const claimedDurationSeconds =
+      typeof dto.durationSeconds === 'string'
+        ? parseInt(dto.durationSeconds, 10)
+        : dto.durationSeconds;
+    if (
+      Number.isNaN(claimedDurationSeconds) ||
+      claimedDurationSeconds < 0 ||
+      claimedDurationSeconds > WAIT_STATE_MAX_DURATION_SECONDS
+    ) {
       throw new BadRequestException('Invalid duration value');
     }
 
@@ -538,16 +592,19 @@ export class ExtensionService {
 
   // ── Ad Serving ──
 
-  async requestAd(userId: string, dto: {
-    deviceId: string;
-    sessionId: string;
-    waitStateId: string;
-    toolType: string;
-    allowedCategories?: string[];
-    blockedCategories?: string[];
-    idempotencyKey: string;
-    signature: string;
-  }) {
+  async requestAd(
+    userId: string,
+    dto: {
+      deviceId: string;
+      sessionId: string;
+      waitStateId: string;
+      toolType: string;
+      allowedCategories?: string[];
+      blockedCategories?: string[];
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
     // Enforce privacy: reject payloads containing prohibited data fields
     this.enforcePrivacyOn(dto);
 
@@ -582,7 +639,7 @@ export class ExtensionService {
 
     // Verify HMAC signature with device-specific secret
     const { signature: _, ...payload } = dto;
-    if (!await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature)) {
+    if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
 
@@ -623,7 +680,11 @@ export class ExtensionService {
     if (
       settings?.quietMode &&
       this.isTimeInRange(
-        this.currentTimeHHMM(),
+        // A-058: evaluate quiet mode in the developer's stored IANA timezone
+        // instead of the API server's local timezone. When the developer has
+        // not set a timezone, fall back to UTC (deterministic and UTC never
+        // observes DST — same wall-clock reading for the same instant).
+        this.currentTimeHHMM(settings?.timezone ?? 'UTC'),
         settings.quietModeStart || '22:00',
         settings.quietModeEnd || '08:00',
       )
@@ -708,7 +769,8 @@ export class ExtensionService {
       if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
       // Category filter
       if (dto.blockedCategories?.length && dto.blockedCategories.includes(c.category)) return false;
-      if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category)) return false;
+      if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category))
+        return false;
       // Per-campaign frequency caps (issue A-061). A cap of 0/undefined means
       // "no limit"; a positive cap is enforced against the user's served
       // impressions in the trailing hour and day.
@@ -754,7 +816,10 @@ export class ExtensionService {
       selected = eligible[0];
       for (const c of eligible) {
         random -= c.bidAmountMinor;
-        if (random <= 0) { selected = c; break; }
+        if (random <= 0) {
+          selected = c;
+          break;
+        }
       }
       // Defensive fallback: float-rounding drift in the loop above can
       // leave `random` slightly above zero for the highest-bid campaign.
@@ -900,7 +965,9 @@ export class ExtensionService {
         // Per-user advisory lock. Hash the userId (a UUID string) into a
         // 32-bit bigint key for pg_advisory_xact_lock — collisions are
         // acceptable; two users hashing to the same key just queue briefly.
-        const lockKey = BigInt('0x' + crypto.createHash('sha256').update(args.userId).digest('hex').slice(0, 8));
+        const lockKey = BigInt(
+          '0x' + crypto.createHash('sha256').update(args.userId).digest('hex').slice(0, 8),
+        );
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
         // Idempotency check inside the lock — an earlier-arrived request
@@ -909,10 +976,7 @@ export class ExtensionService {
         const existing = await tx.adImpression.findFirst({
           where: {
             userId: args.userId,
-            OR: [
-              { idempotencyKey: args.idempotencyKey },
-              { waitStateId: args.waitStateId },
-            ],
+            OR: [{ idempotencyKey: args.idempotencyKey }, { waitStateId: args.waitStateId }],
           },
           select: { id: true },
         });
@@ -958,13 +1022,16 @@ export class ExtensionService {
 
   // ── Ad Event Tracking ──
 
-  async recordRendered(userId: string, dto: {
-    impressionToken: string;
-    renderedAt: string;
-    visibleSurface?: number;
-    idempotencyKey: string;
-    signature: string;
-  }) {
+  async recordRendered(
+    userId: string,
+    dto: {
+      impressionToken: string;
+      renderedAt: string;
+      visibleSurface?: number;
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
     this.enforcePrivacyOn(dto);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
@@ -980,7 +1047,7 @@ export class ExtensionService {
 
     // Verify HMAC signature against the device that requested this impression.
     const { signature: _, ...payload } = dto;
-    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+    if (!(await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
 
@@ -1002,19 +1069,28 @@ export class ExtensionService {
     });
   }
 
-  async recordQualifiedImpression(userId: string, dto: {
-    impressionToken: string;
-    qualifiedAt: string;
-    visibleDurationMs: number;
-    idempotencyKey: string;
-    signature: string;
-  }) {
+  async recordQualifiedImpression(
+    userId: string,
+    dto: {
+      impressionToken: string;
+      qualifiedAt: string;
+      visibleDurationMs: number;
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
       include: {
         campaign: {
-          select: { id: true, bidAmountMinor: true, currency: true, advertiserId: true, bidType: true },
+          select: {
+            id: true,
+            bidAmountMinor: true,
+            currency: true,
+            advertiserId: true,
+            bidType: true,
+          },
         },
         user: {
           select: { status: true },
@@ -1031,7 +1107,7 @@ export class ExtensionService {
 
     // Verify HMAC signature against the device that requested this impression.
     const { signature: _, ...payload } = dto;
-    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+    if (!(await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
 
@@ -1088,7 +1164,8 @@ export class ExtensionService {
       };
     }
 
-    if (impression.qualifiedAt) return { qualified: true, impressionId: impression.id, alreadyQualified: true };
+    if (impression.qualifiedAt)
+      return { qualified: true, impressionId: impression.id, alreadyQualified: true };
 
     // Fraud check via rate limits
     const rateCheck = await this.fraud.checkImpressionRateLimit(
@@ -1106,7 +1183,11 @@ export class ExtensionService {
           isBillable: false,
         },
       });
-      return { qualified: false, impressionId: impression.id, reason: rateCheck.reason || 'fraud_detected' };
+      return {
+        qualified: false,
+        impressionId: impression.id,
+        reason: rateCheck.reason || 'fraud_detected',
+      };
     }
 
     if (impression.campaign.bidType === 'cpc') {
@@ -1125,7 +1206,9 @@ export class ExtensionService {
     }
 
     // Look up the user's trust level for hold days
-    const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
+    const trustScore = await this.prisma.trustScore.findUnique({
+      where: { userId: impression.userId },
+    });
     const trustLevel = trustScore?.level || 'new';
 
     const split = this.ledger.calculateSplit(impression.campaign.bidAmountMinor);
@@ -1282,7 +1365,11 @@ export class ExtensionService {
             invalidationReason: 'insufficient_advertiser_balance',
           },
         });
-        return { qualified: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
+        return {
+          qualified: false,
+          impressionId: impression.id,
+          reason: 'insufficient_advertiser_balance',
+        };
       }
       throw err;
     }
@@ -1294,19 +1381,28 @@ export class ExtensionService {
     return { qualified: true, impressionId: impression.id };
   }
 
-  async recordClick(userId: string, dto: {
-    impressionToken: string;
-    clickedAt: string;
-    idempotencyKey: string;
-    signature: string;
-  }) {
+  async recordClick(
+    userId: string,
+    dto: {
+      impressionToken: string;
+      clickedAt: string;
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
     this.enforcePrivacyOn(dto);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
       where: { impressionTokenHash: hash },
       include: {
         campaign: {
-          select: { id: true, bidAmountMinor: true, currency: true, advertiserId: true, bidType: true },
+          select: {
+            id: true,
+            bidAmountMinor: true,
+            currency: true,
+            advertiserId: true,
+            bidType: true,
+          },
         },
         user: {
           select: { status: true },
@@ -1326,7 +1422,7 @@ export class ExtensionService {
 
     // Verify HMAC signature against the device that requested this impression.
     const { signature: _, ...payload } = dto;
-    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+    if (!(await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
 
@@ -1369,7 +1465,9 @@ export class ExtensionService {
     const isCpcBid = impression.campaign.bidType === BidType.cpc;
 
     // Trust level for hold days
-    const trustScore = await this.prisma.trustScore.findUnique({ where: { userId: impression.userId } });
+    const trustScore = await this.prisma.trustScore.findUnique({
+      where: { userId: impression.userId },
+    });
     const trustLevel = trustScore?.level || 'new';
     const creative = await this.prisma.adCreative.findUnique({
       where: { id: impression.creativeId },
@@ -1496,7 +1594,11 @@ export class ExtensionService {
       });
     } catch (error) {
       if (error instanceof AdvertiserBalanceExhaustedError) {
-        return { clicked: false, impressionId: impression.id, reason: 'insufficient_advertiser_balance' };
+        return {
+          clicked: false,
+          impressionId: impression.id,
+          reason: 'insufficient_advertiser_balance',
+        };
       }
       if (isUniqueConstraintViolation(error)) {
         return { clicked: false, reason: 'duplicate_click' };
@@ -1507,12 +1609,15 @@ export class ExtensionService {
     return { clicked: true, clickId: click.id };
   }
 
-  async reportAd(userId: string, dto: {
-    impressionToken: string;
-    reason: string;
-    details?: string;
-    signature: string;
-  }) {
+  async reportAd(
+    userId: string,
+    dto: {
+      impressionToken: string;
+      reason: string;
+      details?: string;
+      signature: string;
+    },
+  ) {
     this.enforcePrivacyOn(dto);
     const hash = crypto.createHash('sha256').update(dto.impressionToken).digest('hex');
     const impression = await this.prisma.adImpression.findUnique({
@@ -1526,7 +1631,7 @@ export class ExtensionService {
     // Verify device signature — otherwise an attacker who learns an impressionToken
     // could invalidate a legitimate impression and block the owner's earnings.
     const { signature: _, ...payload } = dto;
-    if (!await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature)) {
+    if (!(await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
 
@@ -1640,7 +1745,11 @@ export class ExtensionService {
    *  null deviceId previously authenticated via the shared global HMAC,
    *  which would let any party that learns the global key forge events with
    *  no device binding. Reject instead. */
-  async verifyDeviceSignature(deviceId: string | null, payload: Record<string, unknown>, signature: string): Promise<boolean> {
+  async verifyDeviceSignature(
+    deviceId: string | null,
+    payload: Record<string, unknown>,
+    signature: string,
+  ): Promise<boolean> {
     // No device → no authentication. Do not fall back to the global HMAC for
     // anonymous callers.
     if (!deviceId) {
@@ -1699,9 +1808,44 @@ export class ExtensionService {
     return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
 
-  private currentTimeHHMM(): string {
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  /**
+   * Returns the current wall-clock HH:MM in the supplied IANA timezone. Used by
+   * the quiet-mode check so a developer's quiet window is evaluated in their
+   * own timezone (A-058) rather than the API server's local timezone. When the
+   * timezone is unknown to the runtime, falls back to UTC — the previous
+   * behaviour was server-local time, but UTC is the safe deterministic choice
+   * (no DST). An attacker cannot reach this fallback by storing a bad tz: the
+   * settings service rejects unknown timezones at write time.
+   */
+  private currentTimeHHMM(timezone = 'UTC'): string {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      // `hour12: false` still occasionally surfaces '24' for midnight on some
+      // ICU builds; coerce to '00' for clean string comparison.
+      const parts = fmt.formatToParts(new Date());
+      const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+      const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+      const hh = String(Number(hour)).padStart(2, '0');
+      return `${hh}:${minute}`;
+    } catch {
+      // Unknown timezone / runtime edge — return UTC HH:MM as a safe
+      // deterministic fallback so the quiet-mode check still runs.
+      const fallback = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'UTC',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      const parts = fallback.formatToParts(new Date());
+      const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+      const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+      return `${String(Number(hour)).padStart(2, '0')}:${minute}`;
+    }
   }
 
   private isTimeInRange(now: string, start: string, end: string): boolean {
@@ -1710,15 +1854,16 @@ export class ExtensionService {
     }
     return now >= start || now <= end;
   }
-
 }
 
 function hasMatchingSecret(candidate: string | undefined, expected: string): boolean {
   if (!candidate) return false;
   const candidateBuffer = Buffer.from(candidate);
   const expectedBuffer = Buffer.from(expected);
-  return candidateBuffer.length === expectedBuffer.length &&
-    crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
+  return (
+    candidateBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(candidateBuffer, expectedBuffer)
+  );
 }
 
 function hashDeviceRecoveryToken(token: string): string {
@@ -1735,6 +1880,10 @@ export function adCacheKey(userId: string, deviceId: string, waitStateId: string
   return `${userId}:${deviceId}:${waitStateId}`;
 }
 
-export function adIdempotencyCacheKey(userId: string, deviceId: string, idempotencyKey: string): string {
+export function adIdempotencyCacheKey(
+  userId: string,
+  deviceId: string,
+  idempotencyKey: string,
+): string {
   return `${userId}:${deviceId}:${idempotencyKey}`;
 }

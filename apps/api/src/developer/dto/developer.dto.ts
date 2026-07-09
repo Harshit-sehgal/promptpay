@@ -1,4 +1,15 @@
-import { IsBoolean, IsDateString, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -24,6 +35,18 @@ export class UpdateSettingsDto {
   @Min(1)
   @Max(12)
   maxAdsPerHour?: number;
+
+  /**
+   * A-058: IANA timezone identifier (e.g. "America/New_York", "Asia/Kolkata")
+   * used to evaluate quiet mode in the developer's local wall-clock time
+   * instead of the API server's timezone. Validated server-side against the
+   * set of tz identifiers the runtime actually knows (rejects typos / attempts
+   * to stash arbitrary strings). When unset, quiet mode evaluates in UTC.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
 }
 
 export class EarningsQueryDto {
