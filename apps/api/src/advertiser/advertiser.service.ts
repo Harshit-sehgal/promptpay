@@ -935,29 +935,44 @@ export class AdvertiserService {
       spendRows.map((r) => [`${r.campaignId}:${r.currency}`, r._sum.amountMinor ?? 0]),
     );
 
-    // Daily aggregation for trend chart — only the `createdAt` column is needed
-    // for day-bucketing, so select just that rather than full impression/click
-    // rows (keeps memory bounded for large date ranges, A-007).
-    const dailyImpressions = await this.prisma.adImpression.findMany({
-      where: { campaignId: { in: campaignIds }, isBillable: true, ...timeFilter },
-      select: { createdAt: true },
-    });
-    const dailyClicks = await this.prisma.adClick.findMany({
-      where: { campaignId: { in: campaignIds }, isValid: true, ...timeFilter },
-      select: { createdAt: true },
-    });
+    // Daily aggregation for trend chart (issue A-068). Bucket impressions and
+    // clicks by day directly in SQL via `date_trunc` so that a wide date range
+    // returns at most one row per day instead of streaming every event
+    // timestamp into application memory.
+    const timeConditions: Prisma.Sql[] = [];
+    if (createdAt.gte) timeConditions.push(Prisma.sql`"createdAt" >= ${createdAt.gte}`);
+    if (createdAt.lte) timeConditions.push(Prisma.sql`"createdAt" <= ${createdAt.lte}`);
+    if (createdAt.lt) timeConditions.push(Prisma.sql`"createdAt" < ${createdAt.lt}`);
+    const timeClause = timeConditions.length
+      ? Prisma.sql` AND ${Prisma.join(timeConditions, ' AND ')}`
+      : Prisma.sql``;
+
+    const dailyImpressions = await this.prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+      SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::int AS count
+      FROM ad_impressions
+      WHERE "campaignId" IN (${Prisma.join(campaignIds)}) AND "isBillable" = true${timeClause}
+      GROUP BY day
+      ORDER BY day
+    `;
+    const dailyClicks = await this.prisma.$queryRaw<{ day: Date; count: bigint }[]>`
+      SELECT date_trunc('day', "createdAt") AS day, COUNT(*)::int AS count
+      FROM ad_clicks
+      WHERE "campaignId" IN (${Prisma.join(campaignIds)}) AND "isValid" = true${timeClause}
+      GROUP BY day
+      ORDER BY day
+    `;
 
     const dailyMap = new Map<string, { impressions: number; clicks: number; date: string }>();
     for (const imp of dailyImpressions) {
-      const day = imp.createdAt.toISOString().slice(0, 10);
+      const day = imp.day.toISOString().slice(0, 10);
       const entry = dailyMap.get(day) ?? { date: day, impressions: 0, clicks: 0 };
-      entry.impressions++;
+      entry.impressions += Number(imp.count);
       dailyMap.set(day, entry);
     }
     for (const click of dailyClicks) {
-      const day = click.createdAt.toISOString().slice(0, 10);
+      const day = click.day.toISOString().slice(0, 10);
       const entry = dailyMap.get(day) ?? { date: day, impressions: 0, clicks: 0 };
-      entry.clicks++;
+      entry.clicks += Number(click.count);
       dailyMap.set(day, entry);
     }
     const dailyTrend = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
