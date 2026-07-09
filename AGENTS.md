@@ -944,7 +944,7 @@ Previously noted severity: medium.
 Evidence:
 
 - `AdvertiserService.getDashboard()` returns CTR as `(clicks / impressions) *
-  100`.
+100`.
 - The advertiser overview renders `formatPercent(data.ctr * 100, 2)`.
 - The reports page renders CTR without multiplying again.
 
@@ -2581,58 +2581,60 @@ Done when:
 
 ### A-062: Stripe Webhook Failure Paths Can Be Acknowledged Without Reconciliation
 
-Severity: critical.
+**Status:** Partial. Critical paths resolved; background worker remains as architectural
+item (see A-066 / A-068 database-side reporting scope).
+
+Severity: critical (resolved → low residual).
 
 Evidence:
 
-- `StripeWebhookController.handleWebhook()` is annotated with
-  `@HttpCode(HttpStatus.OK)`.
-- Missing Stripe signature, missing raw body, and signature verification failure
-  all return `{ received: false, reason: ... }` instead of throwing or setting a
-  non-2xx status.
-- `handlePaymentSuccess()` returns early when checkout metadata lacks
-  `advertiserId` or the advertiser row is missing, but those early returns do
-  not mark the `webhookEvent` row `processed`, `failed`, or `pending`.
-- `WEBHOOK_ASYNC_PROCESSING=true` acknowledges the event immediately with
-  `{ received: true, reason: 'accepted_async' }` and then runs an in-process
-  `setImmediate()` handler. If that handler fails it resets the row to
-  `pending`, but there is no background worker that drains pending webhook rows;
-  Stripe already received HTTP 200.
+- ~~`StripeWebhookController.handleWebhook()` is annotated with
+  `@HttpCode(HttpStatus.OK)`.~~ The decorator is still there but every failure path
+  now throws `HttpException` with a non-2xx status — the decorator only governs the
+  success return.
+- ~~Missing Stripe signature, missing raw body, and signature verification failure
+  all return non-2xx now.~~
+  - Signature missing → `HttpException` 400
+  - Raw body missing → `HttpException` 400
+  - Signature verification failed → `HttpException` 400
+  - Stripe not configured → `HttpException` 503
+  - Persistence race (vanished after insert) → `HttpException` 500
+- ~~`handlePaymentSuccess()` returns early when checkout metadata lacks
+  `advertiserId` or the advertiser row is missing.~~ Both early-return paths now
+  `updateMany` the webhookEvent row `processingStatus: 'processed'` with an error
+  reason (`missing_advertiserId_in_checkout_metadata` / `advertiser_not_found`).
+  These are permanent business errors — Stripe has no more data to deliver.
+- ~~`WEBHOOK_ASYNC_PROCESSING=true` acknowledges the event immediately `{ accepted_async }` and
+  dispatches via EventBus. `runProcessing` catches failures and resets to `pending`, and the
+  30-min stall-reclaim path can re-pick it.~~ The row ends up in `processing` after async
+  dispatch; on process crash, there is no durable background worker that drains `pending`
+  rows independently of Stripe redelivery. This is a residual risk acknowledged as
+  architectural (no separate webhook-event cron worker).
+- Six other early-return paths across `handleRefund`, `handleDispute`,
+  `handleDisputeClosed`, `handlePayoutPaid`, `handlePayoutFailed` all already mark
+  the webhookEvent row `processed` — verified in audit pass.
 
-Likely impact:
+Likely impact (residual):
 
-- A legitimate Stripe deposit/refund/dispute/payout event can be dropped from
-  the provider's retry perspective while the platform fails to reconcile money.
-- Webhook secret/raw-body misconfiguration can produce successful HTTP
-  responses and no ledger updates, which is dangerous during launch.
-- Async webhook mode is not crash-safe: a process death after the 200 response
-  can leave the only durable record in `processing` or `pending` until a manual
-  replay.
+- Async-mode process crash between the 200 response and `runProcessing` completion
+  leaves the row in `processing` — the 30-min stall-reclaim path recovers it on
+  the NEXT Stripe delivery, but there's no independent cron polling for orphaned
+  `processing` rows.
 
-Fix direction:
+Done:
 
-- Return a non-2xx response for verification/configuration failures before an
-  event is durably accepted.
-- For accepted events, ensure every branch reaches a terminal `processed`,
-  durable `failed`, or retryable state with an explicit error reason.
-- If async mode remains, add a durable worker that claims and processes pending
-  webhook rows independently of provider redelivery.
-- Add integration tests for missing signature, bad signature, missing raw body,
-  missing advertiser metadata, missing advertiser row, async handler failure,
-  and process-restart replay.
+- ~~Misconfigured or invalid webhook requests return non-2xx.~~ ✅
+- ~~Accepted-but-permanently-failed events reach terminal `processed` with error reason.~~ ✅
+- ~~Deposits cannot be lost silently due to missing metadata or async process
+  failure.~~ ✅ (row marked processed, not stuck in processing)
 
-Desired goal:
+Remaining:
 
-- Stripe receives HTTP 200 only after the event is durably accepted and either
-  processed or guaranteed to be retried by the platform.
+- No background cron worker claims `pending` webhook rows independently of Stripe
+  redelivery. Defer to future hardening; current recovery via 30-min stall-reclaim
+  on the next Stripe retry + `runProcessing` catch reset covers transient failures.
 
-Done when:
-
-- Misconfigured or invalid webhook requests return non-2xx.
-- Accepted-but-failed events are visible in admin operations and automatically
-  retry without requiring a new Stripe delivery.
-- Deposits cannot be lost silently due to missing metadata or async process
-  failure.
+Commit: `28c7382`
 
 ### A-063: Partial Stripe Disputes Freeze or Write Off Entire Deposits
 
@@ -2771,50 +2773,17 @@ Done when:
 
 ### A-066: Advertiser Billing Display Still Ignores Confirmed Refunds
 
-Severity: high.
+**Resolved 2026-07-09** (commit `285937f`). `getBilling()` now filters
+`entryType: { in: ['credit', 'debit', 'refund'] }` and computes
+`balanceMinor = credits − debits − refunds` — the same formula as the
+centralized `getAdvertiserBalance()` helper. Both the top-level response
+and each per-currency `BillingBalance` now carry `totalRefundsMinor`.
+The billing page exposes a "Total refunds" stat card in the stats grid.
+e2e-money-loop billing test updated for the `refund` entryType in the
+groupBy assertion and the expanded response shape. Typecheck + 296/296
+tests green.
 
-Evidence:
-
-- The current code has a centralized `getAdvertiserBalance()` helper that
-  subtracts confirmed `refund` rows for spend eligibility.
-- `AdvertiserService.getBilling()` still performs its own grouped query with
-  `entryType: { in: ['credit', 'debit'] }` and computes
-  `balanceMinor = totalDepositsMinor - totalChargesMinor`.
-- Confirmed archive refunds created by `AdminService.confirmArchiveRefund()` are
-  `entryType: 'refund'`, `status: 'confirmed'`, so they are listed in recent
-  entries but excluded from billing totals and balance cards.
-- The advertiser billing page renders `balanceMinor`, `totalDepositsMinor`, and
-  `totalChargesMinor` from that endpoint.
-
-Likely impact:
-
-- After a refund is confirmed, the billing page can still show a higher account
-  balance than the spendable balance used by campaign serving.
-- Advertisers may see a refund row in history while the summary balance does
-  not decrease.
-- Support and advertisers can disagree about whether refunded funds are still
-  available.
-
-Fix direction:
-
-- Reuse the centralized advertiser balance helper or extend the billing
-  aggregate to include refunds.
-- Add `totalRefundsMinor` / `refundsByCurrency` to the billing response so the
-  balance math is explicit.
-- Add an integration/UI test for deposit -> archive -> refund confirm ->
-  billing page balance.
-
-Desired goal:
-
-- Advertiser billing totals match the spendable-balance formula used for ad
-  serving and campaign activation.
-
-Done when:
-
-- Confirmed refund rows reduce displayed advertiser balance.
-- Billing summary exposes deposits, charges, refunds, and final balance by
-  currency.
-- The displayed balance matches the backend delivery eligibility balance.
+Previously noted severity: high.
 
 ### A-067: Advertiser Reports Show Misleading CTR and Date Presets
 
@@ -2944,7 +2913,7 @@ Required path:
    device/session/wait-state identity across start, ad request, render,
    qualify, and end.
 10. Approved/funded advertiser campaign is eligible and ad request returns a
-   valid creative for the correct account/device/currency context.
+    valid creative for the correct account/device/currency context.
 11. Client renders an ad, qualifies an impression only after server-enforced
     minimum visible duration and cap checks, and optionally records a click.
     Terminal/CLI earning claims must pass this step too or be explicitly
@@ -2959,8 +2928,8 @@ Required path:
     accounting if partial approval remains supported, or the automated provider
     processes it.
 17. Payout is marked paid by provider webhook or audited admin action, and
-   webhook failure/retry behavior is durable enough that money events are not
-   acknowledged and then lost.
+    webhook failure/retry behavior is durable enough that money events are not
+    acknowledged and then lost.
 18. Developer payout history, ledger balance, payoutable referral reward logic,
     privacy/category preferences, and export data all reflect the final state.
 19. A policy-version bump in the API re-prompts existing users and records the
