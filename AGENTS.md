@@ -29,8 +29,13 @@ Observed verification state from the codebase audit:
   full suite verified):
   - `pnpm typecheck`: passed (**14/14 tasks** across all packages).
   - `pnpm lint`: passed (**9/9 tasks, 0 errors, 0 warnings**).
-  - `pnpm test`: passed across all workspaces. **478+ tests green:** API 327
-    unit (37 files) + 34 contract + 42 e2e-http, CLI 22, VSCode 10, Web 43.
+  - `pnpm test` (per-package, bypassing Turbo cache): passed across all workspaces.
+    **531 tests green:** API 441 tests / 43 files (unit 365 + contract 34 + e2e-http 42),
+    CLI 25 / 5, VSCode 10 / 3, Web 55 / 13.
+    (Note: Turbo root `pnpm test` may report stale cached results for
+    `waitlayer-api` because integration tests share the Postgres database;
+    run `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism`
+    for the authoritative API test result.)
   - `pnpm build`: passed (**9/9 tasks**) — root build + Docker release path
     verified end-to-end.
   - `pnpm --filter @waitlayer/db generate`: passes; client generated into the
@@ -146,9 +151,13 @@ Plus final commit: lint warning fixes + AGENTS.md finalization.
 Resolved (verified): A-001, A-002, A-003, A-004, A-005, A-006, A-007, A-008,
 A-009 (anonymous server-side consent implemented + spec), A-010, A-011, A-012,
 A-013, A-014,
-A-015, A-016, A-017, A-018* (code resolved; browser verify pending), A-019,
-A-020, A-021, A-022, A-023, A-024, A-025, A-026, A-027, A-028, A-029, A-031,
-A-034, A-035, A-036, A-037, A-038, A-039, A-040, A-041, A-043, A-044, A-045
+A-015, A-016, A-017, A-018 (CSP test added; live browser verify still recommended),
+A-019,
+A-020 (campaign action visibility extracted to getCampaignActions + test), A-021,
+A-022, A-023, A-024, A-025, A-026, A-027, A-028, A-029, A-031,
+A-034, A-035 (2FA enforcement spec added), A-036, A-037, A-038, A-039,
+A-040 (full CLI ad-flow loop test added; live terminal E2E still recommended),
+A-041, A-043, A-044, A-045
 (empty-reason bug fixed + spec), A-046, A-047, A-048, A-049, A-050, A-051,
 A-052, A-053, A-054, A-055, A-056,
 A-057, A-058, A-059, A-060, A-061, A-062 (opt-in reclaim cron implemented +
@@ -159,10 +168,13 @@ Remaining (require a human decision or external verification — not code-comple
 without fabricating changes): A-030 (product decision: launch payout providers —
 UI now surfaces provider launch status; automated rails still invite-only),
 A-033 (ongoing: landing-claim runtime verification — mapping test anchors claims to
-the two real client codebases but does not auto-verify live integration).
+the two real client codebases but does not auto-verify live integration),
+A-056 (live-client country population: needs a running VS Code/CLI client + populated
+developer profile in a live DB — BLOCKED, no unit/static substitute).
 
 Partial (critical paths fixed): A-040 now fully resolved: watch.ts uses the tested
-runAdFlow() helper.
+runAdFlow() helper and the full request→render→qualify loop is unit-tested with a
+mocked API client.
 
 ## Project Baseline
 
