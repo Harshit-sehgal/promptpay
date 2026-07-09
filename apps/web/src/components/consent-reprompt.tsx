@@ -37,17 +37,21 @@ export default function ConsentRePrompt() {
     setBusy(true);
     try {
       await Promise.all(
-        stale.map((purpose) =>
-          api.post('/consent', {
+        stale.map((purpose) => {
+          const version = requiredVersions[purpose];
+          if (!version) {
+            throw new Error(`Missing required consent version for ${purpose}`);
+          }
+          return api.post('/consent', {
             purpose,
             // Post the server-required version for this purpose, not a
             // hard-coded constant. If the backend bumps a policy version the
             // web must pick it up automatically.
-            version: requiredVersions[purpose] ?? '2026-07-01',
+            version,
             granted: true,
             metadata: { method: 're_prompt' },
-          }),
-        ),
+          });
+        }),
       );
       // Re-check: keep the banner up if any purpose is still reported stale
       // (e.g. a server write failed or returned an unrecorded version).

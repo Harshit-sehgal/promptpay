@@ -93,6 +93,37 @@ describe('AuthService', () => {
     });
   });
 
+  describe('getMe', () => {
+    it('returns auth-provider flags without leaking password hashes', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'u-1',
+        email: 'adv@example.com',
+        name: 'Advertiser',
+        role: 'advertiser',
+        status: 'active',
+        trustLevel: 'normal',
+        country: 'US',
+        emailVerified: true,
+        passwordHash: '$2a$12$hash',
+        googleVerified: false,
+        githubVerified: false,
+        referralCode: null,
+        createdAt: new Date('2026-07-09T00:00:00.000Z'),
+      });
+
+      const result = await service.getMe('u-1');
+
+      expect(result).toMatchObject({
+        id: 'u-1',
+        email: 'adv@example.com',
+        hasPassword: true,
+        googleVerified: false,
+      });
+      expect('passwordHash' in result).toBe(false);
+    });
+  });
+
   describe('signUp', () => {
     it('creates a new user and returns token pair', async () => {
       const { service } = makeService();
@@ -180,6 +211,51 @@ describe('AuthService', () => {
       const purposes = mockPrisma.consent.create.mock.calls.map((c: any) => c[0].data.purpose);
       expect(purposes).toContain('terms_of_service');
       expect(purposes).toContain('privacy_policy');
+      const versions = mockPrisma.consent.create.mock.calls.map((c: any) => c[0].data.version);
+      expect(versions).toEqual(['2026-07-01', '2026-07-01']);
+    });
+
+    it('rejects stale client policy versions before creating a user (A-034)', async () => {
+      const { service } = makeService();
+
+      await expect(
+        service.signUp({
+          email: 'stale@test.com',
+          password: 'password123',
+          role: 'developer' as any,
+          ageConfirmed: true,
+          termsAccepted: true,
+          policyVersion: '2025-01-01',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.user.create).not.toHaveBeenCalled();
+      expect(mockPrisma.consent.create).not.toHaveBeenCalled();
+    });
+
+    it('fails signup before issuing tokens when consent persistence fails (A-034)', async () => {
+      const { service } = makeService();
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        id: 'u-consent-fail',
+        email: 'consent-fail@test.com',
+        role: 'developer',
+        status: 'active',
+      });
+      mockPrisma.consent.create.mockRejectedValueOnce(new Error('consent write failed'));
+
+      await expect(
+        service.signUp({
+          email: 'consent-fail@test.com',
+          password: 'password123',
+          role: 'developer' as any,
+          ageConfirmed: true,
+          termsAccepted: true,
+        }),
+      ).rejects.toThrow('consent write failed');
+
+      expect(mockPrisma.session.create).not.toHaveBeenCalled();
     });
 
     it('rolls back user creation if subsequent onboarding step fails', async () => {
@@ -750,6 +826,9 @@ describe('AuthService', () => {
       const res = await service.googleOAuth({ idToken: 'some-token', role: 'developer' as any, ageConfirmed: true, termsAccepted: true });
       expect(res.user.id).toBe('u-new-google');
       expect(res.accessToken).toBeDefined();
+      const purposes = mockPrisma.consent.create.mock.calls.map((c: any) => c[0].data.purpose);
+      expect(purposes).toContain('terms_of_service');
+      expect(purposes).toContain('privacy_policy');
     });
 
     it('rejects first-time Google signup without age/terms consent (A-034)', async () => {
@@ -766,6 +845,29 @@ describe('AuthService', () => {
         service.googleOAuth({ idToken: 'some-token', role: 'developer' as any }),
       ).rejects.toThrow(BadRequestException);
       expect(mockPrisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects first-time Google signup with a stale policy version (A-034)', async () => {
+      const { service, googleVerifier } = makeService();
+      googleVerifier.verify.mockResolvedValue({
+        sub: 'google-stale',
+        email: 'google-stale@test.com',
+        email_verified: true,
+        name: 'Stale Policy',
+      });
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.googleOAuth({
+          idToken: 'some-token',
+          role: 'developer' as any,
+          ageConfirmed: true,
+          termsAccepted: true,
+          policyVersion: '2025-01-01',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.user.create).not.toHaveBeenCalled();
+      expect(mockPrisma.consent.create).not.toHaveBeenCalled();
     });
   });
 

@@ -2,12 +2,17 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useRef,useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
+import { getDashboardPath } from '@/lib/auth-routing';
 
 interface GoogleCredentialResponse {
   credential: string;
+}
+
+interface AuthenticatedUser {
+  role: string;
 }
 
 /**
@@ -28,14 +33,14 @@ function GoogleG({ size = 20 }: { size?: number }) {
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
   credential: string,
-  googleLoginFn: (idToken: string) => Promise<unknown>,
-): Promise<string | null> {
+  googleLoginFn: (idToken: string) => Promise<AuthenticatedUser>,
+): Promise<{ error: string | null; user?: AuthenticatedUser }> {
   try {
     // credential from GIS is the ID token itself
-    await googleLoginFn(credential);
-    return null;
+    const user = await googleLoginFn(credential);
+    return { error: null, user };
   } catch (err: unknown) {
-    return getErrorMessage(err, 'Google sign-in failed');
+    return { error: getErrorMessage(err, 'Google sign-in failed') };
   }
 }
 
@@ -60,9 +65,8 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      await googleLogin('mock-google-token-developer', undefined, twoFactorToken);
-      const dashboard = localStorage.getItem('lastDashboard') || '/developer';
-      router.push(dashboard);
+      const user = await googleLogin('mock-google-token-developer', undefined, twoFactorToken);
+      router.push(getDashboardPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Mock Google login failed'));
     } finally {
@@ -114,11 +118,10 @@ export default function LoginPage() {
               (idToken) => googleLogin(idToken, undefined, twoFactorTokenRef.current),
             );
             setLoading(false);
-            if (errorMsg) {
-              setError(errorMsg);
+            if (errorMsg.error) {
+              setError(errorMsg.error);
             } else {
-              const dashboard = localStorage.getItem('lastDashboard') || '/developer';
-              router.push(dashboard);
+              router.push(getDashboardPath(errorMsg.user?.role));
             }
           },
           auto_select: false,
@@ -156,9 +159,8 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password, twoFactorToken);
-      const dashboard = localStorage.getItem('lastDashboard') || '/developer';
-      router.push(dashboard);
+      const user = await login(email, password, twoFactorToken);
+      router.push(getDashboardPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Login failed'));
     } finally {

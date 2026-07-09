@@ -13,6 +13,7 @@ import { buildOtpAuthUrl, DEFAULT_COMPANY_NAME, generateTotpSecret, UserRole, ve
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
+import { CURRENT_CONSENT_VERSIONS, SIGNUP_CONSENT_PURPOSES, SignupConsentPurpose } from '../compliance/consent-versions';
 import { PrismaService } from '../config/prisma.service';
 import { EmailService } from '../email/email.service';
 import { FraudService } from '../fraud/fraud.service';
@@ -48,14 +49,9 @@ interface PasswordResetPayload {
   fp: string;
 }
 
-/**
- * Default policy version recorded when a signup path does not send an explicit
- * `policyVersion`. Kept in sync with `CURRENT_CONSENT_VERSIONS` in the
- * compliance service; if the compliance service bumps its required version
- * without a matching client update, the consent re-prompt flow will surface
- * the newer version for re-acceptance.
- */
-const CURRENT_SIGNUP_POLICY_VERSION = '2026-07-01';
+type SignupConsentVersions = Record<SignupConsentPurpose, string>;
+type SignupConsentMethod = 'signup' | 'google_signup';
+type SignupConsentRecord = { id: string; purpose: string; version: string };
 
 @Injectable()
 export class AuthService {
@@ -98,6 +94,7 @@ export class AuthService {
     if (!dto.ageConfirmed || !dto.termsAccepted) {
       throw new BadRequestException('You must confirm you are 18+ and accept the Terms and Privacy Policy to sign up');
     }
+    const signupConsentVersions = this.resolveSignupConsentVersions(dto.policyVersion);
 
     // Optimistic pre-check: catch sequential duplicate signups with a cheap
     // read before paying the bcrypt.hash cost on a doomed insert. Concurrent
@@ -110,7 +107,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const referralCode = await this.generateReferralCode();
 
-    const user = await this.prisma.$transaction(async (tx) => {
+    const { user, consentRows } = await this.prisma.$transaction(async (tx) => {
       let createdUser;
       try {
         createdUser = await tx.user.create({
@@ -164,30 +161,19 @@ export class AuthService {
         }
       }
 
-      return createdUser;
+      const consentRows = await this.createSignupConsentRecords(
+        tx,
+        createdUser,
+        'signup',
+        signupConsentVersions,
+      );
+
+      return { user: createdUser, consentRows };
     });
 
     const tokens = await this.generateTokenPair(user.id, user.role);
 
-    // A-034: persist the accepted age/terms/privacy consent at the exact
-    // policy version the client agreed to, so future version bumps can
-    // re-prompt and the acceptance is auditable per user.
-    const consentVersion = dto.policyVersion ?? CURRENT_SIGNUP_POLICY_VERSION;
-    for (const purpose of ['terms_of_service', 'privacy_policy'] as const) {
-      await this.prisma.consent
-        .create({
-          data: { userId: user.id, purpose, version: consentVersion, granted: true, metadata: { method: 'signup' } },
-        })
-        .catch(() => undefined);
-      void this.audit.log({
-        actorId: user.id,
-        actorRole: user.role,
-        action: 'consent_granted',
-        targetType: 'consent',
-        targetId: purpose,
-        afterSnap: { version: consentVersion, method: 'signup' },
-      });
-    }
+    this.logSignupConsents(user, consentRows, 'signup');
 
     // Audit log: new user registration (fire-and-forget)
     void this.audit.log({
@@ -330,8 +316,9 @@ export class AuthService {
     if (!dto.ageConfirmed || !dto.termsAccepted) {
       throw new BadRequestException('You must confirm you are 18+ and accept the Terms and Privacy Policy to sign up');
     }
+    const signupConsentVersions = this.resolveSignupConsentVersions(dto.policyVersion);
     const referralCode = await this.generateReferralCode();
-    user = await this.prisma.$transaction(async (tx) => {
+    const googleSignup = await this.prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
           email,
@@ -358,28 +345,20 @@ export class AuthService {
         });
       }
 
-      return createdUser;
+      const consentRows = await this.createSignupConsentRecords(
+        tx,
+        createdUser,
+        'google_signup',
+        signupConsentVersions,
+      );
+
+      return { user: createdUser, consentRows };
     });
+    user = googleSignup.user;
 
     const tokens = await this.generateTokenPair(user.id, user.role);
 
-    // A-034: persist the accepted consent for the new Google account.
-    const consentVersion = dto.policyVersion ?? CURRENT_SIGNUP_POLICY_VERSION;
-    for (const purpose of ['terms_of_service', 'privacy_policy'] as const) {
-      await this.prisma.consent
-        .create({
-          data: { userId: user.id, purpose, version: consentVersion, granted: true, metadata: { method: 'google_signup' } },
-        })
-        .catch(() => undefined);
-      void this.audit.log({
-        actorId: user.id,
-        actorRole: user.role,
-        action: 'consent_granted',
-        targetType: 'consent',
-        targetId: purpose,
-        afterSnap: { version: consentVersion, method: 'google_signup' },
-      });
-    }
+    this.logSignupConsents(user, googleSignup.consentRows, 'google_signup');
 
     return { user: this.sanitizeUser(user), ...tokens };
   }
@@ -528,6 +507,7 @@ export class AuthService {
         trustLevel: true,
         country: true,
         emailVerified: true,
+        passwordHash: true,
         googleVerified: true,
         githubVerified: true,
         referralCode: true,
@@ -535,7 +515,8 @@ export class AuthService {
       },
     });
     if (!user) throw new UnauthorizedException();
-    return user;
+    const { passwordHash: _passwordHash, ...safeUser } = user;
+    return { ...safeUser, hasPassword: Boolean(_passwordHash) };
   }
 
   getGoogleClientId() {
@@ -543,6 +524,61 @@ export class AuthService {
   }
 
   // ── Private Helpers ──
+
+  private resolveSignupConsentVersions(policyVersion?: string): SignupConsentVersions {
+    const versions = Object.fromEntries(
+      SIGNUP_CONSENT_PURPOSES.map((purpose) => [purpose, CURRENT_CONSENT_VERSIONS[purpose]]),
+    ) as SignupConsentVersions;
+
+    if (policyVersion && Object.values(versions).some((requiredVersion) => policyVersion !== requiredVersion)) {
+      throw new BadRequestException('Accepted policy version is out of date. Refresh the signup page and try again.');
+    }
+
+    return versions;
+  }
+
+  private async createSignupConsentRecords(
+    tx: Prisma.TransactionClient,
+    user: { id: string },
+    method: SignupConsentMethod,
+    versions: SignupConsentVersions,
+  ): Promise<SignupConsentRecord[]> {
+    return Promise.all(
+      SIGNUP_CONSENT_PURPOSES.map((purpose) =>
+        tx.consent.create({
+          data: {
+            userId: user.id,
+            purpose,
+            version: versions[purpose],
+            granted: true,
+            metadata: { method },
+          },
+          select: {
+            id: true,
+            purpose: true,
+            version: true,
+          },
+        }),
+      ),
+    );
+  }
+
+  private logSignupConsents(
+    user: { id: string; role: string },
+    consentRows: SignupConsentRecord[],
+    method: SignupConsentMethod,
+  ) {
+    for (const consent of consentRows) {
+      void this.audit.log({
+        actorId: user.id,
+        actorRole: user.role,
+        action: 'consent_granted',
+        targetType: 'consent',
+        targetId: consent.id,
+        afterSnap: { purpose: consent.purpose, version: consent.version, method },
+      });
+    }
+  }
 
   private async generateTokenPair(userId: string, role: string, existingFamily?: string) {
     const family = existingFamily || randomUUID();

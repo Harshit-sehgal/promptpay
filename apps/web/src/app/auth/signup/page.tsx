@@ -2,35 +2,40 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormEvent, useEffect, useRef,useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import api from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
+import { getDashboardPath, resolveSignupIntent, SignupRole } from '@/lib/auth-routing';
 
 interface GoogleCredentialResponse {
   credential: string;
 }
 
+interface AuthenticatedUser {
+  role: string;
+}
+
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
   credential: string,
-  googleLoginFn: (idToken: string, role?: string, twoFactorToken?: string, consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string }) => Promise<unknown>,
-  role: string,
+  googleLoginFn: (idToken: string, role?: string, twoFactorToken?: string, consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string }) => Promise<AuthenticatedUser>,
+  role: SignupRole,
   consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
-): Promise<string | null> {
+): Promise<{ error: string | null; user?: AuthenticatedUser }> {
   try {
     // credential from GIS is the ID token itself
-    await googleLoginFn(credential, role, undefined, consent);
-    return null;
+    const user = await googleLoginFn(credential, role, undefined, consent);
+    return { error: null, user };
   } catch (err: unknown) {
-    return getErrorMessage(err, 'Google sign-in failed');
+    return { error: getErrorMessage(err, 'Google sign-in failed') };
   }
 }
 
 export default function SignupPage() {
   const router = useRouter();
   const { signup, googleLogin } = useAuth();
-  const [role, setRole] = useState<'developer' | 'advertiser'>('developer');
+  const [role, setRole] = useState<SignupRole>('developer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -47,19 +52,19 @@ export default function SignupPage() {
   // A-047: Fetch the current required consent versions from the server so the
   // recorded acceptance matches the active server policy, not a hardcoded
   // date that drifts after a backend bump.
-  const [policyVersion, setPolicyVersion] = useState('2026-07-01');
+  const [policyVersion, setPolicyVersion] = useState<string | null>(null);
   const policyRef = useRef(policyVersion);
 
   useEffect(() => {
     const fetchVersions = async () => {
       try {
         const res = await api.get<Record<string, string>>('/consent/required-versions');
-        const version =
-          res.data?.terms_of_service || res.data?.privacy_policy || '2026-07-01';
+        const version = res.data?.terms_of_service || res.data?.privacy_policy;
+        if (!version) throw new Error('Required consent versions missing from server response');
         setPolicyVersion(version);
       } catch {
-        // Fall back to the hardcoded default — the re-prompt flow will surface
-        // any version mismatch after login if the server version is newer.
+        setPolicyVersion(null);
+        setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
       }
     };
     fetchVersions();
@@ -71,18 +76,9 @@ export default function SignupPage() {
   }, [policyVersion]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const referralFromUrl = params.get('ref');
-    if (referralFromUrl) {
-      // Referral links are always developer-only and take precedence.
-      setReferrerCode(referralFromUrl.trim().toUpperCase());
-      setRole('developer');
-      return;
-    }
-    const roleParam = params.get('role');
-    if (roleParam === 'advertiser' || roleParam === 'developer') {
-      setRole(roleParam);
-    }
+    const intent = resolveSignupIntent(window.location.search);
+    setReferrerCode(intent.referrerCode);
+    setRole(intent.role);
   }, []);
 
   // Keep roleRef in sync with role state
@@ -102,15 +98,18 @@ export default function SignupPage() {
       setError('You must confirm you are at least 18 years old to continue.');
       return;
     }
+    if (!policyRef.current) {
+      setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
+      return;
+    }
     setLoading(true);
     try {
-      await googleLogin('mock-google-token-developer', role, undefined, {
+      const user = await googleLogin('mock-google-token-developer', role, undefined, {
         ageConfirmed: true,
         termsAccepted: true,
-        policyVersion,
+        policyVersion: policyRef.current,
       });
-      const dashboard = localStorage.getItem('lastDashboard') || '/developer';
-      router.push(dashboard);
+      router.push(getDashboardPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Mock Google signup failed'));
     } finally {
@@ -164,6 +163,11 @@ export default function SignupPage() {
               setLoading(false);
               return;
             }
+            if (!policyRef.current) {
+              setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
+              setLoading(false);
+              return;
+            }
             setLoading(true);
             // Use roleRef.current to avoid stale closure
             const errorMsg = await handleGoogleCredential(
@@ -173,11 +177,10 @@ export default function SignupPage() {
               { ageConfirmed: true, termsAccepted: true, policyVersion: policyRef.current },
             );
             setLoading(false);
-            if (errorMsg) {
-              setError(errorMsg);
+            if (errorMsg.error) {
+              setError(errorMsg.error);
             } else {
-              const dashboard = localStorage.getItem('lastDashboard') || '/developer';
-              router.push(dashboard);
+              router.push(getDashboardPath(errorMsg.user?.role));
             }
           },
           auto_select: false,
@@ -215,10 +218,14 @@ export default function SignupPage() {
       setError('You must confirm you are at least 18 years old to continue.');
       return;
     }
+    if (!policyVersion) {
+      setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
+      return;
+    }
     setLoading(true);
 
     try {
-      await signup({
+      const user = await signup({
         email,
         password,
         role,
@@ -228,8 +235,7 @@ export default function SignupPage() {
         termsAccepted: ageConfirmed,
         policyVersion,
       });
-      const dashboard = localStorage.getItem('lastDashboard') || '/developer';
-      router.push(dashboard);
+      router.push(getDashboardPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Signup failed'));
     } finally {
@@ -367,7 +373,7 @@ export default function SignupPage() {
 
             <button
               type="submit"
-              disabled={loading || !ageConfirmed}
+              disabled={loading || !ageConfirmed || !policyVersion}
               aria-busy={loading}
               className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
             >

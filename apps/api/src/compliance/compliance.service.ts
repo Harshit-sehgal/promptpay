@@ -3,22 +3,13 @@ import { BadRequestException,Injectable, Logger } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { assertSafeJson } from '../common/utils/json-value';
 import { PrismaService } from '../config/prisma.service';
+import { CURRENT_CONSENT_VERSIONS } from './consent-versions';
 
 const DEFAULT_RETENTION_DAYS: Record<string, number> = {
   webhook_events: 90,
   audit_logs: 365,
   sessions: 30,
   export_cache: 7,
-};
-
-// Current policy/terms versions users must have consented to. Bump these
-// strings whenever the privacy policy / terms / cookie notice materially
-// change — the re-prompt flow (#65) compares a user's latest consent version
-// against these to decide whether to ask again.
-const CURRENT_CONSENT_VERSIONS: Record<string, string> = {
-  privacy_policy: '2026-07-01',
-  terms_of_service: '2026-07-01',
-  marketing_cookies: '2026-07-01',
 };
 
 @Injectable()

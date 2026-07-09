@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-
 import api from '@/lib/api/client';
 import { useAuth } from '@/lib/auth-context';
 
@@ -13,11 +12,24 @@ import { useAuth } from '@/lib/auth-context';
 // consent ledger so the choice is auditable and honored across devices.
 const CCPA_KEY = 'wl_ccpa_opt_out';
 const CCPA_PURPOSE = 'ccpa_opt_out';
-const CCPA_VERSION = '2026-07-01';
 
 export default function PrivacyPage() {
   const { isAuthenticated } = useAuth();
   const [ccpaOptOut, setCcpaOptOut] = useState(false);
+  const [ccpaVersion, setCcpaVersion] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const loadCurrentCcpaVersion = useCallback(async () => {
+    if (ccpaVersion) return ccpaVersion;
+    const { data } = await api.get<Record<string, string>>('/consent/required-versions');
+    const version = data.privacy_policy ?? data.marketing_cookies;
+    if (!version) {
+      throw new Error('No current privacy policy version is available');
+    }
+    setCcpaVersion(version);
+    return version;
+  }, [ccpaVersion]);
 
   const loadServerState = useCallback(async () => {
     try {
@@ -32,29 +44,37 @@ export default function PrivacyPage() {
     if (typeof window !== 'undefined') {
       setCcpaOptOut(window.localStorage.getItem(CCPA_KEY) === 'true');
     }
+    void loadCurrentCcpaVersion().catch(() => {
+      // The authenticated toggle path will surface this if the user tries to
+      // save before the current policy version can be fetched.
+    });
     if (isAuthenticated) void loadServerState();
-  }, [isAuthenticated, loadServerState]);
+  }, [isAuthenticated, loadCurrentCcpaVersion, loadServerState]);
 
   const toggleCcpa = async () => {
+    setSyncError(null);
     const next = !ccpaOptOut;
-    setCcpaOptOut(next);
 
-    // Always keep the device-local copy (works for logged-out + as a cache).
-    window.localStorage.setItem(CCPA_KEY, String(next));
+    if (!isAuthenticated) {
+      setCcpaOptOut(next);
+      window.localStorage.setItem(CCPA_KEY, String(next));
+      return;
+    }
 
-    // Authenticated users also record the preference server-side so it is
-    // durable and honored across devices (A-036).
-    if (isAuthenticated) {
-      try {
-        await api.post('/consent', {
-          purpose: CCPA_PURPOSE,
-          version: CCPA_VERSION,
-          granted: next,
-        });
-      } catch {
-        // Server sync is best-effort; the local copy remains authoritative
-        // for this device.
-      }
+    setSyncing(true);
+    try {
+      const version = await loadCurrentCcpaVersion();
+      await api.post('/consent', {
+        purpose: CCPA_PURPOSE,
+        version,
+        granted: next,
+      });
+      setCcpaOptOut(next);
+      window.localStorage.setItem(CCPA_KEY, String(next));
+    } catch {
+      setSyncError('Could not save your account-level opt-out. Please try again.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -110,9 +130,10 @@ export default function PrivacyPage() {
               aria-checked={ccpaOptOut}
               aria-label="Do not sell my personal information"
               onClick={toggleCcpa}
+              disabled={syncing}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 ccpaOptOut ? 'bg-brand-500' : 'bg-surface-300'
-              }`}
+              } ${syncing ? 'opacity-60 cursor-wait' : ''}`}
             >
               <span
                 className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
@@ -131,6 +152,11 @@ export default function PrivacyPage() {
                 : 'You have not opted out on this device.'}
             {!isAuthenticated && ' This preference is stored locally on this browser only.'}
           </p>
+          {syncError && (
+            <p className="text-red-600 text-[12px] mt-2">
+              {syncError}
+            </p>
+          )}
         </section>
       </div>
     </main>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api/client';
+import { useAuth } from '@/lib/auth-context';
 
 import { useToast } from '@waitlayer/ui';
 
@@ -23,8 +24,10 @@ function readStored(): Choice | null {
 }
 
 export default function CookieConsent() {
+  const { isAuthenticated } = useAuth();
   const [visible, setVisible] = useState(false);
-  const [marketingVersion, setMarketingVersion] = useState('2026-07-01');
+  const [marketingVersion, setMarketingVersion] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const { success } = useToast();
 
   useEffect(() => {
@@ -54,26 +57,35 @@ export default function CookieConsent() {
     setVisible(false);
   };
 
-  const recordConsent = async () => {
-    try {
-      await api.post('/consent', {
-        purpose: 'marketing_cookies',
-        version: marketingVersion,
-        granted: true,
-        metadata: { method: 'cookie_banner' },
-      });
-    } catch {
-      // Consent is still stored locally; server sync is best-effort.
+  const recordConsent = async (granted: boolean) => {
+    if (!marketingVersion) {
+      throw new Error('Missing required marketing cookie consent version');
     }
+    await api.post('/consent', {
+      purpose: 'marketing_cookies',
+      version: marketingVersion,
+      granted,
+      metadata: { method: 'cookie_banner' },
+    });
   };
 
-  const accept = () => {
-    persist('accepted');
-    void recordConsent();
+  const choose = async (choice: Choice) => {
+    setSyncError(null);
+    if (isAuthenticated) {
+      try {
+        await recordConsent(choice === 'accepted');
+      } catch {
+        setSyncError('Could not save cookie preferences to your account. Please try again.');
+        return;
+      }
+    }
+    persist(choice);
     success('Cookie preferences saved');
   };
 
-  const decline = () => persist('declined');
+  const accept = () => void choose('accepted');
+
+  const decline = () => void choose('declined');
 
   if (!visible) return null;
 
@@ -92,6 +104,7 @@ export default function CookieConsent() {
           </Link>{' '}
           for details.
         </p>
+        {syncError && <p className="text-red-600 text-[12px]">{syncError}</p>}
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
