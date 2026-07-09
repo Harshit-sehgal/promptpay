@@ -162,15 +162,12 @@ A-041, A-043, A-044, A-045
 A-052, A-053, A-054, A-055, A-056,
 A-057, A-058, A-059, A-060, A-061, A-062 (opt-in reclaim cron implemented +
 spec), A-063, A-064, A-065, A-066, A-067, A-068,
-A-069, A-070, A-032* (bounds enforced; full async/paginated UI is a product call),
-A-033* (claim↔codebase mapping test added; "Live" statuses still product assertions).
+A-069, A-070, A-032* (bounds enforced; full async/paginated UI is a product call).
 Remaining (require a human decision or external verification — not code-completable
 without fabricating changes): A-030 (product decision: launch payout providers —
 UI now surfaces provider launch status; automated rails still invite-only),
 A-033 (ongoing: landing-claim runtime verification — mapping test anchors claims to
-the two real client codebases but does not auto-verify live integration),
-A-056 (live-client country population: needs a running VS Code/CLI client + populated
-developer profile in a live DB — BLOCKED, no unit/static substitute).
+the two real client codebases but does not auto-verify live integration).
 
 Partial (critical paths fixed): A-040 now fully resolved: watch.ts uses the tested
 runAdFlow() helper and the full request→render→qualify loop is unit-tested with a
