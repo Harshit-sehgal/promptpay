@@ -16,6 +16,7 @@ import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { CampaignService } from '../campaign/campaign.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode } from '../common/utils/errors';
+import { buildCappedExportMeta, splitCappedRows } from '../common/utils/export-metadata';
 import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
 import { PrismaService } from '../config/prisma.service';
 import { reportsToCsv } from './reports-csv';
@@ -40,6 +41,15 @@ import { reportsToCsv } from './reports-csv';
 // its behavior is unchanged (all campaigns are returned unless a caller asks).
 const REPORT_MAX_LIMIT = 1000;
 const REPORT_MAX_RANGE_DAYS = 366;
+const ADVERTISER_EXPORT_LIMITS = {
+  campaigns: 1000,
+  creatives: 2000,
+  billingLedger: 10000,
+};
+// A-074: bound the heavy campaign payload returned by getDashboard. Only a
+// recent slice is loaded with creative/approval includes for display; the
+// account-wide impression/click counts use nested-relation counts.
+const DASHBOARD_CAMPAIGN_SLICE = 20;
 
 export function buildReportsDateFilter(
   from: string | undefined,
@@ -149,7 +159,7 @@ export class AdvertiserService {
     const advertiser = await this.prisma.advertiser.findUnique({ where: { userId } });
     const advertiserId = advertiser?.id;
 
-    const [user, campaigns, creatives, ledger, consents] = await Promise.all([
+    const [user, campaignRows, creativeRows, ledgerRows, consents] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -167,22 +177,37 @@ export class AdvertiserService {
           createdAt: true,
         },
       }),
-      advertiserId ? this.prisma.campaign.findMany({ where: { advertiserId }, take: 1000 }) : [],
+      advertiserId
+        ? this.prisma.campaign.findMany({
+            where: { advertiserId },
+            orderBy: { createdAt: 'desc' },
+            take: ADVERTISER_EXPORT_LIMITS.campaigns + 1,
+          })
+        : [],
       advertiserId
         ? this.prisma.adCreative.findMany({
             where: { campaign: { advertiserId } },
-            take: 2000,
+            orderBy: { createdAt: 'desc' },
+            take: ADVERTISER_EXPORT_LIMITS.creatives + 1,
           })
         : [],
       advertiserId
         ? this.prisma.advertiserLedger.findMany({
             where: { advertiserId },
             orderBy: { createdAt: 'desc' },
-            take: 10000,
+            take: ADVERTISER_EXPORT_LIMITS.billingLedger + 1,
           })
         : [],
       this.prisma.consent.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
     ]);
+    const campaigns = splitCappedRows(campaignRows, ADVERTISER_EXPORT_LIMITS.campaigns);
+    const creatives = splitCappedRows(creativeRows, ADVERTISER_EXPORT_LIMITS.creatives);
+    const billingLedger = splitCappedRows(ledgerRows, ADVERTISER_EXPORT_LIMITS.billingLedger);
+    const exportMeta = buildCappedExportMeta({
+      campaigns: campaigns.meta,
+      creatives: creatives.meta,
+      billingLedger: billingLedger.meta,
+    });
 
     void this.audit.log({
       actorId: userId,
@@ -195,10 +220,11 @@ export class AdvertiserService {
     return {
       profile: user,
       advertiser,
-      campaigns,
-      creatives,
-      billingLedger: ledger,
+      campaigns: campaigns.data,
+      creatives: creatives.data,
+      billingLedger: billingLedger.data,
       consent: consents,
+      exportMeta,
     };
   }
 
@@ -330,11 +356,27 @@ export class AdvertiserService {
 
     const campaigns = await this.prisma.campaign.findMany({
       where: { advertiserId },
+      orderBy: { createdAt: 'desc' },
+      take: DASHBOARD_CAMPAIGN_SLICE,
       include: {
         creatives: {
-          select: { id: true, status: true },
+          select: { id: true, status: true, rejectionReason: true },
+        },
+        approvals: {
+          where: { decision: 'rejected' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { reason: true },
         },
       },
+    });
+
+    const campaignSummaries = campaigns.map((campaign) => {
+      const { approvals = [], ...summary } = campaign;
+      return {
+        ...summary,
+        rejectionReason: campaign.status === 'rejected' ? (approvals[0]?.reason ?? null) : null,
+      };
     });
 
     // A-024: count impressions and clicks over the same population (this
@@ -347,7 +389,7 @@ export class AdvertiserService {
     });
 
     const totalClicks = await this.prisma.adClick.count({
-      where: { campaignId: { in: campaigns.map((c: { id: string }) => c.id) }, isValid: true },
+      where: { campaign: { advertiserId }, isValid: true },
     });
 
     const spend = await this.prisma.advertiserLedger.groupBy({
@@ -365,9 +407,84 @@ export class AdvertiserService {
       totalImpressions,
       totalClicks,
       ctr: totalImpressions > 0 ? totalClicks / totalImpressions : 0,
-      activeCampaigns: campaigns.filter((c: { status: string }) => c.status === 'active').length,
-      totalCampaigns: campaigns.length,
-      campaigns,
+      activeCampaigns: await this.prisma.campaign.count({
+        where: { advertiserId, status: 'active' },
+      }),
+      totalCampaigns: await this.prisma.campaign.count({ where: { advertiserId } }),
+      campaigns: campaignSummaries,
+    };
+  }
+
+  /**
+   * A-074: bounded, paginated campaign list for the advertiser campaigns page.
+   * Replaces the dashboard's unbounded campaign array as the list source and
+   * returns only the requested page slice plus an accurate total count.
+   */
+  async listCampaigns(
+    advertiserId: string,
+    query: { page?: number; limit?: number; status?: string } = {},
+  ) {
+    const page = Math.max(1, Math.trunc(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Math.trunc(query.limit ?? 20)));
+    const where: Prisma.CampaignWhereInput = { advertiserId };
+    if (query.status) where.status = query.status as CampaignStatus;
+
+    const [rows, total] = await Promise.all([
+      this.prisma.campaign.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          creatives: { select: { id: true, status: true, rejectionReason: true } },
+          approvals: {
+            where: { decision: 'rejected' },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { reason: true },
+          },
+        },
+      }),
+      this.prisma.campaign.count({ where }),
+    ]);
+
+    const campaigns = rows.map((campaign) => {
+      const { approvals = [], ...summary } = campaign;
+      return {
+        ...summary,
+        rejectionReason: campaign.status === 'rejected' ? (approvals[0]?.reason ?? null) : null,
+      };
+    });
+
+    return { campaigns, total, page, limit };
+  }
+
+  /**
+   * A-074: single-campaign detail for the advertiser edit flow. Replaces the
+   * previous pattern of loading the whole dashboard and searching the array
+   * for one campaign id (which did not scale and could miss campaigns outside
+   * the dashboard's recent slice).
+   */
+  async getCampaign(advertiserId: string, campaignId: string) {
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      include: {
+        creatives: { select: { id: true, status: true, rejectionReason: true } },
+        approvals: {
+          where: { decision: 'rejected' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { reason: true },
+        },
+      },
+    });
+    if (!campaign || campaign.advertiserId !== advertiserId) {
+      throw new NotFoundException('Campaign not found');
+    }
+    const { approvals = [], ...summary } = campaign;
+    return {
+      ...summary,
+      rejectionReason: campaign.status === 'rejected' ? (approvals[0]?.reason ?? null) : null,
     };
   }
 
@@ -854,6 +971,7 @@ export class AdvertiserService {
       name?: string;
       bidAmountMinor?: number;
       budgetTotalMinor?: number;
+      currency?: string;
       frequencyCapPerHour?: number;
       frequencyCapPerDay?: number;
     },
@@ -862,6 +980,11 @@ export class AdvertiserService {
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
     if (campaign.status !== 'draft') {
       throw new BadRequestException('Campaign can only be edited in DRAFT status');
+    }
+    // A-081: allow currency selection on drafts so a campaign can be created
+    // in a funded non-USD balance (otherwise a non-USD deposit is stranded).
+    if (dto.currency !== undefined) {
+      dto.currency = dto.currency.trim().toUpperCase();
     }
     // Re-validate inputs — the createCampaign path enforces bounds, but
     // an update can be used to bypass them. Mirror the same checks.

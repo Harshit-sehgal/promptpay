@@ -113,6 +113,40 @@ export class AdvertiserController {
     return this.service.getDashboard(advertiserId);
   }
 
+  @Get('campaigns')
+  @RequiredScopes('advertiser:read')
+  async listCampaigns(
+    @Req() req: Request,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.listCampaigns(advertiserId, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      status:
+        (status as
+          | 'draft'
+          | 'submitted'
+          | 'approved'
+          | 'active'
+          | 'paused'
+          | 'rejected'
+          | 'archived'
+          | undefined) ?? undefined,
+    });
+  }
+
+  @Get('campaigns/:id')
+  @RequiredScopes('advertiser:read')
+  async getCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    const ctx = resolveApiContext(req);
+    const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
+    return this.service.getCampaign(advertiserId, id);
+  }
+
   @Get('billing')
   @RequiredScopes('advertiser:read')
   async getBilling(@Req() req: Request) {

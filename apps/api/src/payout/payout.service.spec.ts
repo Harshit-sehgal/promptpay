@@ -9,14 +9,12 @@ import { PayoutService } from './payout.service';
 function makePayoutService(prismaOverrides: Record<string, unknown> = {}, require2fa = false) {
   const prisma = {
     user: {
-      findUnique: vi
-        .fn()
-        .mockResolvedValue({
-          id: 'u1',
-          status: 'active',
-          emailVerified: true,
-          twoFactorEnabled: false,
-        }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'u1',
+        status: 'active',
+        emailVerified: true,
+        twoFactorEnabled: false,
+      }),
     },
     earningsLedger: {
       // available = confirmed credits − confirmed debits − allocated. Mock the
@@ -34,6 +32,7 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}, requir
     },
     fraudFlag: { count: vi.fn().mockResolvedValue(0) },
     payoutAccount: { findUnique: vi.fn() },
+    $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn((cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
     ...prismaOverrides,
   };
@@ -200,6 +199,167 @@ describe('PayoutService.getPayoutInfo payout policy metadata', () => {
 
     expect(info.requiresTwoFactorForPayout).toBe(true);
     expect(info.twoFactorEnabled).toBe(false);
+  });
+
+  it('subtracts reserved allocations with a grouped SQL sum instead of loading rows', async () => {
+    const queryRaw = vi.fn().mockResolvedValue([{ currency: 'USD', amountMinor: 150n }]);
+    const { service } = makePayoutService({
+      $queryRaw: queryRaw,
+      user: {
+        findUnique: vi.fn().mockResolvedValue({ twoFactorEnabled: true }),
+      },
+      payoutAccount: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'acc1', currency: 'USD' }]),
+        findUnique: vi.fn(),
+      },
+      payoutRequest: {
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      earningsLedger: {
+        groupBy: vi.fn((args: { where?: { entryType?: string } }) => {
+          if (args.where?.entryType === 'debit') {
+            return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 100 } }]);
+          }
+          return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 1000 } }]);
+        }),
+        aggregate: vi.fn(),
+      },
+    });
+
+    const info = await service.getPayoutInfo('u1');
+
+    expect(queryRaw).toHaveBeenCalled();
+    expect(info.availableBalanceMinor).toBe(750);
+    expect(info.availableBalanceByCurrency).toEqual({ USD: 750 });
+  });
+});
+
+describe('PayoutService.getAvailableForPayout bounded availability (A-071)', () => {
+  it('uses aggregate totals and returns a paginated entry slice', async () => {
+    const eligibleWhere = expect.objectContaining({
+      userId: 'u1',
+      status: 'confirmed',
+      entryType: 'credit',
+      payoutAllocations: {
+        none: {
+          payoutRequest: {
+            userId: 'u1',
+            status: expect.any(Object),
+          },
+        },
+      },
+    });
+    const earningsLedger = {
+      groupBy: vi.fn((args: { where?: { entryType?: string } }) => {
+        if (args.where?.entryType === 'debit') {
+          return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 100 } }]);
+        }
+        return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 1000 } }]);
+      }),
+      findMany: vi.fn().mockResolvedValue([
+        { id: 'e3', amountMinor: 300, currency: 'USD' },
+        { id: 'e4', amountMinor: 400, currency: 'USD' },
+        { id: 'e5', amountMinor: 500, currency: 'USD' },
+      ]),
+      count: vi.fn().mockResolvedValue(5),
+      aggregate: vi.fn(),
+    };
+    const { service } = makePayoutService({ earningsLedger });
+
+    const available = await service.getAvailableForPayout('u1', { page: 2, limit: 2 });
+
+    expect(earningsLedger.groupBy).toHaveBeenCalledWith({
+      by: ['currency'],
+      where: eligibleWhere,
+      _sum: { amountMinor: true },
+    });
+    expect(earningsLedger.findMany).toHaveBeenCalledWith({
+      where: eligibleWhere,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      skip: 2,
+      take: 3,
+    });
+    expect(available.entries).toHaveLength(2);
+    expect(available.count).toBe(5);
+    expect(available.page).toBe(2);
+    expect(available.limit).toBe(2);
+    expect(available.hasMore).toBe(true);
+    expect(available.totalMinor).toBe(900);
+    expect(available.totalsByCurrency).toEqual({ USD: 900 });
+  });
+});
+
+describe('PayoutService.allocatePayoutEarnings bounded auto-selection (A-071)', () => {
+  it('reads auto-allocation candidates in bounded pages until the request is covered', async () => {
+    const { service } = makePayoutService();
+    const firstPage = Array.from({ length: 500 }, (_, index) => ({
+      id: `earn_${index}`,
+      userId: 'u1',
+      campaignId: null,
+      impressionId: null,
+      clickId: null,
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 1,
+      currency: 'USD',
+      availableAt: null,
+      description: null,
+      createdAt: new Date(index),
+    }));
+    const secondPageEntry = {
+      id: 'earn_500',
+      userId: 'u1',
+      campaignId: null,
+      impressionId: null,
+      clickId: null,
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 200,
+      currency: 'USD',
+      availableAt: null,
+      description: null,
+      createdAt: new Date(500),
+    };
+    const tx = {
+      earningsLedger: {
+        findMany: vi.fn().mockResolvedValueOnce(firstPage).mockResolvedValueOnce([secondPageEntry]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi.fn().mockResolvedValue({ id: 'remainder' }),
+      },
+      payoutAllocation: {
+        create: vi.fn().mockResolvedValue({ id: 'alloc' }),
+      },
+    };
+
+    await (
+      service as unknown as {
+        allocatePayoutEarnings: (
+          tx: typeof tx,
+          payoutRequestId: string,
+          userId: string,
+          amountMinor: number,
+          currency: string,
+        ) => Promise<unknown>;
+      }
+    ).allocatePayoutEarnings(tx, 'pr1', 'u1', 600, 'USD');
+
+    expect(tx.earningsLedger.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ take: 500 }),
+    );
+    expect(tx.earningsLedger.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ cursor: { id: 'earn_499' }, skip: 1, take: 500 }),
+    );
+    expect(tx.payoutAllocation.create).toHaveBeenCalledTimes(501);
+    expect(tx.earningsLedger.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          amountMinor: 100,
+          idempotencyKey: 'payout-remainder-pr1-earn_500',
+        }),
+      }),
+    );
   });
 });
 

@@ -47,10 +47,10 @@ import { ReferralModule } from './referral/referral.module';
       useFactory: async (config: ConfigService) => ({
         storage: await RedisBackedThrottlerStorage.create(config),
         throttlers: [
-          { ttl: 60_000, limit: 10, name: 'auth-short' },   // auth endpoints: 10 req/min
-          { ttl: 300_000, limit: 30, name: 'auth-long' },    // auth endpoints: 30 req/5min
-          { ttl: 60_000, limit: 60, name: 'extension' },     // extension: 60 req/min (catches rate-limit fraud)
-          { ttl: 60_000, limit: 200, name: 'default' },      // everything else: 200 req/min
+          { ttl: 60_000, limit: 10, name: 'auth-short' }, // auth endpoints: 10 req/min
+          { ttl: 300_000, limit: 30, name: 'auth-long' }, // auth endpoints: 30 req/5min
+          { ttl: 60_000, limit: 60, name: 'extension' }, // extension: 60 req/min (catches rate-limit fraud)
+          { ttl: 60_000, limit: 200, name: 'default' }, // everything else: 200 req/min
         ],
       }),
     }),
@@ -86,9 +86,6 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     // Request-id correlation middleware for all routes, declared here via
     // MiddlewareConsumer so all request middleware lives in one place.
-    consumer
-      .apply(RequestIdMiddleware)
-      .forRoutes({ path: '*', method: RequestMethod.ALL });
+    consumer.apply(RequestIdMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL });
   }
 }
-

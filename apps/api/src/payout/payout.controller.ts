@@ -1,16 +1,12 @@
-import { Body, Controller, Get, Post, Query,UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
-import { CurrentUser,Roles } from '../common/decorators';
+import { CurrentUser, Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import {
-  AddPayoutMethodDto,
-  PayoutHistoryQueryDto,
-  RequestPayoutDto,
-} from './dto';
+import { AddPayoutMethodDto, PayoutHistoryQueryDto, RequestPayoutDto } from './dto';
 import { PayoutService } from './payout.service';
 
 @ApiTags('Payout')
@@ -24,10 +20,7 @@ export class PayoutController {
   @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('payout:write')
-  addPayoutMethod(
-    @CurrentUser('id') userId: string,
-    @Body() dto: AddPayoutMethodDto,
-  ) {
+  addPayoutMethod(@CurrentUser('id') userId: string, @Body() dto: AddPayoutMethodDto) {
     return this.service.addPayoutMethod(userId, dto);
   }
 
@@ -43,10 +36,7 @@ export class PayoutController {
   @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('payout:write')
-  requestPayout(
-    @CurrentUser('id') userId: string,
-    @Body() dto: RequestPayoutDto,
-  ) {
+  requestPayout(@CurrentUser('id') userId: string, @Body() dto: RequestPayoutDto) {
     return this.service.requestPayout(userId, {
       payoutAccountId: dto.payoutAccountId,
       amountMinor: dto.amountMinor,
@@ -58,21 +48,17 @@ export class PayoutController {
   @Get('available')
   @Roles('developer')
   @RequiredScopes('ledger:read')
-  getAvailableForPayout(@CurrentUser('id') userId: string) {
-    return this.service.getAvailableForPayout(userId);
+  getAvailableForPayout(@CurrentUser('id') userId: string, @Query() query: PayoutHistoryQueryDto) {
+    return this.service.getAvailableForPayout(userId, {
+      page: query.page !== undefined ? Number(query.page) : undefined,
+      limit: query.limit !== undefined ? Number(query.limit) : undefined,
+    });
   }
 
   @Get('history')
   @Roles('developer')
   @RequiredScopes('ledger:read')
-  getPayoutHistory(
-    @CurrentUser('id') userId: string,
-    @Query() query: PayoutHistoryQueryDto,
-  ) {
-    return this.service.getPayoutHistory(
-      userId,
-      query.page ?? 1,
-      query.limit ?? 20,
-    );
+  getPayoutHistory(@CurrentUser('id') userId: string, @Query() query: PayoutHistoryQueryDto) {
+    return this.service.getPayoutHistory(userId, query.page ?? 1, query.limit ?? 20);
   }
 }

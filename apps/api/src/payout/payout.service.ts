@@ -1,8 +1,20 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { EarningsLedger, PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
-import { isProviderSupportedForCurrency, PAYOUT, payoutMinimumMinor,PayoutProvider, PayoutStatus } from '@waitlayer/shared';
+import {
+  isProviderSupportedForCurrency,
+  PAYOUT,
+  payoutMinimumMinor,
+  PayoutProvider,
+  PayoutStatus,
+} from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
@@ -10,7 +22,11 @@ import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
 import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
-import { PayPalPayoutsProvider, StripeConnectPayoutProvider, WisePayoutProvider } from './providers';
+import {
+  PayPalPayoutsProvider,
+  StripeConnectPayoutProvider,
+  WisePayoutProvider,
+} from './providers';
 
 const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.REQUESTED,
@@ -18,6 +34,14 @@ const RESERVED_PAYOUT_STATUSES = [
   PayoutStatus.APPROVED,
   PayoutStatus.PROCESSING,
 ] as PayoutStatus[];
+const AVAILABLE_ENTRIES_DEFAULT_LIMIT = 100;
+const AVAILABLE_ENTRIES_MAX_LIMIT = 500;
+const ALLOCATION_QUERY_PAGE_SIZE = 500;
+
+function boundedPositiveInt(value: number | undefined, fallback: number, max: number): number {
+  if (!Number.isFinite(value) || value === undefined) return fallback;
+  return Math.min(Math.max(Math.trunc(value), 1), max);
+}
 
 /** Payout provider interface — each provider implements this */
 export interface PayoutProviderHandler {
@@ -28,7 +52,10 @@ export interface PayoutProviderHandler {
     amountMinor: number;
     currency: string;
   }): Promise<{ providerTxId: string; status: string }>;
-  checkStatus(providerTxId: string, context?: { destination?: string }): Promise<{ status: string; paidAt?: Date }>;
+  checkStatus(
+    providerTxId: string,
+    context?: { destination?: string },
+  ): Promise<{ status: string; paidAt?: Date }>;
 }
 
 /** Manual payout provider — for MVP, admin processes manually */
@@ -111,26 +138,30 @@ export class PayoutService {
     throw new BadRequestException(`Payout provider "${provider}" is not valid`);
   }
 
-  private addCurrencyAmount(totals: Record<string, number>, currency: string | null | undefined, amountMinor: number) {
+  private addCurrencyAmount(
+    totals: Record<string, number>,
+    currency: string | null | undefined,
+    amountMinor: number,
+  ) {
     const key = (currency || 'USD').toUpperCase();
     totals[key] = (totals[key] ?? 0) + amountMinor;
   }
 
   private availableCurrencyTotals(totals: Record<string, number>): Record<string, number> {
     return Object.fromEntries(
-      Object.entries(totals).map(([currency, amountMinor]) => [
-        currency,
-        Math.max(0, amountMinor),
-      ]),
+      Object.entries(totals).map(([currency, amountMinor]) => [currency, Math.max(0, amountMinor)]),
     );
   }
 
   /** Add or update a payout method for a user */
-  async addPayoutMethod(userId: string, dto: {
-    provider: string;
-    destination: string;
-    currency?: string;
-  }) {
+  async addPayoutMethod(
+    userId: string,
+    dto: {
+      provider: string;
+      destination: string;
+      currency?: string;
+    },
+  ) {
     const { provider, destination, currency } = this.normalizePayoutMethod(dto);
     const method = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Deactivate the current active method and create the replacement atomically.
@@ -188,15 +219,23 @@ export class PayoutService {
       );
     }
 
-    if ([PayoutProvider.PAYPAL_EMAIL, PayoutProvider.PAYPAL_PAYOUTS, PayoutProvider.WISE].includes(provider)) {
+    if (
+      [PayoutProvider.PAYPAL_EMAIL, PayoutProvider.PAYPAL_PAYOUTS, PayoutProvider.WISE].includes(
+        provider,
+      )
+    ) {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(destination)) {
-        throw new BadRequestException(`Payout destination for ${provider} must be a recipient email`);
+        throw new BadRequestException(
+          `Payout destination for ${provider} must be a recipient email`,
+        );
       }
       return { provider, destination: destination.toLowerCase(), currency };
     }
 
     if (provider === PayoutProvider.STRIPE_CONNECT && !/^acct_[A-Za-z0-9]+$/.test(destination)) {
-      throw new BadRequestException('Stripe Connect payout destination must be a connected account id (acct_...)');
+      throw new BadRequestException(
+        'Stripe Connect payout destination must be a connected account id (acct_...)',
+      );
     }
 
     return { provider, destination, currency };
@@ -219,9 +258,20 @@ export class PayoutService {
       }
     };
 
-    const [accounts, payoutHistory, confirmedEarnings, confirmedDebits, allocatedRows, userSecurity] = await Promise.all([
+    const [
+      accounts,
+      payoutHistory,
+      confirmedEarnings,
+      confirmedDebits,
+      allocatedRows,
+      userSecurity,
+    ] = await Promise.all([
       safe(
-        () => this.prisma.payoutAccount.findMany({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } }),
+        () =>
+          this.prisma.payoutAccount.findMany({
+            where: { userId, isActive: true },
+            orderBy: { createdAt: 'desc' },
+          }),
         'accounts',
         [],
       ),
@@ -258,18 +308,15 @@ export class PayoutService {
       ),
       safe(
         () =>
-          this.prisma.payoutAllocation.findMany({
-            where: {
-              payoutRequest: {
-                userId,
-                status: { in: RESERVED_PAYOUT_STATUSES },
-              },
-            },
-            select: {
-              amountMinor: true,
-              earningsEntry: { select: { currency: true } },
-            },
-          }),
+          this.prisma.$queryRaw<Array<{ currency: string; amountMinor: bigint | number | null }>>`
+            SELECT e."currency" AS "currency", COALESCE(SUM(pa."amountMinor"), 0)::bigint AS "amountMinor"
+            FROM "payout_allocations" pa
+            INNER JOIN "payout_requests" pr ON pr."id" = pa."payoutRequestId"
+            INNER JOIN "earnings_ledger" e ON e."id" = pa."earningsEntryId"
+            WHERE pr."userId" = ${userId}
+              AND pr."status" IN (${Prisma.join(RESERVED_PAYOUT_STATUSES)})
+            GROUP BY e."currency"
+          `,
         'allocatedRows',
         [],
       ),
@@ -292,7 +339,7 @@ export class PayoutService {
       this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
     }
     for (const row of allocatedRows) {
-      this.addCurrencyAmount(rawBalancesByCurrency, row.earningsEntry.currency, -row.amountMinor);
+      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -Number(row.amountMinor ?? 0));
     }
     const availableBalanceByCurrency = this.availableCurrencyTotals(rawBalancesByCurrency);
     const currency = (accounts[0]?.currency || 'USD').toUpperCase();
@@ -310,39 +357,51 @@ export class PayoutService {
   }
 
   /** Get confirmed earnings available for payout (not already allocated to another payout request) */
-  async getAvailableForPayout(userId: string) {
-    // Find earnings that are confirmed and not already allocated to an active payout
-    const allocatedEntryIds = await this.prisma.payoutAllocation.findMany({
-      where: {
-        payoutRequest: {
-          userId,
-          status: { in: RESERVED_PAYOUT_STATUSES },
+  async getAvailableForPayout(userId: string, params: { page?: number; limit?: number } = {}) {
+    const page = boundedPositiveInt(params.page, 1, Number.MAX_SAFE_INTEGER);
+    const limit = boundedPositiveInt(
+      params.limit,
+      AVAILABLE_ENTRIES_DEFAULT_LIMIT,
+      AVAILABLE_ENTRIES_MAX_LIMIT,
+    );
+    const unallocatedCreditWhere: Prisma.EarningsLedgerWhereInput = {
+      userId,
+      status: 'confirmed',
+      entryType: 'credit',
+      payoutAllocations: {
+        none: {
+          payoutRequest: {
+            userId,
+            status: { in: RESERVED_PAYOUT_STATUSES },
+          },
         },
       },
-      select: { earningsEntryId: true },
-    });
-    const excludeIds = allocatedEntryIds.map((a: { earningsEntryId: string }) => a.earningsEntryId);
+    };
 
-    const [available, confirmedDebits] = await Promise.all([
-      this.prisma.earningsLedger.findMany({
-        where: {
-          userId,
-          status: 'confirmed',
-          entryType: 'credit',
-          ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
-        },
-        orderBy: { createdAt: 'asc' },
+    const [availableCredits, confirmedDebits, entryRows, totalEntries] = await Promise.all([
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        where: unallocatedCreditWhere,
+        _sum: { amountMinor: true },
       }),
       this.prisma.earningsLedger.groupBy({
         by: ['currency'],
         where: { userId, status: 'confirmed', entryType: 'debit' },
         _sum: { amountMinor: true },
       }),
+      this.prisma.earningsLedger.findMany({
+        where: unallocatedCreditWhere,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * limit,
+        take: limit + 1,
+      }),
+      this.prisma.earningsLedger.count({ where: unallocatedCreditWhere }),
     ]);
+    const available = entryRows.slice(0, limit);
 
     const totalsByCurrency: Record<string, number> = {};
-    for (const entry of available) {
-      this.addCurrencyAmount(totalsByCurrency, entry.currency, entry.amountMinor);
+    for (const row of availableCredits) {
+      this.addCurrencyAmount(totalsByCurrency, row.currency, row._sum.amountMinor ?? 0);
     }
     for (const row of confirmedDebits) {
       this.addCurrencyAmount(totalsByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
@@ -353,7 +412,10 @@ export class PayoutService {
       entries: available,
       totalMinor: availableByCurrency.USD ?? 0,
       currency: 'USD',
-      count: available.length,
+      count: totalEntries,
+      page,
+      limit,
+      hasMore: entryRows.length > limit,
       totalsByCurrency: availableByCurrency,
     };
   }
@@ -367,54 +429,59 @@ export class PayoutService {
     currency: string,
     specificEntryIds?: string[],
   ) {
-    // Fetch candidate earnings: confirmed, credited, and not already allocated
-    const allocatedEntryIds = await tx.payoutAllocation.findMany({
-      where: {
-        payoutRequest: {
-          userId,
-          status: { in: RESERVED_PAYOUT_STATUSES },
+    let candidateEntries: EarningsLedger[];
+    const unallocatedCreditWhere: Prisma.EarningsLedgerWhereInput = {
+      userId,
+      entryType: 'credit',
+      status: 'confirmed',
+      currency,
+      payoutAllocations: {
+        none: {
+          payoutRequest: {
+            userId,
+            status: { in: RESERVED_PAYOUT_STATUSES },
+          },
         },
       },
-      select: { earningsEntryId: true },
-    });
-    const excludeIds = allocatedEntryIds.map((a: { earningsEntryId: string }) => a.earningsEntryId);
-
-    let candidateEntries: EarningsLedger[];
+    };
 
     if (specificEntryIds && specificEntryIds.length > 0) {
       // Caller specified exact entries — validate they belong to user and are confirmed
       candidateEntries = await tx.earningsLedger.findMany({
         where: {
+          ...unallocatedCreditWhere,
           id: { in: specificEntryIds },
-          userId,
-          entryType: 'credit',
-          status: 'confirmed',
-          currency,
-          ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
         },
         orderBy: { createdAt: 'asc' },
       });
 
       // Check for entries that were requested but are not eligible
       const foundIds = new Set(candidateEntries.map((e: { id: string }) => e.id));
-      const invalidIds = specificEntryIds.filter(id => !foundIds.has(id));
+      const invalidIds = specificEntryIds.filter((id) => !foundIds.has(id));
       if (invalidIds.length > 0) {
         throw new BadRequestException(
           `Earnings entries not eligible for payout: ${invalidIds.join(', ')}`,
         );
       }
     } else {
-      // Auto-select: oldest confirmed entries that are not allocated, up to the requested amount
-      candidateEntries = await tx.earningsLedger.findMany({
-        where: {
-          userId,
-          status: 'confirmed',
-          entryType: 'credit',
-          currency,
-          ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}),
-        },
-        orderBy: { createdAt: 'asc' },
-      });
+      // Auto-select oldest eligible entries in bounded pages. This avoids
+      // loading a high-volume developer's entire ledger when a small payout
+      // only needs the first few confirmed rows.
+      candidateEntries = [];
+      let selectedMinor = 0;
+      let cursor: { id: string } | undefined;
+      do {
+        const page = await tx.earningsLedger.findMany({
+          where: unallocatedCreditWhere,
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          ...(cursor ? { cursor, skip: 1 } : {}),
+          take: ALLOCATION_QUERY_PAGE_SIZE,
+        });
+        candidateEntries.push(...page);
+        selectedMinor += page.reduce((sum, entry) => sum + entry.amountMinor, 0);
+        cursor = page.length > 0 ? { id: page[page.length - 1].id } : undefined;
+        if (page.length < ALLOCATION_QUERY_PAGE_SIZE) break;
+      } while (selectedMinor < amountMinor);
     }
 
     // Walk through candidates, allocating entries until we reach the requested amount
@@ -528,12 +595,15 @@ export class PayoutService {
    *  second to fail `Insufficient confirmed earnings to allocate` inside
    *  allocatePayoutEarnings (which re-reads eligible entries inside the tx).
    */
-  async requestPayout(userId: string, dto: {
-    payoutAccountId: string;
-    amountMinor: number;
-    currency: string;
-    earningsEntryIds?: string[];
-  }) {
+  async requestPayout(
+    userId: string,
+    dto: {
+      payoutAccountId: string;
+      amountMinor: number;
+      currency: string;
+      earningsEntryIds?: string[];
+    },
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
     if (user.status === 'restricted' || user.status === 'banned') {
@@ -550,7 +620,9 @@ export class PayoutService {
     // existing developer flows are unaffected; operators enable it once 2FA
     // adoption is sufficiently broad (or per risk tier).
     if (this.config.get<string>('PAYOUT_REQUIRE_2FA') === 'true' && !user.twoFactorEnabled) {
-      throw new ForbiddenException('Two-factor authentication is required before requesting a payout');
+      throw new ForbiddenException(
+        'Two-factor authentication is required before requesting a payout',
+      );
     }
 
     // Minimum threshold check — per-currency floor from the currency policy.
@@ -561,32 +633,33 @@ export class PayoutService {
     }
 
     // ── Outer pre-checks (fast rejection) ──
-    const [confirmedEarnings, confirmedDebits, allocatedTotal, openFlags, account] = await Promise.all([
-      this.prisma.earningsLedger.aggregate({
-        where: { userId, status: 'confirmed', entryType: 'credit', currency },
-        _sum: { amountMinor: true },
-      }),
-      this.prisma.earningsLedger.aggregate({
-        where: { userId, status: 'confirmed', entryType: 'debit', currency },
-        _sum: { amountMinor: true },
-      }),
-      this.prisma.payoutAllocation.aggregate({
-        where: {
-          earningsEntry: { currency },
-          payoutRequest: {
-            userId,
-            status: { in: RESERVED_PAYOUT_STATUSES },
+    const [confirmedEarnings, confirmedDebits, allocatedTotal, openFlags, account] =
+      await Promise.all([
+        this.prisma.earningsLedger.aggregate({
+          where: { userId, status: 'confirmed', entryType: 'credit', currency },
+          _sum: { amountMinor: true },
+        }),
+        this.prisma.earningsLedger.aggregate({
+          where: { userId, status: 'confirmed', entryType: 'debit', currency },
+          _sum: { amountMinor: true },
+        }),
+        this.prisma.payoutAllocation.aggregate({
+          where: {
+            earningsEntry: { currency },
+            payoutRequest: {
+              userId,
+              status: { in: RESERVED_PAYOUT_STATUSES },
+            },
           },
-        },
-        _sum: { amountMinor: true },
-      }),
-      this.prisma.fraudFlag.count({
-        where: { userId, status: 'open', severity: { in: ['high', 'critical'] } },
-      }),
-      this.prisma.payoutAccount.findUnique({
-        where: { id: dto.payoutAccountId },
-      }),
-    ]);
+          _sum: { amountMinor: true },
+        }),
+        this.prisma.fraudFlag.count({
+          where: { userId, status: 'open', severity: { in: ['high', 'critical'] } },
+        }),
+        this.prisma.payoutAccount.findUnique({
+          where: { id: dto.payoutAccountId },
+        }),
+      ]);
     const available =
       (confirmedEarnings._sum.amountMinor || 0) -
       (confirmedDebits._sum.amountMinor || 0) -
@@ -710,7 +783,9 @@ export class PayoutService {
     if (preflight.status === 'approved') {
       const preflightProvider = this.providers[preflight.payoutAccount.provider];
       if (!preflightProvider) {
-        throw new BadRequestException(`Payout provider "${preflight.payoutAccount.provider}" not implemented`);
+        throw new BadRequestException(
+          `Payout provider "${preflight.payoutAccount.provider}" not implemented`,
+        );
       }
       const readiness = preflightProvider.readiness?.();
       if (readiness && !readiness.ok) {
@@ -741,7 +816,7 @@ export class PayoutService {
         if (!existing) throw new BadRequestException('Payout request not found');
         throw new BadRequestException(
           `Payout cannot be processed from status '${existing.status}'` +
-          (existing.status === 'processing' ? ' (already claimed by a concurrent process)' : ''),
+            (existing.status === 'processing' ? ' (already claimed by a concurrent process)' : ''),
         );
       }
 
@@ -829,14 +904,12 @@ export class PayoutService {
       if (allocatedSum !== expectedAmount) {
         throw new BadRequestException(
           `Allocation mismatch after reconciliation: allocated ${allocatedSum} but expected ${expectedAmount}. ` +
-          `The payout had excess allocations that could not be trimmed — retry or reject the payout.`,
+            `The payout had excess allocations that could not be trimmed — retry or reject the payout.`,
         );
       }
 
       // Compute effective allocations after any potential trimming above.
-      const holdEntryIds = allocations.map(
-        (a: { earningsEntryId: string }) => a.earningsEntryId,
-      );
+      const holdEntryIds = allocations.map((a: { earningsEntryId: string }) => a.earningsEntryId);
 
       // ── Race-safe vs holdEarnings / fraud flags ────────────────
       if (holdEntryIds.length > 0) {
@@ -855,7 +928,9 @@ export class PayoutService {
 
     const provider = this.providers[payout.payoutAccount.provider];
     if (!provider) {
-      throw new BadRequestException(`Payout provider "${payout.payoutAccount.provider}" not implemented`);
+      throw new BadRequestException(
+        `Payout provider "${payout.payoutAccount.provider}" not implemented`,
+      );
     }
 
     const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
@@ -932,18 +1007,21 @@ export class PayoutService {
    *  the row — if it is now `paid` it returns idempotently, otherwise it
    *  throws (a concurrent transition to a *different* terminal state).
    */
-  async markPayoutPaid(payoutId: string, data: {
-    providerTxId: string;
-    paidAt: string;
-    // Optional cross-check fields supplied by the admin body (MarkPayoutPaidDto).
-    // When present, the stored approved/requested amountMinor AND currency MUST
-    // match — this catches a transposed digit / wrong-currency mark-paid before
-    // the payout is irreversibly flipped. When absent (e.g. path callers that
-    // only have providerTxId + paidAt), the cross-check is skipped, preserving
-    // the prior behavior so webhook/automated callers don't break.
-    expectedAmountMinor?: number;
-    expectedCurrency?: string;
-  }) {
+  async markPayoutPaid(
+    payoutId: string,
+    data: {
+      providerTxId: string;
+      paidAt: string;
+      // Optional cross-check fields supplied by the admin body (MarkPayoutPaidDto).
+      // When present, the stored approved/requested amountMinor AND currency MUST
+      // match — this catches a transposed digit / wrong-currency mark-paid before
+      // the payout is irreversibly flipped. When absent (e.g. path callers that
+      // only have providerTxId + paidAt), the cross-check is skipped, preserving
+      // the prior behavior so webhook/automated callers don't break.
+      expectedAmountMinor?: number;
+      expectedCurrency?: string;
+    },
+  ) {
     const payout = await this.prisma.payoutRequest.findUnique({
       where: { id: payoutId },
       include: {
@@ -1136,15 +1214,18 @@ export class PayoutService {
         //  Log both so the first-payout-referral path isn't silent in its log.
         this.logger.error(
           `Referral reward processing failed for userId=${paidPayout.userId}: ` +
-          `${err instanceof Error ? err.message : err}`,
+            `${err instanceof Error ? err.message : err}`,
         );
       });
     }
 
-    return paidPayout ?? this.prisma.payoutRequest.findUnique({
-      where: { id: payoutId },
-      include: { allocations: true },
-    });
+    return (
+      paidPayout ??
+      this.prisma.payoutRequest.findUnique({
+        where: { id: payoutId },
+        include: { allocations: true },
+      })
+    );
   }
 
   /** Mark a provider payout as failed and un-reserve its allocations.
@@ -1158,11 +1239,14 @@ export class PayoutService {
    *   - payout allocations are deleted so confirmed earnings become available
    *     for a fresh payout request.
    */
-  async markPayoutFailed(payoutId: string, data: {
-    provider: string;
-    providerTxId: string;
-    failureReason: string;
-  }) {
+  async markPayoutFailed(
+    payoutId: string,
+    data: {
+      provider: string;
+      providerTxId: string;
+      failureReason: string;
+    },
+  ) {
     const dbProvider = this.toDbPayoutProvider(data.provider);
 
     return this.prisma.$transaction(async (tx) => {

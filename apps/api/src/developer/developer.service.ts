@@ -12,6 +12,7 @@ import { LedgerStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import { buildCappedExportMeta, splitCappedRows } from '../common/utils/export-metadata';
 import { PrismaService } from '../config/prisma.service';
 import { EmailService } from '../email/email.service';
 import { FraudService } from '../fraud/fraud.service';
@@ -39,6 +40,13 @@ interface DeleteAccountOptions {
   googleIdToken?: string;
   auditActor?: DeleteAccountAuditActor;
 }
+
+const DEVELOPER_EXPORT_LIMITS = {
+  earnings: 10000,
+  impressions: 1000,
+  clicks: 1000,
+  payouts: 1000,
+};
 
 @Injectable()
 export class DeveloperService {
@@ -75,9 +83,10 @@ export class DeveloperService {
   }
 
   async getEarningsSummary(userId: string) {
-    const entries = await this.prisma.earningsLedger.findMany({
+    const entries = await this.prisma.earningsLedger.groupBy({
+      by: ['status', 'entryType', 'currency'],
       where: { userId },
-      select: { status: true, entryType: true, amountMinor: true, currency: true },
+      _sum: { amountMinor: true },
     });
     const summary = {
       estimatedEarnings: 0,
@@ -97,16 +106,13 @@ export class DeveloperService {
       lifetimeEarningsByCurrency: {} as Record<string, number>,
     };
     for (const entry of entries) {
+      const amountMinor = entry._sum.amountMinor ?? 0;
       if (entry.entryType === 'debit') {
-        addCurrencyAmount(summary.recoveryDebtByCurrency, entry.currency, entry.amountMinor);
+        addCurrencyAmount(summary.recoveryDebtByCurrency, entry.currency, amountMinor);
         if (entry.status !== 'reversed' && entry.status !== 'void') {
-          addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, -entry.amountMinor);
+          addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, -amountMinor);
           if (entry.status === 'confirmed') {
-            addCurrencyAmount(
-              summary.confirmedEarningsByCurrency,
-              entry.currency,
-              -entry.amountMinor,
-            );
+            addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, -amountMinor);
           }
         }
         continue;
@@ -116,17 +122,17 @@ export class DeveloperService {
       // money that was earned but then clawed back (fraud reversal). Adding
       // them back into the displayed lifetime total inflates the metric.
       if (entry.status !== 'reversed') {
-        addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, entry.amountMinor);
+        addCurrencyAmount(summary.lifetimeEarningsByCurrency, entry.currency, amountMinor);
       }
       if (entry.status === 'estimated')
-        addCurrencyAmount(summary.estimatedEarningsByCurrency, entry.currency, entry.amountMinor);
+        addCurrencyAmount(summary.estimatedEarningsByCurrency, entry.currency, amountMinor);
       else if (entry.status === 'pending')
-        addCurrencyAmount(summary.pendingEarningsByCurrency, entry.currency, entry.amountMinor);
+        addCurrencyAmount(summary.pendingEarningsByCurrency, entry.currency, amountMinor);
       else if (entry.status === 'confirmed')
-        addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, entry.amountMinor);
+        addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, amountMinor);
       else if (entry.status === 'held')
-        addCurrencyAmount(summary.heldEarningsByCurrency, entry.currency, entry.amountMinor);
-      else if (entry.status === 'reversed') summary.reversedEarnings += entry.amountMinor;
+        addCurrencyAmount(summary.heldEarningsByCurrency, entry.currency, amountMinor);
+      else if (entry.status === 'reversed') summary.reversedEarnings += amountMinor;
     }
     summary.confirmedEarningsByCurrency = nonNegativeCurrencyTotals(
       summary.confirmedEarningsByCurrency,
@@ -349,50 +355,70 @@ export class DeveloperService {
   }
 
   async exportData(userId: string) {
-    const [user, earnings, impressions, clicks, payouts, consents] = await Promise.all([
-      this.prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          status: true,
-          trustLevel: true,
-          country: true,
-          emailVerified: true,
-          googleVerified: true,
-          githubVerified: true,
-          referralCode: true,
-          createdAt: true,
-        },
-      }),
-      // Capped at reasonable limits per entity to prevent OOM/stall on
-      // high-volume developers (1M earnings rows would materialize the
-      // entire ledger in memory).  Impressions/clicks are time-ordered;
-      // the cap captures the most recent activity window.  Full export
-      // requires paginated access via separate endpoints.
-      this.prisma.earningsLedger.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 10000,
-      }),
-      this.prisma.adImpression.findMany({ where: { userId }, take: 1000 }),
-      this.prisma.adClick.findMany({ where: { userId }, take: 1000 }),
-      this.prisma.payoutRequest.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 1000,
-      }),
-      this.prisma.consent.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-      }),
-    ]);
-    // Audit: a full PII export (GDPR-style data dump). Records who pulled
-    // the dump so bulk exfiltration via a compromised token is traceable
-    // even after the data has left the platform. The export body itself
-    // is not snapshotted (too large + sensitive).
+    const [user, earningsRows, impressionRows, clickRows, payoutRows, consents] = await Promise.all(
+      [
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            status: true,
+            trustLevel: true,
+            country: true,
+            emailVerified: true,
+            googleVerified: true,
+            githubVerified: true,
+            referralCode: true,
+            createdAt: true,
+          },
+        }),
+        // Capped at reasonable limits per entity to prevent OOM/stall on
+        // high-volume developers (1M earnings rows would materialize the
+        // entire ledger in memory).  Impressions/clicks are time-ordered;
+        // the cap captures the most recent activity window.  Full export
+        // requires paginated access via separate endpoints.
+        this.prisma.earningsLedger.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: DEVELOPER_EXPORT_LIMITS.earnings + 1,
+        }),
+        this.prisma.adImpression.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: DEVELOPER_EXPORT_LIMITS.impressions + 1,
+        }),
+        this.prisma.adClick.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: DEVELOPER_EXPORT_LIMITS.clicks + 1,
+        }),
+        this.prisma.payoutRequest.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          take: DEVELOPER_EXPORT_LIMITS.payouts + 1,
+        }),
+        this.prisma.consent.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ],
+    );
+    const earnings = splitCappedRows(earningsRows, DEVELOPER_EXPORT_LIMITS.earnings);
+    const impressions = splitCappedRows(impressionRows, DEVELOPER_EXPORT_LIMITS.impressions);
+    const clicks = splitCappedRows(clickRows, DEVELOPER_EXPORT_LIMITS.clicks);
+    const payouts = splitCappedRows(payoutRows, DEVELOPER_EXPORT_LIMITS.payouts);
+    const exportMeta = buildCappedExportMeta({
+      earnings: earnings.meta,
+      impressions: impressions.meta,
+      clicks: clicks.meta,
+      payouts: payouts.meta,
+    });
+    // Audit the self-service export request so bulk exfiltration via a
+    // compromised token is traceable even after the data has left the
+    // platform. The export body itself is not snapshotted (too large +
+    // sensitive); completeness is reported in `exportMeta`.
     void this.audit.log({
       actorId: userId,
       actorRole: 'developer',
@@ -400,7 +426,15 @@ export class DeveloperService {
       targetType: 'user',
       targetId: userId,
     });
-    return { profile: user, earnings, impressions, clicks, payouts, consent: consents };
+    return {
+      profile: user,
+      earnings: earnings.data,
+      impressions: impressions.data,
+      clicks: clicks.data,
+      payouts: payouts.data,
+      consent: consents,
+      exportMeta,
+    };
   }
 
   async deleteAccount(userId: string, options: DeleteAccountOptions = {}) {

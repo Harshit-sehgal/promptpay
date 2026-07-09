@@ -1,7 +1,18 @@
-import { BadRequestException,Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
-import { CurrentUser,Roles } from '../common/decorators';
+import { CurrentUser, Roles } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -53,8 +64,17 @@ export class AdminController {
     return this.service.getUsers(query);
   }
 
-  @Get('campaigns/pending') getPendingCampaigns() {
-    return this.service.getPendingCampaigns();
+  @Get('campaigns/pending')
+  getPendingCampaigns(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.service.getPendingCampaigns({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      status: (status as 'submitted' | 'approved' | undefined) ?? undefined,
+    });
   }
 
   @Post('campaigns/:id/approve')
@@ -235,10 +255,7 @@ export class AdminController {
   }
 
   @Post('tools/:slug/toggle')
-  toggleToolIntegration(
-    @Param('slug') slug: string,
-    @Body() dto: ToggleToolIntegrationDto,
-  ) {
+  toggleToolIntegration(@Param('slug') slug: string, @Body() dto: ToggleToolIntegrationDto) {
     return this.service.toggleToolIntegration(slug, dto.isActive === 'true');
   }
 

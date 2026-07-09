@@ -7,10 +7,11 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
-import { getCampaignActions } from './campaign-actions';
+import { getCampaignActions, getCampaignRejectionMessage } from './campaign-actions';
 
 interface CreativeSummary {
   status: string;
+  rejectionReason?: string | null;
 }
 
 interface Campaign {
@@ -25,17 +26,13 @@ interface Campaign {
   impressions: number;
   clicks: number;
   createdAt: string;
+  rejectionReason?: string | null;
   creatives?: CreativeSummary[];
 }
 
 interface CampaignsData {
   campaigns: Campaign[];
   total: number;
-}
-
-interface AdvertiserDashboardResponse {
-  campaigns?: Campaign[];
-  totalCampaigns?: number;
 }
 
 function hasApprovedCreative(campaign: Campaign): boolean {
@@ -48,29 +45,37 @@ export default function AdvertiserCampaignsPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+
+  const isActionLoading = (action: 'pause' | 'resume' | 'archive', id: string) =>
+    actionLoading === `${action}:${id}`;
+  const isCampaignBusy = (id: string) => actionLoading?.endsWith(`:${id}`) ?? false;
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res: { data: AdvertiserDashboardResponse } = await advertiserApi.getDashboard();
-      let campaigns = res.data.campaigns || [];
-      if (statusFilter) {
-        campaigns = campaigns.filter((c) => c.status === statusFilter);
-      }
-      setData({ campaigns, total: res.data.totalCampaigns || campaigns.length });
+      // A-074: use the bounded, paginated campaign list endpoint instead of
+      // loading the entire dashboard and filtering client-side.
+      const res = await advertiserApi.listCampaigns({
+        page,
+        limit,
+        status: statusFilter || undefined,
+      });
+      setData({ campaigns: res.data.campaigns || [], total: res.data.total ?? 0 });
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to load campaigns'));
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, page, limit]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const handlePause = async (id: string) => {
-    setActionLoading(id);
+    setActionLoading(`pause:${id}`);
     try {
       await advertiserApi.pauseCampaign(id);
       await refresh();
@@ -82,12 +87,41 @@ export default function AdvertiserCampaignsPage() {
   };
 
   const handleResume = async (id: string) => {
-    setActionLoading(id);
+    setActionLoading(`resume:${id}`);
     try {
       await advertiserApi.resumeCampaign(id);
       await refresh();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to resume campaign'));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleArchive = async (campaign: Campaign) => {
+    const unspentMinor = Math.max(0, campaign.budgetTotalMinor - campaign.budgetSpentMinor);
+    const refundText =
+      unspentMinor > 0
+        ? ` This records ${formatCurrency(
+            unspentMinor,
+            campaign.currency,
+          )} of unspent budget as a pending refund obligation for admin reconciliation.`
+        : '';
+
+    if (
+      !window.confirm(
+        `Archive "${campaign.name}"? This permanently stops the campaign.${refundText}`,
+      )
+    ) {
+      return;
+    }
+
+    setActionLoading(`archive:${campaign.id}`);
+    try {
+      await advertiserApi.archiveCampaign(campaign.id);
+      await refresh();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to archive campaign'));
     } finally {
       setActionLoading(null);
     }
@@ -133,7 +167,7 @@ export default function AdvertiserCampaignsPage() {
       {data && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <StatCard label="Total campaigns" value={data.campaigns.length.toString()} />
+            <StatCard label="Total campaigns" value={data.total.toString()} />
             <StatCard label="Total budget" value={formatCurrencyBreakdown(totalBudgetByCurrency)} />
             <StatCard
               label="Budget spent"
@@ -154,7 +188,10 @@ export default function AdvertiserCampaignsPage() {
               (status) => (
                 <button
                   key={status || 'all'}
-                  onClick={() => setStatusFilter(status)}
+                  onClick={() => {
+                    setStatusFilter(status);
+                    setPage(1);
+                  }}
                   className={`px-3 py-1 rounded-lg text-xs transition-colors ${
                     statusFilter === status
                       ? 'bg-brand-500 text-white'
@@ -185,6 +222,14 @@ export default function AdvertiserCampaignsPage() {
                   key={campaign.id}
                   className="bg-ink-800 border border-ink-600/30 rounded-xl p-5 hover:border-ink-600/60 transition-colors"
                 >
+                  {(() => {
+                    const rejectionMessage = getCampaignRejectionMessage(campaign);
+                    return rejectionMessage ? (
+                      <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2">
+                        <p className="text-red-300 text-xs">Rejected: {rejectionMessage}</p>
+                      </div>
+                    ) : null;
+                  })()}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3 flex-wrap">
                       <StatusBadge status={campaign.status} />
@@ -220,19 +265,30 @@ export default function AdvertiserCampaignsPage() {
                             {actions.canPause && (
                               <button
                                 onClick={() => handlePause(campaign.id)}
-                                disabled={actionLoading === campaign.id}
+                                disabled={isCampaignBusy(campaign.id)}
                                 className="text-amber-400 hover:text-amber-300 text-xs font-medium disabled:opacity-50"
                               >
-                                {actionLoading === campaign.id ? 'Pausing...' : 'Pause'}
+                                {isActionLoading('pause', campaign.id) ? 'Pausing...' : 'Pause'}
                               </button>
                             )}
                             {actions.canResume && (
                               <button
                                 onClick={() => handleResume(campaign.id)}
-                                disabled={actionLoading === campaign.id}
+                                disabled={isCampaignBusy(campaign.id)}
                                 className="text-emerald-400 hover:text-emerald-300 text-xs font-medium disabled:opacity-50"
                               >
-                                {actionLoading === campaign.id ? 'Resuming...' : 'Resume'}
+                                {isActionLoading('resume', campaign.id) ? 'Resuming...' : 'Resume'}
+                              </button>
+                            )}
+                            {actions.canArchive && (
+                              <button
+                                onClick={() => handleArchive(campaign)}
+                                disabled={isCampaignBusy(campaign.id)}
+                                className="text-red-400 hover:text-red-300 text-xs font-medium disabled:opacity-50"
+                              >
+                                {isActionLoading('archive', campaign.id)
+                                  ? 'Archiving...'
+                                  : 'Archive'}
                               </button>
                             )}
                           </>
@@ -279,6 +335,30 @@ export default function AdvertiserCampaignsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {/* Pagination (A-074) */}
+          {data.total > limit && (
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-4 py-2 rounded-lg text-sm bg-ink-700 text-ink-200 hover:bg-ink-600 disabled:opacity-40 transition-colors"
+              >
+                Previous
+              </button>
+              <span className="text-ink-400 text-sm">
+                Page {page} of {Math.max(1, Math.ceil(data.total / limit))}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={page >= Math.ceil(data.total / limit)}
+                className="px-4 py-2 rounded-lg text-sm bg-ink-700 text-ink-200 hover:bg-ink-600 disabled:opacity-40 transition-colors"
+              >
+                Next
+              </button>
             </div>
           )}
         </>

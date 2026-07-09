@@ -1,7 +1,6 @@
 'use client';
 
 import type { AxiosResponse } from 'axios';
-import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -37,6 +36,12 @@ interface DeveloperApiKey {
 
 interface CreateApiKeyResponse extends DeveloperApiKey {
   plainKey: string;
+}
+
+interface SelfServiceExportPayload {
+  exportMeta?: {
+    truncated?: boolean;
+  };
 }
 
 // A-058: common IANA timezones offered for quiet mode. The browser can detect
@@ -241,13 +246,19 @@ export default function DevSettingsPage() {
   const handleExport = async () => {
     try {
       const res = await developerApi.exportData();
-      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const exportData = res.data as SelfServiceExportPayload;
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = 'waitlayer-export.json';
       a.click();
       URL.revokeObjectURL(url);
+      if (exportData.exportMeta?.truncated) {
+        toast.info('Export downloaded. Some activity sections were capped; see exportMeta.');
+      } else {
+        toast.success('Export downloaded.');
+      }
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Export failed'));
     }
@@ -647,14 +658,20 @@ export default function DevSettingsPage() {
 
                       <div className="flex flex-col sm:flex-row items-center gap-6 py-3">
                         {otpauthUrl && (
-                          <div className="bg-white p-3 border border-surface-200 rounded-xl shadow-sm">
-                            <Image
-                              src={`https://chart.googleapis.com/chart?chs=160x160&chld=M|0&cht=qr&chl=${encodeURIComponent(otpauthUrl)}`}
-                              alt="Scan to pair TOTP"
-                              width={160}
-                              height={160}
-                              unoptimized
-                            />
+                          <div className="bg-surface-50 border border-surface-200 rounded-xl shadow-sm p-3 max-w-xs">
+                            <p className="text-surface-500 text-[11px] uppercase font-semibold mb-1">
+                              Setup URI
+                            </p>
+                            <code className="block break-all text-surface-900 text-[11px] font-mono select-all mb-2">
+                              {otpauthUrl}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard?.writeText(otpauthUrl)}
+                              className="text-brand-500 hover:text-brand-600 text-xs font-medium"
+                            >
+                              Copy setup URI
+                            </button>
                           </div>
                         )}
                         <div className="space-y-2 text-center sm:text-left">
@@ -744,7 +761,8 @@ export default function DevSettingsPage() {
               <div>
                 <h2 className="text-surface-900 font-bold text-[16px]">API keys</h2>
                 <p className="text-surface-500 text-xs mt-1">
-                  Manage read-only ledger keys for reporting integrations. Extension and CLI sign-in still use your user session.
+                  Manage read-only ledger keys for reporting integrations. Extension and CLI sign-in
+                  still use your user session.
                 </p>
               </div>
               <button
@@ -834,12 +852,20 @@ export default function DevSettingsPage() {
             )}
             <p className="text-surface-400 text-xs mt-3 leading-relaxed">
               Ledger keys can read earnings and payout ledger data with the
-              <code className="mx-1 rounded bg-surface-100 px-1 py-0.5 font-mono text-[11px]">x-api-key</code>
-              header. They cannot register extension devices, change settings, export data, delete your account, or request payouts.
+              <code className="mx-1 rounded bg-surface-100 px-1 py-0.5 font-mono text-[11px]">
+                x-api-key
+              </code>
+              header. They cannot register extension devices, change settings, export data, delete
+              your account, or request payouts.
             </p>
           </div>
 
           {/* Actions */}
+          <p className="text-surface-400 text-xs leading-relaxed">
+            Export downloads a recent self-service JSON snapshot. High-volume activity sections are
+            capped and marked in <code className="font-mono">exportMeta</code>; contact support for
+            a compliance-grade full export.
+          </p>
           <div className="flex items-center gap-4">
             <button
               type="submit"

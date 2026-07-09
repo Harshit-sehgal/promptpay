@@ -8,6 +8,12 @@ import { useAuth } from '@/lib/auth-context';
 
 import { useToast } from '@waitlayer/ui';
 
+interface SelfServiceExportPayload {
+  exportMeta?: {
+    truncated?: boolean;
+  };
+}
+
 export default function AdvertiserSettingsPage() {
   const router = useRouter();
   const toast = useToast();
@@ -25,14 +31,19 @@ export default function AdvertiserSettingsPage() {
     setExportError(null);
     try {
       const res = await advertiserApi.exportData();
-      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const exportData = res.data as SelfServiceExportPayload;
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = 'waitlayer-advertiser-export.json';
       a.click();
       URL.revokeObjectURL(url);
-      toast.success('Export downloaded.');
+      if (exportData.exportMeta?.truncated) {
+        toast.info('Export downloaded. Some activity sections were capped; see exportMeta.');
+      } else {
+        toast.success('Export downloaded.');
+      }
     } catch (err: unknown) {
       setExportError(getErrorMessage(err, 'Export failed'));
     } finally {
@@ -98,7 +109,10 @@ export default function AdvertiserSettingsPage() {
         <div>
           <h2 className="text-surface-900 font-bold text-[16px] mb-2">Export my data</h2>
           <p className="text-surface-500 text-xs mb-4">
-            Download a copy of your profile, campaigns, creatives, billing ledger, and consent records.
+            Download a recent self-service JSON snapshot of your profile, campaigns, creatives,
+            billing ledger, and consent records. High-volume sections are capped and marked in
+            <code className="mx-1 font-mono">exportMeta</code>; contact support for a
+            compliance-grade full export.
           </p>
           <button
             type="button"
@@ -118,7 +132,9 @@ export default function AdvertiserSettingsPage() {
           </p>
           {isGoogleOnlyAccount ? (
             <div className="bg-amber-50 border border-amber-200/70 rounded-xl p-4 mb-3">
-              <p className="text-amber-800 text-sm font-medium">Google-only deletion needs support verification</p>
+              <p className="text-amber-800 text-sm font-medium">
+                Google-only deletion needs support verification
+              </p>
               <p className="text-amber-700 text-xs mt-1 leading-relaxed">
                 This account does not have a password step-up. Email{' '}
                 <a

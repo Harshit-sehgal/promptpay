@@ -7,6 +7,12 @@ import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
+import {
+  FREQUENCY_CAPS,
+  frequencyCapValueToInput,
+  parseFrequencyCapInput,
+} from '../../frequency-caps';
+
 interface LoadedCampaign {
   id: string;
   name: string;
@@ -16,6 +22,9 @@ interface LoadedCampaign {
   budgetTotalMinor: number;
   currency: string;
   category?: string;
+  rejectionReason?: string | null;
+  frequencyCapPerHour?: number;
+  frequencyCapPerDay?: number;
 }
 
 export default function EditCampaignPage() {
@@ -35,8 +44,10 @@ export default function EditCampaignPage() {
   const [bidAmount, setBidAmount] = useState('2.00');
   const [budgetTotal, setBudgetTotal] = useState('100.00');
   const [currency, setCurrency] = useState('USD');
+  const [fundedCurrencies, setFundedCurrencies] = useState<string[]>(['USD']);
   const [category, setCategory] = useState<string>('developer_tools');
   const [status, setStatus] = useState<string>('draft');
+  const [campaignRejectionReason, setCampaignRejectionReason] = useState<string | null>(null);
   const [freqCapPerHour, setFreqCapPerHour] = useState('');
   const [freqCapPerDay, setFreqCapPerDay] = useState('');
 
@@ -46,6 +57,7 @@ export default function EditCampaignPage() {
   const [message, setMessage] = useState('');
   const [ctaText, setCtaText] = useState('Learn more');
   const [ctaUrl, setCtaUrl] = useState('');
+  const [creativeRejectionReason, setCreativeRejectionReason] = useState<string | null>(null);
 
   // Targeting (optional; only sent when the advertiser changes it)
   const [targetCountries, setTargetCountries] = useState('');
@@ -54,20 +66,47 @@ export default function EditCampaignPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await advertiserApi.getDashboard();
-        const campaigns = (res.data?.campaigns as LoadedCampaign[] | undefined) ?? [];
-        const found = campaigns.find((c) => c.id === campaignId);
-        if (!found) {
-          setNotFound(true);
+        let found: LoadedCampaign;
+        try {
+          const res = await advertiserApi.getCampaign(campaignId);
+          found = res.data as LoadedCampaign;
+        } catch (err: unknown) {
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status === 404) {
+            setNotFound(true);
+          } else {
+            setError(getErrorMessage(err, 'Failed to load campaign'));
+          }
           return;
         }
         setStatus(found.status);
+        setCampaignRejectionReason(found.rejectionReason ?? null);
         setName(found.name);
         setBidType(found.bidType);
         setBidAmount((found.bidAmountMinor / 100).toFixed(2));
         setBudgetTotal((found.budgetTotalMinor / 100).toFixed(2));
         setCurrency(found.currency);
         if (found.category) setCategory(found.category);
+
+        // A-081: derive selectable currencies — funded deposit balances plus
+        // the current currency and USD — so a non-USD deposit is spendable.
+        try {
+          const billingRes = await advertiserApi.getBilling();
+          const balances = (billingRes.data?.balances ?? []) as Array<{
+            currency: string;
+            balanceMinor: number;
+          }>;
+          const funded = balances
+            .filter((b) => (b.balanceMinor ?? 0) > 0)
+            .map((b) => b.currency.toUpperCase());
+          setFundedCurrencies(
+            Array.from(new Set(['USD', found.currency.toUpperCase(), ...funded].filter(Boolean))),
+          );
+        } catch {
+          setFundedCurrencies(Array.from(new Set(['USD', found.currency.toUpperCase()])));
+        }
+        setFreqCapPerHour(frequencyCapValueToInput(found.frequencyCapPerHour));
+        setFreqCapPerDay(frequencyCapValueToInput(found.frequencyCapPerDay));
 
         try {
           const creativesRes = await campaignApi.getCreatives(campaignId);
@@ -77,6 +116,7 @@ export default function EditCampaignPage() {
             sponsoredMessage: string;
             destinationUrl: string;
             ctaText?: string | null;
+            rejectionReason?: string | null;
           }>;
           const creative = creatives[0];
           if (creative) {
@@ -85,6 +125,7 @@ export default function EditCampaignPage() {
             setMessage(creative.sponsoredMessage);
             setCtaUrl(creative.destinationUrl);
             setCtaText(creative.ctaText || 'Learn more');
+            setCreativeRejectionReason(creative.rejectionReason ?? null);
           }
         } catch {
           // Creative is optional to prefill; the user can still submit one.
@@ -116,6 +157,18 @@ export default function EditCampaignPage() {
       setSubmitting(false);
       return;
     }
+    const hourCap = parseFrequencyCapInput(freqCapPerHour, FREQUENCY_CAPS.perHour);
+    if (hourCap.error) {
+      setError(hourCap.error);
+      setSubmitting(false);
+      return;
+    }
+    const dayCap = parseFrequencyCapInput(freqCapPerDay, FREQUENCY_CAPS.perDay);
+    if (dayCap.error) {
+      setError(dayCap.error);
+      setSubmitting(false);
+      return;
+    }
 
     try {
       // A-021: a rejected campaign must be reset to draft before it can be
@@ -129,14 +182,8 @@ export default function EditCampaignPage() {
         bidAmountMinor,
         budgetTotalMinor,
       };
-      if (freqCapPerHour.trim()) {
-        const v = parseInt(freqCapPerHour, 10);
-        if (!Number.isNaN(v)) updatePayload.frequencyCapPerHour = v;
-      }
-      if (freqCapPerDay.trim()) {
-        const v = parseInt(freqCapPerDay, 10);
-        if (!Number.isNaN(v)) updatePayload.frequencyCapPerDay = v;
-      }
+      if (hourCap.value !== undefined) updatePayload.frequencyCapPerHour = hourCap.value;
+      if (dayCap.value !== undefined) updatePayload.frequencyCapPerDay = dayCap.value;
       await advertiserApi.updateCampaign(campaignId, updatePayload);
 
       const finalCtaUrl = ctaUrl;
@@ -232,6 +279,17 @@ export default function EditCampaignPage() {
             <p className="text-emerald-400 text-sm">Campaign updated and submitted for review!</p>
           </div>
         )}
+        {status === 'rejected' && (campaignRejectionReason || creativeRejectionReason) && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 mb-6">
+            <p className="text-amber-300 text-sm font-medium mb-2">Rejection reason</p>
+            {campaignRejectionReason && (
+              <p className="text-amber-100 text-sm">Campaign: {campaignRejectionReason}</p>
+            )}
+            {creativeRejectionReason && (
+              <p className="text-amber-100 text-sm">Creative: {creativeRejectionReason}</p>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* Campaign details */}
@@ -252,6 +310,28 @@ export default function EditCampaignPage() {
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                 />
               </div>
+              {status === 'draft' && (
+                <div>
+                  <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                    Campaign currency
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand-500"
+                  >
+                    {fundedCurrencies.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-ink-500 text-xs mt-1">
+                    Must match a funded deposit balance — campaigns activate and spend in their own
+                    currency.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -309,29 +389,41 @@ export default function EditCampaignPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Frequency cap / hour (optional)
+                    Frequency cap / hour
                   </label>
                   <input
                     type="number"
-                    min="0"
+                    min={FREQUENCY_CAPS.perHour.min}
+                    max={FREQUENCY_CAPS.perHour.max}
+                    step="1"
                     value={freqCapPerHour}
                     onChange={(e) => setFreqCapPerHour(e.target.value)}
-                    placeholder="No limit"
+                    placeholder="Leave unchanged"
+                    inputMode="numeric"
                     className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                   />
+                  <p className="text-ink-500 text-xs mt-1">
+                    1-30. Blank leaves the current cap unchanged.
+                  </p>
                 </div>
                 <div>
                   <label className="text-ink-200 text-sm font-medium mb-1.5 block">
-                    Frequency cap / day (optional)
+                    Frequency cap / day
                   </label>
                   <input
                     type="number"
-                    min="0"
+                    min={FREQUENCY_CAPS.perDay.min}
+                    max={FREQUENCY_CAPS.perDay.max}
+                    step="1"
                     value={freqCapPerDay}
                     onChange={(e) => setFreqCapPerDay(e.target.value)}
-                    placeholder="No limit"
+                    placeholder="Leave unchanged"
+                    inputMode="numeric"
                     className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                   />
+                  <p className="text-ink-500 text-xs mt-1">
+                    1-100. Blank leaves the current cap unchanged.
+                  </p>
                 </div>
               </div>
             </div>

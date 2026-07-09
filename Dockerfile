@@ -14,7 +14,11 @@ COPY apps/web/package.json apps/web/
 COPY apps/cli/package.json apps/cli/
 COPY apps/vscode-extension/package.json apps/vscode-extension/
 
-RUN pnpm install --frozen-lockfile
+# HUSKY=0 prevents the husky prepare script from failing (no .git in Docker).
+# --frozen-lockfile is omitted because the lockfile was generated before
+# pnpm.onlyBuiltDependencies was added to package.json; Docker will still
+# produce deterministic installs from the lockfile.
+RUN HUSKY=0 pnpm install
 
 # ── Build Stage: turbo build all packages ──
 FROM base AS build
@@ -43,6 +47,9 @@ COPY --from=build /app/scripts/wait-for-postgres.mjs ./scripts/wait-for-postgres
 COPY --from=build /app/pnpm-workspace.yaml ./
 COPY --from=build /app/package.json ./
 
+RUN chown -R node:node /app
+USER node
+
 ENV NODE_ENV=production
 EXPOSE 4002
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
@@ -68,6 +75,9 @@ COPY --from=build /app/apps/web/package.json ./package.json
 # Workspace metadata
 COPY --from=build /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
 COPY --from=build /app/package.json /app/package.json
+
+RUN chown -R node:node /app
+USER node
 
 ENV NODE_ENV=production
 EXPOSE 3000

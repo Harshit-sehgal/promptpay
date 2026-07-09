@@ -1,4 +1,18 @@
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, IsUrl, Length, Matches,Max, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Length,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 import { BidType, depositMinimumMinor } from '@waitlayer/shared';
 
@@ -72,6 +86,11 @@ export class UpdateCampaignDto {
   @IsInt()
   @Min(1)
   budgetTotalMinor?: number;
+  @IsOptional()
+  @IsString()
+  @Length(3, 3)
+  @Matches(/^[A-Z]{3}$/, { message: 'currency must be an uppercase ISO 4217 code' })
+  currency?: string;
 
   @IsOptional()
   @IsInt()

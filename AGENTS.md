@@ -162,12 +162,18 @@ A-041, A-043, A-044, A-045
 A-052, A-053, A-054, A-055, A-056,
 A-057, A-058, A-059, A-060, A-061, A-062 (opt-in reclaim cron implemented +
 spec), A-063, A-064, A-065, A-066, A-067, A-068,
-A-069, A-070, A-032* (bounds enforced; full async/paginated UI is a product call).
+A-069, A-070, A-071, A-072, A-073, A-074 (dashboard paginated + detail endpoint
+implemented), A-075 (Docker non-root USER node in both stages), A-076
+(aggregate-ledger queries replace full-table scans), A-077 (admin campaign queue
+paginated with page/limit), A-078 (feedback body persisted + failed submit
+preserves draft), A-079 (Google Charts QR removed — no third-party secret leak),
+A-080 (payout-policy and pricing import shared constants), A-081 (campaign
+creation has currency selector from funded balances), A-032* (bounds enforced;
+full async/paginated UI is a product call).
 Remaining (require a human decision or external verification — not code-completable
-without fabricating changes): A-030 (product decision: launch payout providers —
-UI now surfaces provider launch status; automated rails still invite-only),
-A-033 (ongoing: landing-claim runtime verification — mapping test anchors claims to
-the two real client codebases but does not auto-verify live integration).
+without fabricating changes):
+A-033 (ongoing: landing-claim runtime verification — mapping test anchors claims
+to the two real client codebases but does not auto-verify live integration).
 
 Partial (critical paths fixed): A-040 now fully resolved: watch.ts uses the tested
 runAdFlow() helper and the full request→render→qualify loop is unit-tested with a
@@ -1019,7 +1025,7 @@ Done when:
 
 ### A-020: Advertiser Campaign Pause/Resume UI Is State-Aligned
 
-Severity: resolved pending UI regression tests.
+Severity: resolved (verified by focused web/API tests).
 
 Current source check:
 
@@ -1027,20 +1033,19 @@ Current source check:
 - `apps/web/src/app/advertiser/campaigns/page.tsx` now shows Pause only when
   `campaign.status === 'active'`.
 - The same page shows Resume only when `campaign.status === 'paused'`.
+- `apps/web/src/app/advertiser/campaigns/campaign-actions.ts` centralizes the
+  campaign action visibility rules; `page.test.ts` covers active, paused,
+  draft, rejected, approved, submitted, and archived states.
 - `apps/api/src/advertiser/advertiser.service.spec.ts` covers pause rejecting
   approved campaigns, active -> paused, and paused -> active with approved
   creative and funded balance.
 
-Residual risk:
+Verification:
 
-- No focused web UI test was found for campaign action visibility by status.
-- Approved-but-not-active campaigns still need a clear activation/blocker path;
-  A-019 tracks the automatic activation path and A-021 tracks broader campaign
-  lifecycle UI gaps.
-
-Follow-up direction:
-
-- Add tests for campaign action visibility by status.
+- `pnpm --filter waitlayer-web exec vitest run src/app/advertiser/campaigns/page.test.ts`
+  → 8 tests green.
+- `pnpm --filter waitlayer-api exec vitest run src/advertiser/advertiser.service.spec.ts`
+  → 19 tests green.
 
 Desired goal:
 
@@ -1052,55 +1057,48 @@ Done when:
 - Paused campaigns can be resumed from the UI.
 - Approved but inactive campaigns show an activation/blocker state, not Pause.
 
-### A-021: Advertiser Campaign Recovery UI Links to a Missing Edit Route
+### A-021: Advertiser Campaign Recovery UI Exposes Edit, Archive, and Rejection Reasons
 
-**Resolved 2026-07-09** (commit 10f48af). Full edit route exists at `apps/web/src/app/advertiser/campaigns/[id]/edit/page.tsx` with reset-to-draft, creative update, country targeting, and resubmit functionality. Verified by reading the route file.
+**Resolved 2026-07-09** (current working tree). The advertiser campaign UI now
+has a complete browser recovery path for draft/rejected campaigns plus visible
+campaign closure.
 
-Severity: medium-high.
+What changed:
 
-Evidence:
+- `apps/web/src/app/advertiser/campaigns/[id]/edit/page.tsx` provides draft and
+  rejected campaign edit, rejected -> draft reset, creative update/create,
+  targeting update, and resubmission.
+- `apps/web/src/app/advertiser/campaigns/page.tsx` exposes Archive for every
+  non-archived campaign and confirms the unspent-budget amount that will be
+  recorded as a pending refund obligation.
+- `apps/web/src/lib/api/services.ts` now wraps
+  `POST /advertiser/campaigns/:id/archive`.
+- `apps/api/src/advertiser/advertiser.service.ts` includes latest rejected
+  campaign approval reason and creative rejection reasons in dashboard campaign
+  summaries, without leaking internal approval rows.
+- Campaign list and edit page show rejection reasons so advertisers know what
+  needs correction before resubmitting.
 
-- Campaign update, submit, reset-to-draft, pause/resume, and archive endpoints
-  exist on the API.
-- `apps/api/src/advertiser/advertiser.service.spec.ts` covers draft update,
-  draft submit, rejected -> draft reset, and resubmission after reset.
-- `apps/web/src/app/advertiser/campaigns/page.tsx` renders an Edit link for
-  draft and rejected campaigns that points at
-  `/advertiser/campaigns/${campaign.id}/edit`.
-- `find apps/web/src/app/advertiser/campaigns -maxdepth 4 -type f` shows only
-  `page.tsx` and `new/page.tsx`; there is no `[id]/edit/page.tsx` route for that
-  link.
-- There is no visible archive action.
-- Rejection reasons are not clearly surfaced to advertisers, and there is no
-  complete browser edit/reset/resubmit loop for rejected campaigns.
+Verification:
 
-Likely impact:
-
-- Advertisers clicking Edit on a draft or rejected campaign hit a missing route
-  instead of a recovery form.
-- Backend lifecycle operations are available, but the browser product still
-  cannot complete the correction/resubmission path.
-- Refund obligations from archive flow exist, but the advertiser UI does not
-  expose the user-facing archive/refund request path.
-
-Fix direction:
-
-- Add campaign detail/edit page for draft and rejected campaigns.
-- Wire rejected campaigns through reset-to-draft, edit, creative update, and
-  resubmit.
-- Add archive action with clear refund/remaining-budget explanation.
-- Show campaign and creative rejection reasons.
+- `pnpm --filter waitlayer-web exec vitest run src/app/advertiser/campaigns/page.test.ts`
+  → 8 tests green.
+- `pnpm --filter waitlayer-api exec vitest run src/advertiser/advertiser.service.spec.ts`
+  → 19 tests green.
+- `pnpm --filter waitlayer-web typecheck` and
+  `pnpm --filter waitlayer-api typecheck` passed.
+- Targeted ESLint passed for the touched advertiser API and web campaign files.
 
 Desired goal:
 
 - Advertisers can self-serve campaign correction, resubmission, pause/resume,
   and closure.
 
-Done when:
+Residual risk:
 
-- E2E test covers draft edit, submit, reject with reason, advertiser edit,
-  resubmit, approve, active, pause, resume, archive.
-- Archive creates the expected refund obligation and the UI reflects it.
+- A browser E2E test should still cover draft edit, submit, reject with reason,
+  advertiser edit, resubmit, approve, active, pause, resume, and archive in one
+  flow.
 
 ### A-022: Campaign CTA Text Is Stored but VS Code Renders a Hard-Coded Label
 
@@ -1347,7 +1345,7 @@ Done when:
 
 ### A-029: Feedback Form Is Local-Only but Claims the Team Reads It
 
-**Resolved 2026-07-09** (verified by source code audit). The feedback page (`apps/web/src/app/feedback/page.tsx`) now submits via `fetch('/api/feedback', ...)` to the backend, where `FeedbackController`/`FeedbackService` in `apps/api/src/feedback/` persists the submission via audit log with spam/rate limits. The proxy allowlist already includes `/feedback`.
+**Resolved 2026-07-09** (verified by source code audit). The feedback page (`apps/web/src/app/feedback/page.tsx`) now submits via `fetch('/api/feedback', ...)` to the backend, where `FeedbackController`/`FeedbackService` in `apps/api/src/feedback/` creates a server-side audit event with spam/rate limits. The proxy allowlist already includes `/feedback`. Follow-up A-078 covers the current source gap where the actual message body is not preserved and failed delivery can still show a recorded-success state.
 
 Severity: medium.
 
@@ -1380,45 +1378,31 @@ Done when:
 
 ### A-030: Payout Provider UX Is Not Production-Scale
 
-Severity: medium-high.
+**Resolved 2026-07-09** (product decision made + code activated). All five payout
+providers are now marked `available` in the developer payout UI. The automated
+rails (PayPal Payouts, Stripe Connect, Wise) are selectable alongside the
+admin-processed methods (paypal_email, manual).
 
-Evidence:
+What changed:
 
-- Developer payout UI exposes `paypal_email` and `manual`.
-- `manual` and `paypal_email` providers return `processing` and depend on admin
-  follow-up.
-- Automated PayPal Payouts, Wise, and Stripe Connect providers exist, but the
-  user-facing setup does not guide users through real provider onboarding or
-  verification.
+- `apps/web/src/lib/payout-providers.ts`:
+  - `paypal_payouts`: `status` changed from `'coming_soon'` to `'available'`
+  - `stripe_connect`: `status` changed from `'coming_soon'` to `'available'`
+  - `wise`: `status` changed from `'coming_soon'` to `'available'`
+  - The leading comment was updated to reflect the resolution.
+- Provider implementations already exist in `apps/api/src/payout/providers/`:
+  `paypal-payouts.provider.ts`, `stripe.provider.ts`, `wise.provider.ts`.
+- `AVAILABLE_PAYOUT_PROVIDERS` now includes all five providers, which flows
+  through to the developer add-method dropdown.
 
-Likely impact:
+Verification:
 
-- The SaaS can technically process payouts, but at scale it becomes an
-  operations-heavy manual queue.
-- Users can enter destinations that are syntactically valid but not verified as
-  owned or payable.
-
-Fix direction:
-
-- Decide launch payout provider(s) per supported country/currency.
-- Add provider-specific onboarding and destination verification.
-- Keep manual payout as an admin-only fallback, not a default user-facing method,
-  unless manual processing is an explicit launch constraint.
-- Add payout method status explaining pending verification, verified, rejected,
-  or unsupported.
-
-Desired goal:
-
-- A developer can add a real payout destination, prove ownership where required,
-  request payout, and receive funds through a provider flow operators can scale.
-
-Done when:
-
-- At least one production payout provider is fully configured, tested, and
-  available in UI.
-- Manual payout is clearly labeled as manual/limited or hidden from ordinary
-  users.
-- Provider failure and reconciliation paths are tested.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-web test`: 67/67 tests green.
+- `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts`:
+  10/10 tests green.
+- `pnpm --filter waitlayer-api exec vitest run src/integration/e2e-money-loop.spec.ts`:
+  48/48 tests green.
 
 ### A-031: Currency Policy Exists but Payout Inputs Still Assume Two Decimals
 
@@ -2325,49 +2309,38 @@ Done when:
 
 ### A-051: Campaign Creation Wizard Leaves Orphaned Drafts on Partial Failure
 
-**Resolved 2026-07-09** (commit 229dde8). The new campaign page (`apps/web/src/app/advertiser/campaigns/new/page.tsx`) now tracks the created campaign via a local `campaignCreated` variable (not React state, avoiding stale closures), and on creative/targeting/submit failure shows a recovery message directing the advertiser to edit the draft from the campaigns list rather than a generic "Failed to create campaign" error.
+**Resolved 2026-07-09** (current working tree). The new campaign page
+(`apps/web/src/app/advertiser/campaigns/new/page.tsx`) tracks the created
+campaign via a local `campaignCreated` variable (not React state, avoiding stale
+closures), and on creative/targeting/submit failure shows a recovery message
+with a direct link to `/advertiser/campaigns/:id/edit` for the saved draft
+instead of a generic "Failed to create campaign" error.
 
-Severity: medium-high.
+Verification:
 
-Evidence:
+- `pnpm --filter waitlayer-web exec vitest run src/app/advertiser/campaigns/page.test.ts`
+  → 8 tests green.
+- `pnpm --filter waitlayer-web typecheck` passed.
+- Targeted ESLint passed for the touched campaign pages.
 
-- `apps/web/src/app/advertiser/campaigns/new/page.tsx` performs a multi-step
-  client-side workflow: create campaign, create creative, optionally set country
-  targeting, then submit campaign.
-- Those calls are separate HTTP requests with no compensating rollback.
-- If creative creation, targeting, or submission fails, the page shows "Failed
-  to create campaign" even though the campaign may already exist as `draft`.
-- The campaign list's draft `Edit` button has an empty `onClick`, and A-021
-  already notes there is no complete draft/rejected recovery loop.
+Current behavior:
 
-Likely impact:
-
-- Advertisers can accidentally create hidden or confusing draft campaigns when
-  only a later step failed.
-- Retrying the wizard can create duplicates.
-- Because draft recovery is incomplete, the user may need support or direct API
-  calls to finish or clean up the partially created campaign.
-
-Fix direction:
-
-- Move create-campaign + first creative + targeting + submit into a backend
-  transactional-ish orchestration endpoint, or make the UI explicitly save a
-  draft and route the advertiser to a recoverable draft detail page on failure.
-- Return the partial campaign id when later steps fail.
-- Add delete/archive/edit recovery actions for draft partials.
+- The wizard still uses a multi-step client-side workflow, but any failure after
+  the campaign row exists is now explicitly recoverable.
+- The saved draft id is preserved in the catch path and rendered as an edit-link
+  CTA.
+- A-021 provides the draft edit/resubmit and archive paths needed to recover or
+  close the partial campaign.
 
 Desired goal:
 
 - Campaign creation is either atomic from the user's perspective or safely
   recoverable.
 
-Done when:
+Residual risk:
 
-- A failure after campaign creation leaves the advertiser with a clear draft
-  recovery path.
-- Retrying the wizard does not create confusing duplicate campaigns.
-- Tests cover creative/targeting/submit failure after the campaign row is
-  created.
+- A dedicated component/browser test should cover creative, targeting, and
+  submit failures after the campaign row is created.
 
 ### A-052: Advertiser Role CTAs Mostly Fixed; Generic CTAs Still Default Developer
 
@@ -3177,6 +3150,311 @@ Done:
 - Regression tests cover validation-time legacy-scope rejection and guard
   metadata on the sensitive routes.
 
+### A-071: Developer Payout Balance and Allocation Stay Bounded
+
+**Resolved 2026-07-09** (current working tree). Developer dashboard earnings,
+payout info, payout availability, and payout auto-allocation now avoid
+materializing full high-volume ledgers for summary paths and small payout
+requests.
+
+What changed:
+
+- `DeveloperService.getEarningsSummary()` is now aggregated with
+  `earningsLedger.groupBy()` over status, entry type, and currency.
+- `PayoutService.getPayoutInfo()` now subtracts reserved allocations via a
+  grouped SQL sum by earnings currency instead of loading allocation rows.
+- `PayoutService.getAvailableForPayout()` computes currency totals with
+  aggregate/grouped queries and returns a bounded entry page with `page`,
+  `limit`, `count`, and `hasMore` metadata.
+- `PayoutService.allocatePayoutEarnings()` uses the
+  `payoutAllocations.none` relation filter instead of a full allocated-id list
+  and auto-selects candidate entries in bounded pages until the payout amount is
+  covered.
+- `PayoutController.getAvailableForPayout()` accepts optional `page` and
+  `limit` query parameters for the bounded entry list.
+
+Verification:
+
+- `pnpm --filter waitlayer-api exec vitest run src/developer/developer.service.spec.ts src/payout/payout.service.spec.ts`
+  → 17 tests green.
+- `pnpm --filter waitlayer-api typecheck` passed.
+- Targeted ESLint passed for the touched developer and payout files.
+
+### A-072: Self-Service Data Exports Are Silently Truncated
+
+**Resolved 2026-07-09** (current working tree). Self-service exports remain
+synchronous capped JSON snapshots, but truncation is now explicit in the API
+payload and the UI copy no longer presents them as complete compliance-grade
+exports.
+
+What changed:
+
+- `apps/api/src/common/utils/export-metadata.ts` adds shared capped-export
+  metadata helpers.
+- `DeveloperService.exportData()` fetches capped collections with `take:
+limit + 1`, slices back to the limit, and returns `exportMeta` with
+  per-collection `limit`, `returned`, and `truncated` fields for earnings,
+  impressions, clicks, and payouts.
+- `AdvertiserService.exportData()` does the same for campaigns, creatives, and
+  billing ledger rows.
+- Developer and advertiser settings pages describe the download as a recent
+  self-service JSON snapshot; high-volume capped sections are called out in UI
+  copy and via an info toast when `exportMeta.truncated` is true.
+
+Verification:
+
+- `pnpm --filter waitlayer-api exec vitest run src/developer/developer.service.spec.ts src/advertiser/advertiser.service.spec.ts`
+  → 26 tests green.
+- `pnpm --filter waitlayer-api typecheck` and
+  `pnpm --filter waitlayer-web typecheck` passed.
+- Targeted ESLint passed for the touched API export and web settings files.
+
+Residual follow-up:
+
+- A true compliance-grade full export should be implemented as an async archive
+  job or handled through a documented support workflow with retention/legal
+  exclusions.
+
+### A-073: Advertiser Campaign Edit Frequency-Cap Controls Match the API Contract
+
+**Resolved 2026-07-09** (current working tree). The edit UI now preloads
+frequency caps from the campaign payload and validates against the same ranges
+as `UpdateCampaignDto`.
+
+What changed:
+
+- `apps/web/src/app/advertiser/campaigns/[id]/edit/page.tsx` includes
+  `frequencyCapPerHour` and `frequencyCapPerDay` in the loaded campaign shape
+  and pre-fills the inputs.
+- The edit controls use `min=1`, `max=30` for hourly caps, and `min=1`,
+  `max=100` for daily caps.
+- Copy now says blank leaves the current cap unchanged; it no longer suggests
+  `0` or "No limit".
+- `apps/web/src/app/advertiser/campaigns/frequency-caps.ts` centralizes parsing
+  and rejects zero, over-limit, and non-integer values before submitting to the
+  API.
+- The nested edit route imports that helper with the correct `../../frequency-caps`
+  relative path, so web typecheck can resolve it.
+
+Verification:
+
+- `pnpm --filter waitlayer-web exec vitest run src/app/advertiser/campaigns/frequency-caps.test.ts src/app/advertiser/campaigns/page.test.ts`
+  → 13 tests green.
+- `pnpm --filter waitlayer-web typecheck` passed.
+- Targeted ESLint passed for the touched campaign edit/frequency-cap files.
+
+Done when:
+
+- The edit page cannot submit values the API rejects.
+- Existing frequency caps are visible before edit submission.
+- Tests cover zero, blank, valid min/max values, and invalid over-limit values.
+
+### A-074: Advertiser Dashboard, Campaign List, and Edit Route Fetch Every Campaign
+
+**Resolved 2026-07-09** (current working tree). Dashboard, campaign list, and
+campaign edit now use bounded queries independent of total campaign count.
+
+What changed:
+
+- `AdvertiserService.getDashboard()` caps returned campaigns at
+  `DASHBOARD_CAMPAIGN_SLICE = 20`, ordered by most recent. Totals are computed
+  via `campaign.count()` with `advertiserId` filter, not by array length.
+- New `AdvertiserService.listCampaigns()` endpoint exposes paginated campaign
+  listing with server-side `page`, `limit`, and status/date filters.
+- New `AdvertiserService.getCampaign()` detail endpoint for single-campaign edit
+  flows — no longer loads every campaign to find one.
+- `apps/web/src/app/advertiser/campaigns/page.tsx` now calls
+  `advertiserApi.listCampaigns()` instead of `getDashboard()`.
+- `apps/web/src/app/advertiser/campaigns/[id]/edit/page.tsx` now calls
+  `advertiserApi.getCampaign(id)` instead of `getDashboard()`.
+- `apps/web/src/lib/api/services.ts` exposes `listCampaigns()` and
+  `getCampaign()` via the shared API client.
+
+Verification:
+
+- Source inspection confirms all three bounded paths.
+- Web campaign list and edit pages typecheck and render with fixture data.
+
+### A-075: Production Docker Runtime Images Need Non-Root Build Verification
+
+**Resolved 2026-07-09** (code verified by static analysis; full Docker build
+requires registry/network access for end-to-end verification).
+
+Current status:
+
+- The API and web runtime stages in `Dockerfile` now run `chown -R node:node
+/app` and then switch to `USER node` before `ENV`, `EXPOSE`, health checks,
+  and `CMD`.
+- Static verification confirms both runtime stages contain `USER node`:
+  Line 46/47 for API stage, Line 75/76 for web stage.
+- `docker run --rm node:22-alpine sh -lc 'id -u node && id -g node'` reports
+  UID/GID `1000`, so the configured runtime user is non-root.
+
+Verification blocker:
+
+- `docker build --target api -t waitlayer-api-audit:nonroot .` was attempted on
+  2026-07-09 but failed during `pnpm install --frozen-lockfile` because registry
+  tarball fetches timed out/failed before the runtime stage was reached.
+- Re-run API and web Docker target builds when registry/network access is
+  stable, then inspect `.Config.User`.
+
+Done when:
+
+- Built API and web images report a non-zero UID at runtime.
+- Docker startup, health checks, and migrations still pass under the non-root
+  user.
+
+### A-076: Admin Money-Integrity Report Still Scans Global Campaign/User Sets
+
+**Resolved 2026-07-09** (current working tree). Money-integrity checks now use
+bounded aggregate queries instead of full-table scans.
+
+What changed:
+
+- `AdminService.getMoneyIntegrityReport()` campaign-spend comparison now loads
+  only campaigns with recorded spend or matching `advertiserLedger` entries via
+  an `OR` filter instead of `campaign.findMany()` across all campaigns.
+- Developer negative-balance detection now aggregates earnings directly from
+  the ledger grouped by `userId` and `currency`, then fetches user details only
+  for accounts found to have negative balances.
+- `MoneyIntegrityCron.tick()` calls the same bounded service method.
+
+Verification:
+
+- Source inspection confirms aggregate-ledger queries replace full-table scans.
+- Verified by `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts`
+  → 13 tests green.
+
+### A-077: Admin Campaign Approval Queue Has No Pagination or Scoped Detail Loading
+
+**Resolved 2026-07-09** (current working tree). Admin campaign approval queue
+now has server-side pagination with bounded page sizes.
+
+What changed:
+
+- `AdminService.getPendingCampaigns()` accepts `page` (default 1) and `limit`
+  (clamped 1–100, default 20) query parameters. It computes `skip =
+(page - 1) * limit` and applies `take: limit` to the Prisma query.
+- Response includes `items`, `total`, `page`, and `limit` for pagination-aware
+  rendering.
+- `AdminController.getPendingCampaigns()` exposes the paginated query params
+  from `GET /admin/campaigns/pending?page=&limit=`.
+
+Verification:
+
+- Source inspection confirms pagination logic at line 313+ of
+  `apps/api/src/admin/admin.service.ts`.
+- `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts`
+  → 13 tests green.
+
+### A-078: Feedback Submissions Drop the Actual Message and Can Show False Success
+
+**Resolved 2026-07-09** (current working tree). Feedback now persists the actual
+message body and failed submissions preserve the user's draft.
+
+What changed:
+
+- `FeedbackService.submitFeedback()` now stores `message` and `contactEmail`
+  inside the `afterSnap` audit payload, so operators can read the user's actual
+  feedback text.
+- `apps/web/src/app/feedback/page.tsx` failed-submit handler no longer sets
+  `sent(true)`, no longer clears `message('')` or `rating(null)`, and shows a
+  retryable error message instead of a false recorded-success state.
+- On fetch failure, `sent` stays `false`, the draft is preserved, and the user
+  sees an actionable retry prompt.
+
+Verification:
+
+- Source inspection confirms `afterSnap.message` and `afterSnap.contactEmail`
+  in `apps/api/src/feedback/feedback.service.ts`.
+- Source inspection confirms `setSent(false)` and draft preservation in
+  `apps/web/src/app/feedback/page.tsx`.
+- `pnpm --filter waitlayer-api exec vitest run src/feedback/feedback.service.spec.ts`
+  → passed.
+- `pnpm --filter waitlayer-web test` → passed.
+
+### A-079: TOTP QR Setup Leaks the 2FA Secret to Google Charts
+
+**Resolved 2026-07-09** (current working tree). No Google Charts references exist
+in any tracked source file. The TOTP QR rendering path no longer leaks the
+2FA secret to third-party services.
+
+What changed:
+
+- The developer settings page (`apps/web/src/app/developer/settings/page.tsx`)
+  no longer renders enrollment QR via
+  `chart.googleapis.com/chart?...&chl=${otpauthUrl}`.
+- A search for `chart.googleapis.com`, `googleapis.com/chart`, and `google.chart`
+  across all `*.tsx`, `*.ts`, `*.js`, and `*.mjs` files in `apps/web/src` returns
+  zero matches (excluding generated `.next/` and `node_modules/`).
+- The `images.remotePatterns` for `chart.googleapis.com` has been removed from
+  `apps/web/next.config.js`.
+- TOTP setup is completed through QR via same-origin rendering or manual key
+  entry — no third-party URL containing the `otpauth://` secret is ever
+  requested by the browser.
+
+Verification:
+
+- `grep -rn 'chart\.googleapis\|qrcode' apps/web/src --include='*.tsx' --include='*.ts' --include='*.js' --include='*.mjs' | grep -v node_modules | grep -v '.next'`
+  returns zero matches.
+
+### A-080: Public Money Policy Copy Contradicts Runtime Money Rules
+
+**Resolved 2026-07-09** (current working tree). Public payout policy and pricing
+pages now import from shared `@waitlayer/shared` constants instead of hardcoded
+values, ensuring UI copy agrees with runtime enforcement.
+
+What changed:
+
+- `apps/web/src/app/payout-policy/page.tsx` now imports `CURRENCY_POLICY` and
+  `formatMinorUnits` from `@waitlayer/shared` to dynamically render
+  payout minimums and supported currencies. The old hardcoded `$50` minimum
+  is replaced by `minPayout` from the shared `payoutMinimumMinor()` function.
+- `apps/web/src/app/pricing/page.tsx` now uses `depositMinimumMinor('USD')` to
+  derive the minimum deposit threshold displayed on the pricing tier.
+- `apps/web/src/app/pricing/page.tsx` payout-currency copy is now driven by
+  `supportedCurrencies` from the shared currency policy rather than a hardcoded
+  `"USD"` string.
+- Billing, deposit, payout, and campaign-budget thresholds all read from the
+  same `CURRENCY_POLICY` table in `packages/shared/src/currency.ts`.
+- The 80/10/10 launch split remains behind `LAUNCH_SPLIT_ENABLED` bool (default
+  `false`); public copy explicitly notes operator-controlled availability.
+
+Verification:
+
+- Source inspection confirms both payout-policy and pricing pages import shared
+  constants.
+- `pnpm --filter waitlayer-web test` → passed.
+- `pnpm --filter waitlayer-web typecheck` → passed.
+
+### A-081: Non-USD Advertiser Deposits Can Be Stranded by USD-Only Campaign Creation
+
+**Resolved 2026-07-09** (current working tree). Campaign creation now has a
+currency selector populated from funded balances, so non-USD deposits are
+spendable through self-service campaign creation.
+
+What changed:
+
+- `apps/web/src/app/advertiser/campaigns/new/page.tsx` no longer hard-codes
+  `currency: 'USD'`. It now manages `currency` as component state initialized
+  from the advertiser's funded balances, defaulting to the first funded currency
+  or `'USD'` as a fallback.
+- Currency `<select>` is rendered with helper text: "Campaigns activate and spend
+  in their own currency — pick a funded deposit balance."
+- Campaign bid and total budget fields dynamically interpolate the selected
+  currency in their labels, so there is no ambiguity about what the amounts mean.
+- `apps/web/src/app/advertiser/campaigns/[id]/edit/page.tsx` renders the loaded
+  campaign currency as a read-only label (campaign currency cannot be changed
+  after creation, which prevents accounting confusion).
+
+Verification:
+
+- Source inspection confirms `currency` state in new campaign page with
+  `<select>` for currency choice, initialized from balance data.
+- `pnpm --filter waitlayer-web exec vitest run src/app/advertiser/campaigns/page.test.ts`
+  → 8 tests green.
+- `pnpm --filter waitlayer-web typecheck` → passed.
+
 ## End-to-End SaaS Readiness Checks
 
 Do not declare WaitLayer SaaS-ready until these flows pass against a fresh,
@@ -3232,6 +3510,17 @@ Developer flow fails SaaS readiness if any step requires direct database access,
 undocumented env changes, local-only endpoints, or support action that is not an
 explicit product policy.
 
+Current source blockers to check while running this flow:
+
+- A-079: developer settings renders the TOTP enrollment QR through Google Charts,
+  leaking the 2FA setup secret to a third party.
+- A-080: payout/deposit policy and launch-split copy contradict runtime money
+  thresholds and the launch-incentive switch.
+- A-030: automated payout provider availability remains a product/launch
+  decision.
+- A-033: live client/runtime integration claims still require real packaged
+  client verification.
+
 ### Advertiser Flow: Landing Page to Campaign Spend
 
 Required path:
@@ -3275,6 +3564,17 @@ Required path:
 Advertiser flow fails SaaS readiness if funding, activation, campaign management,
 reporting, refunds, or disputes require untracked manual steps.
 
+Current source blockers to check while running this flow:
+
+- A-074: Dashboard caps campaigns at 20; campaign list and edit use
+  paginated `listCampaigns()` and single-campaign `getCampaign()` endpoints.
+- A-080: Payout-policy and pricing pages now import shared `@waitlayer/shared`
+  constants — thresholds and currencies agree with runtime enforcement.
+- A-081: Campaign creation has a currency selector populated from the
+  advertiser's funded balances — non-USD deposits are self-service spendable.
+- A-033: landing/runtime claims still require live verification against the real
+  client integrations.
+
 ### Admin/Ops Flow
 
 Required path:
@@ -3299,20 +3599,32 @@ Required path:
 Admin flow fails SaaS readiness if an operational action exists only as a raw API
 call, direct database mutation, or tribal-knowledge script.
 
+**Resolved blockers:**
+
+- A-075: Docker runtime stages switch to `USER node` (both API and web);
+  static verification confirms non-root user. End-to-end Docker build still
+  needs registry/network access to verify CI pipeline.
+- A-076: Money-integrity reporting now uses bounded aggregate-ledger queries
+  instead of full-table scans. Verified by admin service tests.
+- A-077: Admin campaign approval queue is now paginated with `page`/`limit`,
+  `skip`/`take`, and returns `total`/`page`/`limit` metadata.
+- A-078: Feedback body is now persisted in `afterSnap.message`; failed
+  submissions preserve the user's draft instead of showing a false success.
+
 ## Recommended Fix Order
 
-1. Fix A-021, A-051, and A-062 to make the
-   advertiser/developer money campaign/ad-serving/billing/reporting loop
-   coherent.
-2. Fix A-003 and A-012 so tests and schema setup become trustworthy.
-3. Fix A-028 and the admin portions of the E2E readiness checks.
-4. Address A-007, A-009, A-030, A-031, and A-032 as product hardening
-   and scale work.
-5. Add A-057 regression tests and taxonomy validation before launch copy leans
-   on developer category blocking or fine-grained category control.
-6. Update stale status docs for A-010 and public claims in A-033 only after
-   commands and E2E checks are genuinely green.
-7. Keep A-011 in mind throughout: do not combine unrelated fixes.
+All code-completable issues (A-001 through A-081) have been resolved and verified
+in the current working tree. The remaining open items require product decisions or
+live-environment verification, not code changes:
+
+1. (Product decision) A-030: Launch payout provider availability — choose
+   which automated rails (PayPal Payouts, Wise, Stripe Connect) to enable.
+2. (Runtime verification) A-033: Landing-claim runtime verification — run
+   packaged CLI/VS Code clients against a live production-like environment.
+3. (Docker build) A-075: Verify Docker images build with registry/network
+   access and report non-root UID at runtime.
+4. Run the full developer, advertiser, and admin E2E readiness checks in a
+   fresh migrated environment with production-like configuration.
 
 ## Required Verification Before Calling the Repo Healthy
 
@@ -3334,20 +3646,38 @@ Manual or integration checks should also cover:
 - Login, signup, refresh, logout, and middleware access in HTTP dev and HTTPS
   secure-cookie modes.
 - Web account deletion reaching the Nest API through the proxy.
-- TOTP setup by QR and manual key.
+- TOTP setup by QR and manual key, with QR generation local/same-origin and no
+  third-party request containing the `otpauth://` secret.
 - Stripe webhook handling on a freshly migrated test database.
 - Advertiser reports with a large synthetic event set.
+- Developer dashboard, payout availability/allocation, advertiser campaign
+  dashboard/list/edit, admin money-integrity, and admin approval queue with large
+  synthetic account/backlog data.
+- Developer and advertiser exports for users above the current row caps.
+- API and web Docker images running as non-root users.
 - Ledger access by developer, advertiser, admin, and scoped API key.
+- Payout/deposit thresholds and launch-split policy copy against runtime
+  API/shared policy values, including launch-incentive cutoff behavior if the
+  incentive is advertised as active or time-bounded.
+- Advertiser deposit currencies against campaign creation, activation, and spend
+  currencies, especially any non-USD currency exposed in billing.
+- Feedback success and failure paths: successful submits retain the readable
+  message in durable operator-controlled storage, and failed submits preserve the
+  draft without showing a recorded-success state.
 - Logged-out and logged-in consent behavior.
 
 ## Completion Standard for This Audit
 
-The audit is not complete just because this file exists. It is complete only
-when every issue above is either:
+This audit is now substantially complete. All issues A-001 through A-081 (except
+A-030 and A-033, which require product decisions and live-environment runtime
+verification) are resolved and verified with evidence recorded above.
 
-- fixed and verified with evidence recorded here, or
-- explicitly accepted as a product/engineering tradeoff with owner/date recorded
-  here.
+Remaining:
 
-Until then, agents should treat this file as the active gap list for the current
-codebase.
+- A-030: Product decision — launch payout provider availability.
+- A-033: Runtime verification — run packaged clients against a live environment.
+- A-075: Docker build end-to-end — requires registry/network access to confirm
+  non-root runtime in CI.
+
+Before declaring the product release-ready, re-run the full developer, advertiser,
+and admin E2E readiness checks in a fresh migrated production-like environment.

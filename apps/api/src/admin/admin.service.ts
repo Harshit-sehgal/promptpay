@@ -1,9 +1,19 @@
 import * as crypto from 'crypto';
-import { BadRequestException,Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
-import { FraudFlagStatus, FraudSeverity, Prisma, RecoveryDebtCaseStatus, ToolTypeEnum, UserRole, UserStatus } from '@waitlayer/db';
+import {
+  CampaignStatus,
+  FraudFlagStatus,
+  FraudSeverity,
+  Prisma,
+  RecoveryDebtCaseStatus,
+  ToolTypeEnum,
+  UserRole,
+  UserStatus,
+} from '@waitlayer/db';
 
 import { AuditService } from '../audit/audit.service';
+import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';
 import { DeveloperService } from '../developer/developer.service';
@@ -58,19 +68,37 @@ export class AdminService {
 
   async getMoneyIntegrityReport() {
     // 1. Campaign Spend vs Advertiser Debits
-    const campaigns = await this.prisma.campaign.findMany({
-      select: { id: true, name: true, budgetSpentMinor: true, currency: true }
-    });
     const advertiserDebits = await this.prisma.advertiserLedger.groupBy({
       by: ['campaignId', 'currency'],
       where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } },
-      _sum: { amountMinor: true }
+      _sum: { amountMinor: true },
     });
     const debitMap = new Map(
-      advertiserDebits.map(d => [`${d.campaignId}:${d.currency}`, d._sum.amountMinor ?? 0]),
+      advertiserDebits.map((d) => [`${d.campaignId}:${d.currency}`, d._sum.amountMinor ?? 0]),
     );
+    const debitCampaignIds = [
+      ...new Set(
+        advertiserDebits.map((d) => d.campaignId).filter((id): id is string => id !== null),
+      ),
+    ];
 
-    const campaignDiscrepancies: Array<{ campaignId: string; campaignName: string; budgetSpentMinor: number; ledgerDebits: number; diff: number; currency: string }> = [];
+    // Bounded: only load campaigns that could be discrepant (recorded spend or a
+    // matching ledger debit) instead of scanning the entire campaign table.
+    const campaigns = await this.prisma.campaign.findMany({
+      where: {
+        OR: [{ budgetSpentMinor: { not: 0 } }, { id: { in: debitCampaignIds } }],
+      },
+      select: { id: true, name: true, budgetSpentMinor: true, currency: true },
+    });
+
+    const campaignDiscrepancies: Array<{
+      campaignId: string;
+      campaignName: string;
+      budgetSpentMinor: number;
+      ledgerDebits: number;
+      diff: number;
+      currency: string;
+    }> = [];
     for (const c of campaigns) {
       const debits = debitMap.get(`${c.id}:${c.currency}`) ?? 0;
       if (c.budgetSpentMinor !== debits) {
@@ -96,14 +124,57 @@ export class AdminService {
       totalReserveCredit,
       totalReserveReversal,
     ] = await Promise.all([
-      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', status: { in: ['estimated', 'pending', 'confirmed', 'held', 'paid'] } } }),
-      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit', status: 'confirmed' } }),
-      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } } }),
-      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'refund', status: { in: ['confirmed', 'paid'] } } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' } }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: {
+          entryType: 'credit',
+          status: { in: ['estimated', 'pending', 'confirmed', 'held', 'paid'] },
+        },
+      }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'debit', status: 'confirmed' },
+      }),
+      this.prisma.advertiserLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } },
+      }),
+      this.prisma.advertiserLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'refund', status: { in: ['confirmed', 'paid'] } },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE, status: 'confirmed' },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: {
+          entryType: 'reversal',
+          bucket: PLATFORM_BUCKETS.PLATFORM_FEE,
+          status: 'confirmed',
+        },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE, status: 'confirmed' },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: {
+          entryType: 'reversal',
+          bucket: PLATFORM_BUCKETS.FRAUD_RESERVE,
+          status: 'confirmed',
+        },
+      }),
     ]);
 
     const netEarningsByCurrency = netCurrencyAmounts(totalEarningsCredit, totalEarningsDebit);
@@ -118,24 +189,26 @@ export class AdminService {
       ...Object.keys(netReserveByCurrency),
     ]);
     const globalReconciliationByCurrency = Object.fromEntries(
-      Array.from(currencies).sort().map((currency) => {
-        const netEarnings = netEarningsByCurrency[currency] ?? 0;
-        const netAdvertiser = netAdvertiserByCurrency[currency] ?? 0;
-        const netPlatform = netPlatformByCurrency[currency] ?? 0;
-        const netReserve = netReserveByCurrency[currency] ?? 0;
-        const splitSum = netEarnings + netPlatform + netReserve;
-        return [
-          currency,
-          {
-            netAdvertiserSpendMinor: netAdvertiser,
-            netDeveloperEarningsMinor: netEarnings,
-            netPlatformFeeMinor: netPlatform,
-            netReserveMinor: netReserve,
-            splitSumMinor: splitSum,
-            discrepancyMinor: netAdvertiser - splitSum,
-          },
-        ];
-      }),
+      Array.from(currencies)
+        .sort()
+        .map((currency) => {
+          const netEarnings = netEarningsByCurrency[currency] ?? 0;
+          const netAdvertiser = netAdvertiserByCurrency[currency] ?? 0;
+          const netPlatform = netPlatformByCurrency[currency] ?? 0;
+          const netReserve = netReserveByCurrency[currency] ?? 0;
+          const splitSum = netEarnings + netPlatform + netReserve;
+          return [
+            currency,
+            {
+              netAdvertiserSpendMinor: netAdvertiser,
+              netDeveloperEarningsMinor: netEarnings,
+              netPlatformFeeMinor: netPlatform,
+              netReserveMinor: netReserve,
+              splitSumMinor: splitSum,
+              discrepancyMinor: netAdvertiser - splitSum,
+            },
+          ];
+        }),
     );
     const usdGlobal = globalReconciliationByCurrency.USD ?? {
       netAdvertiserSpendMinor: 0,
@@ -145,26 +218,25 @@ export class AdminService {
       splitSumMinor: 0,
       discrepancyMinor: 0,
     };
-    const globalDiscrepancy = Object.values(globalReconciliationByCurrency)
-      .some((row) => row.discrepancyMinor !== 0);
+    const globalDiscrepancy = Object.values(globalReconciliationByCurrency).some(
+      (row) => row.discrepancyMinor !== 0,
+    );
 
-    // 3. Developer Negative Balances
-    const users = await this.prisma.user.findMany({ where: { role: 'developer' }, select: { id: true, email: true } });
-    const userIds = users.map((u) => u.id);
-    const [developerCreditGroups, developerDebitGroups] = userIds.length > 0
-      ? await Promise.all([
-        this.prisma.earningsLedger.groupBy({
-          by: ['userId', 'currency'],
-          where: { userId: { in: userIds }, status: 'confirmed', entryType: 'credit' },
-          _sum: { amountMinor: true },
-        }),
-        this.prisma.earningsLedger.groupBy({
-          by: ['userId', 'currency'],
-          where: { userId: { in: userIds }, status: 'confirmed', entryType: 'debit' },
-          _sum: { amountMinor: true },
-        }),
-      ])
-      : [[], []];
+    // 3. Developer Negative Balances (bounded: aggregate earnings by
+    //    user+currency, then fetch emails only for users with a negative balance
+    //    instead of loading every developer row first).
+    const [developerCreditGroups, developerDebitGroups] = await Promise.all([
+      this.prisma.earningsLedger.groupBy({
+        by: ['userId', 'currency'],
+        where: { status: 'confirmed', entryType: 'credit' },
+        _sum: { amountMinor: true },
+      }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['userId', 'currency'],
+        where: { status: 'confirmed', entryType: 'debit' },
+        _sum: { amountMinor: true },
+      }),
+    ]);
     const developerBalances = new Map<string, number>();
     for (const row of developerCreditGroups) {
       const key = `${row.userId}:${row.currency}`;
@@ -174,23 +246,39 @@ export class AdminService {
       const key = `${row.userId}:${row.currency}`;
       developerBalances.set(key, (developerBalances.get(key) ?? 0) - (row._sum.amountMinor ?? 0));
     }
-    const userEmailById = new Map(users.map((u) => [u.id, u.email]));
-    const negativeDeveloperBalances: Array<{ userId: string; email: string; balanceMinor: number; currency: string }> = [];
+    const negativeDeveloperBalances: Array<{
+      userId: string;
+      email: string;
+      balanceMinor: number;
+      currency: string;
+    }> = [];
+    const negativeUserIds: string[] = [];
     for (const [key, balance] of developerBalances) {
       if (balance < 0) {
         const [userId, currency] = key.split(':');
-        negativeDeveloperBalances.push({
-          userId,
-          email: userEmailById.get(userId) ?? userId,
-          balanceMinor: balance,
-          currency,
-        });
+        negativeDeveloperBalances.push({ userId, email: userId, balanceMinor: balance, currency });
+        negativeUserIds.push(userId);
+      }
+    }
+    if (negativeUserIds.length > 0) {
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: negativeUserIds } },
+        select: { id: true, email: true },
+      });
+      const emailById = new Map(users.map((u) => [u.id, u.email]));
+      for (const row of negativeDeveloperBalances) {
+        row.email = emailById.get(row.userId) ?? row.userId;
       }
     }
 
     return {
       timestamp: new Date().toISOString(),
-      status: (campaignDiscrepancies.length === 0 && !globalDiscrepancy && negativeDeveloperBalances.length === 0) ? 'healthy' : 'unhealthy',
+      status:
+        campaignDiscrepancies.length === 0 &&
+        !globalDiscrepancy &&
+        negativeDeveloperBalances.length === 0
+          ? 'healthy'
+          : 'unhealthy',
       globalReconciliation: {
         netAdvertiserSpendMinor: usdGlobal.netAdvertiserSpendMinor,
         netDeveloperEarningsMinor: usdGlobal.netDeveloperEarningsMinor,
@@ -209,10 +297,23 @@ export class AdminService {
     const where: Prisma.UserWhereInput = {};
     if (params.status) where.status = params.status as UserStatus;
     if (params.role) where.role = params.role as UserRole;
-    if (params.search) where.OR = [{ email: { contains: params.search, mode: 'insensitive' } }, { name: { contains: params.search, mode: 'insensitive' } }];
+    if (params.search)
+      where.OR = [
+        { email: { contains: params.search, mode: 'insensitive' } },
+        { name: { contains: params.search, mode: 'insensitive' } },
+      ];
     const users = await this.prisma.user.findMany({
       where,
-      select: { id: true, email: true, name: true, role: true, status: true, trustLevel: true, country: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        status: true,
+        trustLevel: true,
+        country: true,
+        createdAt: true,
+      },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
@@ -256,18 +357,9 @@ export class AdminService {
    * admin users UI for account-lifecycle operations. Erasing stays a separate,
    * explicitly-confirmed path (eraseUser) because it is irreversible.
    */
-  private static readonly ALLOWED_ADMIN_STATUSES: UserStatus[] = [
-    'active',
-    'restricted',
-    'banned',
-  ];
+  private static readonly ALLOWED_ADMIN_STATUSES: UserStatus[] = ['active', 'restricted', 'banned'];
 
-  async setUserStatus(
-    actorId: string,
-    actorRole: string,
-    targetUserId: string,
-    status: string,
-  ) {
+  async setUserStatus(actorId: string, actorRole: string, targetUserId: string, status: string) {
     if (!AdminService.ALLOWED_ADMIN_STATUSES.includes(status as UserStatus)) {
       throw new BadRequestException(`Invalid target status: ${status}`);
     }
@@ -295,12 +387,32 @@ export class AdminService {
     return updated;
   }
 
-  async getPendingCampaigns() {
-    return this.prisma.campaign.findMany({ where: { status: { in: ['submitted', 'approved'] } }, include: { advertiser: { select: { companyName: true } }, creatives: true }, orderBy: { submittedAt: 'asc' } });
+  async getPendingCampaigns(
+    query: { page?: number; limit?: number; status?: 'submitted' | 'approved' } = {},
+  ) {
+    const page = Math.max(1, Math.trunc(query.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Math.trunc(query.limit ?? 20)));
+    const where = query.status
+      ? { status: query.status }
+      : { status: { in: ['submitted', 'approved'] as CampaignStatus[] } };
+    const [items, total] = await Promise.all([
+      this.prisma.campaign.findMany({
+        where,
+        include: { advertiser: { select: { companyName: true } }, creatives: true },
+        orderBy: { submittedAt: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.campaign.count({ where }),
+    ]);
+    return { items, total, page, limit };
   }
 
   async approveCampaign(campaignId: string, reviewerId: string, reason?: string) {
-    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId }, include: { creatives: true } });
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: campaignId },
+      include: { creatives: true },
+    });
     if (!campaign || campaign.status !== 'submitted') {
       throw new BadRequestException('Campaign must be in submitted status to approve');
     }
@@ -310,7 +422,11 @@ export class AdminService {
     // balance floor, so approval must not label an unfunded campaign active.
     const hasApprovedCreative = campaign.creatives.some((c) => c.status === 'approved');
     const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
-    const advertiserBalance = await this.getAdvertiserBalance(campaign.advertiserId, campaign.currency);
+    const advertiserBalance = await getAdvertiserBalance(
+      this.prisma,
+      campaign.advertiserId,
+      campaign.currency,
+    );
     const hasFundedBalance = advertiserBalance > 0;
     const canActivate = hasApprovedCreative && hasBudget && hasFundedBalance;
 
@@ -371,25 +487,6 @@ export class AdminService {
       status: newStatus,
       blockers,
     };
-  }
-
-  private async getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
-    const sums = await this.prisma.advertiserLedger.groupBy({
-      by: ['entryType'],
-      where: {
-        advertiserId,
-        currency,
-        status: 'confirmed',
-      },
-      _sum: { amountMinor: true },
-    });
-    let credits = 0;
-    let debits = 0;
-    for (const row of sums) {
-      if (row.entryType === 'credit') credits += row._sum.amountMinor ?? 0;
-      if (row.entryType === 'debit') debits += row._sum.amountMinor ?? 0;
-    }
-    return credits - debits;
   }
 
   async rejectCampaign(campaignId: string, reviewerId: string, reason: string) {
@@ -497,7 +594,10 @@ export class AdminService {
       },
     });
     if (result.count === 0) {
-      const existing = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId }, select: { status: true } });
+      const existing = await this.prisma.payoutRequest.findUnique({
+        where: { id: payoutId },
+        select: { status: true },
+      });
       throw new BadRequestException(
         existing
           ? `Payout cannot be approved from status '${existing.status}'`
@@ -532,7 +632,10 @@ export class AdminService {
       return { flipped: true as const };
     });
     if (!result.flipped) {
-      const existing = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId }, select: { status: true } });
+      const existing = await this.prisma.payoutRequest.findUnique({
+        where: { id: payoutId },
+        select: { status: true },
+      });
       throw new BadRequestException(
         existing
           ? `Payout cannot be rejected from status '${existing.status}'`
@@ -546,7 +649,10 @@ export class AdminService {
     return this.payoutService.processPayout(payoutId);
   }
 
-  async markPayoutPaid(payoutId: string, data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string }) {
+  async markPayoutPaid(
+    payoutId: string,
+    data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string },
+  ) {
     // The DTO carries amountMinor + currency so the admin's body can be
     // cross-checked against the payout's stored values before flipping it to
     // `paid`. Previously these fields were dropped silently — a transposed
@@ -576,7 +682,10 @@ export class AdminService {
     const where: Prisma.FraudFlagWhereInput = {};
     // Support comma-separated statuses: "open,reviewing" or "resolved_valid,resolved_invalid"
     if (params.status) {
-      const statuses = params.status.split(',').map((s) => s.trim()).filter(Boolean);
+      const statuses = params.status
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (statuses.length === 1) {
         where.status = statuses[0] as FraudFlagStatus;
       } else if (statuses.length > 1) {
@@ -623,22 +732,23 @@ export class AdminService {
   }
 
   async getFraudStats() {
-    const [
-      byStatus,
-      bySeverity,
-      byFlagType,
-      total,
-      resolved7d,
-      resolvedFlags,
-    ] = await Promise.all([
+    const [byStatus, bySeverity, byFlagType, total, resolved7d, resolvedFlags] = await Promise.all([
       Promise.all(
-        (['open', 'reviewing', 'resolved_valid', 'resolved_invalid', 'escalated'] as FraudFlagStatus[]).map((status) =>
-          this.prisma.fraudFlag.count({ where: { status } }),
-        ),
+        (
+          [
+            'open',
+            'reviewing',
+            'resolved_valid',
+            'resolved_invalid',
+            'escalated',
+          ] as FraudFlagStatus[]
+        ).map((status) => this.prisma.fraudFlag.count({ where: { status } })),
       ),
       Promise.all(
         (['critical', 'high', 'medium', 'low'] as FraudSeverity[]).map((severity) =>
-          this.prisma.fraudFlag.count({ where: { severity, status: { in: ['open', 'reviewing'] as FraudFlagStatus[] } } }),
+          this.prisma.fraudFlag.count({
+            where: { severity, status: { in: ['open', 'reviewing'] as FraudFlagStatus[] } },
+          }),
         ),
       ),
       this.prisma.fraudFlag.groupBy({
@@ -665,9 +775,8 @@ export class AdminService {
     const [open, reviewing, resolvedValid, resolvedInvalid, escalated] = byStatus;
     const [critical, high, medium, low] = bySeverity;
     const totalResolved = resolvedValid + resolvedInvalid;
-    const escalationRate = totalResolved > 0
-      ? Math.round((resolvedValid / totalResolved) * 100)
-      : 0;
+    const escalationRate =
+      totalResolved > 0 ? Math.round((resolvedValid / totalResolved) * 100) : 0;
 
     // Calculate average resolution time in minutes (in-memory)
     let avgResolutionMins = 0;
@@ -703,7 +812,15 @@ export class AdminService {
     return this.fraudService.resolveFlag(flagId, reviewerId, isValid, note);
   }
 
-  async getAuditLog(params: { actorId?: string; actorRole?: string; targetType?: string; from?: string; to?: string; page?: number; limit?: number }) {
+  async getAuditLog(params: {
+    actorId?: string;
+    actorRole?: string;
+    targetType?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }) {
     return this.audit.query(params);
   }
 
@@ -814,7 +931,11 @@ export class AdminService {
     expiresInMinutes?: number;
   }) {
     const expiresInMinutes = params.expiresInMinutes ?? DEFAULT_DEVICE_RECOVERY_TOKEN_MINUTES;
-    if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 5 || expiresInMinutes > MAX_DEVICE_RECOVERY_TOKEN_MINUTES) {
+    if (
+      !Number.isInteger(expiresInMinutes) ||
+      expiresInMinutes < 5 ||
+      expiresInMinutes > MAX_DEVICE_RECOVERY_TOKEN_MINUTES
+    ) {
       throw new BadRequestException(
         `expiresInMinutes must be an integer between 5 and ${MAX_DEVICE_RECOVERY_TOKEN_MINUTES}`,
       );
@@ -847,7 +968,9 @@ export class AdminService {
       throw new BadRequestException('Device recovery is unavailable for this account status');
     }
     if (!device.eventSecret) {
-      throw new BadRequestException('Legacy devices without a per-device secret can re-register without a support token');
+      throw new BadRequestException(
+        'Legacy devices without a per-device secret can re-register without a support token',
+      );
     }
 
     const recoverySupportToken = crypto.randomBytes(32).toString('base64url');
@@ -905,7 +1028,12 @@ export class AdminService {
 
   // ── Recovery Debt Operations ──
 
-  async getRecoveryDebtCases(params: { page?: number; limit?: number; minAmountMinor?: number; currency?: string }) {
+  async getRecoveryDebtCases(params: {
+    page?: number;
+    limit?: number;
+    minAmountMinor?: number;
+    currency?: string;
+  }) {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(100, Math.max(1, params.limit ?? 20));
     const minAmountMinor = Math.max(1, params.minAmountMinor ?? 1);
@@ -928,16 +1056,14 @@ export class AdminService {
 
     const creditByUserCurrency = new Map<string, number>();
     for (const credit of creditGroups) {
-      creditByUserCurrency.set(
-        `${credit.userId}:${credit.currency}`,
-        credit._sum.amountMinor ?? 0,
-      );
+      creditByUserCurrency.set(`${credit.userId}:${credit.currency}`, credit._sum.amountMinor ?? 0);
     }
 
     const allDebtRows = debitGroups
       .map((debit) => {
         const debitMinor = debit._sum.amountMinor ?? 0;
-        const confirmedCreditMinor = creditByUserCurrency.get(`${debit.userId}:${debit.currency}`) ?? 0;
+        const confirmedCreditMinor =
+          creditByUserCurrency.get(`${debit.userId}:${debit.currency}`) ?? 0;
         const outstandingDebtMinor = Math.max(0, debitMinor - confirmedCreditMinor);
         return {
           userId: debit.userId,
@@ -949,24 +1075,28 @@ export class AdminService {
         };
       })
       .filter((row) => row.outstandingDebtMinor >= minAmountMinor)
-      .sort((a, b) => b.outstandingDebtMinor - a.outstandingDebtMinor || a.userId.localeCompare(b.userId));
+      .sort(
+        (a, b) =>
+          b.outstandingDebtMinor - a.outstandingDebtMinor || a.userId.localeCompare(b.userId),
+      );
 
     const total = allDebtRows.length;
     const rows = allDebtRows.slice((page - 1) * limit, page * limit);
     const userIds = Array.from(new Set(rows.map((row) => row.userId)));
     const currencies = Array.from(new Set(rows.map((row) => row.currency)));
-    const [users, cases] = userIds.length > 0
-      ? await Promise.all([
-        this.prisma.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, email: true, name: true, status: true, trustLevel: true },
-        }),
-        this.prisma.recoveryDebtCase.findMany({
-          where: { userId: { in: userIds }, currency: { in: currencies } },
-          orderBy: { updatedAt: 'desc' },
-        }),
-      ])
-      : [[], []];
+    const [users, cases] =
+      userIds.length > 0
+        ? await Promise.all([
+            this.prisma.user.findMany({
+              where: { id: { in: userIds } },
+              select: { id: true, email: true, name: true, status: true, trustLevel: true },
+            }),
+            this.prisma.recoveryDebtCase.findMany({
+              where: { userId: { in: userIds }, currency: { in: currencies } },
+              orderBy: { updatedAt: 'desc' },
+            }),
+          ])
+        : [[], []];
 
     const userById = new Map(users.map((user) => [user.id, user]));
     const latestCaseByUserCurrency = new Map<string, (typeof cases)[number]>();
@@ -981,7 +1111,8 @@ export class AdminService {
       items: rows.map((row) => ({
         ...row,
         user: userById.get(row.userId) ?? null,
-        latestCase: latestCaseByUserCurrency.get(recoveryDebtCaseKey(row.userId, row.currency)) ?? null,
+        latestCase:
+          latestCaseByUserCurrency.get(recoveryDebtCaseKey(row.userId, row.currency)) ?? null,
       })),
       total,
       page,
@@ -1004,10 +1135,13 @@ export class AdminService {
     });
     if (!user) throw new BadRequestException('User not found');
     if (user.role !== 'developer') {
-      throw new BadRequestException('Recovery debt cases can only be opened for developer accounts');
+      throw new BadRequestException(
+        'Recovery debt cases can only be opened for developer accounts',
+      );
     }
 
-    const requestedCurrency = normalizeOptionalCurrency(params.currency) ?? DEFAULT_RECOVERY_DEBT_CURRENCY;
+    const requestedCurrency =
+      normalizeOptionalCurrency(params.currency) ?? DEFAULT_RECOVERY_DEBT_CURRENCY;
     const debt = await this.getOutstandingRecoveryDebt(params.userId, requestedCurrency);
     if (debt.outstandingDebtMinor <= 0) {
       throw new BadRequestException('User has no outstanding recovery debt');
@@ -1023,57 +1157,60 @@ export class AdminService {
       );
     }
 
-    const status = params.status === 'in_collections'
-      ? RecoveryDebtCaseStatus.in_collections
-      : RecoveryDebtCaseStatus.open;
+    const status =
+      params.status === 'in_collections'
+        ? RecoveryDebtCaseStatus.in_collections
+        : RecoveryDebtCaseStatus.open;
     const note = sanitizeOptionalString(params.note);
     const externalReference = sanitizeOptionalString(params.externalReference);
 
-    const debtCase = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.recoveryDebtCase.findFirst({
-        where: {
-          userId: params.userId,
-          currency: debt.currency,
-          status: { in: ACTIVE_RECOVERY_DEBT_CASE_STATUSES },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+    const debtCase = await this.prisma
+      .$transaction(async (tx) => {
+        const existing = await tx.recoveryDebtCase.findFirst({
+          where: {
+            userId: params.userId,
+            currency: debt.currency,
+            status: { in: ACTIVE_RECOVERY_DEBT_CASE_STATUSES },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
 
-      if (existing) {
-        return tx.recoveryDebtCase.update({
-          where: { id: existing.id },
+        if (existing) {
+          return tx.recoveryDebtCase.update({
+            where: { id: existing.id },
+            data: {
+              status,
+              amountMinor: debt.outstandingDebtMinor,
+              currency: debt.currency,
+              externalReference,
+              note,
+              openedByUserId: params.reviewerId,
+              resolvedByUserId: null,
+              resolvedAt: null,
+            },
+          });
+        }
+
+        return tx.recoveryDebtCase.create({
           data: {
+            userId: params.userId,
             status,
             amountMinor: debt.outstandingDebtMinor,
             currency: debt.currency,
             externalReference,
             note,
             openedByUserId: params.reviewerId,
-            resolvedByUserId: null,
-            resolvedAt: null,
           },
         });
-      }
-
-      return tx.recoveryDebtCase.create({
-        data: {
-          userId: params.userId,
-          status,
-          amountMinor: debt.outstandingDebtMinor,
-          currency: debt.currency,
-          externalReference,
-          note,
-          openedByUserId: params.reviewerId,
-        },
+      })
+      .catch((err: unknown) => {
+        if (getErrorCode(err) === 'P2002') {
+          throw new BadRequestException(
+            'An active recovery debt case already exists for this user and currency. Reload and update the existing case.',
+          );
+        }
+        throw err;
       });
-    }).catch((err: unknown) => {
-      if (getErrorCode(err) === 'P2002') {
-        throw new BadRequestException(
-          'An active recovery debt case already exists for this user and currency. Reload and update the existing case.',
-        );
-      }
-      throw err;
-    });
 
     await this.audit.log({
       actorId: params.reviewerId,
@@ -1159,7 +1296,10 @@ export class AdminService {
     return { case: updated, debt };
   }
 
-  private async getOutstandingRecoveryDebt(userId: string, currency = DEFAULT_RECOVERY_DEBT_CURRENCY) {
+  private async getOutstandingRecoveryDebt(
+    userId: string,
+    currency = DEFAULT_RECOVERY_DEBT_CURRENCY,
+  ) {
     const [confirmedDebits, confirmedCredits] = await Promise.all([
       this.prisma.earningsLedger.aggregate({
         where: { userId, currency, status: 'confirmed', entryType: 'debit' },
@@ -1233,7 +1373,10 @@ export class AdminService {
       GROUP BY day
       ORDER BY day
     `;
-    const signupsByDay = new Map<string, { total: number; developer: number; advertiser: number }>();
+    const signupsByDay = new Map<
+      string,
+      { total: number; developer: number; advertiser: number }
+    >();
     let totalSignups = 0;
     for (const sig of dailySignups) {
       const dayStr = sig.day.toISOString().slice(0, 10);
@@ -1281,9 +1424,7 @@ export class AdminService {
     }
 
     // ── Daily advertiser spend (database aggregated) ──
-    const dailySpend = await this.prisma.$queryRaw<
-      { day: Date; spend: bigint }[]
-    >`
+    const dailySpend = await this.prisma.$queryRaw<{ day: Date; spend: bigint }[]>`
       SELECT date_trunc('day', "createdAt") AS day,
              COALESCE(SUM("amountMinor"), 0)::int AS spend
       FROM advertiser_ledger
@@ -1312,22 +1453,34 @@ export class AdminService {
     const [devCount, advCount, adminCount] = await Promise.all([
       this.prisma.user.count({ where: { role: 'developer', status: 'active' } }),
       this.prisma.user.count({ where: { role: 'advertiser', status: 'active' } }),
-      this.prisma.user.count({ where: { role: { in: ['admin', 'super_admin'] as const }, status: 'active' } }),
+      this.prisma.user.count({
+        where: { role: { in: ['admin', 'super_admin'] as const }, status: 'active' },
+      }),
     ]);
 
     // ── Payout stats ──
-    const [
-      totalPayouts,
-      pendingPayouts,
-      payoutSum,
-    ] = await Promise.all([
+    const [totalPayouts, pendingPayouts, payoutSum] = await Promise.all([
       this.prisma.payoutRequest.count(),
       this.prisma.payoutRequest.count({ where: { status: { in: ['requested', 'under_review'] } } }),
-      this.prisma.earningsLedger.aggregate({ where: { status: 'paid', entryType: 'credit', currency: 'USD' }, _sum: { amountMinor: true } }),
+      this.prisma.earningsLedger.aggregate({
+        where: { status: 'paid', entryType: 'credit', currency: 'USD' },
+        _sum: { amountMinor: true },
+      }),
     ]);
 
     // ── Fill in daily time-series (fill missing days with zeros) ──
-    const daily: { date: string; impressions: number; billableImpressions: number; signups: number; developerSignups: number; advertiserSignups: number; estimatedRevenueMinor: number; confirmedRevenueMinor: number; paidRevenueMinor: number; advertiserSpendMinor: number }[] = [];
+    const daily: {
+      date: string;
+      impressions: number;
+      billableImpressions: number;
+      signups: number;
+      developerSignups: number;
+      advertiserSignups: number;
+      estimatedRevenueMinor: number;
+      confirmedRevenueMinor: number;
+      paidRevenueMinor: number;
+      advertiserSpendMinor: number;
+    }[] = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
       const dayStr = floorDay(d);
@@ -1350,9 +1503,18 @@ export class AdminService {
 
     // ── Period-over-period comparison ──
     const [prevImpressions, prevSignups, prevRevenue] = await Promise.all([
-      this.prisma.adImpression.count({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart } } }),
+      this.prisma.adImpression.count({
+        where: { createdAt: { gte: prevPeriodStart, lt: periodStart } },
+      }),
       this.prisma.user.count({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart } } }),
-      this.prisma.earningsLedger.aggregate({ where: { createdAt: { gte: prevPeriodStart, lt: periodStart }, entryType: 'credit', currency: 'USD' }, _sum: { amountMinor: true } }),
+      this.prisma.earningsLedger.aggregate({
+        where: {
+          createdAt: { gte: prevPeriodStart, lt: periodStart },
+          entryType: 'credit',
+          currency: 'USD',
+        },
+        _sum: { amountMinor: true },
+      }),
     ]);
 
     // A-007: totals now computed from the database-aggregated data instead of
@@ -1442,7 +1604,12 @@ export class AdminService {
 
   // ── Webhooks ──
 
-  async getWebhookEvents(params: { provider?: string; processingStatus?: string; page?: number; limit?: number }) {
+  async getWebhookEvents(params: {
+    provider?: string;
+    processingStatus?: string;
+    page?: number;
+    limit?: number;
+  }) {
     const where: Prisma.WebhookEventWhereInput = {};
     if (params.provider) where.provider = params.provider;
     if (params.processingStatus) where.processingStatus = params.processingStatus;
@@ -1545,10 +1712,7 @@ export class AdminService {
    * bucket debit so the books balance. Idempotent: an already-`confirmed` row
    * returns the existing row without re-writing the platform entry.
    */
-  async confirmArchiveRefund(params: {
-    entryId: string;
-    stripeRefundPaymentIntentId: string;
-  }) {
+  async confirmArchiveRefund(params: { entryId: string; stripeRefundPaymentIntentId: string }) {
     const stripeRefundPaymentIntentId = params.stripeRefundPaymentIntentId.trim();
     if (!stripeRefundPaymentIntentId) {
       throw new BadRequestException('stripeRefundPaymentIntentId is required');
@@ -1620,7 +1784,10 @@ function hashDeviceRecoveryToken(token: string): string {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
 }
 
-function normalizeOptionalToolType(toolType?: string, throwOnInvalid = true): ToolTypeEnum | undefined {
+function normalizeOptionalToolType(
+  toolType?: string,
+  throwOnInvalid = true,
+): ToolTypeEnum | undefined {
   const normalized = toolType?.trim();
   if (!normalized) return undefined;
   if ((Object.values(ToolTypeEnum) as string[]).includes(normalized)) {
@@ -1662,7 +1829,9 @@ function recoveryDebtCaseKey(userId: string, currency: string): string {
   return `${userId}:${currency}`;
 }
 
-function toTerminalRecoveryDebtStatus(status: 'recovered' | 'written_off' | 'closed'): RecoveryDebtCaseStatus {
+function toTerminalRecoveryDebtStatus(
+  status: 'recovered' | 'written_off' | 'closed',
+): RecoveryDebtCaseStatus {
   switch (status) {
     case 'recovered':
       return RecoveryDebtCaseStatus.recovered;

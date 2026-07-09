@@ -62,10 +62,14 @@ export const developerApi = {
   getTrust: () => api.get('/developer/trust'),
   updateSettings: (data: Record<string, unknown>) => api.patch('/developer/settings', data),
   exportData: () => api.post('/developer/export-data'),
-  deleteAccount: (data: { confirmation: 'DELETE_MY_ACCOUNT'; currentPassword?: string; googleIdToken?: string }) =>
-    api.post('/developer/delete-account', data),
+  deleteAccount: (data: {
+    confirmation: 'DELETE_MY_ACCOUNT';
+    currentPassword?: string;
+    googleIdToken?: string;
+  }) => api.post('/developer/delete-account', data),
   listApiKeys: () => api.get('/developer/api-keys'),
-  createLedgerApiKey: () => api.post('/developer/api-keys', { scopes: [...DEVELOPER_LEDGER_API_KEY_SCOPES] }),
+  createLedgerApiKey: () =>
+    api.post('/developer/api-keys', { scopes: [...DEVELOPER_LEDGER_API_KEY_SCOPES] }),
   createApiKey: (data: { scopes: string[]; advertiserId?: string; expiresAt?: string }) =>
     api.post('/developer/api-keys', data),
   revokeApiKey: (id: string) => api.delete(`/developer/api-keys/${id}`),
@@ -75,8 +79,11 @@ export const advertiserApi = {
   getDashboard: () => api.get('/advertiser/dashboard'),
   getBilling: () => api.get('/advertiser/billing'),
   exportData: () => api.post('/advertiser/export-data'),
-  deleteAccount: (data: { confirmation: 'DELETE_MY_ACCOUNT'; currentPassword?: string; googleIdToken?: string }) =>
-    api.post('/advertiser/delete-account', data),
+  deleteAccount: (data: {
+    confirmation: 'DELETE_MY_ACCOUNT';
+    currentPassword?: string;
+    googleIdToken?: string;
+  }) => api.post('/advertiser/delete-account', data),
   createCampaign: (data: Record<string, unknown>) =>
     api.post('/advertiser/campaigns', data).then((r) => ok(CreateCampaignResponse.parse(r.data))),
   updateCampaign: (id: string, data: Record<string, unknown>) =>
@@ -85,6 +92,10 @@ export const advertiserApi = {
   resetCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/reset`),
   pauseCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/pause`),
   resumeCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/resume`),
+  archiveCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/archive`),
+  listCampaigns: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get('/advertiser/campaigns', { params }),
+  getCampaign: (id: string) => api.get(`/advertiser/campaigns/${id}`),
   getReports: (params?: Record<string, unknown>) => api.get('/advertiser/reports', { params }),
   createDepositSession: (amountMinor: number, currency?: string) =>
     api.post('/advertiser/deposit-session', { amountMinor, currency }),
@@ -93,12 +104,14 @@ export const advertiserApi = {
 export const adminApi = {
   getOverview: () => api.get('/admin/overview'),
   getUsers: (params?: Record<string, unknown>) => api.get('/admin/users', { params }),
-  setUserStatus: (id: string, status: string) =>
-    api.post(`/admin/users/${id}/status`, { status }),
+  setUserStatus: (id: string, status: string) => api.post(`/admin/users/${id}/status`, { status }),
   eraseUser: (id: string) => api.post(`/admin/users/${id}/erase`),
-  getPendingCampaigns: () => api.get('/admin/campaigns/pending'),
-  approveCampaign: (id: string, reason?: string) => api.post(`/admin/campaigns/${id}/approve`, { reason }),
-  rejectCampaign: (id: string, reason: string) => api.post(`/admin/campaigns/${id}/reject`, { reason }),
+  getPendingCampaigns: (params?: Record<string, unknown>) =>
+    api.get('/admin/campaigns/pending', { params }),
+  approveCampaign: (id: string, reason?: string) =>
+    api.post(`/admin/campaigns/${id}/approve`, { reason }),
+  rejectCampaign: (id: string, reason: string) =>
+    api.post(`/admin/campaigns/${id}/reject`, { reason }),
   getPendingPayouts: () => api.get('/admin/payouts/pending'),
   approvePayout: (id: string, note?: string, approvedAmountMinor?: number) =>
     api.post(`/admin/payouts/${id}/approve`, {
@@ -114,11 +127,8 @@ export const adminApi = {
   getMoneyIntegrity: () => api.get('/admin/money-integrity'),
   getFraudFlags: (params?: Record<string, unknown>) => api.get('/admin/fraud', { params }),
   getFraudStats: () => api.get('/admin/fraud/stats'),
-  resolveFraudFlag: (
-    id: string,
-    decision: 'confirmed' | 'invalid',
-    note?: string,
-  ) => api.post(`/admin/fraud/${id}/resolve`, { decision, note }),
+  resolveFraudFlag: (id: string, decision: 'confirmed' | 'invalid', note?: string) =>
+    api.post(`/admin/fraud/${id}/resolve`, { decision, note }),
   getRecoveryDebtCases: (params?: Record<string, unknown>) =>
     api.get('/admin/recovery-debt', { params }),
   openRecoveryDebtCase: (
@@ -138,8 +148,7 @@ export const adminApi = {
       note?: string;
     },
   ) => api.post(`/admin/recovery-debt/cases/${id}/resolve`, data),
-  recomputeTrustScore: (userId: string) =>
-    api.post(`/admin/fraud/compute-trust/${userId}`),
+  recomputeTrustScore: (userId: string) => api.post(`/admin/fraud/compute-trust/${userId}`),
   getAuditLog: (params?: Record<string, unknown>) => api.get('/admin/audit-log', { params }),
   getMetrics: (days?: number) => api.get('/admin/metrics', { params: { days } }),
   getToolIntegrations: () => api.get('/admin/tools'),
@@ -170,12 +179,12 @@ export const payoutApi = {
 };
 
 export const ledgerApi = {
-  getBalance: () =>
-    api.get('/ledger/balance').then((r) => ok(LedgerBalanceResponse.parse(r.data))),
+  getBalance: () => api.get('/ledger/balance').then((r) => ok(LedgerBalanceResponse.parse(r.data))),
   getBreakdown: () => api.get('/ledger/breakdown'),
   getHistory: (params?: Record<string, unknown>) => api.get('/ledger/history', { params }),
   getAdminBreakdown: () => api.get('/ledger/admin/breakdown'),
-  getAdminHistory: (params?: Record<string, unknown>) => api.get('/ledger/admin/history', { params }),
+  getAdminHistory: (params?: Record<string, unknown>) =>
+    api.get('/ledger/admin/history', { params }),
 };
 
 export const referralApi = {
@@ -197,7 +206,13 @@ export const campaignApi = {
     api.post(`/campaigns/creatives/${creativeId}/reject`, { reason }),
   updateCreative: (
     creativeId: string,
-    data: { title?: string; sponsoredMessage?: string; destinationUrl?: string; displayDomain?: string; ctaText?: string | null },
+    data: {
+      title?: string;
+      sponsoredMessage?: string;
+      destinationUrl?: string;
+      displayDomain?: string;
+      ctaText?: string | null;
+    },
   ) => api.patch(`/campaigns/creatives/${creativeId}`, data),
 };
 

@@ -1,4 +1,17 @@
-import { IsArray, IsDateString,IsEnum, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 import { ToolType } from '@waitlayer/shared';
 
@@ -22,11 +35,21 @@ export class AdRequestDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @Matches(/^[a-z0-9][a-z0-9-]*$/, {
+    each: true,
+    message: 'allowedCategories entries must be lowercase slug strings (letters, numbers, hyphens)',
+  })
+  @MaxLength(64, { each: true })
   allowedCategories?: string[];
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @Matches(/^[a-z0-9][a-z0-9-]*$/, {
+    each: true,
+    message: 'blockedCategories entries must be lowercase slug strings (letters, numbers, hyphens)',
+  })
+  @MaxLength(64, { each: true })
   blockedCategories?: string[];
 
   // Optional ISO-3166-1 alpha-2 country code, supplied by the client so

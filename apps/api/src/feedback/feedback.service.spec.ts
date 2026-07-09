@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
@@ -6,48 +6,62 @@ import { CreateFeedbackDto } from './dto/feedback.dto';
 import { FeedbackService } from './feedback.service';
 
 function makeService() {
-  const audit = {
-    log: vi.fn().mockResolvedValue(undefined),
-  };
-  return { audit, service: new FeedbackService(audit as unknown as AuditService) };
+  const auditLog = vi.fn();
+  const audit = { log: auditLog } as unknown as AuditService;
+  const service = new FeedbackService(audit);
+  return { service, auditLog };
 }
 
-describe('FeedbackService', () => {
-  let ctx: ReturnType<typeof makeService>;
-  beforeEach(() => {
-    ctx = makeService();
+describe('FeedbackService (A-078)', () => {
+  it('persists the readable message body in the audit afterSnap', async () => {
+    const { service, auditLog } = makeService();
+    const dto: CreateFeedbackDto = {
+      message: '  The export button is broken on Safari  ',
+      rating: 4,
+      category: 'bug',
+      email: 'A@B.com',
+    };
+
+    const res = await service.submitFeedback(dto, {
+      ip: '1.2.3.4',
+      userAgent: 'x',
+      userId: 'u1',
+    });
+
+    expect(res.received).toBe(true);
+    expect(auditLog).toHaveBeenCalledTimes(1);
+
+    const snap = auditLog.mock.calls[0][0].afterSnap;
+    // The actual message body must be retained (trimmed), not just metadata.
+    expect(snap.message).toBe('The export button is broken on Safari');
+    expect(snap.contactEmail).toBe('a@b.com');
+    expect(snap.hasEmail).toBe(true);
+    expect(snap.length).toBe(dto.message.trim().length);
   });
 
-  it('accepts a valid message and records an audit event', async () => {
-    const res = await ctx.service.submitFeedback(
-      { message: 'Love the product!' } as CreateFeedbackDto,
-      { ip: '1.2.3.4', userId: null },
-    );
-    expect(res).toEqual({ received: true });
-    expect(ctx.audit.log).toHaveBeenCalledOnce();
-  });
-
-  it('rejects honeypot-filled submissions as spam', async () => {
+  it('rejects too-short messages', async () => {
+    const { service } = makeService();
     await expect(
-      ctx.service.submitFeedback(
-        { message: 'buy cheap things', company: 'spam-inc' } as CreateFeedbackDto,
-        { ip: '1.2.3.4' },
+      service.submitFeedback({ message: 'hi' } as CreateFeedbackDto, {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('treats a missing email as no contact without error', async () => {
+    const { service, auditLog } = makeService();
+    const dto: CreateFeedbackDto = { message: 'Reasonable feedback text here', rating: 5 };
+    await service.submitFeedback(dto, { userId: 'u2' });
+    const snap = auditLog.mock.calls[0][0].afterSnap;
+    expect(snap.contactEmail).toBeNull();
+    expect(snap.hasEmail).toBe(false);
+  });
+
+  it('flags honeypot submissions as spam', async () => {
+    const { service } = makeService();
+    await expect(
+      service.submitFeedback(
+        { message: 'legit-looking message body', company: 'bot' } as CreateFeedbackDto,
+        {},
       ),
-    ).rejects.toThrow(BadRequestException);
-    expect(ctx.audit.log).not.toHaveBeenCalled();
-  });
-
-  it('rejects out-of-range ratings', async () => {
-    await expect(
-      ctx.service.submitFeedback({ message: 'great', rating: 9 } as CreateFeedbackDto, {
-        ip: '1.2.3.4',
-      }),
-    ).rejects.toThrow(BadRequestException);
-  });
-
-  it('rejects empty messages', async () => {
-    await expect(
-      ctx.service.submitFeedback({ message: '  ' } as CreateFeedbackDto, { ip: '1.2.3.4' }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

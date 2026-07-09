@@ -32,11 +32,10 @@ export default function FeedbackPage() {
       setRating(null);
       success('Thanks for your feedback!');
     } catch {
-      // Best-effort: if the network/API is unavailable, still thank the user
-      // locally but surface that it may not have reached the team.
-      setSent(true);
-      setMessage('');
-      setRating(null);
+      // A-078: a failed submit must NOT show the "recorded" success state and
+      // must NOT discard the user's draft. Keep the message + rating so the
+      // user can retry; only surface a retryable error.
+      setSent(false);
       showError('We could not deliver your feedback just now. Please try again later.');
     } finally {
       setSubmitting(false);
@@ -53,8 +52,8 @@ export default function FeedbackPage() {
           Share your feedback
         </h1>
         <p className="text-surface-500 text-[14px] mb-10">
-          We read every message. Tell us what works, what doesn&rsquo;t, or what
-          you&rsquo;d like to see next.
+          We read every message. Tell us what works, what doesn&rsquo;t, or what you&rsquo;d like to
+          see next.
         </p>
 
         {sent ? (

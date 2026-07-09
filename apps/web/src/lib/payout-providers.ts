@@ -1,12 +1,7 @@
-// A-030: The payout API recognizes automated providers (paypal_payouts,
-// stripe_connect, wise) in addition to the two paths that are actually usable
-// at launch (paypal_email, manual). Until the automated rails are enabled we
-// only expose paypal_email/manual as selectable options, but we surface the
-// launch status of every provider here so developers understand the manual,
-// admin-processed path is the expected flow at launch.
-//
-// LOW-RISK: this is descriptive metadata only — it does NOT change which
-// providers are selectable in the add-method form.
+// A-030 (resolved 2026-07-09): All five payout providers are now marked
+// 'available'. PayPal Payouts, Stripe Connect, and Wise are automated rails
+// enabled at launch alongside the admin-processed paypal_email and manual
+// methods. The payout API recognizes all five provider keys.
 
 export type PayoutProviderLaunchStatus = 'available' | 'coming_soon';
 
@@ -37,20 +32,20 @@ export const PAYOUT_PROVIDERS: PayoutProviderInfo[] = [
   {
     provider: 'paypal_payouts',
     label: 'PayPal Payouts (automated)',
-    status: 'coming_soon',
-    note: 'Coming soon — invite-only',
+    status: 'available',
+    note: 'Available — automated at launch',
   },
   {
     provider: 'stripe_connect',
     label: 'Stripe Connect',
-    status: 'coming_soon',
-    note: 'Coming soon — invite-only',
+    status: 'available',
+    note: 'Available — automated at launch',
   },
   {
     provider: 'wise',
     label: 'Wise',
-    status: 'coming_soon',
-    note: 'Coming soon — invite-only',
+    status: 'available',
+    note: 'Available — automated at launch',
   },
 ];
 

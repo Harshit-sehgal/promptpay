@@ -15,6 +15,22 @@ const mockPrisma = {
   apiKey: {
     updateMany: vi.fn(),
   },
+  earningsLedger: {
+    findMany: vi.fn(),
+    groupBy: vi.fn(),
+  },
+  adImpression: {
+    findMany: vi.fn(),
+  },
+  adClick: {
+    findMany: vi.fn(),
+  },
+  payoutRequest: {
+    findMany: vi.fn(),
+  },
+  consent: {
+    findMany: vi.fn(),
+  },
   $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
 };
 
@@ -37,7 +53,13 @@ describe('DeveloperService', () => {
     mockPrisma.user.update.mockResolvedValue({ id: 'user_123', status: 'deleted' });
     mockPrisma.session.updateMany.mockResolvedValue({ count: 2 });
     mockPrisma.apiKey.updateMany.mockResolvedValue({ count: 1 });
-    service = new DeveloperService(mockPrisma as any, mockFraud, mockAudit, mockGoogleVerifier, mockEmail);
+    service = new DeveloperService(
+      mockPrisma as any,
+      mockFraud,
+      mockAudit,
+      mockGoogleVerifier,
+      mockEmail,
+    );
   });
 
   describe('deleteAccount', () => {
@@ -63,10 +85,12 @@ describe('DeveloperService', () => {
         }),
       ).rejects.toThrow(UnauthorizedException);
       expect(mockPrisma.user.update).not.toHaveBeenCalled();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'delete_account_reauth_failed',
-        afterSnap: { reason: 'bad_password' },
-      }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'delete_account_reauth_failed',
+          afterSnap: { reason: 'bad_password' },
+        }),
+      );
     });
 
     it('deletes a password-backed account after current-password step-up', async () => {
@@ -83,11 +107,13 @@ describe('DeveloperService', () => {
       });
 
       expect(mockPrisma.user.update).toHaveBeenCalled();
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({
-        actorId: 'user_123',
-        actorRole: 'developer',
-        action: 'delete_account',
-      }));
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorId: 'user_123',
+          actorRole: 'developer',
+          action: 'delete_account',
+        }),
+      );
     });
 
     it('deletes a Google-linked passwordless account after matching Google re-authentication', async () => {
@@ -154,6 +180,93 @@ describe('DeveloperService', () => {
         targetType: 'user',
         targetId: 'user_123',
       });
+    });
+  });
+
+  describe('exportData', () => {
+    it('adds explicit truncation metadata for capped high-volume collections', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_123', email: 'dev@test.com' });
+      mockPrisma.earningsLedger.findMany.mockResolvedValue(
+        Array.from({ length: 10001 }, (_, i) => ({ id: `earn_${i}` })),
+      );
+      mockPrisma.adImpression.findMany.mockResolvedValue(
+        Array.from({ length: 1001 }, (_, i) => ({ id: `imp_${i}` })),
+      );
+      mockPrisma.adClick.findMany.mockResolvedValue([{ id: 'click_1' }]);
+      mockPrisma.payoutRequest.findMany.mockResolvedValue(
+        Array.from({ length: 1001 }, (_, i) => ({ id: `payout_${i}` })),
+      );
+      mockPrisma.consent.findMany.mockResolvedValue([{ id: 'consent_1' }]);
+
+      const exported = await service.exportData('user_123');
+
+      expect(mockPrisma.earningsLedger.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 10001 }),
+      );
+      expect(mockPrisma.adImpression.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 1001, orderBy: { createdAt: 'desc' } }),
+      );
+      expect(exported.earnings).toHaveLength(10000);
+      expect(exported.impressions).toHaveLength(1000);
+      expect(exported.clicks).toHaveLength(1);
+      expect(exported.payouts).toHaveLength(1000);
+      expect(exported.exportMeta).toMatchObject({
+        exportType: 'self_service_recent_activity',
+        complete: false,
+        truncated: true,
+        collections: {
+          earnings: { limit: 10000, returned: 10000, truncated: true },
+          impressions: { limit: 1000, returned: 1000, truncated: true },
+          clicks: { limit: 1000, returned: 1, truncated: false },
+          payouts: { limit: 1000, returned: 1000, truncated: true },
+        },
+      });
+      expect(exported.exportMeta.generatedAt).toEqual(expect.any(String));
+    });
+  });
+
+  describe('getEarningsSummary', () => {
+    it('aggregates ledger totals in the database instead of loading every row', async () => {
+      mockPrisma.earningsLedger.groupBy.mockResolvedValue([
+        {
+          status: 'estimated',
+          entryType: 'credit',
+          currency: 'USD',
+          _sum: { amountMinor: 125 },
+        },
+        {
+          status: 'confirmed',
+          entryType: 'credit',
+          currency: 'USD',
+          _sum: { amountMinor: 1000 },
+        },
+        {
+          status: 'confirmed',
+          entryType: 'debit',
+          currency: 'USD',
+          _sum: { amountMinor: 250 },
+        },
+        {
+          status: 'held',
+          entryType: 'credit',
+          currency: 'EUR',
+          _sum: { amountMinor: 300 },
+        },
+      ]);
+
+      const summary = await service.getEarningsSummary('user_123');
+
+      expect(mockPrisma.earningsLedger.groupBy).toHaveBeenCalledWith({
+        by: ['status', 'entryType', 'currency'],
+        where: { userId: 'user_123' },
+        _sum: { amountMinor: true },
+      });
+      expect(mockPrisma.earningsLedger.findMany).not.toHaveBeenCalled();
+      expect(summary.estimatedEarnings).toBe(125);
+      expect(summary.confirmedEarnings).toBe(750);
+      expect(summary.availableForPayout).toBe(750);
+      expect(summary.lifetimeEarnings).toBe(875);
+      expect(summary.heldEarningsByCurrency).toEqual({ EUR: 300 });
     });
   });
 });

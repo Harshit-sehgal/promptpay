@@ -36,6 +36,7 @@ export class FeedbackService {
     if (text.length < 3) {
       throw new BadRequestException('Feedback message is too short');
     }
+    const contactEmail = dto.email?.trim().toLowerCase() || null;
 
     await this.audit.log({
       actorId: meta.userId ?? 'anonymous',
@@ -46,14 +47,17 @@ export class FeedbackService {
       afterSnap: {
         category: dto.category ?? 'other',
         rating: dto.rating,
-        hasEmail: Boolean(dto.email),
+        message: text,
+        contactEmail,
+        hasEmail: Boolean(contactEmail),
         length: text.length,
         ip: meta.ip,
+        userAgent: meta.userAgent,
       },
     });
 
     this.logger.log(
-      `Feedback received (category=${dto.category ?? 'other'}, rating=${dto.rating ?? '-'}, contact=${dto.email ?? 'none'})`,
+      `Feedback received (category=${dto.category ?? 'other'}, rating=${dto.rating ?? '-'}, contact=${contactEmail ?? 'none'})`,
     );
 
     return { received: true };

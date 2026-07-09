@@ -14,6 +14,7 @@ function makePrisma() {
   // returned {count:0} for updateMany and null for findUnique, breaking the
   // unit tests.
   const prisma = {
+    user: { findUnique: vi.fn() },
     advertiser: { findUnique: vi.fn() },
     campaign: {
       findUnique: vi.fn(),
@@ -32,8 +33,9 @@ function makePrisma() {
       findMany: vi.fn(),
       groupBy: vi.fn(),
     },
-    advertiserLedger: { groupBy: vi.fn() },
-    adCreative: { updateMany: vi.fn() },
+    advertiserLedger: { groupBy: vi.fn(), findMany: vi.fn() },
+    adCreative: { updateMany: vi.fn(), findMany: vi.fn() },
+    consent: { findMany: vi.fn() },
     // A-068: daily trend uses $queryRaw for server-side day-bucket aggregation.
     $queryRaw: vi.fn(),
     $transaction: vi.fn(async (cb: any) => cb(prisma)),
@@ -69,6 +71,86 @@ describe('AdvertiserService.getDashboard CTR ratio (A-024)', () => {
     expect(dash.ctr).toBeCloseTo(0.01, 10);
     expect(dash.totalImpressions).toBe(100);
     expect(dash.totalClicks).toBe(1);
+  });
+
+  it('surfaces rejected campaign and creative reasons without leaking approval rows', async () => {
+    prisma.campaign.findMany.mockResolvedValue([
+      {
+        id: 'c1',
+        status: 'rejected',
+        creatives: [{ id: 'cr1', status: 'rejected', rejectionReason: 'Creative copy is unclear' }],
+        approvals: [{ reason: 'Campaign category is not eligible' }],
+      },
+    ]);
+
+    const dash = await service.getDashboard('adv-1');
+
+    expect(prisma.campaign.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          creatives: { select: { id: true, status: true, rejectionReason: true } },
+          approvals: expect.objectContaining({
+            where: { decision: 'rejected' },
+            take: 1,
+            select: { reason: true },
+          }),
+        }),
+      }),
+    );
+    expect(dash.campaigns[0]).toMatchObject({
+      id: 'c1',
+      status: 'rejected',
+      rejectionReason: 'Campaign category is not eligible',
+      creatives: [{ id: 'cr1', status: 'rejected', rejectionReason: 'Creative copy is unclear' }],
+    });
+    expect(dash.campaigns[0]).not.toHaveProperty('approvals');
+  });
+});
+
+describe('AdvertiserService.exportData truncation metadata (A-072)', () => {
+  let prisma: ReturnType<typeof makePrisma>;
+  let service: AdvertiserService;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    service = makeService(prisma);
+    prisma.advertiser.findUnique.mockResolvedValue({ id: 'adv-1', userId: 'user-1' });
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-1', email: 'adv@test.com' });
+    prisma.campaign.findMany.mockResolvedValue(
+      Array.from({ length: 1001 }, (_, i) => ({ id: `campaign_${i}` })),
+    );
+    prisma.adCreative.findMany.mockResolvedValue([{ id: 'creative_1' }]);
+    prisma.advertiserLedger.findMany.mockResolvedValue(
+      Array.from({ length: 10001 }, (_, i) => ({ id: `ledger_${i}` })),
+    );
+    prisma.consent.findMany.mockResolvedValue([{ id: 'consent_1' }]);
+  });
+
+  it('adds explicit truncation metadata for capped advertiser collections', async () => {
+    const exported = await service.exportData('user-1');
+
+    expect(prisma.campaign.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 1001, orderBy: { createdAt: 'desc' } }),
+    );
+    expect(prisma.adCreative.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 2001, orderBy: { createdAt: 'desc' } }),
+    );
+    expect(prisma.advertiserLedger.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 10001 }),
+    );
+    expect(exported.campaigns).toHaveLength(1000);
+    expect(exported.creatives).toHaveLength(1);
+    expect(exported.billingLedger).toHaveLength(10000);
+    expect(exported.exportMeta).toMatchObject({
+      exportType: 'self_service_recent_activity',
+      complete: false,
+      truncated: true,
+      collections: {
+        campaigns: { limit: 1000, returned: 1000, truncated: true },
+        creatives: { limit: 2000, returned: 1, truncated: false },
+        billingLedger: { limit: 10000, returned: 10000, truncated: true },
+      },
+    });
   });
 });
 
@@ -334,5 +416,133 @@ describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
     prisma.adCreative.updateMany.mockResolvedValue({ count: 1 });
     const resubmitted = await service.submitCampaign('c1', 'adv-1');
     expect(resubmitted.status).toBe('submitted');
+  });
+});
+
+describe('AdvertiserService.listCampaigns (A-074)', () => {
+  let prisma: ReturnType<typeof makePrisma>;
+  let service: AdvertiserService;
+  const base = {
+    id: 'c1',
+    name: 'A',
+    status: 'active',
+    bidType: 'cpm',
+    bidAmountMinor: 200,
+    budgetTotalMinor: 10000,
+    budgetSpentMinor: 0,
+    currency: 'USD',
+    creatives: [],
+    approvals: [],
+  };
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    service = makeService(prisma);
+  });
+
+  it('paginates and returns the total count without loading every campaign', async () => {
+    const all = Array.from({ length: 25 }, (_unused: number, i: number) => ({
+      ...base,
+      id: `c${i}`,
+    }));
+    prisma.campaign.findMany.mockImplementation((args: { skip?: number; take?: number }) => {
+      const skip = args?.skip ?? 0;
+      const take = args?.take ?? 20;
+      return Promise.resolve(all.slice(skip, skip + take));
+    });
+    prisma.campaign.count.mockResolvedValue(25);
+
+    const res = await service.listCampaigns('adv-1', { page: 2, limit: 10 });
+    expect(res.total).toBe(25);
+    expect(res.page).toBe(2);
+    expect(res.limit).toBe(10);
+    expect(res.campaigns.length).toBe(10);
+    expect(prisma.campaign.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 10, take: 10 }),
+    );
+  });
+
+  it('filters by status', async () => {
+    prisma.campaign.findMany.mockResolvedValue([]);
+    prisma.campaign.count.mockResolvedValue(0);
+    await service.listCampaigns('adv-1', { status: 'active' });
+    expect(prisma.campaign.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { advertiserId: 'adv-1', status: 'active' } }),
+    );
+  });
+});
+
+describe('AdvertiserService.getCampaign (A-074)', () => {
+  let prisma: ReturnType<typeof makePrisma>;
+  let service: AdvertiserService;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    service = makeService(prisma);
+  });
+
+  it('returns a single owned campaign', async () => {
+    prisma.campaign.findUnique.mockResolvedValue({
+      id: 'c1',
+      advertiserId: 'adv-1',
+      status: 'draft',
+      creatives: [{ id: 'x', status: 'pending' }],
+      approvals: [],
+    });
+    const res = await service.getCampaign('adv-1', 'c1');
+    expect(res.id).toBe('c1');
+  });
+
+  it('throws NotFound for a missing or non-owned campaign', async () => {
+    prisma.campaign.findUnique.mockResolvedValue({
+      id: 'c1',
+      advertiserId: 'other',
+      creatives: [],
+      approvals: [],
+    });
+    await expect(service.getCampaign('adv-1', 'c1')).rejects.toThrow();
+    prisma.campaign.findUnique.mockResolvedValue(null);
+    await expect(service.getCampaign('adv-1', 'c2')).rejects.toThrow();
+  });
+});
+
+describe('AdvertiserService.updateCampaign currency (A-081)', () => {
+  let prisma: ReturnType<typeof makePrisma>;
+  let service: AdvertiserService;
+
+  beforeEach(() => {
+    prisma = makePrisma();
+    service = makeService(prisma);
+    prisma.campaign.findUnique.mockResolvedValue({
+      id: 'c1',
+      advertiserId: 'adv-1',
+      status: 'draft',
+    });
+    prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
+    prisma.campaign.findUnique.mockResolvedValue({
+      id: 'c1',
+      advertiserId: 'adv-1',
+      status: 'draft',
+      currency: 'EUR',
+    });
+  });
+
+  it('applies a normalized currency change on a draft', async () => {
+    await service.updateCampaign('c1', 'adv-1', { currency: 'eur' });
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ currency: 'EUR' }),
+        where: expect.objectContaining({ status: 'draft' }),
+      }),
+    );
+  });
+
+  it('rejects a currency change on a non-draft campaign', async () => {
+    prisma.campaign.findUnique.mockResolvedValueOnce({
+      id: 'c1',
+      advertiserId: 'adv-1',
+      status: 'active',
+    });
+    await expect(service.updateCampaign('c1', 'adv-1', { currency: 'EUR' })).rejects.toThrow();
   });
 });
