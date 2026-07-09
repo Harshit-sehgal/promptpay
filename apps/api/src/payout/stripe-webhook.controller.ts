@@ -1,13 +1,22 @@
 import { Request } from 'express';
 import Stripe from 'stripe';
-import { Controller, HttpCode, HttpStatus, HttpException, Logger, OnModuleInit,Post, Req } from '@nestjs/common';
+import {
+  Controller,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Logger,
+  OnModuleInit,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
 import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
 
 import { AuditService } from '../audit/audit.service';
-import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { EventBus } from '../common/events/event-bus';
+import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode, getErrorMessage } from '../common/utils/errors';
 import { assertSafeJson } from '../common/utils/json-value';
 import { PrismaService } from '../config/prisma.service';
@@ -62,21 +71,34 @@ export class StripeWebhookController implements OnModuleInit {
       this.logger.warn('Stripe webhook received but Stripe is not configured');
       // Returning 2xx here would tell Stripe the event was accepted when it
       // was not — so we fail closed with 503 (issue A-062).
-      throw new HttpException({ received: false, reason: 'stripe_not_configured' }, HttpStatus.SERVICE_UNAVAILABLE);
+      throw new HttpException(
+        { received: false, reason: 'stripe_not_configured' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
     }
 
     const sig = req.headers['stripe-signature'] as string;
     if (!sig) {
       this.logger.warn('Stripe webhook missing signature header');
-      throw new HttpException({ received: false, reason: 'missing_signature' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        { received: false, reason: 'missing_signature' },
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Stripe requires the raw request body for signature verification.
     // express.raw() exposes it as req.body; some adapters expose req.rawBody.
-    const rawBody = req.rawBody ?? (Buffer.isBuffer(req.body) || typeof req.body === 'string' ? req.body : undefined);
+    const rawBody =
+      req.rawBody ??
+      (Buffer.isBuffer(req.body) || typeof req.body === 'string' ? req.body : undefined);
     if (!rawBody) {
-      this.logger.error('Stripe webhook missing raw body — raw-body middleware may not be configured before JSON parsing');
-      throw new HttpException({ received: false, reason: 'missing_raw_body' }, HttpStatus.BAD_REQUEST);
+      this.logger.error(
+        'Stripe webhook missing raw body — raw-body middleware may not be configured before JSON parsing',
+      );
+      throw new HttpException(
+        { received: false, reason: 'missing_raw_body' },
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     let event: Stripe.Event;
@@ -88,7 +110,10 @@ export class StripeWebhookController implements OnModuleInit {
       // 400 (not 2xx) stops Stripe from retrying an event we can never
       // process, and — critically — does NOT acknowledge a (potentially
       // money-moving) event we did not verify (issue A-062).
-      throw new HttpException({ received: false, reason: 'signature_verification_failed' }, HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        { received: false, reason: 'signature_verification_failed' },
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // ── Idempotency: insert-or-detect-replay then atomic claim ──
@@ -140,7 +165,10 @@ export class StripeWebhookController implements OnModuleInit {
       // The event was valid (signature verified) but could not be read back.
       // Fail with 5xx so Stripe retries rather than dropping a (potentially
       // money-moving) event (issue A-062).
-      throw new HttpException({ received: false, reason: 'persistence_race' }, HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        { received: false, reason: 'persistence_race' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
     if (existing.processingStatus === 'processed') {
@@ -154,7 +182,9 @@ export class StripeWebhookController implements OnModuleInit {
         this.logger.warn(`Stripe event ${event.id} currently being processed by another worker`);
         return { received: true, reason: 'currently_processing' };
       }
-      this.logger.warn(`Stripe event ${event.id} stalled in processing for ${Math.round(stalledMs / 1000)}s — reclaiming`);
+      this.logger.warn(
+        `Stripe event ${event.id} stalled in processing for ${Math.round(stalledMs / 1000)}s — reclaiming`,
+      );
     }
 
     // 3. Atomic claim: pending (or stalled processing) → processing.
@@ -247,7 +277,9 @@ export class StripeWebhookController implements OnModuleInit {
         // already either released the hold (won) or written it off (lost).
         // We acknowledge receipt so the webhook_event row converges to
         // 'processed' instead of lingering as 'processing'.
-        this.logger.log(`Dispute funds withdrawn for event ${event.id} — already settled at close, acknowledging`);
+        this.logger.log(
+          `Dispute funds withdrawn for event ${event.id} — already settled at close, acknowledging`,
+        );
         await this.prisma.webhookEvent.updateMany({
           where: { provider: 'stripe', eventId: event.id },
           data: { processingStatus: 'processed', processedAt: new Date() },
@@ -285,6 +317,16 @@ export class StripeWebhookController implements OnModuleInit {
 
     if (!result.advertiserId) {
       this.logger.error(`No advertiserId in session metadata for checkout ${sessionId}`);
+      // Mark this webhook event 'processed' — Stripe has no more data to
+      // deliver and will never be able to make this event bookable through
+      // retry. Leaving it 'processing' would pollute the reclaim path forever
+      // and silently drop future deposits from the same Stripe customer (the
+      // webhook_event row would block any retry from being reinserted as a
+      // fresh 'pending' row). (Issue A-062.)
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
+        data: { processingStatus: 'processed', error: 'missing_advertiserId_in_checkout_metadata' },
+      });
       return;
     }
 
@@ -293,6 +335,12 @@ export class StripeWebhookController implements OnModuleInit {
     });
     if (!advertiser) {
       this.logger.error(`Advertiser ${result.advertiserId} not found for checkout ${sessionId}`);
+      // Same as above: this is a permanent business error, not transient; mark
+      // the row processed so it doesn't sit in 'processing' forever.
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
+        data: { processingStatus: 'processed', error: 'advertiser_not_found' },
+      });
       return;
     }
 
@@ -334,7 +382,9 @@ export class StripeWebhookController implements OnModuleInit {
       });
     } catch (err: unknown) {
       if (getErrorCode(err) === 'P2002') {
-        this.logger.warn(`Duplicate deposit for paymentIntent ${result.paymentIntentId} — skipping`);
+        this.logger.warn(
+          `Duplicate deposit for paymentIntent ${result.paymentIntentId} — skipping`,
+        );
       } else {
         throw err;
       }
@@ -362,7 +412,9 @@ export class StripeWebhookController implements OnModuleInit {
       });
     } catch (err: unknown) {
       if (getErrorCode(err) === 'P2002') {
-        this.logger.warn(`Duplicate platform cash entry for paymentIntent ${result.paymentIntentId} — skipping`);
+        this.logger.warn(
+          `Duplicate platform cash entry for paymentIntent ${result.paymentIntentId} — skipping`,
+        );
       } else {
         throw err;
       }
@@ -387,13 +439,19 @@ export class StripeWebhookController implements OnModuleInit {
     for (const campaign of approvedCampaigns) {
       if (campaign.creatives.length === 0) continue;
       if (campaign.budgetSpentMinor >= campaign.budgetTotalMinor) continue;
-      const balance = await getAdvertiserBalance(this.prisma, campaign.advertiserId, campaign.currency);
+      const balance = await getAdvertiserBalance(
+        this.prisma,
+        campaign.advertiserId,
+        campaign.currency,
+      );
       if (balance > 0) {
         await this.prisma.campaign.update({
           where: { id: campaign.id },
           data: { status: 'active', activatedAt: new Date() },
         });
-        this.logger.log(`Activated previously-unfunded approved campaign ${campaign.id} after deposit`);
+        this.logger.log(
+          `Activated previously-unfunded approved campaign ${campaign.id} after deposit`,
+        );
       }
     }
 
@@ -408,7 +466,12 @@ export class StripeWebhookController implements OnModuleInit {
       action: 'stripe_deposit',
       targetType: 'advertiser',
       targetId: advertiser.id,
-      beforeSnap: { amountMinor: result.amountMinor, currency: result.currency, paymentIntentId: result.paymentIntentId, sessionId },
+      beforeSnap: {
+        amountMinor: result.amountMinor,
+        currency: result.currency,
+        paymentIntentId: result.paymentIntentId,
+        sessionId,
+      },
     });
   }
 
@@ -477,7 +540,9 @@ export class StripeWebhookController implements OnModuleInit {
       });
     } catch (err: unknown) {
       if (getErrorCode(err) === 'P2002') {
-        this.logger.warn(`Duplicate platform refund entry for ${platRefundIdempotencyKey} — skipping`);
+        this.logger.warn(
+          `Duplicate platform refund entry for ${platRefundIdempotencyKey} — skipping`,
+        );
       } else {
         throw err;
       }
@@ -770,7 +835,9 @@ export class StripeWebhookController implements OnModuleInit {
         if (getErrorCode(err) === 'P2002') {
           this.logger.warn(`Duplicate dispute flag for ${dispute.id} — skipping`);
         } else {
-          this.logger.error(`Failed to create fraud flag for dispute ${dispute.id}: ${getErrorMessage(err)}`);
+          this.logger.error(
+            `Failed to create fraud flag for dispute ${dispute.id}: ${getErrorMessage(err)}`,
+          );
         }
       }
     }
@@ -792,7 +859,12 @@ export class StripeWebhookController implements OnModuleInit {
       action: 'stripe_dispute_created',
       targetType: 'dispute',
       targetId: dispute.id,
-      beforeSnap: { paymentIntentId: details.paymentIntentId, reason: details.reason, amountMinor: details.amountMinor, advertiserId },
+      beforeSnap: {
+        paymentIntentId: details.paymentIntentId,
+        reason: details.reason,
+        amountMinor: details.amountMinor,
+        advertiserId,
+      },
     });
   }
 
@@ -962,7 +1034,11 @@ export class StripeWebhookController implements OnModuleInit {
       action: 'stripe_dispute_closed',
       targetType: 'dispute',
       targetId: dispute.id,
-      beforeSnap: { status: dispute.status, holdsProcessed: holdEntries.length, paymentIntentId: details.paymentIntentId },
+      beforeSnap: {
+        status: dispute.status,
+        holdsProcessed: holdEntries.length,
+        paymentIntentId: details.paymentIntentId,
+      },
     });
   }
 
@@ -1030,7 +1106,9 @@ export class StripeWebhookController implements OnModuleInit {
     const confirmedAllocations = payoutRequest.allocations.filter(
       (a: { earningsEntry: { status: string } }) => a.earningsEntry.status === 'confirmed',
     );
-    const earningsIds = confirmedAllocations.map((a: { earningsEntryId: string }) => a.earningsEntryId);
+    const earningsIds = confirmedAllocations.map(
+      (a: { earningsEntryId: string }) => a.earningsEntryId,
+    );
 
     let claimed = 0;
     try {
@@ -1118,7 +1196,7 @@ export class StripeWebhookController implements OnModuleInit {
         targetType: 'payout_request',
         targetId: payoutRequestId,
         beforeSnap: { providerTxId },
-    });
+      });
     }
   }
 
