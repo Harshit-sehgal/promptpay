@@ -138,3 +138,101 @@ describe('PayoutService.getPayoutInfo payout policy metadata', () => {
     expect(info.twoFactorEnabled).toBe(false);
   });
 });
+
+describe('PayoutService.processPayout partial approvals', () => {
+  it('splits an over-allocated earnings row so only the approved amount can be marked paid', async () => {
+    const payoutAccount = {
+      id: 'acc1',
+      provider: 'manual',
+      destination: 'manual-destination',
+    };
+    const earningsEntry = {
+      id: 'earn-1',
+      userId: 'u1',
+      campaignId: 'camp-1',
+      impressionId: 'imp-1',
+      clickId: null,
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 1000,
+      currency: 'USD',
+      availableAt: new Date('2026-07-09T00:00:00.000Z'),
+      description: 'Original earning',
+    };
+    const allocation = {
+      id: 'alloc-1',
+      payoutRequestId: 'payout-1',
+      earningsEntryId: earningsEntry.id,
+      amountMinor: 1000,
+      earningsEntry,
+    };
+    const payoutForProcessing = {
+      id: 'payout-1',
+      userId: 'u1',
+      payoutAccount,
+      status: 'processing',
+      requestedAmountMinor: 1000,
+      approvedAmountMinor: 600,
+      currency: 'USD',
+      allocations: [allocation],
+    };
+
+    const payoutRequestFindUnique = vi.fn()
+      .mockResolvedValueOnce({ id: 'payout-1', status: 'approved', payoutAccount })
+      .mockResolvedValueOnce(payoutForProcessing);
+
+    const { prisma, service } = makePayoutService({
+      payoutRequest: {
+        findUnique: payoutRequestFindUnique,
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      payoutAllocation: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0 } }),
+        delete: vi.fn(),
+        update: vi.fn(),
+      },
+      earningsLedger: {
+        findUnique: vi.fn().mockResolvedValue(earningsEntry),
+        update: vi.fn(),
+        create: vi.fn(),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      payoutTransaction: {
+        create: vi.fn().mockResolvedValue({ id: 'ptx-1' }),
+      },
+    });
+
+    const result = await service.processPayout('payout-1');
+
+    expect(result).toEqual({
+      payoutId: 'payout-1',
+      providerTxId: 'manual_payout-1',
+      status: 'processing',
+    });
+    expect(prisma.earningsLedger.update).toHaveBeenCalledWith({
+      where: { id: earningsEntry.id },
+      data: { amountMinor: 600 },
+    });
+    expect(prisma.earningsLedger.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'u1',
+        amountMinor: 400,
+        status: 'confirmed',
+        idempotencyKey: `payout_remainder_payout-1_${earningsEntry.id}`,
+      }),
+    });
+    expect(prisma.payoutAllocation.update).toHaveBeenCalledWith({
+      where: { id: allocation.id },
+      data: { amountMinor: 600 },
+    });
+    expect(prisma.payoutAllocation.delete).not.toHaveBeenCalled();
+    expect(prisma.payoutTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payoutRequestId: 'payout-1',
+        provider: 'manual',
+        providerTxId: 'manual_payout-1',
+        status: 'processing',
+      }),
+    });
+  });
+});

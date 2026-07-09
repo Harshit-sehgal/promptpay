@@ -1,6 +1,6 @@
 import { raw } from 'express';
 import request from 'supertest';
-import { afterAll,beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
@@ -24,15 +24,54 @@ const fakeStripe = {
   isEnabled: () => true,
   verifyWebhookSignature: (_raw: Buffer | string, _sig: string) =>
     JSON.parse(_raw.toString()),
+  getDisputeDetails: (dispute: {
+    payment_intent?: string | { id?: string } | null;
+    amount: number;
+    currency: string;
+    reason?: string | null;
+    status: string;
+  }) => ({
+    paymentIntentId:
+      typeof dispute.payment_intent === 'string'
+        ? dispute.payment_intent
+        : dispute.payment_intent?.id ?? '',
+    amountMinor: dispute.amount,
+    currency: dispute.currency,
+    reason: dispute.reason ?? '',
+    status: dispute.status,
+  }),
 };
 
 const TEST_PROVIDER_TX_IDS = ['po_paid_1', 'po_fail_1'];
-const TEST_EVENT_IDS = ['evt_paid_1', 'evt_fail_1', 'evt_unhandled_1'];
-const TEST_EMAILS = TEST_PROVIDER_TX_IDS.map((providerTxId) => `wh-${providerTxId}@test.com`);
+const TEST_PAYMENT_INTENT_IDS = ['pi_partial_freeze', 'pi_partial_won', 'pi_partial_lost'];
+const TEST_EVENT_IDS = [
+  'evt_paid_1',
+  'evt_fail_1',
+  'evt_unhandled_1',
+  'evt_partial_freeze_created',
+  'evt_partial_won_created',
+  'evt_partial_won_closed',
+  'evt_partial_lost_created',
+  'evt_partial_lost_closed',
+];
+const TEST_EMAILS = [
+  ...TEST_PROVIDER_TX_IDS.map((providerTxId) => `wh-${providerTxId}@test.com`),
+  'wh-dispute-freeze@test.com',
+  'wh-dispute-won@test.com',
+  'wh-dispute-lost@test.com',
+];
 
 async function cleanupStripeWebhookSpecRows(prisma: PrismaService) {
   await prisma.webhookEvent.deleteMany({
     where: { provider: 'stripe', eventId: { in: TEST_EVENT_IDS } },
+  });
+  await prisma.platformLedger.deleteMany({
+    where: {
+      OR: [
+        { referenceId: { in: TEST_PAYMENT_INTENT_IDS } },
+        { idempotencyKey: { contains: 'dp_partial_' } },
+      ],
+    },
   });
 
   const users = await prisma.user.findMany({
@@ -188,6 +227,42 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     return { payoutId: payout.id, e1Id: e1.id, e2Id: e2.id };
   }
 
+  async function seedDisputeScenario(input: {
+    email: string;
+    paymentIntentId: string;
+    idempotencyKey: string;
+  }) {
+    const user = await prisma.user.create({
+      data: {
+        email: input.email,
+        role: UserRole.ADVERTISER,
+        status: 'active',
+        emailVerified: true,
+        country: 'US',
+      },
+    });
+    const advertiser = await prisma.advertiser.create({
+      data: {
+        userId: user.id,
+        companyName: 'Dispute Test Co',
+        billingEmail: input.email,
+      },
+    });
+    const credit = await prisma.advertiserLedger.create({
+      data: {
+        advertiserId: advertiser.id,
+        entryType: 'credit',
+        status: 'confirmed',
+        amountMinor: 10_000,
+        currency: 'USD',
+        stripePaymentIntentId: input.paymentIntentId,
+        idempotencyKey: input.idempotencyKey,
+        description: 'Stripe deposit for dispute test',
+      },
+    });
+    return { advertiserId: advertiser.id, creditId: credit.id };
+  }
+
   function postWebhook(event: unknown) {
     return request(app.getHttpServer())
       .post('/api/v1/payout/stripe/webhook')
@@ -261,6 +336,164 @@ describe('Stripe Webhook Controller — reconciliation', () => {
       where: { provider_eventId: { provider: 'stripe', eventId: 'evt_unhandled_1' } },
     });
     expect(evt?.processingStatus).toBe('processed');
+  });
+
+  it('freezes only the disputed slice for a partial dispute', async () => {
+    const { creditId } = await seedDisputeScenario({
+      email: 'wh-dispute-freeze@test.com',
+      paymentIntentId: 'pi_partial_freeze',
+      idempotencyKey: 'stripe_deposit_pi_partial_freeze',
+    });
+
+    const res = await postWebhook({
+      id: 'evt_partial_freeze_created',
+      type: 'charge.dispute.created',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'dp_partial_freeze',
+          payment_intent: 'pi_partial_freeze',
+          amount: 1_000,
+          currency: 'USD',
+          reason: 'fraudulent',
+          status: 'needs_response',
+        },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const parent = await prisma.advertiserLedger.findUnique({ where: { id: creditId } });
+    expect(parent?.status).toBe('confirmed');
+    expect(parent?.amountMinor).toBe(9_000);
+
+    const hold = await prisma.advertiserLedger.findFirst({
+      where: { stripeDisputeId: 'dp_partial_freeze', entryType: 'hold' },
+    });
+    expect(hold?.status).toBe('held');
+    expect(hold?.amountMinor).toBe(1_000);
+  });
+
+  it('restores exactly the disputed slice when a partial dispute is won', async () => {
+    const { advertiserId, creditId } = await seedDisputeScenario({
+      email: 'wh-dispute-won@test.com',
+      paymentIntentId: 'pi_partial_won',
+      idempotencyKey: 'stripe_deposit_pi_partial_won',
+    });
+
+    const created = await postWebhook({
+      id: 'evt_partial_won_created',
+      type: 'charge.dispute.created',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'dp_partial_won',
+          payment_intent: 'pi_partial_won',
+          amount: 1_000,
+          currency: 'USD',
+          reason: 'fraudulent',
+          status: 'needs_response',
+        },
+      },
+    });
+    expect(created.status).toBe(200);
+
+    const closed = await postWebhook({
+      id: 'evt_partial_won_closed',
+      type: 'charge.dispute.closed',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'dp_partial_won',
+          payment_intent: 'pi_partial_won',
+          amount: 1_000,
+          currency: 'USD',
+          reason: 'fraudulent',
+          status: 'won',
+        },
+      },
+    });
+    expect(closed.status).toBe(200);
+
+    const parent = await prisma.advertiserLedger.findUnique({ where: { id: creditId } });
+    expect(parent?.status).toBe('confirmed');
+    expect(parent?.amountMinor).toBe(9_000);
+
+    const restored = await prisma.advertiserLedger.findFirst({
+      where: { stripeDisputeId: 'dp_partial_won', entryType: 'credit', status: 'confirmed' },
+    });
+    expect(restored?.amountMinor).toBe(1_000);
+
+    const creditSum = await prisma.advertiserLedger.aggregate({
+      where: { advertiserId, entryType: 'credit', status: 'confirmed' },
+      _sum: { amountMinor: true },
+    });
+    expect(creditSum._sum.amountMinor).toBe(10_000);
+  });
+
+  it('writes off exactly the disputed slice when a partial dispute is lost', async () => {
+    const { advertiserId, creditId } = await seedDisputeScenario({
+      email: 'wh-dispute-lost@test.com',
+      paymentIntentId: 'pi_partial_lost',
+      idempotencyKey: 'stripe_deposit_pi_partial_lost',
+    });
+
+    const created = await postWebhook({
+      id: 'evt_partial_lost_created',
+      type: 'charge.dispute.created',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'dp_partial_lost',
+          payment_intent: 'pi_partial_lost',
+          amount: 1_000,
+          currency: 'USD',
+          reason: 'fraudulent',
+          status: 'needs_response',
+        },
+      },
+    });
+    expect(created.status).toBe(200);
+
+    const closed = await postWebhook({
+      id: 'evt_partial_lost_closed',
+      type: 'charge.dispute.closed',
+      created: Math.floor(Date.now() / 1000),
+      data: {
+        object: {
+          id: 'dp_partial_lost',
+          payment_intent: 'pi_partial_lost',
+          amount: 1_000,
+          currency: 'USD',
+          reason: 'fraudulent',
+          status: 'lost',
+        },
+      },
+    });
+    expect(closed.status).toBe(200);
+
+    const parent = await prisma.advertiserLedger.findUnique({ where: { id: creditId } });
+    expect(parent?.status).toBe('confirmed');
+    expect(parent?.amountMinor).toBe(9_000);
+
+    const reversal = await prisma.advertiserLedger.findFirst({
+      where: { stripeDisputeId: 'dp_partial_lost', entryType: 'reversal', status: 'reversed' },
+    });
+    expect(reversal?.amountMinor).toBe(1_000);
+
+    const creditSum = await prisma.advertiserLedger.aggregate({
+      where: { advertiserId, entryType: 'credit', status: 'confirmed' },
+      _sum: { amountMinor: true },
+    });
+    expect(creditSum._sum.amountMinor).toBe(9_000);
+
+    const platformDebit = await prisma.platformLedger.findFirst({
+      where: {
+        referenceId: 'pi_partial_lost',
+        entryType: 'reversal',
+        idempotencyKey: { contains: 'dp_partial_lost' },
+      },
+    });
+    expect(platformDebit?.amountMinor).toBe(1_000);
   });
 
   // ── A-062: failure paths must NOT be acknowledged with HTTP 200 ──
