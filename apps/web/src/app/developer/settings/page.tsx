@@ -1,6 +1,8 @@
 'use client';
+/* eslint-disable @next/next/no-img-element */
 
 import type { AxiosResponse } from 'axios';
+import QRCode from 'qrcode';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -132,6 +134,7 @@ export default function DevSettingsPage() {
   const [verificationCode, setVerificationCode] = useState('');
   const [twoFactorBusy, setTwoFactorBusy] = useState(false);
   const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [twoFactorSuccess, setTwoFactorSuccess] = useState<string | null>(null);
 
   const fetchSettings = () => {
@@ -165,6 +168,9 @@ export default function DevSettingsPage() {
       const res = await authApi.setup2fa();
       setTotpSecret(res.data.secret);
       setOtpauthUrl(res.data.otpauthUrl);
+      QRCode.toDataURL(res.data.otpauthUrl)
+        .then(setQrDataUrl)
+        .catch(() => setQrDataUrl(null));
       setShow2faSetup(true);
     } catch (err: unknown) {
       setTwoFactorError(getErrorMessage(err, 'Failed to initialize 2FA setup'));
@@ -659,6 +665,13 @@ export default function DevSettingsPage() {
                       <div className="flex flex-col sm:flex-row items-center gap-6 py-3">
                         {otpauthUrl && (
                           <div className="bg-surface-50 border border-surface-200 rounded-xl shadow-sm p-3 max-w-xs">
+                            {qrDataUrl ? (
+                              <img
+                                src={qrDataUrl}
+                                alt="TOTP setup QR code"
+                                className="w-40 h-40 mb-3 rounded-md bg-white"
+                              />
+                            ) : null}
                             <p className="text-surface-500 text-[11px] uppercase font-semibold mb-1">
                               Setup URI
                             </p>

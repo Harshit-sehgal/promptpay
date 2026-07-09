@@ -14,11 +14,11 @@ COPY apps/web/package.json apps/web/
 COPY apps/cli/package.json apps/cli/
 COPY apps/vscode-extension/package.json apps/vscode-extension/
 
+# pnpm 11 blocks packages not in onlyBuiltDependencies from running install
+# scripts. The .npmrc config approves esbuild and Prisma packages.
 # HUSKY=0 prevents the husky prepare script from failing (no .git in Docker).
-# --frozen-lockfile is omitted because the lockfile was generated before
-# pnpm.onlyBuiltDependencies was added to package.json; Docker will still
-# produce deterministic installs from the lockfile.
-RUN HUSKY=0 pnpm install
+RUN echo 'only-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-pg' > .npmrc \
+  && HUSKY=0 pnpm install --frozen-lockfile
 
 # ── Build Stage: turbo build all packages ──
 FROM base AS build

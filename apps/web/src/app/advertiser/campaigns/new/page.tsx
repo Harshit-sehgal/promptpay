@@ -7,6 +7,8 @@ import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
+import { majorToMinor } from '@waitlayer/shared';
+
 const BID_TYPES = ['cpm', 'cpc'] as const;
 const CATEGORIES = [
   'developer_tools',
@@ -77,8 +79,8 @@ export default function NewCampaignPage() {
     setDraftRecoveryId(null);
     setSubmitting(true);
 
-    const bidAmountMinor = Math.round(parseFloat(bidAmount) * 100);
-    const budgetTotalMinor = Math.round(parseFloat(budgetTotal) * 100);
+    const bidAmountMinor = majorToMinor(parseFloat(bidAmount), currency);
+    const budgetTotalMinor = majorToMinor(parseFloat(budgetTotal), currency);
 
     if (isNaN(bidAmountMinor) || bidAmountMinor <= 0) {
       setError('Enter a valid bid amount');

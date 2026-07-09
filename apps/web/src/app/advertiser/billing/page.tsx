@@ -6,6 +6,8 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
+import { CURRENCY_POLICY, depositMinimumMinor } from '@waitlayer/shared';
+
 interface LedgerEntry {
   id: string;
   amountMinor: number;
@@ -33,21 +35,20 @@ interface BillingData {
   entries: LedgerEntry[];
 }
 
-const DEPOSIT_CURRENCIES = [
-  { code: 'usd', label: 'USD' },
-  { code: 'eur', label: 'EUR' },
-  { code: 'gbp', label: 'GBP' },
-  { code: 'cad', label: 'CAD' },
-  { code: 'aud', label: 'AUD' },
-  { code: 'inr', label: 'INR' },
-  { code: 'brl', label: 'BRL' },
-  { code: 'mxn', label: 'MXN' },
-  { code: 'sgd', label: 'SGD' },
-] as const;
+// A-081: derive deposit currencies from the single source of truth
+// (CURRENCY_POLICY) so every currency a user can deposit is also spendable by a
+// self-service campaign in the same currency and has payout-provider support.
+// Adding a depositable currency is now a one-line change in the shared policy
+// instead of risking a hardcoded mismatch that strands deposited funds.
+const DEPOSIT_CURRENCIES = Object.keys(CURRENCY_POLICY).map((code) => ({
+  code: code.toLowerCase(),
+  label: code,
+}));
 
 const FIXED_AMOUNTS = [{ minor: 5000 }, { minor: 10000 }, { minor: 25000 }, { minor: 50000 }];
 
-const MIN_DEPOSIT_MINOR = 100; // $1.00
+// Per-currency floor comes from the shared policy; USD is the baseline.
+const MIN_DEPOSIT_MINOR = depositMinimumMinor('USD');
 
 export default function AdvertiserBillingPage() {
   const [data, setData] = useState<BillingData | null>(null);

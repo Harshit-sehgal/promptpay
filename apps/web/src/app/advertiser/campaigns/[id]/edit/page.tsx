@@ -7,6 +7,8 @@ import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
+import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
+
 import {
   FREQUENCY_CAPS,
   frequencyCapValueToInput,
@@ -83,8 +85,8 @@ export default function EditCampaignPage() {
         setCampaignRejectionReason(found.rejectionReason ?? null);
         setName(found.name);
         setBidType(found.bidType);
-        setBidAmount((found.bidAmountMinor / 100).toFixed(2));
-        setBudgetTotal((found.budgetTotalMinor / 100).toFixed(2));
+        setBidAmount(minorToMajorInputValue(found.bidAmountMinor, found.currency));
+        setBudgetTotal(minorToMajorInputValue(found.budgetTotalMinor, found.currency));
         setCurrency(found.currency);
         if (found.category) setCategory(found.category);
 
@@ -144,8 +146,8 @@ export default function EditCampaignPage() {
     setError(null);
     setSubmitting(true);
 
-    const bidAmountMinor = Math.round(parseFloat(bidAmount) * 100);
-    const budgetTotalMinor = Math.round(parseFloat(budgetTotal) * 100);
+    const bidAmountMinor = majorToMinor(parseFloat(bidAmount), currency);
+    const budgetTotalMinor = majorToMinor(parseFloat(budgetTotal), currency);
 
     if (isNaN(bidAmountMinor) || bidAmountMinor <= 0) {
       setError('Enter a valid bid amount');
