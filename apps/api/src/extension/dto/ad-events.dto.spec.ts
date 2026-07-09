@@ -7,11 +7,12 @@ import { AdRequestDto } from './ad-events.dto';
 
 function baseValid(): AdRequestDto {
   const d = new AdRequestDto();
-  d.deviceId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  d.deviceId = '123e4567-e89b-12d3-a456-426614174000';
   d.sessionId = 'sess-1';
   d.waitStateId = 'wait-1';
   d.toolType = ToolType.VSCODE;
   d.idempotencyKey = 'idem-1';
+  d.signature = 'valid-hmac-signature';
   return d;
 }
 

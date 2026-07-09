@@ -3377,7 +3377,10 @@ Verification:
 
 **Resolved 2026-07-09** (current working tree). No Google Charts references exist
 in any tracked source file. The TOTP QR rendering path no longer leaks the
-2FA secret to third-party services.
+2FA secret to third-party services. Re-verified 2026-07-10: enrollment QR now
+rendered locally via the `qrcode` package as a same-origin `data:` URL (no
+third-party request), satisfying the "Done when" scannable-QR requirement;
+web typecheck/lint/test green (71/71).
 
 What changed:
 
@@ -3402,7 +3405,9 @@ Verification:
 
 **Resolved 2026-07-09** (current working tree). Public payout policy and pricing
 pages now import from shared `@waitlayer/shared` constants instead of hardcoded
-values, ensuring UI copy agrees with runtime enforcement.
+values, ensuring UI copy agrees with runtime enforcement. Re-verified 2026-07-10:
+added `apps/web/src/app/pricing/money-policy.test.ts` (4 assertions pinning the
+shared thresholds/currencies the pages render); web tests green (71/71).
 
 What changed:
 
@@ -3431,7 +3436,10 @@ Verification:
 
 **Resolved 2026-07-09** (current working tree). Campaign creation now has a
 currency selector populated from funded balances, so non-USD deposits are
-spendable through self-service campaign creation.
+spendable through self-service campaign creation. Hardened 2026-07-10:
+`DEPOSIT_CURRENCIES` now derives from `CURRENCY_POLICY` (removes mxn/sgd
+stranding), and bid/budget conversion uses `majorToMinor` (correct for
+zero-decimal JPY); edit prefill uses `minorToMajorInputValue`. Web green.
 
 What changed:
 
@@ -3512,10 +3520,6 @@ explicit product policy.
 
 Current source blockers to check while running this flow:
 
-- A-079: developer settings renders the TOTP enrollment QR through Google Charts,
-  leaking the 2FA setup secret to a third party.
-- A-080: payout/deposit policy and launch-split copy contradict runtime money
-  thresholds and the launch-incentive switch.
 - A-030: automated payout provider availability remains a product/launch
   decision.
 - A-033: live client/runtime integration claims still require real packaged
@@ -3566,12 +3570,6 @@ reporting, refunds, or disputes require untracked manual steps.
 
 Current source blockers to check while running this flow:
 
-- A-074: Dashboard caps campaigns at 20; campaign list and edit use
-  paginated `listCampaigns()` and single-campaign `getCampaign()` endpoints.
-- A-080: Payout-policy and pricing pages now import shared `@waitlayer/shared`
-  constants — thresholds and currencies agree with runtime enforcement.
-- A-081: Campaign creation has a currency selector populated from the
-  advertiser's funded balances — non-USD deposits are self-service spendable.
 - A-033: landing/runtime claims still require live verification against the real
   client integrations.
 

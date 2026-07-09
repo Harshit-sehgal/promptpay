@@ -3,14 +3,6 @@
   "private": true,
   "description": "Privacy-first reward marketplace for AI wait time and developer attention",
   "packageManager": "pnpm@11.9.0",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "@prisma/client",
-      "prisma",
-      "@prisma/adapter-pg"
-    ]
-  },
   "engines": {
     "node": ">=22.0.0"
   },
