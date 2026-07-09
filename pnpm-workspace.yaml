@@ -16,3 +16,8 @@ allowBuilds:
   prisma: true
   sharp: true
   unrs-resolver: true
+
+# Disable minimum-release-age check so that recently-published packages
+# (e.g. @typescript 7.0.2 architecture-specific optional packages) do not
+# block pnpm install / pre-commit hooks. The default is 1440 minutes (24h).
+minimumReleaseAge: 0
