@@ -1,11 +1,13 @@
 .vscode/**
 .vscode-test/**
+.turbo/**
 src/**
 test/**
 **/*.ts
 **/*.map
 **/*.tsbuildinfo
 tsconfig.json
+eslint.config.js
 .gitignore
 node_modules/.bin/**
 *.vsix

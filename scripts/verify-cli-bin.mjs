@@ -4,10 +4,8 @@ import { fileURLToPath } from 'url';
 
 /**
  * Verifies that every `bin` entry declared in apps/cli/package.json points to
- * a built artifact that actually exists. The CLI `tsc` build emits to
- * `dist/index.js` (rootDir inferred as `src`), so this guards against the
- * packaging bug where `bin` referenced a non-existent `dist/apps/cli/src/...`
- * path (A-043). Run after build, e.g. in CI before `npm publish` / `npm pack`.
+ * a built artifact that actually exists and is executable by npm as a Node
+ * bin. Run after build, e.g. in CI before `npm publish` / `npm pack`.
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const cliPkgPath = resolve(here, '../apps/cli/package.json');
@@ -21,7 +19,13 @@ for (const [name, rel] of Object.entries(bins)) {
     console.error(`[verify-cli-bin] FAIL: bin "${name}" -> ${rel} does not exist. Run the CLI build first.`);
     ok = false;
   } else {
-    console.log(`[verify-cli-bin] OK: ${name} -> ${rel}`);
+    const firstLine = readFileSync(abs, 'utf-8').split(/\r?\n/, 1)[0];
+    if (firstLine !== '#!/usr/bin/env node') {
+      console.error(`[verify-cli-bin] FAIL: bin "${name}" -> ${rel} is missing the Node shebang.`);
+      ok = false;
+    } else {
+      console.log(`[verify-cli-bin] OK: ${name} -> ${rel}`);
+    }
   }
 }
 

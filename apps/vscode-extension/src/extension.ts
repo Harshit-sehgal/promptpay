@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
 import { ApiClient } from './api-client';
 import { ConfigurationManager } from './config';
@@ -117,7 +118,7 @@ export function activate(context: vscode.ExtensionContext) {
           panel.show({
             headline: ad.title,
             message: ad.message,
-            ctaText: 'Visit site',
+            ctaText: ctaTextForAd(ad),
             ctaUrl: ad.destinationUrl,
             impressionToken: ad.impressionToken,
           }, async (clicked) => {

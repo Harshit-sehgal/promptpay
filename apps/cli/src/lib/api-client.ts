@@ -3,9 +3,8 @@ import * as http from 'http';
 import * as https from 'https';
 import * as os from 'os';
 
-import { signPayload } from '@waitlayer/shared';
-
 import { Credentials, getCredentials, getDeviceEventSecret,setCredentials, storeDeviceEventSecret } from './credentials';
+import { signPayload } from './signing';
 import { normalizeToolType } from './tool-types';
 
 const PRODUCTION_API_URL = 'https://api.waitlayer.com/api/v1';
