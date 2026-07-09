@@ -1969,7 +1969,7 @@ Done:
 
 ### A-042: Readiness Endpoint Now Fails Closed on Dependency Failure
 
-Severity: resolved pending deployment verification.
+Severity: resolved (deployment wiring verified).
 
 Current source check:
 
@@ -1981,9 +1981,12 @@ Current source check:
 
 Residual risk:
 
-- Deployment artifacts still need to be verified to ensure Docker/Kubernetes or
-  load-balancer health checks call `/api/v1/health/ready`, not only
-  `/api/v1/health`.
+- Verified (2026-07-09): `docker-compose.yml` `api` service healthcheck already
+  targets `http://localhost:4002/api/v1/health/ready` (not liveness), with a
+  30s start period and 10 retries, so a container that cannot reach Postgres
+  or Redis is not marked healthy. No Kubernetes manifests exist in the repo, so
+  any future K8s deploy must mirror this (readiness -> `/health/ready`,
+  liveness -> `/health`).
 - Public status UI semantics should keep liveness and readiness distinct.
 
 Follow-up direction:
