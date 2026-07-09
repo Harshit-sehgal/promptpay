@@ -79,7 +79,11 @@ export const advertiserApi = {
     api.post('/advertiser/delete-account', data),
   createCampaign: (data: Record<string, unknown>) =>
     api.post('/advertiser/campaigns', data).then((r) => ok(CreateCampaignResponse.parse(r.data))),
+  getCampaign: (id: string) => api.get(`/advertiser/campaigns/${id}`),
+  updateCampaign: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/advertiser/campaigns/${id}`, data),
   submitCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/submit`),
+  resetCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/reset`),
   pauseCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/pause`),
   resumeCampaign: (id: string) => api.post(`/advertiser/campaigns/${id}/resume`),
   getReports: (params?: Record<string, unknown>) => api.get('/advertiser/reports', { params }),
@@ -192,6 +196,10 @@ export const campaignApi = {
   approveCreative: (creativeId: string) => api.post(`/campaigns/creatives/${creativeId}/approve`),
   rejectCreative: (creativeId: string, reason: string) =>
     api.post(`/campaigns/creatives/${creativeId}/reject`, { reason }),
+  updateCreative: (
+    creativeId: string,
+    data: { title?: string; sponsoredMessage?: string; destinationUrl?: string; displayDomain?: string; ctaText?: string | null },
+  ) => api.patch(`/campaigns/creatives/${creativeId}`, data),
 };
 
 export const systemApi = {
