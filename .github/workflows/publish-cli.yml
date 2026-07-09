@@ -4,9 +4,14 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the packaged CLI tarball to npm after smoke tests pass
+        type: boolean
+        default: false
 
 jobs:
-  publish-cli:
+  package-cli:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,12 +30,38 @@ jobs:
         run: pnpm --filter waitlayer-cli build
       - name: Verify bin artifacts
         run: pnpm --filter waitlayer-cli pack:check
-      # Dry-run only by default. The actual publish is gated behind an
-      # explicit, separate job / manual approval so this pipeline never
-      # publishes unintentionally (A-043).
-      - name: Pack (dry run)
-        run: pnpm --filter waitlayer-cli pack --dry-run
-      # Uncomment to publish for real after the dry-run is reviewed:
-      # - run: pnpm --filter waitlayer-cli publish --no-git-checks --access public
-      #   env:
-      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Pack CLI artifact
+        run: |
+          mkdir -p artifacts/cli
+          pnpm --filter waitlayer-cli pack --pack-destination ../../artifacts/cli
+      - name: Smoke install packaged CLI
+        run: |
+          npm install --global ./artifacts/cli/*.tgz
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --version
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --help
+      - name: Upload CLI package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: waitlayer-cli-package
+          path: artifacts/cli/*.tgz
+          if-no-files-found: error
+
+  publish-npm:
+    needs: package-cli
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Download CLI package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: waitlayer-cli-package
+          path: artifacts/cli
+      - name: Publish CLI to npm
+        run: npm publish ./artifacts/cli/*.tgz --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

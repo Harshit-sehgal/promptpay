@@ -4,9 +4,14 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the packaged VSIX to Visual Studio Marketplace after smoke tests pass
+        type: boolean
+        default: false
 
 jobs:
-  publish-vscode:
+  package-vscode:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,14 +27,35 @@ jobs:
         run: pnpm --filter @waitlayer/db generate
       - name: Build VS Code extension
         run: pnpm --filter waitlayer-vscode build
-      # Packages a .vsix (no publish). Publishing to the Marketplace is an
-      # explicit follow-up step gated behind a marketplace secret (A-043).
       - name: Package VSIX
-        run: npx --yes @vscode/vsce@latest package --no-dependencies
+        run: |
+          mkdir -p ../../artifacts/vscode
+          npx --yes @vscode/vsce@latest package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
         working-directory: apps/vscode-extension
-      # Uncomment to publish to the Marketplace after the .vsix is reviewed:
-      # - name: Publish to Marketplace
-      #   run: npx --yes @vscode/vsce@latest publish --no-dependencies
-      #   working-directory: apps/vscode-extension
-      #   env:
-      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Smoke test VSIX metadata
+        run: |
+          test -s artifacts/vscode/waitlayer-vscode.vsix
+          unzip -p artifacts/vscode/waitlayer-vscode.vsix extension/package.json > /tmp/waitlayer-vscode-package.json
+          node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: waitlayer-vscode-vsix
+          path: artifacts/vscode/waitlayer-vscode.vsix
+          if-no-files-found: error
+
+  publish-marketplace:
+    needs: package-vscode
+    if: github.event_name == 'workflow_dispatch' && inputs.publish == true
+    runs-on: ubuntu-latest
+    environment: vscode-marketplace
+    steps:
+      - name: Download VSIX artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: waitlayer-vscode-vsix
+          path: artifacts/vscode
+      - name: Publish VSIX to Marketplace
+        run: npx --yes @vscode/vsce@latest publish --packagePath artifacts/vscode/waitlayer-vscode.vsix
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

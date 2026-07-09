@@ -77,10 +77,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build CLI
         run: pnpm --filter waitlayer-cli build
-      - name: Dry-run pack CLI
+      - name: Verify CLI bin artifacts
         run: pnpm --filter waitlayer-cli pack:check
+      - name: Pack CLI artifact
+        run: |
+          mkdir -p artifacts/cli
+          pnpm --filter waitlayer-cli pack --pack-destination ../../artifacts/cli
+      - name: Smoke install packaged CLI
+        run: |
+          npm install --global ./artifacts/cli/*.tgz
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --version
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --help
       - name: Build VS Code extension
         run: pnpm --filter waitlayer-vscode build
       - name: Package VS Code extension (no publish)
-        run: npx --yes @vscode/vsce@latest package --no-dependencies
+        run: |
+          mkdir -p ../../artifacts/vscode
+          npx --yes @vscode/vsce@latest package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
         working-directory: apps/vscode-extension
+      - name: Smoke test VSIX metadata
+        run: |
+          test -s artifacts/vscode/waitlayer-vscode.vsix
+          unzip -p artifacts/vscode/waitlayer-vscode.vsix extension/package.json > /tmp/waitlayer-vscode-package.json
+          node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
