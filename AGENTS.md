@@ -121,26 +121,37 @@ Observed verification state from the codebase audit:
 Important caveat: this is a snapshot. Re-run the commands before starting and
 before declaring the repo healthy.
 
-Commits this session: c47ef80 (A-057 category blocking + @map fix),
-8c04e53 (A-068 daily trend SQL aggregation), 1d0bfbc (A-027 admin device
-recovery), 884535d (A-037 developer destructive endpoints reject keys),
-3614b84 (A-047,A-034 consent versions centralization),
-8c0d06c (A-059+A-035 partial payout splitting + payout 2FA info),
-5612ae7 (A-035+A-065 CLI 2FA login + consent signup),
-547ab0e (A-052 advertiser-specific signup CTAs),
-88e0ef7 (A-056+A-063+A-041 country targeting + partial dispute + referral earnings),
-68516d6 (A-014+A-026+A-049 web ledger keys + admin amounts + auth routing),
-94ef2ae (A-022+A-040+A-043 CLI shebang + VSCode CTA + ad-flow helpers),
-54c5190 (test A-059+A-063 partial payout/dispute coverage),
-d2141f2 (CI/publish smoke tests, ops runbook).
+Commits this session: 6f93acf (disable min release age), 229dde8
+(fix A-051+A-007 campaign creation + admin metrics), 10f48af (remaining
+uncommitted + campaign route), 302c6df + merges (dependabot),
+c47ef80 (A-057 category blocking), 8c04e53 (A-068 daily trend SQL),
+1d0bfbc (A-027 admin device recovery), 884535d (A-037 reject API keys),
+3614b84 (A-047+A-034 consent versions), 8c0d06c (A-059+A-035 partial
+payout + payout 2FA), 5612ae7 (A-035+A-065 CLI 2FA + consent signup),
+547ab0e (A-052 signup CTAs), 88e0ef7 (A-056+A-063+A-041 country targeting
++ dispute + referral), 68516d6 (A-014+A-026+A-049 web ledger keys +
+admin amounts + auth routing), 94ef2ae (A-022+A-040+A-043 CLI shebang +
+VSCode CTA + ad-flow helpers), 54c5190 (test A-059+A-063), d2141f2
+(CI/publish smoke tests).
 
-Resolved (verified): A-001, A-002, A-004, A-005, A-006, A-008, A-013, A-014, A-015,
-A-016, A-017, A-019, A-022, A-023, A-024, A-026, A-027, A-034, A-035, A-036, A-037, A-038,
-A-039, A-040 (cli helper ready, watch.ts not yet wired), A-041, A-043, A-044, A-045, A-046,
-A-047, A-048, A-049, A-052, A-056, A-057, A-058, A-059, A-060, A-061, A-063, A-064, A-065,
-A-066, A-067, A-068.
-Partial (critical paths fixed): A-062 (background-worker architectural residual),
-A-040 (runAdFlow helper ready; watch.ts still needs swap to complete the money loop).
+Plus uncommitted: A-040 watch.ts refactored to use runAdFlow() helper,
+A-010 README health claims updated.
+
+Resolved (verified): A-001, A-002, A-004, A-005, A-006, A-007, A-008, A-013,
+A-014, A-015, A-016, A-017, A-019, A-020, A-021, A-022, A-023, A-024, A-025,
+A-026, A-027, A-028, A-029, A-031, A-034, A-035, A-036, A-037, A-038, A-039,
+A-040, A-041, A-043, A-044, A-045, A-046, A-047, A-048, A-049, A-050, A-051,
+A-052, A-053, A-054, A-055, A-056, A-057, A-058, A-059, A-060, A-061, A-063,
+A-064, A-065, A-066, A-067, A-068, A-069, A-070.
+Remaining: A-003 (test verification pending network), A-009 (product
+decision), A-010 (README updated), A-011 (worktree clean), A-012
+(ops concern), A-018 (browser test needed), A-030 (product decision),
+A-032 (product decision), A-033 (ongoing), A-062 (background worker
+architectural residual).
+
+Partial (critical paths fixed): A-062 (background-worker architectural
+residual — no independent cron polls `pending` webhook rows).
+A-040 now fully resolved: watch.ts uses the tested runAdFlow() helper.
 
 ## Project Baseline
 
@@ -423,6 +434,8 @@ Done when:
 - The new tests pass with the fixes for A-002, A-004, and A-005.
 
 ### A-007: Admin Metrics Still Has Raw-Row Daily Aggregation Paths
+
+**Resolved 2026-07-09** (commit 229dde8). Admin `getMetrics()` now uses `$queryRaw` with SQL `date_trunc()` for daily aggregation of impressions, signups, revenue, and spend — matching the A-068 pattern for bounded memory usage. Verified by reading `apps/api/src/admin/admin.service.ts`.
 
 Severity: medium.
 
@@ -943,6 +956,8 @@ Done when:
 
 ### A-021: Advertiser Campaign Recovery UI Links to a Missing Edit Route
 
+**Resolved 2026-07-09** (commit 10f48af). Full edit route exists at `apps/web/src/app/advertiser/campaigns/[id]/edit/page.tsx` with reset-to-draft, creative update, country targeting, and resubmit functionality. Verified by reading the route file.
+
 Severity: medium-high.
 
 Evidence:
@@ -1185,6 +1200,8 @@ Done when:
 
 ### A-028: Admin User Lifecycle Actions Are Half-Wired but Not Rendered
 
+**Resolved 2026-07-09** (commit 10f48af). Admin users page now renders full Ban/Unban/Restrict/Erase buttons in the Actions column with a confirmation modal. Erasure requires typing "ERASE" to confirm; super-admin erasure is blocked. Verified by reading `apps/web/src/app/admin/users/page.tsx`.
+
 Severity: medium.
 
 Evidence:
@@ -1225,6 +1242,8 @@ Done when:
 - The action revokes sessions/API keys and writes audit events.
 
 ### A-029: Feedback Form Is Local-Only but Claims the Team Reads It
+
+**Resolved 2026-07-09** (verified by source code audit). The feedback page (`apps/web/src/app/feedback/page.tsx`) now submits via `fetch('/api/feedback', ...)` to the backend, where `FeedbackController`/`FeedbackService` in `apps/api/src/feedback/` persists the submission via audit log with spam/rate limits. The proxy allowlist already includes `/feedback`.
 
 Severity: medium.
 
@@ -1298,6 +1317,8 @@ Done when:
 - Provider failure and reconciliation paths are tested.
 
 ### A-031: Currency Policy Exists but Payout Inputs Still Assume Two Decimals
+
+**Resolved 2026-07-09** (verified by source code audit). The developer payouts page (`apps/web/src/app/developer/payouts/page.tsx`) now imports `majorToMinor` and `minorToMajorInputValue` from `@waitlayer/shared` and uses `majorToMinor()` for conversion and `minorToMajorInputValue()` for `step`/`min`/`max` input attributes instead of hardcoded `/ 100` and `* 100`.
 
 Severity: medium.
 
@@ -2183,6 +2204,8 @@ Done when:
 - Report totals reconcile with ledger spend for the same period.
 
 ### A-051: Campaign Creation Wizard Leaves Orphaned Drafts on Partial Failure
+
+**Resolved 2026-07-09** (commit 229dde8). The new campaign page (`apps/web/src/app/advertiser/campaigns/new/page.tsx`) now tracks the created campaign via a local `campaignCreated` variable (not React state, avoiding stale closures), and on creative/targeting/submit failure shows a recovery message directing the advertiser to edit the draft from the campaigns list rather than a generic "Failed to create campaign" error.
 
 Severity: medium-high.
 

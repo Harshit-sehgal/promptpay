@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 
+import { runAdFlow } from '../lib/ad-flow';
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
 import { getErrorCode, getErrorMessage } from '../lib/errors';
@@ -38,10 +39,15 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   console.log(chalk.dim('Press Ctrl+C to stop.'));
 
   let lastState: WaitState | null = null;
-  // Track the current waitStateId we reported so we can send end when the file is removed
   let activeWaitStateId: string | null = null;
   let activeStartTime: number | null = null;
-  // Impression token for the ad served during the active wait state, if any.
+  // A-040: Ad flow uses the tested runAdFlow() helper. Since the wait-state
+  // duration is unknown until the marker file is removed/emptied, we split:
+  //   - poll() runs requestAd + recordAdRendered (first half of runAdFlow)
+  //   - endActiveWait() calls recordImpressionQualified (second half) using
+  //     the total elapsed duration, matching runAdFlow's qualify logic.
+  // We track the impressionToken here so the qualify call in endActiveWait
+  // can reference the same impression.
   let activeImpressionToken: string | null = null;
 
   /** End the current active wait state and reset tracking. Shared by both
@@ -52,13 +58,16 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
     const durationMs = Date.now() - activeStartTime;
     const durationSeconds = Math.floor(durationMs / 1000);
     console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms (${durationSeconds}s)`));
+
     try {
       await api.endWaitState({ waitStateId: activeWaitStateId, durationSeconds });
     } catch (err: unknown) {
       console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
     }
-    // If an ad was served and the wait state lasted long enough to satisfy the
-    // minimum visible duration, qualify the impression so it bills (A-040).
+
+    // A-040: Qualify the impression via runAdFlow's logic if the wait state
+    // lasted long enough.  We preserve the original order (endWaitState first,
+    // qualify second) to minimize behavioral changes from the refactoring.
     if (activeImpressionToken && durationMs >= 5000) {
       try {
         await api.recordImpressionQualified({
@@ -71,6 +80,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         console.error(chalk.red(`ad qualify error: ${getErrorMessage(err)}`));
       }
     }
+
     activeWaitStateId = null;
     activeStartTime = null;
     activeImpressionToken = null;
@@ -112,24 +122,27 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         sessionId,
       });
 
-      // Optionally serve an ad during the wait state so the developer can earn.
+      // A-040: Serve an ad during the wait state using the tested runAdFlow()
+      // helper. Because the total wait-state duration is unknown until the file
+      // is removed, runAdFlow handles request + render now; the qualify step
+      // happens in endActiveWait() when the total duration is known.
       if (serveAds) {
         try {
-          const ad = await api.requestAd({
+          const result = await runAdFlow(api, {
             deviceId,
             sessionId,
             waitStateId,
             toolType: state.tool,
             idempotencyKey: `cli-ad-${waitStateId}`,
+            // The wait state is still in progress — we can't know the total
+            // duration yet. Pass a short duration so runAdFlow renders the ad
+            // but does NOT qualify it yet (qualify only happens when >= 5000ms).
+            // The qualify step will run in endActiveWait() with the real total.
+            durationMs: 0,
           });
-          if (ad) {
-            activeImpressionToken = ad.impressionToken;
-            await api.recordAdRendered({
-              impressionToken: ad.impressionToken,
-              renderedAt: new Date().toISOString(),
-              idempotencyKey: `render-${ad.impressionToken}`,
-            });
-            console.log(chalk.dim(`[ad] ${ad.title} — ${ad.displayDomain}`));
+          if (result.served && result.impressionToken) {
+            activeImpressionToken = result.impressionToken;
+            console.log(chalk.dim('[ad] served'));
           }
         } catch (err: unknown) {
           console.error(chalk.red(`ad error: ${getErrorMessage(err)}`));

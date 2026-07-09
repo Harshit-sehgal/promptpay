@@ -50,13 +50,18 @@ A `Makefile` wraps common workflows: `make dev`, `make build`, `make typecheck`,
 ## Quality Gates
 
 ```bash
-pnpm run typecheck   # 14/14 tasks
-pnpm run lint        # 9/9 tasks (style warnings allowed)
-pnpm run build      # 9/9 packages
-pnpm run test       # full suite (API unit/contract/e2e-http + CLI + web + VS Code)
-                        # DB-backed API specs require DATABASE_URL + JWT_SECRET (>=32 chars)
+pnpm run typecheck   # all 9 packages (config, ui, shared, db, api, cli, vscode, web)
+pnpm run lint        # ESLint across all workspaces (style warnings allowed)
+pnpm run build       # all 9 packages via Turborepo
+pnpm run test        # full suite (API unit/contract/e2e-http + CLI + web + VS Code)
+                      # DB-backed API specs require DATABASE_URL + JWT_SECRET (>=32 chars)
 pnpm audit --prod    # production dependency vulnerability audit
 ```
+
+> **Note:** Tests that touch the database require Postgres and Redis running locally.
+> Start them with `docker compose up -d postgres redis` and ensure `DATABASE_URL`,
+> `JWT_SECRET` (≥32 chars), and other required env vars are set via `.env` or
+> the shell. See [Environment Reference](docs/ENV_REFERENCE.md) for the full list.
 
 ## Core Features
 
