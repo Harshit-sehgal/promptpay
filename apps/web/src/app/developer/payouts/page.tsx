@@ -1,6 +1,7 @@
 'use client';
 
 import type { AxiosResponse } from 'axios';
+import Link from 'next/link';
 import { FormEvent,useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard,StatusBadge } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
@@ -23,6 +24,8 @@ interface PayoutInfo {
   availableBalanceByCurrency?: Record<string, number>;
   minimumThresholdMinor: number;
   currency: string;
+  requiresTwoFactorForPayout?: boolean;
+  twoFactorEnabled?: boolean;
 }
 
 interface PayoutRequest {
@@ -71,6 +74,9 @@ export default function DevPayoutsPage() {
   const hasPayoutableBalance = Object.values(availableBalanceByCurrency).some(
     (balanceMinor) => info ? balanceMinor >= info.minimumThresholdMinor : false,
   );
+  const payoutTwoFactorEnabled = user?.twoFactorEnabled === true || info?.twoFactorEnabled === true;
+  const requestBlockedByTwoFactor =
+    info?.requiresTwoFactorForPayout === true && !payoutTwoFactorEnabled;
 
   const fetchData = () => {
     setLoading(true);
@@ -135,6 +141,10 @@ export default function DevPayoutsPage() {
       setRequestError('Please select a payout method');
       return;
     }
+    if (requestBlockedByTwoFactor) {
+      setRequestError('Enable two-factor authentication before requesting a payout.');
+      return;
+    }
     const amountMinor = Math.round(parseFloat(amount) * 100);
     if (isNaN(amountMinor) || amountMinor <= 0) {
       setRequestError('Enter a valid amount');
@@ -187,6 +197,22 @@ export default function DevPayoutsPage() {
           </button>
         </div>
       )}
+      {info && requestBlockedByTwoFactor && (
+        <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-amber-800 font-semibold text-[14px]">Enable 2FA to request payouts</p>
+            <p className="text-amber-700 text-xs mt-0.5">
+              Your operator requires two-factor authentication before money can leave your account.
+            </p>
+          </div>
+          <Link
+            href="/developer/settings"
+            className="bg-amber-600 hover:bg-amber-700 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+          >
+            Enable 2FA
+          </Link>
+        </div>
+      )}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Payouts</h1>
         <p className="text-surface-500 text-[15px] font-normal">
@@ -232,7 +258,11 @@ export default function DevPayoutsPage() {
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Request payout</h2>
 
-            {!hasPayoutableBalance ? (
+            {requestBlockedByTwoFactor ? (
+              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
+                Two-factor authentication is required before requesting a payout. Enable 2FA in settings, then return here.
+              </div>
+            ) : !hasPayoutableBalance ? (
               <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
                 You need at least <span className="font-semibold">{formatCurrency(info.minimumThresholdMinor, selectedCurrency)}</span> in confirmed earnings before you can request a payout.
               </div>

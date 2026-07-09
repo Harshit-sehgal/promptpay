@@ -4,6 +4,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { CurrentUser,Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import {
   AddPayoutMethodDto,
@@ -20,6 +21,7 @@ export class PayoutController {
   constructor(private service: PayoutService) {}
 
   @Post('method')
+  @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('payout:write')
   addPayoutMethod(
@@ -30,6 +32,7 @@ export class PayoutController {
   }
 
   @Get('info')
+  @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('payout:read')
   getPayoutInfo(@CurrentUser('id') userId: string) {
@@ -37,6 +40,7 @@ export class PayoutController {
   }
 
   @Post('request')
+  @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('payout:write')
   requestPayout(

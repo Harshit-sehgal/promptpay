@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
 import { LedgerService } from '../ledger/ledger.service';
@@ -103,5 +103,38 @@ describe('PayoutService.requestPayout payout-account verification', () => {
         currency: 'USD',
       }),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('PayoutService.getPayoutInfo payout policy metadata', () => {
+  it('returns the payout 2FA policy and the user enrollment state', async () => {
+    const { service } = makePayoutService(
+      {
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ twoFactorEnabled: false }),
+        },
+        payoutAccount: {
+          findMany: vi.fn().mockResolvedValue([]),
+          findUnique: vi.fn(),
+        },
+        payoutRequest: {
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+        earningsLedger: {
+          groupBy: vi.fn().mockResolvedValue([]),
+          aggregate: vi.fn(),
+        },
+        payoutAllocation: {
+          findMany: vi.fn().mockResolvedValue([]),
+          aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0 } }),
+        },
+      },
+      true,
+    );
+
+    const info = await service.getPayoutInfo('u1');
+
+    expect(info.requiresTwoFactorForPayout).toBe(true);
+    expect(info.twoFactorEnabled).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger } f
 import { ConfigService } from '@nestjs/config';
 
 import { EarningsLedger, PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
-import { PAYOUT, PayoutProvider, PayoutStatus, payoutMinimumMinor } from '@waitlayer/shared';
+import { PAYOUT, payoutMinimumMinor,PayoutProvider, PayoutStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
@@ -213,7 +213,7 @@ export class PayoutService {
       }
     };
 
-    const [accounts, payoutHistory, confirmedEarnings, confirmedDebits, allocatedRows] = await Promise.all([
+    const [accounts, payoutHistory, confirmedEarnings, confirmedDebits, allocatedRows, userSecurity] = await Promise.all([
       safe(
         () => this.prisma.payoutAccount.findMany({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } }),
         'accounts',
@@ -267,6 +267,15 @@ export class PayoutService {
         'allocatedRows',
         [],
       ),
+      safe(
+        () =>
+          this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { twoFactorEnabled: true },
+          }),
+        'userSecurity',
+        null,
+      ),
     ]);
 
     const rawBalancesByCurrency: Record<string, number> = {};
@@ -289,6 +298,8 @@ export class PayoutService {
       minimumThresholdMinor: PAYOUT.MINIMUM_THRESHOLD_MINOR,
       currency,
       payoutHistory,
+      requiresTwoFactorForPayout: this.config.get<string>('PAYOUT_REQUIRE_2FA') === 'true',
+      twoFactorEnabled: userSecurity?.twoFactorEnabled ?? false,
     };
   }
 
@@ -766,6 +777,38 @@ export class PayoutService {
           } else {
             // Shrink this allocation
             const remaining = entry.amountMinor - overage;
+            // Issue A-059: a partial approval must pay exactly the approved
+            // amount and leave the unpaid remainder available. At request time
+            // each allocation maps 1:1 to an earnings row of the same amount,
+            // so shrink that earnings row to the paid slice and persist the
+            // unpaid remainder as a fresh `confirmed` earnings row. Without
+            // this split, markPayoutPaid would mark the WHOLE (larger) earnings
+            // row `paid` and the developer would lose the remainder.
+            const earningsEntry = await tx.earningsLedger.findUnique({
+              where: { id: entry.earningsEntryId },
+            });
+            if (earningsEntry && earningsEntry.amountMinor > remaining) {
+              const remainderMinor = earningsEntry.amountMinor - remaining;
+              await tx.earningsLedger.update({
+                where: { id: earningsEntry.id },
+                data: { amountMinor: remaining },
+              });
+              await tx.earningsLedger.create({
+                data: {
+                  userId: earningsEntry.userId,
+                  campaignId: earningsEntry.campaignId,
+                  impressionId: earningsEntry.impressionId,
+                  clickId: earningsEntry.clickId,
+                  entryType: earningsEntry.entryType,
+                  status: 'confirmed',
+                  amountMinor: remainderMinor,
+                  currency: earningsEntry.currency,
+                  availableAt: earningsEntry.availableAt,
+                  idempotencyKey: `payout_remainder_${payoutId}_${earningsEntry.id}`,
+                  description: earningsEntry.description ?? 'Payout partial-approval remainder',
+                },
+              });
+            }
             await tx.payoutAllocation.update({
               where: { id: entry.id },
               data: { amountMinor: remaining },
