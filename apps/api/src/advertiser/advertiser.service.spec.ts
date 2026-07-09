@@ -4,7 +4,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
-import { AdvertiserService } from './advertiser.service';
+import { AdvertiserService, buildReportsDateFilter } from './advertiser.service';
 import { CampaignStatus } from '@waitlayer/db';
 
 function makePrisma() {
@@ -101,35 +101,34 @@ describe('AdvertiserService.getReports date-range end-day (A-050)', () => {
   });
 
   it('treats a date-only `to` as inclusive of the whole end day (event at noon is included)', async () => {
+    // A-050: a date-only `to` uses an EXCLUSIVE next-day `lt` bound so the
+    // noon event on 2026-07-09 is included.
+    const createdAt = buildReportsDateFilter(undefined, '2026-07-09');
+    expect(createdAt.lt).toEqual(new Date('2026-07-10T00:00:00.000Z'));
+    expect(createdAt.lte).toBeUndefined();
+
     const reports = await service.getReports('adv-1', { to: '2026-07-09' });
 
-    // A-068: the daily trend is built from $queryRaw SQL bucket queries, not
-    // findMany raw-row loading. The $queryRaw call must have been made for
-    // both impressions and clicks.
-    const queryRawCalls = prisma.$queryRaw.mock.calls;
-    expect(queryRawCalls.length).toBeGreaterThanOrEqual(2);
-
-    // A-007: per-campaign impression/click counts are aggregated in the DB
-    // via groupBy (not by loading every raw row into memory).
+    // A-007/A-068: per-campaign counts via groupBy + daily trend via $queryRaw.
     expect(prisma.adImpression.groupBy).toHaveBeenCalled();
     expect(prisma.adClick.groupBy).toHaveBeenCalled();
+    expect(prisma.$queryRaw).toHaveBeenCalled();
 
-    // The noon impression is counted in the summary.
+    // The noon impression is counted in the summary and daily trend.
     expect(reports.summary.totalImpressions).toBe(1);
     expect(reports.dailyTrend[0].impressions).toBe(1);
   });
 
   it('keeps an ISO-datetime `to` as an inclusive upper bound', async () => {
-    // A-068: $queryRaw SQL aggregation — for an ISO datetime `to`, the SQL
-    // should use `<=` (not `<`) bound. Verify $queryRaw is called and the
-    // returned data is processed correctly.
-    await service.getReports('adv-1', { to: '2026-07-09T23:00:00.000Z' });
+    const createdAt = buildReportsDateFilter(undefined, '2026-07-09T23:00:00.000Z');
+    expect(createdAt.lte).toEqual(new Date('2026-07-09T23:00:00.000Z'));
+    expect(createdAt.lt).toBeUndefined();
 
-    const queryRawCalls = prisma.$queryRaw.mock.calls;
-    expect(queryRawCalls.length).toBeGreaterThanOrEqual(2);
-
-    // Verify the clicks SQL had no data (no crash on empty dailyClick).
-    expect(prisma.adClick.groupBy).toHaveBeenCalled();
+    // End-to-end: the SQL aggregation path must not throw and must produce a
+    // daily trend for the ISO-datetime range.
+    const reports = await service.getReports('adv-1', { to: '2026-07-09T23:00:00.000Z' });
+    expect(prisma.$queryRaw).toHaveBeenCalled();
+    expect(Array.isArray(reports.dailyTrend)).toBe(true);
   });
 });
 

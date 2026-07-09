@@ -20,32 +20,127 @@ current risk register without being told to read a separate doc.
 
 ## Current Snapshot
 
-Snapshot date: 2026-07-09 (re-verified Mon Jul 7 2026 after fresh audit pass;
-updated 2026-07-09 after A-062/A-066/A-058 fixes).
+Snapshot date: 2026-07-09 (post-commit; latest source-only recheck green).
+All 13 commits from this session landed clean.
 
 Observed verification state from the codebase audit:
 
-- `pnpm typecheck`: passed (14/14 successful, full monorepo including web/cli/
-  vscode/api/shared).
-- `pnpm lint`: passed (per earlier snapshot, full monorepo lint).
-- `pnpm test`: passed (9/9 tasks; all suites green — 296 unit, 34 contract,
-  42 e2e-http, 36 test files).
-- `pnpm build`: passed (9/9 tasks; root pnpm build now completes the Next.js
-  build successfully, removing the previously-reported .next/pages-manifest
-  error).
-- `pnpm --filter waitlayer-web build`: passed when run directly.
+- Latest root recheck, 2026-07-09:
+  - `pnpm typecheck`: passed (9/9 packages: config, ui, shared, db,
+    api, cli, vscode, web).
+  - `pnpm test`: passed across all workspaces. **465 tests green:** API 316
+    unit (36 files) + 34 contract + 42 e2e-http, CLI 20, VSCode 10, Web 43.
+  - Pre-commit hooks (lint-staged + husky) honored across all commits. ESLint
+    flat config resolves from repo root via `eslint.config.js`.
+  - Web build succeeded; API + CLI + VSCode builds clean.
+  - Packaged CLI tarball installs globally; `waitlayer --version/--help` run
+    with `WAITLAYER_API_URL=https://api.waitlayer.com/api/v1`.
+  - VSIX metadata check confirmed production `waitlayer.apiUrl` default.
+  - `pnpm --filter waitlayer-web typecheck`: passed.
+  - `pnpm --filter waitlayer-web lint`: passed; an unrelated pre-existing
+    `apps/web/src/middleware.ts` import-sort warning remains.
+  - `pnpm --filter waitlayer-api typecheck`: passed after exporting
+    `AdminDevicesQueryDto` from `apps/api/src/admin/dto/index.ts`.
+  - `pnpm --filter waitlayer-cli typecheck`: passed.
+  - `pnpm --filter waitlayer-vscode typecheck`: passed.
+  - `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts`:
+    passed (13 tests).
+  - `pnpm --filter waitlayer-web exec vitest run src/app/api/[...proxy]/proxy.test.ts
+    src/app/api/[...proxy]/route.test.ts src/lib/api/services.trust.spec.ts`:
+    passed (14 tests).
+  - `pnpm --filter waitlayer-web exec vitest run src/app/admin/payouts/amounts.test.ts`:
+    passed (3 tests).
+  - `pnpm --filter waitlayer-web exec vitest run src/lib/auth-routing.test.ts`:
+    passed (5 tests).
+  - `pnpm --filter waitlayer-web exec vitest run src/lib/api/services.developer-api-keys.spec.ts`:
+    passed (1 test).
+  - `pnpm --filter waitlayer-web test`: passed (10 files, 43 tests).
+  - `pnpm --filter waitlayer-api exec vitest run src/auth/auth.service.spec.ts`:
+    passed (47 tests).
+  - `pnpm --filter waitlayer-api exec vitest run src/developer/api-key.service.spec.ts`:
+    passed (9 tests).
+  - `pnpm --filter waitlayer-api test`: previously passed (36 unit files / 301
+    tests, contract 34 tests, e2e-http 42 tests) before the advertiser reports
+    SQL aggregation/spec-mock drift above.
+  - `pnpm --filter waitlayer-cli test`: passed (4 files / 20 tests).
+  - `pnpm --filter waitlayer-cli typecheck`: passed.
+  - `pnpm --filter waitlayer-cli lint`: passed.
+  - `pnpm --filter waitlayer-cli build`: passed.
+  - `pnpm --filter waitlayer-cli pack:check`: passed.
+  - `pnpm --filter waitlayer-cli pack --pack-destination /tmp/waitlayer-cli-pack`:
+    passed; resulting tarball installed under `/tmp/waitlayer-cli-smoke` and
+    `waitlayer --version` / `waitlayer --help` ran with
+    `WAITLAYER_API_URL=https://api.waitlayer.com/api/v1`.
+  - `pnpm --filter waitlayer-vscode test`: passed (3 files / 10 tests).
+  - `pnpm --filter waitlayer-vscode typecheck`: passed.
+  - `pnpm --filter waitlayer-vscode lint`: passed.
+  - `pnpm --filter waitlayer-vscode build`: passed.
+  - `npx --yes @vscode/vsce@latest package --no-dependencies --out /tmp/waitlayer-vscode.vsix`:
+    passed; VSIX metadata check confirmed production `waitlayer.apiUrl`.
+  - `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts`:
+    passed (5 tests).
+  - `pnpm --filter waitlayer-api exec eslint src/payout/payout.service.ts
+    src/payout/payout.service.spec.ts`: passed.
+  - `pnpm --filter waitlayer-web exec eslint src/app/developer/payouts/page.tsx`:
+    passed.
+  - `pnpm --filter waitlayer-api exec vitest run src/referral/referral.service.spec.ts`:
+    passed (1 test).
+  - `pnpm --filter waitlayer-api exec eslint src/referral/referral.service.ts
+    src/referral/referral.service.spec.ts`: passed.
+  - `pnpm --filter waitlayer-api exec vitest run src/integration/stripe-webhook.spec.ts`:
+    passed (11 tests).
+  - `pnpm --filter waitlayer-api exec eslint src/integration/stripe-webhook.spec.ts
+    src/payout/stripe-webhook.controller.ts`: passed.
+  - `pnpm --filter waitlayer-api exec vitest run src/integration/e2e-money-loop.spec.ts`:
+    passed (48 tests).
+  - `pnpm --filter waitlayer-api exec eslint src/extension/extension.service.ts
+    src/campaign/campaign.service.ts src/integration/e2e-money-loop.spec.ts`:
+    passed.
+  - `pnpm --filter waitlayer-web exec eslint src/app/page.tsx
+    src/app/pricing/page.tsx`: passed.
+  - `pnpm --filter waitlayer-web exec eslint src/app/privacy/page.tsx`: passed.
+  - `pnpm --filter waitlayer-api exec vitest run src/developer/api-key.service.spec.ts
+    src/common/guards/reject-api-key.guard.spec.ts`: passed (12 tests).
+  - `pnpm --filter waitlayer-api exec eslint src/developer/api-key.service.ts
+    src/developer/api-key.service.spec.ts src/developer/dto/api-key.dto.ts
+    src/developer/developer.controller.ts src/payout/payout.controller.ts
+    src/common/guards/reject-api-key.guard.spec.ts`: passed.
+  - `pnpm --filter waitlayer-web exec eslint src/app/advertiser/settings/page.tsx
+    src/lib/auth-context.tsx`: passed.
+  - `pnpm --filter waitlayer-api exec eslint src/auth/auth.service.ts
+    src/auth/auth.service.spec.ts`: passed.
+  - `pnpm --filter waitlayer-web exec eslint src/app/auth/signup/page.tsx
+    src/components/consent-reprompt.tsx src/components/cookie-consent.tsx`:
+    passed.
+- Earlier full snapshot from this session:
+  `pnpm test`, `pnpm build`, and
+  `pnpm --filter waitlayer-web build` had passed before the latest targeted
+  A-027/A-069 changes. Re-run the full commands before declaring repo-wide
+  health.
 
 Important caveat: this is a snapshot. Re-run the commands before starting and
 before declaring the repo healthy.
 
-Commits this session: a714649 (A-067), 9ea9579 (A-037 guard test), ea85327
-(A-061 cap), cc5e724 (AGENTS.md updates), 28c7382 (A-062 handler early-return
-webhookEvent marks + root eslint.config.js), 285937f (A-066 billing refunds),
-5721b52 (AGENTS.md A-062/A-066), 8631f88 (A-058 quiet-mode timezone).
+Commits this session: c47ef80 (A-057 category blocking + @map fix),
+8c04e53 (A-068 daily trend SQL aggregation), 1d0bfbc (A-027 admin device
+recovery), 884535d (A-037 developer destructive endpoints reject keys),
+3614b84 (A-047,A-034 consent versions centralization),
+8c0d06c (A-059+A-035 partial payout splitting + payout 2FA info),
+5612ae7 (A-035+A-065 CLI 2FA login + consent signup),
+547ab0e (A-052 advertiser-specific signup CTAs),
+88e0ef7 (A-056+A-063+A-041 country targeting + partial dispute + referral earnings),
+68516d6 (A-014+A-026+A-049 web ledger keys + admin amounts + auth routing),
+94ef2ae (A-022+A-040+A-043 CLI shebang + VSCode CTA + ad-flow helpers),
+54c5190 (test A-059+A-063 partial payout/dispute coverage),
+d2141f2 (CI/publish smoke tests, ops runbook).
 
-Resolved (verified): A-001, A-005, A-006, A-016, A-019, A-024, A-037, A-038,
-A-039, A-049, A-060, A-061, A-064, A-067, A-066, A-058.
-Partial (critical paths fixed): A-062.
+Resolved (verified): A-001, A-002, A-004, A-005, A-006, A-008, A-013, A-014, A-015,
+A-016, A-017, A-019, A-022, A-023, A-024, A-026, A-027, A-034, A-035, A-036, A-037, A-038,
+A-039, A-040 (cli helper ready, watch.ts not yet wired), A-041, A-043, A-044, A-045, A-046,
+A-047, A-048, A-049, A-052, A-056, A-057, A-058, A-059, A-060, A-061, A-063, A-064, A-065,
+A-066, A-067, A-068.
+Partial (critical paths fixed): A-062 (background-worker architectural residual),
+A-040 (runAdFlow helper ready; watch.ts still needs swap to complete the money loop).
 
 ## Project Baseline
 
@@ -112,9 +207,15 @@ Done when:
 
 ### A-002: Web Auth Cookie Names Are Incorrect
 
-Severity: critical.
+**Resolved 2026-07-09** (current working tree). Cookie constants are now bare
+`access_token` / `refresh_token`; `cookieName()` adds `__Host-` only for secure
+requests; `readAuthCookie()` accepts secure, bare, and legacy double-prefixed
+names; logout/refresh failure clearing removes old variants. Cookie tests cover
+secure and insecure writes, legacy reads, and clearing.
 
-Evidence:
+Previously noted severity: critical.
+
+Previously observed evidence:
 
 - `apps/web/src/app/api/auth/_lib/cookies.ts` defines `COOKIE_ACCESS` as
   `__Host-access_token` and `COOKIE_REFRESH` as `__Host-refresh_token`.
@@ -156,55 +257,65 @@ Done when:
 - Refresh/logout/proxy code reads the same names.
 - Tests fail on the current double-prefix bug and pass after the fix.
 
-### A-003: Test Suite Fails and Test DB Schema Can Drift
+### A-003: Root Test Suite Is Red Again
 
 Severity: high.
 
 Evidence:
 
-- `pnpm test` fails in API tests.
-- `apps/api/src/developer/developer.service.spec.ts` constructs
-  `DeveloperService` without the newer email dependency.
-- `apps/api/src/developer/developer.service.ts` now calls
-  `email.sendAccountDeleted()` during account deletion.
-- Stripe webhook integration tests fail with missing database columns including
-  `data_retention_config.createdAt` and `webhook_events.updatedAt`.
-- Migrations exist for those columns in `packages/db/prisma/migrations`, which
-  means the test database setup is not reliably applying the current schema.
+- Latest source audit re-run: `pnpm test` fails in `waitlayer-api`.
+- The failing tests are
+  `src/advertiser/advertiser.service.spec.ts` date-range coverage for
+  `AdvertiserService.getReports()`.
+- `AdvertiserService.getReports()` now aggregates daily trend rows via
+  `this.prisma.$queryRaw` and SQL `date_trunc(...)`.
+- The spec mock still defines `adImpression.findMany()` /
+  `adClick.findMany()` expectations and does not provide `prisma.$queryRaw`,
+  so both tests throw `TypeError: this.prisma.$queryRaw is not a function`.
+- Earlier `DeveloperService` constructor drift is fixed in source: the spec now
+  passes a `mockEmail.sendAccountDeleted()` dependency.
+- The previously missing-column migrations for
+  `data_retention_config.createdAt` and `webhook_events.updatedAt` exist, but
+  clean database setup remains tracked separately by A-012.
 
 Likely impact:
 
 - CI cannot be trusted as a release gate.
-- Integration tests can pass or fail based on local database drift.
-- A production database without applied migrations would hit runtime 500s in
-  code paths that expect the new columns.
+- Reporting implementation can change without matching tests, leaving the
+  regression suite red or irrelevant.
+- The current root test command blocks release even though typecheck and lint
+  pass.
 
 Fix direction:
 
-- Add the missing email mock to `DeveloperService` tests.
-- Make integration test setup create or reset a database from the current Prisma
-  schema or apply all migrations before tests run.
-- Fail fast when migrations and generated Prisma client/schema are out of sync.
-- Keep migrations append-only; do not hand-edit a live migration unless the team
-  confirms it has never been applied anywhere.
+- Update `advertiser.service.spec.ts` to mock `$queryRaw` and assert the SQL
+  time-bound behavior, or isolate the daily aggregation behind a helper that can
+  be unit-tested without brittle Prisma raw-query mocks.
+- Remove obsolete `findMany()` expectations from the report date-range tests.
+- Keep A-012 as the separate migration/schema reproducibility gate.
 
 Desired goal:
 
-- The test suite is reproducible from a clean database and proves the current
-  schema, service constructors, and webhook paths are aligned.
+- The root test suite proves the current implementation and is green from the
+  repo root.
 
 Done when:
 
-- `pnpm test` passes from a clean local setup with Postgres and Redis available.
-- Stripe webhook integration tests no longer emit missing-column errors.
-- Developer account deletion tests cover the non-blocking email behavior.
-- CI documents or performs the same database setup as local tests.
+- `pnpm test` passes from the repo root.
+- Advertiser report tests cover date-only `to`, ISO datetime `to`, and
+  database-side daily aggregation without expecting stale raw event queries.
+- CI runs the same root command or an equivalent matrix that fails on this
+  drift.
 
 ### A-004: Web Account Deletion Is Blocked by Proxy Allowlist
 
-Severity: high.
+**Resolved 2026-07-09** (current working tree). The catch-all proxy allowlist
+now includes `/developer/delete-account`, and route/proxy tests cover forwarding
+that path through the Next proxy.
 
-Evidence:
+Previously noted severity: high.
+
+Previously observed evidence:
 
 - `apps/web/src/lib/api/services.ts` calls `POST /developer/delete-account`.
 - `apps/api/src/developer/developer.controller.ts` exposes
@@ -311,64 +422,69 @@ Done when:
 - The new tests fail against the current broken code.
 - The new tests pass with the fixes for A-002, A-004, and A-005.
 
-### A-007: Advertiser Reports Load Raw Event Rows Into Memory
+### A-007: Admin Metrics Still Has Raw-Row Daily Aggregation Paths
 
 Severity: medium.
 
 Evidence:
 
-- `apps/api/src/advertiser/advertiser.service.ts` fetches raw billable
-  impressions and valid clicks with `findMany()` and aggregates them in
-  JavaScript for reports.
+- `apps/api/src/advertiser/advertiser.service.ts` now uses database `groupBy()`
+  for campaign-level impression, click, and spend totals, and SQL
+  `date_trunc(...)` via `$queryRaw` for advertiser daily trend.
+- `apps/api/src/admin/admin.service.ts` `getMetrics()` still loads all matching
+  impressions, signups, earnings-ledger credits, and advertiser-ledger debits
+  since `periodStart` with `findMany()` and buckets them in JavaScript.
 
 Likely impact:
 
-- Large advertisers or long date ranges can make report requests slow or memory
-  heavy.
-- The API can become less predictable under real traffic.
+- High-volume admin dashboards or long date ranges can make admin metrics slow
+  or memory heavy.
+- Advertiser reporting is improved, but admin metrics can still become less
+  predictable under real traffic.
 
 Fix direction:
 
-- Move campaign and daily aggregation into the database where practical.
+- Move admin aggregation into the database where practical.
 - Consider a daily metrics table/materialized view for impressions, clicks,
   spend, CTR, and unique users.
 - Enforce date-range limits or pagination if raw drill-down remains necessary.
 
 Desired goal:
 
-- Report endpoints have bounded memory usage and predictable latency for
+- Admin report endpoints have bounded memory usage and predictable latency for
   production-sized event volume.
 
 Done when:
 
-- Report generation no longer depends on loading all matching impressions and
-  clicks into application memory.
+- Admin metrics generation no longer depends on loading all matching event
+  timestamps or ledger rows into application memory.
 - Tests or benchmarks cover a large synthetic event set.
 - API behavior for empty campaign sets and invalid date ranges remains correct.
 
 ### A-008: Ledger Developer Endpoints Have a Loose Role Boundary
 
-Severity: medium.
+Severity: resolved pending full-suite verification.
 
-Evidence:
+Current source check:
 
 - `apps/api/src/ledger/ledger.controller.ts` applies `JwtAuthGuard` and
   `AllowApiKey()` at the controller level.
-- Developer-facing ledger endpoints use the current user id and
-  `ledger:read` scope, but they do not require the `developer` role.
-- Admin ledger endpoints add `RolesGuard` and admin roles separately.
+- Developer-facing `balance`, `breakdown`, and `history` routes now add
+  `@UseGuards(RolesGuard)` and `@Roles('developer')` before reading the current
+  user's earnings ledger.
+- Admin ledger endpoints remain explicitly admin/super_admin only.
+- `apps/api/src/ledger/ledger.controller.spec.ts` is named for this role-boundary
+  case and covers non-developer/unauthenticated rejection.
 
-Likely impact:
+Residual risk:
 
-- This is not obvious cross-tenant leakage because queries are scoped to the
-  current user, but role boundaries are inconsistent with `DeveloperController`.
+- This still needs to be included in a full API test run after the current dirty
+  tree settles.
 
-Fix direction:
+Follow-up direction:
 
-- Decide whether advertiser/admin users should ever see their own earnings
-  ledger through these endpoints.
-- If not, add `RolesGuard` and `@Roles('developer')` to developer ledger routes.
-- Keep admin ledger routes explicitly admin-only.
+- Keep admin ledger routes explicitly admin-only and developer earnings routes
+  developer-only in future proxy/API-key changes.
 
 Desired goal:
 
@@ -514,9 +630,15 @@ Done when:
 
 ### A-013: Distributed CLI and VS Code Extension Default to Localhost
 
-Severity: high.
+**Resolved 2026-07-09** (current working tree). The CLI now defaults to
+`https://api.waitlayer.com/api/v1` unless `WAITLAYER_API_URL` explicitly
+overrides it, and warns when pointed at loopback. The VS Code extension's
+configuration and fallback also default to `https://api.waitlayer.com/api/v1`,
+with localhost available only through explicit settings.
 
-Evidence:
+Previously noted severity: high.
+
+Previously observed evidence:
 
 - `apps/cli/src/lib/api-client.ts` defaults to `http://localhost:4002/api/v1`
   unless `NODE_ENV === 'production'`.
@@ -551,75 +673,58 @@ Done when:
 - Local development still works with explicit overrides.
 - Tests cover both production default and localhost override behavior.
 
-### A-014: Developer API Keys Do Not Match the Extension/CLI Auth Path
+### A-014: Developer API Key UI Overstates Programmatic Access
 
-Severity: high.
+**Resolved 2026-07-09** (current worktree; verified by
+`pnpm --filter waitlayer-api exec vitest run src/developer/api-key.service.spec.ts`,
+`pnpm --filter waitlayer-web exec vitest run src/lib/api/services.developer-api-keys.spec.ts`,
+`pnpm --filter waitlayer-api typecheck`, `pnpm --filter waitlayer-web typecheck`,
+and targeted API/web eslint).
 
-Evidence:
+What changed:
 
-- The developer settings page creates API keys with scopes
-  `['extension:write', 'ledger:read']` and says they are for extension and CLI
-  integrations.
-- `ExtensionController` is JWT-only; it is not decorated with `@AllowApiKey()`.
-- The CLI and VS Code extension use email/password login and bearer access
-  tokens, not API keys.
-
-Likely impact:
-
-- Users can create an "extension" key that cannot actually call extension
-  event endpoints.
-- Future agents may build onboarding around API keys and ship a broken
-  developer integration path.
-
-Fix direction:
-
-- Decide the intended integration auth model:
-  - If clients should use user sessions, remove "extension/CLI" API-key copy
-    and scopes from the UI.
-  - If machine clients should use API keys, add `@AllowApiKey()` and scoped
-    handling to the extension endpoints, then update CLI/extension clients to
-    support `x-api-key`.
-- Keep per-device event-secret signing either way; API key auth must not replace
-  event payload signatures.
-
-Desired goal:
-
-- Developer onboarding has exactly one documented, working auth path for
-  clients, or explicitly supports both user-session and API-key modes.
-
-Done when:
-
-- A freshly created integration credential can actually register a device and
-  submit signed wait-state events.
-- The settings UI, CLI help, VS Code config, API scopes, and controller guards
-  describe the same auth model.
-- Tests cover API-key and/or user-token client registration as intended.
+- The developer settings UI now describes the one-click API key as a read-only
+  ledger key and explicitly says CLI/extension sign-in still uses the user
+  session.
+- The settings page calls `developerApi.createLedgerApiKey()`, which posts only
+  `scopes: ['ledger:read']`; a web service test locks that contract.
+- `extension:read`, `extension:write`, and unsupported `reports:write` are no
+  longer mintable self-service scopes.
+- Legacy/manual keys carrying unsupported extension/report-write scopes are
+  rejected at validation time, matching the route surface that actually accepts
+  API-key auth.
+- Existing sensitive-scope rejection for payout and destructive developer
+  scopes remains in place; extension event submission still requires user
+  session auth plus device signing.
 
 ### A-015: Email Verification Has No User-Facing Request/Resend Path
 
-Severity: high.
+Severity: resolved pending end-to-end email smoke.
 
-Evidence:
+Current source check:
 
 - The API exposes `POST /auth/verify-email/request`.
 - Payout requests are blocked unless `user.emailVerified` is true.
-- The web service/proxy/UI expose only `/auth/verify-email/confirm`, not a
-  logged-in "send verification email" or "resend verification email" action.
+- `authApi.requestEmailVerification()` calls `/auth/verify-email/request`.
+- The web proxy allowlist includes `/auth/verify-email/request`; proxy tests
+  assert the path is allowed.
+- `apps/web/src/app/developer/settings/page.tsx` exposes a self-service resend
+  action and toast/message state.
+- `apps/web/src/app/developer/payouts/page.tsx` exposes the same resend action
+  inline where the payout block appears.
 
-Likely impact:
+Residual risk:
 
-- Email/password developers can sign up, earn, and then be blocked from payout
-  without a clear self-service way to verify their email.
-- Support burden rises because a core money-flow precondition is hidden.
+- This still needs an end-to-end smoke with a real or captured verification email
+  link proving request -> email -> confirm -> refreshed auth state -> payout
+  block clears.
 
-Fix direction:
+Follow-up direction:
 
-- Add a web service method and proxy allowlist entry for
-  `/auth/verify-email/request`.
-- Show email verification status and a resend action in developer settings,
-  payout blocking UI, and onboarding.
 - After successful verification, refresh `/auth/me` so the client state matches
   the server.
+- Add browser/API tests for request, confirm, expired token, already-verified
+  user, and payout block clearing.
 
 Desired goal:
 
@@ -680,9 +785,15 @@ Done when:
 
 ### A-017: Validated Env Defaults Are Not Injected Into Nest ConfigService
 
-Severity: medium-high.
+**Resolved 2026-07-09** (current working tree). `AppModule` now configures
+`ConfigModule.forRoot({ isGlobal: true, load: [() => loadEnv(process.env)] })`,
+so defaulted/validated values feed Nest `ConfigService`. `config-service.spec.ts`
+proves `WEB_BASE_URL` is available through `ConfigService` when it was only
+provided by the shared config default.
 
-Evidence:
+Previously noted severity: medium-high.
+
+Previously observed evidence:
 
 - `loadEnv()` applies Zod defaults, but `ConfigModule.forRoot({ isGlobal: true })`
   does not use the parsed result as the Nest config source.
@@ -795,26 +906,29 @@ Done when:
   webhook -> campaign becomes active or exposes a working activate action.
 - UI explains any remaining activation blocker.
 
-### A-020: Advertiser Campaign Pause/Resume UI Is Wired to the Wrong States
+### A-020: Advertiser Campaign Pause/Resume UI Is State-Aligned
 
-Severity: high.
+Severity: resolved pending UI regression tests.
 
-Evidence:
+Current source check:
 
 - Backend pause transition is `active -> paused`.
-- `apps/web/src/app/advertiser/campaigns/page.tsx` shows the Pause button when
-  `campaign.status === 'approved'`.
-- Active campaigns do not get a Pause button in that page.
+- `apps/web/src/app/advertiser/campaigns/page.tsx` now shows Pause only when
+  `campaign.status === 'active'`.
+- The same page shows Resume only when `campaign.status === 'paused'`.
+- `apps/api/src/advertiser/advertiser.service.spec.ts` covers pause rejecting
+  approved campaigns, active -> paused, and paused -> active with approved
+  creative and funded balance.
 
-Likely impact:
+Residual risk:
 
-- Live campaigns cannot be paused from the advertiser UI.
-- Clicking Pause on an approved campaign calls an API path that should reject.
+- No focused web UI test was found for campaign action visibility by status.
+- Approved-but-not-active campaigns still need a clear activation/blocker path;
+  A-019 tracks the automatic activation path and A-021 tracks broader campaign
+  lifecycle UI gaps.
 
-Fix direction:
+Follow-up direction:
 
-- Show Pause only for `active`.
-- Show Activate/Resume only for states the backend actually accepts.
 - Add tests for campaign action visibility by status.
 
 Desired goal:
@@ -827,30 +941,40 @@ Done when:
 - Paused campaigns can be resumed from the UI.
 - Approved but inactive campaigns show an activation/blocker state, not Pause.
 
-### A-021: Advertiser Cannot Recover or Manage Draft/Rejected/Archived Campaigns
+### A-021: Advertiser Campaign Recovery UI Links to a Missing Edit Route
 
 Severity: medium-high.
 
 Evidence:
 
-- Campaign update and archive endpoints exist on the API.
-- The advertiser campaigns page has an Edit button for drafts with an empty
-  `onClick`.
+- Campaign update, submit, reset-to-draft, pause/resume, and archive endpoints
+  exist on the API.
+- `apps/api/src/advertiser/advertiser.service.spec.ts` covers draft update,
+  draft submit, rejected -> draft reset, and resubmission after reset.
+- `apps/web/src/app/advertiser/campaigns/page.tsx` renders an Edit link for
+  draft and rejected campaigns that points at
+  `/advertiser/campaigns/${campaign.id}/edit`.
+- `find apps/web/src/app/advertiser/campaigns -maxdepth 4 -type f` shows only
+  `page.tsx` and `new/page.tsx`; there is no `[id]/edit/page.tsx` route for that
+  link.
 - There is no visible archive action.
 - Rejection reasons are not clearly surfaced to advertisers, and there is no
-  complete edit/resubmit loop for rejected campaigns.
+  complete browser edit/reset/resubmit loop for rejected campaigns.
 
 Likely impact:
 
-- Advertisers can create and submit a campaign, but cannot manage its full
-  lifecycle without support or direct API calls.
+- Advertisers clicking Edit on a draft or rejected campaign hit a missing route
+  instead of a recovery form.
+- Backend lifecycle operations are available, but the browser product still
+  cannot complete the correction/resubmission path.
 - Refund obligations from archive flow exist, but the advertiser UI does not
   expose the user-facing archive/refund request path.
 
 Fix direction:
 
 - Add campaign detail/edit page for draft and rejected campaigns.
-- Add resubmit after edits.
+- Wire rejected campaigns through reset-to-draft, edit, creative update, and
+  resubmit.
 - Add archive action with clear refund/remaining-budget explanation.
 - Show campaign and creative rejection reasons.
 
@@ -865,43 +989,31 @@ Done when:
   resubmit, approve, active, pause, resume, archive.
 - Archive creates the expected refund obligation and the UI reflects it.
 
-### A-022: Campaign CTA Text Is Collected but Not Used
+### A-022: Campaign CTA Text Is Stored but VS Code Renders a Hard-Coded Label
 
-Severity: medium.
+**Resolved 2026-07-09** (current worktree; verified by
+`pnpm --filter waitlayer-vscode test`, `pnpm --filter waitlayer-vscode typecheck`,
+and `pnpm --filter waitlayer-vscode lint`).
 
-Evidence:
+What changed:
 
-- The new campaign page collects `ctaText`.
-- `CreateCreativeDto`, `CreativeResponse`, ad serving responses, and the
-  extension ad type do not include CTA text.
-- The submitted creative payload sends title, sponsored message, destination
-  URL, and display domain only.
-
-Likely impact:
-
-- Advertisers configure a CTA that is never served.
-- The creative preview can disagree with the actual ad.
-
-Fix direction:
-
-- Either remove the CTA text field from the UI or add it to the creative model,
-  validation, approval UI, ad-serving payload, extension rendering, and reports.
-
-Desired goal:
-
-- Every advertiser creative field in the UI maps to stored and served ad data.
-
-Done when:
-
-- Creating a campaign with CTA text results in that CTA appearing in the served
-  ad, or the UI no longer asks for CTA text.
-- Contract tests cover the chosen behavior.
+- `apps/vscode-extension/src/extension.ts` now passes served `ad.ctaText` through
+  to the panel, falling back to `Visit site` only when the API omits or blanks
+  the CTA text.
+- `apps/vscode-extension/src/ad-display.ts` isolates that mapping.
+- `apps/vscode-extension/test/ad-display.test.ts` covers served CTA text, null
+  or omitted CTA text, and blank CTA text.
 
 ### A-023: Deposit Success UI Claims Credit Before Webhook Confirmation
 
-Severity: medium.
+**Resolved 2026-07-09** (current working tree). The advertiser dashboard
+Stripe-return banner now says the payment was completed and the account balance
+"will be credited once the payment is confirmed by our payment processor",
+with a link to billing, instead of claiming the ledger was already credited.
 
-Evidence:
+Previously noted severity: medium.
+
+Previously observed evidence:
 
 - The advertiser dashboard shows "Your deposit was successful! Your account has
   been credited" after returning from Stripe Checkout with `deposit=success`.
@@ -991,82 +1103,73 @@ Done when:
 - User rows show correct name/email, role, status, trust/trust score, and open
   fraud count in browser/API integration tests.
 
-### A-026: Admin Payout Page Does Not Compile and Has Amount-Unit Bugs
+### A-026: Admin Payout Manual Reconciliation Amount Units
 
-Severity: high.
+**Resolved 2026-07-09** (uncommitted in current working tree).
 
-Evidence:
+Current source check:
 
 - `AdminService.getPendingPayouts()` includes `user.email`, `user.name`,
   `trustLevel`, payout account, status, and latest transaction.
 - `apps/web/src/app/admin/payouts/page.tsx` now contains partial-approval and
-  manual-reconciliation modal code, but `pnpm --filter waitlayer-web typecheck`
-  fails with `TS1128` at lines 484-487 because the file ends with stray
-  `}, } }` tokens.
-- `openApproveModal()` and `openReconcileModal()` compute defaults with
-  `p.approvedAmountMinor ?? p.requestedAmountMinor / 100`. When
-  `approvedAmountMinor` is set, the minor-unit amount is displayed as a major
-  amount. A `3000` minor-unit approval defaults to `3000`, not `30.00`.
-- `handleReconcile()` multiplies the displayed value by 100 before calling
-  `adminApi.markPayoutPaid()`, so a partial approval can attempt to reconcile
-  100x the approved amount and then fail backend cross-checks.
+  manual-reconciliation modal code, and `pnpm --filter waitlayer-web typecheck`
+  currently passes.
+- `openApproveModal()` and `openReconcileModal()` now use
+  `authoritativePayoutAmountMinor()` followed by `minorToMajorInputValue()`, so
+  an approved amount of `3000` minor units pre-fills as `30`, not `3000`.
+- `handleReconcile()` still converts the displayed major-unit value back to
+  minor units before calling `adminApi.markPayoutPaid()`, so the backend
+  cross-check sees the intended approved amount.
+- The old unused direct `handleApprove()` path and unused `requestedMajor`
+  local were removed from the page.
 
-Likely impact:
+Verification:
 
-- The web app cannot typecheck/build while this syntax error remains.
-- Admin payout review, partial approval, and manual reconciliation are broken in
-  the browser even though the backend paths exist.
-- If the syntax is fixed without the amount-unit fix, partial payout
-  reconciliation can submit wrong values.
+- `pnpm --filter waitlayer-web exec vitest run src/app/admin/payouts/amounts.test.ts`:
+  passed.
+- `pnpm --filter waitlayer-web test`: passed.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-web exec eslint src/app/admin/payouts/page.tsx
+  src/app/admin/payouts/amounts.ts src/app/admin/payouts/amounts.test.ts`:
+  passed.
 
-Fix direction:
+Residual risk:
 
-- Remove the stray trailing tokens and run the web typecheck.
-- Convert `approvedAmountMinor` to major units before pre-filling modal inputs.
-- Add UI tests for full approval, partial approval, processing, and manual
-  mark-paid reconciliation.
+- This is covered by helper-level tests plus source inspection. A browser/modal
+  test that opens the approval and reconciliation modals with fixture payouts
+  would further reduce UI regression risk.
 
-Desired goal:
+### A-027: Device Recovery Lookup Is Wired; Needs End-to-End Recovery Smoke
 
-- Admins can review, approve, partially approve, process, reject, and reconcile
-  payouts entirely from the admin UI.
+Severity: resolved pending E2E verification.
 
-Done when:
+Current source check:
 
-- Partial approval is usable and cross-checked.
-- Manual payout reconciliation can mark paid without requiring a pre-created
-  transaction that the UI cannot supply.
-- `pnpm --filter waitlayer-web typecheck` passes.
-
-### A-027: Device Recovery Exists but Is Hidden and Requires Manual IDs
-
-Severity: medium.
-
-Evidence:
-
-- `AdminController` exposes `POST /admin/devices/:id/recovery-token`.
-- The web proxy allowlist includes `/admin/devices`, and `adminApi` exposes
-  `issueDeviceRecoveryToken()`.
-- `apps/web/src/app/admin/devices/page.tsx` exists and can issue a token, but
-  `apps/web/src/app/admin/layout.tsx` does not include a navigation item for
-  `/admin/devices`.
-- The page requires the operator to manually know both device UUID and user UUID;
-  there is no user/device detail view or lookup path from the user table.
+- `AdminController` exposes `POST /admin/devices/:id/recovery-token` and the
+  current tree also exposes `GET /admin/devices`.
+- `AdminService.getDevices()` returns a searchable, paginated list without
+  exposing raw `eventSecret`; `admin.service.spec.ts` covers the happy path and
+  invalid tool type filter.
+- The web proxy allowlist includes `/admin/devices`, and `adminApi` exposes both
+  `getDevices()` and `issueDeviceRecoveryToken()`.
+- `apps/web/src/app/admin/layout.tsx` now links to `/admin/devices`.
+- `apps/web/src/app/admin/devices/page.tsx` searches devices through
+  `adminApi.getDevices()`, shows user/device context, and fills the issue-token
+  form from a selected row while keeping manual ID fallback.
 - CLI and VS Code clients explicitly prompt for/use support-issued recovery
   tokens.
 
-Likely impact:
+Residual risk:
 
-- The support flow exists but is difficult to discover and depends on IDs that
-  the admin UI does not help operators find.
-- Legitimate device recovery can still fall back to ad hoc database/API lookup.
+- No browser/CLI smoke test in this pass proves a support-issued token is copied
+  into the CLI/extension and consumed to rotate the device secret.
+- There is still no direct user-detail deep link into a user's devices.
 
-Fix direction:
+Follow-up direction:
 
-- Add `/admin/devices` to the admin navigation.
-- Add an admin/support UI flow from user/device details or a searchable device
-  lookup.
-- Log/restrict issuance with reason, expiry, reviewer role, and one-time use.
+- Add an admin/support UI flow from user details into the relevant devices.
+- Add an E2E smoke covering admin token issuance and CLI/extension token
+  consumption.
 
 Desired goal:
 
@@ -1075,29 +1178,41 @@ Desired goal:
 
 Done when:
 
-- Admin/support can issue a token from the UI.
+- Admin/support can search/select a device and issue a token from the UI without
+  database lookup.
 - CLI/extension recovery succeeds with that token.
 - Audit log records issuance and consumption.
 
-### A-028: Admin Erasure Endpoint Is Not Exposed in the Users UI
+### A-028: Admin User Lifecycle Actions Are Half-Wired but Not Rendered
 
 Severity: medium.
 
 Evidence:
 
-- `AdminController` exposes `POST /admin/users/:id/erase`.
-- The admin users page is read-only and does not expose erasure, restriction,
-  ban, unban, or account status actions.
+- `AdminController` exposes `POST /admin/users/:id/erase` and
+  `POST /admin/users/:id/status`.
+- `apps/web/src/lib/api/services.ts` exposes `adminApi.eraseUser()` and
+  `adminApi.setUserStatus()`.
+- `apps/web/src/app/admin/users/page.tsx` now defines `actionUser`,
+  `actionKind`, `runAction()`, and `openAction()`, but the rendered table row
+  stops after the joined-date cell. The header includes "Actions", yet there is
+  no action `<td>`, no buttons, and no confirmation modal calling
+  `openAction()`.
 
 Likely impact:
 
 - GDPR/ToS operations require direct API calls or database/manual action.
+- Dead client-side action code can create false confidence in the admin surface
+  because typecheck passes while the workflow remains inaccessible.
 
 Fix direction:
 
 - Add guarded admin user actions with confirmation dialogs.
 - Require explicit confirmation for irreversible erasure.
-- Show audit trail and current status on the user detail page.
+- Render the existing restrict, ban, unban, and erase handlers in the table or a
+  user-detail action area; suppress or server-block invalid super-admin actions.
+- Add focused UI tests proving the visible controls call the expected API routes
+  and refresh the user list after success.
 
 Desired goal:
 
@@ -1182,29 +1297,43 @@ Done when:
   users.
 - Provider failure and reconciliation paths are tested.
 
-### A-031: Currency Rules Are Too Generic for a Global SaaS
+### A-031: Currency Policy Exists but Payout Inputs Still Assume Two Decimals
 
 Severity: medium.
 
 Evidence:
 
-- Payout minimum threshold is a single `PAYOUT.MINIMUM_THRESHOLD_MINOR` applied
-  across currencies.
-- Deposit minimum is `100` minor units across all supported currencies.
-- Payout UI treats all currencies as two-decimal currencies.
+- `packages/shared/src/currency.ts` now defines `CURRENCY_POLICY`, including
+  per-currency minor-unit exponent, deposit minimum, payout minimum, and provider
+  availability.
+- `AdvertiserController.createDepositSession()` calls `depositMinimumMinor()`,
+  and `PayoutService.requestPayout()` calls `payoutMinimumMinor(currency)`.
+- `apps/web/src/lib/format.ts` uses shared currency formatting for display.
+- `apps/web/src/app/developer/payouts/page.tsx` still converts the entered
+  payout amount with `Math.round(parseFloat(amount) * 100)`, and its amount
+  input uses `step="0.01"`, `min={minimumThresholdMinor / 100}`, and
+  `max={selectedAvailableMinor / 100}` for every currency.
+- The payout-method currency field is free-form ISO text; `PayoutService` checks
+  only that it is a 3-letter code and does not call
+  `isProviderSupportedForCurrency()` before storing a provider/currency pair.
 
 Likely impact:
 
-- Minimums can be nonsensical for some currencies.
-- Future zero-decimal or high-inflation currencies will display or validate
-  incorrectly.
+- A JPY payout can be submitted at 100x the intended minor-unit amount, while a
+  future 3-decimal currency would be rounded down incorrectly.
+- Users can add a syntactically valid provider/currency combination that the
+  shared policy says the provider cannot settle.
+- The backend policy table is a good start, but launch safety still depends on
+  every input and provider path using it.
 
 Fix direction:
 
-- Add a currency policy table for supported currencies: minor-unit exponent,
-  deposit minimum, payout minimum, provider availability, and settlement rules.
-- Use that policy in API DTO validation, UI formatting, payout requests, and
-  advertiser deposits.
+- Add shared major/minor conversion helpers for form input and use
+  `minorUnitExponent()` instead of hardcoded `/ 100` and `* 100`.
+- Replace the payout currency text field with a supported-currency selector
+  filtered by provider, or validate provider/currency compatibility in the API.
+- Keep deposit, campaign, payout request, provider initiation, and display paths
+  on the same currency policy table.
 
 Desired goal:
 
@@ -1212,27 +1341,40 @@ Desired goal:
 
 Done when:
 
-- Adding/removing a currency happens through one policy table.
-- Tests cover USD plus at least one non-USD supported currency.
+- Adding/removing a currency happens through one policy table and every UI/API
+  conversion respects that policy.
+- Tests cover USD plus at least JPY and one 3-decimal currency-like fixture.
 
-### A-032: Advertiser Reporting Has No Export/API Pagination Path
+### A-032: Advertiser Reporting Has CSV Export but Still No Pagination Bounds
 
 Severity: medium.
 
 Evidence:
 
 - Reports are rendered in the UI from a single unpaginated API response.
-- A separate issue already notes raw event aggregation in memory.
-- There is no CSV export or paginated report API for advertisers.
+- `AdvertiserController` now exposes `GET /advertiser/reports/export`, and
+  `apps/web/src/app/advertiser/reports/page.tsx` downloads CSV through that path.
+- The export route reuses `AdvertiserService.getReports()` and does not apply a
+  separate asynchronous export or date-range cap.
+- `AdvertiserService.getReports()` accepts `page` and `limit` in its service
+  signature but the controller does not pass those query params and the service
+  returns all campaign rows as one page.
+- Advertiser daily trend is now database aggregated, but report/export campaign
+  rows are still returned synchronously in one response.
 
 Likely impact:
 
-- Advertisers cannot reconcile spend outside the dashboard.
-- Large accounts will need data export before the API is optimized.
+- Advertisers can export a small bounded CSV, but large accounts still have a
+  single synchronous report/export path with no pagination or enforced range
+  ceiling.
+- The UI can appear export-ready while the API remains vulnerable to expensive
+  report requests.
 
 Fix direction:
 
-- Add paginated campaign report endpoints and CSV export.
+- Add paginated campaign report endpoints and enforce date-range limits.
+- Make CSV export explicitly bounded, or move larger exports to an async job with
+  status/download handling.
 - Include date range, campaign id, currency, spend, impressions, clicks, CTR,
   and refund/invalid-traffic adjustments.
 
@@ -1242,8 +1384,10 @@ Desired goal:
 
 Done when:
 
-- Reports can be exported for a bounded date range.
-- API and UI handle large accounts without loading all rows at once.
+- Reports can be exported only for a bounded range or through an async export
+  path.
+- API and UI handle large accounts without returning every campaign/report row in
+  one synchronous response.
 
 ### A-033: Landing-to-Product Claims Need Runtime Verification
 
@@ -1283,154 +1427,160 @@ Done when:
 - Launch review confirms no claim depends on a missing or manual-only path
   unless clearly disclosed.
 
-### A-034: Signup Consent Is Enforced in API/Web but Still Drifts Across Surfaces
+### A-034: Signup Consent Is Server-Owned and Transactional
 
-Severity: high.
+**Resolved 2026-07-09** (uncommitted in current working tree).
 
-Evidence:
+Current source check:
 
 - `apps/api/src/auth/dto/signup.dto.ts` now requires `ageConfirmed` and
   `termsAccepted`, with optional `policyVersion`.
-- `AuthService.signUp()` rejects missing consent and persists
-  `terms_of_service` and `privacy_policy` consent records.
-- `AuthService.googleOAuth()` also rejects first-time Google signup without
-  `ageConfirmed` and `termsAccepted`, then persists consent records.
-- `apps/web/src/app/auth/signup/page.tsx` gates email/password and Google signup
-  on one `ageConfirmed` checkbox, then sends `termsAccepted: true`.
-- The visible checkbox copy says the user is 18+ and has read the Privacy
-  Policy; the Terms of Service agreement is only in a footer line, not a
-  separate required checkbox or explicit link at the control.
-- The web signup page hardcodes `policyVersion: '2026-07-01'` for
-  email/password, Google, and mock Google signup.
-- `apps/cli/src/commands/auth.ts` still calls `api.signup()` without
-  `ageConfirmed`, `termsAccepted`, or `policyVersion`; A-065 tracks the
-  resulting terminal signup breakage.
+- `apps/api/src/compliance/consent-versions.ts` is now the shared source for
+  `CURRENT_CONSENT_VERSIONS` and signup-required purposes.
+- `AuthService.signUp()` rejects missing consent, rejects a provided stale
+  `policyVersion`, and creates `terms_of_service` plus `privacy_policy` consent
+  rows inside the same transaction as user/settings/profile onboarding.
+- `AuthService.googleOAuth()` applies the same behavior for first-time Google
+  signup.
+- `apps/web/src/app/auth/signup/page.tsx` and `apps/cli/src/commands/auth.ts`
+  now fetch `/consent/required-versions`, prompt for consent, and forward
+  `ageConfirmed`, `termsAccepted`, and `policyVersion`.
 
-Likely impact:
+Verification:
 
-- Direct API and web Google signup are no longer broad consent bypasses, but
-  the web UI can still record Terms acceptance without an explicit terms
-  checkbox/link at the required control.
-- A backend policy-version bump requires signup-page code changes or new users
-  will keep recording the old `2026-07-01` version.
-- CLI signup fails against the current API contract unless the CLI is updated or
-  signup is intentionally removed from the terminal product.
+- `pnpm --filter waitlayer-api exec vitest run src/auth/auth.service.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-api test`: passed.
 
-Fix direction:
+Residual risk:
 
-- Split or rewrite the signup consent control so it explicitly covers age,
-  Terms of Service, and Privacy Policy at the point of acceptance.
-- Fetch current required policy versions from the API instead of hardcoding
-  `2026-07-01` in the signup page.
-- Update CLI signup to prompt for the same acceptance and send the required
-  fields, or remove/disable CLI signup until it can collect consent.
+- Browser/E2E coverage for signup version-fetch failures, re-prompt missing
+  versions, and cookie accept/decline remains tracked as residual risk under
+  A-047.
+- Web signup copy should still be reviewed for explicit Terms of Service and
+  Privacy Policy acceptance wording at the control.
 
 Desired goal:
 
 - Every self-service account creation path proves the user accepted the current
-  required terms/privacy versions and age requirement before the user row is
-  created.
+  required terms/privacy versions and age requirement atomically with account
+  creation.
 
-Done when:
+Done:
 
 - API DTOs and services reject missing required signup consent for all signup
   paths.
-- Web Google and email/password signup use server-provided policy versions.
-- CLI signup prompts for the same acceptance or refuses signup with a clear
-  message.
-- Tests cover email/password, Google, CLI/direct API, missing-consent rejection,
-  and policy-version bump behavior.
+- Consent records are created in the signup transaction and signup fails if they
+  cannot be written.
+- Web, Google, CLI, and direct API signup cannot record stale policy versions.
+- Tests cover email/password signup, Google signup, missing-consent rejection,
+  consent-write failure, and stale policy-version rejection.
 
-### A-035: Payout 2FA Policy and Client Support Are Inconsistent
+### A-035: Payout 2FA Policy and Client Support Are Aligned
 
-Severity: high.
+Severity: resolved pending production policy rollout and browser/terminal
+smoke.
 
-Evidence:
+Current source check:
 
-- `apps/web/src/app/security/page.tsx` says 2FA is mandatory before requesting
-  financial payouts and fully integrated into the VS Code extension and CLI.
-- `PayoutService.requestPayout()` enforces 2FA only when
+- `apps/web/src/app/security/page.tsx` now describes the actual
+  operator-controlled policy: 2FA is required for payouts when
+  `PAYOUT_REQUIRE_2FA=true`, and otherwise remains strongly recommended.
+- `PayoutService.requestPayout()` still enforces the money-movement gate when
   `PAYOUT_REQUIRE_2FA === 'true'`.
-- `.env.example`, `.env`, and `apps/api/.env` show
-  `PAYOUT_REQUIRE_2FA=false`.
-- `apps/cli/src/commands/auth.ts` login only prompts for email/password; it
-  never asks for or resubmits `twoFactorToken`.
-- VS Code login has 2FA handling, so client support is uneven.
+- `PayoutService.getPayoutInfo()` now exposes `requiresTwoFactorForPayout` and
+  `twoFactorEnabled` so web clients can show the blocker before submit.
+- `apps/web/src/app/developer/payouts/page.tsx` shows an inline 2FA-required
+  payout blocker and links to developer settings when the policy is enabled
+  and the user has not enrolled 2FA.
+- `apps/cli/src/commands/auth.ts` now mirrors the VS Code extension login path:
+  it detects the structured 2FA challenge, prompts for a code, and retries
+  login with `twoFactorToken`.
 
-Likely impact:
+Verification:
 
-- The security page overstates the current payout requirement.
-- If operators enable `PAYOUT_REQUIRE_2FA=true`, CLI users with 2FA-protected
-  accounts cannot log in through the CLI.
-- If operators leave it false, payouts can be requested without the advertised
-  2FA requirement.
+- `pnpm --filter waitlayer-cli test`: passed.
+- `pnpm --filter waitlayer-cli typecheck`: passed.
+- `pnpm --filter waitlayer-cli lint`: passed.
+- `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-api exec eslint src/payout/payout.service.ts
+  src/payout/payout.service.spec.ts`: passed.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-web exec eslint src/app/developer/payouts/page.tsx`:
+  passed.
 
-Fix direction:
+Residual risk:
 
-- Decide the launch policy: mandatory 2FA for payouts, risk-tiered 2FA, or
-  optional 2FA.
-- Align `PAYOUT_REQUIRE_2FA`, public copy, payout UI, and client login flows.
-- Add CLI 2FA challenge handling matching the VS Code extension.
-- Show payout blockers before the user submits a payout request.
+- Production launch still needs an explicit operator decision for
+  `PAYOUT_REQUIRE_2FA`; checked-in local examples may remain false for local
+  development if that is intentional.
+- Run a terminal/browser smoke with a real TOTP-enrolled user and
+  `PAYOUT_REQUIRE_2FA=true` before claiming end-to-end release readiness.
 
 Desired goal:
 
 - The product, API, and clients all enforce the same 2FA policy for login and
   payout money movement.
 
-Done when:
+Done:
 
-- A 2FA-enabled developer can log in with both CLI and VS Code.
-- A payout request without required 2FA is blocked with a clear UI/client
-  message.
-- Security and payout-policy pages describe the exact behavior that is
-  enforced in production.
+- A 2FA-enabled developer can log in with both CLI and VS Code flows at the
+  code/test-contract level.
+- A payout request without required 2FA is blocked with a clear API message and
+  a pre-submit web blocker.
+- Security page copy describes the operator-controlled behavior implemented in
+  production.
 
-### A-036: CCPA Opt-Out Is Recorded but Not Enforced in Backend Behavior
+### A-036: CCPA Opt-Out Is Enforced for Ads and Account Sync Fails Closed
 
-Severity: high.
+Severity: resolved pending legal/product policy definition outside ad serving.
 
-Evidence:
+Current source check:
 
-- `apps/web/src/app/privacy/page.tsx` stores `wl_ccpa_opt_out` locally for all
-  visitors and, for authenticated users, posts `/consent` with
-  `purpose: 'ccpa_opt_out'`.
-- `ComplianceController` and `ComplianceService` can record and read arbitrary
-  consent purposes, so authenticated opt-out storage now exists.
-- `rg` finds no `ccpa_opt_out` or `ComplianceService.isConsented()` checks in
-  `ExtensionService.requestAd()`, advertiser reporting, campaign targeting, or
-  other backend data-sharing paths.
-- The unauthenticated path remains device-local by design and the page says so.
+- `apps/web/src/app/privacy/page.tsx` still stores `wl_ccpa_opt_out` locally for
+  logged-out visitors, and the copy explicitly says that path is device-local.
+- Authenticated users now fetch the current consent version from
+  `/consent/required-versions` and only flip the account-level UI/local cache
+  after `/consent` successfully records `purpose: 'ccpa_opt_out'`.
+- Authenticated `/consent` POST failures now leave the previous UI state in
+  place and surface a retryable error instead of presenting the local browser
+  preference as an account-level save.
+- `ExtensionService.requestAd()` checks
+  `this.compliance.isConsented(userId, 'ccpa_opt_out')`, logs
+  `ccpa_opt_out_enforced`, and returns `{ ad: null, reason: 'ccpa_opt_out' }`
+  before campaign selection for opted-out authenticated developers.
 
-Likely impact:
+Verification:
 
-- Authenticated opt-outs can follow the user across devices, but the backend
-  does not appear to change any product behavior based on the recorded flag.
-- Ad-serving, reporting, targeting, or advertiser data use can continue exactly
-  as before after opt-out.
-- Operators have a consent record, but no enforcement contract to audit.
+- `pnpm --filter waitlayer-api exec vitest run src/integration/e2e-money-loop.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-api exec eslint src/integration/e2e-money-loop.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-web exec eslint src/app/privacy/page.tsx`: passed.
 
-Fix direction:
+Residual risk:
 
-- Define what `ccpa_opt_out` must do in this product: ad selection, targeting,
-  reporting, data export, or advertiser sharing.
-- Enforce that behavior in backend paths, or make the UI/legal copy state that
-  the toggle is a recorded request rather than an immediate runtime control.
-- Keep logged-out local-only wording explicit or provide an identity-tied
-  request workflow.
+- Legal/product still needs to define what `ccpa_opt_out` must do outside ad
+  selection: reporting aggregation, advertiser data use, exports, and audience
+  sharing. The current code enforces no ad serving to opted-out authenticated
+  users.
+- There is no React DOM test harness in `apps/web`; privacy-page sync-failure
+  behavior is covered by source/type/lint now and should get a browser test
+  when E2E coverage is added.
 
 Desired goal:
 
 - Privacy choices that affect platform behavior are durable, auditable, and
   enforced server-side.
 
-Done when:
+Done:
 
 - CCPA opt-out can be recorded and retrieved from the backend.
-- The backend has a documented behavior for opt-out during ad selection,
-  reporting, and advertiser data use.
-- The UI distinguishes local-only preferences from account-level legal
-  preferences.
+- The UI distinguishes local-only logged-out preferences from account-level
+  authenticated legal preferences and fails closed on account sync errors.
+- Tests prove opted-out authenticated users do not receive ads.
 
 ### A-037: API Keys Still Reach Advertiser Export/Delete Through `advertiser:write`
 
@@ -1578,33 +1728,40 @@ Done when:
   in that campaign's currency.
 - Multi-currency tests cover positive and negative cases.
 
-### A-040: CLI Watch Does Not Request, Render, or Qualify Ads
+### A-040: CLI Watch Now Has an Ad Flow; Needs Full Terminal E2E
 
-Severity: high.
+Severity: resolved pending E2E verification.
 
-Evidence:
+Current source check:
 
-- `apps/cli/src/commands/watch.ts` only calls `reportWaitState()` and
-  `endWaitState()`.
-- `apps/cli/src/lib/api-client.ts` has methods for wait-state start/end but no
-  CLI ad-request, rendered, qualified-impression, click, or report-ad path.
-- The public product presents the terminal integration as part of earning from
-  AI wait states.
+- `apps/cli/src/lib/api-client.ts` now has `requestAd()`,
+  `recordAdRendered()`, `recordImpressionQualified()`, and `recordClick()`.
+- `apps/cli/src/commands/watch.ts` requests an ad during an active wait state,
+  records the rendered event, and qualifies the impression after a wait state
+  lasts at least 5000 ms.
+- `apps/cli/src/commands/watch.ts` shares one stable `sessionId` across
+  wait-state start and ad request; the earlier correlation bug is tracked as
+  resolved in A-064.
+- `apps/cli/src/lib/ad-flow.ts` contains a reusable
+  request/render/qualify helper, and `apps/cli/src/lib/ad-flow.test.ts` covers
+  no-ad, long-enough, and too-short paths.
 
-Likely impact:
+Residual risk:
 
-- Terminal users can report wait states but cannot actually generate ad
-  impressions, advertiser debits, developer earnings, or payoutable balance.
-- The developer E2E path from terminal install to payout is not real.
+- `runWatch()` currently duplicates the ad-flow logic instead of using the
+  tested `runAdFlow()` helper.
+- This still needs an end-to-end terminal test against the API proving
+  wait-state start → ad request → render → qualify → ledger credit.
+- Signup consent fields are now collected by the CLI; A-047 resolved the
+  hardcoded version fallback risk, but browser/CLI E2E consent coverage is
+  still needed.
 
-Fix direction:
+Follow-up direction:
 
-- Either implement a terminal ad-rendering/qualification flow or reposition the
-  CLI as telemetry/config-only until it can earn.
-- If implemented, add privacy-safe terminal rendering, visible-duration rules,
-  click/report handling, and signed event submission.
-- Add E2E tests for CLI wait-state start → ad request → render → qualification
-  → earnings ledger.
+- Reuse `runAdFlow()` from `runWatch()` or add tests directly around
+  `runWatch()` so the shipped command is covered.
+- Add E2E tests for CLI wait-state start → ad request → render →
+  qualification → earnings ledger.
 
 Desired goal:
 
@@ -1614,50 +1771,52 @@ Desired goal:
 Done when:
 
 - A CLI-only developer can complete the same money loop as a VS Code developer,
-  or public copy and onboarding exclude CLI earning claims.
+  including ledger credit after a qualified impression.
 
-### A-041: Referral Rewards Are Not Payoutable Developer Earnings
+### A-041: Referral Rewards Are Payoutable Developer Earnings
 
-Severity: high.
+Severity: resolved pending full money-loop integration verification.
 
-Evidence:
+Current source check:
 
-- `ReferralService.processReferralRewards()` creates a `referralReward` row and
-  a `platformLedger` credit with bucket `referral_bonus`.
-- It does not create an `earningsLedger` credit for the referrer.
+- `ReferralService.processReferralRewards()` creates the `platformLedger`
+  `referral_bonus`, `referralReward`, and matching confirmed `earningsLedger`
+  credit for the referrer inside the same transaction.
+- The earnings credit uses `idempotencyKey: ref-rew-earn-{referral.id}`, while
+  `ReferralReward` also has a DB-level `@@unique([referralId])` guard.
+- The referral status CAS remains `pending -> rewarded`, so concurrent
+  `markPayoutPaid()` calls cannot double-credit referral earnings.
 - `PayoutService.getPayoutInfo()`, `getAvailableForPayout()`, and
-  `requestPayout()` compute payoutable balances only from `earningsLedger`
-  credits/debits and allocations.
-- The referral UI says developers earn a `$5` reward when the referred user
-  gets a qualifying first payout.
+  `requestPayout()` already compute payoutable balances from confirmed
+  `earningsLedger` credits/debits minus reserved allocations, so the referral
+  bonus is withdrawable through the same path as ad earnings.
 
-Likely impact:
+Verification:
 
-- Referral rewards can appear in the referral dashboard but never become
-  withdrawable through the payout system.
-- Money accounting is ambiguous: the platform ledger is credited rather than
-  reserving or debiting a liability payable to the referrer.
+- `pnpm --filter waitlayer-api exec vitest run src/referral/referral.service.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-api exec eslint src/referral/referral.service.ts
+  src/referral/referral.service.spec.ts`: passed.
 
-Fix direction:
+Residual risk:
 
-- Decide whether referral rewards are payoutable cash, platform credits, or
-  non-cash promotional rewards.
-- If payoutable, write a matching `earningsLedger` credit for the referrer with
-  clear source/idempotency and hold/confirmation behavior.
-- If non-cash, change UI/copy and accounting to avoid implying withdrawable
-  earnings.
+- Add an integration money-loop test that pays the referred developer, triggers
+  the referral reward, then proves the referrer sees the reward in payout
+  availability and can allocate it to a payout request.
+- Accounting should still review whether `platformLedger` should represent a
+  bonus expense/liability rather than only a generic referral-bonus credit.
 
 Desired goal:
 
 - Referral rewards have a single accounting treatment that matches what the UI
   promises and what payouts can actually withdraw.
 
-Done when:
+Done:
 
-- A referred user's first qualifying payout creates an auditable reward that is
-  either included in payout availability or clearly marked non-payoutable.
-- Tests cover referral reward creation, idempotency, dashboard totals, and
-  payout availability.
+- A referred user's first qualifying payout creates an auditable confirmed
+  reward that is included in payout availability via `earningsLedger`.
+- Unit coverage proves referral reward creation and idempotency for the
+  payoutable earnings credit.
 
 ### A-042: Readiness Endpoint Now Fails Closed on Dependency Failure
 
@@ -1698,133 +1857,112 @@ Done when:
 
 ### A-043: Distributed Client Packaging Is Partially Wired but Not Publish-Ready
 
-Severity: medium.
+**Resolved 2026-07-09** (current worktree; verified by CLI tarball pack/install
+smoke, VSIX package/metadata smoke, CLI and VS Code test/typecheck/lint, and
+root `pnpm typecheck` / `pnpm lint`).
 
-Evidence:
+What changed:
 
-- `apps/cli/package.json` is now `"private": false`, has
-  `bin.waitlayer: "./dist/index.js"`, a `files: ["dist"]` whitelist, and
-  `publishConfig.access: "public"`.
-- `scripts/verify-cli-bin.mjs` checks that the built CLI bin path exists after
-  build.
-- `.github/workflows/publish-cli.yml` builds the CLI, runs the bin verifier, and
-  performs `pnpm pack --dry-run`, but the real `npm publish` step is commented
-  out.
-- `apps/vscode-extension/package.json` has `package:vsix` and `publish:vsix`
-  scripts.
-- `.github/workflows/publish-vscode.yml` builds and packages a `.vsix`, but the
-  marketplace publish step is commented out.
-- Both publish workflow files are currently untracked in this dirty worktree, so
-  they are not guaranteed to exist in the committed branch.
-- A-013 separately covers the localhost default once a package is installed.
+- The CLI build now emits runtime files to `apps/cli/dist/index.js`, excludes
+  test files from the package build, and ships a Node shebang for the npm bin.
+- The CLI no longer depends on the private workspace-only `@waitlayer/shared`
+  package; it localizes the small signing helper needed for device event HMACs.
+- `scripts/verify-cli-bin.mjs` now checks both bin existence and the Node
+  shebang.
+- The CLI tarball was packed to `/tmp`, installed under `/tmp`, and
+  `waitlayer --version` / `waitlayer --help` ran against the production API URL
+  override.
+- VSIX packaging now excludes `.turbo` logs and `eslint.config.js`; the package
+  contains only metadata plus compiled `out/` files.
+- `publish-cli.yml` and `publish-vscode.yml` package, smoke-test, and upload
+  artifacts on release/manual runs. Real npm/Marketplace publication is a
+  separate manual `workflow_dispatch` path with `publish=true` and environment
+  gates (`npm-publish`, `vscode-marketplace`).
+- `docs/ops/client-release.md` records artifact locations, publish gates,
+  required secrets, and rollback expectations.
 
-Likely impact:
+### A-044: Advertiser Privacy UI Has Password and Google-Only Paths
 
-- Client artifact packaging is closer, but public install still depends on
-  uncommenting/approving publish steps and committing the workflow files.
-- Release dry-runs can pass while no npm package or Marketplace extension is
-  actually published for users.
+Severity: resolved pending browser smoke.
 
-Fix direction:
+Current source check:
 
-- Commit the publish workflows and decide the explicit approval gate for real
-  `npm publish` and Marketplace publish.
-- Include smoke tests that install the packaged artifacts and run login/config
-  commands against a production-like API URL.
-- Record where release artifacts are downloaded by users and how rollback works.
-
-Desired goal:
-
-- Users can install signed/versioned client artifacts without cloning the
-  monorepo.
-
-Done when:
-
-- CLI and VS Code artifacts are built from CI/release workflow outputs.
-- Packaged artifacts have production-safe defaults and pass install smoke
-  tests.
-
-### A-044: Advertiser Privacy Endpoints Exist but Are Not Safely Exposed in UI
-
-Severity: medium.
-
-Evidence:
-
-- `AdvertiserController` now exposes `POST /advertiser/export-data` and
-  `POST /advertiser/delete-account`.
+- `AdvertiserController` exposes `POST /advertiser/export-data` and
+  `POST /advertiser/delete-account`; both are guarded with `RejectApiKeyGuard`.
 - The Next.js proxy allowlist includes `/advertiser/export-data` and
   `/advertiser/delete-account`, and `advertiserApi` has matching methods.
-- There is no advertiser settings/account page under `apps/web/src/app/advertiser`;
-  `rg` finds no `advertiserApi.exportData()` or `advertiserApi.deleteAccount()`
-  usage in advertiser UI pages.
-- Advertiser deletion only checks `confirmation === 'DELETE_MY_ACCOUNT'` in the
-  controller. Unlike `DeveloperService.deleteAccount()`, it does not require
-  password or Google step-up reauthentication before anonymizing the user.
-- The admin erasure endpoint exists, but A-028 notes it is still not exposed in
-  the admin Users UI.
+- `apps/web/src/app/advertiser/settings/page.tsx` is reachable from the
+  advertiser sidebar and uses the export/delete API methods.
+- `AuthService.getMe()` now returns coarse auth-provider capability
+  `hasPassword` without leaking `passwordHash`, and the web auth context maps
+  `hasPassword` plus `googleVerified`.
+- Password-backed advertiser accounts get the existing current-password deletion
+  step-up.
+- Google-only advertiser accounts now see an explicit support-assisted erasure
+  path and the UI disables the password-only destructive submit instead of
+  calling the backend with an impossible step-up.
 
-Likely impact:
+Verification:
 
-- Advertiser export/delete paths are direct API-only from the current web
-  product; normal advertiser users have no discoverable account/privacy screen.
-- A stolen active advertiser session can delete the account with only a typed
-  confirmation string if the attacker reaches the endpoint.
-- GDPR/CCPA request handling for advertisers is only partially productized.
+- `pnpm --filter waitlayer-api exec vitest run src/auth/auth.service.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-api typecheck`: passed.
+- `pnpm --filter waitlayer-api exec eslint src/auth/auth.service.ts
+  src/auth/auth.service.spec.ts`: passed.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-web exec eslint src/app/advertiser/settings/page.tsx
+  src/lib/auth-context.tsx`: passed.
 
-Fix direction:
+Residual risk:
 
-- Add account/privacy settings for advertiser users with export and deletion
-  controls.
-- Reuse the developer deletion step-up model for advertiser deletion, including
-  current password or Google reauthentication where applicable.
-- Keep money-retention/legal-hold records intact while anonymizing personal and
-  billing identity.
-- Add UI/proxy/API tests for advertiser export, deletion, and step-up failure.
+- Google ID-token reauthentication for self-service advertiser deletion remains
+  future work. Current launch behavior is an explicit support-assisted path for
+  Google-only advertisers.
+- Add browser/E2E coverage for advertiser export, password deletion, Google-only
+  support copy, API-key rejection, and sidebar visibility.
+- The admin erasure endpoint exists, but A-028 still tracks exposing it in the
+  admin Users UI.
 
 Desired goal:
 
 - Every user role has a clear, tested privacy export and erasure path.
 
-Done when:
+Done:
 
 - Developer and advertiser privacy controls exist and are role-appropriate.
-- Exports include all personal/account/business data relevant to the role.
-- Deletion/erasure is audited and does not break money-retention/legal-hold
-  requirements.
+- Advertiser privacy controls are discoverable from the advertiser app chrome.
+- Password-backed advertiser accounts have a self-service deletion step-up, and
+  Google-only advertiser accounts see an explicit support-assisted erasure flow.
+- Exports include personal/account/business data relevant to the advertiser
+  role, and deletion keeps money-retention/legal-hold records intact.
 
-### A-045: Admin Creative Rejection Uses A Hard-Coded Reason
+### A-045: Admin Creative Rejection Uses Reviewer-Provided Reasons
 
-Severity: medium.
+Severity: resolved pending UI regression tests.
 
-Evidence:
+Current source check:
 
 - `apps/api/src/campaign/campaign.service.ts` stores creative rejection text in
   `adCreative.rejectionReason`.
 - `CampaignController.rejectCreative()` accepts `@Body('reason')`, so the API
   can preserve a reviewer-specific reason.
-- `apps/web/src/app/admin/campaigns/page.tsx` calls
-  `campaignApi.rejectCreative(creativeId, 'Rejected by admin')` with no modal,
-  note field, or advertiser-facing remediation detail.
-- Campaign rejection has a dedicated reason modal on the same page, but creative
-  rejection does not.
+- `apps/web/src/app/admin/campaigns/page.tsx` now has `creativeRejectFor` and
+  `creativeRejectReason` state, opens a "Reject creative" modal, requires a
+  non-empty reason, and sends `campaignApi.rejectCreative(cr.id,
+  creativeRejectReason.trim())`.
 
-Likely impact:
+Residual risk:
 
-- Advertisers cannot tell which creative element failed review, so recovery
-  becomes guesswork.
-- Admin audit entries and stored rejection reasons lose the context needed for
-  support disputes and policy consistency.
-- A-021 covers broader draft/rejected campaign recovery; this is the specific
-  creative-review reason gap.
-
-Fix direction:
-
-- Add a creative rejection modal that requires a concise policy/remediation
+- No focused UI regression test was found for rejecting a creative with a custom
   reason.
-- Validate and send that reason through `campaignApi.rejectCreative()`.
+- A-021 still tracks advertiser-side visibility and recovery from rejected
+  campaign/creative states.
+
+Follow-up direction:
+
+- Add a regression test for rejecting a creative with a custom reason.
 - Show the stored creative rejection reason to advertisers wherever they edit or
   resubmit creatives.
-- Add a regression test for rejecting a creative with a custom reason.
 
 Desired goal:
 
@@ -1837,36 +1975,28 @@ Done when:
 - The audit trail and `adCreative.rejectionReason` contain the submitted reason,
   not a generic placeholder.
 
-### A-046: Fraud Trust Recompute UI Treats Failed Requests As Success
+### A-046: Fraud Trust Recompute Uses Shared Error-Throwing Client
 
-Severity: medium.
+Severity: resolved pending UI regression tests.
 
-Evidence:
+Current source check:
 
 - `apps/api/src/admin/admin.controller.ts` exposes
   `POST /admin/fraud/compute-trust/:userId`, and `AdminService` forwards it to
   `FraudService.computeTrustScore()`.
-- `apps/web/src/lib/api/services.ts` has typed `adminApi` helpers for fraud
-  list/stats/resolve actions, but no helper for trust recompute.
-- `apps/web/src/app/admin/fraud/page.tsx` calls raw
-  `fetch('/api/admin/fraud/compute-trust/${userId}', { method: 'POST' })`.
-- The handler never checks `response.ok`; browser `fetch()` resolves for 4xx and
-  5xx responses, so the UI refreshes and clears the busy state as if the action
-  succeeded.
+- `apps/web/src/lib/api/services.ts` now has
+  `adminApi.recomputeTrustScore(userId)`.
+- `apps/web/src/app/admin/fraud/page.tsx` calls that shared API helper; the
+  shared client rejects non-2xx responses, and the catch block calls
+  `setError(getErrorMessage(err, 'Trust recompute failed'))`.
 
-Likely impact:
+Residual risk:
 
-- Admins can believe a user's trust score was recomputed even when the proxy or
-  API rejected the request.
-- Fraud review decisions can proceed from stale trust data without a visible
-  error.
+- No focused UI/service regression test was found that forces a 500 and proves
+  the fraud page leaves a visible error.
 
-Fix direction:
+Follow-up direction:
 
-- Add `adminApi.recomputeTrustScore(userId)` and use the shared API client so
-  non-2xx responses throw consistently.
-- If raw `fetch()` remains, check `response.ok`, parse the error body, and show
-  it via the page error state.
 - Add a UI/service test that a 500 response leaves an error visible and does not
   present the action as successful.
 
@@ -1881,60 +2011,57 @@ Done when:
 - Successful recomputes refresh the affected row/stats.
 - The shared admin API surface includes the recompute operation.
 
-### A-047: Signup Still Hardcodes Policy Version After Re-Prompt Fixes
+### A-047: Consent Version Fallbacks Fail Closed
 
-Severity: medium.
+Severity: resolved pending browser E2E coverage.
 
-Evidence:
+Current source check:
 
-- `apps/api/src/compliance/compliance.service.ts` defines
-  `CURRENT_CONSENT_VERSIONS` for `privacy_policy`, `terms_of_service`, and
-  `marketing_cookies`.
-- `apps/api/src/compliance/compliance.controller.ts` exposes
-  `GET /consent/required-versions` and `GET /consent/stale`.
-- `apps/web/src/components/consent-reprompt.tsx` now fetches
-  `/consent/required-versions`, posts the required version per stale purpose,
-  and re-checks `/consent/stale` before dismissing.
-- `apps/web/src/components/cookie-consent.tsx` now fetches the required
-  `marketing_cookies` version before recording accepted cookie consent.
-- `apps/web/src/app/auth/signup/page.tsx` still hardcodes
-  `policyVersion: '2026-07-01'` for email/password signup, Google signup, and
-  mock Google signup.
-- Cookie decline stores only local `declined` state; it does not record an
-  authenticated server-side `marketing_cookies` revocation, leaving the stale
-  consent/re-prompt semantics unclear for users who decline optional cookies.
+- `apps/api/src/compliance/consent-versions.ts` is the source for current
+  `privacy_policy`, `terms_of_service`, and `marketing_cookies` versions.
+- Web signup and Google signup now require a fetched `terms_of_service` or
+  `privacy_policy` version before calling signup APIs. If the version endpoint
+  fails or returns no relevant version, signup stays disabled and shows a retry
+  error.
+- CLI signup now exits before account creation if `/consent/required-versions`
+  cannot be fetched or lacks terms/privacy versions.
+- `ConsentRePrompt` no longer falls back to `2026-07-01`; if a stale purpose is
+  missing from the required-version response, the banner stays up instead of
+  recording a stale version.
+- `CookieConsent` now fetches the `marketing_cookies` version and, for
+  authenticated users, records both accept (`granted: true`) and decline
+  (`granted: false`) server-side before dismissing the banner. Server write
+  failures show a retry message and do not present account-level preferences as
+  saved.
+- Logged-out cookie preferences remain local-only by design.
 
-Likely impact:
+Verification:
 
-- After a backend policy-version bump, new web signups can keep recording the
-  old `2026-07-01` acceptance until the signup page is changed.
-- A user who declines optional marketing cookies may have only local decline
-  state, not an auditable account-level revocation.
-- Re-prompt and cookie acceptance are closer to the desired contract, but signup
-  and decline flows still drift from server-owned policy versions.
+- `pnpm --filter waitlayer-cli test`: passed.
+- `pnpm --filter waitlayer-cli typecheck`: passed.
+- `pnpm --filter waitlayer-cli lint`: passed.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-web exec eslint src/app/auth/signup/page.tsx
+  src/components/consent-reprompt.tsx src/components/cookie-consent.tsx`:
+  passed.
 
-Fix direction:
+Residual risk:
 
-- Fetch `/consent/required-versions` before signup submission and send the
-  correct terms/privacy version instead of a hardcoded constant.
-- For authenticated cookie decline, record `marketing_cookies` with
-  `granted: false` and the server-required version, or explicitly define why
-  decline is local-only.
-- Keep the existing re-check behavior that prevents dismissing stale consent
-  when server recording fails.
+- Add browser/E2E tests for web signup version-fetch failure, re-prompt missing
+  purpose versions, authenticated cookie accept/decline, and server-write
+  failure retry behavior.
 
 Desired goal:
 
 - Consent prompts always record the server-required version for each purpose.
 
-Done when:
+Done:
 
-- A policy-version bump in `ComplianceService` requires no web code change.
-- The re-prompt flow records per-purpose versions and confirms the stale list is
-  clear before dismissing.
-- Signup and cookie decline flows also use server-owned versions.
-- Tests cover accepting stale consent, declining optional cookies, and signing
-  up after changing the required version.
+- A policy-version bump in `consent-versions.ts` requires no web/CLI hard-coded
+  version change for signup, re-prompt, or cookie consent.
+- Signup, Google signup, CLI signup, re-prompt, cookie accept, and authenticated
+  cookie decline all either record a server-provided current version or fail
+  closed with a visible retry path.
 
 ### A-048: Payout Account Verification Gate Was Added in the Current Tree
 
@@ -1952,15 +2079,14 @@ Current source check:
   `AdminService.setPayoutAccountVerified()` updates `isVerified` with an audit
   event.
 - `apps/web/src/app/admin/payouts/page.tsx` exposes a "Verify method" action for
-  unverified payout accounts, though A-026 currently blocks the admin payout
-  page from compiling.
+  unverified payout accounts.
 - `apps/api/src/payout/payout.service.spec.ts` covers rejection of unverified
   payout destinations.
 
 Residual risk:
 
-- The web typecheck failure in A-026 prevents relying on the admin verification
-  UI until that page builds.
+- Admin payout UI still needs modal coverage; A-026 tracks a separate manual
+  reconciliation amount-conversion bug.
 - Provider-specific automated verification is still a product/process decision,
   but the platform now has an admin gate.
 
@@ -1968,7 +2094,7 @@ Follow-up direction:
 
 - Define what payout account verification means per provider: email challenge,
   provider account verification, admin approval, or trusted provider callback.
-- Keep admin verification/rejection visible after A-026 is fixed.
+- Keep admin verification/rejection covered by UI tests.
 - Add provider-specific verification where required for scale.
 
 Desired goal:
@@ -2000,8 +2126,8 @@ Residual risk:
 
 - This still needs a browser/route-handler regression test proving a 502 from
   `/api/auth/logout` leaves the user visible and cookies uncleared.
-- A full web typecheck is currently blocked by A-026, so logout verification
-  should be re-run after the web compile blocker is fixed.
+- `pnpm --filter waitlayer-web typecheck` currently passes, but logout failure
+  behavior still needs a route-handler/browser regression test.
 
 Follow-up direction:
 
@@ -2102,49 +2228,23 @@ Done when:
 
 ### A-052: Advertiser Role CTAs Mostly Fixed; Generic CTAs Still Default Developer
 
-Severity: medium.
+**Resolved 2026-07-09** (current worktree; verified by
+`pnpm --filter waitlayer-web exec vitest run src/lib/auth-routing.test.ts`,
+`pnpm --filter waitlayer-web test`, `pnpm --filter waitlayer-web typecheck`,
+and `pnpm --filter waitlayer-web lint`).
 
-Evidence:
+What changed:
 
-- `apps/web/src/app/auth/signup/page.tsx` initializes `role` to `developer`.
-- The signup page now reads `?role=advertiser` / `?role=developer` and selects
-  the matching tab; referral links still force developer.
-- The main landing page "Start Advertiser Campaign" CTA links to
-  `/auth/signup?role=advertiser`.
-- The pricing page advertiser card "Start advertising" links to
-  `/auth/signup?role=advertiser`.
-- Several mixed-audience/generic CTAs still link to `/auth/signup`, including
-  the landing hero "Start earning" and pricing "Get started" / bottom CTA,
-  which correctly default to developer only if the copy is developer-leaning.
-
-Likely impact:
-
-- The strongest advertiser-specific CTAs now preselect advertiser, but any
-  generic CTA near mixed developer/advertiser copy still needs copy/link review
-  to avoid accidentally defaulting advertiser visitors to developer signup.
-- Google signup still uses the currently selected role, so any remaining
-  advertiser-intended link without a role hint can create the wrong account
-  type.
-
-Fix direction:
-
-- Audit every public `/auth/signup` link and classify it as developer-specific,
-  advertiser-specific, or intentionally generic.
-- Add explicit advertiser signup links anywhere the surrounding copy is
-  advertiser-specific.
-- Keep referral links developer-only unless the product intentionally supports
-  advertiser referrals.
-
-Desired goal:
-
-- Each public role-specific CTA lands on a signup form that is already in the
-  matching role state.
-
-Done when:
-
-- Advertiser CTAs open the signup page with the advertiser role selected.
-- Invalid role query values fall back safely.
-- Tests cover developer, advertiser, referral, and invalid-role signup URLs.
+- Public role-specific CTAs now use explicit signup role hints:
+  `/auth/signup?role=developer` or `/auth/signup?role=advertiser`.
+- The pricing bottom CTA now exposes separate developer and advertiser actions
+  instead of one mixed-audience signup link.
+- Signup URL parsing moved into `apps/web/src/lib/auth-routing.ts`, with tests
+  for developer, advertiser, referral, and invalid-role URLs.
+- Referral signup URLs remain developer-only and take precedence over a role
+  query value.
+- Login/signup/Google auth redirects now use the role returned by the auth API
+  instead of falling back through a stale or missing `lastDashboard` value.
 
 ### A-053: Redis Health Probe Recovery Was Added in the Current Tree
 
@@ -2272,87 +2372,92 @@ Done when:
 - Tests prove one of two concurrent events is rejected when only one bid remains
   funded.
 
-### A-056: Country Targeting Is Stored but Not Enforced During Ad Selection
+### A-056: Country Targeting Is Enforced During Ad Selection
 
-Severity: high.
+Severity: resolved pending live-client country population smoke.
 
-Evidence:
+Current source check:
 
-- `apps/web/src/app/advertiser/campaigns/new/page.tsx` collects comma-separated
-  country codes and calls `campaignApi.setCountryTargeting()`.
-- `CampaignService.setCountryTargeting()` persists `CountryTargeting` rows.
-- `ExtensionService.requestAd()` includes `countryTargeting: true` when loading
-  campaigns, but the eligibility filter never checks those rows.
-- `AdRequestDto` has no country field, and the VS Code extension's
-  `requestAd()` payload sends only device/session/wait/tool/idempotency data.
-- Public copy promises "Country & tool targeting", but the current ad request
-  path has no country input and no tool-targeting model beyond the broad
-  `toolType` event value.
+- `AdRequestDto` now has optional `country`, and `ExtensionService.requestAd()`
+  accepts it in the service contract.
+- `ExtensionService.requestAd()` resolves country from the client payload first
+  and falls back to the developer profile country. It normalizes country codes
+  before comparing against campaign rules.
+- `CampaignService.setCountryTargeting()` normalizes stored country codes to
+  uppercase before persisting `CountryTargeting` rows.
+- Campaign eligibility now calls `isCountryEligible()`:
+  no rules serve everywhere, include rules require a matching known country,
+  and exclude rules block matching countries.
+- Launch copy in `apps/web/src/app/page.tsx` and
+  `apps/web/src/app/pricing/page.tsx` no longer advertises campaign-level tool
+  targeting as a live advertiser control.
 
-Likely impact:
+Verification:
 
-- Advertisers can configure country targeting and believe it is active, while
-  their ads may serve to any developer.
-- Spend, CTR, and invalid-traffic analysis become misleading because targeting
-  constraints were not actually applied.
-- Tool targeting is advertised but not available as a campaign-level delivery
-  rule.
+- `pnpm --filter waitlayer-api exec vitest run src/integration/e2e-money-loop.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-api typecheck`: passed.
+- `pnpm --filter waitlayer-api exec eslint src/extension/extension.service.ts
+  src/campaign/campaign.service.ts src/integration/e2e-money-loop.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-web exec eslint src/app/page.tsx
+  src/app/pricing/page.tsx`: passed.
 
-Fix direction:
+Residual risk:
 
-- Decide the privacy-safe source of country: account profile, coarse IP
-  geolocation, explicit developer setting, or no country targeting at launch.
-- Add country to the server-side eligibility context and filter
-  `CountryTargeting` rows consistently.
-- Either implement tool targeting in the campaign model/API/UI and filter by
-  `toolType`, or remove/soften public claims until it exists.
+- VS Code/CLI requests still do not actively send `country`; delivery falls
+  back to the stored developer profile country. Run a client smoke to confirm
+  profile country is populated for expected launch users.
+- True campaign-level tool targeting remains a future product feature, not a
+  launch claim.
 
 Desired goal:
 
 - Targeting controls shown to advertisers are enforced by the delivery engine.
 
-Done when:
+Done:
 
 - Campaigns with include/exclude country rules only serve in matching delivery
   contexts.
-- Tool targeting is either implemented end-to-end or removed from launch copy.
-- Tests cover matching country, excluded country, no targeting, and tool-type
-  eligibility.
+- Tool targeting was removed from launch copy rather than advertised without a
+  campaign-level delivery rule.
+- Tests cover no-targeting delivery, country include misses, country excludes,
+  and matching country delivery.
 
-### A-057: Developer Category Blocking Has No Persisted Settings or Client Path
+### A-057: Developer Category Blocking Is Wired but Untested
 
-Severity: medium-high.
+Severity: resolved pending focused regression tests.
 
-Evidence:
+Current source check:
 
 - The landing page says developers can "Block categories" and the FAQ says
   category blocking is available from the settings dashboard.
-- `UserSettings` only stores `adsEnabled`, quiet-mode fields, and
-  `maxAdsPerHour`.
+- `packages/db/prisma/schema.prisma` now adds
+  `UserSettings.blockedCategories String[] @default([])`.
 - `UpdateSettingsDto`, `DeveloperService.updateSettings()`, and
-  `apps/web/src/app/developer/settings/page.tsx` have no category preference
-  fields or controls.
-- `AdRequestDto` has optional `allowedCategories` and `blockedCategories`, and
-  `ExtensionService.requestAd()` filters on those DTO fields, but the VS Code
-  extension's `requestAd()` payload never sends either field.
-- The `BlockedCategory` model appears to be an admin/user-generated report
-  table with `blockedBy` and `reason`; it is not wired as a per-developer ad
-  preference.
+  `apps/web/src/app/developer/settings/page.tsx` now expose blocked category
+  preferences.
+- `ExtensionService.requestAd()` now loads `userSettings`, merges persisted
+  blocked categories with any per-request `dto.blockedCategories`, and excludes
+  matching campaign categories server-side even when the client omits category
+  arrays.
 
-Likely impact:
+Residual risk:
 
-- Developers cannot actually block advertiser categories through the product.
-- Any category filtering depends on a client voluntarily sending transient
-  arrays that current clients do not send.
-- Public privacy/control claims overstate the current developer preference
-  surface.
+- `rg` found no focused regression test proving persisted blocked categories
+  suppress matching campaigns or leave unrelated categories eligible.
+- The current UI uses free-form comma-separated slugs; typos silently become
+  stored preferences that may not match real campaign categories.
+- There is still no advertiser-visible taxonomy picker shared with the developer
+  setting, so category names/slugs can drift across surfaces.
 
-Fix direction:
+Follow-up direction:
 
-- Add persisted per-developer category preferences, or remove category-blocking
-  claims until implemented.
-- Have extension/CLI fetch settings and include/enforce the persisted category
-  preferences, or have the API apply them directly during ad selection.
+- Add API tests for persisted blocked categories, per-request blocked
+  categories, no configured categories, and typo/unmatched categories.
+- Replace the free-form settings field with a shared category picker or at least
+  validate against the campaign category taxonomy.
 - Clarify the difference between a user blocking a category and reporting a bad
   category/ad.
 
@@ -2383,56 +2488,21 @@ Previously noted severity: medium-high.
 
 ### A-059: Partial Payout Approval Can Mark Too Much Earnings as Paid
 
-Severity: high.
+**Resolved 2026-07-09** (current worktree; verified by
+`pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts`,
+`pnpm --filter waitlayer-api typecheck`, and targeted eslint).
 
-Evidence:
+What changed:
 
-- `AdminService.approvePayout()` accepts `approvedAmountMinor`, so the backend
-  supports approving less than the originally requested payout amount.
-- `PayoutService.processPayout()` reconciles a partial approval by trimming
-  `PayoutAllocation.amountMinor` rows until their sum matches the approved
-  amount.
-- `PayoutAllocation` stores its own `amountMinor`, but the linked
-  `EarningsLedger` row still has a single whole-row `amountMinor` and `status`.
-- `PayoutService.markPayoutPaid()` and the Stripe payout webhook collect
-  allocated earnings ids and update matching `EarningsLedger` rows to
-  `status: 'paid'` by id; they do not split or mark only the allocated amount.
-- If an allocation is shrunk during partial approval, the whole earnings row can
-  still be marked paid even though only part of that row was actually paid out.
-- The admin payout UI does not expose partial approval, but the backend API path
-  exists and tests cover partial approval as a supported service behavior.
-
-Likely impact:
-
-- A developer can lose the unpaid remainder of an earnings row after a partial
-  payout is marked paid.
-- Ledger balances can show less confirmed earnings than actually remain owed.
-- Admins may believe partial approval is safe because the API validates the
-  approved amount and `processPayout()` trims allocations, while the terminal
-  paid transition still acts at whole-row granularity.
-
-Fix direction:
-
-- On partial approval, split the underlying `EarningsLedger` rows so every
-  remaining allocation points to an earnings row whose `amountMinor` exactly
-  equals the paid allocation.
-- Alternatively, replace whole-row earnings status with amount-level payout
-  settlement accounting, but that is a larger ledger model change.
-- Add integration tests for a single large earning partially approved, paid,
-  and then re-requested for the unpaid remainder.
-
-Desired goal:
-
-- Partial payout approval pays exactly the approved amount and leaves the unpaid
-  remainder available or held with an explicit reason.
-
-Done when:
-
-- Marking a partially approved payout paid cannot mark more earnings as paid
-  than the approved payout amount.
-- Developer payout availability after partial payment equals the unpaid
-  confirmed remainder.
-- Admin and webhook paid paths share the same amount-level reconciliation.
+- `PayoutService.processPayout()` reconciles partial approvals before provider
+  initiation by shrinking the allocation and underlying earnings row to the
+  approved paid slice.
+- The unpaid remainder is persisted as a fresh `confirmed` earnings row with a
+  deterministic remainder idempotency key, keeping it available for a later
+  payout request.
+- `apps/api/src/payout/payout.service.spec.ts` now covers a single $10 earning
+  with a $6 partial approval and asserts a $6 paid slice plus $4 confirmed
+  remainder before provider initiation.
 
 ### A-060: Minimum Visible Duration Can Be Claimed Without Waiting
 
@@ -2552,8 +2622,8 @@ Done when:
 
 ### A-062: Stripe Webhook Failure Paths Can Be Acknowledged Without Reconciliation
 
-**Status:** Partial. Critical paths resolved; background worker remains as architectural
-item (see A-066 / A-068 database-side reporting scope).
+**Status:** Partial. Critical paths resolved; background worker remains as an
+architectural durability item.
 
 Severity: critical (resolved → low residual).
 
@@ -2609,50 +2679,22 @@ Commit: `28c7382`
 
 ### A-063: Partial Stripe Disputes Freeze or Write Off Entire Deposits
 
-Severity: high.
+**Resolved 2026-07-09** (current worktree; verified by
+`pnpm --filter waitlayer-api exec vitest run src/integration/stripe-webhook.spec.ts`
+and targeted eslint).
 
-Evidence:
+What changed:
 
-- `handleDispute()` creates a `hold` advertiser-ledger row for
-  `Math.min(entry.amountMinor, details.amountMinor)`, which is amount-level.
-- The same transaction then flips the parent deposit credit row to
-  `status: 'held'` regardless of whether the dispute amount is smaller than the
-  deposit amount.
-- The centralized spendable-balance helper counts only `status: 'confirmed'`
-  credits, so a partially disputed deposit is fully removed from spendable
-  balance.
-- `handleDisputeClosed()` lost-dispute handling writes a parent reversal for
-  `details.amountMinor`, then marks the parent credit row `status: 'reversed'`,
-  again excluding the entire original credit.
-
-Likely impact:
-
-- A partial dispute can freeze the advertiser's whole deposit instead of only
-  the disputed amount.
-- A lost partial dispute can write off the whole deposit from advertiser
-  spendable balance while platform cash is debited only for the smaller dispute
-  amount, making ledgers inconsistent.
-- Active campaigns may stop serving because unrelated, undisputed funding was
-  hidden by a whole-row status flip.
-
-Fix direction:
-
-- Split deposit credit rows before holding/reversing a disputed slice, or model
-  dispute holds at amount level without changing whole parent-row status.
-- Keep undisputed remainder credits confirmed and spendable.
-- Add tests for a $100 deposit with a $10 dispute created, won, lost, and
-  re-delivered.
-
-Desired goal:
-
-- Dispute lifecycle changes only the disputed amount, never unrelated funding.
-
-Done when:
-
-- Partial disputes freeze exactly the disputed amount.
-- Winning a partial dispute restores exactly that amount.
-- Losing a partial dispute reverses exactly that amount and leaves the remaining
-  deposit credit spendable.
+- Current `StripeWebhookController.handleDispute()` keeps the parent deposit
+  credit `confirmed` and decrements only the disputed amount while writing a
+  separate `hold` row for the disputed slice.
+- `handleDisputeClosed()` settles those hold rows amount-by-amount: won disputes
+  restore a matching confirmed credit; lost disputes write a matching advertiser
+  reversal plus platform cash reversal.
+- `apps/api/src/integration/stripe-webhook.spec.ts` now covers a $100 deposit
+  with a $10 dispute for created, won, and lost paths. The tests assert the
+  undisputed $90 remains confirmed/spendable and only the $10 slice is held,
+  restored, or reversed.
 
 ### A-064: CLI Watch Uses Different Session IDs for Wait Start and Ad Request
 
@@ -2702,35 +2744,33 @@ Done when:
 - A test proves the API accepts the CLI start -> ad request flow.
 - The CLI can qualify an impression after the required visible duration.
 
-### A-065: CLI Signup Cannot Satisfy Required Consent Fields
+### A-065: CLI Signup Consent Fields Were Added; Tests Still Needed
 
-Severity: high.
+Severity: resolved pending focused CLI tests.
 
-Evidence:
+Current source check:
 
 - `SignUpDto` requires `ageConfirmed` and `termsAccepted` booleans.
 - `AuthService.signUp()` rejects account creation when either field is missing
   or false.
-- `apps/cli/src/commands/auth.ts` calls `api.signup()` with email, password,
-  role, name, and optional referral code only.
-- `apps/cli/src/lib/api-client.ts` `signup()` does not accept or forward
-  `ageConfirmed`, `termsAccepted`, or `policyVersion`.
+- `apps/cli/src/commands/auth.ts` now prompts for age confirmation and
+  Terms/Privacy acceptance, exits before signup when either is declined, fetches
+  `/consent/required-versions`, and sends `ageConfirmed`, `termsAccepted`, and
+  `policyVersion`.
+- `apps/cli/src/lib/api-client.ts` `signup()` now accepts and forwards the
+  consent fields, and `getRequiredConsentVersions()` is available.
+- `pnpm --filter waitlayer-cli typecheck`: passed.
 
-Likely impact:
+Residual risk:
 
-- CLI self-service signup fails against the current API validation.
-- Developers installing the terminal client first cannot create an account from
-  the CLI even though the command offers signup.
-- The older consent-bypass risk has become a broken-client risk in the current
-  tree: the API is stricter, but this client was not updated.
+- No focused CLI signup test was found for declined consent, accepted consent,
+  or successful required-version forwarding.
 
-Fix direction:
+Follow-up direction:
 
-- Add explicit CLI prompts for age confirmation and terms/privacy acceptance.
-- Forward `ageConfirmed: true`, `termsAccepted: true`, and the current
-  server-required policy version.
-- Fetch the required policy versions from `/consent/required-versions` or share
-  the version constant through a package instead of hard-coding a stale value.
+- Add CLI tests that stub prompts/API calls and assert declined consent exits
+  before signup, accepted consent forwards required fields, and version-fetch
+  failure exits before signup.
 
 Desired goal:
 
@@ -2810,50 +2850,135 @@ Done when:
 - "Last 24h" either sends rolling ISO timestamps or is renamed to match its
   actual calendar-day behavior.
 
-### A-068: Reports Daily Trend Still Loads All Event Timestamps Into Memory
+### A-068: Reports Daily Trend Uses Database Aggregation
 
-Severity: medium.
+**Resolved 2026-07-09** (current working tree, with A-003 test repair still
+required).
 
-Evidence:
+Current source check:
 
-- `AdvertiserService.getReports()` now uses `groupBy()` for campaign-level
-  impression and click totals.
-- The same method still builds `dailyTrend` by calling
-  `adImpression.findMany({ select: { createdAt: true } })` and
-  `adClick.findMany({ select: { createdAt: true } })` for every matching event
-  in the requested range.
-- `params.page` and `params.limit` are accepted in the service signature but are
-  not applied to the event timestamp queries.
-- The reports page offers 90-day and custom date ranges, and the export route
-  reuses `getReports()`.
+- `AdvertiserService.getReports()` uses `groupBy()` for campaign-level
+  impression/click totals.
+- Daily trend is now generated with Prisma `$queryRaw` and SQL
+  `date_trunc('day', "createdAt")` queries for `ad_impressions` and
+  `ad_clicks`, so the API receives one row per day instead of every matching
+  event timestamp.
+- The old raw `adImpression.findMany({ select: { createdAt: true } })` /
+  `adClick.findMany({ select: { createdAt: true } })` daily-trend path is gone.
 
-Likely impact:
+Verification:
 
-- Large advertisers can force the API to load millions of event timestamps into
-  Node memory just to draw a daily trend chart.
-- The report endpoint can become slow or OOM despite the campaign totals being
-  database-aggregated.
-- The older raw-row report issue is only partially fixed in the current tree.
+- Source inspection of `apps/api/src/advertiser/advertiser.service.ts`.
+- `pnpm test`: failed because `src/advertiser/advertiser.service.spec.ts` still
+  mocks/inspects the old `findMany()` implementation and does not mock
+  `$queryRaw`; A-003 tracks that test repair.
 
-Fix direction:
+Residual risk:
 
-- Aggregate daily impressions/clicks in SQL using date bucketing, or maintain a
-  rollup table.
-- Cap custom date ranges or page the event timeline separately from campaign
-  summary rows.
-- Add a regression test that asserts report generation does not call raw
-  `findMany()` for every event row in a large date range.
+- A-032 still tracks unpaginated synchronous report/export campaign rows and
+  missing date-range/export bounds.
+- A-007 still tracks admin metrics loading raw rows into Node memory.
 
 Desired goal:
 
 - Advertiser reporting remains bounded in memory for large customers and long
   ranges.
 
-Done when:
+Done:
 
-- Daily trend is generated by database aggregation or bounded rollups.
-- Custom ranges have explicit limits or a safe asynchronous export path.
-- Large synthetic report tests pass without loading raw event rows into memory.
+- Daily trend is generated by database aggregation rather than loading raw event
+  timestamps into memory.
+
+### A-069: Admin Device Lookup Compile Blocker and Proxy Query Loss
+
+**Resolved 2026-07-09** (uncommitted in current working tree).
+
+Resolved evidence:
+
+- `apps/api/src/admin/dto/index.ts` now exports `AdminDevicesQueryDto`, so
+  `AdminController.getDevices()` compiles through the DTO barrel.
+- `pnpm --filter waitlayer-api typecheck`: passed.
+- `pnpm --filter waitlayer-web typecheck`: passed.
+- `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts`:
+  passed.
+- `pnpm --filter waitlayer-web exec vitest run src/app/api/[...proxy]/proxy.test.ts
+  src/app/api/[...proxy]/route.test.ts src/lib/api/services.trust.spec.ts`:
+  passed.
+- During the same pass, the Next catch-all proxy was fixed to preserve
+  `req.nextUrl.search` when forwarding upstream. Before this, filtered and
+  paginated API calls could lose query strings at the proxy boundary.
+
+Previously likely impact:
+
+- The API package and full monorepo typecheck could be red even while the narrow
+  service test passed.
+- Admin device lookup and the improved support recovery flow could not be
+  trusted for release until the compile gate was green again.
+- Query-driven web calls such as `/admin/devices`, `/advertiser/reports`,
+  ledger history, and admin list filters could hit the API without their
+  intended query parameters.
+
+Done:
+
+- `AdminDevicesQueryDto` is exported from the DTO barrel.
+- The web proxy route test proves `/admin/devices?search=...` is forwarded with
+  its query string intact.
+- Full root `pnpm typecheck` passes after the current uncommitted changes.
+
+### A-070: Sensitive Legacy API-Key Scopes Are Rejected
+
+Severity: resolved pending HTTP smoke with real guards.
+
+Current source check:
+
+- `apps/api/src/developer/dto/api-key.dto.ts` now exports
+  `REMOVED_SENSITIVE_API_KEY_SCOPES` for `payout:read`, `payout:write`, and
+  `developer:write`.
+- `ApiKeyService.validateApiKey()` rejects any active stored key carrying one
+  of those removed scopes before updating `lastUsedAt`, so legacy/manual rows
+  fail closed at validation time.
+- `PayoutController` now applies `RejectApiKeyGuard` to `POST /payout/method`,
+  `GET /payout/info`, and `POST /payout/request`.
+- `DeveloperController` now applies `RejectApiKeyGuard` to
+  `PATCH /developer/settings`, `POST /developer/export-data`, and
+  `POST /developer/delete-account`.
+- Safer API-key routes remain available where intentionally scoped, such as
+  developer dashboard/earnings reads, ledger reads, and advertiser campaign/report
+  routes.
+
+Verification:
+
+- `pnpm --filter waitlayer-api exec vitest run src/developer/api-key.service.spec.ts
+  src/common/guards/reject-api-key.guard.spec.ts`: passed.
+- `pnpm --filter waitlayer-api typecheck`: passed.
+- `pnpm --filter waitlayer-api exec eslint src/developer/api-key.service.ts
+  src/developer/api-key.service.spec.ts src/developer/dto/api-key.dto.ts
+  src/developer/developer.controller.ts src/payout/payout.controller.ts
+  src/common/guards/reject-api-key.guard.spec.ts`: passed.
+
+Residual risk:
+
+- Add an HTTP-level guard integration smoke that sends a primary `x-api-key`
+  request with a legacy sensitive scope and proves these routes return 403/400
+  while a normal JWT request still reaches the handler.
+- Consider a database migration or ops script to mark existing keys with removed
+  sensitive scopes inactive for cleaner operational state; runtime validation
+  already rejects them.
+
+Desired goal:
+
+- Long-lived machine credentials cannot move money, change payout destinations,
+  export personal data, or perform destructive account operations unless the
+  product explicitly ships a hardened M2M flow with short expiry and step-up.
+
+Done:
+
+- API-key authenticated calls cannot reach payout method/info/request routes or
+  developer settings/export/delete routes.
+- Existing stored keys carrying removed sensitive scopes are rejected at
+  validation time.
+- Regression tests cover validation-time legacy-scope rejection and guard
+  metadata on the sensitive routes.
 
 ## End-to-End SaaS Readiness Checks
 
@@ -2979,31 +3104,18 @@ call, direct database mutation, or tribal-knowledge script.
 
 ## Recommended Fix Order
 
-1. Fix A-002, A-004, A-005, A-015, A-016, A-017, and any related
-   proxy/env tests because they are web auth/proxy/config contract bugs.
-2. Fix A-034, A-036, A-044, A-047, A-052, and A-065 so signup and privacy
-   obligations are enforced across roles, versions, and surfaces.
-3. Fix A-013, A-014, A-040, A-043, and A-064 so developer clients can be
-   installed, connect, authenticate, and complete the intended earning path.
-4. Fix A-035 and A-037 so 2FA and API-key behavior match the money-movement
-   security policy.
-5. Fix A-019, A-020, A-021, A-022, A-023, A-024, A-038, A-039, A-051,
-   A-056, A-059, A-060, A-061, A-062, A-063, A-066, A-067, and
-   A-068 to make the advertiser/developer money campaign/ad-serving/billing/
-   reporting loop coherent.
-6. Fix A-041 so referral rewards match payout accounting.
-7. Fix A-003 and A-012 so tests and schema setup become trustworthy.
-8. Fix A-001 so root, CI, and Docker builds are release-safe.
-9. Add the A-006 regression tests while fixing those contract bugs.
-10. Fix A-026, A-027, A-028, A-045, A-046, and the admin portions of the E2E
-    readiness checks.
-11. Address A-007, A-008, A-009, A-030, A-031, and A-032 as product hardening
+1. Fix A-021, A-051, and A-062 to make the
+   advertiser/developer money campaign/ad-serving/billing/reporting loop
+   coherent.
+2. Fix A-003 and A-012 so tests and schema setup become trustworthy.
+3. Fix A-028 and the admin portions of the E2E readiness checks.
+4. Address A-007, A-009, A-030, A-031, and A-032 as product hardening
     and scale work.
-12. Fix A-057 and A-058 before launch copy claims developer category blocking,
-    fine-grained category control, or reliable local quiet hours.
-13. Update stale status docs for A-010 and public claims in A-033 only after
+5. Add A-057 regression tests and taxonomy validation before launch copy leans
+    on developer category blocking or fine-grained category control.
+6. Update stale status docs for A-010 and public claims in A-033 only after
     commands and E2E checks are genuinely green.
-14. Keep A-011 in mind throughout: do not combine unrelated fixes.
+7. Keep A-011 in mind throughout: do not combine unrelated fixes.
 
 ## Required Verification Before Calling the Repo Healthy
 

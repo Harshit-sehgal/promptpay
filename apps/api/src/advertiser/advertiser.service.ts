@@ -20,6 +20,46 @@ import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-po
 import { PrismaService } from '../config/prisma.service';
 import { reportsToCsv } from './reports-csv';
 
+/**
+ * Build the Prisma `createdAt` filter for advertiser reports (issue A-050).
+ *
+ * A date-ONLY `to` (no 'T', e.g. "2026-07-09") is parsed by `new Date(...)`
+ * as midnight at the START of that day, which would exclude every event that
+ * happened later on the selected end day. We instead treat a date-only `to`
+ * as inclusive-of-the-day by using an exclusive next-day UTC lower bound
+ * (`lt`); ISO datetimes keep an inclusive upper bound (`lte`). The next-day
+ * bound is computed in UTC so it lines up with how `new Date(params.to)`
+ * parses a date-only string (UTC midnight).
+ *
+ * Exported so the date-bound semantics can be unit-tested without invoking the
+ * SQL aggregation path (A-068).
+ */
+export function buildReportsDateFilter(
+  from: string | undefined,
+  to: string | undefined,
+): { gte?: Date; lte?: Date; lt?: Date } {
+  const gte = from ? new Date(from) : undefined;
+  const lte = to ? new Date(to) : undefined;
+  if (gte && Number.isNaN(gte.getTime())) {
+    throw new BadRequestException(`Invalid 'from' date: ${from}`);
+  }
+  if (lte && Number.isNaN(lte.getTime())) {
+    throw new BadRequestException(`Invalid 'to' date: ${to}`);
+  }
+
+  const createdAt: { gte?: Date; lte?: Date; lt?: Date } = {};
+  if (gte) createdAt.gte = gte;
+  if (to) {
+    if (to.includes('T')) {
+      createdAt.lte = lte;
+    } else {
+      const toUtc = new Date(`${to}T00:00:00.000Z`);
+      createdAt.lt = new Date(toUtc.getTime() + 24 * 60 * 60 * 1000);
+    }
+  }
+  return createdAt;
+}
+
 /** Valid campaign status transitions */
 const CAMPAIGN_TRANSITIONS: Record<string, CampaignStatus[]> = {
   draft: [CampaignStatus.SUBMITTED],
@@ -868,35 +908,15 @@ export class AdvertiserService {
     });
     const campaignIds = campaigns.map((campaign) => campaign.id);
 
-    // Parse date range
-    const gte = params.from ? new Date(params.from) : undefined;
-    const lte = params.to ? new Date(params.to) : undefined;
-    if (gte && Number.isNaN(gte.getTime())) {
-      throw new BadRequestException(`Invalid 'from' date: ${params.from}`);
-    }
-    if (lte && Number.isNaN(lte.getTime())) {
-      throw new BadRequestException(`Invalid 'to' date: ${params.to}`);
-    }
-
-    // Build the time filter. A date-ONLY `to` (no 'T', e.g. "2026-07-09") is
-    // parsed by `new Date(...)` as midnight at the START of that day, which
-    // would exclude every impression/click that happened later on the selected
-    // end day (issue A-050). Treat a date-only `to` as inclusive-of-the-day by
-    // using an exclusive next-day UTC lower bound (`lt`); ISO datetimes are kept
-    // as an inclusive upper bound (`lte`). "Last 24h" callers should pass a
-    // full ISO datetime for `from`/`to`. The next-day bound is computed in UTC
-    // (not local time) so it lines up with how `new Date(params.to)` parses a
-    // date-only string (UTC midnight).
-    const createdAt: { gte?: Date; lte?: Date; lt?: Date } = {};
-    if (gte) createdAt.gte = gte;
-    if (params.to) {
-      if (params.to.includes('T')) {
-        createdAt.lte = lte;
-      } else {
-        const toUtc = new Date(`${params.to}T00:00:00.000Z`);
-        createdAt.lt = new Date(toUtc.getTime() + 24 * 60 * 60 * 1000);
-      }
-    }
+    // Parse + normalize the date range into a Prisma `createdAt` filter
+    // (issue A-050). A date-ONLY `to` (no 'T', e.g. "2026-07-09") is parsed by
+    // `new Date(...)` as midnight at the START of that day, which would exclude
+    // every impression/click that happened later on the selected end day. We
+    // treat a date-only `to` as inclusive-of-the-day by using an exclusive
+    // next-day UTC lower bound (`lt`); ISO datetimes are kept as an inclusive
+    // upper bound (`lte`). The next-day bound is computed in UTC so it lines up
+    // with how `new Date(params.to)` parses a date-only string (UTC midnight).
+    const createdAt = buildReportsDateFilter(params.from, params.to);
     const timeFilter = Object.keys(createdAt).length > 0 ? { createdAt } : {};
 
     // Aggregate impressions + clicks per campaign in the database (groupBy)
