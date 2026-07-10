@@ -11,7 +11,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
@@ -38,6 +38,7 @@ function isCredentialFailure(err: unknown): boolean {
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @ApiOperation({ summary: 'Sign up' })
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
   async signUp(@Body() dto: SignUpDto, @Req() req: Request) {
@@ -57,6 +58,7 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Log in' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto, @Req() req: Request) {
@@ -73,6 +75,7 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Google OAuth login' })
   @Post('google')
   @HttpCode(HttpStatus.OK)
   async googleOAuth(@Body() dto: GoogleOAuthDto, @Req() req: Request) {
@@ -92,6 +95,7 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Refresh token' })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshDto, @Req() req: Request) {
@@ -112,22 +116,22 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Log out' })
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  logout(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('jti') jti: string,
-  ) {
+  logout(@CurrentUser('id') userId: string, @CurrentUser('jti') jti: string) {
     return this.authService.logout(userId, jti);
   }
 
+  @ApiOperation({ summary: 'Get current user' })
   @Get('me')
   @UseGuards(JwtAuthGuard)
   getMe(@CurrentUser('id') userId: string) {
     return this.authService.getMe(userId);
   }
 
+  @ApiOperation({ summary: 'Request email verification' })
   @Post('verify-email/request')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
@@ -135,6 +139,7 @@ export class AuthController {
     return this.authService.requestEmailVerification(userId);
   }
 
+  @ApiOperation({ summary: 'Confirm email verification' })
   @Post('verify-email/confirm')
   @HttpCode(HttpStatus.OK)
   async confirmEmailVerification(@Body() dto: VerifyEmailConfirmDto, @Req() req: Request) {
@@ -155,6 +160,7 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Set up two-factor auth' })
   @Post('2fa/setup')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
@@ -162,10 +168,15 @@ export class AuthController {
     return this.authService.setupTwoFactor(userId);
   }
 
+  @ApiOperation({ summary: 'Enable two-factor auth' })
   @Post('2fa/enable')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async enableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorEnableDto, @Req() req: Request) {
+  async enableTwoFactor(
+    @CurrentUser('id') userId: string,
+    @Body() dto: TwoFactorEnableDto,
+    @Req() req: Request,
+  ) {
     try {
       await BruteForceGuard.assertCanAttempt(req, userId);
       const result = await this.authService.enableTwoFactor(userId, dto.token);
@@ -179,10 +190,15 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Disable two-factor auth' })
   @Post('2fa/disable')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async disableTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorDisableDto, @Req() req: Request) {
+  async disableTwoFactor(
+    @CurrentUser('id') userId: string,
+    @Body() dto: TwoFactorDisableDto,
+    @Req() req: Request,
+  ) {
     try {
       await BruteForceGuard.assertCanAttempt(req, userId);
       const result = await this.authService.disableTwoFactor(userId, dto.token);
@@ -196,6 +212,7 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Request password reset' })
   @Post('password/forgot')
   @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
@@ -215,6 +232,7 @@ export class AuthController {
     return result;
   }
 
+  @ApiOperation({ summary: 'Reset password' })
   @Post('password/reset')
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
@@ -231,6 +249,7 @@ export class AuthController {
     }
   }
 
+  @ApiOperation({ summary: 'Get auth config' })
   @Get('config')
   @HttpCode(HttpStatus.OK)
   getConfig() {

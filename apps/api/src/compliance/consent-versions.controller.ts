@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { ComplianceService } from './compliance.service';
 
@@ -21,6 +21,7 @@ import { ComplianceService } from './compliance.service';
 export class ConsentVersionsController {
   constructor(private compliance: ComplianceService) {}
 
+  @ApiOperation({ summary: 'Get required consent versions' })
   @Get('required-versions')
   @HttpCode(HttpStatus.OK)
   requiredVersions() {

@@ -8,7 +8,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { ComplianceService } from './compliance.service';
 
@@ -48,6 +48,7 @@ class AnonymousConsentDto {
 export class ConsentAnonymousController {
   constructor(private compliance: ComplianceService) {}
 
+  @ApiOperation({ summary: 'Record anonymous consent' })
   @Post('anonymous')
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))

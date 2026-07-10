@@ -1,5 +1,13 @@
-import { Controller, Get, HttpCode, HttpException, HttpStatus, Logger, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Logger,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 
 import { Roles } from '../common/decorators';
@@ -19,6 +27,7 @@ export class HealthController {
     private redis: RedisHealthService,
   ) {}
 
+  @ApiOperation({ summary: 'Health check' })
   @Get()
   @HttpCode(HttpStatus.OK)
   async check() {
@@ -53,6 +62,7 @@ export class HealthController {
    * unavailable. This prevents routing traffic to an API that cannot safely
    * serve it (A-042).
    */
+  @ApiOperation({ summary: 'Readiness check' })
   @Get('ready')
   @HttpCode(HttpStatus.OK)
   async ready() {
@@ -83,6 +93,7 @@ export class HealthController {
     return checks;
   }
 
+  @ApiOperation({ summary: 'Get health metrics' })
   @Get('metrics')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin', 'super_admin')
@@ -107,7 +118,9 @@ export class HealthController {
       checks['redis'] = redis;
 
       const [pendingPayouts, openFraudFlags, activeDevelopers] = await Promise.all([
-        this.prisma.payoutRequest.count({ where: { status: { in: ['requested', 'under_review', 'approved', 'processing'] } } }),
+        this.prisma.payoutRequest.count({
+          where: { status: { in: ['requested', 'under_review', 'approved', 'processing'] } },
+        }),
         this.prisma.fraudFlag.count({ where: { status: 'open' } }),
         this.prisma.user.count({ where: { role: 'developer', status: 'active' } }),
       ]);
