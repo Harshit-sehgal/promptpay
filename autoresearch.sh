@@ -7,8 +7,10 @@
 # sum of:
 #   * real quality-gate debt (TypeScript type errors + ESLint severity-2
 #     errors), and
-#   * outstanding flagged tasks in source (TODO / FIXME / HACK markers), which
-#     represent work the code itself says is not yet done.
+#   * outstanding flagged tasks in tracked source (TODO / FIXME / HACK / XXX
+#     markers bounded by a non-letter), which represent work the code itself
+#     says is not yet done. Counted via `git grep` over tracked files, so
+#     node_modules, build artifacts, and generated output are never counted.
 #
 # The composite `remaining_work` metric is used as the PRIMARY signal (lower is
 # better). Because it includes the quality-gate errors, "completing" flagged
@@ -16,9 +18,11 @@
 # penalised.
 #
 # Workload is fully offline and deterministic: per-package `tsc --noEmit`
-# (typecheck), `eslint --format json` (lint), and a source scan for flagged
-# task markers. No network, no clock dependency, no random seeds. Turbo is
-# bypassed so runs are sequential and reproducible.
+# (typecheck), `eslint --format json` (lint), and a `git grep` scan for
+# flagged-task markers over tracked source only. No network, no clock
+# dependency, no random seeds. Turbo is bypassed so runs are sequential and
+# reproducible; `git grep` inherently skips node_modules, build artifacts, and
+# generated output (gitignore-respecting, tracked files only).
 #
 # Emits:
 #   METRIC remaining_work=<code_errors + open_todos>   (PRIMARY, lower better)
@@ -57,7 +61,7 @@ declare -A LINT_TARGETS=(
 
 typecheck_errors=0
 lint_errors=0
-open_todos=0
+open_todos="$(git grep -iE --line-number '(TODO|FIXME|HACK|XXX)([^[:alpha:]]|$)' -- "${PACKAGES[@]}" 2>/dev/null | wc -l || true)"
 
 START_TS=$(date +%s)
 
@@ -86,9 +90,6 @@ for pkg in "${PACKAGES[@]}"; do
   ')"
   lint_errors=$((lint_errors + le))
 
-  # --- outstanding flagged tasks in source ---
-  td="$(grep -rniE --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build -I 'TODO|FIXME|HACK' "$pkg" 2>/dev/null | wc -l || true)"
-  open_todos=$((open_todos + td))
 done
 
 END_TS=$(date +%s)

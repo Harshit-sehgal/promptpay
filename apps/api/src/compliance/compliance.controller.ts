@@ -11,27 +11,31 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { ComplianceService } from './compliance.service';
 
 class RecordConsentDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(80)
   @Matches(/^[a-z0-9_.:-]+$/i, { message: 'purpose contains unsupported characters' })
   purpose!: string;
 
+  @ApiProperty()
   @IsString()
   @MaxLength(80)
   @Matches(/^[a-z0-9_.:-]+$/i, { message: 'version contains unsupported characters' })
   version!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   granted?: boolean;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;

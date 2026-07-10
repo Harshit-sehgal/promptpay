@@ -8,24 +8,28 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 
 import { ComplianceService } from './compliance.service';
 
 class AnonymousConsentDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(256)
   visitorId!: string;
 
+  @ApiProperty()
   @IsString()
   @MaxLength(80)
   @Matches(/^[a-z0-9_.:-]+$/i, { message: 'purpose contains unsupported characters' })
   purpose!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   granted?: boolean;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(80)
