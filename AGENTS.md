@@ -138,8 +138,10 @@ browser or live-client check that has not been executed:
   (reporting/exports/audience) is undefined by product.
 - **A-040** CLI `waitlayer watch` money loop: covered via HTTP E2E against the
   same API surface; live compiled-binary run not done.
-- **A-046** Fraud recompute: shared client wired; no UI test proving a 500 leaves
-  a visible error.
+- **A-046** Fraud recompute: shared client wired; UI error path now covered by
+  `apps/web/src/app/admin/fraud/page.a046.test.ts` (renders the admin fraud page,
+  mocks `recomputeTrustScore` to reject with a 500, asserts the failure surfaces
+  as a visible `text-red-400` error and that the recompute call fired).
 - **A-047** Consent version fail-closed: code verified; browser E2E for
   signup/re-prompt/cookie paths pending.
 - **A-050 / A-067** date-range end-day inclusion + reports CTR×100 / "1 day"
