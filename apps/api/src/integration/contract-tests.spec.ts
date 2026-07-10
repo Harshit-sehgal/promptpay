@@ -1,10 +1,16 @@
 import * as bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { afterAll,beforeAll, describe, expect, it } from 'vitest';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { BidType, canonicalJson, PayoutProvider, UserRole, verifySignature } from '@waitlayer/shared';
+import {
+  BidType,
+  canonicalJson,
+  PayoutProvider,
+  UserRole,
+  verifySignature,
+} from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 import {
   AdClickResponse,
@@ -70,7 +76,8 @@ describe('API Contract Tests', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api/v1');
+    app.setGlobalPrefix('api');
+    app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -128,7 +135,15 @@ describe('API Contract Tests', () => {
     it('POST /auth/signup → matches SignupResponse schema', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-dev@test.com', password: 'Password123!', role: UserRole.DEVELOPER, name: 'Contract Dev', country: 'US', ageConfirmed: true, termsAccepted: true })
+        .send({
+          email: 'contract-dev@test.com',
+          password: 'Password123!',
+          role: UserRole.DEVELOPER,
+          name: 'Contract Dev',
+          country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
+        })
         .expect(201);
       expect(() => SignupResponse.parse(res.body)).not.toThrow();
       devToken = res.body.accessToken;
@@ -175,7 +190,15 @@ describe('API Contract Tests', () => {
       // beforeAll. Login with the seeded admin to obtain a token.
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-admin@test.com', password: 'Password123!', role: UserRole.ADMIN, name: 'Contract Admin', country: 'US', ageConfirmed: true, termsAccepted: true })
+        .send({
+          email: 'contract-admin@test.com',
+          password: 'Password123!',
+          role: UserRole.ADMIN,
+          name: 'Contract Admin',
+          country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
+        })
         .expect(400);
       const adminLogin = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
@@ -185,7 +208,15 @@ describe('API Contract Tests', () => {
 
       const advRes = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email: 'contract-adv@test.com', password: 'Password123!', role: UserRole.ADVERTISER, name: 'Contract Adv', country: 'US', ageConfirmed: true, termsAccepted: true })
+        .send({
+          email: 'contract-adv@test.com',
+          password: 'Password123!',
+          role: UserRole.ADVERTISER,
+          name: 'Contract Adv',
+          country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
+        })
         .expect(201);
       advertiserToken = advRes.body.accessToken;
 
@@ -219,7 +250,14 @@ describe('API Contract Tests', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/advertiser/campaigns')
         .set('Authorization', `Bearer ${advertiserToken}`)
-        .send({ name: 'Contract CPM Campaign', category: 'technology', bidType: BidType.CPM, currency: 'USD', bidAmountMinor: 1000, budgetTotalMinor: 50000 })
+        .send({
+          name: 'Contract CPM Campaign',
+          category: 'technology',
+          bidType: BidType.CPM,
+          currency: 'USD',
+          bidAmountMinor: 1000,
+          budgetTotalMinor: 50000,
+        })
         .expect(201);
       expect(() => CreateCampaignResponse.parse(res.body)).not.toThrow();
       campaignId = res.body.id;
@@ -229,7 +267,12 @@ describe('API Contract Tests', () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/campaigns/${campaignId}/creatives`)
         .set('Authorization', `Bearer ${advertiserToken}`)
-        .send({ title: 'Contract Creative', sponsoredMessage: 'Test sponsored message', destinationUrl: 'https://test.com', displayDomain: 'test.com' })
+        .send({
+          title: 'Contract Creative',
+          sponsoredMessage: 'Test sponsored message',
+          destinationUrl: 'https://test.com',
+          displayDomain: 'test.com',
+        })
         .expect(200);
       expect(() => CreativeResponse.parse(res.body)).not.toThrow();
       creativeId = res.body.id;
@@ -261,7 +304,12 @@ describe('API Contract Tests', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/register-device')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ toolType: 'vscode', fingerprintHash: 'contract-fingerprint-abc', extensionVersion: '1.0.0', platform: 'linux' })
+        .send({
+          toolType: 'vscode',
+          fingerprintHash: 'contract-fingerprint-abc',
+          extensionVersion: '1.0.0',
+          platform: 'linux',
+        })
         .expect(200);
       expect(() => RegisterDeviceResponse.parse(res.body)).not.toThrow();
       expect(res.body.eventSecret).toBeDefined(); // per-device secret issued
@@ -270,7 +318,13 @@ describe('API Contract Tests', () => {
     });
 
     it('POST /extension/wait-state/start → matches WaitStateStartResponse schema', async () => {
-      const payload = { deviceId, sessionId: 'contract-session', toolType: 'vscode', waitStateId: 'contract-ws', idempotencyKey: 'contract-ws-start' };
+      const payload = {
+        deviceId,
+        sessionId: 'contract-session',
+        toolType: 'vscode',
+        waitStateId: 'contract-ws',
+        idempotencyKey: 'contract-ws-start',
+      };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -285,7 +339,11 @@ describe('API Contract Tests', () => {
       // Value must be within 30s tolerance of the server-computed duration (server
       // computes elapsed seconds since the wait_state_start event, created moments
       // ago — so 1 second works).
-      const payload = { waitStateId: 'contract-ws', durationSeconds: '1', idempotencyKey: 'contract-ws-end' };
+      const payload = {
+        waitStateId: 'contract-ws',
+        durationSeconds: '1',
+        idempotencyKey: 'contract-ws-end',
+      };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/end')
@@ -297,14 +355,26 @@ describe('API Contract Tests', () => {
 
     it('POST /extension/ad-request → matches AdRequestResponse schema', async () => {
       // Need a fresh wait-state start for each ad-request (ad-request validates active wait)
-      const wsPayload = { deviceId, sessionId: 'contract-session', toolType: 'vscode', waitStateId: 'contract-ad-ws', idempotencyKey: 'contract-ad-ws-start' };
+      const wsPayload = {
+        deviceId,
+        sessionId: 'contract-session',
+        toolType: 'vscode',
+        waitStateId: 'contract-ad-ws',
+        idempotencyKey: 'contract-ad-ws-start',
+      };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...wsPayload, signature: signPayload(wsPayload, deviceEventSecret) })
         .expect(200);
 
-      const payload = { deviceId, sessionId: 'contract-session', waitStateId: 'contract-ad-ws', toolType: 'vscode', idempotencyKey: 'contract-ad-req' };
+      const payload = {
+        deviceId,
+        sessionId: 'contract-session',
+        waitStateId: 'contract-ad-ws',
+        toolType: 'vscode',
+        idempotencyKey: 'contract-ad-req',
+      };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
@@ -316,7 +386,11 @@ describe('API Contract Tests', () => {
     });
 
     it('POST /extension/ad-rendered → matches AdRenderedResponse schema', async () => {
-      const payload = { impressionToken, renderedAt: new Date().toISOString(), idempotencyKey: 'contract-render' };
+      const payload = {
+        impressionToken,
+        renderedAt: new Date().toISOString(),
+        idempotencyKey: 'contract-render',
+      };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-rendered')
@@ -335,7 +409,12 @@ describe('API Contract Tests', () => {
       // qualification (issue A-060). The ad-rendered test ran immediately
       // before this one, so wait past the threshold first.
       await new Promise((r) => setTimeout(r, 4000));
-      const payload = { impressionToken, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'contract-qual' };
+      const payload = {
+        impressionToken,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'contract-qual',
+      };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/impression-qualified')
@@ -351,7 +430,12 @@ describe('API Contract Tests', () => {
       const earningsLedgerCountBefore = await prisma.earningsLedger.count();
       const platformLedgerCountBefore = await prisma.platformLedger.count();
 
-      const payload = { impressionToken, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'contract-qual-dup' };
+      const payload = {
+        impressionToken,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'contract-qual-dup',
+      };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/impression-qualified')
@@ -381,14 +465,26 @@ describe('API Contract Tests', () => {
         data: { isBillable: false },
       });
 
-      const wsPayload = { deviceId, sessionId: 'contract-session-concurrent', toolType: 'vscode', waitStateId: 'concurrent-ws', idempotencyKey: 'concurrent-ws-start' };
+      const wsPayload = {
+        deviceId,
+        sessionId: 'contract-session-concurrent',
+        toolType: 'vscode',
+        waitStateId: 'concurrent-ws',
+        idempotencyKey: 'concurrent-ws-start',
+      };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...wsPayload, signature: signPayload(wsPayload, deviceEventSecret) })
         .expect(200);
 
-      const adReqPayload = { deviceId, sessionId: 'contract-session-concurrent', waitStateId: 'concurrent-ws', toolType: 'vscode', idempotencyKey: 'concurrent-ad-req' };
+      const adReqPayload = {
+        deviceId,
+        sessionId: 'contract-session-concurrent',
+        waitStateId: 'concurrent-ws',
+        toolType: 'vscode',
+        idempotencyKey: 'concurrent-ad-req',
+      };
       const adRes = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
         .set('Authorization', `Bearer ${devToken}`)
@@ -396,7 +492,11 @@ describe('API Contract Tests', () => {
         .expect(200);
       const token = adRes.body.ad.impressionToken;
 
-      const renderPayload = { impressionToken: token, renderedAt: new Date().toISOString(), idempotencyKey: 'concurrent-render' };
+      const renderPayload = {
+        impressionToken: token,
+        renderedAt: new Date().toISOString(),
+        idempotencyKey: 'concurrent-render',
+      };
       await request(app.getHttpServer())
         .post('/api/v1/extension/ad-rendered')
         .set('Authorization', `Bearer ${devToken}`)
@@ -406,8 +506,18 @@ describe('API Contract Tests', () => {
       // Wait past the minimum visible duration before qualifying (issue A-060).
       await new Promise((r) => setTimeout(r, 4000));
 
-      const payload1 = { impressionToken: token, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'concurrent-qual-1' };
-      const payload2 = { impressionToken: token, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: 'concurrent-qual-2' };
+      const payload1 = {
+        impressionToken: token,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'concurrent-qual-1',
+      };
+      const payload2 = {
+        impressionToken: token,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: 'concurrent-qual-2',
+      };
 
       const campaignBefore = await prisma.campaign.findUnique({ where: { id: campaignId } });
       const advCountBefore = await prisma.advertiserLedger.count();
@@ -434,14 +544,20 @@ describe('API Contract Tests', () => {
       expect(alreadyQual1 !== alreadyQual2).toBe(true);
 
       const campaignAfter = await prisma.campaign.findUnique({ where: { id: campaignId } });
-      expect(campaignAfter?.budgetSpentMinor).toBe((campaignBefore?.budgetSpentMinor ?? 0) + campaignBefore?.bidAmountMinor!);
+      expect(campaignAfter?.budgetSpentMinor).toBe(
+        (campaignBefore?.budgetSpentMinor ?? 0) + campaignBefore?.bidAmountMinor!,
+      );
 
       const advCountAfter = await prisma.advertiserLedger.count();
       expect(advCountAfter).toBe(advCountBefore + 1);
     });
 
     it('POST /extension/click → matches AdClickResponse schema', async () => {
-      const payload = { impressionToken, clickedAt: new Date().toISOString(), idempotencyKey: 'contract-click' };
+      const payload = {
+        impressionToken,
+        clickedAt: new Date().toISOString(),
+        idempotencyKey: 'contract-click',
+      };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
         .post('/api/v1/extension/click')
@@ -461,7 +577,11 @@ describe('API Contract Tests', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/payout/method')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ provider: PayoutProvider.PAYPAL_EMAIL, destination: 'contract-dev@paypal.com', currency: 'USD' })
+        .send({
+          provider: PayoutProvider.PAYPAL_EMAIL,
+          destination: 'contract-dev@paypal.com',
+          currency: 'USD',
+        })
         .expect(201);
       expect(() => PayoutMethodResponse.parse(res.body)).not.toThrow();
       expect(res.body.id).toBeDefined();
@@ -513,21 +633,44 @@ describe('API Contract Tests', () => {
 
   describe('Schema Structural Validation', () => {
     it('SignupResponse rejects missing user.id', () => {
-      const bad = { user: { email: 'x@x.com', name: 'X', role: 'developer' }, accessToken: 't', refreshToken: 't' };
+      const bad = {
+        user: { email: 'x@x.com', name: 'X', role: 'developer' },
+        accessToken: 't',
+        refreshToken: 't',
+      };
       expect(() => SignupResponse.parse(bad)).toThrow();
     });
 
     it('SignupResponse rejects bad email', () => {
-      const bad = { user: { id: '11111111-1111-1111-1111-111111111111', email: 'not-email', name: 'X', role: 'developer', emailVerified: true }, accessToken: 't', refreshToken: 't' };
+      const bad = {
+        user: {
+          id: '11111111-1111-1111-1111-111111111111',
+          email: 'not-email',
+          name: 'X',
+          role: 'developer',
+          emailVerified: true,
+        },
+        accessToken: 't',
+        refreshToken: 't',
+      };
       expect(() => SignupResponse.parse(bad)).toThrow();
     });
 
     it('QualifiedImpressionResponse accepts qualified=true shape', () => {
-      expect(() => QualifiedImpressionResponse.parse({ qualified: true, impressionId: 'imp-1' })).not.toThrow();
+      expect(() =>
+        QualifiedImpressionResponse.parse({ qualified: true, impressionId: 'imp-1' }),
+      ).not.toThrow();
     });
 
     it('QualifiedImpressionResponse accepts qualified=false shape', () => {
-      expect(() => QualifiedImpressionResponse.parse({ qualified: false, reason: 'minimum_duration_not_met', minimumRequired: 5000, actual: 2000 })).not.toThrow();
+      expect(() =>
+        QualifiedImpressionResponse.parse({
+          qualified: false,
+          reason: 'minimum_duration_not_met',
+          minimumRequired: 5000,
+          actual: 2000,
+        }),
+      ).not.toThrow();
     });
 
     it('AdClickResponse accepts clicked=true shape', () => {
@@ -535,7 +678,9 @@ describe('API Contract Tests', () => {
     });
 
     it('AdClickResponse accepts clicked=false shape', () => {
-      expect(() => AdClickResponse.parse({ clicked: false, reason: 'duplicate_click' })).not.toThrow();
+      expect(() =>
+        AdClickResponse.parse({ clicked: false, reason: 'duplicate_click' }),
+      ).not.toThrow();
     });
 
     it('AdRequestResponse accepts ad=null (no eligible campaign)', () => {

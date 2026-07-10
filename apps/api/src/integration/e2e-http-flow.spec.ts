@@ -1,10 +1,10 @@
 import * as bcrypt from 'bcryptjs';
 import request from 'supertest';
-import { afterAll,beforeAll, describe, expect, it } from 'vitest';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { BidType, PayoutProvider,UserRole } from '@waitlayer/shared';
+import { BidType, PayoutProvider, UserRole } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
@@ -54,7 +54,8 @@ describe('End-to-End HTTP Integration Flow', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api/v1');
+    app.setGlobalPrefix('api');
+    app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -309,7 +310,15 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Register a dedicated user for this flow
       await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send({ email, password: originalPassword, role: UserRole.DEVELOPER, name: 'Reset Flow', country: 'US', ageConfirmed: true, termsAccepted: true })
+        .send({
+          email,
+          password: originalPassword,
+          role: UserRole.DEVELOPER,
+          name: 'Reset Flow',
+          country: 'US',
+          ageConfirmed: true,
+          termsAccepted: true,
+        })
         .expect(201);
 
       // Unknown email → generic message, no token leaked
@@ -841,7 +850,9 @@ describe('End-to-End HTTP Integration Flow', () => {
       });
       expect(newDevEarnings.length).toBe(oldDevEarnings.length + 1);
 
-      const cpcEarning = newDevEarnings.find(e => !oldDevEarnings.map(o => o.id).includes(e.id));
+      const cpcEarning = newDevEarnings.find(
+        (e) => !oldDevEarnings.map((o) => o.id).includes(e.id),
+      );
       expect(cpcEarning?.amountMinor).toBe(300);
       expect(cpcEarning?.campaignId).toBe(cpcCampaignId);
       expect(cpcEarning?.clickId).toBe(clickId);
@@ -941,7 +952,10 @@ describe('End-to-End HTTP Integration Flow', () => {
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
         .set('Authorization', `Bearer ${dev2Token}`)
-        .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, dev2DeviceEventSecret) })
+        .send({
+          ...waitStartPayload,
+          signature: signPayload(waitStartPayload, dev2DeviceEventSecret),
+        })
         .expect(200);
 
       const adReqPayload = {
@@ -1023,7 +1037,13 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ ...waitStartPayload, signature: signPayload(waitStartPayload, deviceEventSecret) })
         .expect(200);
 
-      const adReqPayload = { deviceId, sessionId: 'budget-sess', waitStateId: wsId, toolType: 'vscode', idempotencyKey: `ad-budget-${wsId}` };
+      const adReqPayload = {
+        deviceId,
+        sessionId: 'budget-sess',
+        waitStateId: wsId,
+        toolType: 'vscode',
+        idempotencyKey: `ad-budget-${wsId}`,
+      };
       const sig = signPayload(adReqPayload, deviceEventSecret);
       const adRes = await request(app.getHttpServer())
         .post('/api/v1/extension/ad-request')
@@ -1033,8 +1053,13 @@ describe('End-to-End HTTP Integration Flow', () => {
       if (!adRes.body.ad) return; // no eligible campaigns — budget may already be near limit
 
       const tok = adRes.body.ad.impressionToken;
-      const rp = { impressionToken: tok, renderedAt: new Date().toISOString(), idempotencyKey: `r-budget-${wsId}` };
-      await request(app.getHttpServer()).post('/api/v1/extension/ad-rendered')
+      const rp = {
+        impressionToken: tok,
+        renderedAt: new Date().toISOString(),
+        idempotencyKey: `r-budget-${wsId}`,
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-rendered')
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...rp, signature: signPayload(rp, deviceEventSecret) })
         .expect(200);
@@ -1042,8 +1067,14 @@ describe('End-to-End HTTP Integration Flow', () => {
       // Wait past the server-enforced minimum visible duration (issue A-060).
       await new Promise((r) => setTimeout(r, 4000));
 
-      const ip = { impressionToken: tok, qualifiedAt: new Date().toISOString(), visibleDurationMs: 6000, idempotencyKey: `i-budget-${wsId}` };
-      const qRes = await request(app.getHttpServer()).post('/api/v1/extension/impression-qualified')
+      const ip = {
+        impressionToken: tok,
+        qualifiedAt: new Date().toISOString(),
+        visibleDurationMs: 6000,
+        idempotencyKey: `i-budget-${wsId}`,
+      };
+      const qRes = await request(app.getHttpServer())
+        .post('/api/v1/extension/impression-qualified')
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...ip, signature: signPayload(ip, deviceEventSecret) });
 
@@ -1051,7 +1082,9 @@ describe('End-to-End HTTP Integration Flow', () => {
       expect(qRes.body.qualified).toBe(true);
 
       // Verify campaign has non-zero budget spent
-      const campaign = await prisma.campaign.findUnique({ where: { id: adRes.body.ad.campaignId } });
+      const campaign = await prisma.campaign.findUnique({
+        where: { id: adRes.body.ad.campaignId },
+      });
       expect(campaign).toBeDefined();
       expect(campaign!.budgetSpentMinor).toBeGreaterThan(0);
       expect(campaign!.budgetSpentMinor).toBeLessThanOrEqual(campaign!.budgetTotalMinor);

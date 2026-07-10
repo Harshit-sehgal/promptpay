@@ -1,7 +1,7 @@
 import { raw } from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { UserRole } from '@waitlayer/shared';
@@ -22,8 +22,7 @@ import { StripeProvider } from '../payout/providers';
  */
 const fakeStripe = {
   isEnabled: () => true,
-  verifyWebhookSignature: (_raw: Buffer | string, _sig: string) =>
-    JSON.parse(_raw.toString()),
+  verifyWebhookSignature: (_raw: Buffer | string, _sig: string) => JSON.parse(_raw.toString()),
   getDisputeDetails: (dispute: {
     payment_intent?: string | { id?: string } | null;
     amount: number;
@@ -34,7 +33,7 @@ const fakeStripe = {
     paymentIntentId:
       typeof dispute.payment_intent === 'string'
         ? dispute.payment_intent
-        : dispute.payment_intent?.id ?? '',
+        : (dispute.payment_intent?.id ?? ''),
     amountMinor: dispute.amount,
     currency: dispute.currency,
     reason: dispute.reason ?? '',
@@ -133,7 +132,8 @@ describe('Stripe Webhook Controller — reconciliation', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api/v1');
+    app.setGlobalPrefix('api');
+    app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
     // Mirror main.ts: the webhook route needs the raw body for Stripe
     // signature verification (req.rawBody).
     app.use('/api/v1/payout/stripe/webhook', raw({ type: 'application/json', limit: '256kb' }));
@@ -502,7 +502,8 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     fakeStripe.isEnabled = () => false;
     try {
       const res = await postWebhook({
-        id: 'evt_cfg', type: 'payout.paid',
+        id: 'evt_cfg',
+        type: 'payout.paid',
         created: Math.floor(Date.now() / 1000),
         data: { object: { id: 'po_cfg', status: 'paid' } },
       });
@@ -527,7 +528,8 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     };
     try {
       const res = await postWebhook({
-        id: 'evt_badsig', type: 'payout.paid',
+        id: 'evt_badsig',
+        type: 'payout.paid',
         created: Math.floor(Date.now() / 1000),
         data: { object: { id: 'po_badsig', status: 'paid' } },
       });

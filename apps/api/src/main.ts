@@ -60,10 +60,17 @@ async function bootstrap() {
     : 1;
   app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
 
-  app.setGlobalPrefix('api/v1');
-  // API versioning (Uri strategy). Controllers without an explicit @Version
-  // bind to defaultVersion '1', so existing /api/v1 routes are unchanged while
-  // new major versions can be introduced without breaking clients.
+  // Global prefix is `api`; URI versioning (below) contributes the `/v1`
+  // (or `/v2` …) segment, so the resolved base path is `/api/v1` for the
+  // default version and `/api/v2` for a future major version — matching the
+  // documented client contract (web proxy base, CLI PRODUCTION_API_URL). A
+  // prefix of `api/v1` here would double up with the version segment and
+  // produce `/api/v1/v1/...`, which 404s every real client request.
+  app.setGlobalPrefix('api');
+  // API versioning (URI strategy). Controllers without an explicit @Version
+  // bind to defaultVersion '1', so the resolved path is `/api/v1/<resource>`
+  // and new major versions can be introduced as `/api/v2/...` without
+  // breaking existing clients.
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   app.useGlobalPipes(
