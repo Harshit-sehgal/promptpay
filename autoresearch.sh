@@ -8,9 +8,12 @@
 #   * real quality-gate debt (TypeScript type errors + ESLint severity-2
 #     errors), and
 #   * outstanding flagged tasks in tracked source (TODO / FIXME / HACK / XXX
-#     markers bounded by a non-letter), which represent work the code itself
-#     says is not yet done. Counted via `git grep` over tracked files, so
-#     node_modules, build artifacts, and generated output are never counted.
+#     markers), which represent work the code itself says is not yet done.
+#     Counted via `git grep` over tracked files only, so node_modules,
+#     build artifacts, and generated output are never counted. The match is
+#     bounded by non-word characters (POSIX ERE — git grep has no \b), so
+#     test fixtures like 'sk_test_xxx' / 'wl_xxx' are NOT false-matched
+#     as XXX markers.
 #
 # The composite `remaining_work` metric is used as the PRIMARY signal (lower is
 # better). Because it includes the quality-gate errors, "completing" flagged
@@ -61,7 +64,7 @@ declare -A LINT_TARGETS=(
 
 typecheck_errors=0
 lint_errors=0
-open_todos="$(git grep -iE --line-number '(TODO|FIXME|HACK|XXX)([^[:alpha:]]|$)' -- "${PACKAGES[@]}" 2>/dev/null | wc -l || true)"
+open_todos="$(git grep -niE --line-number '(^|[^[:alnum:]_])(TODO|FIXME|HACK|XXX)([^[:alnum:]_]|$)' -- "${PACKAGES[@]}" 2>/dev/null | wc -l || true)"
 
 START_TS=$(date +%s)
 

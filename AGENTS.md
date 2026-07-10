@@ -235,6 +235,7 @@ writeups were pruned; this index preserves the audit trail.
 - A-081 non-USD deposit currency (`new/page.tsx:40-67,220-233`).
 - A-082 payout stub-provider registration guard (`payout.service.ts:211`) — API previously only failed `payoneer`/`razorpay` (registered as `StubPayoutProvider`) at **payout** time; now rejected at **registration** (`addPayoutMethod`/`normalizePayoutMethod`). Closes an undocumented gap found in the 2026-07-10 audit (API accepted non-payable providers with no allowlist).
 - A-083 web middleware `JWT_SECRET` fail-closed (`middleware.ts:58` `getJwtSecret`) — Next.js Edge middleware inlines `process.env` at **build** time, so a runtime-injected secret reads as `undefined` and would verify tokens against a bogus `"undefined"` key. Now returns `null` → redirect-to-login + production warning instead of a silent auth break. Requires `JWT_SECRET` present at **web build time** (operator/deploy constraint, not code).
+- A-084 Swagger/OpenAPI model docs (`@ApiProperty` on all DTO fields incl. inline `RecordConsentDto`/`AnonymousConsentDto`, `@ApiOperation` on all controller routes) — previously only `@ApiTags` + `SwaggerModule.setup` existed (gap #114 "zero decorators"). Generated `/docs` spec now documents request/response models and per-route summaries.
 
 ## End-to-End SaaS Readiness Checks
 
