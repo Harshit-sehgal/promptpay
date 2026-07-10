@@ -403,87 +403,138 @@ export class ApiClient {
     body?: Record<string, unknown> | undefined,
     _isRefreshAttempt = false,
   ): Promise<T> {
-    // No header signature: the body already carries `signature`, and the API
-    // does not verify an X-WaitLayer-Signature header. Emitting one would
-    // leak the per-device HMAC signing key to anyone reading headers
-    // (proxies, browser DevTools, server access logs that capture headers).
+    // Network-resilient retry (gap #31): transient failures — socket errors,
+    // timeouts, 429/5xx — are retried with capped exponential backoff.
+    // Application 4xx (except 429) are not retried to avoid double-writes.
+    const MAX_ATTEMPTS = 3;
+    let attempt = 0;
+    for (;;) {
+      attempt++;
+      try {
+        return await this.attemptRaw<T>(method, path, body, _isRefreshAttempt);
+      } catch (err) {
+        if (attempt >= MAX_ATTEMPTS || !this.isRetryableError(err)) throw err;
+        const backoffMs = Math.min(500 * 2 ** (attempt - 1), 8000);
+        await this.sleep(backoffMs);
+      }
+    }
+  }
+
+  private sleep(ms: number): Promise<void> {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    setTimeout(resolve, ms);
+    return promise;
+  }
+
+  private isRetryableError(err: unknown): boolean {
+    if (!isRecord(err)) return false;
+    const status = typeof err.status === 'number' ? err.status : undefined;
+    if (status !== undefined && (status === 429 || status >= 500)) return true;
+    const code = typeof err.code === 'string' ? err.code : undefined;
+    if (
+      code &&
+      [
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ETIMEDOUT',
+        'ENOTFOUND',
+        'EAI_AGAIN',
+        'ECONNABORTED',
+      ].includes(code)
+    ) {
+      return true;
+    }
+    const message = typeof err.message === 'string' ? err.message : undefined;
+    if (message && message.toLowerCase().includes('timed out')) return true;
+    return false;
+  }
+
+  private attemptRaw<T>(
+    method: 'GET' | 'POST' | 'PATCH',
+    path: string,
+    body?: Record<string, unknown> | undefined,
+    _isRefreshAttempt = false,
+  ): Promise<T> {
     const isAbsoluteUrl = /^[a-z][a-z\d+\-.]*:\/\//i.test(path);
     const url = new URL(isAbsoluteUrl ? path : API_URL + path);
     const bodyStr = body ? JSON.stringify(body) : '';
 
-    return new Promise<T>((resolve, reject) => {
-      // Credentials must never traverse a real network in cleartext. Enforce
-      // https: for any remote host. Loopback http (`localhost`, 127.0.0.1, ::1)
-      // is the single safe exception: it never leaves the machine, so pointing
-      // the CLI at a local dev server (WAITLAYER_API_URL=http://localhost:4002)
-      // is permitted. Any other protocol is refused.
-      const requestHostname =
-        url.hostname.startsWith('[') && url.hostname.endsWith(']')
-          ? url.hostname.slice(1, -1)
-          : url.hostname;
-      const isLoopback =
-        requestHostname === 'localhost' ||
-        requestHostname === '127.0.0.1' ||
-        requestHostname === '::1';
-      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
-        throw new Error(
+    const { promise, resolve, reject } = Promise.withResolvers<T>();
+
+    // No header signature: the body already carries `signature`, and the API
+    // does not verify an X-WaitLayer-Signature header. Emitting one would
+    // leak the per-device HMAC signing key to anyone reading headers
+    // (proxies, browser DevTools, server access logs that capture headers).
+    const requestHostname =
+      url.hostname.startsWith('[') && url.hostname.endsWith(']')
+        ? url.hostname.slice(1, -1)
+        : url.hostname;
+    const isLoopback =
+      requestHostname === 'localhost' ||
+      requestHostname === '127.0.0.1' ||
+      requestHostname === '::1';
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+      reject(
+        new Error(
           `CLI refuses to send credentials over ${url.protocol}. ` +
             'Set WAITLAYER_API_URL to an https:// endpoint, or http://localhost for local development.',
-        );
-      }
-      const transport = url.protocol === 'https:' ? https : http;
-      const req = transport.request(
-        {
-          method,
-          hostname: requestHostname,
-          port: url.port || (url.protocol === 'https:' ? 443 : 80),
-          path: url.pathname + url.search,
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(bodyStr).toString(),
-            ...(this.creds?.accessToken
-              ? { Authorization: `Bearer ${this.creds.accessToken}` }
-              : {}),
-          },
-        },
-        async (res) => {
-          let data = '';
-          res.on('data', (chunk) => (data += chunk));
-          res.on('end', async () => {
-            try {
-              const parsed = data.length ? JSON.parse(data) : {};
-              if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-                resolve(parsed as T);
-              } else if (res.statusCode === 401 && this.creds?.refreshToken && !_isRefreshAttempt) {
-                // Use deduplicated refresh — if a concurrent 401 is already
-                // refreshing, this reuses the same in-flight request.
-                const newTokens = await this.refreshTokens();
-                if (newTokens) {
-                  return this.raw<T>(method, path, body).then(resolve, reject);
-                }
-                reject({ status: 401, message: 'unauthorized' });
-              } else {
-                // NestJS returns { message, error, statusCode }
-                const parsedObject = isRecord(parsed) ? parsed : {};
-                const msg =
-                  typeof parsedObject.message === 'string'
-                    ? parsedObject.message
-                    : 'request failed';
-                reject({ status: res.statusCode, message: msg, ...parsedObject });
-              }
-            } catch {
-              reject(new Error('Invalid JSON response'));
-            }
-          });
-        },
+        ),
       );
-      req.on('error', reject);
-      req.setTimeout(30_000, () => {
-        req.destroy(new Error('Request timed out after 30s'));
-      });
-      if (body) req.write(bodyStr);
-      req.end();
+      return promise;
+    }
+    const transport = url.protocol === 'https:' ? https : http;
+    const req = transport.request(
+      {
+        method,
+        hostname: requestHostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname + url.search,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(bodyStr).toString(),
+          ...(this.creds?.accessToken ? { Authorization: `Bearer ${this.creds.accessToken}` } : {}),
+        },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', async () => {
+          try {
+            const parsed = data.length ? JSON.parse(data) : {};
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(parsed as T);
+              return;
+            }
+            if (res.statusCode === 401 && this.creds?.refreshToken && !_isRefreshAttempt) {
+              const newTokens = await this.refreshTokens();
+              if (newTokens) {
+                try {
+                  resolve(await this.attemptRaw<T>(method, path, body, true));
+                } catch (retryErr) {
+                  reject(retryErr);
+                }
+                return;
+              }
+              reject({ status: 401, message: 'unauthorized' });
+              return;
+            }
+            const parsedObject = isRecord(parsed) ? parsed : {};
+            const msg =
+              typeof parsedObject.message === 'string' ? parsedObject.message : 'request failed';
+            reject({ status: res.statusCode, message: msg, ...parsedObject });
+          } catch {
+            reject(new Error('Invalid JSON response'));
+          }
+        });
+      },
+    );
+    req.on('error', reject);
+    req.setTimeout(30_000, () => {
+      req.destroy(new Error('Request timed out after 30s'));
     });
+    if (body) req.write(bodyStr);
+    req.end();
+    return promise;
   }
 }
 

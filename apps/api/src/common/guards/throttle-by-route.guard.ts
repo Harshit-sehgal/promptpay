@@ -43,7 +43,8 @@ function resolveThrottleName(path: string): string {
     path.includes('/auth/signup') ||
     path.includes('/auth/password') ||
     path.includes('/auth/google') ||
-    path.includes('/auth/verify-email')
+    path.includes('/auth/verify-email') ||
+    path.includes('/auth/2fa')
   ) {
     return 'auth-short';
   }

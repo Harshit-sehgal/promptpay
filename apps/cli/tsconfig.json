@@ -3,7 +3,7 @@
     "declaration": false,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "ES2024"],
     "module": "CommonJS",
     "outDir": "dist",
     "rootDir": "src",

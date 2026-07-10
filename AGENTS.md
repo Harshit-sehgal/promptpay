@@ -79,6 +79,23 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 --frozen-lockfile` timed out on registry access. Needs network/registry, not
   code.
 
+## 2026-07-10 Source Audit — gap closures
+
+The 2026-07-10 source audit verified `AGENTS.md` against the actual code.
+`waitlayer-gap-analysis.md` is **historical** — its note listing A-074…A-081 as
+OPEN is stale/false; those items are code-DONE. The following previously-mis-closed
+gaps are now **code-closed**:
+
+- #23 / #63 — 2FA endpoints (`/auth/2fa/*`) now use the tight `auth-short` (10/min) throttle bucket.
+- #31 — CLI HTTP client retries transient failures (socket errors, timeouts, 429/5xx) with capped exponential backoff.
+- #79 — CI now runs the VS Code extension test (`pnpm --filter waitlayer-vscode test`).
+- #82 — CI jobs have `timeout-minutes: 30`.
+
+Gaps still requiring a product/legal/infra decision (not closable by a source edit):
+#12 age verification (self-asserted 18+ only), #39 analytics (no vendor chosen),
+#103 webhook async processing (set `WEBHOOK_ASYNC_PROCESSING=true` in prod),
+#131 message broker (in-process EventBus only).
+
 ## Residual Verification (code complete; browser/live E2E pending)
 
 These are shipped and unit/integration-tested; their "Done when" still lists a
@@ -124,14 +141,14 @@ writeups were pruned; this index preserves the audit trail.
 - A-013 prod API defaults (`api-client.ts:18-30`; vscode `package.json:84`).
 - A-014 ledger-only API key (`api-key.dto` `UNSUPPORTED_SCOPES`; `createLedgerApiKey` posts `ledger:read`).
 - A-015 email verify resend (`auth.controller:134`; settings/payouts pages).
-- A-016 middleware `JWT_SECRET` tests (`middleware.test.ts:27`; `web-env.ts:21`).
+  - A-016 middleware `JWT_SECRET` tests (`middleware.test.ts:27`; `lib/web-env.ts:21`).
 - A-017 `ConfigModule` `loadEnv` wired (`app.module.ts:43`).
 - A-018 CSP `frame-src` google (`next.config.js:39`).
 - A-019 deposit auto-activates approved campaign (`stripe-webhook.controller:429-456`).
 - A-020 campaign pause/resume UI (`campaign-actions.ts:24-30`).
 - A-021 campaign edit/archive/rejection reasons (`services.ts:95`; page.tsx).
 - A-022 VS Code CTA text (`extension.ts:121`; `ad-display.ts` fallback).
-- A-023 deposit banner pending copy (`advertiser/page.tsx:115`).
+  - A-023 deposit banner (`advertiser/page.tsx:115` — success/cancelled states; no separate pending copy).
 - A-024 CTR ratio render ×100 (`advertiser.service.ts:409`; `page.tsx:169`) — _index pointer corrected from stale `:276`._
 - A-025 admin users shape (`admin.service.ts:296-330`; `users/page.tsx:161-192`).
 - A-026 payout amount units (`admin/payouts/amounts.ts:6-8`; `amounts.test.ts`).
@@ -139,7 +156,7 @@ writeups were pruned; this index preserves the audit trail.
 - A-028 admin user lifecycle buttons (`admin/users/page.tsx:250-319`).
 - A-029 feedback backend submit (`feedback/page.tsx:20`; `feedback.service.ts`).
 - A-030 all 5 payout providers `available` (`payout-providers.ts:19-50`) — operator launch decision remains.
-- A-031 currency helpers in UI (`currency.ts`; developer payouts `page.tsx:342-351`).
+  - A-031 currency helpers in UI (relocated to `@waitlayer/shared`: `formatMinorUnits`, `minorToMajorInputValue`, `depositMinimumMinor`, `payoutMinimumMinor`; developer payouts `page.tsx:342-351`).
 - A-032 reports pagination bounds (`advertiser.service.ts:42-43`; `spec:237-295`).
 - A-033 comparison `Live` claims over 2 codebases (`comparison/page.tsx:37-51`) — runtime unverified.
 - A-034 signup consent DTO+tx (`signup.dto.ts:43-51`; `auth.service.ts:94-97,110-172`).
