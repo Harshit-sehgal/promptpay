@@ -1,5 +1,5 @@
 export function getErrorMessage(error: unknown, fallback: string): string {
-  const candidate = error as {
+  const candidate = (error ?? {}) as {
     response?: { data?: { message?: unknown } };
     message?: unknown;
   };
