@@ -9,7 +9,10 @@ const OTHER_SECRET = 'other-secret-at-least-32-characters-long-0123456';
 
 function makeReq(token?: string): NextRequest {
   const req = new NextRequest(new URL('https://app.example/developer'), {});
-  if (token) req.cookies.set('access_token', token);
+  // The middleware only trusts the host-bound, Secure-only `__Host-` cookie in
+  // production (https); a bare `access_token` is only read over a non-secure
+  // connection. The test exercises the realistic, secure path.
+  if (token) req.cookies.set('__Host-access_token', token);
   return req;
 }
 
@@ -57,7 +60,7 @@ describe('protected-route middleware JWT_SECRET (A-016)', () => {
     process.env.JWT_SECRET = SECRET;
     const req = makeReq();
     // Attacker tries to satisfy the old "any refresh value passes" branch.
-    req.cookies.set('refresh_token', 'forged-value');
+    req.cookies.set('__Host-refresh_token', 'forged-value');
     const res = await middleware(req);
     expect(isRedirect(res)).toBe(true);
   });
@@ -66,7 +69,7 @@ describe('protected-route middleware JWT_SECRET (A-016)', () => {
     process.env.JWT_SECRET = SECRET;
     const refresh = await makeToken(SECRET); // any secret-signed JWT works as refresh
     const req = makeReq();
-    req.cookies.set('refresh_token', refresh);
+    req.cookies.set('__Host-refresh_token', refresh);
     const res = await middleware(req);
     expect(isRedirect(res)).toBe(false);
   });

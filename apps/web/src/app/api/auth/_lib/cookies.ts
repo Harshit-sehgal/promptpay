@@ -66,8 +66,11 @@ export function readAuthCookie(
   // because `__Host-` cookies cannot be set without the Secure flag. In
   // production we must NOT fall back to the bare name: a sibling subdomain
   // can set `access_token` with `Domain=.example.com` and forge a session.
-  // Only accept the bare name when we know the connection is not Secure.
-  if (secure === false) {
+  // Only accept the bare name when the connection is not known to be Secure
+  // (`secure !== true`): i.e. when `secure` is false OR unspecified. This matches
+  // the middleware's inline cookie read and keeps production (`secure === true`)
+  // from ever trusting the forgeable bare name.
+  if (secure !== true) {
     return req.cookies.get(base)?.value;
   }
   return undefined;
