@@ -202,6 +202,17 @@ export class PayoutService {
     currency?: string;
   }): { provider: PayoutProvider; destination: string; currency: string } {
     this.toDbPayoutProvider(dto.provider);
+    // Reject providers that have no real PSP integration. `payoneer` and
+    // `razorpay` are registered only as `StubPayoutProvider` (whose `initiate`
+    // throws in production) and must never be persisted as a payout account —
+    // otherwise the failure surfaces only at payout time instead of at
+    // registration. The web client already hides them; this guard closes the
+    // API-side gap for any direct caller. (See audit gap A.)
+    if (this.providers[dto.provider] instanceof StubPayoutProvider) {
+      throw new BadRequestException(
+        `Payout provider "${dto.provider}" is not available for registration.`,
+      );
+    }
     const provider = dto.provider as PayoutProvider;
     const destination = dto.destination?.trim();
     if (!destination) {

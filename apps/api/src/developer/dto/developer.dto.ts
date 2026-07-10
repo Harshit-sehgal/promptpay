@@ -11,26 +11,32 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateSettingsDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   adsEnabled?: boolean;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
   quietMode?: boolean;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(5)
   quietModeStart?: string; // "HH:MM"
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(5)
   quietModeEnd?: string; // "HH:MM"
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -44,6 +50,7 @@ export class UpdateSettingsDto {
    * set of tz identifiers the runtime actually knows (rejects typos / attempts
    * to stash arbitrary strings). When unset, quiet mode evaluates in UTC.
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(64)
@@ -61,6 +68,7 @@ export class UpdateSettingsDto {
    * validation against the advertiser Category table is a follow-up product
    * step (sharing one taxonomy with the advertiser category picker).
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -73,23 +81,28 @@ export class UpdateSettingsDto {
 }
 
 export class EarningsQueryDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   status?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsDateString()
   from?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsDateString()
   to?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -98,18 +111,21 @@ export class EarningsQueryDto {
 }
 
 export class DeleteAccountDto {
+  @ApiProperty()
   @IsString()
   @Matches(/^DELETE_MY_ACCOUNT$/, {
     message: 'confirmation must be exactly DELETE_MY_ACCOUNT',
   })
   confirmation!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(500)
   currentPassword?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(4096)

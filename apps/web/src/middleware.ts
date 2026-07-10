@@ -44,6 +44,32 @@ const STATIC_CACHEABLE_PATHS = [
  * `/api/auth/refresh` Route Handler before any visible redirect happens.
  * We verify with `clockTolerance` to avoid edge-case clock-skew false rejects.
  */
+
+/**
+ * Resolve the JWT signing secret for Edge middleware.
+ *
+ * Unlike the NestJS API (Node runtime, reads env at process start), Next.js
+ * Edge middleware inlines `process.env` values at *build* time. A secret that
+ * is only injected at container/serverless *runtime* therefore appears as
+ * `undefined` here. We require a non-trivial secret and return `null` when it
+ * is missing/unsafe so callers fail closed (redirect to login) instead of
+ * verifying tokens against a bogus `"undefined"` key.
+ */
+function getJwtSecret(): Uint8Array | null {
+  const raw = process.env.JWT_SECRET;
+  if (!raw || raw.length < 32) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error(
+        '[waitlayer] JWT_SECRET is missing or too short in the web middleware. ' +
+          'It must be present at build time (Edge runtime inlines env vars). ' +
+          'All protected routes will fail closed.',
+      );
+    }
+    return null;
+  }
+  return new TextEncoder().encode(raw);
+}
+
 export async function middleware(request: NextRequest) {
   // Fail fast in production if the web env (in particular JWT_SECRET, which
   // must match the API's) is missing/unsafe. In dev/test this is a no-op
@@ -87,7 +113,12 @@ export async function middleware(request: NextRequest) {
   // Anything else (bad signature, malformed) is treated as absent.
   const hasValidRefresh = async (): Promise<boolean> => {
     if (!refreshCookie?.value) return false;
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    // Edge middleware inlines `process.env.JWT_SECRET` at *build* time. If the
+    // secret is only injected at container/serverless runtime, this is
+    // `undefined` and verification is impossible — fail closed rather than
+    // verifying against a bogus key.
+    const secret = getJwtSecret();
+    if (!secret) return false;
     try {
       await jwtVerify(refreshCookie.value, secret, { clockTolerance: '30s' });
       return true;
@@ -108,9 +139,13 @@ export async function middleware(request: NextRequest) {
 
   try {
     // Verify the JWT access token with the same secret the NestJS API uses
-    // (configured via the shared JWT_SECRET env var). Tolerate a small
-    // clock skew so brief token-expiry boundary doesn't bounce users.
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    // (configured via the shared JWT_SECRET env var, inlined at build time for
+    // the Edge runtime). Tolerate a small clock skew so a brief token-expiry
+    // boundary doesn't bounce users. If the secret is unavailable, fail closed.
+    const secret = getJwtSecret();
+    if (!secret) {
+      return redirectToLogin(pathname, request);
+    }
     await jwtVerify(token, secret, { clockTolerance: '30s' });
     return NextResponse.next();
   } catch (err) {

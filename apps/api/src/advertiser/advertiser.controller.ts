@@ -16,7 +16,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { depositMinimumMinor } from '@waitlayer/shared';
 
@@ -79,6 +79,7 @@ export class AdvertiserController {
     private config: ConfigService,
   ) {}
 
+  @ApiOperation({ summary: 'Create advertiser profile' })
   @Post('profile')
   @HttpCode(HttpStatus.OK)
   @RequiredScopes('advertiser:write')
@@ -92,6 +93,7 @@ export class AdvertiserController {
     return this.service.createProfile(ctx.userId, dto);
   }
 
+  @ApiOperation({ summary: 'Get advertiser profile' })
   @Get('profile')
   @RequiredScopes('advertiser:read')
   async getProfile(@Req() req: Request) {
@@ -105,6 +107,7 @@ export class AdvertiserController {
     return this.service.getOrCreateProfile(ctx.userId);
   }
 
+  @ApiOperation({ summary: 'Get advertiser dashboard' })
   @Get('dashboard')
   @RequiredScopes('advertiser:read')
   async getDashboard(@Req() req: Request) {
@@ -113,6 +116,7 @@ export class AdvertiserController {
     return this.service.getDashboard(advertiserId);
   }
 
+  @ApiOperation({ summary: 'List campaigns' })
   @Get('campaigns')
   @RequiredScopes('advertiser:read')
   async listCampaigns(
@@ -139,6 +143,7 @@ export class AdvertiserController {
     });
   }
 
+  @ApiOperation({ summary: 'Get campaign' })
   @Get('campaigns/:id')
   @RequiredScopes('advertiser:read')
   async getCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -147,6 +152,7 @@ export class AdvertiserController {
     return this.service.getCampaign(advertiserId, id);
   }
 
+  @ApiOperation({ summary: 'Get billing' })
   @Get('billing')
   @RequiredScopes('advertiser:read')
   async getBilling(@Req() req: Request) {
@@ -155,6 +161,7 @@ export class AdvertiserController {
     return this.service.getBilling(advertiserId);
   }
 
+  @ApiOperation({ summary: 'Create campaign' })
   @Post('campaigns')
   @RequiredScopes('campaigns:write')
   async createCampaign(@Req() req: Request, @Body() dto: CreateCampaignDto) {
@@ -163,6 +170,7 @@ export class AdvertiserController {
     return this.service.createCampaign(advertiserId, dto);
   }
 
+  @ApiOperation({ summary: 'Update campaign' })
   @Patch('campaigns/:id')
   @RequiredScopes('campaigns:write')
   async updateCampaign(
@@ -175,6 +183,7 @@ export class AdvertiserController {
     return this.service.updateCampaign(id, advertiserId, dto);
   }
 
+  @ApiOperation({ summary: 'Submit campaign' })
   @Post('campaigns/:id/submit')
   @RequiredScopes('campaigns:write')
   async submitCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -183,6 +192,7 @@ export class AdvertiserController {
     return this.service.submitCampaign(id, advertiserId);
   }
 
+  @ApiOperation({ summary: 'Reset campaign to draft' })
   @Post('campaigns/:id/reset')
   @RequiredScopes('campaigns:write')
   async resetCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -191,6 +201,7 @@ export class AdvertiserController {
     return this.service.resetCampaignToDraft(id, advertiserId);
   }
 
+  @ApiOperation({ summary: 'Pause campaign' })
   @Post('campaigns/:id/pause')
   @RequiredScopes('campaigns:write')
   async pauseCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -199,6 +210,7 @@ export class AdvertiserController {
     return this.service.pauseCampaign(id, advertiserId);
   }
 
+  @ApiOperation({ summary: 'Resume campaign' })
   @Post('campaigns/:id/resume')
   @RequiredScopes('campaigns:write')
   async resumeCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -207,6 +219,7 @@ export class AdvertiserController {
     return this.service.resumeCampaign(id, advertiserId);
   }
 
+  @ApiOperation({ summary: 'Archive campaign' })
   @Post('campaigns/:id/archive')
   @RequiredScopes('campaigns:write')
   async archiveCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
@@ -215,6 +228,7 @@ export class AdvertiserController {
     return this.service.archiveCampaign(id, advertiserId);
   }
 
+  @ApiOperation({ summary: 'Get reports' })
   @Get('reports')
   @RequiredScopes('reports:read')
   async getReports(
@@ -249,6 +263,7 @@ export class AdvertiserController {
     });
   }
 
+  @ApiOperation({ summary: 'Export reports' })
   @Get('reports/export')
   @RequiredScopes('reports:read')
   async exportReports(
@@ -267,6 +282,7 @@ export class AdvertiserController {
     return this.service.getReports(advertiserId, { campaignId, from, to });
   }
 
+  @ApiOperation({ summary: 'Create deposit session' })
   @Post('deposit-session')
   @RequiredScopes('advertiser:write')
   async createDepositSession(@Req() req: Request, @Body() dto: CreateDepositSessionDto) {
@@ -302,6 +318,7 @@ export class AdvertiserController {
   // These are JWT-only, role-scoped to the advertiser themselves — machine
   // API keys are deliberately NOT allowed to export or erase an account.
 
+  @ApiOperation({ summary: 'Export advertiser data' })
   @Post('export-data')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RejectApiKeyGuard)
@@ -310,6 +327,7 @@ export class AdvertiserController {
     return this.service.exportData(userId);
   }
 
+  @ApiOperation({ summary: 'Delete advertiser account' })
   @Post('delete-account')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RejectApiKeyGuard)

@@ -11,17 +11,21 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 import { payoutMinimumMinor, PayoutProvider } from '@waitlayer/shared';
 
 export class AddPayoutMethodDto {
+  @ApiProperty()
   @IsEnum(PayoutProvider)
   provider!: PayoutProvider;
 
+  @ApiProperty()
   @IsString()
   @MaxLength(255)
   destination!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(3)
@@ -29,9 +33,11 @@ export class AddPayoutMethodDto {
 }
 
 export class RequestPayoutDto {
+  @ApiProperty()
   @IsUUID()
   payoutAccountId!: string;
 
+  @ApiProperty()
   @IsInt()
   // The per-currency payout minimum (see `payoutMinimumMinor()` in
   // @waitlayer/shared) is enforced in the service once the currency is
@@ -46,6 +52,7 @@ export class RequestPayoutDto {
   })
   amountMinor!: number;
 
+  @ApiProperty()
   @IsString()
   @Length(3, 3)
   @Matches(/^[A-Z]{3}$/, { message: 'currency must be an uppercase ISO 4217 code' })
@@ -53,6 +60,7 @@ export class RequestPayoutDto {
 
   /** Optional: specify exact earnings entry IDs to allocate.
    *  If omitted, the oldest confirmed entries are auto-selected. */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -60,11 +68,13 @@ export class RequestPayoutDto {
 }
 
 export class PayoutHistoryQueryDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)

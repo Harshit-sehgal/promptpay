@@ -1,5 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe,Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { Roles } from '../common/decorators';
 import { CurrentUser } from '../common/decorators';
@@ -15,6 +25,7 @@ import { FraudService } from './fraud.service';
 export class FraudController {
   constructor(private fraudService: FraudService) {}
 
+  @ApiOperation({ summary: 'Get fraud flags' })
   @Get('flags')
   @Roles('admin', 'support', 'super_admin')
   getOpenFlags(
@@ -29,6 +40,7 @@ export class FraudController {
     );
   }
 
+  @ApiOperation({ summary: 'Get fraud flag stats' })
   @Get('stats')
   @Roles('admin', 'support', 'super_admin')
   getFlagStats() {
@@ -39,6 +51,7 @@ export class FraudController {
   // when it triggers a money-mutating resolveFlag call. The interceptor only
   // fires on /admin/* by default — opt-in needed here. Also include the
   // `:id` as `id` in params so the interceptor parses it correctly.
+  @ApiOperation({ summary: 'Resolve fraud flag' })
   @Post('flags/:id/resolve')
   @Roles('admin', 'super_admin')
   @UseInterceptors(AuditInterceptor)
@@ -57,6 +70,7 @@ export class FraudController {
     return this.fraudService.resolveFlag(flagId, reviewerId, isValid, dto.note);
   }
 
+  @ApiOperation({ summary: 'Compute trust score' })
   @Post('compute-trust/:userId')
   @Roles('admin', 'super_admin')
   computeTrustScore(@Param('userId', ParseUUIDPipe) userId: string) {

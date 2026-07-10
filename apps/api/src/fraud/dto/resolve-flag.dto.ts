@@ -1,4 +1,5 @@
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 /**
  * Validation for POST /fraud/flags/:id/resolve.
@@ -15,9 +16,11 @@ import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
  * the admin controller's ResolveFraudFlagDto) and bounds `note` to 500 chars.
  */
 export class ResolveFlagDto {
+  @ApiProperty()
   @IsIn(['confirmed', 'invalid'])
   decision!: 'confirmed' | 'invalid';
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(500)

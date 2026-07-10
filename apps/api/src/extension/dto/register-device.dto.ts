@@ -1,26 +1,32 @@
-import { IsEnum, IsOptional, IsString, MaxLength,MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 import { ToolType } from '@waitlayer/shared';
 
 export class RegisterDeviceDto {
+  @ApiProperty()
   @IsEnum(ToolType)
   toolType!: ToolType;
 
+  @ApiProperty()
   @IsString()
   @MinLength(16)
   @MaxLength(128)
   fingerprintHash!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(32)
   extensionVersion?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(64)
   platform?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(256)
@@ -36,6 +42,7 @@ export class RegisterDeviceDto {
    *
    * On first registration this field is unused (no prior secret exists).
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MinLength(16)
@@ -49,6 +56,7 @@ export class RegisterDeviceDto {
    * `recoveryGoogleIdToken`; non-Google passwordless accounts require a
    * support-issued `recoverySupportToken`.
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MinLength(8)
@@ -60,6 +68,7 @@ export class RegisterDeviceDto {
    * the same Google verifier used by /auth/google and must match the
    * authenticated user's linked googleId.
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MinLength(16)
@@ -71,6 +80,7 @@ export class RegisterDeviceDto {
    * accounts. The server stores only a hash, enforces expiry, and consumes
    * the token before rotating the device secret.
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MinLength(32)

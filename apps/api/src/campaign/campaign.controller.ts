@@ -1,6 +1,19 @@
 import { Request } from 'express';
-import { Body, Controller, ForbiddenException, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Req,UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CreateCountryTargetingDto } from '../advertiser/dto';
 import { CurrentUser } from '../common/decorators';
@@ -45,6 +58,7 @@ export class CampaignController {
     private prisma: PrismaService,
   ) {}
 
+  @ApiOperation({ summary: 'Get campaign stats' })
   @Get(':id/stats')
   @AllowApiKey()
   @RequiredScopes('reports:read')
@@ -63,6 +77,7 @@ export class CampaignController {
     return this.campaignService.getCampaignStats(campaignId, actor);
   }
 
+  @ApiOperation({ summary: 'Get creatives' })
   @Get(':id/creatives')
   @AllowApiKey()
   @RequiredScopes('campaigns:read')
@@ -79,6 +94,7 @@ export class CampaignController {
     return this.campaignService.getCreatives(campaignId, actor);
   }
 
+  @ApiOperation({ summary: 'Create creative' })
   @Post(':id/creatives')
   @HttpCode(HttpStatus.OK)
   @AllowApiKey()
@@ -101,6 +117,7 @@ export class CampaignController {
     return this.campaignService.createCreative(campaignId, dto, actor);
   }
 
+  @ApiOperation({ summary: 'Update creative' })
   @Patch('creatives/:creativeId')
   @AllowApiKey()
   @RequiredScopes('campaigns:write')
@@ -124,6 +141,7 @@ export class CampaignController {
     return this.campaignService.updateCreative(creativeId, dto, actor);
   }
 
+  @ApiOperation({ summary: 'Approve creative' })
   @Post('creatives/:creativeId/approve')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
@@ -132,6 +150,7 @@ export class CampaignController {
     return this.campaignService.approveCreative(creativeId);
   }
 
+  @ApiOperation({ summary: 'Reject creative' })
   @Post('creatives/:creativeId/reject')
   @HttpCode(HttpStatus.OK)
   @UseGuards(RolesGuard)
@@ -143,6 +162,7 @@ export class CampaignController {
     return this.campaignService.rejectCreative(creativeId, reason);
   }
 
+  @ApiOperation({ summary: 'Set country targeting' })
   @Post(':id/targeting/countries')
   @HttpCode(HttpStatus.OK)
   @AllowApiKey()
@@ -161,7 +181,7 @@ export class CampaignController {
     }
     return this.campaignService.setCountryTargeting(
       campaignId,
-      targets.map(t => ({ countryCode: t.countryCode, include: t.include })),
+      targets.map((t) => ({ countryCode: t.countryCode, include: t.include })),
       actor,
     );
   }

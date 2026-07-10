@@ -1,6 +1,6 @@
 import { Request } from 'express';
 import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CreateFeedbackDto } from './dto/feedback.dto';
 import { FeedbackService } from './feedback.service';
@@ -15,6 +15,7 @@ import { FeedbackService } from './feedback.service';
 export class FeedbackController {
   constructor(private service: FeedbackService) {}
 
+  @ApiOperation({ summary: 'Submit feedback' })
   @Post()
   @HttpCode(HttpStatus.OK)
   async submit(@Body() dto: CreateFeedbackDto, @Req() req: Request) {

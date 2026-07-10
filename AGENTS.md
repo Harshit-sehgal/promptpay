@@ -72,12 +72,38 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 
 ### A-075 — Docker non-root runtime (build not run end-to-end)
 
-- **Code state (verified):** `Dockerfile:50-51` (api) and `Dockerfile:79-80`
+- **Code state (verified):** `Dockerfile:70-71` (api) and `Dockerfile:102-103`
   (web) both do `RUN chown -R node:node /app` then `USER node`. HEALTHCHECK hits
-  `/health/ready` (api, line 56) and `/` (web, line 85).
+  `/health/ready` (api, line 75-76) and `/` (web, line 107-108). _Line numbers
+  corrected from stale `50-51/79-80`._
 - **Gap:** a full `docker build` never completed — `pnpm install
 --frozen-lockfile` timed out on registry access. Needs network/registry, not
   code.
+
+### #157 — No DB-level CHECK constraints on monetary columns — RESOLVED (2026-07-10 re-audit)
+
+- **State (corrected):** CHECK constraints **are present** in the database via
+  migration `20260708010000_monetary_check_constraints/migration.sql`. They
+  guard `amountMinor >= 0` on `earnings_ledger`, `advertiser_ledger`,
+  `platform_ledger`, `payout_allocations`, `recovery_debt_cases`,
+  `referral_rewards`; `bidAmountMinor > 0` and non-negative budget/frequency
+  caps on `campaigns`; `maxAdsPerHour >= 0` on `user_settings`; and
+  `requestedAmountMinor >= 0` (with nullable `approvedAmountMinor`) on
+  `payout_requests`. Added `NOT VALID` so `migrate deploy` never fails against
+  legacy data; enforced for all new writes.
+- **Note:** `schema.prisma` deliberately does **not** declare `@@check` — Prisma's
+  `@@check` cannot express the `NOT VALID` option used here, and mirroring them
+  would create migration drift. The raw-SQL migration is the authoritative
+  floor. The earlier doc text claiming "no DB-level safety net" was stale.
+
+### Quality gates not executed in audit (2026-07-10)
+
+- `pnpm typecheck` / `lint` / `test` / `build` were **not** run during the
+  audit — the sandbox denied shell access, so the green status claimed in the
+  source-audit note is **unverified by direct execution**. Re-run the gates in a
+  shell-enabled environment before relying on them. The two code fixes above
+  (A-082 payout guard, A-083 middleware secret) were verified by inspection
+  only.
 
 ## 2026-07-10 Source Audit — gap closures
 
@@ -207,6 +233,8 @@ writeups were pruned; this index preserves the audit trail.
 - A-079 local QR (`developer/settings/page.tsx:5,171` `qrcode` toDataURL; no `googleapis`).
 - A-080 shared currency constants (`payout-policy/page.tsx:4,13,14`; `pricing/page.tsx:4,56,57`).
 - A-081 non-USD deposit currency (`new/page.tsx:40-67,220-233`).
+- A-082 payout stub-provider registration guard (`payout.service.ts:211`) — API previously only failed `payoneer`/`razorpay` (registered as `StubPayoutProvider`) at **payout** time; now rejected at **registration** (`addPayoutMethod`/`normalizePayoutMethod`). Closes an undocumented gap found in the 2026-07-10 audit (API accepted non-payable providers with no allowlist).
+- A-083 web middleware `JWT_SECRET` fail-closed (`middleware.ts:58` `getJwtSecret`) — Next.js Edge middleware inlines `process.env` at **build** time, so a runtime-injected secret reads as `undefined` and would verify tokens against a bogus `"undefined"` key. Now returns `null` → redirect-to-login + production warning instead of a silent auth break. Requires `JWT_SECRET` present at **web build time** (operator/deploy constraint, not code).
 
 ## End-to-End SaaS Readiness Checks
 

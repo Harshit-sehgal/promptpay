@@ -10,7 +10,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -45,25 +45,31 @@ import {
 export class AdminController {
   constructor(private service: AdminService) {}
 
-  @Get('overview') getOverview() {
+  @ApiOperation({ summary: 'Get admin overview' })
+  @Get('overview')
+  getOverview() {
     return this.service.getOverview();
   }
 
+  @ApiOperation({ summary: 'Get money integrity report' })
   @Get('money-integrity')
   getMoneyIntegrityReport() {
     return this.service.getMoneyIntegrityReport();
   }
 
+  @ApiOperation({ summary: 'Get admin metrics' })
   @Get('metrics')
   getMetrics(@Query('days') days?: string) {
     return this.service.getMetrics(days ? parseInt(days, 10) : 30);
   }
 
+  @ApiOperation({ summary: 'Get users' })
   @Get('users')
   getUsers(@Query() query: UsersQueryDto) {
     return this.service.getUsers(query);
   }
 
+  @ApiOperation({ summary: 'Get pending campaigns' })
   @Get('campaigns/pending')
   getPendingCampaigns(
     @Query('page') page?: string,
@@ -77,6 +83,7 @@ export class AdminController {
     });
   }
 
+  @ApiOperation({ summary: 'Approve campaign' })
   @Post('campaigns/:id/approve')
   approveCampaign(
     @Param('id', ParseUUIDPipe) id: string,
@@ -86,6 +93,7 @@ export class AdminController {
     return this.service.approveCampaign(id, userId, dto.reason);
   }
 
+  @ApiOperation({ summary: 'Reject campaign' })
   @Post('campaigns/:id/reject')
   rejectCampaign(
     @Param('id', ParseUUIDPipe) id: string,
@@ -95,10 +103,13 @@ export class AdminController {
     return this.service.rejectCampaign(id, userId, dto.reason);
   }
 
-  @Get('payouts/pending') getPendingPayouts() {
+  @ApiOperation({ summary: 'Get pending payouts' })
+  @Get('payouts/pending')
+  getPendingPayouts() {
     return this.service.getPendingPayouts();
   }
 
+  @ApiOperation({ summary: 'Approve payout' })
   @Post('payouts/:id/approve')
   approvePayout(
     @Param('id', ParseUUIDPipe) id: string,
@@ -108,6 +119,7 @@ export class AdminController {
     return this.service.approvePayout(id, userId, dto.note, dto.approvedAmountMinor);
   }
 
+  @ApiOperation({ summary: 'Reject payout' })
   @Post('payouts/:id/reject')
   rejectPayout(
     @Param('id', ParseUUIDPipe) id: string,
@@ -117,11 +129,13 @@ export class AdminController {
     return this.service.rejectPayout(id, userId, dto.reason);
   }
 
+  @ApiOperation({ summary: 'Process payout' })
   @Post('payouts/:id/process')
   processPayout(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.processPayout(id);
   }
 
+  @ApiOperation({ summary: 'Mark payout paid' })
   @Post('payouts/:id/mark-paid')
   markPayoutPaid(
     @Param('id', ParseUUIDPipe) id: string,
@@ -131,16 +145,19 @@ export class AdminController {
     return this.service.markPayoutPaid(id, dto);
   }
 
+  @ApiOperation({ summary: 'Get fraud flags' })
   @Get('fraud')
   getFraudFlags(@Query() query: FraudFlagsQueryDto) {
     return this.service.getFraudFlags(query);
   }
 
+  @ApiOperation({ summary: 'Get fraud stats' })
   @Get('fraud/stats')
   getFraudStats() {
     return this.service.getFraudStats();
   }
 
+  @ApiOperation({ summary: 'Resolve fraud flag' })
   @Post('fraud/:id/resolve')
   resolveFraudFlag(
     @Param('id', ParseUUIDPipe) id: string,
@@ -150,16 +167,19 @@ export class AdminController {
     return this.service.resolveFraudFlag(id, userId, dto.decision, dto.note);
   }
 
+  @ApiOperation({ summary: 'Compute trust score' })
   @Post('fraud/compute-trust/:userId')
   computeTrustScore(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.service.recomputeTrustScore(userId);
   }
 
+  @ApiOperation({ summary: 'Get audit log' })
   @Get('audit-log')
   getAuditLog(@Query() query: AuditLogQueryDto) {
     return this.service.getAuditLog(query);
   }
 
+  @ApiOperation({ summary: 'Erase user' })
   @Post('users/:id/erase')
   eraseUser(
     @Param('id', ParseUUIDPipe) id: string,
@@ -169,6 +189,7 @@ export class AdminController {
     return this.service.eraseUser(actorId, actorRole, id);
   }
 
+  @ApiOperation({ summary: 'Set user status' })
   @Post('users/:id/status')
   setUserStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -181,12 +202,14 @@ export class AdminController {
 
   // ── Device Recovery ──
 
+  @ApiOperation({ summary: 'Get devices' })
   @Get('devices')
   @Roles('admin', 'support', 'super_admin')
   getDevices(@Query() query: AdminDevicesQueryDto) {
     return this.service.getDevices(query);
   }
 
+  @ApiOperation({ summary: 'Issue device recovery token' })
   @Post('devices/:id/recovery-token')
   @Roles('admin', 'support', 'super_admin')
   issueDeviceRecoveryToken(
@@ -207,11 +230,13 @@ export class AdminController {
 
   // ── Recovery Debt Operations ──
 
+  @ApiOperation({ summary: 'Get recovery debt cases' })
   @Get('recovery-debt')
   getRecoveryDebtCases(@Query() query: RecoveryDebtCasesQueryDto) {
     return this.service.getRecoveryDebtCases(query);
   }
 
+  @ApiOperation({ summary: 'Open recovery debt case' })
   @Post('recovery-debt/users/:userId/open')
   openRecoveryDebtCase(
     @Param('userId', ParseUUIDPipe) userId: string,
@@ -230,6 +255,7 @@ export class AdminController {
     });
   }
 
+  @ApiOperation({ summary: 'Resolve recovery debt case' })
   @Post('recovery-debt/cases/:id/resolve')
   resolveRecoveryDebtCase(
     @Param('id', ParseUUIDPipe) id: string,
@@ -249,11 +275,13 @@ export class AdminController {
 
   // ── Tool Integrations ──
 
+  @ApiOperation({ summary: 'Get tool integrations' })
   @Get('tools')
   getToolIntegrations() {
     return this.service.getToolIntegrations();
   }
 
+  @ApiOperation({ summary: 'Toggle tool integration' })
   @Post('tools/:slug/toggle')
   toggleToolIntegration(@Param('slug') slug: string, @Body() dto: ToggleToolIntegrationDto) {
     return this.service.toggleToolIntegration(slug, dto.isActive === 'true');
@@ -261,6 +289,7 @@ export class AdminController {
 
   // ── Webhook Events ──
 
+  @ApiOperation({ summary: 'Get webhook events' })
   @Get('webhooks')
   getWebhookEvents(@Query() query: WebhookEventsQueryDto) {
     return this.service.getWebhookEvents(query);
@@ -268,6 +297,7 @@ export class AdminController {
 
   // ── Payout account verification ─
 
+  @ApiOperation({ summary: 'Verify payout account' })
   @Post('payout-accounts/:id/verify')
   @Roles('admin', 'support', 'super_admin')
   verifyPayoutAccount(
@@ -287,6 +317,7 @@ export class AdminController {
 
   // ── Archive Refunds ──
 
+  @ApiOperation({ summary: 'Get pending archive refunds' })
   @Get('refunds/archive/pending')
   getPendingArchiveRefunds() {
     return this.service.getPendingArchiveRefunds();
@@ -297,6 +328,7 @@ export class AdminController {
    * the Stripe refund. The body carries the ledger entry id and the Stripe
    * refund payment_intent id so the platform books the cash outflow.
    */
+  @ApiOperation({ summary: 'Confirm archive refund' })
   @Post('refunds/archive/:id/confirm')
   confirmArchiveRefund(
     @Param('id', ParseUUIDPipe) id: string,

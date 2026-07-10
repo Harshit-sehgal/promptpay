@@ -13,19 +13,23 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 import { BidType, depositMinimumMinor } from '@waitlayer/shared';
 
 const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'brl', 'mxn', 'sgd'] as const;
 
 export class CreateProfileDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(100)
   companyName!: string;
 
+  @ApiProperty()
   @IsEmail()
   billingEmail!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsUrl({ protocols: ['https'], require_protocol: true })
   @MaxLength(500)
@@ -33,37 +37,45 @@ export class CreateProfileDto {
 }
 
 export class CreateCampaignDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(100)
   name!: string;
 
+  @ApiProperty()
   @IsString()
   @MaxLength(50)
   category!: string;
 
+  @ApiProperty()
   @IsEnum(BidType)
   bidType!: BidType;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @Length(3, 3)
   @Matches(/^[A-Z]{3}$/, { message: 'currency must be an uppercase ISO 4217 code' })
   currency?: string;
 
+  @ApiProperty()
   @IsInt()
   @Min(1)
   bidAmountMinor!: number;
 
+  @ApiProperty()
   @IsInt()
   @Min(1)
   budgetTotalMinor!: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(30)
   frequencyCapPerHour?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -72,32 +84,38 @@ export class CreateCampaignDto {
 }
 
 export class UpdateCampaignDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   name?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   bidAmountMinor?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   budgetTotalMinor?: number;
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @Length(3, 3)
   @Matches(/^[A-Z]{3}$/, { message: 'currency must be an uppercase ISO 4217 code' })
   currency?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(30)
   frequencyCapPerHour?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -106,10 +124,12 @@ export class UpdateCampaignDto {
 }
 
 export class CreateCountryTargetingDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(2)
   countryCode!: string;
 
+  @ApiProperty()
   @IsBoolean()
   include!: boolean;
 }
@@ -122,6 +142,7 @@ export class CreateCountryTargetingDto {
  *  policy value can be read safely. class-validator's `@Min` takes a static
  *  number, not a per-field-value callback. */
 export class CreateDepositSessionDto {
+  @ApiProperty()
   @IsInt()
   @Min(depositMinimumMinor('USD'), {
     message: (args) =>
@@ -131,6 +152,7 @@ export class CreateDepositSessionDto {
   })
   amountMinor!: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsIn(DEPOSIT_CURRENCIES, {
     message: 'Currency must be one of the supported deposit currencies',

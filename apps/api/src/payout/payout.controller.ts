@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
@@ -16,6 +16,7 @@ import { PayoutService } from './payout.service';
 export class PayoutController {
   constructor(private service: PayoutService) {}
 
+  @ApiOperation({ summary: 'Add payout method' })
   @Post('method')
   @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
@@ -24,6 +25,7 @@ export class PayoutController {
     return this.service.addPayoutMethod(userId, dto);
   }
 
+  @ApiOperation({ summary: 'Get payout info' })
   @Get('info')
   @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
@@ -32,6 +34,7 @@ export class PayoutController {
     return this.service.getPayoutInfo(userId);
   }
 
+  @ApiOperation({ summary: 'Request payout' })
   @Post('request')
   @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
@@ -45,6 +48,7 @@ export class PayoutController {
     });
   }
 
+  @ApiOperation({ summary: 'Get available balance for payout' })
   @Get('available')
   @Roles('developer')
   @RequiredScopes('ledger:read')
@@ -55,6 +59,7 @@ export class PayoutController {
     });
   }
 
+  @ApiOperation({ summary: 'Get payout history' })
   @Get('history')
   @Roles('developer')
   @RequiredScopes('ledger:read')

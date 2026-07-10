@@ -10,7 +10,7 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
 
@@ -64,6 +64,7 @@ export class StripeWebhookController implements OnModuleInit {
     });
   }
 
+  @ApiOperation({ summary: 'Receive Stripe webhook' })
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
   async handleWebhook(@Req() req: RawBodyRequest) {

@@ -1,5 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
@@ -18,6 +18,7 @@ export class LedgerController {
   constructor(private ledgerService: LedgerService) {}
 
   /** Developer: own earnings balance only */
+  @ApiOperation({ summary: 'Get earnings balance' })
   @Get('balance')
   @UseGuards(RolesGuard)
   @Roles('developer')
@@ -37,6 +38,7 @@ export class LedgerController {
   }
 
   /** Developer: own earnings breakdown only */
+  @ApiOperation({ summary: 'Get earnings breakdown' })
   @Get('breakdown')
   @UseGuards(RolesGuard)
   @Roles('developer')
@@ -46,6 +48,7 @@ export class LedgerController {
   }
 
   /** Developer: own earnings history only. Ignores ledgerKind if set (no privilege escalation). */
+  @ApiOperation({ summary: 'Get earnings history' })
   @Get('history')
   @UseGuards(RolesGuard)
   @Roles('developer')
@@ -60,6 +63,7 @@ export class LedgerController {
   }
 
   /** Admin: platform-wide ledger history (all ledger kinds) */
+  @ApiOperation({ summary: 'Get admin ledger history' })
   @Get('admin/history')
   @UseGuards(RolesGuard, RejectApiKeyGuard)
   @Roles('admin', 'super_admin')
@@ -72,6 +76,7 @@ export class LedgerController {
   }
 
   /** Admin: platform-wide breakdown */
+  @ApiOperation({ summary: 'Get admin ledger breakdown' })
   @Get('admin/breakdown')
   @UseGuards(RolesGuard, RejectApiKeyGuard)
   @Roles('admin', 'super_admin')

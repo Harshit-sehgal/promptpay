@@ -1,10 +1,22 @@
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength,Min } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 import { FraudSeverity } from '@waitlayer/shared';
 
 // ── Campaign approval ──
 
 export class ApproveCampaignDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -12,6 +24,7 @@ export class ApproveCampaignDto {
 }
 
 export class RejectCampaignDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(500)
   reason!: string;
@@ -20,6 +33,7 @@ export class RejectCampaignDto {
 // ── Payout approval ──
 
 export class ApprovePayoutDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -36,6 +50,7 @@ export class ApprovePayoutDto {
    * requested amount (which would let a reduced approval be paid at the
    * original figure).
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -43,23 +58,28 @@ export class ApprovePayoutDto {
 }
 
 export class RejectPayoutDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(500)
   reason!: string;
 }
 
 export class MarkPayoutPaidDto {
+  @ApiProperty()
   @IsString()
   @MaxLength(255)
   providerTxId!: string;
 
+  @ApiProperty()
   @IsString()
   paidAt!: string;
 
+  @ApiProperty()
   @IsInt()
   @Min(1)
   amountMinor!: number;
 
+  @ApiProperty()
   @IsString()
   @MaxLength(3)
   currency!: string;
@@ -68,9 +88,11 @@ export class MarkPayoutPaidDto {
 // ── Fraud ──
 
 export class ResolveFraudFlagDto {
+  @ApiProperty()
   @IsIn(['confirmed', 'invalid'])
   decision!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -83,28 +105,34 @@ export class FraudFlagsQueryDto {
    * or "resolved_valid,resolved_invalid"). Accepts any FraudFlagStatus
    * value. If omitted, no status filter is applied.
    */
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   status?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsEnum(FraudSeverity)
   severity?: FraudSeverity;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   flagType?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   search?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -115,14 +143,17 @@ export class FraudFlagsQueryDto {
 // ── Users ──
 
 export class UsersQueryDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   status?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   role?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   search?: string;
@@ -131,14 +162,17 @@ export class UsersQueryDto {
 // ── Device recovery ──
 
 export class IssueDeviceRecoveryTokenDto {
+  @ApiProperty()
   @IsUUID()
   userId!: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   reason?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(5)
@@ -147,25 +181,30 @@ export class IssueDeviceRecoveryTokenDto {
 }
 
 export class AdminDevicesQueryDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(100)
   search?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
   userId?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(50)
   toolType?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -176,22 +215,26 @@ export class AdminDevicesQueryDto {
 // ── Recovery debt operations ──
 
 export class RecoveryDebtCasesQueryDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(100)
   limit?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   minAmountMinor?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(3)
@@ -199,20 +242,24 @@ export class RecoveryDebtCasesQueryDto {
 }
 
 export class OpenRecoveryDebtCaseDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsIn(['open', 'in_collections'])
   status?: 'open' | 'in_collections';
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(3)
   currency?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   externalReference?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
@@ -220,14 +267,17 @@ export class OpenRecoveryDebtCaseDto {
 }
 
 export class ResolveRecoveryDebtCaseDto {
+  @ApiProperty()
   @IsIn(['recovered', 'written_off', 'closed'])
   status!: 'recovered' | 'written_off' | 'closed';
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   externalReference?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
@@ -237,6 +287,7 @@ export class ResolveRecoveryDebtCaseDto {
 // ── Tool Integrations ──
 
 export class ToggleToolIntegrationDto {
+  @ApiProperty()
   @IsIn(['true', 'false'])
   isActive!: string;
 }
@@ -244,19 +295,23 @@ export class ToggleToolIntegrationDto {
 // ── Webhooks ──
 
 export class WebhookEventsQueryDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   provider?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   processingStatus?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -267,31 +322,38 @@ export class WebhookEventsQueryDto {
 // ── Audit ──
 
 export class AuditLogQueryDto {
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   actorId?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   actorRole?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   targetType?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   from?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   to?: string;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
   page?: number;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -302,9 +364,11 @@ export class AuditLogQueryDto {
 // ── Payout account verification ─
 
 export class PayoutAccountVerifyDto {
+  @ApiProperty()
   @IsIn([true, false])
   verified!: boolean;
 
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(500)
