@@ -236,6 +236,7 @@ model User {
   // The `email` @unique (above) already serves equality/like scans on
   // email; a separate @@index duplicates storage and write cost.
   @@index([role, status])
+  @@unique([githubId])
   @@map("users")
 }
 
@@ -502,6 +503,7 @@ model BlockedCategory {
   createdAt DateTime @default(now())
 
   @@map("blocked_categories")
+  @@index([categoryId])
 }
 
 model CountryTargeting {
@@ -646,6 +648,7 @@ model AdClick {
   @@index([isValid, createdAt])
   @@index([campaignId])
   @@index([creativeId])
+  @@index([deviceId])
   @@map("ad_clicks")
 }
 
@@ -672,6 +675,7 @@ model AdReport {
 
   @@index([impressionId])
   @@index([userId])
+  @@index([creativeId])
   @@map("ad_reports")
 }
 
@@ -720,6 +724,8 @@ model EarningsLedger {
   @@index([status, createdAt])
   // Releasing a false-positive flag's holds scopes by heldByFlagId.
   @@index([heldByFlagId])
+  @@index([impressionId])
+  @@index([clickId])
   @@map("earnings_ledger")
 }
 
@@ -810,6 +816,7 @@ model PayoutRequest {
   // by both user and status; the single-column indexes above force Postgres
   // to pick one and heap-filter the other.
   @@index([userId, status])
+  @@index([payoutAccountId])
   @@map("payout_requests")
 }
 
@@ -916,6 +923,8 @@ model FraudFlag {
   @@index([campaignId, status])
   @@index([flagType, severity])
   @@index([status, createdAt])
+  @@index([impressionId])
+  @@index([clickId])
   @@map("fraud_flags")
 }
 
@@ -980,6 +989,7 @@ model ApiKey {
   expiresAt DateTime? @db.Timestamptz
 
   @@index([ownerId])
+  @@index([advertiserId])
   // The `keyHash` @unique (above) already serves equality lookups — a
   // separate @@index duplicates storage/write cost.
   @@map("api_keys")

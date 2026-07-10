@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { apiBaseUrl, clearAuthCookies, COOKIE_ACCESS,readAuthCookie } from '../_lib/cookies';
+import {
+  apiBaseUrl,
+  clearAuthCookies,
+  COOKIE_ACCESS,
+  isSecure,
+  readAuthCookie,
+} from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
 
 export async function POST(req: NextRequest) {
@@ -20,7 +26,7 @@ export async function POST(req: NextRequest) {
     // cookies is correct. Network errors and 5xx responses propagate as
     // non-200 so the client surfaces a retryable failure rather than a false
     // sense of security.
-    const accessToken = readAuthCookie(req, COOKIE_ACCESS);
+    const accessToken = readAuthCookie(req, COOKIE_ACCESS, isSecure(req.headers));
     let apiRes: Response;
     try {
       apiRes = await fetch(`${apiBaseUrl()}/auth/logout`, {

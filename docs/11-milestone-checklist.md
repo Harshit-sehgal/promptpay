@@ -1,5 +1,10 @@
 # Milestone Checklist
 
+> **Note (2026-07-10):** This is the original milestone plan. All phases are
+> verified complete as of 2026-07-09/10 — the unchecked boxes below are the
+> template, not a "not done" signal. Current status of record lives in
+> `AGENTS.md` (open items only) and `FOUNDATION_STATUS.md` (domain table).
+
 ## Phase 0: Planning complete
 
 - [ ] Product requirements approved.
@@ -129,4 +134,3 @@
 - [ ] Fraud rate below target.
 - [ ] Comparison page is reviewed for claims.
 - [ ] Launch support plan exists.
-

@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 import { json, raw, urlencoded } from 'express';
 import helmet from 'helmet';
 import './instrument';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { SentryGlobalFilter } from '@sentry/nestjs/setup';
@@ -61,6 +61,10 @@ async function bootstrap() {
   app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
 
   app.setGlobalPrefix('api/v1');
+  // API versioning (Uri strategy). Controllers without an explicit @Version
+  // bind to defaultVersion '1', so existing /api/v1 routes are unchanged while
+  // new major versions can be introduced without breaking clients.
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   app.useGlobalPipes(
     new ValidationPipe({

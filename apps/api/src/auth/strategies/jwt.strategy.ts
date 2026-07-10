@@ -1,5 +1,5 @@
 import { type Request } from 'express';
-import { ExtractJwt, JwtFromRequestFunction,Strategy } from 'passport-jwt';
+import { ExtractJwt, JwtFromRequestFunction, Strategy } from 'passport-jwt';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
@@ -19,15 +19,20 @@ function extractJwtFromRequest(req: Request): string | null {
   const headerToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
   if (headerToken) return headerToken;
 
-  // 2. HttpOnly access_token cookie (Next.js web app)
-  if (req.cookies?.access_token) return req.cookies.access_token;
-
+  // 2. HttpOnly access_token cookie (Next.js web app). Prefer the host-bound
+  //    `__Host-` form (Secure + Path=/, no Domain) and only fall back to the
+  //    bare name as a dev/HTTP compatibility shim.
+  const cookieToken = req.cookies?.['__Host-access_token'] ?? req.cookies?.access_token;
+  if (cookieToken) return cookieToken;
   return null;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: ConfigService, private prisma: PrismaService) {
+  constructor(
+    config: ConfigService,
+    private prisma: PrismaService,
+  ) {
     const secret = config.get<string>('JWT_SECRET');
     if (!secret || secret.length < 32) {
       throw new Error(

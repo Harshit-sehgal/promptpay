@@ -5,7 +5,6 @@ import * as os from 'os';
 
 import {
   Credentials,
-  getCredentials,
   getDeviceEventSecret,
   setCredentials,
   storeDeviceEventSecret,
@@ -92,11 +91,11 @@ export class ApiClient {
   private deviceEventSecret: string | null = null;
 
   constructor(private creds: Credentials | null = null) {
-    if (!this.creds) this.creds = getCredentials();
+    // Credentials are passed in by the caller (which loads them via the async
+    // getCredentials()). The event secret is NOT in the JSON credential file
+    // (it's in the OS keychain when available, else a separate obfuscated
+    // file); it's loaded lazily on first signing — see signEventPayload().
     if (this.creds?.deviceUUID) this.deviceUUID = this.creds.deviceUUID;
-    // Event secret is NOT in the JSON credential file (it's in the OS keychain
-    // when available, else a separate obfuscated file). Loaded lazily on first
-    // signing; see signEventPayload().
     this.deviceEventSecret = null;
   }
 
@@ -167,7 +166,7 @@ export class ApiClient {
       this.deviceEventSecret = res.eventSecret;
       if (this.creds) {
         this.creds.deviceUUID = res.id;
-        setCredentials(this.creds);
+        await setCredentials(this.creds);
       }
       // Persist the event secret separately (not in the main credential JSON).
       await storeDeviceEventSecret(res.eventSecret);
@@ -388,7 +387,7 @@ export class ApiClient {
       if (this.creds) {
         this.creds.accessToken = refresh.accessToken;
         this.creds.refreshToken = refresh.refreshToken;
-        setCredentials(this.creds);
+        await setCredentials(this.creds);
       }
       return refresh;
     } catch {

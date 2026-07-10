@@ -49,12 +49,28 @@ function cookieName(base: string, secure: boolean): string {
 export function readAuthCookie(
   req: { cookies: { get(name: string): { value?: string } | undefined } },
   base: string,
+  secure?: boolean,
 ): string | undefined {
-  return (
-    req.cookies.get(`__Host-${base}`)?.value ??
-    req.cookies.get(base)?.value ??
-    req.cookies.get(`__Host-__Host-${base}`)?.value
-  );
+  // Always prefer the host-bound, Secure-only `__Host-` cookie. A sibling
+  // subdomain cannot set a `__Host-` cookie (no `Domain` attribute is
+  // permitted), so this is the trusted source in production.
+  const prefixed = req.cookies.get(`__Host-${base}`)?.value;
+  if (prefixed) return prefixed;
+
+  // Legacy double-prefixed form from older buggy code — accepted during the
+  // rollout window; clearAuthCookies removes it on next login/logout.
+  const legacy = req.cookies.get(`__Host-__Host-${base}`)?.value;
+  if (legacy) return legacy;
+
+  // The bare name is ONLY valid over a non-secure (dev/HTTP) connection,
+  // because `__Host-` cookies cannot be set without the Secure flag. In
+  // production we must NOT fall back to the bare name: a sibling subdomain
+  // can set `access_token` with `Domain=.example.com` and forge a session.
+  // Only accept the bare name when we know the connection is not Secure.
+  if (secure === false) {
+    return req.cookies.get(base)?.value;
+  }
+  return undefined;
 }
 
 /**
@@ -93,7 +109,7 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  *      to the wrong protocol; if the deploy is HTTPS the proxy will set
  *      X-Forwarded-Proto upstream).
  */
-function isSecure(headers: Headers): boolean {
+export function isSecure(headers: Headers): boolean {
   // Decision order — explicit env override wins over the NODE_ENV default:
   //   1. `COOKIE_SECURE=true|false` — honour the explicit operator override
   //      first, including in production. A staging host running with
@@ -132,8 +148,8 @@ function isSecure(headers: Headers): boolean {
       // missing escape hatch.
       console.warn(
         '[waitlayer] COOKIE_SECURE=false is IGNORED in NODE_ENV=production — refusing to ' +
-        'issue non-Secure auth cookies. Either set COOKIE_SECURE=true, remove the override, ' +
-        'or change NODE_ENV if this really is a staging deploy.',
+          'issue non-Secure auth cookies. Either set COOKIE_SECURE=true, remove the override, ' +
+          'or change NODE_ENV if this really is a staging deploy.',
       );
       return true;
     }
@@ -158,7 +174,9 @@ function isSecure(headers: Headers): boolean {
  * so the tokens never leak to client JavaScript (where they could be
  * exfiltrated by an XSS).
  */
-export function stripAuthTokens<T extends Record<string, unknown>>(body: T): Omit<T, 'accessToken' | 'refreshToken'> {
+export function stripAuthTokens<T extends Record<string, unknown>>(
+  body: T,
+): Omit<T, 'accessToken' | 'refreshToken'> {
   const { accessToken: _a, refreshToken: _r, ...rest } = body as Record<string, unknown>;
   return rest as Omit<T, 'accessToken' | 'refreshToken'>;
 }
@@ -238,7 +256,7 @@ export function apiBaseUrl(): string {
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
     throw new Error(
       `WaitLayer web refuses to send credentials over ${url.protocol}. ` +
-      'Set NEXT_PUBLIC_API_URL to an https:// endpoint, or http://localhost for local development.',
+        'Set NEXT_PUBLIC_API_URL to an https:// endpoint, or http://localhost for local development.',
     );
   }
 

@@ -13,6 +13,14 @@ const CRED_FILE = path.join(CRED_DIR, 'credentials.json');
 const KEYCHAIN_SERVICE = 'waitlayer-cli';
 const KEYCHAIN_ACCOUNT = 'device-event-secret';
 
+// OS keychain coordinates for the access/refresh tokens. Same back-end as the
+// event secret above; when a keychain is available the tokens live ONLY there
+// and the plaintext credential file never carries them. When no keychain is
+// available (headless CI) we fall back to a separate 0o600 file — unlike the
+// event secret, tokens do NOT fail-closed in production, since CI and local
+// dev must be able to run without a desktop keychain integration.
+const TOKENS_ACCOUNT = 'device-access-tokens';
+
 /**
  * Load the keytar module via dynamic import. Using a string variable (rather
  * than a literal `import('keytar')`) keeps TypeScript from requiring the
@@ -41,7 +49,10 @@ async function loadKeytar(): Promise<{
         getPassword: (service, account) =>
           new Entry(service, account).getPassword().then((p: string | undefined) => p ?? null),
         deletePassword: (service, account) =>
-          new Entry(service, account).deletePassword().then(() => true).catch(() => false),
+          new Entry(service, account)
+            .deletePassword()
+            .then(() => true)
+            .catch(() => false),
       };
     }
     // Fallback: a keytar-shaped module exposing top-level functions.
@@ -54,13 +65,14 @@ async function loadKeytar(): Promise<{
 
 /**
  * Credential payload before stripping secrets from the filesystem copy.
- * `deviceEventSecret` and `accessToken` are the most sensitive fields —
- * when the OS keychain IS the storage back-end (see setCredentials), they
- * are stored only there; the JSON file keeps session-level metadata.
+ * `deviceEventSecret` and `accessToken`/`refreshToken` are the most sensitive
+ * fields — when the OS keychain IS the storage back-end, they are stored only
+ * there; the JSON file keeps session-level metadata and never carries them.
  *
  * This interface exists for internal use by `setCredentials` /
  * `getCredentials`. Callers that need the event secret must go through the
- * keychain layer; the JSON file never carries it.
+ * keychain layer; the JSON file never carries it. Tokens are read back via
+ * `loadTokens()` (keychain, or the plaintext fallback when no keychain).
  */
 interface RawCredentials {
   email: string;
@@ -81,20 +93,49 @@ export interface Credentials {
   deviceUUID?: string;
 }
 
-export function getCredentials(): Credentials | null {
-  try {
-    const raw = fs.readFileSync(CRED_FILE, 'utf-8');
-    const parsed = JSON.parse(raw) as RawCredentials & Partial<Pick<RawCredentials, 'deviceEventSecret'>>;
-    // Strip the event secret — callers must fetch via getDeviceEventSecret()
-    // if they need it. Read handles old files that may still carry it.
-    const { deviceEventSecret: _, ...safe } = parsed;
-    return safe;
-  } catch {
-    return null;
-  }
+export interface Tokens {
+  accessToken: string;
+  refreshToken: string;
 }
 
-export function setCredentials(creds: Credentials) {
+export async function getCredentials(): Promise<Credentials | null> {
+  let parsed: (RawCredentials & Partial<Pick<RawCredentials, 'deviceEventSecret'>>) | null = null;
+  try {
+    const raw = fs.readFileSync(CRED_FILE, 'utf-8');
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = null;
+  }
+  if (!parsed) return null;
+  // Strip the event secret — callers must fetch via getDeviceEventSecret()
+  // if they need it. Read handles old files that may still carry it.
+  const { deviceEventSecret: _dev, ...rest } = parsed;
+  const safe = rest as Omit<RawCredentials, 'deviceEventSecret'>;
+
+  // Tokens are stored in the OS keychain (or a plaintext fallback when the
+  // keychain is unavailable) rather than the credential file. Load them now so
+  // callers still receive a complete Credentials object. Legacy files that
+  // still inline the tokens act as a fallback until the next write.
+  const stored = await loadTokens();
+  const accessToken = stored?.accessToken ?? safe.accessToken;
+  const refreshToken = stored?.refreshToken ?? safe.refreshToken;
+
+  return {
+    email: safe.email,
+    accessToken,
+    refreshToken,
+    userId: safe.userId,
+    role: safe.role,
+    ...(safe.deviceUUID ? { deviceUUID: safe.deviceUUID } : {}),
+  };
+}
+
+export async function setCredentials(creds: Credentials): Promise<void> {
+  // Tokens are stored in the OS keychain (or a plaintext fallback) rather than
+  // the credential file. Persist them separately first.
+  if (creds.accessToken || creds.refreshToken) {
+    await saveTokens({ accessToken: creds.accessToken, refreshToken: creds.refreshToken });
+  }
   fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
   // Ensure the parent directory is also locked down — regardless of umask
   // the directory must be readable only by the owner.
@@ -103,10 +144,15 @@ export function setCredentials(creds: Credentials) {
   } catch {
     console.warn('[waitlayer] Failed to set credentials directory permissions');
   }
-  // Strip the event secret BEFORE writing. Users who need it store it
-  // separately via storeDeviceEventSecret() which backs onto the OS keychain
-  // when available, or a separate encrypted blob otherwise.
-  const { deviceEventSecret: _, ...safe } = creds as RawCredentials;
+  // Strip the event secret AND the tokens BEFORE writing. The event secret is
+  // stored via storeDeviceEventSecret(); the tokens via saveTokens(). The JSON
+  // file never carries either in cleartext.
+  const {
+    deviceEventSecret: _dev,
+    accessToken: _at,
+    refreshToken: _rt,
+    ...safe
+  } = creds as RawCredentials;
   fs.writeFileSync(CRED_FILE, JSON.stringify(safe, null, 2), { mode: 0o600 });
   try {
     fs.chmodSync(CRED_FILE, 0o600);
@@ -145,7 +191,7 @@ export async function storeDeviceEventSecret(secret: string): Promise<void> {
     // explicit failure here, not a silent security regression.
     throw new Error(
       'storeDeviceEventSecret does not support NODE_ENV=production without an OS keychain — ' +
-      'integrate keytar (GNOME Keyring / macOS Keychain / Windows CredMan) to ship this credential safely.',
+        'integrate keytar (GNOME Keyring / macOS Keychain / Windows CredMan) to ship this credential safely.',
     );
   }
   const keyFile = path.join(CRED_DIR, '.event-secret');
@@ -189,6 +235,80 @@ export async function clearDeviceEventSecret(): Promise<void> {
 }
 
 /**
+ * Persist the access/refresh tokens in the OS keychain when available,
+ * otherwise fall back to a plaintext 0o600 file (headless CI / no keychain).
+ * The keyring path is preferred so the tokens are never written to disk in
+ * cleartext on developer machines and production servers that have a keychain.
+ */
+export async function saveTokens(tokens: Tokens): Promise<void> {
+  const keytar = await loadKeytar();
+  if (keytar) {
+    try {
+      await keytar.setPassword(KEYCHAIN_SERVICE, TOKENS_ACCOUNT, JSON.stringify(tokens));
+      return;
+    } catch {
+      console.warn('[waitlayer] OS keychain write failed; storing tokens in local fallback');
+    }
+  }
+  // Plaintext fallback (headless CI / no keychain). The directory is 0o700 and
+  // the file is 0o600 — treat this as the only path when no keychain exists.
+  const tokensFile = path.join(CRED_DIR, '.tokens');
+  fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(tokensFile, JSON.stringify(tokens), { mode: 0o600 });
+  try {
+    fs.chmodSync(tokensFile, 0o600);
+  } catch {
+    /* noop — permissions may be fixed by the directory */
+  }
+}
+
+/**
+ * Load the access/refresh tokens from the OS keychain when available,
+ * otherwise from the plaintext 0o600 fallback file. Returns null when no
+ * tokens are stored either way.
+ */
+export async function loadTokens(): Promise<Tokens | null> {
+  const keytar = await loadKeytar();
+  if (keytar) {
+    try {
+      const raw = await keytar.getPassword(KEYCHAIN_SERVICE, TOKENS_ACCOUNT);
+      if (raw) {
+        try {
+          return JSON.parse(raw) as Tokens;
+        } catch {
+          /* ignore corrupt keyring entry */
+        }
+      }
+    } catch {
+      // fall through to the local file fallback
+    }
+  }
+  const tokensFile = path.join(CRED_DIR, '.tokens');
+  try {
+    const raw = fs.readFileSync(tokensFile, 'utf-8');
+    return JSON.parse(raw) as Tokens;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearTokens(): Promise<void> {
+  const keytar = await loadKeytar();
+  if (keytar) {
+    try {
+      await keytar.deletePassword(KEYCHAIN_SERVICE, TOKENS_ACCOUNT);
+    } catch {
+      /* noop — keychain entry may not exist */
+    }
+  }
+  try {
+    fs.unlinkSync(path.join(CRED_DIR, '.tokens'));
+  } catch {
+    /* noop — file may not exist */
+  }
+}
+
+/**
  * When a proper OS keychain is not available (the CLI runs in headless CI
  * or the user hasn't installed our keychain binding), we at minimum XOR
  * the secret with a machine-derived key so a bare `cat` doesn't leak it.
@@ -197,7 +317,9 @@ export async function clearDeviceEventSecret(): Promise<void> {
  * integrate `keytar` (Linux/GNOME keyring, macOS Keychain, Windows CredMan).
  */
 function hashDeviceSecretOnDisk(secret: string): string {
-  const key = createHash('sha256').update(`${os.hostname()}-${os.userInfo().username}-waitlayer`).digest('hex');
+  const key = createHash('sha256')
+    .update(`${os.hostname()}-${os.userInfo().username}-waitlayer`)
+    .digest('hex');
   const buf = Buffer.from(secret, 'utf-8');
   const keyBuf = Buffer.from(key, 'hex');
   for (let i = 0; i < buf.length; i++) buf[i] ^= keyBuf[i % keyBuf.length];
@@ -205,17 +327,20 @@ function hashDeviceSecretOnDisk(secret: string): string {
 }
 
 function decodeHashedDeviceSecret(hashedHex: string): string {
-  const key = createHash('sha256').update(`${os.hostname()}-${os.userInfo().username}-waitlayer`).digest('hex');
+  const key = createHash('sha256')
+    .update(`${os.hostname()}-${os.userInfo().username}-waitlayer`)
+    .digest('hex');
   const buf = Buffer.from(hashedHex, 'hex');
   const keyBuf = Buffer.from(key, 'hex');
   for (let i = 0; i < buf.length; i++) buf[i] ^= keyBuf[i % keyBuf.length];
   return buf.toString('utf-8');
 }
 
-export function clearCredentials() {
-  // Best-effort keychain clear (fire-and-forget; the file unlink below is the
+export async function clearCredentials(): Promise<void> {
+  // Best-effort keychain clears (fire-and-forget; the file unlink below is the
   // authoritative local cleanup).
   void clearDeviceEventSecret();
+  void clearTokens();
   try {
     fs.unlinkSync(CRED_FILE);
   } catch {

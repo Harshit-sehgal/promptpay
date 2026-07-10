@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 
 import { ApiClient } from '../lib/api-client';
-import { getCredentials,setCredentials } from '../lib/credentials';
+import { getCredentials, setCredentials } from '../lib/credentials';
 import { getErrorMessage } from '../lib/errors';
 import { prompt } from '../lib/prompt';
 
@@ -12,7 +12,7 @@ interface LoginResult {
 }
 
 export async function runAuth(opts: { email?: string; signup?: boolean }) {
-  const existing = getCredentials();
+  const existing = await getCredentials();
   if (existing) {
     console.log(chalk.green(`Already logged in as ${existing.email}`));
     console.log(chalk.dim('Run `waitlayer logout` to switch accounts.'));
@@ -46,10 +46,10 @@ async function handleLogin(email: string) {
   }
 
   console.log(chalk.dim('Signing in...'));
-  const api = new ApiClient();
+  const api = new ApiClient(await getCredentials());
   try {
     const res = await api.login({ email, password });
-    persistLogin(email, res);
+    await persistLogin(email, res);
     printLoginSuccess(email, res.user.role);
   } catch (err: unknown) {
     if (isTwoFactorChallenge(err)) {
@@ -62,7 +62,7 @@ async function handleLogin(email: string) {
       console.log(chalk.dim('Verifying 2FA...'));
       try {
         const res = await api.login({ email, password, twoFactorToken });
-        persistLogin(email, res);
+        await persistLogin(email, res);
         printLoginSuccess(email, res.user.role);
         return;
       } catch (twoFactorErr: unknown) {
@@ -78,8 +78,8 @@ async function handleLogin(email: string) {
   }
 }
 
-function persistLogin(email: string, res: LoginResult) {
-  setCredentials({
+async function persistLogin(email: string, res: LoginResult) {
+  await setCredentials({
     email,
     accessToken: res.accessToken,
     refreshToken: res.refreshToken,
@@ -134,7 +134,11 @@ async function handleSignup(email: string, _opts: { email?: string }) {
   const ageConfirmed = ageOk?.trim().toLowerCase() === 'y';
   const termsAccepted = termsOk?.trim().toLowerCase() === 'y';
   if (!ageConfirmed || !termsAccepted) {
-    console.error(chalk.red('Account creation requires age confirmation and acceptance of the Terms of Service and Privacy Policy.'));
+    console.error(
+      chalk.red(
+        'Account creation requires age confirmation and acceptance of the Terms of Service and Privacy Policy.',
+      ),
+    );
     process.exit(1);
   }
 
@@ -143,7 +147,7 @@ async function handleSignup(email: string, _opts: { email?: string }) {
   // version cannot be loaded; posting a hard-coded fallback would drift after a
   // policy bump and the API will reject stale client versions anyway.
   let policyVersion: string | null = null;
-  const api = new ApiClient();
+  const api = new ApiClient(await getCredentials());
   try {
     const versions = await api.getRequiredConsentVersions();
     if (versions?.terms_of_service) {
@@ -160,7 +164,9 @@ async function handleSignup(email: string, _opts: { email?: string }) {
     process.exit(1);
   }
   if (!policyVersion) {
-    console.error(chalk.red('Cannot create account: required consent versions missing from server response'));
+    console.error(
+      chalk.red('Cannot create account: required consent versions missing from server response'),
+    );
     process.exit(1);
   }
 
@@ -176,7 +182,7 @@ async function handleSignup(email: string, _opts: { email?: string }) {
       termsAccepted: true,
       policyVersion,
     });
-    setCredentials({
+    await setCredentials({
       email,
       accessToken: res.accessToken,
       refreshToken: res.refreshToken,

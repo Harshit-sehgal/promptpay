@@ -6,7 +6,7 @@ import { getErrorMessage, getErrorStatus } from '../lib/errors';
 import { prompt } from '../lib/prompt';
 
 export async function runConfig() {
-  const creds = getCredentials();
+  const creds = await getCredentials();
   if (!creds) {
     console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
     process.exit(1);
@@ -21,10 +21,16 @@ export async function runConfig() {
     console.log(chalk.bold.cyan('WaitLayer Settings'));
     console.log(chalk.dim('─'.repeat(40)));
     console.log();
-    console.log(`  ${chalk.dim('Ads enabled:')}     ${settings.adsEnabled ? chalk.green('✓ yes') : chalk.red('✗ no')}`);
-    console.log(`  ${chalk.dim('Quiet mode:')}       ${settings.quietMode ? chalk.yellow(`on (${settings.quietModeStart ?? '22:00'}–${settings.quietModeEnd ?? '08:00'})`) : chalk.dim('off')}`);
+    console.log(
+      `  ${chalk.dim('Ads enabled:')}     ${settings.adsEnabled ? chalk.green('✓ yes') : chalk.red('✗ no')}`,
+    );
+    console.log(
+      `  ${chalk.dim('Quiet mode:')}       ${settings.quietMode ? chalk.yellow(`on (${settings.quietModeStart ?? '22:00'}–${settings.quietModeEnd ?? '08:00'})`) : chalk.dim('off')}`,
+    );
     console.log(`  ${chalk.dim('Max ads/hour:')}     ${settings.maxAdsPerHour ?? 6}`);
-    console.log(`  ${chalk.dim('Referral code:')}    ${settings.referralCode ? chalk.cyan(settings.referralCode) : chalk.dim('none')}`);
+    console.log(
+      `  ${chalk.dim('Referral code:')}    ${settings.referralCode ? chalk.cyan(settings.referralCode) : chalk.dim('none')}`,
+    );
     console.log(`  ${chalk.dim('Email:')}            ${settings.email}`);
     if (settings.displayName) {
       console.log(`  ${chalk.dim('Name:')}            ${settings.displayName}`);
@@ -61,14 +67,20 @@ export async function runConfig() {
 
         const updated = await api.updateSettings(updatePayload);
         if (updated.quietMode) {
-          console.log(chalk.green(`✓ Quiet mode on (${updated.quietModeStart ?? '22:00'}–${updated.quietModeEnd ?? '08:00'}).`));
+          console.log(
+            chalk.green(
+              `✓ Quiet mode on (${updated.quietModeStart ?? '22:00'}–${updated.quietModeEnd ?? '08:00'}).`,
+            ),
+          );
         } else {
           console.log(chalk.green('✓ Quiet mode off.'));
         }
         break;
       }
       case '3': {
-        const raw = await prompt(`Max ads per hour (1–12, current: ${settings.maxAdsPerHour ?? 6}):`);
+        const raw = await prompt(
+          `Max ads per hour (1–12, current: ${settings.maxAdsPerHour ?? 6}):`,
+        );
         const num = parseInt(raw, 10);
         if (isNaN(num) || num < 1 || num > 12) {
           console.error(chalk.red('Enter a number between 1 and 12.'));
@@ -92,7 +104,9 @@ export async function runConfig() {
     if (getErrorStatus(err) === 401) {
       console.error(chalk.red('Session expired. Run `waitlayer auth` again.'));
     } else {
-      console.error(chalk.red(`Failed to load settings: ${getErrorMessage(err, 'request failed')}`));
+      console.error(
+        chalk.red(`Failed to load settings: ${getErrorMessage(err, 'request failed')}`),
+      );
     }
     process.exit(1);
   }

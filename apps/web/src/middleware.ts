@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { validateWebEnv } from '@/lib/web-env';
 
-const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin', '/settings', '/dashboard'];
+const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin'];
 
 // Static/marketing pages that can be publicly cached at the edge
 const STATIC_CACHEABLE_PATHS = [
@@ -69,10 +69,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  const secure =
+    request.nextUrl.protocol === 'https:' ||
+    request.headers.get('x-forwarded-proto')?.split(',')[0].trim() === 'https';
   const accessCookie =
-    request.cookies.get('__Host-access_token') ?? request.cookies.get('access_token');
+    request.cookies.get('__Host-access_token') ??
+    (!secure ? request.cookies.get('access_token') : undefined);
   const refreshCookie =
-    request.cookies.get('__Host-refresh_token') ?? request.cookies.get('refresh_token');
+    request.cookies.get('__Host-refresh_token') ??
+    (!secure ? request.cookies.get('refresh_token') : undefined);
   const token = accessCookie?.value;
 
   // The edge gate must not trust the mere *presence* of a refresh cookie value
@@ -131,13 +136,11 @@ export const config = {
      * pass through without the Edge runtime cost.
      *
      * Matches: /developer, /developer/*, /advertiser, /advertiser/*, /admin,
-     *          /admin/*, /settings, /settings/*, /dashboard, /dashboard/*
+     *          /admin/*
      */
     '/developer/:path*',
     '/advertiser/:path*',
     '/admin/:path*',
-    '/settings/:path*',
-    '/dashboard/:path*',
     // Public static/marketing pages — middleware handles caching headers
     '/',
     '/pricing',

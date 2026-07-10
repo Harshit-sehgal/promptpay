@@ -2,6 +2,8 @@ import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { minorToMajorInputValue } from '@waitlayer/shared';
+
 import { PayoutProviderHandler } from '../payout.service';
 
 /**
@@ -41,7 +43,8 @@ export class WisePayoutProvider implements PayoutProviderHandler {
     this.apiVersion = this.config.get<string>('WISE_API_VERSION', '3.0');
     const mode = this.config.get<string>('WISE_MODE', 'sandbox');
     // Sandbox: api.sandbox.transferwise.tech ; Live: api.transferwise.com
-    this.baseUrl = mode === 'live' ? 'https://api.transferwise.com' : 'https://api.sandbox.transferwise.tech';
+    this.baseUrl =
+      mode === 'live' ? 'https://api.transferwise.com' : 'https://api.sandbox.transferwise.tech';
     this.enabled = !!(this.token && this.profileId);
     this.nodeEnv = this.config.get<string>('NODE_ENV', process.env.NODE_ENV || 'development');
   }
@@ -51,10 +54,14 @@ export class WisePayoutProvider implements PayoutProviderHandler {
       if (this.nodeEnv === 'production') {
         return {
           ok: false,
-          reason: 'Wise payouts are not configured: set WISE_API_TOKEN and WISE_PROFILE_ID to enable Wise developer payouts in production.',
+          reason:
+            'Wise payouts are not configured: set WISE_API_TOKEN and WISE_PROFILE_ID to enable Wise developer payouts in production.',
         };
       }
-      return { ok: false, reason: 'Wise payout provider is disabled (no WISE_API_TOKEN/WISE_PROFILE_ID).' };
+      return {
+        ok: false,
+        reason: 'Wise payout provider is disabled (no WISE_API_TOKEN/WISE_PROFILE_ID).',
+      };
     }
     return { ok: true };
   }
@@ -119,7 +126,11 @@ export class WisePayoutProvider implements PayoutProviderHandler {
    * transfer. NOTE: this flow must be validated against the Wise sandbox
    * (WISE_MODE=sandbox) before enabling WISE_MODE=live.
    */
-  private async createQuote(recipientId: string, amount: number, currency: string): Promise<string> {
+  private async createQuote(
+    recipientId: string,
+    amount: number,
+    currency: string,
+  ): Promise<string> {
     const quoteRes = await fetch(`${this.baseUrl}/v1/quotes`, {
       method: 'POST',
       headers: this.headers(),
@@ -163,7 +174,7 @@ export class WisePayoutProvider implements PayoutProviderHandler {
       throw new Error(`Invalid Wise payout destination '${email}': must be a recipient email.`);
     }
 
-    const amount = Number((params.amountMinor / 100).toFixed(2));
+    const amount = Number(minorToMajorInputValue(params.amountMinor, params.currency));
     if (!(amount > 0)) {
       throw new Error(`Refusing Wise payout with non-positive amount: ${amount}`);
     }

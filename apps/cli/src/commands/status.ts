@@ -6,7 +6,7 @@ import { getErrorMessage, getErrorStatus } from '../lib/errors';
 import { formatCurrency } from '../lib/format';
 
 export async function runStatus(opts: { period?: string }) {
-  const creds = getCredentials();
+  const creds = await getCredentials();
   if (!creds) {
     console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
     process.exit(1);
@@ -16,10 +16,7 @@ export async function runStatus(opts: { period?: string }) {
   const _period = opts.period ?? '7d';
 
   try {
-    const [balance, overview] = await Promise.all([
-      api.getBalance(),
-      api.getOverview(),
-    ]);
+    const [balance, overview] = await Promise.all([api.getBalance(), api.getOverview()]);
 
     console.log();
     console.log(chalk.bold.cyan('WaitLayer Status'));
@@ -36,7 +33,9 @@ export async function runStatus(opts: { period?: string }) {
     console.log();
 
     console.log(chalk.bold(`Account Summary`));
-    console.log(`  Est. Earnings:  ${chalk.green.bold(formatCurrency(overview.estimatedEarnings))}`);
+    console.log(
+      `  Est. Earnings:  ${chalk.green.bold(formatCurrency(overview.estimatedEarnings))}`,
+    );
     console.log(`  Confirmed:      ${chalk.yellow(formatCurrency(overview.confirmedEarnings))}`);
     console.log(`  Pending:        ${chalk.yellow(formatCurrency(overview.pendingEarnings))}`);
     console.log(`  Lifetime:       ${formatCurrency(overview.lifetimeEarnings)}`);

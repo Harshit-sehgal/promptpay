@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
 import api from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
@@ -19,7 +20,12 @@ interface AuthenticatedUser {
 /** Convert the Google credential response into an idToken and call our API. */
 async function handleGoogleCredential(
   credential: string,
-  googleLoginFn: (idToken: string, role?: string, twoFactorToken?: string, consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string }) => Promise<AuthenticatedUser>,
+  googleLoginFn: (
+    idToken: string,
+    role?: string,
+    twoFactorToken?: string,
+    consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
+  ) => Promise<AuthenticatedUser>,
   role: SignupRole,
   consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
 ): Promise<{ error: string | null; user?: AuthenticatedUser }> {
@@ -31,6 +37,16 @@ async function handleGoogleCredential(
     return { error: getErrorMessage(err, 'Google sign-in failed') };
   }
 }
+
+// Lightweight client-side validation mirroring the server Zod contract so
+// obviously-invalid input is blocked before any network request.
+const signupSchema = z.object({
+  email: z.email({ message: 'Please enter a valid email address.' }),
+  password: z.string().min(8, 'Password must be at least 8 characters.'),
+  ageConfirmed: z
+    .boolean()
+    .refine((v) => v === true, 'You must confirm you are at least 18 years old to continue.'),
+});
 
 export default function SignupPage() {
   const router = useRouter();
@@ -64,7 +80,9 @@ export default function SignupPage() {
         setPolicyVersion(version);
       } catch {
         setPolicyVersion(null);
-        setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
+        setError(
+          'Could not load the current Terms and Privacy Policy versions. Refresh and try again.',
+        );
       }
     };
     fetchVersions();
@@ -99,7 +117,9 @@ export default function SignupPage() {
       return;
     }
     if (!policyRef.current) {
-      setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
+      setError(
+        'Could not load the current Terms and Privacy Policy versions. Refresh and try again.',
+      );
       return;
     }
     setLoading(true);
@@ -134,7 +154,10 @@ export default function SignupPage() {
         }
       } catch (err: unknown) {
         // Silently degrade — Google sign-in button will show as disabled.
-        console.error('Auth config fetch failed (signup):', err instanceof Error ? err.message : String(err));
+        console.error(
+          'Auth config fetch failed (signup):',
+          err instanceof Error ? err.message : String(err),
+        );
       }
     };
     fetchConfig();
@@ -164,7 +187,9 @@ export default function SignupPage() {
               return;
             }
             if (!policyRef.current) {
-              setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
+              setError(
+                'Could not load the current Terms and Privacy Policy versions. Refresh and try again.',
+              );
               setLoading(false);
               return;
             }
@@ -214,12 +239,15 @@ export default function SignupPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!ageConfirmed) {
-      setError('You must confirm you are at least 18 years old to continue.');
+    const parsed = signupSchema.safeParse({ email, password, ageConfirmed });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Please fix the errors below.');
       return;
     }
     if (!policyVersion) {
-      setError('Could not load the current Terms and Privacy Policy versions. Refresh and try again.');
+      setError(
+        'Could not load the current Terms and Privacy Policy versions. Refresh and try again.',
+      );
       return;
     }
     setLoading(true);
@@ -250,11 +278,15 @@ export default function SignupPage() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">WaitLayer</span>
+          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
+            WaitLayer
+          </span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
-          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">Create your account</h1>
+          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
+            Create your account
+          </h1>
           <p className="text-surface-500 text-[14px] mb-8">Start earning from AI wait time</p>
 
           {/* Role toggle — Notion-style segmented control */}
@@ -288,7 +320,11 @@ export default function SignupPage() {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5" role="alert" aria-live="polite">
+            <div
+              className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5"
+              role="alert"
+              aria-live="polite"
+            >
               <p className="text-red-600 text-[14px]">{error}</p>
             </div>
           )}
@@ -323,7 +359,9 @@ export default function SignupPage() {
               />
             </div>
             <div>
-              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">Password</label>
+              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
@@ -360,11 +398,17 @@ export default function SignupPage() {
               />
               <span>
                 I confirm that I am at least 18 years old and have read the{' '}
-                <Link href="/terms" className="text-brand-500 hover:text-brand-600 underline underline-offset-2">
+                <Link
+                  href="/terms"
+                  className="text-brand-500 hover:text-brand-600 underline underline-offset-2"
+                >
                   Terms of Service
-                </Link>
-                {' '}and{' '}
-                <Link href="/privacy" className="text-brand-500 hover:text-brand-600 underline underline-offset-2">
+                </Link>{' '}
+                and{' '}
+                <Link
+                  href="/privacy"
+                  className="text-brand-500 hover:text-brand-600 underline underline-offset-2"
+                >
                   Privacy Policy
                 </Link>
                 .
@@ -383,16 +427,15 @@ export default function SignupPage() {
 
           <div className="flex items-center gap-3 my-6">
             <div className="flex-1 h-px bg-surface-200" />
-            <span className="text-surface-400 text-[11px] font-semibold uppercase tracking-wider">or</span>
+            <span className="text-surface-400 text-[11px] font-semibold uppercase tracking-wider">
+              or
+            </span>
             <div className="flex-1 h-px bg-surface-200" />
           </div>
 
           {/* Google Sign-In */}
           {googleEnabled ? (
-            <div
-              id="google-signup-btn"
-              className="flex justify-center w-full min-h-[44px]"
-            />
+            <div id="google-signup-btn" className="flex justify-center w-full min-h-[44px]" />
           ) : (
             <button
               disabled
@@ -400,28 +443,53 @@ export default function SignupPage() {
               className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-400 font-medium py-3 rounded-xl text-[14px] opacity-75 cursor-not-allowed"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#EA4335"
+                />
               </svg>
               <span>Continue with Google</span>
-              <span className="text-[10px] text-surface-300 font-normal">(disabled: client ID missing)</span>
+              <span className="text-[10px] text-surface-300 font-normal">
+                (disabled: client ID missing)
+              </span>
             </button>
           )}
 
           {process.env.NODE_ENV === 'development' && (
-
             <button
               onClick={handleMockGoogleSignup}
               type="button"
               className="w-full flex items-center justify-center gap-3 bg-surface-50 hover:bg-surface-100/80 border border-surface-200 text-surface-700 font-semibold py-3 rounded-xl text-[14px] mt-3 transition-all"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#EA4335"
+                />
               </svg>
               <span>Continue with Mock Google</span>
             </button>
@@ -429,14 +497,17 @@ export default function SignupPage() {
 
           <p className="text-surface-500 text-[14px] text-center mt-7">
             Already have an account?{' '}
-            <Link href="/auth/login" className="text-brand-500 hover:text-brand-600 font-medium transition-colors">
+            <Link
+              href="/auth/login"
+              className="text-brand-500 hover:text-brand-600 font-medium transition-colors"
+            >
               Sign in
             </Link>
           </p>
 
           <p className="text-surface-400 text-[12px] text-center mt-6 leading-relaxed">
-            By creating an account, you agree to our Terms of Service and Privacy Policy.
-            All ad events are audited. We never read your code or prompts.
+            By creating an account, you agree to our Terms of Service and Privacy Policy. All ad
+            events are audited. We never read your code or prompts.
           </p>
         </div>
       </div>

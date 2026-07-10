@@ -26,7 +26,7 @@ interface WaitState {
  * This CLI command tails the file and reports wait-state events to the API.
  */
 export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
-  const creds = getCredentials();
+  const creds = await getCredentials();
   if (!creds) {
     console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
     process.exit(1);
@@ -57,7 +57,9 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
     if (!activeWaitStateId || activeStartTime === null) return;
     const durationMs = Date.now() - activeStartTime;
     const durationSeconds = Math.floor(durationMs / 1000);
-    console.log(chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms (${durationSeconds}s)`));
+    console.log(
+      chalk.dim(`[wait-end] ${activeWaitStateId} — ${durationMs}ms (${durationSeconds}s)`),
+    );
 
     try {
       await api.endWaitState({ waitStateId: activeWaitStateId, durationSeconds });
@@ -177,5 +179,16 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
     return;
   }
 
-  setInterval(poll, 3000);
+  // Guard against overlapping polls: a slow API call must not let the next
+  // 3s tick start a second in-flight poll. Skip the tick while the previous
+  // one is still running; the guard is reset when it settles.
+  let inFlight: Promise<void> | null = null;
+  const tick = () => {
+    if (inFlight) return;
+    inFlight = poll().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  };
+  setInterval(tick, 3000);
 }

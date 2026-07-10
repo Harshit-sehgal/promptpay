@@ -1,6 +1,7 @@
 /** @type {import('@sentry/nextjs').SentryBuildOptions} */
 const { withSentryConfig } = require('@sentry/nextjs');
 const path = require('path');
+const crypto = require('crypto');
 
 /**
  * Security headers applied to every response (both page and API routes).
@@ -62,10 +63,22 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
 
   async headers() {
+    // Per-request nonce so Next.js's own inline bootstrap / Flight / React
+    // refresh scripts (which are NOT served from /_next and therefore are
+    // NOT exempted by the `source` filter below) are allowed to run
+    // without weakening `script-src` to a global 'unsafe-inline'. Next.js
+    // stamps this nonce onto its inline <script> tags automatically.
+    const nonce = crypto
+      .randomBytes(16)
+      .toString('base64')
+      .replace(/[^a-zA-Z0-9]/g, '');
+    const csp = `default-src 'self'; script-src 'self' 'unsafe-inline' 'nonce-${nonce}' https://accounts.google.com/gsi/client; style-src 'self' 'nonce-${nonce}' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';`;
     return [
       {
         source: '/((?!_next).*)', // all routes except Next.js internal assets
-        headers: SECURITY_HEADERS,
+        headers: SECURITY_HEADERS.map((h) =>
+          h.key === 'Content-Security-Policy' ? { key: h.key, value: csp } : h,
+        ),
       },
     ];
   },

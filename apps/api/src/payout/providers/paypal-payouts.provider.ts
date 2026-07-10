@@ -2,6 +2,8 @@ import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { minorToMajorInputValue } from '@waitlayer/shared';
+
 import { PayoutProviderHandler } from '../payout.service';
 
 interface PayPalTokenResponse {
@@ -45,9 +47,8 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
     this.clientId = this.config.get<string>('PAYPAL_CLIENT_ID', '');
     this.clientSecret = this.config.get<string>('PAYPAL_CLIENT_SECRET', '');
     const mode = this.config.get<string>('PAYPAL_MODE', 'sandbox');
-    this.baseUrl = mode === 'live'
-      ? 'https://api-m.paypal.com'
-      : 'https://api-m.sandbox.paypal.com';
+    this.baseUrl =
+      mode === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
     this.enabled = !!(this.clientId && this.clientSecret);
     this.nodeEnv = this.config.get<string>('NODE_ENV', process.env.NODE_ENV || 'development');
   }
@@ -61,7 +62,8 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
     if (!this.enabled && this.nodeEnv === 'production') {
       return {
         ok: false,
-        reason: 'PayPal Payouts is not configured. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET before processing paypal_payouts requests in production.',
+        reason:
+          'PayPal Payouts is not configured. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET before processing paypal_payouts requests in production.',
       };
     }
     return { ok: true };
@@ -88,7 +90,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       throw new Error(`PayPal OAuth failed: ${res.status} ${text}`);
     }
 
-    const data = await res.json() as PayPalTokenResponse;
+    const data = (await res.json()) as PayPalTokenResponse;
     this.accessToken = data.access_token;
     // Refresh 60 seconds before actual expiry
     this.tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
@@ -118,7 +120,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       throw new Error(`Invalid PayPal payout destination '${email}': must be a recipient email.`);
     }
 
-    const amount = (params.amountMinor / 100).toFixed(2);
+    const amount = minorToMajorInputValue(params.amountMinor, params.currency);
     if (!(Number(amount) > 0)) {
       throw new Error(`Refusing PayPal payout with non-positive amount: ${amount}`);
     }
@@ -136,7 +138,8 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
         sender_batch_header: {
           sender_batch_id: `batch_${params.payoutRequestId}`,
           email_subject: 'You have a payout from WaitLayer',
-          email_message: 'You have received a payout from WaitLayer. Thanks for your participation!',
+          email_message:
+            'You have received a payout from WaitLayer. Thanks for your participation!',
         },
         items: [
           {
@@ -160,7 +163,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       return { providerTxId: `paypal_failed_${params.payoutRequestId}`, status: 'failed' };
     }
 
-    const data = await res.json() as PayPalPayoutResponse;
+    const data = (await res.json()) as PayPalPayoutResponse;
     const payoutItemId = data.items?.[0]?.payout_item_id ?? `paypal_${params.payoutRequestId}`;
 
     const destHash = createHash('sha256').update(email).digest('hex').slice(0, 8);
@@ -193,13 +196,16 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       return { status: 'processing' };
     }
 
-    const data = await res.json() as PayPalPayoutStatusResponse;
+    const data = (await res.json()) as PayPalPayoutStatusResponse;
     const paypalStatus = data.transaction_status;
 
     // Map PayPal statuses to our PayoutStatus
     switch (paypalStatus) {
       case 'SUCCESS':
-        return { status: 'paid', paidAt: data.time_processed ? new Date(data.time_processed) : new Date() };
+        return {
+          status: 'paid',
+          paidAt: data.time_processed ? new Date(data.time_processed) : new Date(),
+        };
       case 'FAILED':
       case 'RETURNED':
       case 'BLOCKED':

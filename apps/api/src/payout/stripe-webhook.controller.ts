@@ -742,9 +742,10 @@ export class StripeWebhookController implements OnModuleInit {
       },
     });
 
+    let remainingDisputeMinor = details.amountMinor;
     for (const entry of creditEntries) {
-      const holdAmount = Math.min(entry.amountMinor, details.amountMinor);
-      if (holdAmount <= 0) continue;
+      const holdAmount = Math.min(entry.amountMinor, remainingDisputeMinor);
+      if (holdAmount <= 0) break;
 
       const holdIdempotencyKey = `stripe_dispute_hold_${dispute.id}_${entry.id}`;
       await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -782,6 +783,7 @@ export class StripeWebhookController implements OnModuleInit {
           data: { amountMinor: { decrement: holdAmount } },
         });
       });
+      remainingDisputeMinor -= holdAmount;
     }
 
     // Create a fraud flag for review.
