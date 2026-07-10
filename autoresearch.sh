@@ -2,20 +2,30 @@
 #
 # autoresearch.sh — benchmark harness for the waitlayer (promptpay) monorepo.
 #
-# Goal under optimization: eliminate code-quality-gate errors across the
-# workspace (TypeScript type errors + ESLint severity-2 errors) so that the
-# source tree's static quality gates pass. This is the code-completable
-# "remaining work" surfaced in AGENTS.md.
+# Goal under optimization: "complete all the remaining work" — drive the
+# workspace to a clean, complete state. The remaining work is modelled as the
+# sum of:
+#   * real quality-gate debt (TypeScript type errors + ESLint severity-2
+#     errors), and
+#   * outstanding flagged tasks in source (TODO / FIXME / HACK markers), which
+#     represent work the code itself says is not yet done.
+#
+# The composite `remaining_work` metric is used as the PRIMARY signal (lower is
+# better). Because it includes the quality-gate errors, "completing" flagged
+# tasks by breaking the build does NOT improve the score — regressions are
+# penalised.
 #
 # Workload is fully offline and deterministic: per-package `tsc --noEmit`
-# (typecheck) and `eslint --format json` (lint). No network, no clock
-# dependency, no random seeds. Turbo is bypassed so runs are sequential and
-# reproducible.
+# (typecheck), `eslint --format json` (lint), and a source scan for flagged
+# task markers. No network, no clock dependency, no random seeds. Turbo is
+# bypassed so runs are sequential and reproducible.
 #
 # Emits:
-#   METRIC code_errors=<typecheck+lint errors>   (PRIMARY, lower is better)
+#   METRIC remaining_work=<code_errors + open_todos>   (PRIMARY, lower better)
+#   METRIC code_errors=<typecheck+lint errors>
 #   METRIC typecheck_errors=<n>
 #   METRIC lint_errors=<n>
+#   METRIC open_todos=<n>
 #   METRIC gates_passing=<0..2>
 #   METRIC wall_seconds=<n>
 # Exits 0 when the workload completed and metrics were produced.
@@ -47,6 +57,7 @@ declare -A LINT_TARGETS=(
 
 typecheck_errors=0
 lint_errors=0
+open_todos=0
 
 START_TS=$(date +%s)
 
@@ -74,19 +85,27 @@ for pkg in "${PACKAGES[@]}"; do
     });
   ')"
   lint_errors=$((lint_errors + le))
+
+  # --- outstanding flagged tasks in source ---
+  td="$(grep -rniE --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build -I 'TODO|FIXME|HACK' "$pkg" 2>/dev/null | wc -l || true)"
+  open_todos=$((open_todos + td))
 done
 
 END_TS=$(date +%s)
 wall_seconds=$((END_TS - START_TS))
 
 code_errors=$((typecheck_errors + lint_errors))
+remaining_work=$((code_errors + open_todos))
+
 gates_passing=0
 [ "$typecheck_errors" -eq 0 ] && gates_passing=$((gates_passing + 1))
 [ "$lint_errors" -eq 0 ] && gates_passing=$((gates_passing + 1))
 
+echo "METRIC remaining_work=$remaining_work"
 echo "METRIC code_errors=$code_errors"
 echo "METRIC typecheck_errors=$typecheck_errors"
 echo "METRIC lint_errors=$lint_errors"
+echo "METRIC open_todos=$open_todos"
 echo "METRIC gates_passing=$gates_passing"
 echo "METRIC wall_seconds=$wall_seconds"
 
