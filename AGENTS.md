@@ -24,7 +24,7 @@ see the live risk/status register without being told to read a separate doc.
 
 ## Current Status (snapshot 2026-07-10)
 
-- **All issues A-001…A-081 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` pass; but `pnpm build` (web) is now BLOCKED** — see the new Open Item "Build — Web `next build` blocked by Next 16.2.x prerender regression" (discovered 2026-07-11; the prior "9/9 green" was a stale `.next` cache). Remaining non-code items: one operator decision (A-030), and code-complete items whose browser/live E2E is still pending (A-033, A-075, residual list).
+- **All issues A-001…A-081 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). Remaining non-code items: one operator decision (A-030), and code-complete items whose browser/live E2E is still pending (A-033, A-075, residual list).
 - This is a snapshot. Re-run the gates after any code change to confirm health.
 
 ### Quality gates (run from repo root)
@@ -46,13 +46,13 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 
 ## Open Items (not code-completable / unverified)
 
-### Build — Web `next build` blocked by Next 16.2.x prerender regression (framework/environment, not code — discovered 2026-07-11)
+### Build — Web `next build` RESOLVED (2026-07-11): `NODE_ENV=development` env leak, not a framework regression
 
-- **Symptom:** `cd apps/web && rm -rf .next && npx next build --webpack` (or plain `next build`) fails during static prerender with `TypeError: Cannot read properties of null (reading 'useContext')` on `/_global-error/page`. The prior "9/9 green" build (2026-07-10) was a **stale `.next` cache** — a clean rebuild was never green in this environment.
-- **Ruled out (exhaustively):** our app code (Next's own default `global-error` fails identically); React version (19.2.7 and 19.1.8); Next version (16.2.10 and 16.2.9); Node (22 and 24, both installed via nvm); Sentry (`withSentryConfig` bypassed — `module.exports = nextConfig`); CSP/nonce; dual-React (`react$` alias + `serverExternalPackages`); Turbopack vs webpack. Also tested: downgrading to **Next 15.5.20** moves the failure to the legacy `/_error` route (`Error: <Html> should not be imported outside of pages/_document`), i.e. Next's **own** error routes cannot be statically prerendered here on either major.
-- **Conclusion:** a Next.js framework prerender regression affecting error routes (`global-error` in 16.2.x, legacy `_error` in 15.5.20). Not fixable by app code, version pins within 15/16, Node, or config. The app runs correctly at **runtime** — `next dev`/`next start` serve SSR + hydrated pages (verified by browser: `/` hydrates with no CSP inline-script violations, `/comparison` shows 6 "Live" labels, `/privacy` shows CCPA / "Do Not Sell" / opt-out copy, CSP header correct).
-- **Fix path (operator/engineer decision):** pin/upgrade Next to a release where error-route prerender works (Next 16.3.0 once stable, or verify in a clean CI environment), or build the web image where Next prerenders error routes correctly. Until then `pnpm build` (web) cannot complete; `pnpm typecheck` / `lint` / `test` remain green.
-- **Legitimate fixes applied this session (kept):** CSP nonce removed in favour of `'unsafe-inline'` in `script-src`/`style-src` — a per-request nonce silently broke client hydration (verified fixed in-browser); `const crypto = require('node:crypto')` added to `next.config.js` (Node 24 `globalThis.crypto` is Web Crypto, so `crypto.randomBytes` was undefined); `react` kept as a `@waitlayer/ui` peerDependency (correct shared-UI-lib design). The web `build` script is `next build --webpack` (Turbopack also hits the same prerender regression).
+- **Symptom:** `cd apps/web && rm -rf .next && next build` failed during static prerender with `TypeError: Cannot read properties of null (reading 'useContext')` on `/_global-error/page`. The prior "9/9 green" build (2026-07-10) was a **stale `.next` cache** — a clean rebuild was never green _in this environment_.
+- **Root cause (found 2026-07-11):** the shell exports `NODE_ENV=development`; `next build` inherits it into its static-generation **worker threads**, and Next 16.2.10's error-route prerender crashes on a null React dispatcher in dev mode. It is **not** a Next.js framework regression — forcing `NODE_ENV=production` makes the build green (50/50 static pages, no error). The earlier diagnosis had ruled out app code, versions, Node, Sentry, CSP, dual-React, and Turbopack-vs-webpack, but never forced production mode.
+- **Fix:** the web `build` script is now `NODE_ENV=production next build` (`apps/web/package.json`), so the build is robust against the env leak in the normal `pnpm build` / Docker flow. (`NODE_ENV=production` is POSIX-shell syntax — Linux/Docker/CI; Windows devs should use WSL.)
+- **Legitimate fixes applied & kept:** CSP nonce removed in favour of `'unsafe-inline'` (a per-request nonce silently broke client hydration — verified fixed in-browser); `react` kept as a `@waitlayer/ui` peerDependency (correct shared-UI-lib design).
+- **Status:** `pnpm --filter waitlayer-web build` is **green** (verified 2026-07-11, exit 0, all routes prerendered). `pnpm build` (web + api) passes; `pnpm typecheck` (14/14) and `pnpm lint` (9/9) remain green.
 
 ### A-030 — Payout provider launch availability (operator decision)
 
@@ -116,14 +116,14 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 
 ### Quality gates executed (2026-07-10, shell-enabled second pass)
 
-- `pnpm build` — **api (Nest) builds; web (`next build`) BLOCKED** by a Next 16.2.x static-prerender regression on `/_global-error` (discovered 2026-07-11; the earlier "9/9" was a stale `.next` cache — see Open Items). `pnpm typecheck` (14/14) and `pnpm lint` (9/9) still pass.
+- `pnpm build` — **9/9 packages** (web `next build` now green after forcing `NODE_ENV=production`; the 2026-07-11 blocker was an `NODE_ENV=development` env leak inherited by static-generation workers, not a framework regression). `pnpm typecheck` (14/14) and `pnpm lint` (9/9) pass.
 - All four gates **run and pass** in a shell-enabled environment. Services were
   brought up with `docker compose up -d postgres redis postgres-test` (Postgres
   `:5432`, Redis `:6379`, isolated test Postgres `:5433`).
   - `pnpm --filter @waitlayer/db generate` — Prisma client generated.
   - `pnpm typecheck` — **14/14** packages.
   - `pnpm lint` — **9/9** packages.
-  - `pnpm build` — **api (Nest) builds; web (`next build`) BLOCKED** by a Next 16.2.x static-prerender regression on `/_global-error` (discovered 2026-07-11; the earlier "9/9" was a stale `.next` cache — see Open Items). `pnpm typecheck` (14/14) and `pnpm lint` (9/9) still pass.
+  - `pnpm build` — **9/9 packages** (web `next build` now green after forcing `NODE_ENV=production`; the 2026-07-11 blocker was an `NODE_ENV=development` env leak inherited by static-generation workers, not a framework regression). `pnpm typecheck` (14/14) and `pnpm lint` (9/9) pass.
   - `pnpm test` for non-API packages — **cli 28, web 78, vscode 10 = 116/116**.
   - `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism`
     — **461/461** (45 files), run against both the default `:5432` dev DB
@@ -255,7 +255,7 @@ tests + 116 web/cli/vscode tests prove routing/logic end to end:
 Each line: `A-0XX — what — verification evidence (file:line)`. Full detailed
 writeups were pruned; this index preserves the audit trail.
 
-- A-001 root build/Docker — web deps (`@tailwindcss/postcss`, `zod`) + cli `auth.test.ts` fix; `pnpm build` 9/9 at 2026-07-10 audit time — **web `next build` now BLOCKED** by Next 16.2.x prerender regression (see Open Items, discovered 2026-07-11).
+- A-001 root build/Docker — web deps (`@tailwindcss/postcss`, `zod`) + cli `auth.test.ts` fix; `pnpm build` 9/9 — **web `next build` env-leak blocker fixed 2026-07-11** by forcing `NODE_ENV=production` in the web build script (see RESOLVED Open Item).
 - A-002 auth cookies — bare names, secure `__Host-` only (`cookies.ts:25-41`, `readAuthCookie:52-57`).
 - A-003 advertiser reports `$queryRaw` mock (`advertiser.service.spec.ts:40,174,200`).
 - A-004 proxy allowlist `/developer/delete-account` (`route.ts` ALLOWED_PATH_PREFIXES).
