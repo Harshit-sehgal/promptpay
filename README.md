@@ -8,17 +8,17 @@ Developers earn rewards by viewing sponsored content during AI tool wait states 
 
 This monorepo (pnpm workspaces + Turborepo) contains:
 
-| Package | Description |
-|---------|-------------|
-| `apps/api` | NestJS REST API — auth, campaigns, ledger, payouts, fraud detection, extensions |
-| `apps/web` | Next.js frontend — developer, advertiser, and admin dashboards |
-| `apps/cli` | CLI tool — register device, report wait states, check earnings |
-| `apps/vscode-extension` | VS Code extension — detects wait states, displays sponsored ads |
-| `packages/shared` | Shared types, Zod contracts, HMAC signing, constants |
-| `packages/config` | Zod-validated environment schema shared by all apps |
-| `packages/db` | Prisma schema, migrations, and client re-exports |
-| `packages/ui` | Shared UI components |
-| `packages/eslint-config` | Shared ESLint flat config |
+| Package                  | Description                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `apps/api`               | NestJS REST API — auth, campaigns, ledger, payouts, fraud detection, extensions |
+| `apps/web`               | Next.js frontend — developer, advertiser, and admin dashboards                  |
+| `apps/cli`               | CLI tool — register device, report wait states, check earnings                  |
+| `apps/vscode-extension`  | VS Code extension — detects wait states, displays sponsored ads                 |
+| `packages/shared`        | Shared types, Zod contracts, HMAC signing, constants                            |
+| `packages/config`        | Zod-validated environment schema shared by all apps                             |
+| `packages/db`            | Prisma schema, migrations, and client re-exports                                |
+| `packages/ui`            | Shared UI components                                                            |
+| `packages/eslint-config` | Shared ESLint flat config                                                       |
 
 ## Quickstart
 
@@ -50,9 +50,9 @@ A `Makefile` wraps common workflows: `make dev`, `make build`, `make typecheck`,
 ## Quality Gates
 
 ```bash
-pnpm run typecheck   # all 9 packages (config, ui, shared, db, api, cli, vscode, web)
+pnpm run typecheck   # all workspace packages (config, ui, shared, db, api, cli, vscode, web)
 pnpm run lint        # ESLint across all workspaces (style warnings allowed)
-pnpm run build       # all 9 packages via Turborepo
+pnpm run build        # all workspace packages via Turborepo
 pnpm run test        # full suite (API unit/contract/e2e-http + CLI + web + VS Code)
                       # DB-backed API specs require DATABASE_URL + JWT_SECRET (>=32 chars)
 pnpm audit --prod    # production dependency vulnerability audit

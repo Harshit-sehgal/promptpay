@@ -1,6 +1,6 @@
 # WaitLayer Foundation Status
 
-Last updated: 2026-07-09 (current hardening pass)
+Last updated: 2026-07-11 (current hardening pass)
 
 ---
 
@@ -373,7 +373,7 @@ test suite were fixed (see "Critical fixes" below).
 
 ## 11. Tests/readiness -- PASS
 
-**326 tests across 27 files (unit tests all pass; integration tests require real Postgres + JWT_SECRET env):**
+**Tests green across all packages** (unit tests all pass; integration tests require real Postgres + JWT_SECRET env). Exact counts grow per pass and are regenerated, not hard-coded — the latest gate totals live in `AGENTS.md`. The table below maps representative coverage; the full spec file set is larger than listed.
 
 | File                                                    | Tests | Type                     | Coverage                                                                                                                                                                                                                |
 | ------------------------------------------------------- | ----- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -624,11 +624,11 @@ All quality gates pass cleanly:
 - `pnpm install --frozen-lockfile` — PASS
 - `pnpm run lint` — PASS (9/9 tasks, 0 warnings)
 - `pnpm run typecheck` — PASS (14/14 tasks)
-- `pnpm run test` — PASS, 326 tests / 27 files (302 API + 9 CLI + 11 web + 4 VS Code)
+  `pnpm run test` — PASS (full suite green across all packages; live counts in AGENTS.md — regenerated per pass).
 - `pnpm run build` — PASS (9/9 packages)
 - `pnpm audit --prod` — PASS, 0 known production vulnerabilities
 - `pnpm audit` — PASS, 0 known vulnerabilities
 - `pnpm --filter @waitlayer/db exec prisma validate --schema prisma/schema.prisma` — PASS
-- `pnpm --filter @waitlayer/db exec prisma migrate status --schema prisma/schema.prisma` — PASS, 21 migrations applied and database schema is up to date
+  `prisma migrate status` — PASS, 32 migrations applied and database schema is up to date
 - `prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script` — PASS, empty migration
 - `git diff --check` — PASS

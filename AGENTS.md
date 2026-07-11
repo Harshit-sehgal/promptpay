@@ -3,9 +3,9 @@
 This file applies to the whole repository. It is auto-loaded so AI coding agents
 see the live risk/status register without being told to read a separate doc.
 
-> **Pruned 2026-07-10.** All issues A-001…A-081 were code-verified against the
+> **Pruned 2026-07-10.** All issues A-001…A-084 were code-verified against the
 > actual source (four parallel read-only audits: A-001–A-027, A-028–A-059,
-> A-055–A-081, plus a docs audit). Every resolved claim held; no code
+> A-055–A-084, plus a docs audit; A-082/A-083/A-084 verified in the same second pass). Every resolved claim held; no code
 > contradiction was found. The detailed per-item writeups were removed. This file
 > now carries only the **open / unverified** items plus a compact verified
 > resolved index for traceability. Durable counts are intentionally not
@@ -177,11 +177,12 @@ browser or live-client check. **Status after the 2026-07-10 live-E2E session
   `'unsafe-inline'`, so Next.js bootstrap scripts hydrate. See "Sandbox live-E2E
   findings" below.
 
-- **A-018** Google sign-in CSP: `apps/web/next.config.js:39` adds
-  `frame-src 'self' https://accounts.google.com` — **live-verified 2026-07-10**:
-  the web response `Content-Security-Policy` header includes `frame-src 'self'
+**A-018** Google sign-in CSP: `apps/web/next.config.js:22` adds
+`frame-src 'self' https://accounts.google.com` — **live-verified 2026-07-10**:
+the web response `Content-Security-Policy` header includes `frame-src 'self'
 https://accounts.google.com` (and `script-src … https://accounts.google.com/gsi/client`).
-  Live Google ID-token callback still unverified (needs real Google OAuth).
+Live Google ID-token callback still unverified (needs real Google OAuth).
+
 - **A-027** CLI/extension consuming an admin-issued device recovery token:
   server issuance is unit-tested (`admin.service.spec.ts`); live client
   consumption unverified (no public consume route exists by design).
@@ -201,7 +202,7 @@ https://accounts.google.com` (and `script-src … https://accounts.google.com/gs
   mocks `recomputeTrustScore` to reject with a 500, asserts the failure surfaces
   as a visible `text-red-400` error and that the recompute call fired).
 - **A-047** Consent version fail-closed: code verified (fail-closed logic in
-  `consent-versions.ts` / `cookie-consent.tsx`). **Component live-checked
+  `apps/api/src/compliance/consent-versions.ts` / `cookie-consent.tsx`).
   2026-07-10**: `CookieConsent` is mounted in `layout.tsx` and the footer shows a
   "Cookie Settings" control. The earlier note that the Accept/Decline banner
   failed to render because a strict nonce CSP blocked hydration is now **stale** —
@@ -250,7 +251,7 @@ tests + 116 web/cli/vscode tests prove routing/logic end to end:
   privacy) and client hydration both work under the current config; a real-browser
   cookie/signup E2E is still recommended but is no longer blocked by CSP.
 
-## Verified Resolved Index (A-001…A-081, code-verified 2026-07-10)
+## Verified Resolved Index (A-001…A-084, code-verified 2026-07-10 / later)
 
 Each line: `A-0XX — what — verification evidence (file:line)`. Full detailed
 writeups were pruned; this index preserves the audit trail.
@@ -268,14 +269,14 @@ writeups were pruned; this index preserves the audit trail.
 - A-011 worktree committed (`git status` clean).
 - A-012 migration gate (`main.ts:96 verifyMigrationsApplied`; `ci.yml:55-57`).
 - A-013 prod API defaults (`api-client.ts:18-30`; vscode `package.json:84`).
-- A-014 ledger-only API key (`api-key.dto` `UNSUPPORTED_SCOPES`; `createLedgerApiKey` posts `ledger:read`).
+- A-014 ledger-only API key (`api-key.dto` `UNSUPPORTED_API_KEY_SCOPES`; web `createLedgerApiKey` (`apps/web/src/lib/api/services.ts`) posts `ledger:read`).
 - A-015 email verify resend (`auth.controller:134`; settings/payouts pages).
   - A-016 middleware `JWT_SECRET` tests (`middleware.test.ts:27`; `lib/web-env.ts:21`).
 - A-017 `ConfigModule` `loadEnv` wired (`app.module.ts:43`).
-- A-018 CSP `frame-src` google (`next.config.js:39`).
+- A-018 CSP `frame-src` google (`next.config.js:22`).
 - A-019 deposit auto-activates approved campaign (`stripe-webhook.controller:429-456`).
 - A-020 campaign pause/resume UI (`campaign-actions.ts:24-30`).
-- A-021 campaign edit/archive/rejection reasons (`services.ts:95`; page.tsx).
+- A-021 campaign edit/archive/rejection reasons (`campaign-actions.ts`; page.tsx).
 - A-022 VS Code CTA text (`extension.ts:121`; `ad-display.ts` fallback).
   - A-023 deposit banner (`advertiser/page.tsx:115` — success/cancelled states; no separate pending copy).
 - A-024 CTR ratio render ×100 (`advertiser.service.ts:409`; `page.tsx:169`) — _index pointer corrected from stale `:276`._
@@ -294,14 +295,14 @@ writeups were pruned; this index preserves the audit trail.
 - A-037 `RejectApiKeyGuard` on advertiser export/delete (`advertiser.controller:305-317`).
 - A-038 ad cache keyed by user/device (`extension.service.ts:721-722`).
 - A-039 per-currency balance (`extension.service.ts:818-821`; `advertiser-balance.ts`).
-- A-040 CLI ad flow (`watch.ts` `runAdFlow`; `ad-flow.ts` `MIN_DURATION 5000`).
+- A-040 CLI ad flow (`watch.ts` `runAdFlow`; `ad-flow.ts` `MINIMUM_VISIBLE_DURATION_MS = 5000`).
 - A-041 referral reward earnings (`referral.service.ts:197-262`).
 - A-042 readiness 503 (`health.controller.ts:56-84`).
 - A-043 CLI packaging/shebang (`package.json` bin; `verify-cli-bin.mjs`; no `@waitlayer/shared`).
 - A-044 advertiser privacy UI (`advertiser.controller:305-317`; `settings/page.tsx`).
 - A-045 empty creative reject reason (`campaign.service.ts:219-233`).
 - A-046 fraud recompute client (`admin.controller:153-155`; `fraud/page.tsx:217-229`).
-- A-047 consent version fail-closed (`consent-versions.ts:5-9`; `cookie-consent.tsx:58-85`).
+- A-047 consent version fail-closed (`apps/api/src/compliance/consent-versions.ts:5-9`; `cookie-consent.tsx:58-85`).
 - A-048 payout `isVerified` gate (`schema.prisma:368`; `payout.service.ts:681`; admin verify).
 - A-049 logout waits server (`logout/route.ts:32-53`; `auth-context.tsx:150-155`).
 - A-050 date-only end-day (`advertiser.service.ts` `buildReportsDateFilter:104-126`).
@@ -329,7 +330,7 @@ writeups were pruned; this index preserves the audit trail.
 - A-072 capped exports (`developer.service:385-412`; `export-metadata.ts`).
 - A-073 frequency-cap edit UI (`frequency-caps.ts:7-33`).
 - A-074 dashboard/list/edit pagination (`advertiser.service:52,360,423,468`).
-- A-075 Docker `USER node` (`Dockerfile:50-51,79-80`) — full build e2e not run.
+- A-075 Docker `USER node` (`Dockerfile:70-71,102-103`) — full build e2e not run.
 - A-076 money-integrity bounded (`admin.service.ts:69-294`).
 - A-077 admin campaign queue pagination (`admin.service.ts:390-409`).
 - A-078 feedback message persisted (`feedback.service.ts:47-54`; `page.tsx:38`).

@@ -5,10 +5,13 @@
 **Analysis Rounds:** 13  
 **Files Examined:** 100+ source files across all packages and apps
 
-> **Current source-audit note (2026-07-09):** This file is the historical
+> **Current source-audit note (2026-07-11):** This file is the historical
 > 158-gap closure summary. The live source-backed readiness register is
-> `AGENTS.md`; current open items are A-030, A-033, A-074, A-075, A-076,
-> A-077, A-078, A-079, A-080, and A-081.
+> `AGENTS.md`. The 2026-07-10 source audit closed all 158 original gaps and
+> code-verified A-001…A-084; A-074…A-081 are code-DONE (resolved). The only
+> remaining open items are operator/environment decisions, not code defects:
+> A-030 (payout provider launch availability — operator credentials), A-033
+> (packaged CLI/VS Code live runtime), A-075 (full Docker build e2e — network-blocked).
 >
 > **Closure status (2026-07-09):** All 158 original gaps have been verified against the
 > current source and closed. Genuinely-missing behavior was implemented; already-done items
