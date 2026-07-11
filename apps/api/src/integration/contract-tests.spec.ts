@@ -36,6 +36,12 @@ import { AppModule } from '../app.module';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
+// Resolve after `ms` milliseconds without nested Promise-executor callbacks.
+function delay(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
+}
 
 async function cleanDb(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(`
@@ -408,7 +414,7 @@ describe('API Contract Tests', () => {
       // the minimum visible duration (5s, with grace) to have elapsed before
       // qualification (issue A-060). The ad-rendered test ran immediately
       // before this one, so wait past the threshold first.
-      await new Promise((r) => setTimeout(r, 4000));
+      await delay(4000);
       const payload = {
         impressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -504,7 +510,7 @@ describe('API Contract Tests', () => {
         .expect(200);
 
       // Wait past the minimum visible duration before qualifying (issue A-060).
-      await new Promise((r) => setTimeout(r, 4000));
+      await delay(4000);
 
       const payload1 = {
         impressionToken: token,
