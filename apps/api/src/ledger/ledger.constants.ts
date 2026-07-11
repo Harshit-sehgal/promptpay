@@ -1,3 +1,31 @@
+import { LedgerStatus } from '@waitlayer/shared';
+
+/** Valid earning state transitions */
+export const EARNING_TRANSITIONS: Partial<Record<LedgerStatus, LedgerStatus[]>> = {
+  [LedgerStatus.ESTIMATED]: [
+    LedgerStatus.PENDING,
+    LedgerStatus.CONFIRMED,
+    LedgerStatus.HELD,
+    LedgerStatus.REVERSED,
+    LedgerStatus.VOID,
+  ],
+  [LedgerStatus.PENDING]: [
+    LedgerStatus.CONFIRMED,
+    LedgerStatus.HELD,
+    LedgerStatus.REVERSED,
+    LedgerStatus.VOID,
+  ],
+  [LedgerStatus.CONFIRMED]: [
+    LedgerStatus.HELD,
+    LedgerStatus.PAID,
+    LedgerStatus.REVERSED,
+    LedgerStatus.VOID,
+  ],
+  [LedgerStatus.HELD]: [LedgerStatus.CONFIRMED, LedgerStatus.REVERSED, LedgerStatus.VOID],
+  [LedgerStatus.PAID]: [],
+  [LedgerStatus.REVERSED]: [],
+  [LedgerStatus.VOID]: [],
+};
 export const PLATFORM_BUCKETS = {
   PLATFORM_FEE: 'platform_fee',
   FRAUD_RESERVE: 'fraud_reserve',

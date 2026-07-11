@@ -47,7 +47,8 @@ function visit(n, parent) {
       ts.isEnumDeclaration(n) ||
       ts.isFunctionDeclaration(n) ||
       ts.isTypeAliasDeclaration(n) ||
-      ts.isInterfaceDeclaration(n)
+      ts.isInterfaceDeclaration(n) ||
+      (ts.isClassDeclaration(n) && n.name && n.name.text !== serviceName)
     ) {
       topDecls.push(n);
     }
@@ -162,8 +163,12 @@ if (ctor) {
 const fields = members.filter((m) => ts.isPropertyDeclaration(m));
 const fieldNames = new Set(fields.map((f) => f.name.getText(sf)));
 function fieldType(f) {
-  if (f.type) return print(f.type);
-  if (f.initializer && ts.isNewExpression(f.initializer)) return print(f.initializer.expression);
+  if (f.type) return f.type.getText(sf);
+  if (f.initializer && ts.isNewExpression(f.initializer)) {
+    const expr = f.initializer.expression.getText(sf);
+    const targs = f.initializer.typeArguments;
+    return targs && targs.length ? `${expr}<${targs.map((a) => a.getText(sf)).join(', ')}>` : expr;
+  }
   return 'any';
 }
 
@@ -244,6 +249,7 @@ function withExport(d) {
   if (ts.isInterfaceDeclaration(d)) return ts.factory.updateInterfaceDeclaration(d, mods, d.name, d.typeParameters, d.heritageClauses, d.members);
   if (ts.isTypeAliasDeclaration(d)) return ts.factory.updateTypeAliasDeclaration(d, mods, d.name, d.typeParameters, d.type);
   if (ts.isEnumDeclaration(d)) return ts.factory.updateEnumDeclaration(d, mods, d.name, d.members);
+  if (ts.isClassDeclaration(d)) return ts.factory.updateClassDeclaration(d, mods, d.name, d.typeParameters, d.heritageClauses, d.members);
   if (ts.isFunctionDeclaration(d)) return ts.factory.updateFunctionDeclaration(d, mods, d.asteriskToken, d.name, d.typeParameters, d.parameters, d.type, d.body);
   return d;
 }
@@ -282,9 +288,9 @@ const closure = (trait) => {
   const stack = [...(depsOf.get(trait) || [])];
   while (stack.length) {
     const t = stack.pop();
-    if (seen.has(t)) continue;
+    if (seen.has(t) || t === trait) continue;
     seen.add(t);
-    for (const d of depsOf.get(t) || []) if (!seen.has(d)) stack.push(d);
+    for (const d of depsOf.get(t) || []) if (!seen.has(d) && d !== trait) stack.push(d);
   }
   return [...seen];
 };
@@ -304,7 +310,10 @@ function traitDeclsAndUsed(thisSet, refSet) {
       const ft = fieldType(f);
       decls.push(`  declare ${fname}: ${ft};`);
       if (f.type) usedIdents(f.type).forEach((i) => depUsed.add(i));
-      else if (ft !== 'any') depUsed.add(ft);
+      else if (f.initializer && ts.isNewExpression(f.initializer)) {
+        usedIdents(f.initializer).forEach((i) => depUsed.add(i));
+        if (f.initializer.typeArguments) f.initializer.typeArguments.forEach((a) => usedIdents(a).forEach((i) => depUsed.add(i)));
+      }
     }
   }
   if (!decls.length) decls.push(`  declare prisma: PrismaService;`);
@@ -322,12 +331,15 @@ function buildTrait(traitName, file, names) {
   ms.forEach((m) => { thisRefs(m, thisSet); refIdents(m, refSet, methodBound); usedIdents(m, allIdents); });
   const { decls, depUsed } = traitDeclsAndUsed(thisSet, refSet);
   const used = new Set([...allIdents, ...depUsed, 'PrismaService']);
+  const extraTypeImports = [];
+  if (used.has(serviceName)) extraTypeImports.push(`import { ${serviceName} } from './${baseName}.service';`);
   const importLines = neededImports(used);
   const globalLines = umdGlobalImports(refSet);
   const body = ms.map((m) => '\n' + print(stripVisibility(m))).join('\n');
   const deps = closure(traitName);
   const depImports = deps.map((d) => `import { ${d} } from '${traitFileFor(d)}';`);
   const content =
+    (extraTypeImports.length ? extraTypeImports.join('\n') + '\n' : '') +
     (importLines.length ? importLines.join('\n') + '\n' : '') +
     (globalLines.length ? globalLines.join('\n') + '\n' : '') +
     (depImports.length ? depImports.join('\n') + '\n' : '') +
@@ -423,7 +435,13 @@ if (ctor) {
 
 const fieldTexts = fields.map((f) => {
   const name = f.name.getText(sf);
+  const ft = fieldType(f);
   const init = f.initializer ? ` = ${print(f.initializer)}` : '';
+  const mods = (ts.getModifiers(f) || []).map((m) => m.getText(sf));
+  // keep `static` (and readonly) for static fields; drop instance visibility to match trait `declare`
+  const isStatic = (ts.getModifiers(f) || []).some((m) => m.kind === ts.SyntaxKind.StaticKeyword);
+  const prefix = isStatic ? mods.filter((m) => m !== 'private' && m !== 'protected').join(' ') + ' ' : '';
+  return `  ${prefix}${name}: ${ft}${init};`;
 });
 
 const mainBody = [newCtor, ...fieldTexts].filter(Boolean).join('\n');
@@ -446,6 +464,7 @@ fields.forEach((f) => {
 const mainImports = neededImports(mainUsed);
 const mainGlobalImports = umdGlobalImports(mainRefs);
 
+const constsReexport = topDecls.length ? `\nexport * from '${constsImportPath}';\n` : '';
 const newMain =
 `${mainImports.join('\n')}
 ${mainGlobalImports.join('\n')}
@@ -457,8 +476,7 @@ ${mainBody}
 
 export interface ${serviceName} extends ${traitList} {}
 
-${assignLoop}
-`;
+${assignLoop}${constsReexport}`;
 
 fs.writeFileSync(serviceFile, newMain);
 console.log(`rewrote ${serviceFile} (${methods.length} methods extracted, ${written.length} traits)`);

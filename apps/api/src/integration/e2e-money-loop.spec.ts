@@ -345,8 +345,11 @@ function makeServices(): TestFixtures {
   // AuditService — real instance (its prisma is mocked)
   const audit = new AuditService(prismaRef);
 
-  // LedgerService — real instance with mocked prisma
-  const ledger = new LedgerService(prismaRef);
+  // LedgerService — real instance with mocked prisma + real audit
+  // (reverseEarnings emits a fire-and-forget audit log after the $transaction;
+  //  the same audit instance as CampaignService is safe to share — audit.log is
+  //  non-blocking and buffered on write failure).
+  const ledger = new LedgerService(prismaRef, audit);
 
   // FraudService — real instance with mocked prisma and real ledger
   const fraud = new FraudService(prismaRef, ledger);

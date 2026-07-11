@@ -1,4 +1,4 @@
-import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LedgerService } from './ledger.service';
 
@@ -61,12 +61,18 @@ const mockPrisma = {
 };
 const prismaRef = mockPrisma as any;
 
+// reverseEarnings emits a fire-and-forget `void this.audit.log(...)` after the
+// $transaction. The real AuditService queues/buffers on failure; in these
+// unit tests we only need the call to not throw and not block. `log` resolves
+// undefined so any accidental `await` of the voided promise still behaves.
+const mockAudit = { log: vi.fn().mockResolvedValue(undefined) } as any;
+
 describe('LedgerService', () => {
   let service: LedgerService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new LedgerService(prismaRef);
+    service = new LedgerService(prismaRef, mockAudit);
   });
 
   describe('calculateSplit', () => {
@@ -126,9 +132,7 @@ describe('LedgerService', () => {
     });
 
     it('returns 0 when there are no confirmed earnings', async () => {
-      mockPrisma.earningsLedger.groupBy
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      mockPrisma.earningsLedger.groupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
       const result = await service.getAvailableBalance('u-1');
 
@@ -398,23 +402,23 @@ describe('LedgerService', () => {
         status: 'paid',
       });
 
-      await expect(
-        (service as any).transitionEarning('e-1', 'confirmed' as any),
-      ).rejects.toThrow();
+      await expect((service as any).transitionEarning('e-1', 'confirmed' as any)).rejects.toThrow();
     });
 
     it('allows valid transitions', async () => {
       // The read returns the current status; the CAS updateMany wins
       // (count: 1) and the post-update re-read returns the new status.
       mockPrisma.earningsLedger.findUnique
-        .mockResolvedValueOnce({ // transitionEarning's initial read
+        .mockResolvedValueOnce({
+          // transitionEarning's initial read
           id: 'e-2',
           userId: 'u-1',
           status: 'confirmed',
           amountMinor: 100,
           currency: 'USD',
         })
-        .mockResolvedValueOnce({ // re-read after the winning CAS write
+        .mockResolvedValueOnce({
+          // re-read after the winning CAS write
           id: 'e-2',
           status: 'paid',
         });
@@ -440,9 +444,9 @@ describe('LedgerService', () => {
       // count: 0 → the row's status changed between read and write.
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        (service as any).transitionEarning('e-3', 'held' as any),
-      ).rejects.toThrow(/modified by a concurrent transition/);
+      await expect((service as any).transitionEarning('e-3', 'held' as any)).rejects.toThrow(
+        /modified by a concurrent transition/,
+      );
     });
   });
 
@@ -493,6 +497,20 @@ describe('LedgerService', () => {
       const result = await service.reverseEarnings({ impressionId }, 'click_abuse');
 
       expect(result).toEqual({ reversed: 1, paidSkipped: 0 });
+
+      // 0. Audit row emitted once with a system actor — reverseEarnings is a
+      //    service-layer-only path the controller AuditInterceptor cannot see,
+      //    so the audit.log call must fire here. beforeSnap carries the
+      //    reversed/paidSkipped counts + reason for the audit timeline.
+      expect(mockAudit.log).toHaveBeenCalledTimes(1);
+      expect(mockAudit.log).toHaveBeenCalledWith({
+        actorId: 'ledger_service',
+        actorRole: 'system',
+        action: 'reverse_earnings',
+        targetType: 'impression',
+        targetId: impressionId,
+        beforeSnap: { reversed: 1, paidSkipped: 0, reason: 'click_abuse' },
+      });
 
       // 1. Earnings row flipped to `reversed` with the reason in description.
       expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
@@ -554,8 +572,11 @@ describe('LedgerService', () => {
     it('is idempotent — a replayed call hits `update: {}` no-op on already-created compensation rows', async () => {
       const impressionId = 'imp-xyz';
       mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
-        id: 'adv-row-1', advertiserId: 'adv-1', campaignId: 'cmp-1',
-        amountMinor: 500, currency: 'USD',
+        id: 'adv-row-1',
+        advertiserId: 'adv-1',
+        campaignId: 'cmp-1',
+        amountMinor: 500,
+        currency: 'USD',
         idempotencyKey: `imp-${impressionId}-adv`,
       });
       mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null); // no plt row
@@ -581,8 +602,11 @@ describe('LedgerService', () => {
     it('records recovery debit when the impression has earnings already in `paid` (developer withdrawal)', async () => {
       const impressionId = 'imp-paid';
       mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
-        id: 'adv-row-1', advertiserId: 'adv-1', campaignId: 'cmp-1',
-        amountMinor: 200, currency: 'USD',
+        id: 'adv-row-1',
+        advertiserId: 'adv-1',
+        campaignId: 'cmp-1',
+        amountMinor: 200,
+        currency: 'USD',
         idempotencyKey: `imp-${impressionId}-adv`,
       });
       mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null);
@@ -674,13 +698,22 @@ describe('LedgerService', () => {
       // Earnings row flipped by clickId, not impressionId.
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
-      mockPrisma.platformLedger.upsert
-        .mockResolvedValueOnce({})
-        .mockResolvedValueOnce({});
+      mockPrisma.platformLedger.upsert.mockResolvedValueOnce({}).mockResolvedValueOnce({});
 
       const result = await service.reverseEarnings({ clickId }, 'click_abuse');
 
       expect(result).toEqual({ reversed: 1, paidSkipped: 0 });
+
+      // 0. Audit row emits targetType:'click' (not 'impression') — pins the
+      //    click-vs-impression discriminator in the audit timeline.
+      expect(mockAudit.log).toHaveBeenCalledTimes(1);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'reverse_earnings',
+          targetType: 'click',
+          targetId: clickId,
+        }),
+      );
 
       // 1. Earnings row flipped by clickId (where: { clickId }).
       expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith(
@@ -741,6 +774,8 @@ describe('LedgerService', () => {
       expect(mockPrisma.platformLedger.findUnique).not.toHaveBeenCalled();
       expect(mockPrisma.$transaction).not.toHaveBeenCalled();
       expect(mockPrisma.earningsLedger.updateMany).not.toHaveBeenCalled();
+      // No audit row either — nothing moved, so there is nothing to record.
+      expect(mockAudit.log).not.toHaveBeenCalled();
     });
   });
 
@@ -782,17 +817,22 @@ describe('LedgerService', () => {
 
       const result = await service.getPlatformBreakdown();
 
-      expect(result.totalEarnings).toBe(900);
-      expect(result.totalAdvertiserSpend).toBe(1500);
-      expect(result.totalPlatformFee).toBe(450);
-      expect(result.totalReserve).toBe(200);
+      // Top-level scalars derive from the primary (largest-positive) currency of
+      // each byCurrency map — consistent with getAvailableBalance /
+      // getPayoutInfo. In this fixture EUR is largest in every map, so each
+      // scalar is the EUR total (NOT the USD total). The byCurrency maps below
+      // still carry the full per-currency breakdown.
+      expect(result.totalEarnings).toBe(1750); // EUR = 2000 − 250 (debit)
+      expect(result.totalAdvertiserSpend).toBe(2200); // EUR = 2600 − 400 (refund)
+      expect(result.totalPlatformFee).toBe(700); // EUR = 700 (no EUR reversal)
+      expect(result.totalReserve).toBe(275); // EUR = 300 − 25 (reversal)
       expect(result.byCurrency).toEqual({
         totalEarnings: { USD: 900, EUR: 1750 },
         totalAdvertiserSpend: { USD: 1500, EUR: 2200 },
         totalPlatformFee: { USD: 450, EUR: 700 },
         totalReserve: { USD: 200, EUR: 275 },
       });
-      expect(result.earningsLedger.pendingMinor).toBe(75);
+      expect(result.earningsLedger.pendingMinor).toBe(125); // EUR = 125
       expect(result.earningsLedger.pendingByCurrency).toEqual({ USD: 75, EUR: 125 });
       expect(mockPrisma.earningsLedger.groupBy).toHaveBeenCalledWith({
         by: ['currency'],

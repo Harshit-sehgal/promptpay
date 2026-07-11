@@ -16,6 +16,19 @@ import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 
 @Injectable()
 export class AuthService {
+  // The TOTP trait (auth-totp.trait.ts) calls `this.logger.warn(...)` on the
+  // dev-fallback path of `buildTotpEncryptionKey`, which runs in the
+  // constructor below. The trait's `declare logger: Logger` is compile-time
+  // only — it emits no runtime field — so without this concrete initializer
+  // `this.logger` is `undefined` and AuthService construction throws in any
+  // non-production environment lacking TOTP_SECRET_ENCRYPTION_KEY (every unit
+  // test + local dev boot). Field initializers run before the constructor
+  // body, so this is set before buildTotpEncryptionKey() runs. Declared
+  // public+readonly (not private) to satisfy the trait's `declare logger:
+  // Logger` — TS rejects a private field that an extended trait interface
+  // expects to be public (TS2430).
+  readonly logger = new Logger(AuthService.name);
+
   constructor(
     public prisma: PrismaService,
     public jwt: JwtService,
