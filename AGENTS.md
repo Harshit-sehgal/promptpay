@@ -409,10 +409,80 @@ totalSpendByCurrency.USD ?? 0`. Now uses `primaryCurrency(totalSpendByCurrency)`
 - Shared helper added: `primaryCurrency(totals: Record<string, number>): string`
   in `packages/shared/src/currency.ts` (re-exported via `index.ts`), with
   unit tests in `apps/api/src/shared/currency.spec.ts` (8 tests, incl. 3 new).
+- **`admin.service.ts` `getMetrics` integer-overflow 500** — the daily
+  revenue/spend `$queryRaw` aggregates casted `SUM("amountMinor")` with `::int`.
+  `SUM(int4)` already returns `bigint` in Postgres, so the `::int` clamp threw
+  "integer out of range" (HTTP 500) the moment platform earnings/spend crossed
+  ~2.1e9 minor units. Casts changed to `::bigint` (the query was already typed
+  `bigint` + `Number()`), eliminating the overflow. `COUNT(*)` casts left as
+  `::int` (row counts never overflow). (#8, 2026-07-11)
+- **Broader 2026-07-11 audit (HIGH/MEDIUM security/money sweep):** a full
+  trace of the auth/middleware/2FA/webhook/guard/controller/ledger/payout surface
+  found the **HIGH-severity fail-open, missing-ownership, SQL-injection, and
+  race-condition paths already correctly hardened** (parameterized `$queryRaw`,
+  `Prisma.join`, per-user advisory locks, CAS `updateMany`, idempotency keys,
+  ownership checks at every boundary, HMAC webhook verification, build-time
+  `JWT_SECRET` fail-closed). Lower-impact items reviewed and **intentionally
+  left as safe-by-design**: `markPayoutPaid` amount cross-check is skippable
+  only for the automated provider-confirmation path (cron/webhook are the
+  authoritative source, so skipping there is correct — making it mandatory would
+  break auto-completion); `requestAd`'s pre-lock balance filter is re-checked
+  inside the advisory-locked tx (not exploitable); `advertiser-balance` excludes
+  `reversal` entryType because the parent `credit` is already decremented at
+  freeze time (changing it would double-subtract). The one remaining systemic
+  follow-up is migrating monetary columns from `Int`→`BigInt` (per-row 2^31 cap)
+  — a schema migration that needs a reachable DB to generate/verify, so it was
+  not executed here.
 
-Verified: `pnpm typecheck` 14/14, `pnpm lint` 9/9 (0 sev-2),
-web vitest **86/86**, `currency.spec.ts` **8/8**. The web
-`developer/payouts` and `advertiser` dashboards already consumed the
+- **reverseEarnings audit gap (fixed 2026-07-12):** `LedgerService.reverseEarnings`
+  — the highest-stakes fraud-mutation path (reflows money across advertiser refund,
+  platform-fee reversal, fraud-reserve release, and recovery-debt rows) — had no
+  `audit.log(...)` emission and did not inject `AuditService`. The controller-layer
+  `AuditInterceptor` cannot see it because reverseEarnings is only callable from
+  the service layer (`FraudService.resolveFraudFlag`, `ExtensionService.reportAd`).
+  Fixed: `AuditService` injected into `LedgerService` constructor, and
+  `reverseEarnings` emits a `reverse_earnings` system-audit row (actor: system,
+  targetType: impression|click, beforeSnap: { reversed, paidSkipped, reason })
+  after the tx commits. Also: `getPlatformBreakdown` top-level scalars now use
+  `primaryCurrency(byCurrency)` (consistent with `getAvailableBalance` /
+  `getPayoutInfo` / `getAvailableForPayout`).
+
+- **AuthService TOTP logger crash (fixed 2026-07-12):** the trait-decomposition
+  refactor (bb5fcbf) split `AuthService` into `AuthCoreTrait` / `AuthEmailTrait`
+  / `AuthTotpTrait` / `AuthPasswordTrait` / `AuthSessionTrait`. `auth-totp.trait.ts`
+  declares `declare logger: Logger`, which is compile-time-only — it emits no
+  runtime field. But `buildTotpEncryptionKey()` (called in the `AuthService`
+  constructor) reaches `this.logger.warn(...)` on the dev-fallback path, so
+  `this.logger` was `undefined` and **`AuthService` construction threw
+  `TypeError: Cannot read properties of undefined (reading 'warn')`** in any
+  non-production environment lacking `TOTP_SECRET_ENCRYPTION_KEY` — bricking
+  local dev boot and crashing 48 `auth.service.spec.ts` cases. Fixed: added a
+  concrete `readonly logger = new Logger(AuthService.name)` field to
+  `AuthService` (field initializers run before the constructor body, so it is
+  set before `buildTotpEncryptionKey()` runs). Declared public (not private)
+  to satisfy the trait's public `declare logger: Logger` — a private field
+  clashes with the trait interface (TS2430).
+- **God-service decomposition (completed 2026-07-12):** all six largest
+  NestJS services are now split into mixin/trait files + thin facades via the
+  hardened `decompose-service.mjs` — methods copied verbatim, with a prototype
+  `Object.defineProperty` assign-loop wiring cross-trait `this.<method>` calls so
+  runtime behaviour is identical. `AuthService` (bb5fcbf) plus `LedgerService`
+  (math/earnings/balance/admin), `AdminService`
+  (overview/users/campaigns/payouts/fraud/devices/integrations),
+  `AdvertiserService` (profile/campaign/dashboard), `PayoutService`
+  (method/summary/request), and `ExtensionService` (ad/device-report/wait) are
+  all decomposed. The script relocates module-level decls + same-file provider
+  classes to `<svc>.constants.ts`, preserves static + instance field
+  initializers (a dropped-initializer regression once left `this.adCache`
+  `undefined` at runtime), and is cycle-safe on trait `extends`. Verified with
+  the full API integration suite **503/503** and per-service isolated specs
+  (ledger 29, admin 18, advertiser 26, payout 10, extension 14; e2e-money-loop
+  - e2e-http-flow 42; contract 34), plus web **86/86**, cli **27/27**, vscode
+    **10/10**, web `next build` green, and `eslint` 0 errors/0 warnings on all new
+    traits.
+
+Verified: `pnpm typecheck` 14/14, `pnpm lint` 9/9 (0 sev-2), API integration **503/503**, web vitest **86/86**, `currency.spec.ts` **8/8**.
+The web `developer/payouts` and `advertiser` dashboards already consumed the
 `byCurrency` maps (so the scalars were a fallback); they now agree with
 the maps. `getBilling` was checked and is **already correct** (its
 sort puts `'USD'` first when present, else the first present currency).

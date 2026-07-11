@@ -440,7 +440,7 @@ test suite were fixed (see "Critical fixes" below).
 **Known limitations:**
 
 - Without `STRIPE_SECRET_KEY`, `createDepositSession` returns a fake checkout URL but won't actually open a session on Stripe's side.
-- Without `STRIPE_WEBHOOK_SECRET`, incoming webhook signatures are rejected — the route is reachable but returns 401.
+- Without `STRIPE_WEBHOOK_SECRET`, incoming webhook signatures are rejected — the route is reachable but returns 400 (`HttpStatus.BAD_REQUEST`), verified in `stripe-webhook.controller.ts`.
 
 ---
 
