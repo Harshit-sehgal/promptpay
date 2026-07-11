@@ -4,9 +4,20 @@ import { ExtensionService } from './extension.service';
 
 // A-039/A-055 balance helper is mocked so the post-filter advertiser-balance
 // gate does not require a real database.
+
 vi.mock('../common/utils/advertiser-balance', () => ({
   getAdvertiserBalance: vi.fn(),
   getAdvertiserBalancesByCurrency: vi.fn(async () => new Map([['adv-1:USD', 1_000_000]])),
+}));
+
+// isCountryEligible was extracted from ExtensionService into country-targeting.ts
+// (pure function). The blocked-category tests don't exercise country targeting,
+// so mock it to always return true to keep the existing assertion scope.
+// NOTE: vi.mock is HOISTED to the top of the file, so the factory cannot
+// reference any outer variable (temporal dead zone). Define the mock inline.
+vi.mock('./country-targeting', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./country-targeting')>()),
+  isCountryEligible: vi.fn(() => true),
 }));
 
 const makeCreative = (id: string) => ({
@@ -63,8 +74,9 @@ function buildService(prismaMock: any) {
   );
 
   // Collapse the heavy post-filter machinery so we only assert selection.
+  // isCountryEligible is mocked at the module level (vi.mock('./country-targeting'))
+  // because it was extracted from ExtensionService as a pure function.
   vi.spyOn(service as any, 'verifyDeviceSignature').mockResolvedValue(true);
-  vi.spyOn(service as any, 'isCountryEligible').mockReturnValue(true);
   vi.spyOn(service as any, 'recentBillableCampaignIds').mockResolvedValue([]);
   const claimSpy = vi
     .spyOn(service as any, 'claimImpression')

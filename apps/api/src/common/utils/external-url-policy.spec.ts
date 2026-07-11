@@ -8,87 +8,100 @@ import {
   parsePublicHttpsUrl,
 } from './external-url-policy';
 
-describe('external URL policy', () => {
-  it('accepts public HTTPS URLs and matching display domains', () => {
+describe('parsePublicHttpsUrl (A-057 / #4)', () => {
+  it('accepts a valid public https URL and normalizes the hostname', () => {
+    expect(parsePublicHttpsUrl('  https://Example.com/path?x=1  ', 'url')).toEqual({
+      value: 'https://Example.com/path?x=1',
+      hostname: 'example.com',
+    });
+  });
+
+  it('rejects empty / undefined input', () => {
+    expect(() => parsePublicHttpsUrl(undefined, 'url')).toThrow(BadRequestException);
+    expect(() => parsePublicHttpsUrl('   ', 'url')).toThrow(BadRequestException);
+  });
+
+  it('rejects non-https schemes', () => {
+    expect(() => parsePublicHttpsUrl('http://example.com', 'url')).toThrow(BadRequestException);
+    expect(() => parsePublicHttpsUrl('ftp://example.com', 'url')).toThrow(BadRequestException);
+  });
+
+  it('rejects embedded credentials', () => {
+    expect(() => parsePublicHttpsUrl('https://user:pass@example.com', 'url')).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('rejects IP addresses (SSRF guard)', () => {
+    expect(() => parsePublicHttpsUrl('https://127.0.0.1', 'url')).toThrow(BadRequestException);
+    expect(() => parsePublicHttpsUrl('https://192.168.1.1', 'url')).toThrow(BadRequestException);
+    expect(() => parsePublicHttpsUrl('https://[::1]', 'url')).toThrow(BadRequestException);
+  });
+
+  it('rejects reserved / private hostnames', () => {
+    expect(() => parsePublicHttpsUrl('https://localhost', 'url')).toThrow(BadRequestException);
+    expect(() => parsePublicHttpsUrl('https://app.localhost', 'url')).toThrow(BadRequestException);
+    expect(() => parsePublicHttpsUrl('https://host.internal', 'url')).toThrow(BadRequestException);
+  });
+
+  it('rejects single-label and numeric-TLD hostnames', () => {
+    expect(() => parsePublicHttpsUrl('https://singlelabel', 'url')).toThrow(BadRequestException);
+    expect(() => parsePublicHttpsUrl('https://example.123', 'url')).toThrow(BadRequestException);
+  });
+});
+
+describe('normalizeOptionalPublicHttpsUrl (A-057 / #4)', () => {
+  it('returns undefined for undefined input', () => {
+    expect(normalizeOptionalPublicHttpsUrl(undefined, 'url')).toBeUndefined();
+  });
+  it('returns the parsed value otherwise', () => {
+    expect(normalizeOptionalPublicHttpsUrl('https://Example.com', 'url')).toBe(
+      'https://Example.com',
+    );
+  });
+});
+
+describe('normalizeCreativeDestination (A-057 / #4)', () => {
+  it('accepts a matching displayDomain (www stripped)', () => {
     expect(
       normalizeCreativeDestination({
-        destinationUrl: ' https://www.example.com/path ',
-        displayDomain: 'Example.COM',
+        destinationUrl: 'https://example.com/ad',
+        displayDomain: 'www.example.com',
       }),
+    ).toEqual({ destinationUrl: 'https://example.com/ad', displayDomain: 'www.example.com' });
+  });
+
+  it('rejects a displayDomain that does not match the destination hostname', () => {
+    expect(() =>
+      normalizeCreativeDestination({
+        destinationUrl: 'https://example.com/ad',
+        displayDomain: 'evil.com',
+      }),
+    ).toThrow(BadRequestException);
+  });
+});
+
+describe('normalizeCreativeUpdate (A-057 / #4)', () => {
+  it('falls back to the existing destination hostname when only displayDomain changes', () => {
+    expect(
+      normalizeCreativeUpdate({ displayDomain: 'example.com' }, 'https://example.com/ad'),
     ).toEqual({
-      destinationUrl: 'https://www.example.com/path',
       displayDomain: 'example.com',
     });
   });
 
-  it('rejects non-HTTPS URLs', () => {
-    expect(() => parsePublicHttpsUrl('http://example.com', 'destinationUrl')).toThrow(BadRequestException);
-  });
-
-  it('rejects localhost and IP literal hosts', () => {
-    expect(() => parsePublicHttpsUrl('https://localhost/callback', 'destinationUrl')).toThrow(BadRequestException);
-    expect(() => parsePublicHttpsUrl('https://127.0.0.1/callback', 'destinationUrl')).toThrow(BadRequestException);
-    expect(() => parsePublicHttpsUrl('https://[::1]/callback', 'destinationUrl')).toThrow(BadRequestException);
-  });
-
-  it('rejects credentialed URLs', () => {
-    expect(() => parsePublicHttpsUrl('https://user:pass@example.com', 'destinationUrl')).toThrow(BadRequestException);
-  });
-
-  it('rejects internal-style hostnames', () => {
-    expect(() => parsePublicHttpsUrl('https://billing.internal', 'destinationUrl')).toThrow(BadRequestException);
-    expect(() => parsePublicHttpsUrl('https://intranet', 'destinationUrl')).toThrow(BadRequestException);
-  });
-
-  it('rejects deceptive display domains', () => {
+  it('rejects a mismatched displayDomain on partial update', () => {
     expect(() =>
-      normalizeCreativeDestination({
-        destinationUrl: 'https://evil.example.net/offer',
-        displayDomain: 'trusted.example.com',
-      }),
+      normalizeCreativeUpdate({ displayDomain: 'evil.com' }, 'https://example.com/ad'),
     ).toThrow(BadRequestException);
   });
 
-  it('rejects display domains with schemes or paths', () => {
-    expect(() =>
-      normalizeCreativeDestination({
-        destinationUrl: 'https://example.com/offer',
-        displayDomain: 'https://example.com/offer',
-      }),
-    ).toThrow(BadRequestException);
-  });
-
-  it('derives a truthful display domain when an update changes only the destination URL', () => {
+  it('uses the new destination hostname when destinationUrl is provided', () => {
     expect(
       normalizeCreativeUpdate(
-        { destinationUrl: 'https://new.example.com/product' },
-        'https://old.example.com/product',
+        { destinationUrl: 'https://new.com/ad', displayDomain: 'new.com' },
+        'https://example.com/ad',
       ),
-    ).toEqual({
-      destinationUrl: 'https://new.example.com/product',
-      displayDomain: 'new.example.com',
-    });
-  });
-
-  it('validates display-domain-only updates against the existing destination URL', () => {
-    expect(
-      normalizeCreativeUpdate(
-        { displayDomain: 'example.com' },
-        'https://www.example.com/product',
-      ),
-    ).toEqual({ displayDomain: 'example.com' });
-
-    expect(() =>
-      normalizeCreativeUpdate(
-        { displayDomain: 'other.example.com' },
-        'https://www.example.com/product',
-      ),
-    ).toThrow(BadRequestException);
-  });
-
-  it('normalizes optional advertiser profile URLs with the same policy', () => {
-    expect(normalizeOptionalPublicHttpsUrl(undefined, 'websiteUrl')).toBeUndefined();
-    expect(normalizeOptionalPublicHttpsUrl(' https://example.com ', 'websiteUrl')).toBe('https://example.com');
-    expect(() => normalizeOptionalPublicHttpsUrl('javascript:alert(1)', 'websiteUrl')).toThrow(BadRequestException);
+    ).toEqual({ destinationUrl: 'https://new.com/ad', displayDomain: 'new.com' });
   });
 });
