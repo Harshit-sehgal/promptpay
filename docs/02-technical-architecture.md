@@ -157,14 +157,18 @@ Outputs:
 Interface:
 
 ```ts
-interface PayoutProvider {
-  createRecipient(input: CreateRecipientInput): Promise<CreateRecipientResult>;
-  validateRecipient(input: ValidateRecipientInput): Promise<ValidateRecipientResult>;
-  createPayout(input: CreatePayoutInput): Promise<CreatePayoutResult>;
-  checkPayoutStatus(providerPayoutId: string): Promise<PayoutStatusResult>;
-  handleWebhook(payload: unknown, headers: Record<string, string>): Promise<WebhookResult>;
-  markFailed(input: MarkFailedInput): Promise<void>;
-  markCompleted(input: MarkCompletedInput): Promise<void>;
+interface PayoutProviderHandler {
+  readiness?(): { ok: true } | { ok: false; reason: string };
+  initiate(params: {
+    payoutRequestId: string;
+    destination: string;
+    amountMinor: number;
+    currency: string;
+  }): Promise<{ providerTxId: string; status: string }>;
+  checkStatus(
+    providerTxId: string,
+    context?: { destination?: string },
+  ): Promise<{ status: string; paidAt?: Date }>;
 }
 ```
 
@@ -251,4 +255,3 @@ Scale path:
 - If qualified impression succeeds but ledger job fails, event remains queued and idempotent replay creates entries once.
 - If payout marking fails, payout remains in approved or processing state until reconciled.
 - If fraud jobs lag, earnings stay pending and unavailable for payout.
-

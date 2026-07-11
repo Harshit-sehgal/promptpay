@@ -5,7 +5,7 @@ conventions the codebase follows.
 
 ## Formatting
 
-- Enforced by Prettier (`.prettierrc`): double quotes, semicolons, 100 col,
+- Enforced by Prettier (`.prettierrc`): single quotes, semicolons, 100 col,
   2-space indent, trailing commas.
 - Run `pnpm run lint` (eslint) and let the hook run `prettier --write`.
 

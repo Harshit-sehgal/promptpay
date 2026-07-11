@@ -50,7 +50,7 @@ Sections:
 - Campaign review.
 - Early advertiser waitlist.
 
-### Payouts
+### Payouts (planned public page — current payout info lives in `/payout-policy` and the developer dashboard)
 
 Sections:
 
@@ -89,7 +89,7 @@ Required pages:
 - Privacy Policy.
 - Advertiser Policy.
 - Payout Policy.
-- Prohibited Content Policy.
+- Prohibited Content Policy (covered by `/advertiser-policy` and `/payout-policy`; a dedicated page is planned).
 
 ### FAQ
 
@@ -114,7 +114,7 @@ Rules:
 - Compare measurable areas: payout flexibility, transparency, privacy, fraud controls, advertiser tooling, and integration roadmap.
 - Avoid unverified claims about competitor internals.
 
-### Waitlist page
+### Waitlist page (planned — CTAs currently on the landing page; early access via signup)
 
 Forms:
 
@@ -352,4 +352,3 @@ Pages:
 - Support notes.
 
 Access is limited and audited.
-

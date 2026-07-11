@@ -43,7 +43,7 @@ the schema, regenerate.
 
 ## Prisma schema drift (CI failure)
 
-`Detect Prisma schema drift` step fails when `schema.prisma` changes without a
+`Assert no migration drift` step fails when `schema.prisma` changes without a
 matching migration. Fix: `pnpm db:migrate` to create the migration, commit it,
 re-run CI.
 

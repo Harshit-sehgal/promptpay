@@ -72,19 +72,17 @@ pnpm run test             # needs DATABASE_URL, REDIS_URL, JWT_SECRET
 
 ## Port reference & conflicts
 
-| Service | Port | Env override        |
-| ------- | ---- | ------------------- |
-| Postgres| 5432 | `DATABASE_URL` host/port |
-| Redis   | 6379 | `REDIS_URL`         |
-| API     | 4002 | `API_PORT`          |
-| Web     | 3000 | `WEB_PORT`          |
-| Test DB | 5433 | `docker compose --profile test` (isolated) |
+| Service  | Port | Env override                               |
+| -------- | ---- | ------------------------------------------ |
+| Postgres | 5432 | `DATABASE_URL` host/port                   |
+| Redis    | 6379 | `REDIS_URL`                                |
+| API      | 4002 | `API_PORT`                                 |
+| Web      | 3000 | `WEB_PORT`                                 |
+| Test DB  | 5433 | `docker compose --profile test` (isolated) |
 
 **Port conflict?** If a port is taken (e.g. a leftover Postgres on 5432),
 
 - Stop the conflicting process, or
-- Override the host port: `POSTGRES_PORT=5433 docker compose up -d postgres`
-  (and update `DATABASE_URL` accordingly), or
 - Use the `test` profile DB on 5433 for the suite without disturbing dev.
 
 See `docs/TROUBLESHOOTING.md` for more.

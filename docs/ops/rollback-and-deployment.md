@@ -21,7 +21,7 @@
               │         Docker Host          │
               │  ┌─────────┐ ┌──────────┐   │
               │  │ API     │ │ Web      │   │
-              │  │ :4000   │ │ :3000    │   │
+              │  │ :4002   │ │ :3000    │   │
               │  └────┬────┘ └──────────┘   │
               │       │                     │
               │  ┌────┴────┐ ┌──────────┐   │
@@ -37,19 +37,19 @@
 
 ### Environment Variables Required
 
-| Variable | Source | Required In |
-|----------|--------|-------------|
-| `DATABASE_URL` | Infisical / env | API |
-| `JWT_SECRET` | Random 32+ char | API |
-| `REDIS_URL` | Infisical / env | API (production) |
-| `STRIPE_SECRET_KEY` | Stripe Dashboard | API |
-| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard | API |
-| `STRIPE_PUBLISHABLE_KEY` | Stripe Dashboard | Web |
-| `PAYPAL_CLIENT_ID` | PayPal Developer | API (for PayPayouts) |
-| `PAYPAL_CLIENT_SECRET` | PayPal Developer | API (for PayPayouts) |
-| `SENTRY_DSN` | Sentry | API + Web |
-| `SENTRY_AUTH_TOKEN` | Sentry | CI (source maps) |
-| `NEXT_PUBLIC_API_URL` | Infisical / env | Web |
+| Variable                 | Source           | Required In          |
+| ------------------------ | ---------------- | -------------------- |
+| `DATABASE_URL`           | Infisical / env  | API                  |
+| `JWT_SECRET`             | Random 32+ char  | API                  |
+| `REDIS_URL`              | Infisical / env  | API (production)     |
+| `STRIPE_SECRET_KEY`      | Stripe Dashboard | API                  |
+| `STRIPE_WEBHOOK_SECRET`  | Stripe Dashboard | API                  |
+| `STRIPE_PUBLISHABLE_KEY` | Stripe Dashboard | Web                  |
+| `PAYPAL_CLIENT_ID`       | PayPal Developer | API (for PayPayouts) |
+| `PAYPAL_CLIENT_SECRET`   | PayPal Developer | API (for PayPayouts) |
+| `SENTRY_DSN`             | Sentry           | API + Web            |
+| `SENTRY_AUTH_TOKEN`      | Sentry           | CI (source maps)     |
+| `NEXT_PUBLIC_API_URL`    | Infisical / env  | Web                  |
 
 ### Docker Images
 
@@ -79,13 +79,13 @@ docker push registry.example.com/promptpay-web:v1.0.0
 docker compose pull
 
 # 2. Run database migrations
-docker compose run --rm api pnpm --filter @waitlayer/db deploy
+ docker compose run --rm api pnpm --filter @waitlayer/db migrate:deploy
 
 # 3. Deploy API (blue-green)
 docker compose up -d --no-deps --scale api=2 api
 
 # 4. Health check
-curl -f http://localhost:4000/api/v1/health
+ curl -f http://localhost:4002/api/v1/health/ready
 
 # 5. Deploy web
 docker compose up -d --no-deps web
@@ -119,7 +119,7 @@ docker compose up -d --no-deps api=registry.example.com/promptpay-api:v1.0.0
 docker compose up -d --no-deps web=registry.example.com/promptpay-web:v1.0.0
 
 # Step 3: Verify rollback
-curl -f http://localhost:4000/api/v1/health
+ curl -f http://localhost:4002/api/v1/health/ready
 curl -f http://localhost:3000
 ```
 
@@ -145,6 +145,7 @@ pnpm --filter @waitlayer/db migrate deploy
 ```
 
 **Note:** Rollback to backup is a last resort. All migrations should be:
+
 - Forward-only (no data-loss operations in reversible migrations)
 - Tested against a staging database first
 - Reviewed for backward compatibility
@@ -173,21 +174,21 @@ pnpm run test       # Run ledger reconciliation tests
 
 Configure in Sentry dashboard:
 
-| Alert | Threshold | Action |
-|-------|-----------|--------|
-| 5xx errors | > 1% of requests | Page on-call engineer |
-| 4xx errors on auth | > 10% of auth requests | Investigate brute-force |
-| Payout failures | Any | Check PayPal/Stripe status |
-| Ledger discrepancy | Zero earnings | Check LedgerCronService |
-| DB connection errors | Any | Check Postgres health |
+| Alert                | Threshold              | Action                     |
+| -------------------- | ---------------------- | -------------------------- |
+| 5xx errors           | > 1% of requests       | Page on-call engineer      |
+| 4xx errors on auth   | > 10% of auth requests | Investigate brute-force    |
+| Payout failures      | Any                    | Check PayPal/Stripe status |
+| Ledger discrepancy   | Zero earnings          | Check LedgerCronService    |
+| DB connection errors | Any                    | Check Postgres health      |
 
 ### 5.2 Health Check Endpoints
 
-| Endpoint | Expected Response |
-|----------|------------------|
+| Endpoint             | Expected Response                        |
+| -------------------- | ---------------------------------------- |
 | `GET /api/v1/health` | `{ "status": "ok", "timestamp": "..." }` |
-| Docker healthcheck | Container status `healthy` |
-| DB connection | Prisma can query |
+| Docker healthcheck   | Container status `healthy`               |
+| DB connection        | Prisma can query                         |
 
 ### 5.3 Runbook Access
 
