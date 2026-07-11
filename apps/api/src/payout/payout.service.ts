@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { AuditService } from '../audit/audit.service';
@@ -7,7 +7,6 @@ import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
 import {
   ManualPayoutProvider,
-  PayoutProviderHandler,
   PayPalEmailPayoutProvider,
   StubPayoutProvider,
 } from './payout.constants';
