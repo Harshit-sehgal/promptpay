@@ -2,8 +2,12 @@ import { formatMinorUnits } from '@waitlayer/shared';
 
 /** Format minor units (cents) to display currency string.
  *  Uses the per-currency minor-unit exponent (JPY=0, USD=2, BHD=3, ...) so
- *  non-2-decimal currencies are not mis-rendered. */
-export function formatCurrency(minorUnits: number, currency = 'USD'): string {
+ *  non-2-decimal currencies are not mis-rendered. `currency` is
+ *  REQUIRED: callers must pass it explicitly so a non-USD amount
+ *  can never silently render as "$" (the previous default masked
+ *  multi-currency bugs). `formatCurrencyBreakdown` handles the
+ *  zero/empty case below. */
+export function formatCurrency(minorUnits: number, currency: string): string {
   return formatMinorUnits(minorUnits, currency);
 }
 
@@ -13,11 +17,9 @@ export function formatCurrencyBreakdown(totalsByCurrency: Record<string, number>
     .filter(([, minorUnits]) => minorUnits !== 0)
     .sort(([a], [b]) => a.localeCompare(b));
 
-  if (entries.length === 0) return formatCurrency(0);
+  if (entries.length === 0) return formatCurrency(0, 'USD');
 
-  return entries
-    .map(([currency, minorUnits]) => formatCurrency(minorUnits, currency))
-    .join(' / ');
+  return entries.map(([currency, minorUnits]) => formatCurrency(minorUnits, currency)).join(' / ');
 }
 
 /** Format a number with commas */

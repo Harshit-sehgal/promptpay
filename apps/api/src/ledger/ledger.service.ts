@@ -1,17 +1,38 @@
-import { BadRequestException, ConflictException,Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 import { PAYOUT_HOLD_DAYS } from '@waitlayer/shared';
-import { LedgerStatus } from '@waitlayer/shared';
+import { LedgerStatus, primaryCurrency } from '@waitlayer/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { PLATFORM_BUCKETS } from './ledger.constants';
 
 /** Valid earning state transitions */
 const EARNING_TRANSITIONS: Partial<Record<LedgerStatus, LedgerStatus[]>> = {
-  [LedgerStatus.ESTIMATED]: [LedgerStatus.PENDING, LedgerStatus.CONFIRMED, LedgerStatus.HELD, LedgerStatus.REVERSED, LedgerStatus.VOID],
-  [LedgerStatus.PENDING]: [LedgerStatus.CONFIRMED, LedgerStatus.HELD, LedgerStatus.REVERSED, LedgerStatus.VOID],
-  [LedgerStatus.CONFIRMED]: [LedgerStatus.HELD, LedgerStatus.PAID, LedgerStatus.REVERSED, LedgerStatus.VOID],
+  [LedgerStatus.ESTIMATED]: [
+    LedgerStatus.PENDING,
+    LedgerStatus.CONFIRMED,
+    LedgerStatus.HELD,
+    LedgerStatus.REVERSED,
+    LedgerStatus.VOID,
+  ],
+  [LedgerStatus.PENDING]: [
+    LedgerStatus.CONFIRMED,
+    LedgerStatus.HELD,
+    LedgerStatus.REVERSED,
+    LedgerStatus.VOID,
+  ],
+  [LedgerStatus.CONFIRMED]: [
+    LedgerStatus.HELD,
+    LedgerStatus.PAID,
+    LedgerStatus.REVERSED,
+    LedgerStatus.VOID,
+  ],
   [LedgerStatus.HELD]: [LedgerStatus.CONFIRMED, LedgerStatus.REVERSED, LedgerStatus.VOID],
   [LedgerStatus.PAID]: [],
   [LedgerStatus.REVERSED]: [],
@@ -22,7 +43,11 @@ const EARNING_TRANSITIONS: Partial<Record<LedgerStatus, LedgerStatus[]>> = {
 export class LedgerService {
   constructor(private prisma: PrismaService) {}
 
-  private addCurrencyAmount(totals: Record<string, number>, currency: string | null | undefined, amountMinor: number) {
+  private addCurrencyAmount(
+    totals: Record<string, number>,
+    currency: string | null | undefined,
+    amountMinor: number,
+  ) {
     const key = (currency || 'USD').toUpperCase();
     totals[key] = (totals[key] ?? 0) + amountMinor;
   }
@@ -39,10 +64,7 @@ export class LedgerService {
 
   private nonNegativeCurrencyTotals(totals: Record<string, number>): Record<string, number> {
     return Object.fromEntries(
-      Object.entries(totals).map(([currency, amountMinor]) => [
-        currency,
-        Math.max(0, amountMinor),
-      ]),
+      Object.entries(totals).map(([currency, amountMinor]) => [currency, Math.max(0, amountMinor)]),
     );
   }
 
@@ -100,8 +122,10 @@ export class LedgerService {
   /** Get hold days based on trust level */
   getHoldDays(trustLevel: string): number {
     switch (trustLevel) {
-      case 'high_trust': return PAYOUT_HOLD_DAYS.HIGH_TRUST;
-      case 'normal': return PAYOUT_HOLD_DAYS.NORMAL;
+      case 'high_trust':
+        return PAYOUT_HOLD_DAYS.HIGH_TRUST;
+      case 'normal':
+        return PAYOUT_HOLD_DAYS.NORMAL;
       case 'new':
       case 'low_trust':
         return PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
@@ -129,15 +153,8 @@ export class LedgerService {
     advertiserId: string;
     trustLevel: string;
   }) {
-    const {
-      userId,
-      campaignId,
-      impressionId,
-      bidAmountMinor,
-      currency,
-      advertiserId,
-      trustLevel,
-    } = params;
+    const { userId, campaignId, impressionId, bidAmountMinor, currency, advertiserId, trustLevel } =
+      params;
 
     const split = this.calculateSplit(bidAmountMinor, process.env.LAUNCH_SPLIT_ENABLED === 'true');
     const holdDays = this.getHoldDays(trustLevel);
@@ -248,15 +265,8 @@ export class LedgerService {
     advertiserId: string;
     trustLevel: string;
   }) {
-    const {
-      userId,
-      campaignId,
-      clickId,
-      clickBidMinor,
-      currency,
-      advertiserId,
-      trustLevel,
-    } = params;
+    const { userId, campaignId, clickId, clickBidMinor, currency, advertiserId, trustLevel } =
+      params;
 
     const split = this.calculateSplit(clickBidMinor, process.env.LAUNCH_SPLIT_ENABLED === 'true');
     const holdDays = this.getHoldDays(trustLevel);
@@ -377,9 +387,7 @@ export class LedgerService {
       where: { id: entryId, status: entry.status },
       data: {
         status: newStatus,
-        description: reason
-          ? `${entry.description || ''} [${newStatus}: ${reason}]`
-          : undefined,
+        description: reason ? `${entry.description || ''} [${newStatus}: ${reason}]` : undefined,
       },
     });
     if (result.count === 0) {
@@ -445,10 +453,7 @@ export class LedgerService {
    *
    *  Either way the operation is idempotent (no-op when nothing matches).
    */
-  async releaseEarnings(
-    userId: string,
-    opts?: { impressionId?: string; flagId?: string },
-  ) {
+  async releaseEarnings(userId: string, opts?: { impressionId?: string; flagId?: string }) {
     if (opts?.impressionId) {
       return this.prisma.earningsLedger.updateMany({
         where: { userId, impressionId: opts.impressionId, status: 'held' },
@@ -675,7 +680,9 @@ export class LedgerService {
   // ── Balance Queries ──
 
   /** Get total confirmed (available) earnings for a user */
-  async getAvailableBalance(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
+  async getAvailableBalance(
+    userId: string,
+  ): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
     const [credits, debits] = await Promise.all([
       this.prisma.earningsLedger.groupBy({
         by: ['currency'],
@@ -692,15 +699,22 @@ export class LedgerService {
     this.addGroupedCurrencyTotals(totals, credits);
     this.addGroupedCurrencyTotals(totals, debits, -1);
     const byCurrency = this.nonNegativeCurrencyTotals(totals);
+    // Derive the primary currency from the user's ACTUAL balance
+    // (largest positive), not a hardcoded 'USD'. Fixes the
+    // multi-currency bug where a developer with only EUR
+    // earnings saw `amountMinor: 0, currency: 'USD'`.
+    const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency.USD ?? 0,
-      currency: 'USD',
+      amountMinor: byCurrency[currency] ?? 0,
+      currency,
       byCurrency,
     };
   }
 
   /** Get total pending (estimated + confirmed) earnings for a user */
-  async getPendingBalance(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
+  async getPendingBalance(
+    userId: string,
+  ): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
     const result = await this.prisma.earningsLedger.groupBy({
       by: ['currency'],
       where: { userId, status: { in: ['estimated', 'pending'] }, entryType: 'credit' },
@@ -716,7 +730,9 @@ export class LedgerService {
   }
 
   /** Get all-time total earnings for a user (excluding reversed/void) */
-  async getTotalEarnings(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
+  async getTotalEarnings(
+    userId: string,
+  ): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
     const [credits, debits] = await Promise.all([
       this.prisma.earningsLedger.groupBy({
         by: ['currency'],
@@ -757,7 +773,9 @@ export class LedgerService {
   }
 
   /** Get paid-out total for a user */
-  async getPaidOutTotal(userId: string): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
+  async getPaidOutTotal(
+    userId: string,
+  ): Promise<{ amountMinor: number; currency: string; byCurrency: Record<string, number> }> {
     const result = await this.prisma.earningsLedger.groupBy({
       by: ['currency'],
       where: { userId, status: 'paid', entryType: 'credit' },
@@ -814,9 +832,7 @@ export class LedgerService {
     limit: number,
   ) {
     const skip = (page - 1) * limit;
-    const statusFilter = filters?.status
-      ? { status: filters.status as LedgerStatus }
-      : {};
+    const statusFilter = filters?.status ? { status: filters.status as LedgerStatus } : {};
 
     // Single-ledger views: paginate at the DB layer with a real total count.
     if (filters?.ledgerKind === 'platform') {
@@ -907,15 +923,51 @@ export class LedgerService {
       totalEarningsDebit,
       pendingEarnings,
     ] = await Promise.all([
-      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', status: { in: ['confirmed', 'paid'] } } }),
-      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
-      this.prisma.advertiserLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'refund' } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
-      this.prisma.platformLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE } }),
-      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'debit' } }),
-      this.prisma.earningsLedger.groupBy({ by: ['currency'], _sum: { amountMinor: true }, where: { entryType: 'credit', status: 'pending' } }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', status: { in: ['confirmed', 'paid'] } },
+      }),
+      this.prisma.advertiserLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'debit' },
+      }),
+      this.prisma.advertiserLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'refund' },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.PLATFORM_FEE },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.PLATFORM_FEE },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.FRAUD_RESERVE },
+      }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'debit' },
+      }),
+      this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', status: 'pending' },
+      }),
     ]);
 
     const earningsByCurrency: Record<string, number> = {};

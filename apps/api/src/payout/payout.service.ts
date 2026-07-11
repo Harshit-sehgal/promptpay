@@ -14,6 +14,7 @@ import {
   payoutMinimumMinor,
   PayoutProvider,
   PayoutStatus,
+  primaryCurrency,
 } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
@@ -329,7 +330,14 @@ export class PayoutService {
             GROUP BY e."currency"
           `,
         'allocatedRows',
-        [],
+        // NOTE: this slice is intentionally NOT wrapped in `safe(...)`
+        // with a `[]` fallback. A transient failure here would silently
+        // skip subtracting in-flight payouts, OVERSTating the available
+        // balance (the only unsafe direction among the resilient
+        // fallbacks). We let it throw so the balance is never shown
+        // inflated — better a 500 than a lie. The authoritative
+        // `requestPayout` re-validates availability anyway.
+        null,
       ),
       safe(
         () =>
@@ -349,11 +357,18 @@ export class PayoutService {
     for (const row of confirmedDebits) {
       this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
     }
-    for (const row of allocatedRows) {
-      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -Number(row.amountMinor ?? 0));
+    if (allocatedRows) {
+      for (const row of allocatedRows) {
+        this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -Number(row.amountMinor ?? 0));
+      }
     }
     const availableBalanceByCurrency = this.availableCurrencyTotals(rawBalancesByCurrency);
-    const currency = (accounts[0]?.currency || 'USD').toUpperCase();
+    // Derive the primary currency from the user's ACTUAL earnings
+    // balance (largest positive), not from an arbitrary payout account
+    // (`accounts[0]`). Fixes the multi-currency bug where a
+    // developer with EUR earnings but a USD-first account saw a
+    // misleading `currency: 'USD'` / `$0` balance.
+    const currency = primaryCurrency(availableBalanceByCurrency);
 
     return {
       payoutAccounts: accounts,
@@ -418,11 +433,16 @@ export class PayoutService {
       this.addCurrencyAmount(totalsByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
     }
     const availableByCurrency = this.availableCurrencyTotals(totalsByCurrency);
+    // Derive the primary currency from the user's ACTUAL available
+    // earnings (largest positive), not a hardcoded 'USD'. Fixes the
+    // multi-currency bug where a developer with only EUR earnings
+    // saw `totalMinor: 0, currency: 'USD'`.
+    const currency = primaryCurrency(availableByCurrency);
 
     return {
       entries: available,
-      totalMinor: availableByCurrency.USD ?? 0,
-      currency: 'USD',
+      totalMinor: availableByCurrency[currency] ?? 0,
+      currency,
       count: totalEntries,
       page,
       limit,

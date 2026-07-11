@@ -117,6 +117,30 @@ export function isSupportedCurrency(code: string | null | undefined): boolean {
   return getCurrencyPolicy(code) !== null;
 }
 
+/**
+ * Choose a single "primary" currency from a per-currency minor-unit totals
+ * map. Used by summary endpoints whose contract still exposes a single
+ * `currency` / `amountMinor` scalar alongside a full `byCurrency` map.
+ *
+ * Picks the currency with the strictly-largest positive balance; if the map
+ * is empty or every entry is non-positive, falls back to `'USD'`.
+ *
+ * This is the fix for the multi-currency bug class where summary scalars
+ * were hard-pinned to `'USD'`: the primary currency is now derived
+ * from the user's ACTUAL balances, not assumed USD.
+ */
+export function primaryCurrency(totals: Record<string, number>): string {
+  let best = 'USD';
+  let bestAmount = 0;
+  for (const [currency, amount] of Object.entries(totals)) {
+    if (amount > bestAmount) {
+      bestAmount = amount;
+      best = currency;
+    }
+  }
+  return best;
+}
+
 /** Minor-unit exponent for a currency (defaults to 2 when unknown). */
 export function minorUnitExponent(code: string | null | undefined): number {
   return getCurrencyPolicy(code)?.minorUnitExponent ?? 2;

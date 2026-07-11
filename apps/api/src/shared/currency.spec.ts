@@ -9,6 +9,7 @@ import {
   isSupportedCurrency,
   minorUnitExponent,
   payoutMinimumMinor,
+  primaryCurrency,
 } from '@waitlayer/shared';
 import { PayoutProvider } from '@waitlayer/shared';
 
@@ -45,5 +46,23 @@ describe('currency policy table', () => {
 
   it('exposes a policy for every listed currency', () => {
     expect(Object.keys(CURRENCY_POLICY).length).toBeGreaterThanOrEqual(8);
+  });
+
+  describe('primaryCurrency (multi-currency summary fix)', () => {
+    it('picks the currency with the strictly-largest positive balance', () => {
+      expect(primaryCurrency({ USD: 50, EUR: 30 })).toBe('USD');
+      expect(primaryCurrency({ EUR: 30, USD: 50 })).toBe('USD');
+    });
+
+    it('returns a non-USD currency when it is the only positive one', () => {
+      expect(primaryCurrency({ EUR: 30 })).toBe('EUR');
+      expect(primaryCurrency({ USD: 0, EUR: 12 })).toBe('EUR');
+    });
+
+    it('falls back to USD when the map is empty or all entries are non-positive', () => {
+      expect(primaryCurrency({})).toBe('USD');
+      expect(primaryCurrency({ USD: 0, EUR: 0 })).toBe('USD');
+      expect(primaryCurrency({ USD: -5 })).toBe('USD');
+    });
   });
 });

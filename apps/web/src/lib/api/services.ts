@@ -150,7 +150,12 @@ export const adminApi = {
   ) => api.post(`/admin/recovery-debt/cases/${id}/resolve`, data),
   recomputeTrustScore: (userId: string) => api.post(`/admin/fraud/compute-trust/${userId}`),
   getAuditLog: (params?: Record<string, unknown>) => api.get('/admin/audit-log', { params }),
-  getMetrics: (days?: number) => api.get('/admin/metrics', { params: { days } }),
+  getMetrics: (days?: number, currency?: string) => {
+    const params: Record<string, string | number> = {};
+    if (days !== undefined) params.days = days;
+    if (currency) params.currency = currency;
+    return api.get('/admin/metrics', { params });
+  },
   getToolIntegrations: () => api.get('/admin/tools'),
   toggleToolIntegration: (slug: string, isActive: boolean) =>
     api.post(`/admin/tools/${slug}/toggle`, { isActive: String(isActive) }),

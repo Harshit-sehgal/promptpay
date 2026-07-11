@@ -7,6 +7,8 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 
+import { CURRENCY_POLICY } from '@waitlayer/shared';
+
 // ── Types ──
 
 interface DailyPoint {
@@ -61,7 +63,15 @@ const PERIOD_PRESETS = [
 
 // ── Mini bar chart (reused pattern from advertiser reports) ──
 
-function MiniBar({ values, maxValue, color }: { values: number[]; maxValue: number; color: string }) {
+function MiniBar({
+  values,
+  maxValue,
+  color,
+}: {
+  values: number[];
+  maxValue: number;
+  color: string;
+}) {
   const max = Math.max(maxValue, 1);
   return (
     <div className="flex items-end gap-[2px] h-8">
@@ -83,16 +93,17 @@ export default function AdminMetricsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState(30);
+  const [selectedCurrency, setSelectedCurrency] = useState('USD');
 
   const fetchMetrics = useCallback(() => {
     setLoading(true);
     setError(null);
     adminApi
-      .getMetrics(selectedDays)
+      .getMetrics(selectedDays, selectedCurrency)
       .then((res: { data: MetricsData }) => setData(res.data))
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load metrics')))
       .finally(() => setLoading(false));
-  }, [selectedDays]);
+  }, [selectedDays, selectedCurrency]);
 
   useEffect(() => {
     fetchMetrics();
@@ -151,6 +162,24 @@ export default function AdminMetricsPage() {
         </span>
       </div>
 
+      {/* Currency selector — the platform is multi-currency (A-081);
+          metrics were previously hard-filtered to USD. Selecting a
+          currency re-queries that currency's revenue/spend. */}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <span className="text-ink-400 text-sm mr-1">Currency:</span>
+        <select
+          value={selectedCurrency}
+          onChange={(e) => setSelectedCurrency(e.target.value)}
+          className="bg-ink-700 text-ink-100 text-xs rounded-lg px-2 py-1.5 border border-ink-600 focus:outline-none focus:border-brand-400"
+        >
+          {Object.keys(CURRENCY_POLICY).map((code) => (
+            <option key={code} value={code}>
+              {code}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Loading & error */}
       {loading && <LoadingSpinner />}
       {error && (
@@ -169,7 +198,11 @@ export default function AdminMetricsPage() {
             <StatCard
               label="Impressions"
               value={formatNumber(data.totals.impressions)}
-              subtitle={data.vsPreviousPeriod.impressionsChangePct !== null ? `${data.vsPreviousPeriod.impressionsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.impressionsChangePct).toFixed(1)}% vs prior period` : undefined}
+              subtitle={
+                data.vsPreviousPeriod.impressionsChangePct !== null
+                  ? `${data.vsPreviousPeriod.impressionsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.impressionsChangePct).toFixed(1)}% vs prior period`
+                  : undefined
+              }
             />
             <StatCard
               label="Billable %"
@@ -182,12 +215,13 @@ export default function AdminMetricsPage() {
             <StatCard
               label="Signups"
               value={formatNumber(data.totals.signups)}
-              subtitle={data.vsPreviousPeriod.signupsChangePct !== null ? `${data.vsPreviousPeriod.signupsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.signupsChangePct).toFixed(1)}% vs prior period` : undefined}
+              subtitle={
+                data.vsPreviousPeriod.signupsChangePct !== null
+                  ? `${data.vsPreviousPeriod.signupsChangePct > 0 ? '↑' : '↓'} ${Math.abs(data.vsPreviousPeriod.signupsChangePct).toFixed(1)}% vs prior period`
+                  : undefined
+              }
             />
-            <StatCard
-              label="Active users"
-              value={formatNumber(data.activeUsers.total)}
-            />
+            <StatCard label="Active users" value={formatNumber(data.activeUsers.total)} />
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -218,9 +252,7 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily impressions{' '}
-                    <span className="text-ink-400 font-normal">
-                      ({data.daily.length} days)
-                    </span>
+                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
                   </h3>
                   <span className="text-ink-400 text-xs">
                     {formatNumber(data.totals.impressions)} total
@@ -244,9 +276,7 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily signups{' '}
-                    <span className="text-ink-400 font-normal">
-                      ({data.daily.length} days)
-                    </span>
+                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
                   </h3>
                   <span className="text-ink-400 text-xs">
                     {formatNumber(data.totals.signups)} total
@@ -270,9 +300,7 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily earnings (estimated){' '}
-                    <span className="text-ink-400 font-normal">
-                      ({data.daily.length} days)
-                    </span>
+                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
                   </h3>
                   <span className="text-ink-400 text-xs">
                     {formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency)}
@@ -296,9 +324,7 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily advertiser spend{' '}
-                    <span className="text-ink-400 font-normal">
-                      ({data.daily.length} days)
-                    </span>
+                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
                   </h3>
                   <span className="text-ink-400 text-xs">
                     {formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency)}
@@ -333,14 +359,14 @@ export default function AdminMetricsPage() {
                       s.status === 'active'
                         ? 'bg-emerald-500'
                         : s.status === 'draft'
-                        ? 'bg-ink-500'
-                        : s.status === 'submitted'
-                        ? 'bg-blue-500'
-                        : s.status === 'paused'
-                        ? 'bg-amber-500'
-                        : s.status === 'archived'
-                        ? 'bg-ink-600'
-                        : 'bg-ink-400';
+                          ? 'bg-ink-500'
+                          : s.status === 'submitted'
+                            ? 'bg-blue-500'
+                            : s.status === 'paused'
+                              ? 'bg-amber-500'
+                              : s.status === 'archived'
+                                ? 'bg-ink-600'
+                                : 'bg-ink-400';
                     return (
                       <div
                         key={s.status}
@@ -356,14 +382,14 @@ export default function AdminMetricsPage() {
                     s.status === 'active'
                       ? 'bg-emerald-500'
                       : s.status === 'draft'
-                      ? 'bg-ink-500'
-                      : s.status === 'submitted'
-                      ? 'bg-blue-500'
-                      : s.status === 'paused'
-                      ? 'bg-amber-500'
-                      : s.status === 'archived'
-                      ? 'bg-ink-600'
-                      : 'bg-ink-400';
+                        ? 'bg-ink-500'
+                        : s.status === 'submitted'
+                          ? 'bg-blue-500'
+                          : s.status === 'paused'
+                            ? 'bg-amber-500'
+                            : s.status === 'archived'
+                              ? 'bg-ink-600'
+                              : 'bg-ink-400';
                   return (
                     <div key={s.status} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
@@ -384,11 +410,21 @@ export default function AdminMetricsPage() {
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
               <h3 className="text-white text-sm font-semibold mb-4">Active users</h3>
               <div className="space-y-4">
-                {([
-                  { label: 'Developers', count: data.activeUsers.developers, color: 'bg-brand-500' },
-                  { label: 'Advertisers', count: data.activeUsers.advertisers, color: 'bg-emerald-500' },
-                  { label: 'Admins', count: data.activeUsers.admins, color: 'bg-red-500' },
-                ] as const).map(({ label, count, color }) => (
+                {(
+                  [
+                    {
+                      label: 'Developers',
+                      count: data.activeUsers.developers,
+                      color: 'bg-brand-500',
+                    },
+                    {
+                      label: 'Advertisers',
+                      count: data.activeUsers.advertisers,
+                      color: 'bg-emerald-500',
+                    },
+                    { label: 'Admins', count: data.activeUsers.admins, color: 'bg-red-500' },
+                  ] as const
+                ).map(({ label, count, color }) => (
                   <div key={label}>
                     <div className="flex items-center justify-between text-sm mb-1">
                       <span className="text-ink-300">{label}</span>
@@ -439,7 +475,9 @@ export default function AdminMetricsPage() {
               <div className="mt-4 pt-4 border-t border-ink-600/20">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-ink-400">Paid out to developers</span>
-                  <span className="text-white font-mono">{formatCurrency(data.payouts.totalPaidMinor, reportingCurrency)}</span>
+                  <span className="text-white font-mono">
+                    {formatCurrency(data.payouts.totalPaidMinor, reportingCurrency)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm mt-2">
                   <span className="text-ink-400">Total payouts processed</span>

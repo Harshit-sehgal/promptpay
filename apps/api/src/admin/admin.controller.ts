@@ -59,8 +59,8 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Get admin metrics' })
   @Get('metrics')
-  getMetrics(@Query('days') days?: string) {
-    return this.service.getMetrics(days ? parseInt(days, 10) : 30);
+  getMetrics(@Query('days') days?: string, @Query('currency') currency?: string) {
+    return this.service.getMetrics(days ? parseInt(days, 10) : 30, currency);
   }
 
   @ApiOperation({ summary: 'Get users' })

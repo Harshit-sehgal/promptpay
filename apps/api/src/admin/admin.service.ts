@@ -11,6 +11,7 @@ import {
   UserRole,
   UserStatus,
 } from '@waitlayer/db';
+import { isSupportedCurrency } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
@@ -1323,7 +1324,14 @@ export class AdminService {
 
   // ── Operational Metrics ──
 
-  async getMetrics(days = 30) {
+  async getMetrics(days = 30, currency = 'USD') {
+    // A-007 / multi-currency fix: the platform is multi-currency
+    // (A-081). Metrics were previously hard-filtered to USD, which
+    // silently excluded ALL non-USD revenue/spend. The reporting
+    // currency is now a parameter (default USD for backward
+    // compatibility) so any currency is queryable and nothing is
+    // dropped. Reject anything that is not a supported currency.
+    const reportingCurrency = isSupportedCurrency(currency) ? currency.toUpperCase() : 'USD';
     const now = new Date();
     const periodStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const prevPeriodStart = new Date(periodStart.getTime() - days * 24 * 60 * 60 * 1000);
@@ -1401,7 +1409,7 @@ export class AdminService {
       FROM earnings_ledger
       WHERE "createdAt" >= ${periodStart}
         AND "entryType" = 'credit'
-        AND "currency" = 'USD'
+        AND "currency" = ${reportingCurrency}
       GROUP BY day
       ORDER BY day
     `;
@@ -1430,7 +1438,7 @@ export class AdminService {
       FROM advertiser_ledger
       WHERE "createdAt" >= ${periodStart}
         AND "entryType" = 'debit'
-        AND "currency" = 'USD'
+        AND "currency" = ${reportingCurrency}
       GROUP BY day
       ORDER BY day
     `;
@@ -1463,7 +1471,7 @@ export class AdminService {
       this.prisma.payoutRequest.count(),
       this.prisma.payoutRequest.count({ where: { status: { in: ['requested', 'under_review'] } } }),
       this.prisma.earningsLedger.aggregate({
-        where: { status: 'paid', entryType: 'credit', currency: 'USD' },
+        where: { status: 'paid', entryType: 'credit', currency: reportingCurrency },
         _sum: { amountMinor: true },
       }),
     ]);
@@ -1511,7 +1519,7 @@ export class AdminService {
         where: {
           createdAt: { gte: prevPeriodStart, lt: periodStart },
           entryType: 'credit',
-          currency: 'USD',
+          currency: reportingCurrency,
         },
         _sum: { amountMinor: true },
       }),
@@ -1527,17 +1535,19 @@ export class AdminService {
       prev > 0 ? Math.round(((current - prev) / prev) * 1000) / 10 : null;
 
     // ── Platform ledger breakdown ──
+    // Reported in the selected `reportingCurrency` so platform
+    // fees / fraud reserves in non-USD buckets are not dropped.
     const platform = await this.prisma.platformLedger.aggregate({
       _sum: { amountMinor: true },
-      where: { bucket: 'platform_fee', entryType: 'credit', currency: 'USD' },
+      where: { bucket: 'platform_fee', entryType: 'credit', currency: reportingCurrency },
     });
     const reserve = await this.prisma.platformLedger.aggregate({
       _sum: { amountMinor: true },
-      where: { bucket: 'fraud_reserve', entryType: 'credit', currency: 'USD' },
+      where: { bucket: 'fraud_reserve', entryType: 'credit', currency: reportingCurrency },
     });
 
     return {
-      currency: 'USD',
+      currency: reportingCurrency,
       period: { days, from: floorDay(periodStart), to: floorDay(now) },
       daily,
       totals: {

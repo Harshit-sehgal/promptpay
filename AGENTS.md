@@ -341,6 +341,64 @@ writeups were pruned; this index preserves the audit trail.
 - A-083 web middleware `JWT_SECRET` fail-closed (`middleware.ts:58` `getJwtSecret`) — Next.js Edge middleware inlines `process.env` at **build** time, so a runtime-injected secret reads as `undefined` and would verify tokens against a bogus `"undefined"` key. Now returns `null` → redirect-to-login + production warning instead of a silent auth break. Requires `JWT_SECRET` present at **web build time** (operator/deploy constraint, not code).
 - A-084 Swagger/OpenAPI model docs (`@ApiProperty` on all DTO fields incl. inline `RecordConsentDto`/`AnonymousConsentDto`, `@ApiOperation` on all controller routes) — previously only `@ApiTags` + `SwaggerModule.setup` existed (gap #114 "zero decorators"). Generated `/api/v1/docs` spec now documents request/response models and per-route summaries.
 
+## Defect fixes (2026-07-11) — multi-currency summary bug class
+
+An independent code audit (post the A-001…A-084 closure) found a coherent
+**multi-currency correctness bug class**: several summary endpoints computed a
+correct per-currency `byCurrency` map but then exposed a single
+`currency` / `amountMinor` scalar that was **hard-pinned to `'USD'`** (or
+derived from the wrong source). The platform is multi-currency (A-081), so
+non-USD users/admins got wrong or omitted numbers. Each was fixed by
+deriving the scalar's currency from the user's **actual** balances via a new
+shared `primaryCurrency(totals)` helper (`packages/shared/src/currency.ts`,
+largest-positive balance, falls back to `'USD'`), and — for admin metrics —
+making the reporting currency an explicit, queryable parameter instead of a
+silent `'USD'` SQL filter.
+
+- **`payout.service.ts` `getAvailableForPayout`** (`payout.service.ts:424`)
+  returned `totalMinor: availableByCurrency.USD ?? 0, currency: 'USD'`. Now uses
+  `primaryCurrency(availableByCurrency)`. (A-030/#1)
+- **`payout.service.ts` `getPayoutInfo`** (`payout.service.ts:356`) derived
+  `currency` from `accounts[0]` (first payout account) and indexed the
+  multi-currency map with it — so EUR-earnings + USD-account users saw
+  `$0 / USD`. Now derives currency from `availableBalanceByCurrency`.
+  (A-030/#2)
+- **`advertiser.service.ts` `getDashboard` + `getReports` summary**
+  (`advertiser.service.ts:405`, `:1196`) hard-pinned `totalSpendMinor:
+totalSpendByCurrency.USD ?? 0`. Now uses `primaryCurrency(totalSpendByCurrency)`.
+  (A-024/#3)
+- **`ledger.service.ts` `getBalance`** (`ledger.service.ts:696`) hard-pinned
+  `amountMinor: byCurrency.USD ?? 0, currency: 'USD'`. Now uses
+  `primaryCurrency(byCurrency)`. (#4)
+- **`admin.service.ts` `getMetrics`** (`admin.service.ts:1404,1433` + the
+  `platform`/`reserve`/`payout` aggregates) hard-filtered `AND "currency" = 'USD'`
+  directly in `$queryRaw`, **silently excluding all non-USD revenue/spend**
+  from admin metrics. Now takes a `currency` param (default `'USD'`, validated via
+  `isSupportedCurrency`) used in the filters, returns it as `currency`, and the
+  web `admin/metrics` page gained a currency `<select>` (reads `CURRENCY_POLICY`)
+  so non-USD activity is queryable and no longer dropped. (#5)
+- **`payout.service.ts` `getPayoutInfo` fail-open over-state** — the
+  in-flight `allocatedRows` sub-query was wrapped in `safe(...)` with a `[]`
+  fallback, so a transient failure skipped subtracting allocations and
+  **over-stated** available balance (the only unsafe direction among the
+  resilient fallbacks). The allocations slice now throws on failure instead of
+  falling back to `[]`, so the balance is never shown inflated. (#6)
+- **`web/src/lib/format.ts` `formatCurrency` USD-default footgun** —
+  `currency` was optional (default `'USD'`), so any caller formatting a
+  non-USD amount without passing `currency` would render a wrong `$`.
+  Now `currency` is **required**; the one zero-amount call site passes
+  `'USD'` explicitly. (#7)
+- Shared helper added: `primaryCurrency(totals: Record<string, number>): string`
+  in `packages/shared/src/currency.ts` (re-exported via `index.ts`), with
+  unit tests in `apps/api/src/shared/currency.spec.ts` (8 tests, incl. 3 new).
+
+Verified: `pnpm typecheck` 14/14, `pnpm lint` 9/9 (0 sev-2),
+web vitest **86/86**, `currency.spec.ts` **8/8**. The web
+`developer/payouts` and `advertiser` dashboards already consumed the
+`byCurrency` maps (so the scalars were a fallback); they now agree with
+the maps. `getBilling` was checked and is **already correct** (its
+sort puts `'USD'` first when present, else the first present currency).
+
 ## End-to-End SaaS Readiness Checks
 
 The three flows (developer / advertiser / admin) are code-complete step by step.

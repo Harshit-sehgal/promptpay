@@ -9,7 +9,12 @@ import {
 } from '@nestjs/common';
 
 import { BidType, Prisma } from '@waitlayer/db';
-import { AD_SERVING, CampaignStatus, DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
+import {
+  AD_SERVING,
+  CampaignStatus,
+  DEFAULT_COMPANY_NAME,
+  primaryCurrency,
+} from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
@@ -400,9 +405,11 @@ export class AdvertiserService {
     const totalSpendByCurrency = Object.fromEntries(
       spend.map((row) => [row.currency, row._sum.amountMinor ?? 0]),
     );
+    const spendCurrency = primaryCurrency(totalSpendByCurrency);
 
     return {
-      totalSpendMinor: totalSpendByCurrency.USD ?? 0,
+      totalSpendMinor: totalSpendByCurrency[spendCurrency] ?? 0,
+      currency: spendCurrency,
       totalSpendByCurrency,
       totalImpressions,
       totalClicks,
@@ -1193,7 +1200,8 @@ export class AdvertiserService {
       summary: {
         totalImpressions,
         totalClicks,
-        totalSpendMinor: totalSpendByCurrency.USD ?? 0,
+        totalSpendMinor: totalSpendByCurrency[primaryCurrency(totalSpendByCurrency)] ?? 0,
+        currency: primaryCurrency(totalSpendByCurrency),
         totalSpendByCurrency,
         avgCtr,
         totalCampaigns,
