@@ -19,6 +19,7 @@ export class LedgerHistoryQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -27,5 +28,6 @@ export class LedgerHistoryQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   limit?: number;
 }

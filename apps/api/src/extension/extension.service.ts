@@ -32,6 +32,7 @@ import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { LedgerService } from '../ledger/ledger.service';
+import { isUnderFrequencyCap } from './frequency-cap';
 
 class BudgetExhaustedError extends Error {
   constructor() {
@@ -798,11 +799,10 @@ export class ExtensionService {
       // Per-campaign frequency caps (issue A-061). A cap of 0/undefined means
       // "no limit"; a positive cap is enforced against the user's served
       // impressions in the trailing hour and day.
-      if (c.frequencyCapPerHour && c.frequencyCapPerHour > 0) {
-        if ((campaignHourCounts.get(c.id) ?? 0) >= c.frequencyCapPerHour) return false;
-      }
-      if (c.frequencyCapPerDay && c.frequencyCapPerDay > 0) {
-        if ((campaignDayCounts.get(c.id) ?? 0) >= c.frequencyCapPerDay) return false;
+      if (
+        !isUnderFrequencyCap(c, campaignHourCounts.get(c.id) ?? 0, campaignDayCounts.get(c.id) ?? 0)
+      ) {
+        return false;
       }
       return true;
     });

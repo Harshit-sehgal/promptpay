@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
@@ -72,6 +73,7 @@ export class PayoutHistoryQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -79,5 +81,6 @@ export class PayoutHistoryQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   limit?: number;
 }

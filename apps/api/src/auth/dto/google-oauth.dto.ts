@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -31,11 +32,13 @@ export class GoogleOAuthDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
+  @Type(() => Boolean)
   ageConfirmed?: boolean;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
+  @Type(() => Boolean)
   termsAccepted?: boolean;
 
   @ApiProperty({ required: false })

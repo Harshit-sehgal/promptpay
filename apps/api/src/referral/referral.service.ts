@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { REFERRAL } from '@waitlayer/shared';
+import { primaryCurrency, REFERRAL } from '@waitlayer/shared';
 
 import { isUniqueConstraintViolation } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';
@@ -64,7 +64,7 @@ export class ReferralService {
       referralCode: code,
       referralCount,
       referralLink: `${this.webBaseUrl}/auth/signup?ref=${code}`,
-      rewardsEarnedMinor: rewardsEarnedByCurrency.USD ?? 0,
+      rewardsEarnedMinor: rewardsEarnedByCurrency[primaryCurrency(rewardsEarnedByCurrency)] ?? 0,
       rewardsEarnedByCurrency,
       referrals: referrals.map((r) => ({
         id: r.id,
@@ -183,10 +183,7 @@ export class ReferralService {
     });
     if (!firstPaidPayout) return null;
 
-    const totalPaidMinor = firstPaidPayout.allocations.reduce(
-      (sum, a) => sum + a.amountMinor,
-      0,
-    );
+    const totalPaidMinor = firstPaidPayout.allocations.reduce((sum, a) => sum + a.amountMinor, 0);
     if (totalPaidMinor < REFERRAL.FIRST_PAYOUT_THRESHOLD_MINOR) return null;
 
     const rewardAmount = REFERRAL.REWARD_AMOUNT_MINOR;
@@ -290,7 +287,8 @@ export class ReferralService {
       status: r.status,
       createdAt: r.createdAt,
       totalRewardsMinor: r.rewards.reduce(
-        (sum, rw) => (rw.status === 'reversed' || rw.status === 'void' ? sum : sum + rw.amountMinor),
+        (sum, rw) =>
+          rw.status === 'reversed' || rw.status === 'void' ? sum : sum + rw.amountMinor,
         0,
       ),
     }));

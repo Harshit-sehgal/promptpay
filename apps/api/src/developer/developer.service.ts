@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
-import { LedgerStatus } from '@waitlayer/shared';
+import { LedgerStatus, primaryCurrency } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
@@ -141,13 +141,23 @@ export class DeveloperService {
     summary.lifetimeEarningsByCurrency = nonNegativeCurrencyTotals(
       summary.lifetimeEarningsByCurrency,
     );
-    summary.estimatedEarnings = summary.estimatedEarningsByCurrency.USD ?? 0;
-    summary.confirmedEarnings = summary.confirmedEarningsByCurrency.USD ?? 0;
-    summary.pendingEarnings = summary.pendingEarningsByCurrency.USD ?? 0;
-    summary.heldEarnings = summary.heldEarningsByCurrency.USD ?? 0;
-    summary.recoveryDebt = summary.recoveryDebtByCurrency.USD ?? 0;
-    summary.availableForPayout = summary.availableForPayoutByCurrency.USD ?? 0;
-    summary.lifetimeEarnings = summary.lifetimeEarningsByCurrency.USD ?? 0;
+    summary.estimatedEarnings =
+      summary.estimatedEarningsByCurrency[primaryCurrency(summary.estimatedEarningsByCurrency)] ??
+      0;
+    summary.confirmedEarnings =
+      summary.confirmedEarningsByCurrency[primaryCurrency(summary.confirmedEarningsByCurrency)] ??
+      0;
+    summary.pendingEarnings =
+      summary.pendingEarningsByCurrency[primaryCurrency(summary.pendingEarningsByCurrency)] ?? 0;
+    summary.heldEarnings =
+      summary.heldEarningsByCurrency[primaryCurrency(summary.heldEarningsByCurrency)] ?? 0;
+    summary.recoveryDebt =
+      summary.recoveryDebtByCurrency[primaryCurrency(summary.recoveryDebtByCurrency)] ?? 0;
+    summary.availableForPayout =
+      summary.availableForPayoutByCurrency[primaryCurrency(summary.availableForPayoutByCurrency)] ??
+      0;
+    summary.lifetimeEarnings =
+      summary.lifetimeEarningsByCurrency[primaryCurrency(summary.lifetimeEarningsByCurrency)] ?? 0;
     return summary;
   }
 

@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -17,11 +18,13 @@ export class UpdateSettingsDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
+  @Type(() => Boolean)
   adsEnabled?: boolean;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()
+  @Type(() => Boolean)
   quietMode?: boolean;
 
   @ApiProperty({ required: false })
@@ -41,6 +44,7 @@ export class UpdateSettingsDto {
   @IsInt()
   @Min(1)
   @Max(12)
+  @Type(() => Number)
   maxAdsPerHour?: number;
 
   /**
@@ -100,6 +104,7 @@ export class EarningsQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -107,6 +112,7 @@ export class EarningsQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   limit?: number;
 }
 

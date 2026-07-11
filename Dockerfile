@@ -24,6 +24,34 @@ RUN echo 'only-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-
 FROM base AS build
 COPY . .
 RUN pnpm --filter @waitlayer/db run generate
+# ── Build-time env for the web (Next.js) image ──────────────────────────
+# Next.js inlines `process.env` at *build* time — both JWT_SECRET (used by
+# the Edge auth middleware) and every NEXT_PUBLIC_* var (baked into the
+# client bundle). Supplying them only as runtime container env (as
+# docker-compose.yml used to) does NOT reach the built assets: the middleware
+# bakes `undefined` and every protected route redirects to /login (A-083),
+# and the client has no API URL. They MUST be build args in production.
+# Defaults keep `docker build` from failing locally but MUST be overridden.
+ARG JWT_SECRET=dev-only-docker-compose-jwt-secret-at-least-32-char
+ENV JWT_SECRET=$JWT_SECRET
+ARG NEXT_PUBLIC_API_URL=http://localhost:4002/api/v1
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com
+ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ARG NEXT_PUBLIC_WEB_URL=http://localhost:3000
+ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL
+ARG NEXT_PUBLIC_ALLOW_MOCK_AUTH=
+ENV NEXT_PUBLIC_ALLOW_MOCK_AUTH=$NEXT_PUBLIC_ALLOW_MOCK_AUTH
+ARG NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS=
+ENV NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS=$NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS
+ARG NEXT_PUBLIC_SENTRY_DSN=
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT=
+ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT=$NEXT_PUBLIC_SENTRY_ENVIRONMENT
+# Build as production so Next.js inlines NODE_ENV='production' into the Edge
+# middleware (its production fail-fast paths depend on it) and the web
+# prerender does not crash in dev mode (A-001).
+ENV NODE_ENV=production
 RUN pnpm run build
 
 # ── API Runtime ──

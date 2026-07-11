@@ -2,6 +2,10 @@
 
 Last updated: 2026-07-11 (current hardening pass)
 
+> **Authoritative health signal:** this narrative is NOT the source of truth.
+> The live signal is `pnpm test` + the `docker-build` CI job (boots the compiled
+> API over TCP). Re-run the quality gates after any code change.
+
 ---
 
 ## Verification Methodology

@@ -13,6 +13,7 @@ import {
   PAYOUT,
   payoutMinimumMinor,
   PayoutProvider,
+  payoutProviderLaunchStatus,
   PayoutStatus,
   primaryCurrency,
 } from '@waitlayer/shared';
@@ -214,6 +215,12 @@ export class PayoutService {
         `Payout provider "${dto.provider}" is not available for registration.`,
       );
     }
+    const launchOverrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+    if (payoutProviderLaunchStatus(dto.provider, launchOverrides) === 'coming_soon') {
+      throw new BadRequestException(
+        `Payout provider "${dto.provider}" is not available for registration (launch status: coming_soon).`,
+      );
+    }
     const provider = dto.provider as PayoutProvider;
     const destination = dto.destination?.trim();
     if (!destination) {
@@ -318,27 +325,23 @@ export class PayoutService {
         'confirmedDebits',
         [],
       ),
-      safe(
-        () =>
-          this.prisma.$queryRaw<Array<{ currency: string; amountMinor: bigint | number | null }>>`
-            SELECT e."currency" AS "currency", COALESCE(SUM(pa."amountMinor"), 0)::bigint AS "amountMinor"
-            FROM "payout_allocations" pa
-            INNER JOIN "payout_requests" pr ON pr."id" = pa."payoutRequestId"
-            INNER JOIN "earnings_ledger" e ON e."id" = pa."earningsEntryId"
-            WHERE pr."userId" = ${userId}
-              AND pr."status" IN (${Prisma.join(RESERVED_PAYOUT_STATUSES)})
-            GROUP BY e."currency"
-          `,
-        'allocatedRows',
-        // NOTE: this slice is intentionally NOT wrapped in `safe(...)`
-        // with a `[]` fallback. A transient failure here would silently
-        // skip subtracting in-flight payouts, OVERSTating the available
-        // balance (the only unsafe direction among the resilient
-        // fallbacks). We let it throw so the balance is never shown
-        // inflated — better a 500 than a lie. The authoritative
-        // `requestPayout` re-validates availability anyway.
-        null,
-      ),
+      // NOTE: this slice is intentionally NOT wrapped in `safe(...)`.
+      // A transient failure here must THROW (rejecting the whole
+      // `Promise.all`, surfacing as a 500) rather than falling back to a
+      // value. Any silent fallback — `[]` OR `null` — would skip
+      // subtracting in-flight payouts and OVERstate the available balance
+      // (the only unsafe direction among the resilient fallbacks). Better a
+      // 500 than a lie. The authoritative `requestPayout` re-validates
+      // availability anyway.
+      this.prisma.$queryRaw<Array<{ currency: string; amountMinor: bigint | number | null }>>`
+        SELECT e."currency" AS "currency", COALESCE(SUM(pa."amountMinor"), 0)::bigint AS "amountMinor"
+        FROM "payout_allocations" pa
+        INNER JOIN "payout_requests" pr ON pr."id" = pa."payoutRequestId"
+        INNER JOIN "earnings_ledger" e ON e."id" = pa."earningsEntryId"
+        WHERE pr."userId" = ${userId}
+          AND pr."status" IN (${Prisma.join(RESERVED_PAYOUT_STATUSES)})
+        GROUP BY e."currency"
+      `,
       safe(
         () =>
           this.prisma.user.findUnique({

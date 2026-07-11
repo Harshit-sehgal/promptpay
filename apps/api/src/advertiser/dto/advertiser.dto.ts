@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -73,6 +74,7 @@ export class CreateCampaignDto {
   @IsInt()
   @Min(1)
   @Max(30)
+  @Type(() => Number)
   frequencyCapPerHour?: number;
 
   @ApiProperty({ required: false })
@@ -80,6 +82,7 @@ export class CreateCampaignDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   frequencyCapPerDay?: number;
 }
 
@@ -94,12 +97,14 @@ export class UpdateCampaignDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   bidAmountMinor?: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   budgetTotalMinor?: number;
   @ApiProperty({ required: false })
   @IsOptional()
@@ -113,6 +118,7 @@ export class UpdateCampaignDto {
   @IsInt()
   @Min(1)
   @Max(30)
+  @Type(() => Number)
   frequencyCapPerHour?: number;
 
   @ApiProperty({ required: false })
@@ -120,6 +126,7 @@ export class UpdateCampaignDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   frequencyCapPerDay?: number;
 }
 

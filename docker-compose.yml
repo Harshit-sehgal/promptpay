@@ -13,11 +13,11 @@ services:
       POSTGRES_USER: waitlayer
       POSTGRES_PASSWORD: waitlayer-dev
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U waitlayer -d waitlayer"]
+      test: ['CMD-SHELL', 'pg_isready -U waitlayer -d waitlayer']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,11 +25,11 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -38,17 +38,17 @@ services:
   # the dev DB untouched when running `pnpm --filter waitlayer-api test`.
   postgres-test:
     image: postgres:16-alpine
-    profiles: ["test"]
+    profiles: ['test']
     environment:
       POSTGRES_DB: waitlayer_test
       POSTGRES_USER: waitlayer
       POSTGRES_PASSWORD: waitlayer-test
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - pgtestdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U waitlayer -d waitlayer_test"]
+      test: ['CMD-SHELL', 'pg_isready -U waitlayer -d waitlayer_test']
       interval: 5s
       timeout: 5s
       retries: 5
@@ -58,7 +58,7 @@ services:
       context: .
       target: api
     ports:
-      - "4002:4002"
+      - '4002:4002'
     environment:
       DATABASE_URL: postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer
       REDIS_URL: redis://redis:6379
@@ -72,8 +72,8 @@ services:
       JWT_SECRET: dev-only-docker-compose-jwt-secret-at-least-32-char
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
-      API_PORT: "4002"
-      GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
+      API_PORT: '4002'
+      GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
       WEB_BASE_URL: http://localhost:3000
       # docker-compose is a developer convenience — run with dev NODE_ENV so the
       # google-token verifier's mock path remains available. Production deploys
@@ -82,7 +82,7 @@ services:
       # Enable the mock-google-token path so local dev can sign in without a
       # real Google account. The verifier requires BOTH NODE_ENV !== 'production'
       # AND an explicit flag — never set this in staging/production.
-      ALLOW_MOCK_GOOGLE: "true"
+      ALLOW_MOCK_GOOGLE: 'true'
       EMAIL_DRIVER: console
       EMAIL_FROM: noreply@waitlayer.local
       STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
@@ -95,7 +95,15 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4002/api/v1/health/ready"]
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:4002/api/v1/health/ready',
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -105,16 +113,29 @@ services:
     build:
       context: .
       target: web
+      # Next.js inlines these at *build* time — runtime `environment:` below
+      # does NOT reach the Edge middleware or the client bundle (A-083). Pass
+      # real production values here; the ${VAR:-default} fallbacks match the
+      # dev-runtime `environment:` block so local `docker compose up` works.
+      args:
+        JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
+        NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:-http://localhost:3000}
+        NEXT_PUBLIC_ALLOW_MOCK_AUTH: ${NEXT_PUBLIC_ALLOW_MOCK_AUTH:-"true"}
+        NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS: ${NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS:-}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${NEXT_PUBLIC_SENTRY_ENVIRONMENT:-}
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com"
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
       JWT_SECRET: dev-only-docker-compose-jwt-secret-at-least-32-char
       # Match the api service — dev convenience compose uses NODE_ENV=development
       # so the mock-google sign-in button remains available for local testing.
       NODE_ENV: development
-      NEXT_PUBLIC_ALLOW_MOCK_AUTH: "true"
+      NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
     depends_on:
       api:
         condition: service_healthy

@@ -102,3 +102,49 @@ jobs:
           test -s artifacts/vscode/waitlayer-vscode.vsix
           unzip -p artifacts/vscode/waitlayer-vscode.vsix extension/package.json > /tmp/waitlayer-vscode-package.json
           node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
+
+  # Build the Docker images and prove the COMPILED artifacts actually serve
+  # traffic. The integration suite only exercises the source AppModule via
+  # in-process supertest, so a broken container build (e.g. A-083 — web
+  # secrets inlined at build time, not runtime) would otherwise pass CI
+  # undetected. This job catches that blind spot.
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      # Web reads JWT_SECRET + NEXT_PUBLIC_* at *build* time (Edge middleware
+      # inlines env). Passing them as build args proves the image bakes them
+      # in; a missing arg would fail the deploy (A-083), not silently break auth.
+      - name: Build web image (verifies build-time secret wiring)
+        run: docker compose build web
+        env:
+          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
+          NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
+          NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
+      # Boot the COMPILED api image against real Postgres + Redis and confirm
+      # it serves a real request over a socket (closes the standalone-404 gap
+      # that the in-process suite could never catch).
+      - name: Build + boot API and verify it serves over TCP
+        run: |
+          docker compose up -d api postgres redis
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4002/api/v1/health/ready; then
+              echo "API healthy over TCP"; break
+            fi
+            sleep 2
+          done
+          # Controllers resolve: docs-json is mounted by the same router.
+          curl -fsS http://localhost:4002/api/v1/docs-json | head -c 200
+          docker compose down -v

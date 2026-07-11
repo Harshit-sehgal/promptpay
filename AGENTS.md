@@ -1,5 +1,10 @@
 # Agent Instructions and Current Code Audit
 
+> **Authoritative health signal:** the live source of truth is `pnpm test` plus
+> the `docker-build` CI job (which builds the images and boots the compiled API
+> over TCP). This file is a narrative audit trail — re-run the quality gates
+> after any change; do not treat its prose as the system state.
+
 This file applies to the whole repository. It is auto-loaded so AI coding agents
 see the live risk/status register without being told to read a separate doc.
 
@@ -378,11 +383,24 @@ totalSpendByCurrency.USD ?? 0`. Now uses `primaryCurrency(totalSpendByCurrency)`
   web `admin/metrics` page gained a currency `<select>` (reads `CURRENCY_POLICY`)
   so non-USD activity is queryable and no longer dropped. (#5)
 - **`payout.service.ts` `getPayoutInfo` fail-open over-state** — the
-  in-flight `allocatedRows` sub-query was wrapped in `safe(...)` with a `[]`
-  fallback, so a transient failure skipped subtracting allocations and
-  **over-stated** available balance (the only unsafe direction among the
-  resilient fallbacks). The allocations slice now throws on failure instead of
-  falling back to `[]`, so the balance is never shown inflated. (#6)
+  in-flight `allocatedRows` sub-query was wrapped in `safe(...)` with a `null`
+  fallback (its comment claimed it "let it throw", but `safe()` _caught_ the
+  error and returned `null`, so `if (allocatedRows)` skipped subtracting
+  in-flight payouts and **over-stated** the available balance — the only unsafe
+  direction). The `safe()` wrapper is now **removed** so a transient failure
+  genuinely throws (500) instead of silently inflating the balance; the
+  authoritative `requestPayout` re-validates availability anyway. (#6,
+  corrected 2026-07-11 — the prior "now throws" claim was inaccurate)
+- **Same bug class also in per-user ledger/summary surfaces** (missed by the
+  original audit, fixed 2026-07-11): `ledger.service.ts` `getPendingBalance` /
+  `getTotalEarnings` / `getPaidOutTotal`, `developer.service.ts`
+  `getEarningsSummary`, and `referral.service.ts` `getReferralStats` all
+  hard-pinned their scalar to `byCurrency.USD ?? 0`. Each now derives the
+  scalar currency via `primaryCurrency(map)`. Platform-level USD-headline
+  aggregates (`ledger.getPlatformBreakdown`, `admin.getOverview.totalPayoutsMinor`,
+  `admin.getMoneyIntegrityReport.globalReconciliation`) were **intentionally
+  left** as USD reporting bases — they carry the full `byCurrency` breakdown and
+  their contracts are test-enforced, so they are not part of this bug class.
 - **`web/src/lib/format.ts` `formatCurrency` USD-default footgun** —
   `currency` was optional (default `'USD'`), so any caller formatting a
   non-USD amount without passing `currency` would render a wrong `$`.

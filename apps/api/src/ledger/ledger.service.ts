@@ -722,9 +722,10 @@ export class LedgerService {
     });
     const byCurrency: Record<string, number> = {};
     this.addGroupedCurrencyTotals(byCurrency, result);
+    const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency.USD ?? 0,
-      currency: 'USD',
+      amountMinor: byCurrency[currency] ?? 0,
+      currency,
       byCurrency,
     };
   }
@@ -749,9 +750,10 @@ export class LedgerService {
     this.addGroupedCurrencyTotals(totals, credits);
     this.addGroupedCurrencyTotals(totals, debits, -1);
     const byCurrency = this.nonNegativeCurrencyTotals(totals);
+    const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency.USD ?? 0,
-      currency: 'USD',
+      amountMinor: byCurrency[currency] ?? 0,
+      currency,
       byCurrency,
     };
   }
@@ -783,9 +785,10 @@ export class LedgerService {
     });
     const byCurrency: Record<string, number> = {};
     this.addGroupedCurrencyTotals(byCurrency, result);
+    const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency.USD ?? 0,
-      currency: 'USD',
+      amountMinor: byCurrency[currency] ?? 0,
+      currency,
       byCurrency,
     };
   }

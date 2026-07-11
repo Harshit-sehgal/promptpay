@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsEnum,
   IsIn,
@@ -54,6 +55,7 @@ export class ApprovePayoutDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   approvedAmountMinor?: number;
 }
 
@@ -130,6 +132,7 @@ export class FraudFlagsQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -137,6 +140,7 @@ export class FraudFlagsQueryDto {
   @IsInt()
   @Min(1)
   @Max(200)
+  @Type(() => Number)
   limit?: number;
 }
 
@@ -177,6 +181,7 @@ export class IssueDeviceRecoveryTokenDto {
   @IsInt()
   @Min(5)
   @Max(60)
+  @Type(() => Number)
   expiresInMinutes?: number;
 }
 
@@ -202,6 +207,7 @@ export class AdminDevicesQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -209,6 +215,7 @@ export class AdminDevicesQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   limit?: number;
 }
 
@@ -219,6 +226,7 @@ export class RecoveryDebtCasesQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -226,12 +234,14 @@ export class RecoveryDebtCasesQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   limit?: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   minAmountMinor?: number;
 
   @ApiProperty({ required: false })
@@ -309,6 +319,7 @@ export class WebhookEventsQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -316,6 +327,7 @@ export class WebhookEventsQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   limit?: number;
 }
 
@@ -351,6 +363,7 @@ export class AuditLogQueryDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Type(() => Number)
   page?: number;
 
   @ApiProperty({ required: false })
@@ -358,6 +371,7 @@ export class AuditLogQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
+  @Type(() => Number)
   limit?: number;
 }
 

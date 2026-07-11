@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
@@ -96,6 +97,7 @@ export class AdRenderedDto {
   @IsNumber()
   @Min(0)
   @Max(100)
+  @Type(() => Number)
   visibleSurface?: number;
 
   @ApiProperty()
