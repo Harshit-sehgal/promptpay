@@ -32,7 +32,9 @@ import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { LedgerService } from '../ledger/ledger.service';
+import { isCountryEligible, normalizeCountryCode } from './country-targeting';
 import { isUnderFrequencyCap } from './frequency-cap';
+import { formatHHMMInZone, isTimeInRange } from './quiet-hours';
 
 class BudgetExhaustedError extends Error {
   constructor() {
@@ -681,12 +683,12 @@ export class ExtensionService {
     }
     if (
       settings?.quietMode &&
-      this.isTimeInRange(
+      isTimeInRange(
         // A-058: evaluate quiet mode in the developer's stored IANA timezone
         // instead of the API server's local timezone. When the developer has
         // not set a timezone, fall back to UTC (deterministic and UTC never
         // observes DST — same wall-clock reading for the same instant).
-        this.currentTimeHHMM(settings?.timezone ?? 'UTC'),
+        formatHHMMInZone(new Date(), settings?.timezone ?? 'UTC'),
         settings.quietModeStart || '22:00',
         settings.quietModeEnd || '08:00',
       )
@@ -795,7 +797,7 @@ export class ExtensionService {
       // Country-targeting filter (issue A-056). Campaigns with no targeting
       // rows serve everywhere; include-lists restrict to listed countries and
       // exclude-lists block listed countries.
-      if (!this.isCountryEligible(c, userCountry)) return false;
+      if (!isCountryEligible(c, userCountry)) return false;
       // Per-campaign frequency caps (issue A-061). A cap of 0/undefined means
       // "no limit"; a positive cap is enforced against the user's served
       // impressions in the trailing hour and day.
@@ -1831,83 +1833,6 @@ export class ExtensionService {
   private getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
     return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
-
-  /**
-   * Returns the current wall-clock HH:MM in the supplied IANA timezone. Used by
-   * the quiet-mode check so a developer's quiet window is evaluated in their
-   * own timezone (A-058) rather than the API server's local timezone. When the
-   * timezone is unknown to the runtime, falls back to UTC — the previous
-   * behaviour was server-local time, but UTC is the safe deterministic choice
-   * (no DST). An attacker cannot reach this fallback by storing a bad tz: the
-   * settings service rejects unknown timezones at write time.
-   */
-  private currentTimeHHMM(timezone = 'UTC'): string {
-    try {
-      const fmt = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-      // `hour12: false` still occasionally surfaces '24' for midnight on some
-      // ICU builds; coerce to '00' for clean string comparison.
-      const parts = fmt.formatToParts(new Date());
-      const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
-      const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
-      const hh = String(Number(hour)).padStart(2, '0');
-      return `${hh}:${minute}`;
-    } catch {
-      // Unknown timezone / runtime edge — return UTC HH:MM as a safe
-      // deterministic fallback so the quiet-mode check still runs.
-      const fallback = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'UTC',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-      const parts = fallback.formatToParts(new Date());
-      const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
-      const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
-      return `${String(Number(hour)).padStart(2, '0')}:${minute}`;
-    }
-  }
-
-  private isTimeInRange(now: string, start: string, end: string): boolean {
-    if (start <= end) {
-      return now >= start && now <= end;
-    }
-    return now >= start || now <= end;
-  }
-
-  /**
-   * Country-targeting eligibility (issue A-056). The campaign's `countryTargeting`
-   * rows are include/exclude rules keyed by ISO-3166-1 alpha-2 code:
-   *  - No rules -> serve everywhere.
-   *  - Only `include: true` rules -> serve only to those listed countries. If the
-   *    developer's country is unknown we cannot confirm a match, so we do NOT serve.
-   *  - Only `include: false` (exclude) rules -> serve everywhere except those
-   *    listed. An unknown developer country is allowed (we can't confirm exclusion).
-   */
-  private isCountryEligible(
-    campaign: { countryTargeting?: { countryCode: string; include: boolean }[] },
-    userCountry?: string,
-  ): boolean {
-    const rules = campaign.countryTargeting;
-    if (!rules || rules.length === 0) return true;
-    const includes = rules.filter((r) => r.include);
-    const excludes = rules.filter((r) => !r.include);
-    if (includes.length > 0) {
-      if (!userCountry) return false;
-      return includes.some((r) => normalizeCountryCode(r.countryCode) === userCountry);
-    }
-    if (!userCountry) return true;
-    return !excludes.some((r) => normalizeCountryCode(r.countryCode) === userCountry);
-  }
-}
-
-function normalizeCountryCode(country: string | null | undefined): string | undefined {
-  const normalized = country?.trim().toUpperCase();
-  return normalized && /^[A-Z]{2}$/.test(normalized) ? normalized : undefined;
 }
 
 function hasMatchingSecret(candidate: string | undefined, expected: string): boolean {

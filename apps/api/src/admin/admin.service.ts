@@ -1402,10 +1402,10 @@ export class AdminService {
       { day: Date; estimated: bigint; confirmed: bigint; paid: bigint; total: bigint }[]
     >`
       SELECT date_trunc('day', "createdAt") AS day,
-             COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'estimated'), 0)::int AS estimated,
-             COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'confirmed'), 0)::int AS confirmed,
-             COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'paid'), 0)::int AS paid,
-             COALESCE(SUM("amountMinor"), 0)::int AS total
+              COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'estimated'), 0)::bigint AS estimated,
+              COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'confirmed'), 0)::bigint AS confirmed,
+              COALESCE(SUM("amountMinor") FILTER (WHERE "status" = 'paid'), 0)::bigint AS paid,
+              COALESCE(SUM("amountMinor"), 0)::bigint AS total
       FROM earnings_ledger
       WHERE "createdAt" >= ${periodStart}
         AND "entryType" = 'credit'
@@ -1434,7 +1434,7 @@ export class AdminService {
     // ── Daily advertiser spend (database aggregated) ──
     const dailySpend = await this.prisma.$queryRaw<{ day: Date; spend: bigint }[]>`
       SELECT date_trunc('day', "createdAt") AS day,
-             COALESCE(SUM("amountMinor"), 0)::int AS spend
+              COALESCE(SUM("amountMinor"), 0)::bigint AS spend
       FROM advertiser_ledger
       WHERE "createdAt" >= ${periodStart}
         AND "entryType" = 'debit'
