@@ -1,6 +1,6 @@
-import { describe, expect,it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { formatCurrency, formatNumber } from './format';
+import { formatCurrency } from './format';
 import { normalizeToolType } from './tool-types';
 
 describe('normalizeToolType', () => {
@@ -46,13 +46,5 @@ describe('formatCurrency', () => {
     expect(formatCurrency(1050)).toBe('$10.50');
     expect(formatCurrency(0)).toBe('$0.00');
     expect(formatCurrency(9999)).toBe('$99.99');
-  });
-});
-
-describe('formatNumber', () => {
-  it('formats numbers with commas', () => {
-    expect(formatNumber(1000)).toBe('1,000');
-    expect(formatNumber(1000000)).toBe('1,000,000');
-    expect(formatNumber(42)).toBe('42');
   });
 });

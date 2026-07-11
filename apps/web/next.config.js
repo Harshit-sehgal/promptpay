@@ -1,43 +1,25 @@
 /** @type {import('@sentry/nextjs').SentryBuildOptions} */
 const { withSentryConfig } = require('@sentry/nextjs');
 const path = require('path');
-const crypto = require('crypto');
 
 /**
  * Security headers applied to every response (both page and API routes).
  *
- * CSP: script-src 'self' is the strongest policy the current app can support
- *      today — Google Identity Services requires loading accounts.google.com/gsi/client.
- *      We allow that origin explicitly rather than using a nonce or hash approach
- *      (GIS dynamically injects script). Once the GIS integration is replaced,
- *      tighten script-src to 'self' only.
- *
- *      frame-src: Google Identity Services renders its account-picker popup and
- *      the One-Tap prompt inside a cross-origin iframe at accounts.google.com.
- *      Without this, the Google button cannot complete sign-in under the
- *      production CSP (A-018). We scope it to exactly that origin.
- *
- * frame-ancestors 'none': equivalent to X-Frame-Options: DENY — prevents
- *      clickjacking of all WaitLayer pages (auth, dashboard, admin).
- *
- * X-Content-Type-Options: nosniff — prevents MIME-type sniffing attacks.
- *
- * Referrer-Policy: strict-origin-when-cross-origin — sends full referrer to
- *      same-origin, origin-only to cross-origin HTTPS (nothing to HTTP).
- *      This is the modern safe default.
- *
- * Permissions-Policy: explicitly disables camera, microphone, geolocation —
- *      WaitLayer has no use case for any of these, so we deny them by default.
- *
- * Strict-Transport-Security: max-age=63072000 (2 years), includeSubDomains.
- *      In production behind TLS termination, this tells browsers to always use
- *      HTTPS for this domain. `includeSubDomains` covers *.waitlayer.com.
+ * CSP notes:
+ *  - script-src / style-src keep 'unsafe-inline'. Next.js injects inline
+ *    bootstrap / Flight / React-refresh scripts that are NOT stamped with a
+ *    nonce, so a nonce-only policy would block hydration (the page renders
+ *    SSR HTML but is never interactive). A per-request nonce was tried and
+ *    explicitly broke client-side hydration.
+ *  - frame-src 'self' https://accounts.google.com allows the Google Identity
+ *    Services account-picker popup.
+ *  - connect-src allows the Sentry ingest endpoint.
  */
 const SECURITY_HEADERS = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
   },
   {
     key: 'X-Content-Type-Options',
@@ -63,22 +45,11 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
 
   async headers() {
-    // Per-request nonce so Next.js's own inline bootstrap / Flight / React
-    // refresh scripts (which are NOT served from /_next and therefore are
-    // NOT exempted by the `source` filter below) are allowed to run
-    // without weakening `script-src` to a global 'unsafe-inline'. Next.js
-    // stamps this nonce onto its inline <script> tags automatically.
-    const nonce = crypto
-      .randomBytes(16)
-      .toString('base64')
-      .replace(/[^a-zA-Z0-9]/g, '');
-    const csp = `default-src 'self'; script-src 'self' 'unsafe-inline' 'nonce-${nonce}' https://accounts.google.com/gsi/client; style-src 'self' 'nonce-${nonce}' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';`;
+    // Apply to all app routes except Next.js internal assets.
     return [
       {
-        source: '/((?!_next).*)', // all routes except Next.js internal assets
-        headers: SECURITY_HEADERS.map((h) =>
-          h.key === 'Content-Security-Policy' ? { key: h.key, value: csp } : h,
-        ),
+        source: '/((?!_next).*)',
+        headers: SECURITY_HEADERS,
       },
     ];
   },

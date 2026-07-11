@@ -10,7 +10,7 @@ Each domain below was evaluated by inspecting the **actual source**, not by docu
 
 | #   | Domain               | Status  | Verification                                                                                                                                                                                                                                  |
 | --- | -------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Build/monorepo       | PASS    | `pnpm run build` / `pnpm run typecheck` succeeds; all workspace packages compile                                                                                                                                                              |
+| 1   | Build/monorepo       | PARTIAL | `pnpm run typecheck`/`lint` pass (14/14, 9/9); `waitlayer-web` `next build` BLOCKED by a Next 16.2.x prerender regression (see 2026-07-11 note below) — `next dev`/`next start` serve hydrated pages                                          |
 | 2   | API contract         | PASS    | **Zod 3.25 schemas** integrated via `contract-tests.spec.ts` verifying live HTTP responses                                                                                                                                                    |
 | 3   | Auth + roles         | PASS    | Real Postgres integration covers signup/login/refresh/replay/password-reset; unit tests cover non-active account credential freeze, TOTP 2FA enforcement, and encrypted secret storage                                                        |
 | 4   | Authorization        | PASS    | Integration test asserts 403s on cross-tenant access                                                                                                                                                                                          |
@@ -114,6 +114,9 @@ test suite were fixed (see "Critical fixes" below).
 - `pnpm run typecheck` → 14/14 tasks.
 - `pnpm run lint` → 9/9 tasks (style warnings allowed; no errors).
 - `pnpm run build` → 9/9 packages (root `pnpm run build` and `pnpm --filter waitlayer-web build` both succeed).
+
+> **Note (2026-07-11):** the `9/9` build claim in this block is now **stale** — `pnpm --filter waitlayer-web build` (`next build`) is **BLOCKED** by a Next.js 16.2.x static-prerender regression on `/_global-error` (`TypeError: Cannot read properties of null (reading 'useContext')`). This is a framework issue (reproduces on Next 15.5.20 / 16.2.9 / 16.2.10, React 19.1.8 & 19.2.7, Node 22 & 24, with/without Sentry/Turbopack/webpack, and on Next's own default `global-error`), not app code. `next dev`/`next start` serve fully-hydrated pages (verified in-browser 2026-07-11: React attached, Flight data injected, no CSP inline-script violations; `/comparison` shows all 6 Live tools, `/privacy` shows CCPA/Do-Not-Sell/opt-out). `pnpm run typecheck` (14/14) and `pnpm run lint` (9/9) still pass. Fix path = pin/upgrade Next (16.3.0 once stable) or build in a clean CI environment — see AGENTS.md Open Items.
+
 - `pnpm test` → full suite (API unit/contract/e2e-http + CLI + web + VS Code). Exact counts grow per pass and are regenerated, not hard-coded; DB-backed API specs require `DATABASE_URL` + `JWT_SECRET` (>=32 chars).
 - `pnpm --filter @waitlayer/db generate` → client regenerated; `prisma migrate deploy` → all migrations applied.
 

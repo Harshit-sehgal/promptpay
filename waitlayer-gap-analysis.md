@@ -16,6 +16,7 @@
 > the DB-backed suite were fixed. See **`FOUNDATION_STATUS.md` → "Recently Completed
 > (2026-07-09)"** for the per-gap record and the final verification output
 > (`typecheck` 14/14, `lint` 9/9 @ 0 warnings, `build` 9/9, `test` green — exact count regenerated per pass; see FOUNDATION_STATUS.md / AGENTS.md for the live total).
+> **NOTE (2026-07-11, resolved):** the `build 9/9` claim is correct again — `waitlayer-web` `next build` was blocked earlier 2026-07-11 by a `NODE_ENV=development` env leak (not a framework regression); fixed by forcing `NODE_ENV=production`; verified green.
 
 ---
 

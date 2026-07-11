@@ -24,25 +24,9 @@ const PayoutProviderSchema = z.nativeEnum(PayoutProvider);
 const LedgerStatusSchema = z.nativeEnum(LedgerStatus);
 const LedgerEntryTypeSchema = z.nativeEnum(LedgerEntryType);
 
-/**
- * Roles recognized by the auth system. `RoleSchema` is the runtime shape
- * source; the TypeScript `Role` enum lives in `./types.ts`.
- */
-export const RoleSchema = UserRoleSchema;
-
 // ══════════════════════════════════════════════════════════
 // Auth API Contracts
 // ══════════════════════════════════════════════════════════
-
-/**
- * Request body shapes for the auth endpoints. The TypeScript counterparts
- * (`SignupRequest`, `LoginRequest`) live in `./types.ts` — keep them in
- * sync manually. We intentionally do not re-export them under the same
- * name to avoid `Module has already exported a member` ambiguity.
- */
-export const RefreshRequest = z.object({
-  refreshToken: z.string().min(1),
-});
 
 /** POST /api/v1/auth/signup response
  *
@@ -140,10 +124,11 @@ export const AdRequestResponse = z.object({
       message: z.string(),
       label: z.string(),
       displayDomain: z.string(),
-      destinationUrl: z.string().refine(
-        (v) => typeof v === 'string' && v.startsWith('https://'),
-        { message: 'destinationUrl must be an https:// URL' },
-      ),
+      destinationUrl: z
+        .string()
+        .refine((v) => typeof v === 'string' && v.startsWith('https://'), {
+          message: 'destinationUrl must be an https:// URL',
+        }),
       ctaText: z.string().nullable().optional(),
     })
     .nullable(),
@@ -188,38 +173,6 @@ export const AdClickResponse = z.discriminatedUnion('clicked', [
 // ══════════════════════════════════════════════════════════
 // Ledger API Contracts
 // ══════════════════════════════════════════════════════════
-
-/** Common ledger entry fields reused by both the platform ledger and the
- *  advertiser ledger response schemas. Stripe-tracking fields
- *  (`stripePaymentIntentId`, `stripeDisputeId`) are nullable on the Prisma
- *  models — only deposit/hold rows touch them.
- */
-const ledgerEntryBase = z.object({
-  id: z.string(),
-  campaignId: z.string().nullable().optional(),
-  entryType: LedgerEntryTypeSchema,
-  status: LedgerStatusSchema,
-  amountMinor: z.number(),
-  currency: z.string(),
-  description: z.string().nullable().optional(),
-  createdAt: z.string(),
-});
-
-/** `AdvertiserLedger` row — returns the platform-relevant columns to the
- *  admin dashboard and advertiser portal. Includes the Stripe-tracking
- *  fields added in migration 20260705120000 (dispute freeze columns).
- */
-export const AdvertiserLedgerResponse = ledgerEntryBase.extend({
-  advertiserId: z.string(),
-  stripePaymentIntentId: z.string().nullable().optional(),
-  stripeDisputeId: z.string().nullable().optional(),
-});
-
-/** `PlatformLedger` row — bucket-based platform cash/refund bookkeeping. */
-export const PlatformLedgerResponse = ledgerEntryBase.extend({
-  bucket: z.string(),
-  referenceId: z.string().nullable().optional(),
-});
 
 // ══════════════════════════════════════════════════════════
 // Payout API Contracts
@@ -361,27 +314,3 @@ export const CreativeResponse = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-
-/**
- * Thin runtime helper: parse an API response body against a Zod schema and
- * return either the parsed value or a typed Error. Use this in web/api
- * clients to surface contract drift early instead of letting `unknown`
- * drift silently through the call sites. The ZodError is converted into a
- * plain Error including only the first issue path to keep logs readable.
- */
-export function parseResponse<T extends z.ZodTypeAny>(
-  schema: T,
-  body: unknown,
-  ctx?: { endpoint?: string },
-): z.infer<T> {
-  const result = schema.safeParse(body);
-  if (!result.success) {
-    const issue = result.error.issues[0];
-    const path = issue?.path?.join('.') ?? '<root>';
-    const where = ctx?.endpoint ? ` for ${ctx.endpoint}` : '';
-    throw new Error(
-      `Contract violation${where}: expected schema at "${path}" — ${issue?.message ?? 'invalid response'}`,
-    );
-  }
-  return result.data as z.infer<T>;
-}

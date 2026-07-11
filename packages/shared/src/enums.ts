@@ -46,18 +46,6 @@ export enum BidType {
   CPM = 'cpm',
   CPC = 'cpc',
 }
-
-// ── Events ──
-export enum EventType {
-  WAIT_STATE_START = 'wait_state_start',
-  WAIT_STATE_END = 'wait_state_end',
-  AD_REQUEST = 'ad_request',
-  AD_RENDERED = 'ad_rendered',
-  QUALIFIED_IMPRESSION = 'qualified_impression',
-  CLICK = 'click',
-  REPORT_AD = 'report_ad',
-}
-
 export enum ToolType {
   VSCODE = 'vscode',
   CURSOR = 'cursor',
@@ -117,14 +105,6 @@ export enum PayoutStatus {
 }
 
 // ── Fraud ──
-export enum FraudFlagStatus {
-  OPEN = 'open',
-  REVIEWING = 'reviewing',
-  RESOLVED_VALID = 'resolved_valid',
-  RESOLVED_INVALID = 'resolved_invalid',
-  ESCALATED = 'escalated',
-}
-
 export enum FraudFlagType {
   IMPRESSION_RATE_LIMIT = 'impression_rate_limit',
   CLICK_RATE_LIMIT = 'click_rate_limit',
@@ -148,14 +128,6 @@ export enum FraudSeverity {
   HIGH = 'high',
   CRITICAL = 'critical',
 }
-
-// ── Campaign Approval ──
-export enum ApprovalDecision {
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
-  CHANGES_REQUESTED = 'changes_requested',
-}
-
 // ── Prohibited Ad Categories ──
 export const PROHIBITED_CATEGORIES = [
   'gambling',

@@ -122,7 +122,7 @@ async function bootstrap() {
     .addApiKey(undefined, 'X-Api-Key')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, document, {
+  SwaggerModule.setup('api/v1/docs', app, document, {
     swaggerOptions: { persistAuthorization: true },
   });
 

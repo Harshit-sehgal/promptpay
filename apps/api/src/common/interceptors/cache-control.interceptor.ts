@@ -1,11 +1,6 @@
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import {
-  CallHandler,
-  ExecutionContext,
-  Injectable,
-  NestInterceptor,
-} from '@nestjs/common';
+import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 
 /**
  * Sets Cache-Control headers on API responses.
@@ -27,7 +22,7 @@ export class CacheControlInterceptor implements NestInterceptor {
     const url = req.url ?? '';
 
     let directive = 'no-store';
-    if (url.startsWith('/health') || url.startsWith('/docs') || url.startsWith('/docs-json')) {
+    if (url.startsWith('/health') || url.startsWith('/api/v1/docs') || url.startsWith('/docs')) {
       directive = 'public, max-age=5';
     }
 

@@ -65,9 +65,6 @@ importers:
       '@nestjs/throttler':
         specifier: ^6.5.0
         version: 6.5.0(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(reflect-metadata@0.2.2)
-      '@paypal/payouts-sdk':
-        specifier: ^1.1.1
-        version: 1.1.1
       '@sentry/nestjs':
         specifier: ^10.64.0
         version: 10.64.0(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.28)(@opentelemetry/core@2.9.0(@opentelemetry/api@1.9.1))
@@ -113,9 +110,6 @@ importers:
       passport-jwt:
         specifier: ^4.0.1
         version: 4.0.1
-      passport-local:
-        specifier: ^1.0.0
-        version: 1.0.0
       redis:
         specifier: ^6.1.0
         version: 6.1.0(@opentelemetry/api@1.9.1)
@@ -153,9 +147,6 @@ importers:
       '@types/passport-jwt':
         specifier: ^4.0.1
         version: 4.0.1
-      '@types/passport-local':
-        specifier: ^1.0.38
-        version: 1.0.38
       '@types/supertest':
         specifier: ^7.2.0
         version: 7.2.0
@@ -189,9 +180,6 @@ importers:
       keytar:
         specifier: npm:@napi-rs/keyring@^1.1.0
         version: '@napi-rs/keyring@1.3.0'
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^26.1.1
@@ -387,21 +375,9 @@ importers:
 
   packages/ui:
     dependencies:
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      lucide-react:
-        specifier: ^1.23.0
-        version: 1.23.0(react@19.2.7)
-      react:
-        specifier: ^19.1.0
-        version: 19.2.7
-      react-dom:
-        specifier: ^19.1.0
-        version: 19.2.7(react@19.2.7)
       tailwind-merge:
         specifier: ^3.3.0
         version: 3.6.0
@@ -412,12 +388,12 @@ importers:
       '@types/react':
         specifier: ^19.1.0
         version: 19.2.17
-      '@types/react-dom':
-        specifier: ^19.1.0
-        version: 19.2.3(@types/react@19.2.17)
       '@waitlayer/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
+      react:
+        specifier: ^19.1.0
+        version: 19.2.7
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -2122,20 +2098,6 @@ packages:
         integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==,
       }
 
-  '@paypal/payouts-sdk@1.1.1':
-    resolution:
-      {
-        integrity: sha512-m8hICfBjrf8WKXYGt84wVS7YLa+exB/HQwItn33ArmDDH1Hno0vqwwE2oY7TNTuKcBpxSE75D9KMrtNlVN9kZQ==,
-      }
-    engines: { node: '>=8' }
-
-  '@paypal/paypalhttp@1.0.1':
-    resolution:
-      {
-        integrity: sha512-DC7AHxTT7drF6dUi3YaFdPVuT15sIkpD5H2eHmdtFgxM4UanS1o1ZDfMhR9mpxd8o+X6pz2r+EZVRRq+n1cssQ==,
-      }
-    engines: { node: '>=4' }
-
   '@prisma/adapter-pg@7.8.0':
     resolution:
       {
@@ -3429,12 +3391,6 @@ packages:
         integrity: sha512-Y0Ykz6nWP4jpxgEUYq8NoVZeCQPo1ZndJLfapI249g1jHChvRfZRO/LS3tqu26YgAS/laI1qx98sYGz0IalRXQ==,
       }
 
-  '@types/passport-local@1.0.38':
-    resolution:
-      {
-        integrity: sha512-nsrW4A963lYE7lNTv9cr5WmiUD1ibYJvWrpE13oxApFsRt77b0RdtZvKbCdNIY4v/QZ6TRQWaDDEwV1kCTmcXg==,
-      }
-
   '@types/passport-strategy@0.2.38':
     resolution:
       {
@@ -4266,12 +4222,6 @@ packages:
     resolution:
       {
         integrity: sha512-LqoS80HBBSCVhz/3KloUly0ovokxpdOLR++Al3J3+dHXWt9sTKlKd4eYtoxhxyUjoe5+UcIM+5k9MIxyBWnRTw==,
-      }
-
-  class-variance-authority@0.7.1:
-    resolution:
-      {
-        integrity: sha512-Ka+9Trutv7G8M6WT6SeiRWz792K5qEqIGEGzXKhAE6xOWAY6pPH8U+9IY3oCMv6kqTmLsv7Xh/2w2RigkePMsg==,
       }
 
   cli-cursor@3.1.0:
@@ -6497,13 +6447,6 @@ packages:
       {
         integrity: sha512-UCKMDYhNuGOBE9/9Ycuoyh7vP6jpeTp/+sfMJl7nLff/t6dps+iaeE0hhNkKN8/HZHcJ7lCdOyDxHdDoxoSvdQ==,
       }
-
-  passport-local@1.0.0:
-    resolution:
-      {
-        integrity: sha512-9wCE6qKznvf9mQYYbgJ3sVOHmCWoUNMVFoZzNoznmISbhnNNPhN9xfY3sLmScHMetEJeoY7CXwfhCe7argfQow==,
-      }
-    engines: { node: '>= 0.4.0' }
 
   passport-strategy@1.0.0:
     resolution:
@@ -9103,12 +9046,6 @@ snapshots:
     dependencies:
       '@noble/hashes': 1.8.0
 
-  '@paypal/payouts-sdk@1.1.1':
-    dependencies:
-      '@paypal/paypalhttp': 1.0.1
-
-  '@paypal/paypalhttp@1.0.1': {}
-
   '@prisma/adapter-pg@7.8.0':
     dependencies:
       '@prisma/driver-adapter-utils': 7.8.0
@@ -9858,12 +9795,6 @@ snapshots:
       '@types/jsonwebtoken': 9.0.10
       '@types/passport-strategy': 0.2.38
 
-  '@types/passport-local@1.0.38':
-    dependencies:
-      '@types/express': 5.0.6
-      '@types/passport': 1.0.17
-      '@types/passport-strategy': 0.2.38
-
   '@types/passport-strategy@0.2.38':
     dependencies:
       '@types/express': 5.0.6
@@ -10328,7 +10259,7 @@ snapshots:
   browserslist@4.28.4:
     dependencies:
       baseline-browser-mapping: 2.10.42
-      caniuse-lite: 1.0.30001799
+      caniuse-lite: 1.0.30001803
       electron-to-chromium: 1.5.381
       node-releases: 2.0.50
       update-browserslist-db: 1.2.3(browserslist@4.28.4)
@@ -10425,10 +10356,6 @@ snapshots:
       '@types/validator': 13.15.10
       libphonenumber-js: 1.13.7
       validator: 13.15.35
-
-  class-variance-authority@0.7.1:
-    dependencies:
-      clsx: 2.1.1
 
   cli-cursor@3.1.0:
     dependencies:
@@ -11652,10 +11579,6 @@ snapshots:
   passport-jwt@4.0.1:
     dependencies:
       jsonwebtoken: 9.0.3
-      passport-strategy: 1.0.0
-
-  passport-local@1.0.0:
-    dependencies:
       passport-strategy: 1.0.0
 
   passport-strategy@1.0.0: {}
