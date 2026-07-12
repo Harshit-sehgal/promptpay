@@ -494,25 +494,24 @@ export class StripeWebhookController implements OnModuleInit {
     // reversing them, double-counting the refund against the advertiser.
     // (Campaign debits never carry stripePaymentIntentId, so they're never
     // picked up here — already-served ad spend is correctly not refunded.)
+    //
+    // `stripeDisputeId: null` excludes credit rows that belong to the
+    // dispute machinery: the won-dispute restore path writes a fresh
+    // `credit` stamped with the dispute id (see handleDisputeClosed), and
+    // that slice is under the dispute's control, not the refund's. Without
+    // this filter a late/duplicate refund could iterate and reverse that
+    // won-restore credit, removing funds the platform actually holds. The
+    // decremented parent deposit credit (stripeDisputeId stays null on the
+    // parent — only the `hold` child row is stamped) remains pickable and
+    // reverses only its undisputed remainder, which is correct.
     const entries = await this.prisma.advertiserLedger.findMany({
       where: {
         stripePaymentIntentId: details.paymentIntentId,
         entryType: 'credit',
         status: { notIn: ['reversed', 'void'] },
+        stripeDisputeId: null,
       },
     });
-
-    if (entries.length === 0) {
-      this.logger.warn(
-        `No active ledger entries found for paymentIntent ${details.paymentIntentId} in refund ${event.id}`,
-      );
-      // Still mark as processed
-      await this.prisma.webhookEvent.updateMany({
-        where: { provider: 'stripe', eventId: event.id },
-        data: { processingStatus: 'processed', processedAt: new Date() },
-      });
-      return;
-    }
 
     const totalRefunded = BigInt(details.amountMinor);
     let remaining = totalRefunded;
@@ -526,6 +525,15 @@ export class StripeWebhookController implements OnModuleInit {
     // Writing it inside the per-advertiser-entry loop (keyed per-entry)
     // produced N platform refund rows for a PI with N credit rows, summing to
     // more than the actual refund — a platform-cash double-count.
+    //
+    // This write runs BEFORE the `entries.length === 0` check below so the
+    // cash side always mirrors Stripe's outbound refund regardless of
+    // whether advertiser credit rows exist. If the advertiser credit was
+    // already reversed (duplicate delivery, or a refund arriving after a
+    // prior full refund/won-dispute settle), Stripe has still moved the
+    // money out — skipping this write would leave the platform cash ledger
+    // permanently overstated by the refund amount. The key is idempotent on
+    // (paymentIntent, refundId), so a re-delivery is a safe P2002 no-op.
     const platRefundIdempotencyKey = `stripe_refund_plat_${details.paymentIntentId}_${refund.id}`;
     try {
       await this.prisma.platformLedger.create({
@@ -548,6 +556,25 @@ export class StripeWebhookController implements OnModuleInit {
       } else {
         throw err;
       }
+    }
+
+    if (entries.length === 0) {
+      // The cash side above was still written (Stripe moved money out), but
+      // there is no advertiser credit row to reverse against — either the
+      // deposit webhook hasn't landed yet (out-of-order delivery) or the
+      // credit was already fully reversed by a prior delivery. Mark the
+      // event processed; the cash-white reconciliation (`getMoneyIntegrityReport`)
+      // surfaces any residual drift. A retry would not help once the credit
+      // is gone, and the deposit-not-yet-arrived case is handled by the
+      // separate deposit webhook path, not by re-iterating refunds.
+      this.logger.warn(
+        `No active ledger entries found for paymentIntent ${details.paymentIntentId} in refund ${event.id} — cash refund recorded, advertiser side skipped`,
+      );
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
+      return;
     }
 
     // Create a reversal entry for each active entry on this payment intent.
