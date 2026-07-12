@@ -503,23 +503,17 @@ export class ApiClient {
       return promise;
     }
     const transport = url.protocol === 'https:' ? https : http;
-    const headers: Record<string, string> = {
-      ...(bodyStr
-        ? {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(bodyStr).toString(),
-          }
-        : {}),
-      ...(this.creds?.accessToken ? { Authorization: `Bearer ${this.creds.accessToken}` } : {}),
-    };
-    console.log('[CLI DEBUG] request', { method, url: url.toString(), headers });
     const req = transport.request(
       {
         method,
         hostname: requestHostname,
         port: url.port || (url.protocol === 'https:' ? 443 : 80),
         path: url.pathname + url.search,
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(bodyStr).toString(),
+          ...(this.creds?.accessToken ? { Authorization: `Bearer ${this.creds.accessToken}` } : {}),
+        },
       },
       (res) => {
         let data = '';
@@ -527,7 +521,6 @@ export class ApiClient {
         res.on('end', async () => {
           try {
             const parsed = data.length ? JSON.parse(data) : {};
-            console.log('[CLI DEBUG] response', { status: res.statusCode, body: parsed });
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               resolve(parsed as T);
               return;
