@@ -524,7 +524,7 @@ export class ExtensionDeviceReportTrait {
    * clients); once a version is supplied it must satisfy the configured
    * minimum. Tool integrations are managed in `ToolIntegration`.
    */
-  private async assertMinimumExtensionVersion(toolType: string, extensionVersion?: string) {
+  async assertMinimumExtensionVersion(toolType: string, extensionVersion?: string) {
     const integration = await this.prisma.toolIntegration.findUnique({
       where: { slug: toolType },
     });
@@ -550,7 +550,7 @@ export class ExtensionDeviceReportTrait {
    * `provided` is greater than or equal to `required`. Non-numeric segments
    * and pre-release suffixes are ignored for simplicity.
    */
-  private isVersionAtLeast(provided: string, required: string): boolean {
+  isVersionAtLeast(provided: string, required: string): boolean {
     const parse = (v: string) =>
       v
         .split('.')

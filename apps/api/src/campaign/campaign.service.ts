@@ -319,8 +319,8 @@ export class CampaignService {
       impressions,
       clicks,
       ctr: impressions > 0 ? clicks / impressions : 0,
-      spendMinor: spend._sum.amountMinor || 0,
-      budgetRemaining: campaign ? campaign.budgetTotalMinor - campaign.budgetSpentMinor : 0,
+      spendMinor: spend._sum.amountMinor ?? 0n,
+      budgetRemaining: campaign ? campaign.budgetTotalMinor - campaign.budgetSpentMinor : 0n,
     };
   }
 
