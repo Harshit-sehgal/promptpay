@@ -63,6 +63,7 @@ interface ServerAdResponse {
 
 interface RegisterDeviceResponse {
   id: string;
+  userId: string;
   eventSecret?: string;
 }
 
@@ -188,6 +189,10 @@ export class ApiClient {
       try {
         await this.config.storeDeviceUUID(res.id);
         await this.config.storeDeviceEventSecret(res.eventSecret);
+        // Persist the owning userId so handleLoginSuccess can detect
+        // account-switch vs same-user re-auth and avoid bricking the
+        // latter behind the support-token recovery wall.
+        await this.config.storeDeviceUserId(res.userId);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.warn(`[WaitLayer] Failed to persist device registration: ${msg}`);
@@ -336,7 +341,11 @@ export class ApiClient {
 
     try {
       // First attempt: try normal login without TOTP
-      const res = await this.post<{ accessToken: string; refreshToken: string }>('/auth/login', {
+      const res = await this.post<{
+        accessToken: string;
+        refreshToken: string;
+        user: { id: string };
+      }>('/auth/login', {
         email,
         password,
       });
@@ -362,10 +371,11 @@ export class ApiClient {
           return;
         }
         try {
-          const res = await this.post<{ accessToken: string; refreshToken: string }>(
-            '/auth/login',
-            { email, password, twoFactorToken },
-          );
+          const res = await this.post<{
+            accessToken: string;
+            refreshToken: string;
+            user: { id: string };
+          }>('/auth/login', { email, password, twoFactorToken });
           await this.handleLoginSuccess(res);
         } catch (err2: unknown) {
           vscode.window.showErrorMessage(
@@ -381,19 +391,48 @@ export class ApiClient {
   private async handleLoginSuccess(res: {
     accessToken: string;
     refreshToken: string;
+    user?: { id?: string };
   }): Promise<void> {
     const tokens = { accessToken: res.accessToken, refreshToken: res.refreshToken };
     this.currentTokens = tokens;
-    this.deviceUUID = null;
-    this.deviceEventSecret = null;
+
+    // ── Device registration handling across login/logout cycles ──
+    // The device is bound to (userId + machine fingerprint). When the
+    // SAME user logs out and back in, the device registration should
+    // survive — we present `existingEventSecret` to the backend for a
+    // clean proof-of-possession pass, avoiding the support-token
+    // recovery wall. When a DIFFERENT user logs into the same machine,
+    // we clear the previous user's device registration so the new user
+    // gets a fresh device row + event secret.
+    const newUserId = res.user?.id;
+    try {
+      const storedDeviceUserId = await this.config.getDeviceUserId();
+      if (newUserId && storedDeviceUserId === newUserId) {
+        // Same user → keep existing device secrets for proof-of-possession.
+      } else {
+        // Different user (or no stored userId) → clear stale device data.
+        this.deviceUUID = null;
+        this.deviceEventSecret = null;
+        this.config.clearDeviceRegistration().catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
+        });
+      }
+    } catch {
+      // SecretStorage read failed — conservative: clear device data so
+      // registration re-runs and gets a fresh secret.
+      this.deviceUUID = null;
+      this.deviceEventSecret = null;
+      this.config.clearDeviceRegistration().catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
+      });
+    }
+
     // Persist tokens so they survive extension restarts
     this.config.storeTokens(tokens).catch((e: unknown) => {
       const msg = e instanceof Error ? e.message : String(e);
       console.warn(`[WaitLayer] Failed to persist tokens after login: ${msg}`);
-    });
-    this.config.clearDeviceRegistration().catch((e: unknown) => {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
     });
     vscode.window.showInformationMessage('WaitLayer: logged in');
   }
@@ -405,10 +444,12 @@ export class ApiClient {
       // Local cleanup must still happen if the access token has already expired.
     } finally {
       this.currentTokens = null;
-      this.deviceUUID = null;
-      this.deviceEventSecret = null;
+      // Keep device registration across logout cycles: the physical machine
+      // is the same, and on same-user re-login the stored eventSecret
+      // provides proof-of-possession, avoiding the support-token recovery
+      // wall. On a DIFFERENT-user login, handleLoginSuccess detects the
+      // userId mismatch and clears the stale registration then.
       void this.config.clearTokens();
-      void this.config.clearDeviceRegistration();
     }
     vscode.window.showInformationMessage('WaitLayer: logged out');
   }

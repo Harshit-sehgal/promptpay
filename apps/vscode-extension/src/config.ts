@@ -8,6 +8,7 @@ export class ConfigurationManager {
   private deviceKey = 'waitlayer.deviceFingerprint';
   private deviceUuidKey = 'waitlayer.deviceUUID';
   private deviceEventSecretKey = 'waitlayer.deviceEventSecret';
+  private deviceUserIdKey = 'waitlayer.deviceUserId';
 
   /**
    * Secrets is required — it carries the VS Code SecretStorage instance from
@@ -57,9 +58,7 @@ export class ConfigurationManager {
   }
 
   async getMaxAdsPerHour(): Promise<number> {
-    return (
-      vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('maxAdsPerHour') ?? 6
-    );
+    return vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('maxAdsPerHour') ?? 6;
   }
 
   /**
@@ -186,9 +185,37 @@ export class ConfigurationManager {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[WaitLayer] SecretStorage failure (clear event secret): ${msg}`);
     }
+    try {
+      await this.secrets.delete(this.deviceUserIdKey);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure (clear device userId): ${msg}`);
+    }
+  }
+
+  /** Store the userId associated with the current device registration so
+   * a subsequent login can detect an account switch vs a same-user re-auth
+   * and avoid bricking same-user re-login behind the support-token wall. */
+  async storeDeviceUserId(userId: string): Promise<void> {
+    try {
+      await this.secrets.store(this.deviceUserIdKey, userId);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[WaitLayer] SecretStorage failure (store device userId): ${msg}`);
+    }
+  }
+
+  async getDeviceUserId(): Promise<string | null> {
+    try {
+      const id = await this.secrets.get(this.deviceUserIdKey);
+      if (id) return id;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`[WaitLayer] SecretStorage failure (getDeviceUserId): ${msg}`);
+    }
+    return null;
   }
 }
-
 
 function currentTimeHHMM(): string {
   const now = new Date();
