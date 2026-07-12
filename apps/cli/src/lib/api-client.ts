@@ -265,6 +265,14 @@ export class ApiClient {
     }>('GET', '/developer/settings', undefined);
   }
 
+  /** Revoke the current session server-side via POST /auth/logout. The
+   * call may fail if the access token has already expired — the caller
+   * (runLogout) swallows errors and proceeds with local cleanup so the
+   * user's secrets are always wiped regardless of server state. */
+  async logout(): Promise<void> {
+    return this.raw('POST', '/auth/logout', {});
+  }
+
   async updateSettings(data: Record<string, unknown>) {
     return this.raw<{
       adsEnabled: boolean;

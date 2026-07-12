@@ -493,8 +493,15 @@ export class ApiClient {
           try {
             const parsed = data.length ? JSON.parse(data) : {};
 
-            // On 401, try token refresh and retry once (skip for auth endpoints)
-            if (res.statusCode === 401 && !isRetry && !skipAuth && !path.includes('/auth/')) {
+            // On 401, try token refresh and retry once (skip for auth endpoints
+            // except /auth/logout — a stale access token should still be
+            // refreshed so the server-side session is actually revoked)
+            if (
+              res.statusCode === 401 &&
+              !isRetry &&
+              !skipAuth &&
+              (!path.includes('/auth/') || path === '/auth/logout')
+            ) {
               const newTokens = await this.refreshTokens();
               if (newTokens) {
                 // Rebuild headers with new access token (replacing any old auth header)
