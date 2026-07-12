@@ -129,9 +129,9 @@ export function isSupportedCurrency(code: string | null | undefined): boolean {
  * were hard-pinned to `'USD'`: the primary currency is now derived
  * from the user's ACTUAL balances, not assumed USD.
  */
-export function primaryCurrency(totals: Record<string, number>): string {
+export function primaryCurrency(totals: Record<string, bigint>): string {
   let best = 'USD';
-  let bestAmount = 0;
+  let bestAmount = 0n;
   for (const [currency, amount] of Object.entries(totals)) {
     if (amount > bestAmount) {
       bestAmount = amount;

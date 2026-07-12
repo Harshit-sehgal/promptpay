@@ -58,11 +58,11 @@ export class AdvertiserDashboardTrait {
       _sum: { amountMinor: true },
     });
     const totalSpendByCurrency = Object.fromEntries(
-      spend.map((row) => [row.currency, row._sum.amountMinor ?? 0]),
+      spend.map((row) => [row.currency, row._sum.amountMinor ?? 0n]),
     );
     const spendCurrency = primaryCurrency(totalSpendByCurrency);
     return {
-      totalSpendMinor: totalSpendByCurrency[spendCurrency] ?? 0,
+      totalSpendMinor: totalSpendByCurrency[spendCurrency] ?? 0n,
       currency: spendCurrency,
       totalSpendByCurrency,
       totalImpressions,
@@ -189,22 +189,22 @@ export class AdvertiserDashboardTrait {
       string,
       {
         currency: string;
-        balanceMinor: number;
-        totalDepositsMinor: number;
-        totalChargesMinor: number;
-        totalRefundsMinor: number;
+        balanceMinor: bigint;
+        totalDepositsMinor: bigint;
+        totalChargesMinor: bigint;
+        totalRefundsMinor: bigint;
       }
     >();
     for (const row of totals) {
       const currency = row.currency.toUpperCase();
       const current = byCurrency.get(currency) ?? {
         currency,
-        balanceMinor: 0,
-        totalDepositsMinor: 0,
-        totalChargesMinor: 0,
-        totalRefundsMinor: 0,
+        balanceMinor: 0n,
+        totalDepositsMinor: 0n,
+        totalChargesMinor: 0n,
+        totalRefundsMinor: 0n,
       };
-      const amount = row._sum.amountMinor ?? 0;
+      const amount = row._sum.amountMinor ?? 0n;
       if (row.entryType === 'credit') current.totalDepositsMinor += amount;
       if (row.entryType === 'debit') current.totalChargesMinor += amount;
       if (row.entryType === 'refund') current.totalRefundsMinor += amount;
@@ -220,10 +220,10 @@ export class AdvertiserDashboardTrait {
     });
     const primary = balances[0] ?? {
       currency: 'USD',
-      balanceMinor: 0,
-      totalDepositsMinor: 0,
-      totalChargesMinor: 0,
-      totalRefundsMinor: 0,
+      balanceMinor: 0n,
+      totalDepositsMinor: 0n,
+      totalChargesMinor: 0n,
+      totalRefundsMinor: 0n,
     };
     return {
       ...primary,
@@ -307,7 +307,7 @@ export class AdvertiserDashboardTrait {
       _sum: { amountMinor: true },
     });
     const spendByCampaignCurrency = new Map(
-      spendRows.map((r) => [`${r.campaignId}:${r.currency}`, r._sum.amountMinor ?? 0]),
+      spendRows.map((r) => [`${r.campaignId}:${r.currency}`, r._sum.amountMinor ?? 0n]),
     );
     // Daily aggregation for trend chart (issue A-068). Bucket impressions and
     // clicks by day directly in SQL via `date_trunc` so that a wide date range
@@ -370,7 +370,7 @@ export class AdvertiserDashboardTrait {
       const impressions = impByCampaign.get(campaign.id) ?? 0;
       const clicks = clicksByCampaign.get(campaign.id) ?? 0;
       const ctr = impressions > 0 ? clicks / impressions : 0;
-      const spendMinor = spendByCampaignCurrency.get(`${campaign.id}:${campaign.currency}`) ?? 0;
+      const spendMinor = spendByCampaignCurrency.get(`${campaign.id}:${campaign.currency}`) ?? 0n;
       return {
         campaignId: campaign.id,
         campaignName: campaign.name,
@@ -385,8 +385,8 @@ export class AdvertiserDashboardTrait {
     // Summary
     const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
     const totalClicks = rows.reduce((s, r) => s + r.clicks, 0);
-    const totalSpendByCurrency = rows.reduce<Record<string, number>>((totals, row) => {
-      totals[row.currency] = (totals[row.currency] ?? 0) + row.spendMinor;
+    const totalSpendByCurrency = rows.reduce<Record<string, bigint>>((totals, row) => {
+      totals[row.currency] = (totals[row.currency] ?? 0n) + row.spendMinor;
       return totals;
     }, {});
     const avgCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
@@ -396,7 +396,7 @@ export class AdvertiserDashboardTrait {
       summary: {
         totalImpressions,
         totalClicks,
-        totalSpendMinor: totalSpendByCurrency[primaryCurrency(totalSpendByCurrency)] ?? 0,
+        totalSpendMinor: totalSpendByCurrency[primaryCurrency(totalSpendByCurrency)] ?? 0n,
         currency: primaryCurrency(totalSpendByCurrency),
         totalSpendByCurrency,
         avgCtr,

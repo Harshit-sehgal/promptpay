@@ -19,9 +19,12 @@ export class PayoutSummaryTrait {
   declare config: ConfigService;
   declare logger: Logger;
 
-  availableCurrencyTotals(totals: Record<string, number>): Record<string, number> {
+  availableCurrencyTotals(totals: Record<string, bigint>): Record<string, bigint> {
     return Object.fromEntries(
-      Object.entries(totals).map(([currency, amountMinor]) => [currency, Math.max(0, amountMinor)]),
+      Object.entries(totals).map(([currency, amountMinor]) => [
+        currency,
+        amountMinor > 0n ? amountMinor : 0n,
+      ]),
     );
   }
 
@@ -121,16 +124,16 @@ export class PayoutSummaryTrait {
         null,
       ),
     ]);
-    const rawBalancesByCurrency: Record<string, number> = {};
+    const rawBalancesByCurrency: Record<string, bigint> = {};
     for (const row of confirmedEarnings) {
-      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, row._sum.amountMinor ?? 0);
+      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, row._sum.amountMinor ?? 0n);
     }
     for (const row of confirmedDebits) {
-      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
+      this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -(row._sum.amountMinor ?? 0n));
     }
     if (allocatedRows) {
       for (const row of allocatedRows) {
-        this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -Number(row.amountMinor ?? 0));
+        this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -(row.amountMinor ?? 0n));
       }
     }
     const availableBalanceByCurrency = this.availableCurrencyTotals(rawBalancesByCurrency);
@@ -142,9 +145,9 @@ export class PayoutSummaryTrait {
     const currency = primaryCurrency(availableBalanceByCurrency);
     return {
       payoutAccounts: accounts,
-      availableBalanceMinor: availableBalanceByCurrency[currency] ?? 0,
+      availableBalanceMinor: availableBalanceByCurrency[currency] ?? 0n,
       availableBalanceByCurrency,
-      minimumThresholdMinor: PAYOUT.MINIMUM_THRESHOLD_MINOR,
+      minimumThresholdMinor: BigInt(PAYOUT.MINIMUM_THRESHOLD_MINOR),
       currency,
       payoutHistory,
       requiresTwoFactorForPayout: this.config.get<string>('PAYOUT_REQUIRE_2FA') === 'true',
@@ -199,12 +202,12 @@ export class PayoutSummaryTrait {
       this.prisma.earningsLedger.count({ where: unallocatedCreditWhere }),
     ]);
     const available = entryRows.slice(0, limit);
-    const totalsByCurrency: Record<string, number> = {};
+    const totalsByCurrency: Record<string, bigint> = {};
     for (const row of availableCredits) {
-      this.addCurrencyAmount(totalsByCurrency, row.currency, row._sum.amountMinor ?? 0);
+      this.addCurrencyAmount(totalsByCurrency, row.currency, row._sum.amountMinor ?? 0n);
     }
     for (const row of confirmedDebits) {
-      this.addCurrencyAmount(totalsByCurrency, row.currency, -(row._sum.amountMinor ?? 0));
+      this.addCurrencyAmount(totalsByCurrency, row.currency, -(row._sum.amountMinor ?? 0n));
     }
     const availableByCurrency = this.availableCurrencyTotals(totalsByCurrency);
     // Derive the primary currency from the user's ACTUAL available
@@ -214,7 +217,7 @@ export class PayoutSummaryTrait {
     const currency = primaryCurrency(availableByCurrency);
     return {
       entries: available,
-      totalMinor: availableByCurrency[currency] ?? 0,
+      totalMinor: availableByCurrency[currency] ?? 0n,
       currency,
       count: totalEntries,
       page,

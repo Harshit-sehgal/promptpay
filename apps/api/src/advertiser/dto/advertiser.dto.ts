@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -62,12 +62,14 @@ export class CreateCampaignDto {
   @ApiProperty()
   @IsInt()
   @Min(1)
-  bidAmountMinor!: number;
+  @Transform(({ value }) => BigInt(value))
+  bidAmountMinor!: bigint;
 
   @ApiProperty()
   @IsInt()
   @Min(1)
-  budgetTotalMinor!: number;
+  @Transform(({ value }) => BigInt(value))
+  budgetTotalMinor!: bigint;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -97,15 +99,15 @@ export class UpdateCampaignDto {
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Type(() => Number)
-  bidAmountMinor?: number;
+  @Transform(({ value }) => BigInt(value))
+  bidAmountMinor?: bigint;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Type(() => Number)
-  budgetTotalMinor?: number;
+  @Transform(({ value }) => BigInt(value))
+  budgetTotalMinor?: bigint;
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
@@ -151,13 +153,14 @@ export class CreateCountryTargetingDto {
 export class CreateDepositSessionDto {
   @ApiProperty()
   @IsInt()
-  @Min(depositMinimumMinor('USD'), {
+  @Min(Number(depositMinimumMinor('USD')), {
     message: (args) =>
       `Minimum deposit is ${depositMinimumMinor(
         (args.object as CreateDepositSessionDto).currency ?? 'USD',
       )} minor units`,
   })
-  amountMinor!: number;
+  @Transform(({ value }) => BigInt(value))
+  amountMinor!: bigint;
 
   @ApiProperty({ required: false })
   @IsOptional()

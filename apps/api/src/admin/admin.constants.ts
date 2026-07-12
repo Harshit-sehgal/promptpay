@@ -17,7 +17,7 @@ export const ACTIVE_RECOVERY_DEBT_CASE_STATUSES = [
 export type CurrencyAmountGroup = {
   currency: string;
   _sum: {
-    amountMinor: number | null;
+    amountMinor: bigint | null;
   };
 };
 
@@ -55,13 +55,13 @@ export function normalizeOptionalCurrency(value: string | undefined): string | u
 export function netCurrencyAmounts(
   credits: CurrencyAmountGroup[],
   debits: CurrencyAmountGroup[],
-): Record<string, number> {
-  const totals: Record<string, number> = {};
+): Record<string, bigint> {
+  const totals: Record<string, bigint> = {};
   for (const row of credits) {
-    totals[row.currency] = (totals[row.currency] ?? 0) + (row._sum.amountMinor ?? 0);
+    totals[row.currency] = (totals[row.currency] ?? 0n) + (row._sum.amountMinor ?? 0n);
   }
   for (const row of debits) {
-    totals[row.currency] = (totals[row.currency] ?? 0) - (row._sum.amountMinor ?? 0);
+    totals[row.currency] = (totals[row.currency] ?? 0n) - (row._sum.amountMinor ?? 0n);
   }
   return totals;
 }

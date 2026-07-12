@@ -23,8 +23,8 @@ export class AdvertiserCampaignTrait {
       name: string;
       category: string;
       bidType: string;
-      bidAmountMinor: number;
-      budgetTotalMinor: number;
+      bidAmountMinor: bigint;
+      budgetTotalMinor: bigint;
       currency?: string;
       frequencyCapPerHour?: number;
       frequencyCapPerDay?: number;
@@ -303,10 +303,7 @@ export class AdvertiserCampaignTrait {
         where: { id: campaignId },
         select: { budgetTotalMinor: true, budgetSpentMinor: true, currency: true },
       });
-      const unspentMinor = Math.max(
-        0,
-        (locked?.budgetTotalMinor ?? 0) - (locked?.budgetSpentMinor ?? 0),
-      );
+      const unspentMinor = (locked?.budgetTotalMinor ?? 0n) - (locked?.budgetSpentMinor ?? 0n);
       // Record the refund obligation row. Use `entryType: 'refund'` (NOT
       // 'credit') + `status: 'pending'` so the row is doubly excluded from
       // any "advertiser available balance" computation: a generic
@@ -320,7 +317,7 @@ export class AdvertiserCampaignTrait {
         id: string;
         amountMinor: number;
       } | null = null;
-      if (unspentMinor > 0) {
+      if (unspentMinor > 0n) {
         try {
           refundEntry = await tx.advertiserLedger.create({
             data: {
@@ -383,8 +380,8 @@ export class AdvertiserCampaignTrait {
     advertiserId: string,
     dto: {
       name?: string;
-      bidAmountMinor?: number;
-      budgetTotalMinor?: number;
+      bidAmountMinor?: bigint;
+      budgetTotalMinor?: bigint;
       currency?: string;
       frequencyCapPerHour?: number;
       frequencyCapPerDay?: number;
