@@ -500,6 +500,25 @@ The web `developer/payouts` and `advertiser` dashboards already consumed the
 the maps. `getBilling` was checked and is **already correct** (its
 sort puts `'USD'` first when present, else the first present currency).
 
+## BigInt monetary migration (completed 2026-07-12)
+
+- **What:** Migrated all 11 monetary columns from `Int` (32-bit, max 21,474,836,647 cents ≈ $214k) to `BigInt` (64-bit, ~9.2e18 cents) — closes the per-row 2^31 cap that would truncate campaign budgets, payout requests, and ledger entries at high-volume advertisers.
+- **Schema (already):** `packages/db/prisma/schema.prisma` already declared every monetary column as `BigInt`. The Postgres follow-up was the missing piece.
+- **Migration:** `packages/db/prisma/migrations/20260712000000_bigint_monetary_columns/migration.sql` — raw-SQL `ALTER TABLE … ALTER COLUMN … TYPE BIGINT` on:
+  - `campaigns.{bidAmountMinor,budgetTotalMinor,budgetSpentMinor}`
+  - `earnings_ledger.amountMinor`, `advertiser_ledger.amountMinor`, `platform_ledger.amountMinor`
+  - `payout_requests.{requestedAmountMinor,approvedAmountMinor}`, `payout_allocations.amountMinor`
+  - `referral_rewards.amountMinor`, `recovery_debt_cases.amountMinor`
+    Idempotent — Postgres tolerates ALTER on an already-BIGINT column.
+- **Application support:**
+  - `apps/api/src/main.ts:21` — `BigInt.prototype.toJSON = () => this.toString()` polyfill (already present) so JSON responses serialize BigInts as decimal strings.
+  - `apps/api/src/common/validators/bigint.validators.ts` — `@IsBigInt()` and `@MinBigInt(m)` class-validator decorators for monetary DTO fields (mounted on `CreateCampaignDto.bidAmountMinor`, `budgetTotalMinor`, `RecoveryDebtCasesQueryDto.minAmountMinor`).
+  - `apps/api/src/test-setup.ts` — same polyfill mirrored for vitest (so `JSON.stringify(BigInt)` works in specs that don't boot `main.ts`).
+- **Tests:**
+  - `apps/api/src/common/validators/bigint.validators.spec.ts` — 6 cases (accept valid, reject non-bigint, reject below-min, reject negative, accept equal-min, accept greater-than-min) on `CreateCampaignDto`.
+  - `apps/api/src/common/validators/non-monetary-int.validators.spec.ts` — 39 cases guarding that _non-monetary_ `Int` fields (pagination, frequency caps, ratings, `expiresInMinutes`, `maxAdsPerHour`, …) still enforce `@IsInt()` boundaries after the migration.
+- **Verified:** typecheck 14/14, lint 9/9, integration **503/503**, web vitest **86/86**, contract 34, plus BigInt validator specs (4 + 39 = 43 new cases) all green. Type fixes (DTO Zod schemas updated to `z.bigint()` / `z.coerce.bigint()` in `packages/shared/src/contracts.ts`; the existing `int4 → ::bigint` CAST fix from the multi-currency patch was the application-side complement) keep end-to-end behavior identical.
+
 ## End-to-End SaaS Readiness Checks
 
 The three flows (developer / advertiser / admin) are code-complete step by step.
