@@ -444,9 +444,8 @@ totalSpendByCurrency.USD ?? 0`. Now uses `primaryCurrency(totalSpendByCurrency)`
   inside the advisory-locked tx (not exploitable); `advertiser-balance` excludes
   `reversal` entryType because the parent `credit` is already decremented at
   freeze time (changing it would double-subtract). The one remaining systemic
-  follow-up is migrating monetary columns from `Int`→`BigInt` (per-row 2^31 cap)
-  — a schema migration that needs a reachable DB to generate/verify, so it was
-  not executed here.
+  follow-up — migrating monetary columns from `Int`→`BigInt` (per-row 2^31 cap)
+  — was executed 2026-07-12 (see "BigInt monetary migration" below).
 
 - **reverseEarnings audit gap (fixed 2026-07-12):** `LedgerService.reverseEarnings`
   — the highest-stakes fraud-mutation path (reflows money across advertiser refund,

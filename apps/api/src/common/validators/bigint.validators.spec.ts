@@ -19,12 +19,12 @@ describe('BigInt validators', () => {
   });
 
   it('rejects non-bigint monetary values', async () => {
-    const dto = plainToInstance(CreateCampaignDto, {
+    const dto = Object.assign(new CreateCampaignDto(), {
       name: 'Test',
       category: 'developer-tools',
       bidType: 'cpc',
       currency: 'USD',
-      bidAmountMinor: 'not-a-number',
+      bidAmountMinor: 'not-bigint',
       budgetTotalMinor: null,
     });
     const errors = await validate(dto);
