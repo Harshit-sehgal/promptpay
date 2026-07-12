@@ -12,7 +12,17 @@ import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { loadEnv } from '@waitlayer/config';
 
 import { AppModule } from './app.module';
+
+// BigInt values cannot be serialized by JSON.stringify by default. Every
+// monetary column in the schema is stored as BigInt, so without this polyfill
+// any response containing an amount would throw at runtime. We serialize
+// BigInt as a string to preserve precision across the wire; callers that need
+// numeric values should parse with BigInt(value) on the client.
+(BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
+  return this.toString();
+};
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { verifyMigrationsApplied } from './config/migration-check';
 import { PrismaService } from './config/prisma.service';
@@ -81,7 +91,11 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new SentryGlobalFilter(), new HttpExceptionFilter());
+  app.useGlobalFilters(
+    new SentryGlobalFilter(),
+    new PrismaExceptionFilter(),
+    new HttpExceptionFilter(),
+  );
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   app.enableCors({

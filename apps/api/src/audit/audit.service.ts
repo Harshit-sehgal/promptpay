@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy,OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
@@ -31,6 +31,7 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AuditService.name);
   private readonly queue: AuditLogEntry[] = [];
   private retryTimer?: NodeJS.Timeout;
+  private drainPromise: Promise<void> | null = null;
 
   constructor(private prisma: PrismaService) {}
 
@@ -46,8 +47,22 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     if (this.retryTimer) clearInterval(this.retryTimer);
   }
 
-  /** Attempt to flush the queued entries. Best-effort; failures stay queued. */
+  /** Attempt to flush the queued entries. Best-effort; failures stay queued.
+   *  Serialised by `drainPromise` so concurrent calls do not race over the
+   *  queue snapshot and the bounded re-queue check. */
   private async drain(): Promise<void> {
+    if (this.drainPromise) {
+      return this.drainPromise;
+    }
+    this.drainPromise = this.drainUnsafe();
+    try {
+      await this.drainPromise;
+    } finally {
+      this.drainPromise = null;
+    }
+  }
+
+  private async drainUnsafe(): Promise<void> {
     if (this.queue.length === 0) return;
     // Snapshot + clear so concurrent log() calls append to a fresh buffer.
     const batch = this.queue.splice(0, this.queue.length);

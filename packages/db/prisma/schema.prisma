@@ -417,9 +417,9 @@ model Campaign {
   status              CampaignStatus @default(draft)
   category            String
   bidType             BidType
-  bidAmountMinor      Int
-  budgetTotalMinor    Int
-  budgetSpentMinor    Int            @default(0)
+  bidAmountMinor      BigInt
+  budgetTotalMinor    BigInt
+  budgetSpentMinor    BigInt         @default(0)
   currency            String         @default("USD")
   frequencyCapPerHour Int            @default(2)
   frequencyCapPerDay  Int            @default(6)
@@ -695,7 +695,7 @@ model EarningsLedger {
   click          AdClick?        @relation(fields: [clickId], references: [id], onDelete: SetNull)
   entryType      LedgerEntryType
   status         LedgerStatus
-  amountMinor    Int
+  amountMinor    BigInt
   currency       String          @default("USD")
   availableAt    DateTime?       @db.Timestamptz
   idempotencyKey String          @unique
@@ -749,7 +749,7 @@ model AdvertiserLedger {
   stripeDisputeId       String?
   entryType             LedgerEntryType
   status                LedgerStatus
-  amountMinor           Int
+  amountMinor           BigInt
   currency              String          @default("USD")
   idempotencyKey        String          @unique
   description           String?
@@ -770,7 +770,7 @@ model PlatformLedger {
   campaign       Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   entryType      LedgerEntryType
   status         LedgerStatus
-  amountMinor    Int
+  amountMinor    BigInt
   currency       String          @default("USD")
   bucket         String
   referenceId    String?
@@ -796,8 +796,8 @@ model PayoutRequest {
   payoutAccountId      String
   payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Restrict)
   status               PayoutStatus  @default(draft)
-  requestedAmountMinor Int
-  approvedAmountMinor  Int?
+  requestedAmountMinor BigInt
+  approvedAmountMinor  BigInt?
   currency             String        @default("USD")
   reviewerId           String?
   reviewNote           String?
@@ -826,7 +826,7 @@ model PayoutAllocation {
   payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
   earningsEntryId String
   earningsEntry   EarningsLedger @relation(fields: [earningsEntryId], references: [id], onDelete: Restrict)
-  amountMinor     Int
+  amountMinor     BigInt
   createdAt       DateTime       @default(now())
 
   @@unique([earningsEntryId])
@@ -867,7 +867,7 @@ model RecoveryDebtCase {
   userId            String
   user              User                   @relation("RecoveryDebtUserCases", fields: [userId], references: [id], onDelete: Restrict)
   status            RecoveryDebtCaseStatus @default(open)
-  amountMinor       Int
+  amountMinor       BigInt
   currency          String                 @default("USD")
   externalReference String?
   note              String?
@@ -1094,7 +1094,7 @@ model ReferralReward {
   referral    Referral     @relation(fields: [referralId], references: [id], onDelete: Cascade)
   userId      String
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amountMinor Int
+  amountMinor BigInt
   currency    String       @default("USD")
   status      LedgerStatus @default(estimated)
 

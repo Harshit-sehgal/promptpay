@@ -151,31 +151,31 @@ export function minorUnitExponent(code: string | null | undefined): number {
  * into integer minor units, respecting the currency's actual minor-unit
  * exponent. Avoids the JPY 100x bug that a hardcoded `* 100` produces.
  */
-export function majorToMinor(majorAmount: number, currency = 'USD'): number {
+export function majorToMinor(majorAmount: number, currency = 'USD'): bigint {
   const exponent = minorUnitExponent(currency);
   const factor = 10 ** exponent;
   // Round to the nearest minor unit; guard against floating-point drift.
-  return Math.round((majorAmount + Number.EPSILON) * factor);
+  return BigInt(Math.round((majorAmount + Number.EPSILON) * factor));
 }
 
 /**
  * Convert integer minor units back into a major-unit input value string for
  * form fields (e.g. 3000 USD minor -> "30", 1000 JPY minor -> "1000").
  */
-export function minorToMajorInputValue(minorUnits: number, currency = 'USD'): string {
+export function minorToMajorInputValue(minorUnits: bigint, currency = 'USD'): string {
   const exponent = minorUnitExponent(currency);
-  const major = minorUnits / 10 ** exponent;
+  const major = Number(minorUnits) / 10 ** exponent;
   return major.toString();
 }
 
 /** Per-currency deposit floor, or the USD default when the code is unknown. */
-export function depositMinimumMinor(code: string | null | undefined): number {
-  return getCurrencyPolicy(code)?.depositMinimumMinor ?? DEFAULT_POLICY.depositMinimumMinor;
+export function depositMinimumMinor(code: string | null | undefined): bigint {
+  return BigInt(getCurrencyPolicy(code)?.depositMinimumMinor ?? DEFAULT_POLICY.depositMinimumMinor);
 }
 
 /** Per-currency payout floor, or the USD default when the code is unknown. */
-export function payoutMinimumMinor(code: string | null | undefined): number {
-  return getCurrencyPolicy(code)?.payoutMinimumMinor ?? DEFAULT_POLICY.payoutMinimumMinor;
+export function payoutMinimumMinor(code: string | null | undefined): bigint {
+  return BigInt(getCurrencyPolicy(code)?.payoutMinimumMinor ?? DEFAULT_POLICY.payoutMinimumMinor);
 }
 
 /** Whether the given provider can settle the given currency. */
@@ -193,9 +193,9 @@ export function isProviderSupportedForCurrency(
  * currency's actual minor-unit exponent (e.g. JPY 1000 -> "¥1,000", not
  * "¥10.00"). Falls back to 2 decimals for unknown currencies.
  */
-export function formatMinorUnits(minorUnits: number, currency = 'USD'): string {
+export function formatMinorUnits(minorUnits: bigint, currency = 'USD'): string {
   const exponent = minorUnitExponent(currency);
-  const major = minorUnits / 10 ** exponent;
+  const major = Number(minorUnits) / 10 ** exponent;
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,

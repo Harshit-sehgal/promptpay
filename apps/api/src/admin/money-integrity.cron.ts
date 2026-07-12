@@ -40,9 +40,6 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
   ) {}
 
   onApplicationBootstrap() {
-    // Never run the monitor under the test harness — it would hammer the
-    // database with full-reconciliation scans and emit noisy audit rows.
-    if (process.env.NODE_ENV === 'test') return;
     this.intervalId = setInterval(() => void this.tick(), MoneyIntegrityCronService.INTERVAL_MS);
     // Run once shortly after boot so a fresh deploy surfaces any pre-existing
     // drift without waiting a full interval.
@@ -63,10 +60,12 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
 
       const discrepancies = [
         ...report.campaignDiscrepancies.map(
-          (d) => `campaign ${d.campaignId} (${d.campaignName}): currency=${d.currency} spend=${d.budgetSpentMinor} debits=${d.ledgerDebits} diff=${d.diff}`,
+          (d) =>
+            `campaign ${d.campaignId} (${d.campaignName}): currency=${d.currency} spend=${d.budgetSpentMinor} debits=${d.ledgerDebits} diff=${d.diff}`,
         ),
         ...report.negativeDeveloperBalances.map(
-          (b) => `developer ${b.userId} (${b.email}): currency=${b.currency} negative balance=${b.balanceMinor}`,
+          (b) =>
+            `developer ${b.userId} (${b.email}): currency=${b.currency} negative balance=${b.balanceMinor}`,
         ),
       ];
 
@@ -75,8 +74,12 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
           report.globalReconciliationByCurrency ?? { USD: report.globalReconciliation },
         ).map(([currency, row]) => [currency, row.discrepancyMinor]),
       );
-      const totalDiff = Math.max(0, ...Object.values(globalDiscrepancies).map((diff) => Math.abs(diff)));
-      const severity = totalDiff > 0 || report.negativeDeveloperBalances.length > 0 ? 'high' : 'medium';
+      const totalDiff = Math.max(
+        0,
+        ...Object.values(globalDiscrepancies).map((diff) => Math.abs(diff)),
+      );
+      const severity =
+        totalDiff > 0 || report.negativeDeveloperBalances.length > 0 ? 'high' : 'medium';
 
       this.logger.error(
         `[MONEY INTEGRITY] (${severity}) ${discrepancies.length} discrepancy(ies) detected. ` +

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
@@ -6,6 +6,7 @@ import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { AddPayoutMethodDto, PayoutHistoryQueryDto, RequestPayoutDto } from './dto';
 import { PayoutService } from './payout.service';
 
@@ -36,6 +37,8 @@ export class PayoutController {
 
   @ApiOperation({ summary: 'Request payout' })
   @Post('request')
+  @Audit('request_payout', 'payout')
+  @UseInterceptors(AuditInterceptor)
   @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('payout:write')

@@ -12,6 +12,7 @@ import {
   Post,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -21,6 +22,7 @@ import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { PrismaService } from '../config/prisma.service';
 import { CampaignService, type ServiceActor } from './campaign.service';
 import { CreateCreativeDto, UpdateCreativeDto } from './dto';
@@ -144,6 +146,8 @@ export class CampaignController {
   @ApiOperation({ summary: 'Approve creative' })
   @Post('creatives/:creativeId/approve')
   @HttpCode(HttpStatus.OK)
+  @Audit('approve_creative', 'creative', 'creativeId')
+  @UseInterceptors(AuditInterceptor)
   @UseGuards(RolesGuard)
   @Roles('admin', 'super_admin')
   approveCreative(@Param('creativeId', ParseUUIDPipe) creativeId: string) {
@@ -153,6 +157,8 @@ export class CampaignController {
   @ApiOperation({ summary: 'Reject creative' })
   @Post('creatives/:creativeId/reject')
   @HttpCode(HttpStatus.OK)
+  @Audit('reject_creative', 'creative', 'creativeId')
+  @UseInterceptors(AuditInterceptor)
   @UseGuards(RolesGuard)
   @Roles('admin', 'super_admin')
   rejectCreative(

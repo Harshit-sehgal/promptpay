@@ -1,4 +1,4 @@
-import { Injectable, Logger,OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { ComplianceService } from './compliance.service';
 
@@ -15,6 +15,7 @@ import { ComplianceService } from './compliance.service';
 export class RetentionCronService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(RetentionCronService.name);
   private intervalId?: NodeJS.Timeout;
+  private running = false;
   // Configurable via RETENTION_CRON_INTERVAL_MS (default 24h).
   private readonly POLL_INTERVAL_MS = Number(
     process.env.RETENTION_CRON_INTERVAL_MS ?? 24 * 60 * 60 * 1000,
@@ -41,7 +42,16 @@ export class RetentionCronService implements OnApplicationBootstrap, OnModuleDes
   }
 
   async run() {
-    await this.compliance.ensureRetentionDefaults();
-    await this.compliance.runAllRetention();
+    if (this.running) {
+      this.logger.warn('Data-retention purge already in flight — skipping overlapping run');
+      return;
+    }
+    this.running = true;
+    try {
+      await this.compliance.ensureRetentionDefaults();
+      await this.compliance.runAllRetention();
+    } finally {
+      this.running = false;
+    }
   }
 }

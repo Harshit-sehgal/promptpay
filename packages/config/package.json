@@ -2,6 +2,9 @@
   "name": "@waitlayer/config",
   "version": "0.0.1",
   "private": true,
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {

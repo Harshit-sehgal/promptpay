@@ -1,4 +1,4 @@
-import { Injectable, Logger,OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { PrismaService } from '../config/prisma.service';
 
@@ -15,6 +15,7 @@ import { PrismaService } from '../config/prisma.service';
 export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(SessionCleanupCron.name);
   private intervalId?: NodeJS.Timeout;
+  private running = false;
 
   // Run every hour. The `expiresAt` of a session row is the same instant the
   // refresh JWT expires, and the JWT strategy refuses tokens past their own
@@ -49,17 +50,29 @@ export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestr
   }
 
   private async runCleanup() {
+    if (this.running) {
+      this.logger.warn('Session cleanup already in flight — skipping overlapping run');
+      return;
+    }
+    this.running = true;
     try {
       const cutoff = new Date(Date.now() - SessionCleanupCron.GRACE_MS);
       const result = await this.prisma.session.deleteMany({
         where: { expiresAt: { lt: cutoff } },
       });
       if (result.count > 0) {
-        this.logger.log(`Pruned ${result.count} expired session(s) (cutoff=${cutoff.toISOString()})`);
+        this.logger.log(
+          `Pruned ${result.count} expired session(s) (cutoff=${cutoff.toISOString()})`,
+        );
       }
     } catch (err) {
       // Cron errors must not crash the app — log and continue.
-      this.logger.error('Session cleanup cron failed', err instanceof Error ? err.stack : String(err));
+      this.logger.error(
+        'Session cleanup cron failed',
+        err instanceof Error ? err.stack : String(err),
+      );
+    } finally {
+      this.running = false;
     }
   }
 

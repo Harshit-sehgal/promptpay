@@ -14,6 +14,7 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -25,6 +26,7 @@ import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { DeleteAccountDto } from '../developer/dto';
 import { StripeProvider } from '../payout/providers';
 import { AdvertiserService } from './advertiser.service';
@@ -185,6 +187,8 @@ export class AdvertiserController {
 
   @ApiOperation({ summary: 'Submit campaign' })
   @Post('campaigns/:id/submit')
+  @Audit('submit_campaign', 'campaign', 'id')
+  @UseInterceptors(AuditInterceptor)
   @RequiredScopes('campaigns:write')
   async submitCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
@@ -194,6 +198,8 @@ export class AdvertiserController {
 
   @ApiOperation({ summary: 'Reset campaign to draft' })
   @Post('campaigns/:id/reset')
+  @Audit('reset_campaign', 'campaign', 'id')
+  @UseInterceptors(AuditInterceptor)
   @RequiredScopes('campaigns:write')
   async resetCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
@@ -203,6 +209,8 @@ export class AdvertiserController {
 
   @ApiOperation({ summary: 'Pause campaign' })
   @Post('campaigns/:id/pause')
+  @Audit('pause_campaign', 'campaign', 'id')
+  @UseInterceptors(AuditInterceptor)
   @RequiredScopes('campaigns:write')
   async pauseCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
@@ -212,6 +220,8 @@ export class AdvertiserController {
 
   @ApiOperation({ summary: 'Resume campaign' })
   @Post('campaigns/:id/resume')
+  @Audit('resume_campaign', 'campaign', 'id')
+  @UseInterceptors(AuditInterceptor)
   @RequiredScopes('campaigns:write')
   async resumeCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
@@ -221,6 +231,8 @@ export class AdvertiserController {
 
   @ApiOperation({ summary: 'Archive campaign' })
   @Post('campaigns/:id/archive')
+  @Audit('archive_campaign', 'campaign', 'id')
+  @UseInterceptors(AuditInterceptor)
   @RequiredScopes('campaigns:write')
   async archiveCampaign(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
     const ctx = resolveApiContext(req);
@@ -330,6 +342,8 @@ export class AdvertiserController {
   @ApiOperation({ summary: 'Delete advertiser account' })
   @Post('delete-account')
   @HttpCode(HttpStatus.OK)
+  @Audit('delete_account', 'user')
+  @UseInterceptors(AuditInterceptor)
   @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('advertiser:write')
   deleteAccount(@CurrentUser('id') userId: string, @Body() dto: DeleteAccountDto) {

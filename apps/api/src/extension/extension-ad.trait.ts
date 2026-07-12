@@ -269,16 +269,16 @@ export class ExtensionAdTrait {
     // long as eligible is non-empty, but falls through here only when
     // totalBid happens to round to zero. In that case pick uniformly to
     // avoid deterministic over-serving of the first campaign encountered.
-    const totalBid = eligible.reduce((sum, c) => sum + c.bidAmountMinor, 0);
+    const totalBid = eligible.reduce((sum, c) => sum + c.bidAmountMinor, 0n);
     let selected: (typeof eligible)[number];
-    if (totalBid === 0) {
+    if (totalBid === 0n) {
       selected = eligible[Math.floor(Math.random() * eligible.length)];
     } else {
-      let random = Math.random() * totalBid;
+      let random = BigInt(Math.floor(Math.random() * Number(totalBid)));
       selected = eligible[0];
       for (const c of eligible) {
         random -= c.bidAmountMinor;
-        if (random <= 0) {
+        if (random <= 0n) {
           selected = c;
           break;
         }
@@ -658,7 +658,7 @@ export class ExtensionAdTrait {
       where: { userId: impression.userId },
     });
     const trustLevel = trustScore?.level || 'new';
-    const split = this.ledger.calculateSplit(impression.campaign.bidAmountMinor);
+    const split = this.ledger.calculateSplit(BigInt(impression.campaign.bidAmountMinor));
     const holdDays = this.ledger.getHoldDays(trustLevel);
     // RESTRICTED → holdDays = -1 (indefinite). A negative hold must never
     // produce an `availableAt` in the past (that would immediately mature the
@@ -718,7 +718,7 @@ export class ExtensionAdTrait {
         // (2) Atomic spend increment — rejects when budget would overflow OR the
         // campaign is no longer `active`.
         const spent: number = await tx.$executeRawUnsafe(
-          `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
+          `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
           impression.campaign.bidAmountMinor,
           impression.campaignId,
         );
@@ -732,7 +732,7 @@ export class ExtensionAdTrait {
             campaignId: impression.campaignId,
             entryType: 'debit',
             status: 'confirmed',
-            amountMinor: impression.campaign.bidAmountMinor,
+            amountMinor: BigInt(impression.campaign.bidAmountMinor),
             currency: impression.campaign.currency,
             idempotencyKey: `${idempotencyBase}-adv`,
             description: `Impression ${impression.id} - campaign ${impression.campaignId}`,
@@ -953,7 +953,7 @@ export class ExtensionAdTrait {
           // including the `status = 'active'` TOCTOU guard against
           // concurrent archive/pause.
           const spent: number = await tx.$executeRawUnsafe(
-            `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
+            `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
             impression.campaign.bidAmountMinor,
             impression.campaignId,
           );
@@ -967,7 +967,7 @@ export class ExtensionAdTrait {
               campaignId: impression.campaignId,
               entryType: 'debit',
               status: 'confirmed',
-              amountMinor: impression.campaign.bidAmountMinor,
+              amountMinor: BigInt(impression.campaign.bidAmountMinor),
               currency: impression.campaign.currency,
               idempotencyKey: `${idempotencyBase}-adv`,
               description: `Click charge - campaign ${impression.campaignId}`,

@@ -1,4 +1,4 @@
-import { Injectable, Logger,OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { LedgerService } from './ledger.service';
 
@@ -6,6 +6,7 @@ import { LedgerService } from './ledger.service';
 export class LedgerCronService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(LedgerCronService.name);
   private intervalId?: NodeJS.Timeout;
+  private running = false;
 
   constructor(private readonly ledgerService: LedgerService) {}
 
@@ -23,6 +24,11 @@ export class LedgerCronService implements OnApplicationBootstrap, OnModuleDestro
   }
 
   private async runMaturation() {
+    if (this.running) {
+      this.logger.warn('Earnings maturation already in flight — skipping overlapping run');
+      return;
+    }
+    this.running = true;
     try {
       this.logger.log('Running estimated earnings maturation...');
       const result = await this.ledgerService.matureEarnings();
@@ -31,6 +37,8 @@ export class LedgerCronService implements OnApplicationBootstrap, OnModuleDestro
       }
     } catch (error) {
       this.logger.error('Failed to mature estimated earnings:', error);
+    } finally {
+      this.running = false;
     }
   }
 

@@ -41,6 +41,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
 
+      - name: Audit dependencies
+        run: pnpm audit --audit-level moderate
+
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -123,6 +126,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      # The main build-and-test job already typechecks and lints against the
+      # source tree. Re-run here in the docker-build context so a Dockerfile or
+      # compose change that breaks the build environment is caught before any
+      # image is trusted.
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
       # Web reads JWT_SECRET + NEXT_PUBLIC_* at *build* time (Edge middleware
       # inlines env). Passing them as build args proves the image bakes them
       # in; a missing arg would fail the deploy (A-083), not silently break auth.
@@ -152,6 +166,24 @@ jobs:
             -H 'Content-Type: application/json' -d '{}')
           if [ "$STATUS" = "404" ]; then echo "CONTROLLER ROUTE 404 — compiled image dropped a route"; exit 1; fi
           echo "Controller route resolved over TCP (status $STATUS; expected 400/401, not 404)"
+          docker compose down -v
+
+      # Build and boot the web image, then verify it serves a 200 on the
+      # root path. This closes the gap where the API image is tested but the
+      # web image is only built (and could fail at runtime due to CSP, env,
+      # or static-generation issues).
+      - name: Build + boot web and verify it serves over TCP
+        run: |
+          docker compose up -d web
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000; then
+              echo "Web healthy over TCP"; break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Web container did not become healthy within timeout"; exit 1
+            fi
+            sleep 2
+          done
           docker compose down -v
   # Docs-drift guard: assert AGENTS.md's key claims still match the code.
   # Cheap, no DB, no install — runs on plain node. Keeps the audit narrative

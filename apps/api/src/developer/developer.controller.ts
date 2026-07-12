@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
@@ -16,6 +17,7 @@ import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { DeveloperService } from './developer.service';
 import { DeleteAccountDto, EarningsQueryDto, UpdateSettingsDto } from './dto';
 
@@ -75,6 +77,8 @@ export class DeveloperController {
   @ApiOperation({ summary: 'Delete developer account' })
   @Post('delete-account')
   @HttpCode(HttpStatus.OK)
+  @Audit('delete_account', 'user')
+  @UseInterceptors(AuditInterceptor)
   @UseGuards(RejectApiKeyGuard)
   @RequiredScopes('developer:write')
   deleteAccount(@CurrentUser('id') userId: string, @Body() dto: DeleteAccountDto) {

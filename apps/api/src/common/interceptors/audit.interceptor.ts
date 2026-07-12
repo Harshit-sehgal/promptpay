@@ -1,18 +1,31 @@
 import * as crypto from 'crypto';
-import { from,Observable } from 'rxjs';
+import { from, Observable } from 'rxjs';
 import { throwError } from 'rxjs';
-import { catchError, switchMap,tap } from 'rxjs/operators';
+import { catchError, switchMap, tap } from 'rxjs/operators';
 import {
   CallHandler,
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  SetMetadata,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 
 import type { Prisma } from '@waitlayer/db';
 
 import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../config/prisma.service';
+
+export const AUDIT_METADATA_KEY = 'audit';
+
+export interface AuditMetadata {
+  action: string;
+  targetType: string;
+  targetIdParam?: string;
+}
+
+export const Audit = (action: string, targetType: string, targetIdParam?: string) =>
+  SetMetadata(AUDIT_METADATA_KEY, { action, targetType, targetIdParam });
 
 interface AuditedRequest {
   method?: string;
@@ -27,9 +40,12 @@ interface AuditedRequest {
 }
 
 /**
- * Interceptor that automatically logs admin mutation actions to the AuditLog table.
+ * Interceptor that automatically logs sensitive mutation actions to the AuditLog table.
  *
- * Only activates on POST requests under /admin/* routes (mutations).
+ * Activates on POST requests under /admin/* and /fraud/* routes, plus any route
+ * explicitly opted in via the @Audit decorator. The decorator allows sensitive
+ * non-admin mutations (payout requests, account deletion, API key revocation,
+ * campaign lifecycle actions, etc.) to be audited without relying on URL parsing.
  * Reads the authenticated user id/role from the request (set by JwtAuthGuard)
  * and extracts the target type and id from the URL pattern.
  *
@@ -49,40 +65,64 @@ interface AuditedRequest {
  */
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
-  constructor(private audit: AuditService, private prisma: PrismaService) {}
+  constructor(
+    private audit: AuditService,
+    private prisma: PrismaService,
+    private reflector: Reflector,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler<unknown>): Observable<unknown> {
     const req = context.switchToHttp().getRequest<AuditedRequest>();
     const method = req.method;
     const url: string = req.route?.path ?? req.url ?? '';
 
+    const auditMeta = this.reflector.get<AuditMetadata | undefined>(
+      AUDIT_METADATA_KEY,
+      context.getHandler(),
+    );
+
     // Only audit POST mutations on admin routes, plus manually opted-in
     // handlers (FraudController.resolveFlag is not under /admin/ but still
     // needs auditing). When opted in, the interceptor is class-level or
     // method-level via @UseInterceptors, so it runs unconditionally — the
     // guard here ensures we skip GET requests even when opted in.
-    if (method !== 'POST') {
-      return next.handle();
-    }
-    if (!url.startsWith('/admin/') && !url.startsWith('/fraud/')) {
-      return next.handle();
+    if (!auditMeta) {
+      if (method !== 'POST') {
+        return next.handle();
+      }
+      if (!url.startsWith('/admin/') && !url.startsWith('/fraud/')) {
+        return next.handle();
+      }
     }
 
     const actorId = req.user?.sub ?? req.user?.id ?? 'unknown';
-    const actorRole = req.user?.role ?? 'admin';
+    const actorRole = req.user?.role ?? 'unknown';
 
-    const parsed = parseAdminUrl(url, req.params);
+    let action: string;
+    let targetType: string;
+    let targetId: string;
+
+    if (auditMeta) {
+      action = auditMeta.action;
+      targetType = auditMeta.targetType;
+      targetId = auditMeta.targetIdParam ? (req.params[auditMeta.targetIdParam] ?? '') : actorId;
+    } else {
+      const parsed = parseAdminUrl(url, req.params);
+      action = parsed.action;
+      targetType = parsed.targetType;
+      targetId = parsed.targetId;
+    }
 
     // Fetch the entity's pre-mutation DB state asynchronously, then chain
     // into the handler.
-    return from(fetchEntityPreState(this.prisma, parsed.targetType, parsed.targetId)).pipe(
+    return from(fetchEntityPreState(this.prisma, targetType, targetId)).pipe(
       switchMap((entitySnap) => {
         const actor = {
           actorId,
           actorRole,
-          action: parsed.action,
-          targetType: parsed.targetType,
-          targetId: parsed.targetId,
+          action,
+          targetType,
+          targetId,
           ipHash: hashIp(req),
           // beforeSnap now carries both the scrubbed request body AND the
           // entity's current DB state — solving the "what did they change
@@ -104,7 +144,9 @@ export class AuditInterceptor implements NestInterceptor {
             // than silently dropping it.
             this.audit.log({
               ...actor,
-              afterSnap: { error: (err && (err.message || String(err))) ?? 'error' } as Prisma.InputJsonValue,
+              afterSnap: {
+                error: (err && (err.message || String(err))) ?? 'error',
+              } as Prisma.InputJsonValue,
             });
             return throwError(() => err);
           }),
@@ -201,6 +243,21 @@ async function fetchEntityPreState(
         where: { slug: targetId },
         select: { slug: true, name: true, isActive: true },
       }) as Promise<Record<string, unknown> | null>;
+    case 'api_key':
+      return prisma.apiKey.findUnique({
+        where: { id: targetId },
+        select: { id: true, keyPrefix: true, scopes: true, isActive: true, expiresAt: true },
+      }) as Promise<Record<string, unknown> | null>;
+    case 'user':
+      return prisma.user.findUnique({
+        where: { id: targetId },
+        select: { id: true, role: true, status: true },
+      }) as Promise<Record<string, unknown> | null>;
+    case 'creative':
+      return prisma.adCreative.findUnique({
+        where: { id: targetId },
+        select: { id: true, status: true, campaignId: true, rejectionReason: true },
+      }) as Promise<Record<string, unknown> | null>;
     default:
       return null;
   }
@@ -239,7 +296,11 @@ function parseAdminUrl(
     // Sensitive: tool integrations (an attacker with admin could disable
     // ad-blocking/fraud-detection tools). Surface the slug as the targetId
     // instead of dropping it on the generic fallback.
-    return { action: 'toggle_tool_integration', targetType: 'tool_integration', targetId: params['slug'] ?? '' };
+    return {
+      action: 'toggle_tool_integration',
+      targetType: 'tool_integration',
+      targetId: params['slug'] ?? '',
+    };
   }
 
   // Fallback: derive from last two segments

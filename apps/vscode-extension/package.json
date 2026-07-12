@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "publisher": "waitlayer",
   "engines": {
+    "node": ">=22.0.0",
     "vscode": "^1.90.0"
   },
   "categories": [

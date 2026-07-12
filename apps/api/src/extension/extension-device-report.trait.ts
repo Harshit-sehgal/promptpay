@@ -44,6 +44,8 @@ export class ExtensionDeviceReportTrait {
   ) {
     // Privacy: reject payloads containing prohibited data fields
     this.enforcePrivacyOn(dto);
+    // Enforce minimum extension version for the requested tool.
+    await this.assertMinimumExtensionVersion(dto.toolType, dto.extensionVersion);
     // Check for duplicate device (same user + same fingerprint = re-registration).
     const existingDevice = await this.prisma.device.findUnique({
       where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
@@ -513,5 +515,56 @@ export class ExtensionDeviceReportTrait {
 
   getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
     return getAdvertiserBalance(this.prisma, advertiserId, currency);
+  }
+
+  // ── Extension Version Enforcement ──
+  /**
+   * Reject registration if the tool integration requires a minimum version and
+   * the client does not meet it. Missing versions are allowed (legacy/MVP
+   * clients); once a version is supplied it must satisfy the configured
+   * minimum. Tool integrations are managed in `ToolIntegration`.
+   */
+  private async assertMinimumExtensionVersion(toolType: string, extensionVersion?: string) {
+    const integration = await this.prisma.toolIntegration.findUnique({
+      where: { slug: toolType },
+    });
+    if (!integration || !integration.minVersion) return;
+
+    const required = integration.minVersion;
+    const provided = extensionVersion?.trim();
+    if (!provided) {
+      throw new ForbiddenException(
+        `Extension version is required for ${toolType}. Minimum supported version: ${required}.`,
+      );
+    }
+
+    if (!this.isVersionAtLeast(provided, required)) {
+      throw new ForbiddenException(
+        `Extension version ${provided} for ${toolType} is below the minimum supported version ${required}. Please update and try again.`,
+      );
+    }
+  }
+
+  /**
+   * Compare two dotted version strings (e.g. "1.2.3"). Returns true if
+   * `provided` is greater than or equal to `required`. Non-numeric segments
+   * and pre-release suffixes are ignored for simplicity.
+   */
+  private isVersionAtLeast(provided: string, required: string): boolean {
+    const parse = (v: string) =>
+      v
+        .split('.')
+        .map((part) => parseInt(part.replace(/[^\d].*$/, ''), 10))
+        .filter((n) => !Number.isNaN(n));
+    const p = parse(provided);
+    const r = parse(required);
+    const maxLen = Math.max(p.length, r.length);
+    for (let i = 0; i < maxLen; i++) {
+      const a = p[i] ?? 0;
+      const b = r[i] ?? 0;
+      if (a > b) return true;
+      if (a < b) return false;
+    }
+    return true;
   }
 }

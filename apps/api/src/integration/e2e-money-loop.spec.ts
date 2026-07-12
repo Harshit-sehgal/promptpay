@@ -265,6 +265,10 @@ const mockPrisma = {
   webhookEvent: {
     deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
   },
+  // ── ToolIntegration (extension version enforcement) ──
+  toolIntegration: {
+    findUnique: vi.fn(),
+  },
 
   // Raw SQL — used for atomic budget guards. Default return = 1 (row updated).
   $executeRawUnsafe: vi.fn(async (_sql: string, ..._params: any[]) => 1),
@@ -437,6 +441,9 @@ describe('E2E Money Loop', () => {
       }));
     });
     mockPrisma.consent.findFirst.mockResolvedValue(null);
+    // Default: no minimum extension version requirement so device
+    // registration tests don't need to opt in individually.
+    mockPrisma.toolIntegration.findUnique.mockResolvedValue(null);
   });
 
   // ──────────────────────────────────────────────────────────────

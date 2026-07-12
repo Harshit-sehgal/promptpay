@@ -18,7 +18,7 @@ export class LedgerEarningsTrait {
     userId: string;
     campaignId: string;
     impressionId: string;
-    bidAmountMinor: number;
+    bidAmountMinor: bigint;
     currency: string;
     advertiserId: string;
     trustLevel: string;
@@ -47,7 +47,7 @@ export class LedgerEarningsTrait {
       // is the authoritative billability flag and is set false by callers
       // when this path throws `campaign_archived`.
       const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
         bidAmountMinor,
         campaignId,
       );
@@ -126,7 +126,7 @@ export class LedgerEarningsTrait {
     userId: string;
     campaignId: string;
     clickId: string;
-    clickBidMinor: number;
+    clickBidMinor: bigint;
     currency: string;
     advertiserId: string;
     trustLevel: string;
@@ -142,7 +142,7 @@ export class LedgerEarningsTrait {
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Status guard — see the matching comment on recordImpressionEarnings.
       const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1 WHERE "id" = $2 AND "budgetSpentMinor" + $1 <= "budgetTotalMinor" AND "status" = 'active'`,
+        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
         clickBidMinor,
         campaignId,
       );
