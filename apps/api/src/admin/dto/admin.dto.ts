@@ -380,6 +380,23 @@ export class AuditLogQueryDto {
 
 // ── Payout account verification ─
 
+// ── Metrics ──
+
+export class AdminMetricsQueryDto {
+  @ApiProperty({ required: false, default: 30 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  @Type(() => Number)
+  days?: number;
+
+  @ApiProperty({ required: false, default: 'USD' })
+  @IsOptional()
+  @IsString()
+  currency?: string;
+}
+
 export class PayoutAccountVerifyDto {
   @ApiProperty()
   @IsIn([true, false])

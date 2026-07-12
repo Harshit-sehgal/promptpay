@@ -1,5 +1,6 @@
 export {
   AdminDevicesQueryDto,
+  AdminMetricsQueryDto,
   ApproveCampaignDto,
   ApprovePayoutDto,
   AuditLogQueryDto,

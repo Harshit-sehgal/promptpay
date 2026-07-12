@@ -282,7 +282,7 @@ export const CreateCampaignResponse = z.object({
   status: CampaignStatusSchema,
   category: z.string(),
   bidType: BidTypeSchema,
-  bidAmountMinor: z.coerce.bigint().nonnegative(),
+  bidAmountMinor: z.coerce.bigint().positive(),
   budgetTotalMinor: z.coerce.bigint().nonnegative(),
   budgetSpentMinor: z.coerce.bigint().nonnegative(),
   currency: z.string(),

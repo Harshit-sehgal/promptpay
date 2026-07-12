@@ -19,6 +19,7 @@ import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { AdminService } from './admin.service';
 import {
   AdminDevicesQueryDto,
+  AdminMetricsQueryDto,
   ApproveCampaignDto,
   ApprovePayoutDto,
   AuditLogQueryDto,
@@ -59,8 +60,8 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Get admin metrics' })
   @Get('metrics')
-  getMetrics(@Query('days') days?: string, @Query('currency') currency?: string) {
-    return this.service.getMetrics(days ? parseInt(days, 10) : 30, currency);
+  getMetrics(@Query() query: AdminMetricsQueryDto) {
+    return this.service.getMetrics(query.days, query.currency);
   }
 
   @ApiOperation({ summary: 'Get users' })

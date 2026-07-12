@@ -305,9 +305,15 @@ export class AdminOverviewTrait {
     // compatibility) so any currency is queryable and nothing is
     // dropped. Reject anything that is not a supported currency.
     const reportingCurrency = isSupportedCurrency(currency) ? currency.toUpperCase() : 'USD';
+    // Defense-in-depth: bound `days` to a sane operational window so
+    // the Node daily[] array, the JSON response payload, and the four
+    // database date_trunc queries all stay bounded regardless of what
+    // the caller passes. The controller DTO already gates 1–90, but a
+    // future internal caller or trait composition could skip that gate.
+    const boundedDays = Math.min(Math.max(Math.trunc(Number(days) || 30), 1), 90);
     const now = new Date();
-    const periodStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    const prevPeriodStart = new Date(periodStart.getTime() - days * 24 * 60 * 60 * 1000);
+    const periodStart = new Date(Date.now() - boundedDays * 24 * 60 * 60 * 1000);
+    const prevPeriodStart = new Date(periodStart.getTime() - boundedDays * 24 * 60 * 60 * 1000);
     // Date-floor helper for grouping by day
     const floorDay = (d: Date): string => d.toISOString().slice(0, 10);
     // A-007: All daily aggregation is computed in the DATABASE via SQL
@@ -489,7 +495,7 @@ export class AdminOverviewTrait {
       paidRevenueMinor: bigint;
       advertiserSpendMinor: bigint;
     }[] = [];
-    for (let i = days - 1; i >= 0; i--) {
+    for (let i = boundedDays - 1; i >= 0; i--) {
       const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
       const dayStr = floorDay(d);
       const imps = impressionByDay.get(dayStr);
@@ -546,7 +552,7 @@ export class AdminOverviewTrait {
     });
     return {
       currency: reportingCurrency,
-      period: { days, from: floorDay(periodStart), to: floorDay(now) },
+      period: { days: boundedDays, from: floorDay(periodStart), to: floorDay(now) },
       daily,
       totals: {
         impressions: currentImpressions,
