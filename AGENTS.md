@@ -179,10 +179,11 @@ browser or live-client check. **Status after the 2026-07-10 live-E2E session
   error path (`page.a046.test.ts`), A-083 middleware secret (`middleware.test.ts`).
 - Remain live/browser-only — genuine environment, operator, or design constraints,
   NOT code defects: A-027 (by design — no public recovery-token consume route),
-  A-040 / A-047 signup (blocked only by the standalone-API-404 sandbox artifact,
-  see findings — not by application code), A-056 (client `country` population
-  smoke). A-033, A-046, A-050, A-067 are now covered by automated tests (see
-  per-item notes). The CSP-hydration blocker previously listed here is RESOLVED:
+  A-047 signup (full real-browser cookie/re-prompt E2E still recommended — the
+  standalone API itself serves routes correctly, see findings; not by application
+  code), A-056 (client `country` population smoke). A-033, A-046, A-050, A-067 are
+  now covered by automated tests (see per-item notes). The CSP-hydration blocker
+  previously listed here is RESOLVED:
   the committed `apps/web/next.config.js` `script-src` already allows
   `'unsafe-inline'`, so Next.js bootstrap scripts hydrate. See "Sandbox live-E2E
   findings" below.
@@ -203,10 +204,13 @@ Live Google ID-token callback still unverified (needs real Google OAuth).
   Information" / opt-out copy (SSR). Live enforcement beyond ad serving remains
   product-undefined.
 - **A-040** CLI `waitlayer watch` money loop: covered via HTTP E2E against the
-  same API surface (in-process integration test). **Live compiled-binary run
-  blocked 2026-07-10**: the standalone API HTTP listener 404s all controller
-  routes in this sandbox (see findings), so a live `waitlayer` CLI run against it
-  cannot complete. Logic is exercised by `e2e-money-loop.spec.ts`.
+  same API surface (in-process integration test `e2e-money-loop.spec.ts`). **Live
+  compiled-binary run RESOLVED (2026-07-12):** the standalone API HTTP listener
+  serves all controller routes (see findings — no 404s), so a live `waitlayer` CLI
+  run against it now completes: `POST /auth/signup` → 201, then `waitlayer status`
+  → `GET /developer/dashboard` + `GET /ledger/balance` (both 200) printing the
+  earnings summary. The `watch` money-loop ad-serving logic is exercised by
+  `e2e-money-loop.spec.ts`; the binary↔API live link is proven.
 - **A-046** Fraud recompute: shared client wired; UI error path now covered by
   `apps/web/src/app/admin/fraud/page.a046.test.ts` (renders the admin fraud page,
   mocks `recomputeTrustScore` to reject with a 500, asserts the failure surfaces
@@ -233,25 +237,27 @@ Live Google ID-token callback still unverified (needs real Google OAuth).
 
 ### Sandbox live-E2E findings (2026-07-10)
 
-Two environment artifacts blocked deeper live browser/CLI E2E in this sandbox;
-both are infra/environment, not code defects — the 461 in-process API integration
-tests + 116 web/cli/vscode tests prove routing/logic end to end:
+Two environment artifacts were believed to block deeper live browser/CLI E2E in
+this sandbox; both are now RESOLVED (see bullets below) — the 461 in-process API
+integration tests + 116 web/cli/vscode tests prove routing/logic end to end, and
+the standalone `dist` API runtime + live `waitlayer` CLI binary are now verified
+serving real routes against the live Postgres + Redis (2026-07-12):
 
-- **Standalone API HTTP 404s all controller routes.** The compiled (`start:prod`)
-  and source (`nest start`) API both boot, log route mapping, and serve Swagger at
-  `/docs` (200), but **every** `/api/v1/*` controller route returns 404 over the
-  TCP listener. The identical app routes correctly under `supertest` (used by all
-  461 integration tests), so routing logic is sound — the standalone
-  `app.listen()` path in this sandbox does not serve controller routes. This
-  blocks live CLI/API browser E2E (A-027, A-040, A-047 signup) here and should be
-  re-checked in a real container before trusting `pnpm start:api` / the Docker
-  image (A-075). **Re-verified 2026-07-11:** the build output path
-  `apps/api/dist/apps/api/src/main.js` exists and exactly matches the
-  `start:api` script (`node apps/api/dist/apps/api/src/main.js`) and the API
-  package `start:prod` (`node dist/apps/api/src/main`), so the 404 is **not** a
-  wrong-entrypoint / wrong-build-path defect — it is a runtime artifact of this
-  sandbox's network/process environment (no reachable Postgres/Redis, no reverse
-  proxy), not a code defect.
+- **Standalone API HTTP serving — RESOLVED (2026-07-12).** Prior notes claimed the
+  compiled (`start:prod`) API "404s all `/api/v1/*` controller routes" over the TCP
+  listener while serving `/docs`. That was a **stale environment artifact**, not a
+  code defect. Re-verified 2026-07-12 by booting the real `dist` build
+  (`node apps/api/dist/apps/api/src/main.js`) against the live Postgres + Redis: it
+  maps every controller route, `/api/v1/docs` → 200, `/api/v1/health/ready` → 200
+  (`database: connected`, `redis: connected`), `/api/v1/auth/login` → 400
+  (validation), `/api/v1/auth/me` → 401 (auth) — **no 404s**. A live run of the
+  compiled `waitlayer` CLI binary (`apps/cli/dist/index.js`) against this standalone
+  API completed a full exchange: `POST /auth/signup` → 201, then `waitlayer status`
+  issued `GET /developer/dashboard` + `GET /ledger/balance` (both 200) and printed
+  the earnings summary (`status.exit=0`). This clears A-040's "live compiled-binary
+  run blocked" claim — the standalone API runtime is sound. The only remaining
+  A-075 gap is `docker build` itself, blocked by the npm-registry `ETIMEDOUT` in
+  this sandbox (the Dockerfile code path + `USER node` + HEALTHCHECK are correct).
 - **Strict CSP blocks Next.js hydration — RESOLVED (stale).** The committed
   `apps/web/next.config.js` `headers()` CSP is
   `script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client` (the per-request nonce was removed 2026-07-11 because a nonce silently broke hydration; the committed config is now nonce-free) — `'unsafe-inline'` lets Next.js inline bootstrap / Flight / React-refresh scripts hydrate.
