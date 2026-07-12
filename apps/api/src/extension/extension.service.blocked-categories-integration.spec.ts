@@ -7,7 +7,7 @@ import { ExtensionService } from './extension.service';
 
 vi.mock('../common/utils/advertiser-balance', () => ({
   getAdvertiserBalance: vi.fn(),
-  getAdvertiserBalancesByCurrency: vi.fn(async () => new Map([['adv-1:USD', 1_000_000]])),
+  getAdvertiserBalancesByCurrency: vi.fn(async () => new Map([['adv-1:USD', 1_000_000n]])),
 }));
 
 // isCountryEligible was extracted from ExtensionService into country-targeting.ts
@@ -34,9 +34,9 @@ const financeCampaign = {
   id: 'camp-finance',
   advertiserId: 'adv-1',
   currency: 'USD',
-  bidAmountMinor: 100,
-  budgetSpentMinor: 0,
-  budgetTotalMinor: 1000,
+  bidAmountMinor: 100n,
+  budgetSpentMinor: 0n,
+  budgetTotalMinor: 1000n,
   frequencyCapPerHour: 0,
   frequencyCapPerDay: 0,
   category: 'finance',
@@ -48,9 +48,9 @@ const gamingCampaign = {
   id: 'camp-gaming',
   advertiserId: 'adv-1',
   currency: 'USD',
-  bidAmountMinor: 100,
-  budgetSpentMinor: 0,
-  budgetTotalMinor: 1000,
+  bidAmountMinor: 100n,
+  budgetSpentMinor: 0n,
+  budgetTotalMinor: 1000n,
   frequencyCapPerHour: 0,
   frequencyCapPerDay: 0,
   category: 'gaming',

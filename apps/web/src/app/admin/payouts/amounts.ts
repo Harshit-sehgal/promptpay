@@ -1,9 +1,9 @@
 export interface PayoutAmountSource {
-  requestedAmountMinor: number;
-  approvedAmountMinor?: number | null;
+  requestedAmountMinor: bigint;
+  approvedAmountMinor?: bigint | null;
 }
 
-export function authoritativePayoutAmountMinor(payout: PayoutAmountSource): number {
+export function authoritativePayoutAmountMinor(payout: PayoutAmountSource): bigint {
   return payout.approvedAmountMinor ?? payout.requestedAmountMinor;
 }
 

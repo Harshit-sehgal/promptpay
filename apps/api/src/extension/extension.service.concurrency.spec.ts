@@ -38,7 +38,7 @@ interface LedgerRow {
   currency: string;
   entryType: string;
   status: string;
-  amountMinor: number;
+  amountMinor: bigint;
   idempotencyKey?: string;
 }
 
@@ -55,11 +55,11 @@ function groupAdvertiserLedger(
   );
   const byType: Record<string, number> = {};
   for (const r of rows) {
-    byType[r.entryType] = (byType[r.entryType] ?? 0) + r.amountMinor;
+    byType[r.entryType] = (byType[r.entryType] ?? 0n) + r.amountMinor;
   }
   return (['credit', 'debit', 'refund'] as const).map((entryType) => ({
     entryType,
-    _sum: { amountMinor: byType[entryType] ?? 0 },
+    _sum: { amountMinor: byType[entryType] ?? 0n },
   }));
 }
 
@@ -71,7 +71,7 @@ function makePrisma() {
       currency: 'USD',
       entryType: 'credit',
       status: 'confirmed',
-      amountMinor: 100,
+      amountMinor: 100n,
     },
   ];
 
@@ -151,7 +151,7 @@ describe('concurrent billable impressions cannot overdraw advertiser balance (A-
     const prisma = makePrisma();
     const audit = { log: vi.fn().mockResolvedValue(undefined) } as any;
     const ledger = {
-      calculateSplit: vi.fn(() => ({ userShare: 70, platformShare: 20, reserveShare: 10 })),
+      calculateSplit: vi.fn(() => ({ userShare: 70n, platformShare: 20n, reserveShare: 10n })),
       getHoldDays: vi.fn(() => 7),
     } as any;
     const fraud = {
@@ -197,17 +197,17 @@ describe('concurrent billable impressions cannot overdraw advertiser balance (A-
       (r: LedgerRow) => r.entryType === 'debit' && r.status === 'confirmed',
     );
     expect(debits.length).toBe(1);
-    expect(debits[0].amountMinor).toBe(100);
+    expect(debits[0].amountMinor).toBe(100n);
 
     // Final spendable balance must be exactly 0 (never negative).
     const finalBalance = prisma.store
       .filter((r: LedgerRow) => r.status === 'confirmed')
       .reduce(
-        (acc: number, r: LedgerRow) =>
+        (acc: bigint, r: LedgerRow) =>
           acc + (r.entryType === 'credit' ? r.amountMinor : -r.amountMinor),
-        0,
+        0n,
       );
-    expect(finalBalance).toBe(0);
+    expect(finalBalance).toBe(0n);
   });
 
   it('rejects the second impression even when run strictly sequentially (serialized lock semantics)', async () => {
@@ -216,7 +216,7 @@ describe('concurrent billable impressions cannot overdraw advertiser balance (A-
       prisma,
       { log: vi.fn().mockResolvedValue(undefined) } as any,
       {
-        calculateSplit: vi.fn(() => ({ userShare: 70, platformShare: 20, reserveShare: 10 })),
+        calculateSplit: vi.fn(() => ({ userShare: 70n, platformShare: 20n, reserveShare: 10n })),
         getHoldDays: vi.fn(() => 7),
       } as any,
       { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,

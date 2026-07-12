@@ -13,8 +13,8 @@ interface PendingPayout {
   userId: string;
   user?: { email?: string | null; name?: string | null; trustLevel?: string | null };
   status: 'requested' | 'under_review' | 'approved' | 'processing';
-  requestedAmountMinor: number;
-  approvedAmountMinor?: number | null;
+  requestedAmountMinor: bigint;
+  approvedAmountMinor?: bigint | null;
   currency: string;
   payoutAccount: { id: string; provider: string; destination: string; isVerified?: boolean };
   transactions?: Array<{ providerTxId?: string | null; status: string }>;
@@ -64,7 +64,7 @@ export default function AdminPayoutsPage() {
   const handleApproveWithAmount = async () => {
     if (!approveModalFor) return;
     const trimmed = approveAmount.trim();
-    let amountMinor: number | undefined;
+    let amountMinor: bigint | undefined;
     if (trimmed !== '') {
       const major = parseFloat(trimmed);
       if (isNaN(major) || major <= 0) {
@@ -191,9 +191,9 @@ export default function AdminPayoutsPage() {
     }
   };
 
-  const totalsByCurrency = payouts.reduce<Record<string, number>>((totals, payout) => {
+  const totalsByCurrency = payouts.reduce<Record<string, bigint>>((totals, payout) => {
     const currency = payout.currency || 'USD';
-    totals[currency] = (totals[currency] ?? 0) + payout.requestedAmountMinor;
+    totals[currency] = (totals[currency] ?? 0n) + payout.requestedAmountMinor;
     return totals;
   }, {});
   const totalSummary = formatCurrencyBreakdown(totalsByCurrency);

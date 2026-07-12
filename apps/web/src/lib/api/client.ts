@@ -1,6 +1,39 @@
 import axios from 'axios';
 
 /**
+ * Recursively coerce monetary fields serialized as strings back to BigInt.
+ * The API serializes `bigint` values as JSON strings via
+ * `BigInt.prototype.toJSON`; this walker restores them on the client so
+ * component code can work with real `bigint` values.
+ *
+ * Only targets fields ending in `Minor` or `ByCurrency` to avoid converting
+ * non-monetary numeric strings (e.g. `providerTxId`, `userId`).
+ */
+function coerceBigInts(obj: unknown): unknown {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj;
+  if (Array.isArray(obj)) return obj.map(coerceBigInts);
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (key.endsWith('Minor') && typeof value === 'string' && /^-?\d+$/.test(value)) {
+      result[key] = BigInt(value);
+    } else if (key.endsWith('ByCurrency') && typeof value === 'object' && value !== null) {
+      const coerced: Record<string, unknown> = {};
+      for (const [currency, val] of Object.entries(value)) {
+        coerced[currency] = typeof val === 'string' && /^-?\d+$/.test(val) ? BigInt(val) : val;
+      }
+      result[key] = coerced;
+    } else if (typeof value === 'object') {
+      result[key] = coerceBigInts(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Axios instance for same-origin API calls via Next.js Route Handlers.
  *
  * The browser calls `/api/...` endpoints (same origin). The catch-all proxy
@@ -44,7 +77,10 @@ function onRefreshFailed(err: unknown) {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    response.data = coerceBigInts(response.data);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 

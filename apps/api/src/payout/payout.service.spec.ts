@@ -22,13 +22,13 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}, requir
       // insufficient-earnings guard) is the one under test.
       aggregate: vi.fn((args: { where?: { entryType?: string } }) => {
         if (args?.where?.entryType === 'debit') {
-          return Promise.resolve({ _sum: { amountMinor: 0 } });
+          return Promise.resolve({ _sum: { amountMinor: 0n } });
         }
-        return Promise.resolve({ _sum: { amountMinor: 10_000 } });
+        return Promise.resolve({ _sum: { amountMinor: 10_00n } });
       }),
     },
     payoutAllocation: {
-      aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0 } }),
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
     },
     fraudFlag: { count: vi.fn().mockResolvedValue(0) },
     payoutAccount: { findUnique: vi.fn() },
@@ -68,7 +68,7 @@ describe('PayoutService.requestPayout payout-account verification', () => {
     await expect(
       service.requestPayout('u1', {
         payoutAccountId: 'acc1',
-        amountMinor: 1000,
+        amountMinor: 1000n,
         currency: 'USD',
       }),
     ).rejects.toThrow(ForbiddenException);
@@ -90,7 +90,7 @@ describe('PayoutService.requestPayout payout-account verification', () => {
     await expect(
       service.requestPayout('u1', {
         payoutAccountId: 'acc1',
-        amountMinor: 1000,
+        amountMinor: 1000n,
         currency: 'USD',
       }),
     ).rejects.not.toThrow(ForbiddenException);
@@ -109,7 +109,7 @@ describe('PayoutService.requestPayout payout-account verification', () => {
     await expect(
       service.requestPayout('u1', {
         payoutAccountId: 'acc1',
-        amountMinor: 1000,
+        amountMinor: 1000n,
         currency: 'USD',
       }),
     ).rejects.toThrow(ForbiddenException);
@@ -145,7 +145,7 @@ describe('PayoutService.requestPayout 2FA enforcement (A-035)', () => {
     await expect(
       service.requestPayout('u1', {
         payoutAccountId: 'acc1',
-        amountMinor: 1000,
+        amountMinor: 1000n,
         currency: 'USD',
       }),
     ).rejects.not.toThrow(ForbiddenException);
@@ -160,7 +160,7 @@ describe('PayoutService.requestPayout 2FA enforcement (A-035)', () => {
     await expect(
       service.requestPayout('u1', {
         payoutAccountId: 'acc1',
-        amountMinor: 1000,
+        amountMinor: 1000n,
         currency: 'USD',
       }),
     ).rejects.not.toThrow(ForbiddenException);
@@ -189,7 +189,7 @@ describe('PayoutService.getPayoutInfo payout policy metadata', () => {
         },
         payoutAllocation: {
           findMany: vi.fn().mockResolvedValue([]),
-          aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0 } }),
+          aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
         },
       },
       true,
@@ -218,9 +218,9 @@ describe('PayoutService.getPayoutInfo payout policy metadata', () => {
       earningsLedger: {
         groupBy: vi.fn((args: { where?: { entryType?: string } }) => {
           if (args.where?.entryType === 'debit') {
-            return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 100 } }]);
+            return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 100n } }]);
           }
-          return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 1000 } }]);
+          return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 1000n } }]);
         }),
         aggregate: vi.fn(),
       },
@@ -229,8 +229,8 @@ describe('PayoutService.getPayoutInfo payout policy metadata', () => {
     const info = await service.getPayoutInfo('u1');
 
     expect(queryRaw).toHaveBeenCalled();
-    expect(info.availableBalanceMinor).toBe(750);
-    expect(info.availableBalanceByCurrency).toEqual({ USD: 750 });
+    expect(info.availableBalanceMinor).toBe(750n);
+    expect(info.availableBalanceByCurrency).toEqual({ USD: 750n });
   });
 });
 
@@ -252,14 +252,14 @@ describe('PayoutService.getAvailableForPayout bounded availability (A-071)', () 
     const earningsLedger = {
       groupBy: vi.fn((args: { where?: { entryType?: string } }) => {
         if (args.where?.entryType === 'debit') {
-          return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 100 } }]);
+          return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 100n } }]);
         }
-        return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 1000 } }]);
+        return Promise.resolve([{ currency: 'USD', _sum: { amountMinor: 1000n } }]);
       }),
       findMany: vi.fn().mockResolvedValue([
-        { id: 'e3', amountMinor: 300, currency: 'USD' },
-        { id: 'e4', amountMinor: 400, currency: 'USD' },
-        { id: 'e5', amountMinor: 500, currency: 'USD' },
+        { id: 'e3', amountMinor: 300n, currency: 'USD' },
+        { id: 'e4', amountMinor: 400n, currency: 'USD' },
+        { id: 'e5', amountMinor: 500n, currency: 'USD' },
       ]),
       count: vi.fn().mockResolvedValue(5),
       aggregate: vi.fn(),
@@ -284,8 +284,8 @@ describe('PayoutService.getAvailableForPayout bounded availability (A-071)', () 
     expect(available.page).toBe(2);
     expect(available.limit).toBe(2);
     expect(available.hasMore).toBe(true);
-    expect(available.totalMinor).toBe(900);
-    expect(available.totalsByCurrency).toEqual({ USD: 900 });
+    expect(available.totalMinor).toBe(900n);
+    expect(available.totalsByCurrency).toEqual({ USD: 900n });
   });
 });
 
@@ -300,7 +300,7 @@ describe('PayoutService.allocatePayoutEarnings bounded auto-selection (A-071)', 
       clickId: null,
       entryType: 'credit',
       status: 'confirmed',
-      amountMinor: 1,
+      amountMinor: 1n,
       currency: 'USD',
       availableAt: null,
       description: null,
@@ -314,7 +314,7 @@ describe('PayoutService.allocatePayoutEarnings bounded auto-selection (A-071)', 
       clickId: null,
       entryType: 'credit',
       status: 'confirmed',
-      amountMinor: 200,
+      amountMinor: 200n,
       currency: 'USD',
       availableAt: null,
       description: null,
@@ -341,7 +341,7 @@ describe('PayoutService.allocatePayoutEarnings bounded auto-selection (A-071)', 
           currency: string,
         ) => Promise<unknown>;
       }
-    ).allocatePayoutEarnings(tx, 'pr1', 'u1', 600, 'USD');
+    ).allocatePayoutEarnings(tx, 'pr1', 'u1', 600n, 'USD');
 
     expect(tx.earningsLedger.findMany).toHaveBeenNthCalledWith(
       1,
@@ -355,7 +355,7 @@ describe('PayoutService.allocatePayoutEarnings bounded auto-selection (A-071)', 
     expect(tx.earningsLedger.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          amountMinor: 100,
+          amountMinor: 100n,
           idempotencyKey: 'payout-remainder-pr1-earn_500',
         }),
       }),
@@ -378,7 +378,7 @@ describe('PayoutService.processPayout partial approvals', () => {
       clickId: null,
       entryType: 'credit',
       status: 'confirmed',
-      amountMinor: 1000,
+      amountMinor: 1000n,
       currency: 'USD',
       availableAt: new Date('2026-07-09T00:00:00.000Z'),
       description: 'Original earning',
@@ -387,7 +387,7 @@ describe('PayoutService.processPayout partial approvals', () => {
       id: 'alloc-1',
       payoutRequestId: 'payout-1',
       earningsEntryId: earningsEntry.id,
-      amountMinor: 1000,
+      amountMinor: 1000n,
       earningsEntry,
     };
     const payoutForProcessing = {
@@ -412,7 +412,7 @@ describe('PayoutService.processPayout partial approvals', () => {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       payoutAllocation: {
-        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0 } }),
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
         delete: vi.fn(),
         update: vi.fn(),
       },
@@ -436,19 +436,19 @@ describe('PayoutService.processPayout partial approvals', () => {
     });
     expect(prisma.earningsLedger.update).toHaveBeenCalledWith({
       where: { id: earningsEntry.id },
-      data: { amountMinor: 600 },
+      data: { amountMinor: 600n },
     });
     expect(prisma.earningsLedger.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         userId: 'u1',
-        amountMinor: 400,
+        amountMinor: 400n,
         status: 'confirmed',
         idempotencyKey: `payout_remainder_payout-1_${earningsEntry.id}`,
       }),
     });
     expect(prisma.payoutAllocation.update).toHaveBeenCalledWith({
       where: { id: allocation.id },
-      data: { amountMinor: 600 },
+      data: { amountMinor: 600n },
     });
     expect(prisma.payoutAllocation.delete).not.toHaveBeenCalled();
     expect(prisma.payoutTransaction.create).toHaveBeenCalledWith({

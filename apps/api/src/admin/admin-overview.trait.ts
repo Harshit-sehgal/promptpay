@@ -19,8 +19,8 @@ export class AdminOverviewTrait {
       }),
       this.prisma.fraudFlag.count({ where: { status: 'open' } }),
     ]);
-    const totalPayoutsByCurrency = Object.fromEntries(
-      payouts.map((row) => [row.currency, row._sum.amountMinor ?? 0n]),
+    const totalPayoutsByCurrency: Record<string, bigint> = Object.fromEntries(
+      payouts.map((row) => [row.currency, BigInt(row._sum.amountMinor ?? 0)]),
     );
     return {
       activeUsers: users,
@@ -200,11 +200,17 @@ export class AdminOverviewTrait {
     const developerBalances = new Map<string, bigint>();
     for (const row of developerCreditGroups) {
       const key = `${row.userId}:${row.currency}`;
-      developerBalances.set(key, (developerBalances.get(key) ?? 0n) + (row._sum.amountMinor ?? 0n));
+      developerBalances.set(
+        key,
+        (developerBalances.get(key) ?? 0n) + BigInt(row._sum.amountMinor ?? 0),
+      );
     }
     for (const row of developerDebitGroups) {
       const key = `${row.userId}:${row.currency}`;
-      developerBalances.set(key, (developerBalances.get(key) ?? 0n) - (row._sum.amountMinor ?? 0n));
+      developerBalances.set(
+        key,
+        (developerBalances.get(key) ?? 0n) - BigInt(row._sum.amountMinor ?? 0),
+      );
     }
     const negativeDeveloperBalances: Array<{
       userId: string;
@@ -365,21 +371,21 @@ export class AdminOverviewTrait {
     const revenueByDay = new Map<
       string,
       {
-        estimated: number;
-        confirmed: number;
-        paid: number;
+        estimated: bigint;
+        confirmed: bigint;
+        paid: bigint;
       }
     >();
-    let totalEstimatedRevenue = 0;
-    let totalConfirmedRevenue = 0;
-    let totalPaidRevenue = 0;
-    let totalRevenueAmount = 0;
+    let totalEstimatedRevenue = 0n;
+    let totalConfirmedRevenue = 0n;
+    let totalPaidRevenue = 0n;
+    let totalRevenueAmount = 0n;
     for (const rev of dailyRevenue) {
       const dayStr = rev.day.toISOString().slice(0, 10);
-      const estimated = Number(rev.estimated);
-      const confirmed = Number(rev.confirmed);
-      const paid = Number(rev.paid);
-      const total = Number(rev.total);
+      const estimated = rev.estimated;
+      const confirmed = rev.confirmed;
+      const paid = rev.paid;
+      const total = rev.total;
       revenueByDay.set(dayStr, { estimated, confirmed, paid });
       totalEstimatedRevenue += estimated;
       totalConfirmedRevenue += confirmed;
@@ -402,11 +408,11 @@ export class AdminOverviewTrait {
       GROUP BY day
       ORDER BY day
     `;
-    const spendByDay = new Map<string, number>();
-    let totalAdvertiserSpend = 0;
+    const spendByDay = new Map<string, bigint>();
+    let totalAdvertiserSpend = 0n;
     for (const row of dailySpend) {
       const dayStr = row.day.toISOString().slice(0, 10);
-      const spend = Number(row.spend);
+      const spend = row.spend;
       spendByDay.set(dayStr, spend);
       totalAdvertiserSpend += spend;
     }
@@ -440,10 +446,10 @@ export class AdminOverviewTrait {
       signups: number;
       developerSignups: number;
       advertiserSignups: number;
-      estimatedRevenueMinor: number;
-      confirmedRevenueMinor: number;
-      paidRevenueMinor: number;
-      advertiserSpendMinor: number;
+      estimatedRevenueMinor: bigint;
+      confirmedRevenueMinor: bigint;
+      paidRevenueMinor: bigint;
+      advertiserSpendMinor: bigint;
     }[] = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
@@ -458,10 +464,10 @@ export class AdminOverviewTrait {
         signups: sigs?.total ?? 0,
         developerSignups: sigs?.developer ?? 0,
         advertiserSignups: sigs?.advertiser ?? 0,
-        estimatedRevenueMinor: rev?.estimated ?? 0,
-        confirmedRevenueMinor: rev?.confirmed ?? 0,
-        paidRevenueMinor: rev?.paid ?? 0,
-        advertiserSpendMinor: spendByDay.get(dayStr) ?? 0,
+        estimatedRevenueMinor: rev?.estimated ?? 0n,
+        confirmedRevenueMinor: rev?.confirmed ?? 0n,
+        paidRevenueMinor: rev?.paid ?? 0n,
+        advertiserSpendMinor: spendByDay.get(dayStr) ?? 0n,
       });
     }
     // ── Period-over-period comparison ──
@@ -484,8 +490,11 @@ export class AdminOverviewTrait {
     const currentImpressions = totalImpressions;
     const currentSignups = totalSignups;
     const currentRevenue = totalRevenueAmount;
-    const calcPct = (current: number, prev: number): number | null =>
-      prev > 0 ? Math.round(((current - prev) / prev) * 1000) / 10 : null;
+    const calcPct = (current: bigint | number, prev: bigint | number): number | null => {
+      const cur = typeof current === 'bigint' ? Number(current) : current;
+      const pr = typeof prev === 'bigint' ? Number(prev) : prev;
+      return pr > 0 ? Math.round(((cur - pr) / pr) * 1000) / 10 : null;
+    };
     // ── Platform ledger breakdown ──
     // Reported in the selected `reportingCurrency` so platform
     // fees / fraud reserves in non-USD buckets are not dropped.
@@ -513,7 +522,7 @@ export class AdminOverviewTrait {
       vsPreviousPeriod: {
         impressionsChangePct: calcPct(currentImpressions, prevImpressions),
         signupsChangePct: calcPct(currentSignups, prevSignups),
-        revenueChangePct: calcPct(currentRevenue, prevRevenue._sum.amountMinor ?? 0),
+        revenueChangePct: calcPct(currentRevenue, prevRevenue._sum.amountMinor ?? 0n),
       },
       activeUsers: {
         developers: devCount,
@@ -528,12 +537,12 @@ export class AdminOverviewTrait {
       payouts: {
         total: totalPayouts,
         pending: pendingPayouts,
-        totalPaidMinor: payoutSum._sum.amountMinor ?? 0,
+        totalPaidMinor: payoutSum._sum.amountMinor ?? 0n,
       },
       platformRevenue: {
-        platformFeeMinor: platform._sum.amountMinor ?? 0,
-        fraudReserveMinor: reserve._sum.amountMinor ?? 0,
-        totalMinor: (platform._sum.amountMinor ?? 0) + (reserve._sum.amountMinor ?? 0),
+        platformFeeMinor: platform._sum.amountMinor ?? 0n,
+        fraudReserveMinor: reserve._sum.amountMinor ?? 0n,
+        totalMinor: (platform._sum.amountMinor ?? 0n) + (reserve._sum.amountMinor ?? 0n),
       },
     };
   }

@@ -17,12 +17,12 @@ import {
 // the runtime API enforcement in @waitlayer/shared.
 describe('public money-policy matches runtime shared policy (A-080)', () => {
   it('exposes a minimum payout of $10.00 (1000 minor) for USD', () => {
-    expect(payoutMinimumMinor('USD')).toBe(1000);
+    expect(payoutMinimumMinor('USD')).toBe(1000n);
     expect(formatMinorUnits(payoutMinimumMinor('USD'), 'USD')).toBe('$10.00');
   });
 
   it('exposes a minimum deposit of $1.00 (100 minor) for USD', () => {
-    expect(depositMinimumMinor('USD')).toBe(100);
+    expect(depositMinimumMinor('USD')).toBe(100n);
     expect(formatMinorUnits(depositMinimumMinor('USD'), 'USD')).toBe('$1.00');
   });
 
@@ -31,7 +31,7 @@ describe('public money-policy matches runtime shared policy (A-080)', () => {
     expect(codes).toContain('USD');
     expect(codes.length).toBeGreaterThan(1);
     for (const code of codes) {
-      expect(payoutMinimumMinor(code)).toBeGreaterThan(0);
+      expect(payoutMinimumMinor(code)).toBeGreaterThan(0n);
     }
   });
 

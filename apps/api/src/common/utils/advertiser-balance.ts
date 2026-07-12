@@ -40,9 +40,9 @@ export async function getAdvertiserBalance(
   let debits = 0n;
   let refunds = 0n;
   for (const row of rows) {
-    if (row.entryType === 'credit') credits = row._sum.amountMinor ?? 0n;
-    else if (row.entryType === 'debit') debits = row._sum.amountMinor ?? 0n;
-    else if (row.entryType === 'refund') refunds = row._sum.amountMinor ?? 0n;
+    if (row.entryType === 'credit') credits = BigInt(row._sum.amountMinor ?? 0);
+    else if (row.entryType === 'debit') debits = BigInt(row._sum.amountMinor ?? 0);
+    else if (row.entryType === 'refund') refunds = BigInt(row._sum.amountMinor ?? 0);
   }
   return credits - debits - refunds;
 }
@@ -70,7 +70,7 @@ export async function getAdvertiserBalancesByCurrency(
   for (const row of rows) {
     const key = `${row.advertiserId}:${row.currency}`;
     const current = map.get(key) ?? 0n;
-    const amount = row._sum.amountMinor ?? 0n;
+    const amount = BigInt(row._sum.amountMinor ?? 0);
     if (row.entryType === 'credit') map.set(key, current + amount);
     else if (row.entryType === 'debit' || row.entryType === 'refund') {
       map.set(key, current - amount);

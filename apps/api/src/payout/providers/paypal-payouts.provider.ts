@@ -104,7 +104,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
   async initiate(params: {
     payoutRequestId: string;
     destination: string;
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
   }): Promise<{ providerTxId: string; status: string }> {
     if (!this.enabled) {

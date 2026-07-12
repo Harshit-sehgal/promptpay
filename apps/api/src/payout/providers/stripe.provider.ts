@@ -40,7 +40,7 @@ export class StripeProvider {
    */
   async createDepositSession(params: {
     advertiserId: string;
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
     successUrl: string;
     cancelUrl: string;
@@ -59,7 +59,7 @@ export class StripeProvider {
               name: 'WaitLayer Ad Credit Deposit',
               description: `Deposit for advertiser ${params.advertiserId}`,
             },
-            unit_amount: params.amountMinor,
+            unit_amount: Number(params.amountMinor),
           },
           quantity: 1,
         },
@@ -133,7 +133,7 @@ export class StripeProvider {
     const paymentIntentId =
       typeof refund.payment_intent === 'string'
         ? refund.payment_intent
-        : refund.payment_intent?.id ?? '';
+        : (refund.payment_intent?.id ?? '');
 
     const amountMinor = refund.amount;
     const currency = refund.currency;
@@ -158,14 +158,16 @@ export class StripeProvider {
     const paymentIntentId =
       typeof dispute.payment_intent === 'string'
         ? dispute.payment_intent
-        : dispute.payment_intent?.id ?? '';
+        : (dispute.payment_intent?.id ?? '');
 
     const amountMinor = dispute.amount;
     const currency = dispute.currency;
     const reason = dispute.reason ?? '';
     const status = dispute.status;
 
-    this.logger.log(`Dispute created: paymentIntent=${paymentIntentId}, amount=${amountMinor}, reason=${reason}`);
+    this.logger.log(
+      `Dispute created: paymentIntent=${paymentIntentId}, amount=${amountMinor}, reason=${reason}`,
+    );
 
     return { paymentIntentId, amountMinor, currency, reason, status };
   }
@@ -211,10 +213,14 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
       if (this.nodeEnv === 'production') {
         return {
           ok: false,
-          reason: 'Stripe Connect payouts are not configured: set STRIPE_SECRET_KEY to enable developer payouts via Stripe Connect.',
+          reason:
+            'Stripe Connect payouts are not configured: set STRIPE_SECRET_KEY to enable developer payouts via Stripe Connect.',
         };
       }
-      return { ok: false, reason: 'Stripe Connect payout provider is disabled (no STRIPE_SECRET_KEY).' };
+      return {
+        ok: false,
+        reason: 'Stripe Connect payout provider is disabled (no STRIPE_SECRET_KEY).',
+      };
     }
     return { ok: true };
   }
@@ -222,11 +228,13 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
   async initiate(params: {
     payoutRequestId: string;
     destination: string;
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
   }): Promise<{ providerTxId: string; status: string }> {
     if (!this.stripe) {
-      throw new Error('Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).');
+      throw new Error(
+        'Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).',
+      );
     }
 
     const connectedAccount = params.destination?.trim();
@@ -237,7 +245,7 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
     }
 
     // Stripe expects integer minor units (cents) and a lowercase currency code.
-    const amount = Math.round(params.amountMinor);
+    const amount = Math.round(Number(params.amountMinor));
     if (amount <= 0) {
       throw new Error(`Refusing Stripe Connect payout with non-positive amount: ${amount}`);
     }
@@ -291,10 +299,11 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
           { idempotencyKey: `${transferGroup}_transfer_reversal` },
         );
       } catch (reversalErr: unknown) {
-        const reversalError = reversalErr instanceof Error ? reversalErr.message : String(reversalErr);
+        const reversalError =
+          reversalErr instanceof Error ? reversalErr.message : String(reversalErr);
         throw new PayoutProviderUnsafeFailure(
           `Stripe Connect payout creation failed after transfer ${transfer.id}, and automatic transfer reversal failed. ` +
-          `Do not release payout allocations until Stripe is reconciled manually. payoutError=${payoutError}; reversalError=${reversalError}`,
+            `Do not release payout allocations until Stripe is reconciled manually. payoutError=${payoutError}; reversalError=${reversalError}`,
         );
       }
 
@@ -315,7 +324,9 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
     context?: { destination?: string },
   ): Promise<{ status: string; paidAt?: Date }> {
     if (!this.stripe) {
-      throw new Error('Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).');
+      throw new Error(
+        'Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).',
+      );
     }
     const connectedAccount = context?.destination?.trim();
     if (!connectedAccount || !connectedAccount.startsWith('acct_')) {
@@ -323,7 +334,11 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
         `Invalid Stripe Connect status destination '${connectedAccount}': a connected account id (acct_...) is required to retrieve a connected-account payout.`,
       );
     }
-    const payout = await this.stripe.payouts.retrieve(providerTxId, {}, { stripeAccount: connectedAccount });
+    const payout = await this.stripe.payouts.retrieve(
+      providerTxId,
+      {},
+      { stripeAccount: connectedAccount },
+    );
     return {
       status: payout.status,
       paidAt: payout.arrival_date ? new Date(payout.arrival_date * 1000) : undefined,

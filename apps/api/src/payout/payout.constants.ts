@@ -35,7 +35,7 @@ export interface PayoutProviderHandler {
   initiate(params: {
     payoutRequestId: string;
     destination: string;
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
   }): Promise<{
     providerTxId: string;

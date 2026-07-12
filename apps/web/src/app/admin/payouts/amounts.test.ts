@@ -6,27 +6,27 @@ describe('admin payout amount helpers', () => {
   it('uses approved minor units when a payout was partially approved', () => {
     expect(
       authoritativePayoutAmountMinor({
-        requestedAmountMinor: 5000,
-        approvedAmountMinor: 3000,
+        requestedAmountMinor: 5000n,
+        approvedAmountMinor: 3000n,
       }),
-    ).toBe(3000);
+    ).toBe(3000n);
   });
 
   it('falls back to requested minor units when no approval override exists', () => {
     expect(
       authoritativePayoutAmountMinor({
-        requestedAmountMinor: 5000,
+        requestedAmountMinor: 5000n,
         approvedAmountMinor: null,
       }),
-    ).toBe(5000);
+    ).toBe(5000n);
   });
 
   it('formats minor-unit amounts as currency-aware major-unit input values', () => {
     // USD (exponent 2)
-    expect(minorToMajorInputValue(3000, 'USD')).toBe('30');
-    expect(minorToMajorInputValue(3050, 'USD')).toBe('30.5');
-    expect(minorToMajorInputValue(3055, 'USD')).toBe('30.55');
+    expect(minorToMajorInputValue(3000n, 'USD')).toBe('30');
+    expect(minorToMajorInputValue(3050n, 'USD')).toBe('30.5');
+    expect(minorToMajorInputValue(3055n, 'USD')).toBe('30.55');
     // JPY (exponent 0) — must NOT be divided by 100 (A-031 regression)
-    expect(minorToMajorInputValue(1000, 'JPY')).toBe('1000');
+    expect(minorToMajorInputValue(1000n, 'JPY')).toBe('1000');
   });
 });

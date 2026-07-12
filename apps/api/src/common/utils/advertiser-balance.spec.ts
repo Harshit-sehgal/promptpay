@@ -1,15 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  getAdvertiserBalance,
-  getAdvertiserBalancesByCurrency,
-} from './advertiser-balance';
+import { getAdvertiserBalance, getAdvertiserBalancesByCurrency } from './advertiser-balance';
 
 interface Row {
   advertiserId: string;
   currency: string;
   entryType: string;
-  amountMinor: number;
+  amountMinor: bigint;
   status: string;
 }
 
@@ -22,7 +19,7 @@ function fakeLedger(rows: Row[]) {
           if (where.advertiserId) {
             const ids = Array.isArray(where.advertiserId)
               ? where.advertiserId
-              : where.advertiserId.in ?? [where.advertiserId];
+              : (where.advertiserId.in ?? [where.advertiserId]);
             if (!ids.includes(r.advertiserId)) return false;
           }
           if (where.currency && r.currency !== where.currency) return false;
@@ -44,51 +41,129 @@ function fakeLedger(rows: Row[]) {
 describe('getAdvertiserBalance (A-054, A-039)', () => {
   it('excludes a PENDING archive refund from spendable balance', async () => {
     const client = fakeLedger([
-      { advertiserId: 'a1', currency: 'USD', entryType: 'credit', amountMinor: 1000, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'USD', entryType: 'debit', amountMinor: 300, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'USD', entryType: 'refund', amountMinor: 200, status: 'pending' },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'credit',
+        amountMinor: 1000n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'debit',
+        amountMinor: 300n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'refund',
+        amountMinor: 200n,
+        status: 'pending',
+      },
     ]);
     const pending = await getAdvertiserBalance(client, 'a1', 'USD');
-    expect(pending).toBe(700);
+    expect(pending).toBe(700n);
   });
 
   it('a CONFIRMED archive refund reduces spendable balance (A-054)', async () => {
     const client = fakeLedger([
-      { advertiserId: 'a1', currency: 'USD', entryType: 'credit', amountMinor: 1000, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'USD', entryType: 'debit', amountMinor: 300, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'USD', entryType: 'refund', amountMinor: 200, status: 'confirmed' },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'credit',
+        amountMinor: 1000n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'debit',
+        amountMinor: 300n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'refund',
+        amountMinor: 200n,
+        status: 'confirmed',
+      },
     ]);
     const confirmed = await getAdvertiserBalance(client, 'a1', 'USD');
-    expect(confirmed).toBe(500);
+    expect(confirmed).toBe(500n);
   });
 
   it('filters by currency (A-039)', async () => {
     const client = fakeLedger([
-      { advertiserId: 'a1', currency: 'EUR', entryType: 'credit', amountMinor: 900, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'USD', entryType: 'credit', amountMinor: 100, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'USD', entryType: 'debit', amountMinor: 100, status: 'confirmed' },
+      {
+        advertiserId: 'a1',
+        currency: 'EUR',
+        entryType: 'credit',
+        amountMinor: 900n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'credit',
+        amountMinor: 100n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'debit',
+        amountMinor: 100n,
+        status: 'confirmed',
+      },
     ]);
     const usd = await getAdvertiserBalance(client, 'a1', 'USD');
-    expect(usd).toBe(0);
+    expect(usd).toBe(0n);
     const eur = await getAdvertiserBalance(client, 'a1', 'EUR');
-    expect(eur).toBe(900);
+    expect(eur).toBe(900n);
   });
 });
 
 describe('getAdvertiserBalancesByCurrency (A-039)', () => {
   it('builds a per-(advertiser,currency) balance map', async () => {
     const client = fakeLedger([
-      { advertiserId: 'a1', currency: 'USD', entryType: 'credit', amountMinor: 1000, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'USD', entryType: 'debit', amountMinor: 400, status: 'confirmed' },
-      { advertiserId: 'a1', currency: 'EUR', entryType: 'credit', amountMinor: 500, status: 'confirmed' },
-      { advertiserId: 'a2', currency: 'USD', entryType: 'credit', amountMinor: 50, status: 'confirmed' },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'credit',
+        amountMinor: 1000n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'USD',
+        entryType: 'debit',
+        amountMinor: 400n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a1',
+        currency: 'EUR',
+        entryType: 'credit',
+        amountMinor: 500n,
+        status: 'confirmed',
+      },
+      {
+        advertiserId: 'a2',
+        currency: 'USD',
+        entryType: 'credit',
+        amountMinor: 50n,
+        status: 'confirmed',
+      },
     ]);
 
     const map = await getAdvertiserBalancesByCurrency(client, ['a1', 'a2']);
-    expect(map.get('a1:USD')).toBe(600);
-    expect(map.get('a1:EUR')).toBe(500);
-    expect(map.get('a2:USD')).toBe(50);
+    expect(map.get('a1:USD')).toBe(600n);
+    expect(map.get('a1:EUR')).toBe(500n);
+    expect(map.get('a2:USD')).toBe(50n);
     // A USD campaign for a1 must see only the USD balance, not the EUR one.
-    expect(map.get('a1:USD')).not.toBe(1100);
+    expect(map.get('a1:USD')).not.toBe(1100n);
   });
 });

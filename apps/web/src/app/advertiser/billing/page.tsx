@@ -10,7 +10,7 @@ import { CURRENCY_POLICY, depositMinimumMinor } from '@waitlayer/shared';
 
 interface LedgerEntry {
   id: string;
-  amountMinor: number;
+  amountMinor: bigint;
   currency: string;
   entryType: string;
   description?: string;
@@ -19,18 +19,18 @@ interface LedgerEntry {
 
 interface BillingBalance {
   currency: string;
-  balanceMinor: number;
-  totalDepositsMinor: number;
-  totalChargesMinor: number;
-  totalRefundsMinor: number;
+  balanceMinor: bigint;
+  totalDepositsMinor: bigint;
+  totalChargesMinor: bigint;
+  totalRefundsMinor: bigint;
 }
 
 interface BillingData {
-  balanceMinor: number;
+  balanceMinor: bigint;
   currency: string;
-  totalDepositsMinor: number;
-  totalChargesMinor: number;
-  totalRefundsMinor: number;
+  totalDepositsMinor: bigint;
+  totalChargesMinor: bigint;
+  totalRefundsMinor: bigint;
   balances?: BillingBalance[];
   entries: LedgerEntry[];
 }
@@ -76,13 +76,13 @@ export default function AdvertiserBillingPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const getDepositAmount = (): number | null => {
+  const getDepositAmount = (): bigint | null => {
     if (showCustom) {
       const parsed = parseInt(customAmount, 10);
       if (isNaN(parsed) || parsed < 1) return null;
-      return parsed * 100; // Convert dollars to minor units
+      return BigInt(parsed) * 100n; // Convert dollars to minor units
     }
-    return selectedMinor;
+    return selectedMinor !== null ? BigInt(selectedMinor) : null;
   };
 
   const handleDeposit = async () => {

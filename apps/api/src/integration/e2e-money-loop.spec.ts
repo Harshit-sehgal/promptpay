@@ -198,7 +198,7 @@ const mockPrisma = {
           advertiserId,
           currency,
           entryType: 'credit',
-          _sum: { amountMinor: 10000_00 },
+          _sum: { amountMinor: 10000_00n },
         },
       ];
     }),
@@ -437,7 +437,7 @@ describe('E2E Money Loop', () => {
         advertiserId,
         currency: 'USD',
         entryType: 'credit',
-        _sum: { amountMinor: 10000_00 },
+        _sum: { amountMinor: 10000_00n },
       }));
     });
     mockPrisma.consent.findFirst.mockResolvedValue(null);
@@ -487,9 +487,9 @@ describe('E2E Money Loop', () => {
         name: 'Test Campaign',
         category: 'developer_tools',
         bidType: 'cpm',
-        bidAmountMinor: 2_00,
-        budgetTotalMinor: 100_00, // $1.00 budget
-        budgetSpentMinor: 0,
+        bidAmountMinor: 2_00n,
+        budgetTotalMinor: 100_00n, // $1.00 budget
+        budgetSpentMinor: 0n,
         currency: 'USD',
         status: 'draft',
         frequencyCapPerHour: 2,
@@ -508,8 +508,8 @@ describe('E2E Money Loop', () => {
         name: 'Test Campaign',
         category: 'developer_tools',
         bidType: 'cpm',
-        bidAmountMinor: 2_00,
-        budgetTotalMinor: 100_00,
+        bidAmountMinor: 2_00n,
+        budgetTotalMinor: 100_00n,
       });
       expect(campaign.id).toBe(campaignId);
       expect(campaign.status).toBe('draft');
@@ -597,8 +597,8 @@ describe('E2E Money Loop', () => {
         .mockResolvedValueOnce({
           id: campaignId,
           status: 'submitted',
-          budgetSpentMinor: 0,
-          budgetTotalMinor: 50000,
+          budgetSpentMinor: 0n,
+          budgetTotalMinor: 50000n,
           creatives: [{ id: creativeId, status: 'approved' }],
         })
         .mockResolvedValueOnce({
@@ -649,9 +649,9 @@ describe('E2E Money Loop', () => {
 
       mockPrisma.advertiser.findUnique.mockResolvedValue({ id: advertiserId });
       mockPrisma.advertiserLedger.groupBy.mockResolvedValue([
-        { currency: 'USD', entryType: 'credit', _sum: { amountMinor: 10_000 } },
-        { currency: 'USD', entryType: 'debit', _sum: { amountMinor: 2_500 } },
-        { currency: 'USD', entryType: 'refund', _sum: { amountMinor: 500 } },
+        { currency: 'USD', entryType: 'credit', _sum: { amountMinor: 10_000n } },
+        { currency: 'USD', entryType: 'debit', _sum: { amountMinor: 2_500n } },
+        { currency: 'USD', entryType: 'refund', _sum: { amountMinor: 500n } },
       ]);
       mockPrisma.advertiserLedger.findMany.mockResolvedValue([
         {
@@ -659,7 +659,7 @@ describe('E2E Money Loop', () => {
           campaignId: null,
           entryType: 'credit',
           status: 'confirmed',
-          amountMinor: 10_000,
+          amountMinor: 10_000n,
           currency: 'USD',
           description: 'Stripe deposit',
           stripePaymentIntentId: 'pi_123',
@@ -671,7 +671,7 @@ describe('E2E Money Loop', () => {
           campaignId: uid('camp'),
           entryType: 'refund',
           status: 'confirmed',
-          amountMinor: 500,
+          amountMinor: 500n,
           currency: 'USD',
           description: 'Stripe refund',
           stripePaymentIntentId: 'pi_123',
@@ -683,7 +683,7 @@ describe('E2E Money Loop', () => {
           campaignId: uid('camp'),
           entryType: 'debit',
           status: 'confirmed',
-          amountMinor: 2_500,
+          amountMinor: 2_500n,
           currency: 'USD',
           description: 'Campaign spend',
           stripePaymentIntentId: null,
@@ -695,17 +695,17 @@ describe('E2E Money Loop', () => {
       const result = await svc.advertiser.getBilling(advertiserId);
 
       // 10_000 − 2_500 − 500 = 7_000 (A-066: refunds reduce displayed balance)
-      expect(result.balanceMinor).toBe(7_000);
-      expect(result.totalDepositsMinor).toBe(10_000);
-      expect(result.totalChargesMinor).toBe(2_500);
-      expect(result.totalRefundsMinor).toBe(500);
+      expect(result.balanceMinor).toBe(7_000n);
+      expect(result.totalDepositsMinor).toBe(10_000n);
+      expect(result.totalChargesMinor).toBe(2_500n);
+      expect(result.totalRefundsMinor).toBe(500n);
       expect(result.balances).toEqual([
         {
           currency: 'USD',
-          balanceMinor: 7_000,
-          totalDepositsMinor: 10_000,
-          totalChargesMinor: 2_500,
-          totalRefundsMinor: 500,
+          balanceMinor: 7_000n,
+          totalDepositsMinor: 10_000n,
+          totalChargesMinor: 2_500n,
+          totalRefundsMinor: 500n,
         },
       ]);
       expect(result.entries).toHaveLength(3);
@@ -742,7 +742,7 @@ describe('E2E Money Loop', () => {
           advertiserId: ADS_PROFILE_ID,
           currency: 'USD',
           entryType: 'credit',
-          _sum: { amountMinor: 1000_00 },
+          _sum: { amountMinor: 1000_00n },
         },
       ]);
       // Pre-seed the "developer" user and "advertiser" user exists
@@ -800,9 +800,9 @@ describe('E2E Money Loop', () => {
           status: 'active',
           category: 'developer_tools',
           bidType: 'cpm',
-          bidAmountMinor: 2_00,
-          budgetTotalMinor: 1_000_00,
-          budgetSpentMinor: 0,
+          bidAmountMinor: 2_00n,
+          budgetTotalMinor: 1_000_00n,
+          budgetSpentMinor: 0n,
           currency: 'USD',
           frequencyCapPerHour: 2,
           frequencyCapPerDay: 6,
@@ -943,9 +943,9 @@ describe('E2E Money Loop', () => {
           status: 'active',
           category: 'developer_tools',
           bidType: 'cpm',
-          bidAmountMinor: 2_00,
-          budgetTotalMinor: 1_000_00,
-          budgetSpentMinor: 0,
+          bidAmountMinor: 2_00n,
+          budgetTotalMinor: 1_000_00n,
+          budgetSpentMinor: 0n,
           currency: 'USD',
           frequencyCapPerHour: 2,
           frequencyCapPerDay: 6,
@@ -1149,7 +1149,7 @@ describe('E2E Money Loop', () => {
         isBillable: false,
         campaign: {
           id: CAMPAIGN_ID,
-          bidAmountMinor: 2_00,
+          bidAmountMinor: 2_00n,
           currency: 'USD',
           advertiserId: ADS_PROFILE_ID,
           bidType: 'cpm',
@@ -1168,7 +1168,7 @@ describe('E2E Money Loop', () => {
       // Campaign spend update
       mockPrisma.campaign.update.mockResolvedValue({
         id: CAMPAIGN_ID,
-        budgetSpentMinor: 2_00,
+        budgetSpentMinor: 2_00n,
       });
 
       // Ledger creates captured via installLedgerCapture()
@@ -1215,7 +1215,7 @@ describe('E2E Money Loop', () => {
       expect(advDebit).toBeDefined();
       expect(advDebit.advertiserId).toBe(ADS_PROFILE_ID);
       expect(advDebit.campaignId).toBe(CAMPAIGN_ID);
-      expect(advDebit.amountMinor).toBe(2_00); // full bid charged to advertiser
+      expect(advDebit.amountMinor).toBe(2_00n); // full bid charged to advertiser
       expect(advDebit.status).toBe('confirmed');
 
       // (2) Developer earnings credit (estimated, with future availableAt)
@@ -1226,7 +1226,7 @@ describe('E2E Money Loop', () => {
       expect(devCredit.userId).toBe(DEV_USER_ID);
       expect(devCredit.impressionId).toBe(IMPRESSION_ID);
       expect(devCredit.status).toBe('estimated');
-      expect(devCredit.amountMinor).toBe(120); // 60% of 200 cents = 120
+      expect(devCredit.amountMinor).toBe(120n); // 60% of 200 cents = 120
       expect(devCredit.availableAt).toBeDefined(); // future date for hold
 
       // (3) Platform fee (confirmed)
@@ -1234,13 +1234,13 @@ describe('E2E Money Loop', () => {
       expect(platEntries.length).toBeGreaterThanOrEqual(2);
       const platFee = platEntries.find((e: any) => e.bucket === 'platform_fee');
       expect(platFee).toBeDefined();
-      expect(platFee.amountMinor).toBe(60); // 30% of 200 cents
+      expect(platFee.amountMinor).toBe(60n); // 30% of 200 cents
       expect(platFee.status).toBe('confirmed');
 
       // (4) Fraud reserve (confirmed)
       const reserve = platEntries.find((e: any) => e.bucket === 'fraud_reserve');
       expect(reserve).toBeDefined();
-      expect(reserve.amountMinor).toBe(20); // 10% of 200 cents
+      expect(reserve.amountMinor).toBe(20n); // 10% of 200 cents
       expect(reserve.status).toBe('confirmed');
     });
 
@@ -1301,7 +1301,7 @@ describe('E2E Money Loop', () => {
         isBillable: false,
         campaign: {
           id: CAMPAIGN_ID,
-          bidAmountMinor: 2_00,
+          bidAmountMinor: 2_00n,
           currency: 'USD',
           advertiserId: ADS_PROFILE_ID,
           bidType: 'cpm',
@@ -1370,7 +1370,7 @@ describe('E2E Money Loop', () => {
         qualifiedAt: new Date(),
         campaign: {
           id: CAMPAIGN_ID,
-          bidAmountMinor: 3_00,
+          bidAmountMinor: 3_00n,
           currency: 'USD',
           advertiserId: ADS_PROFILE_ID,
           bidType: 'cpc',
@@ -1455,26 +1455,26 @@ describe('E2E Money Loop', () => {
       // CPC campaigns generate advertiser debit + developer credit + platform fee + reserve
       const advDebit = recordedLedgerEntries.advertiser.find((e: any) => e.entryType === 'debit');
       expect(advDebit).toBeDefined();
-      expect(advDebit.amountMinor).toBe(3_00);
+      expect(advDebit.amountMinor).toBe(3_00n);
 
       const devCredit = recordedLedgerEntries.earnings.find((e: any) => e.entryType === 'credit');
       expect(devCredit).toBeDefined();
       expect(devCredit.status).toBe('estimated');
-      expect(devCredit.amountMinor).toBe(180); // 60% of 300
+      expect(devCredit.amountMinor).toBe(180n); // 60% of 300
       expect(devCredit.clickId).toBe(clickId);
 
       const platformEntry = recordedLedgerEntries.platform.find(
         (e: any) => e.bucket === 'platform_fee',
       );
       expect(platformEntry).toBeDefined();
-      expect(platformEntry.amountMinor).toBe(90); // 30% of 300
+      expect(platformEntry.amountMinor).toBe(90n); // 30% of 300
       expect(platformEntry.referenceId).toBe(clickId);
 
       const reserveEntry = recordedLedgerEntries.platform.find(
         (e: any) => e.bucket === 'fraud_reserve',
       );
       expect(reserveEntry).toBeDefined();
-      expect(reserveEntry.amountMinor).toBe(30); // 10% of 300
+      expect(reserveEntry.amountMinor).toBe(30n); // 10% of 300
       expect(reserveEntry.referenceId).toBe(clickId);
     });
   });
@@ -1485,24 +1485,24 @@ describe('E2E Money Loop', () => {
 
   describe('Phase 5: Revenue split math', () => {
     it('default split is 60/30/10', () => {
-      const split = svc.ledger.calculateSplit(1000, false);
-      expect(split.userShare).toBe(600);
-      expect(split.platformShare).toBe(300);
-      expect(split.reserveShare).toBe(100);
-      expect(split.userShare + split.platformShare + split.reserveShare).toBe(1000);
+      const split = svc.ledger.calculateSplit(1000n, false);
+      expect(split.userShare).toBe(600n);
+      expect(split.platformShare).toBe(300n);
+      expect(split.reserveShare).toBe(100n);
+      expect(split.userShare + split.platformShare + split.reserveShare).toBe(1000n);
     });
 
     it('launch incentive split is 80/10/10', () => {
-      const split = svc.ledger.calculateSplit(1000, true);
-      expect(split.userShare).toBe(800);
-      expect(split.platformShare).toBe(100);
-      expect(split.reserveShare).toBe(100);
+      const split = svc.ledger.calculateSplit(1000n, true);
+      expect(split.userShare).toBe(800n);
+      expect(split.platformShare).toBe(100n);
+      expect(split.reserveShare).toBe(100n);
     });
 
     it('remainder goes to user share', () => {
       // 10 cents split: 60% = 6.0, floors to 6, remainder 1 goes to user
-      const split = svc.ledger.calculateSplit(10, false);
-      expect(split.userShare + split.platformShare + split.reserveShare).toBe(10);
+      const split = svc.ledger.calculateSplit(10n, false);
+      expect(split.userShare + split.platformShare + split.reserveShare).toBe(10n);
       expect(split.userShare).toBeGreaterThanOrEqual(split.platformShare);
     });
   });
@@ -1633,9 +1633,9 @@ describe('E2E Money Loop', () => {
         name: 'E2E Campaign',
         category: 'developer_tools',
         bidType: 'cpm',
-        bidAmountMinor: 5_00,
-        budgetTotalMinor: 500_00,
-        budgetSpentMinor: 0,
+        bidAmountMinor: 5_00n,
+        budgetTotalMinor: 500_00n,
+        budgetSpentMinor: 0n,
         currency: 'USD',
         status: 'draft',
       });
@@ -1643,8 +1643,8 @@ describe('E2E Money Loop', () => {
         name: 'E2E Campaign',
         category: 'developer_tools',
         bidType: 'cpm',
-        bidAmountMinor: 5_00,
-        budgetTotalMinor: 500_00,
+        bidAmountMinor: 5_00n,
+        budgetTotalMinor: 500_00n,
       });
 
       // ── Step 3: Create creative ──
@@ -1705,8 +1705,8 @@ describe('E2E Money Loop', () => {
       mockPrisma.campaign.findUnique.mockResolvedValue({
         id: campaignId,
         status: 'submitted',
-        budgetSpentMinor: 0,
-        budgetTotalMinor: 50000,
+        budgetSpentMinor: 0n,
+        budgetTotalMinor: 50000n,
         creatives: [{ id: creativeId, status: 'approved' }],
       });
       mockPrisma.campaignApproval.create.mockResolvedValue({
@@ -1780,7 +1780,7 @@ describe('E2E Money Loop', () => {
           advertiserId: advProfileId,
           currency: 'USD',
           entryType: 'credit',
-          _sum: { amountMinor: 10000_00 },
+          _sum: { amountMinor: 10000_00n },
         },
       ]);
       mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: devUserId, adsEnabled: true });
@@ -1819,9 +1819,9 @@ describe('E2E Money Loop', () => {
           status: 'active',
           category: 'developer_tools',
           bidType: 'cpm',
-          bidAmountMinor: 5_00,
-          budgetTotalMinor: 500_00,
-          budgetSpentMinor: 0,
+          bidAmountMinor: 5_00n,
+          budgetTotalMinor: 500_00n,
+          budgetSpentMinor: 0n,
           currency: 'USD',
           frequencyCapPerHour: 2,
           frequencyCapPerDay: 6,
@@ -1915,7 +1915,7 @@ describe('E2E Money Loop', () => {
         isBillable: false,
         campaign: {
           id: campaignId,
-          bidAmountMinor: 5_00,
+          bidAmountMinor: 5_00n,
           currency: 'USD',
           advertiserId: advProfileId,
           bidType: 'cpm',
@@ -1930,7 +1930,7 @@ describe('E2E Money Loop', () => {
       });
       mockPrisma.campaign.update.mockResolvedValue({
         id: campaignId,
-        budgetSpentMinor: 5_00,
+        budgetSpentMinor: 5_00n,
       });
 
       // Capture the $transaction call for ledger verification
@@ -1964,8 +1964,8 @@ describe('E2E Money Loop', () => {
         (e: any) => e.entryType === 'debit',
       );
       expect(advDebits.length).toBeGreaterThanOrEqual(1);
-      const totalAdvCharged = advDebits.reduce((sum: number, e: any) => sum + e.amountMinor, 0);
-      expect(totalAdvCharged).toBe(5_00); // $5.00 charged to advertiser
+      const totalAdvCharged = advDebits.reduce((sum: bigint, e: any) => sum + e.amountMinor, 0n);
+      expect(totalAdvCharged).toBe(5_00n); // $5.00 charged to advertiser
 
       // Developer earnings: 60% of bid (300 cents)
       const devCredits = recordedLedgerEntries.earnings.filter(
@@ -1974,24 +1974,24 @@ describe('E2E Money Loop', () => {
       expect(devCredits.length).toBeGreaterThanOrEqual(1);
       const devEarning = devCredits.find((e: any) => e.impressionId === impressionId);
       expect(devEarning).toBeDefined();
-      expect(devEarning.amountMinor).toBe(300); // 60% of 500
+      expect(devEarning.amountMinor).toBe(300n); // 60% of 500
       expect(devEarning.status).toBe('estimated');
       expect(devEarning.availableAt).toBeDefined();
 
       // Platform fee: 30% of bid (150 cents)
       const platFee = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'platform_fee');
       expect(platFee).toBeDefined();
-      expect(platFee.amountMinor).toBe(150); // 30% of 500
+      expect(platFee.amountMinor).toBe(150n); // 30% of 500
       expect(platFee.status).toBe('confirmed');
 
       // Fraud reserve: 10% of bid (50 cents)
       const reserve = recordedLedgerEntries.platform.find((e: any) => e.bucket === 'fraud_reserve');
       expect(reserve).toBeDefined();
-      expect(reserve.amountMinor).toBe(50); // 10% of 500
+      expect(reserve.amountMinor).toBe(50n); // 10% of 500
       expect(reserve.status).toBe('confirmed');
 
       // Sum check: advertiser debit (500) = dev (300) + platform (150) + reserve (50)
-      expect(devEarning.amountMinor + platFee.amountMinor + reserve.amountMinor).toBe(5_00);
+      expect(devEarning.amountMinor + platFee.amountMinor + reserve.amountMinor).toBe(5_00n);
     });
   });
 
@@ -2407,17 +2407,17 @@ describe('E2E Money Loop', () => {
       const userId = uid('u');
       mockPrisma.earningsLedger.groupBy
         .mockResolvedValueOnce([
-          { userId, currency: 'USD', _sum: { amountMinor: 1500 }, _count: { _all: 2 } },
+          { userId, currency: 'USD', _sum: { amountMinor: 1500n }, _count: { _all: 2 } },
           {
             userId: 'settled-user',
             currency: 'USD',
-            _sum: { amountMinor: 300 },
+            _sum: { amountMinor: 300n },
             _count: { _all: 1 },
           },
         ])
         .mockResolvedValueOnce([
-          { userId, currency: 'USD', _sum: { amountMinor: 500 } },
-          { userId: 'settled-user', currency: 'USD', _sum: { amountMinor: 300 } },
+          { userId, currency: 'USD', _sum: { amountMinor: 500n } },
+          { userId: 'settled-user', currency: 'USD', _sum: { amountMinor: 300n } },
         ]);
       mockPrisma.user.findMany.mockResolvedValue([
         {
@@ -2433,7 +2433,7 @@ describe('E2E Money Loop', () => {
           id: 'case-eur-newer',
           userId,
           status: 'in_collections',
-          amountMinor: 9999,
+          amountMinor: 9999n,
           currency: 'EUR',
           updatedAt: new Date('2026-07-08T00:00:00.000Z'),
         },
@@ -2441,7 +2441,7 @@ describe('E2E Money Loop', () => {
           id: 'case-latest',
           userId,
           status: 'in_collections',
-          amountMinor: 1000,
+          amountMinor: 1000n,
           currency: 'USD',
           updatedAt: new Date('2026-07-07T00:00:00.000Z'),
         },
@@ -2457,9 +2457,9 @@ describe('E2E Money Loop', () => {
       expect(result.items[0]).toMatchObject({
         userId,
         currency: 'USD',
-        confirmedDebitMinor: 1500,
-        confirmedCreditMinor: 500,
-        outstandingDebtMinor: 1000,
+        confirmedDebitMinor: 1500n,
+        confirmedCreditMinor: 500n,
+        outstandingDebtMinor: 1000n,
         recoveryDebitEntryCount: 2,
         user: { email: 'debt@example.com' },
         latestCase: { id: 'case-latest', status: 'in_collections' },
@@ -2476,8 +2476,8 @@ describe('E2E Money Loop', () => {
         status: 'restricted',
       });
       mockPrisma.earningsLedger.aggregate
-        .mockResolvedValueOnce({ _sum: { amountMinor: 2500 } })
-        .mockResolvedValueOnce({ _sum: { amountMinor: 400 } });
+        .mockResolvedValueOnce({ _sum: { amountMinor: 2500n } })
+        .mockResolvedValueOnce({ _sum: { amountMinor: 400n } });
       mockPrisma.recoveryDebtCase.findFirst.mockResolvedValue(null);
       mockPrisma.recoveryDebtCase.create.mockImplementationOnce(({ data }: any) =>
         Promise.resolve({ id: 'case-open', ...data }),
@@ -2501,12 +2501,12 @@ describe('E2E Money Loop', () => {
         where: { userId, currency: 'EUR', status: 'confirmed', entryType: 'credit' },
         _sum: { amountMinor: true },
       });
-      expect(result.debt.outstandingDebtMinor).toBe(2100);
+      expect(result.debt.outstandingDebtMinor).toBe(2100n);
       expect(mockPrisma.recoveryDebtCase.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId,
           status: 'in_collections',
-          amountMinor: 2100,
+          amountMinor: 2100n,
           currency: 'EUR',
           externalReference: 'COLL-123',
           note: 'No future earnings after paid-fraud reversal',
@@ -2523,7 +2523,7 @@ describe('E2E Money Loop', () => {
         id: 'case-active',
         userId,
         status: 'in_collections',
-        amountMinor: 2100,
+        amountMinor: 2100n,
         currency: 'EUR',
       };
       const resolvedCase = {
@@ -2537,8 +2537,8 @@ describe('E2E Money Loop', () => {
         .mockResolvedValueOnce(resolvedCase);
       mockPrisma.recoveryDebtCase.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.earningsLedger.aggregate
-        .mockResolvedValueOnce({ _sum: { amountMinor: 2500 } })
-        .mockResolvedValueOnce({ _sum: { amountMinor: 400 } });
+        .mockResolvedValueOnce({ _sum: { amountMinor: 2500n } })
+        .mockResolvedValueOnce({ _sum: { amountMinor: 400n } });
 
       const result = await svc.admin.resolveRecoveryDebtCase({
         caseId: existingCase.id,
@@ -2571,7 +2571,7 @@ describe('E2E Money Loop', () => {
         where: { userId, currency: 'EUR', status: 'confirmed', entryType: 'credit' },
         _sum: { amountMinor: true },
       });
-      expect(result.debt.outstandingDebtMinor).toBe(2100);
+      expect(result.debt.outstandingDebtMinor).toBe(2100n);
     });
 
     it('rejects wait-state-start for device not owned by user', async () => {
@@ -2727,7 +2727,7 @@ describe('E2E Money Loop', () => {
         renderedAt: new Date(Date.now() - 6000),
         campaign: {
           id: uid('c'),
-          bidAmountMinor: 5_00,
+          bidAmountMinor: 5_00n,
           currency: 'USD',
           advertiserId: uid('adv'),
           bidType: 'cpc',
@@ -2791,7 +2791,7 @@ describe('E2E Money Loop', () => {
         qualifiedAt: new Date(), // Now qualified!
         campaign: {
           id: uid('c'),
-          bidAmountMinor: 5_00,
+          bidAmountMinor: 5_00n,
           currency: 'USD',
           advertiserId: uid('adv'),
           bidType: 'cpc',
@@ -2813,25 +2813,25 @@ describe('E2E Money Loop', () => {
       // Verify CPC click charged advertiser & credited user & platform & reserve
       const advDebit = recordedLedgerEntries.advertiser.find((e: any) => e.entryType === 'debit');
       expect(advDebit).toBeDefined();
-      expect(advDebit.amountMinor).toBe(5_00);
+      expect(advDebit.amountMinor).toBe(5_00n);
 
       const devCredit = recordedLedgerEntries.earnings.find((e: any) => e.entryType === 'credit');
       expect(devCredit).toBeDefined();
-      expect(devCredit.amountMinor).toBe(300); // 60% of 5_00
+      expect(devCredit.amountMinor).toBe(300n); // 60% of 5_00
       expect(devCredit.clickId).toBe(clickId);
 
       const platformEntry = recordedLedgerEntries.platform.find(
         (e: any) => e.bucket === 'platform_fee',
       );
       expect(platformEntry).toBeDefined();
-      expect(platformEntry.amountMinor).toBe(150); // 30% of 5_00
+      expect(platformEntry.amountMinor).toBe(150n); // 30% of 5_00
       expect(platformEntry.referenceId).toBe(clickId);
 
       const reserveEntry = recordedLedgerEntries.platform.find(
         (e: any) => e.bucket === 'fraud_reserve',
       );
       expect(reserveEntry).toBeDefined();
-      expect(reserveEntry.amountMinor).toBe(50); // 10% of 5_00
+      expect(reserveEntry.amountMinor).toBe(50n); // 10% of 5_00
       expect(reserveEntry.referenceId).toBe(clickId);
     });
 
@@ -2857,7 +2857,7 @@ describe('E2E Money Loop', () => {
         qualifiedAt: new Date(),
         campaign: {
           id: uid('c'),
-          bidAmountMinor: 5_00,
+          bidAmountMinor: 5_00n,
           currency: 'USD',
           advertiserId: uid('adv'),
           bidType: 'cpc',
@@ -2912,9 +2912,9 @@ describe('E2E Money Loop', () => {
           category: 'developer_tools',
           status: 'active',
           bidType: 'cpm',
-          bidAmountMinor: 100,
-          budgetTotalMinor: 1_000_00,
-          budgetSpentMinor: 0,
+          bidAmountMinor: 100n,
+          budgetTotalMinor: 1_000_00n,
+          budgetSpentMinor: 0n,
           currency: 'USD',
           frequencyCapPerHour: 2,
           frequencyCapPerDay: 6,

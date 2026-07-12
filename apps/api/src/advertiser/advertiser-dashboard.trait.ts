@@ -231,6 +231,12 @@ export class AdvertiserDashboardTrait {
       balances,
       entries,
     };
+    return {
+      ...primary,
+      totalRefundsMinor: primary.totalRefundsMinor,
+      balances,
+      entries,
+    };
   }
 
   /** Get reports for advertiser campaigns — aggregated by campaign */

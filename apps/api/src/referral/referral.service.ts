@@ -64,7 +64,7 @@ export class ReferralService {
       referralCode: code,
       referralCount,
       referralLink: `${this.webBaseUrl}/auth/signup?ref=${code}`,
-      rewardsEarnedMinor: rewardsEarnedByCurrency[primaryCurrency(rewardsEarnedByCurrency)] ?? 0,
+      rewardsEarnedMinor: rewardsEarnedByCurrency[primaryCurrency(rewardsEarnedByCurrency)] ?? 0n,
       rewardsEarnedByCurrency,
       referrals: referrals.map((r) => ({
         id: r.id,
@@ -183,10 +183,10 @@ export class ReferralService {
     });
     if (!firstPaidPayout) return null;
 
-    const totalPaidMinor = firstPaidPayout.allocations.reduce((sum, a) => sum + a.amountMinor, 0);
-    if (totalPaidMinor < REFERRAL.FIRST_PAYOUT_THRESHOLD_MINOR) return null;
+    const totalPaidMinor = firstPaidPayout.allocations.reduce((sum, a) => sum + a.amountMinor, 0n);
+    if (totalPaidMinor < BigInt(REFERRAL.FIRST_PAYOUT_THRESHOLD_MINOR)) return null;
 
-    const rewardAmount = REFERRAL.REWARD_AMOUNT_MINOR;
+    const rewardAmount = BigInt(REFERRAL.REWARD_AMOUNT_MINOR);
 
     // Create both the platformLedger credit and the ReferralReward record
     // atomically, with a CAS check on the referral status to prevent two

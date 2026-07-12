@@ -41,7 +41,7 @@ describe('ReferralService.processReferralRewards payoutable earnings (A-041)', (
     });
     prisma.payoutRequest.count.mockResolvedValue(1);
     prisma.payoutRequest.findFirst.mockResolvedValue({
-      allocations: [{ amountMinor: REFERRAL.FIRST_PAYOUT_THRESHOLD_MINOR + 100 }],
+      allocations: [{ amountMinor: BigInt(REFERRAL.FIRST_PAYOUT_THRESHOLD_MINOR + 100) }],
     });
     prisma.$transaction = vi.fn(async (cb: any) => cb(prisma));
   });
@@ -56,7 +56,7 @@ describe('ReferralService.processReferralRewards payoutable earnings (A-041)', (
       userId: 'referrer-1',
       entryType: 'credit',
       status: 'confirmed',
-      amountMinor: REFERRAL.REWARD_AMOUNT_MINOR,
+      amountMinor: BigInt(REFERRAL.REWARD_AMOUNT_MINOR),
       currency: REFERRAL.CURRENCY,
       idempotencyKey: `ref-rew-earn-ref-1`,
     });

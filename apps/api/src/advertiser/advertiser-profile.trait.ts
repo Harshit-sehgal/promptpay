@@ -255,7 +255,7 @@ export class AdvertiserProfileTrait {
     }
   }
 
-  getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+  getAdvertiserBalance(advertiserId: string, currency: string): Promise<bigint> {
     return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
 }

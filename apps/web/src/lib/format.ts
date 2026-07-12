@@ -7,14 +7,14 @@ import { formatMinorUnits } from '@waitlayer/shared';
  *  can never silently render as "$" (the previous default masked
  *  multi-currency bugs). `formatCurrencyBreakdown` handles the
  *  zero/empty case below. */
-export function formatCurrency(minorUnits: number, currency: string): string {
-  return formatMinorUnits(minorUnits, currency);
+export function formatCurrency(minorUnits: bigint | number, currency: string): string {
+  return formatMinorUnits(BigInt(minorUnits), currency);
 }
 
 /** Format grouped minor-unit totals without mixing currencies */
-export function formatCurrencyBreakdown(totalsByCurrency: Record<string, number>): string {
+export function formatCurrencyBreakdown(totalsByCurrency: Record<string, bigint | number>): string {
   const entries = Object.entries(totalsByCurrency)
-    .filter(([, minorUnits]) => minorUnits !== 0)
+    .filter(([, minorUnits]) => minorUnits !== 0 && minorUnits !== 0n)
     .sort(([a], [b]) => a.localeCompare(b));
 
   if (entries.length === 0) return formatCurrency(0, 'USD');

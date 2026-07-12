@@ -468,7 +468,7 @@ export class StripeWebhookController implements OnModuleInit {
       targetType: 'advertiser',
       targetId: advertiser.id,
       beforeSnap: {
-        amountMinor: result.amountMinor,
+        amountMinor: String(result.amountMinor),
         currency: result.currency,
         paymentIntentId: result.paymentIntentId,
         sessionId,
@@ -565,7 +565,7 @@ export class StripeWebhookController implements OnModuleInit {
     // aggregate closes both windows: only one delivery wins the flip and it
     // wins it atomically with its threshold read.
     for (const entry of entries) {
-      const reversalAmount = Math.min(entry.amountMinor, totalRefunded);
+      const reversalAmount = entry.amountMinor < totalRefunded ? entry.amountMinor : totalRefunded;
       if (reversalAmount <= 0) continue;
 
       const idempotencyKey = `stripe_refund_${details.paymentIntentId}_${refund.id}_${entry.id}`;
@@ -601,7 +601,7 @@ export class StripeWebhookController implements OnModuleInit {
           },
           _sum: { amountMinor: true },
         });
-        if ((totalReversed._sum.amountMinor ?? 0) < entry.amountMinor) {
+        if ((totalReversed._sum.amountMinor ?? 0n) < entry.amountMinor) {
           return; // not yet fully reversed — leave parent in its active state
         }
 
@@ -637,7 +637,11 @@ export class StripeWebhookController implements OnModuleInit {
       action: 'stripe_refund',
       targetType: 'payment_intent',
       targetId: details.paymentIntentId ?? '',
-      beforeSnap: { amountMinor: totalRefunded, currency: details.currency, refundId: refund.id },
+      beforeSnap: {
+        amountMinor: String(totalRefunded),
+        currency: details.currency,
+        refundId: refund.id,
+      },
     });
   }
 
@@ -743,9 +747,10 @@ export class StripeWebhookController implements OnModuleInit {
       },
     });
 
-    let remainingDisputeMinor = details.amountMinor;
+    let remainingDisputeMinor = BigInt(details.amountMinor);
     for (const entry of creditEntries) {
-      const holdAmount = Math.min(entry.amountMinor, remainingDisputeMinor);
+      const holdAmount =
+        entry.amountMinor < remainingDisputeMinor ? entry.amountMinor : remainingDisputeMinor;
       if (holdAmount <= 0) break;
 
       const holdIdempotencyKey = `stripe_dispute_hold_${dispute.id}_${entry.id}`;
@@ -869,7 +874,7 @@ export class StripeWebhookController implements OnModuleInit {
       beforeSnap: {
         paymentIntentId: details.paymentIntentId,
         reason: details.reason,
-        amountMinor: details.amountMinor,
+        amountMinor: String(details.amountMinor),
         advertiserId,
       },
     });

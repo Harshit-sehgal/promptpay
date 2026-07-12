@@ -232,25 +232,25 @@ describe('DeveloperService', () => {
           status: 'estimated',
           entryType: 'credit',
           currency: 'USD',
-          _sum: { amountMinor: 125 },
+          _sum: { amountMinor: 125n },
         },
         {
           status: 'confirmed',
           entryType: 'credit',
           currency: 'USD',
-          _sum: { amountMinor: 1000 },
+          _sum: { amountMinor: 1000n },
         },
         {
           status: 'confirmed',
           entryType: 'debit',
           currency: 'USD',
-          _sum: { amountMinor: 250 },
+          _sum: { amountMinor: 250n },
         },
         {
           status: 'held',
           entryType: 'credit',
           currency: 'EUR',
-          _sum: { amountMinor: 300 },
+          _sum: { amountMinor: 300n },
         },
       ]);
 
@@ -262,11 +262,11 @@ describe('DeveloperService', () => {
         _sum: { amountMinor: true },
       });
       expect(mockPrisma.earningsLedger.findMany).not.toHaveBeenCalled();
-      expect(summary.estimatedEarnings).toBe(125);
-      expect(summary.confirmedEarnings).toBe(750);
-      expect(summary.availableForPayout).toBe(750);
-      expect(summary.lifetimeEarnings).toBe(875);
-      expect(summary.heldEarningsByCurrency).toEqual({ EUR: 300 });
+      expect(summary.estimatedEarnings).toBe(125n);
+      expect(summary.confirmedEarnings).toBe(750n);
+      expect(summary.availableForPayout).toBe(750n);
+      expect(summary.lifetimeEarnings).toBe(875n);
+      expect(summary.heldEarningsByCurrency).toEqual({ EUR: 300n });
     });
   });
 });

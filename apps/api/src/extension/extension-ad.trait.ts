@@ -230,7 +230,7 @@ export class ExtensionAdTrait {
     }));
     const initialEligible = campaignsWithSafeCreatives.filter((c) => {
       if (c.creatives.length === 0) return false;
-      if (c.budgetSpentMinor >= c.budgetTotalMinor) return false;
+      if (BigInt(c.budgetSpentMinor) >= BigInt(c.budgetTotalMinor)) return false;
       // Category filter
       if (isCategoryBlocked(effectiveBlocked, c.category)) return false;
       if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category))
@@ -258,8 +258,8 @@ export class ExtensionAdTrait {
     const advertiserIds = initialEligible.map((c) => c.advertiserId);
     const advertiserBalances = await getAdvertiserBalancesByCurrency(this.prisma, advertiserIds);
     const eligible = initialEligible.filter((c) => {
-      const balance = advertiserBalances.get(`${c.advertiserId}:${c.currency}`) ?? 0;
-      return balance >= c.bidAmountMinor;
+      const balance = BigInt(advertiserBalances.get(`${c.advertiserId}:${c.currency}`) ?? 0);
+      return balance >= BigInt(c.bidAmountMinor);
     });
     if (!eligible.length) {
       return { ad: null, reason: 'no_eligible_campaign' };
@@ -269,7 +269,7 @@ export class ExtensionAdTrait {
     // long as eligible is non-empty, but falls through here only when
     // totalBid happens to round to zero. In that case pick uniformly to
     // avoid deterministic over-serving of the first campaign encountered.
-    const totalBid = eligible.reduce((sum, c) => sum + c.bidAmountMinor, 0n);
+    const totalBid = eligible.reduce((sum, c) => sum + BigInt(c.bidAmountMinor), 0n);
     let selected: (typeof eligible)[number];
     if (totalBid === 0n) {
       selected = eligible[Math.floor(Math.random() * eligible.length)];
@@ -277,7 +277,7 @@ export class ExtensionAdTrait {
       let random = BigInt(Math.floor(Math.random() * Number(totalBid)));
       selected = eligible[0];
       for (const c of eligible) {
-        random -= c.bidAmountMinor;
+        random -= BigInt(c.bidAmountMinor);
         if (random <= 0n) {
           selected = c;
           break;
@@ -908,7 +908,9 @@ export class ExtensionAdTrait {
     // RESTRICTED → holdDays = -1 (indefinite). Never compute a past
     // `availableAt` for restricted users; null ⇒ never matures. See ledger.service.ts.
     const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);
-    const split = isCpcBid ? this.ledger.calculateSplit(impression.campaign.bidAmountMinor) : null;
+    const split = isCpcBid
+      ? this.ledger.calculateSplit(BigInt(impression.campaign.bidAmountMinor))
+      : null;
     let click: {
       id: string;
     };
@@ -931,7 +933,7 @@ export class ExtensionAdTrait {
             impression.campaign.advertiserId,
             impression.campaign.currency,
           );
-          if (advertiserBalance < impression.campaign.bidAmountMinor) {
+          if (advertiserBalance < BigInt(impression.campaign.bidAmountMinor)) {
             throw new AdvertiserBalanceExhaustedError();
           }
         }

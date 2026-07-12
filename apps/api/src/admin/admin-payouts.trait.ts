@@ -25,7 +25,7 @@ export class AdminPayoutsTrait {
     payoutId: string,
     reviewerId: string,
     note?: string,
-    approvedAmountMinor?: number,
+    approvedAmountMinor?: bigint,
   ) {
     // Conditional update: only approve from a reviewable state. This prevents
     // an admin (or a compromised admin token) from re-approving a payout that
@@ -47,7 +47,7 @@ export class AdminPayoutsTrait {
     //     — explicit, so the reconciliation prefers the APPROVED value
     //     rather than the requested one going forward.
     if (approvedAmountMinor !== undefined) {
-      if (!Number.isInteger(approvedAmountMinor) || approvedAmountMinor <= 0) {
+      if (approvedAmountMinor <= 0n) {
         throw new BadRequestException('approvedAmountMinor must be a positive integer');
       }
     }
@@ -62,7 +62,7 @@ export class AdminPayoutsTrait {
       select: { requestedAmountMinor: true, currency: true },
     });
     if (!target) throw new BadRequestException('Payout not found');
-    let resolvedApprovedAmount: number;
+    let resolvedApprovedAmount: bigint;
     if (approvedAmountMinor !== undefined) {
       // Partial approval — validated against requested
       if (approvedAmountMinor > target.requestedAmountMinor) {
@@ -148,7 +148,7 @@ export class AdminPayoutsTrait {
     data: {
       providerTxId: string;
       paidAt: string;
-      amountMinor: number;
+      amountMinor: bigint;
       currency: string;
     },
   ) {

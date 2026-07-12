@@ -314,12 +314,13 @@ export class AdvertiserController {
     // enforced here. See A-031.
     const currency = dto.currency ?? 'usd';
     const minimum = depositMinimumMinor(currency);
-    if (dto.amountMinor < minimum) {
+    const amountMinor = BigInt(dto.amountMinor);
+    if (amountMinor < BigInt(minimum)) {
       throw new BadRequestException(`Minimum deposit is ${minimum} minor units`);
     }
     return this.stripe.createDepositSession({
       advertiserId,
-      amountMinor: dto.amountMinor,
+      amountMinor,
       currency,
       successUrl: `${webBaseUrl}/advertiser?deposit=success`,
       cancelUrl: `${webBaseUrl}/advertiser?deposit=cancelled`,

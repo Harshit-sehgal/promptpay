@@ -50,7 +50,7 @@ export default function NewCampaignPage() {
         if (!active) return;
         const balances = (res.data?.balances ?? []) as Array<{
           currency: string;
-          balanceMinor: number;
+          balanceMinor: bigint;
         }>;
         const funded = balances
           .filter((b) => (b.balanceMinor ?? 0) > 0)
@@ -79,15 +79,17 @@ export default function NewCampaignPage() {
     setDraftRecoveryId(null);
     setSubmitting(true);
 
-    const bidAmountMinor = majorToMinor(parseFloat(bidAmount), currency);
-    const budgetTotalMinor = majorToMinor(parseFloat(budgetTotal), currency);
+    const bidAmountMajor = parseFloat(bidAmount);
+    const budgetTotalMajor = parseFloat(budgetTotal);
+    const bidAmountMinor = majorToMinor(bidAmountMajor, currency);
+    const budgetTotalMinor = majorToMinor(budgetTotalMajor, currency);
 
-    if (isNaN(bidAmountMinor) || bidAmountMinor <= 0) {
+    if (isNaN(bidAmountMajor) || bidAmountMinor <= 0n) {
       setError('Enter a valid bid amount');
       setSubmitting(false);
       return;
     }
-    if (isNaN(budgetTotalMinor) || budgetTotalMinor < 5000) {
+    if (isNaN(budgetTotalMajor) || budgetTotalMinor < 5000n) {
       setError('Minimum budget is $50.00');
       setSubmitting(false);
       return;

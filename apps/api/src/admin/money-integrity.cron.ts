@@ -74,10 +74,10 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
           report.globalReconciliationByCurrency ?? { USD: report.globalReconciliation },
         ).map(([currency, row]) => [currency, row.discrepancyMinor]),
       );
-      const totalDiff = Math.max(
-        0,
-        ...Object.values(globalDiscrepancies).map((diff) => Math.abs(diff)),
-      );
+      const totalDiff = Object.values(globalDiscrepancies).reduce((max, diff) => {
+        const abs = diff < 0n ? -diff : diff;
+        return abs > max ? abs : max;
+      }, 0n);
       const severity =
         totalDiff > 0 || report.negativeDeveloperBalances.length > 0 ? 'high' : 'medium';
 
@@ -96,10 +96,20 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
         afterSnap: {
           status: report.status,
           severity,
-          globalDiscrepancyMinor: report.globalReconciliation.discrepancyMinor,
-          globalDiscrepancyByCurrency: globalDiscrepancies,
-          campaignDiscrepancies: report.campaignDiscrepancies,
-          negativeDeveloperBalances: report.negativeDeveloperBalances,
+          globalDiscrepancyMinor: String(report.globalReconciliation.discrepancyMinor),
+          globalDiscrepancyByCurrency: Object.fromEntries(
+            Object.entries(globalDiscrepancies).map(([currency, diff]) => [currency, String(diff)]),
+          ),
+          campaignDiscrepancies: report.campaignDiscrepancies.map((d) => ({
+            ...d,
+            budgetSpentMinor: String(d.budgetSpentMinor),
+            ledgerDebits: String(d.ledgerDebits),
+            diff: String(d.diff),
+          })),
+          negativeDeveloperBalances: report.negativeDeveloperBalances.map((b) => ({
+            ...b,
+            balanceMinor: String(b.balanceMinor),
+          })),
         },
       });
     } catch (err: unknown) {

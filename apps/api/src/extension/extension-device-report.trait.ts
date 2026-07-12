@@ -513,7 +513,7 @@ export class ExtensionDeviceReportTrait {
     this.enforcePrivacy({ ...dto } as Record<string, unknown>);
   }
 
-  getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+  getAdvertiserBalance(advertiserId: string, currency: string): Promise<bigint> {
     return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
 

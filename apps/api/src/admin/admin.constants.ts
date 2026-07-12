@@ -58,10 +58,10 @@ export function netCurrencyAmounts(
 ): Record<string, bigint> {
   const totals: Record<string, bigint> = {};
   for (const row of credits) {
-    totals[row.currency] = (totals[row.currency] ?? 0n) + (row._sum.amountMinor ?? 0n);
+    totals[row.currency] = (totals[row.currency] ?? 0n) + BigInt(row._sum.amountMinor ?? 0);
   }
   for (const row of debits) {
-    totals[row.currency] = (totals[row.currency] ?? 0n) - (row._sum.amountMinor ?? 0n);
+    totals[row.currency] = (totals[row.currency] ?? 0n) - BigInt(row._sum.amountMinor ?? 0);
   }
   return totals;
 }

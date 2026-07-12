@@ -42,6 +42,7 @@ export class PayoutRequestTrait {
     currency: string,
     specificEntryIds?: string[],
   ) {
+    amountMinor = BigInt(amountMinor);
     let candidateEntries: EarningsLedger[];
     const unallocatedCreditWhere: Prisma.EarningsLedgerWhereInput = {
       userId,
@@ -93,7 +94,7 @@ export class PayoutRequestTrait {
           take: ALLOCATION_QUERY_PAGE_SIZE,
         });
         candidateEntries.push(...page);
-        selectedMinor += page.reduce((sum, entry) => sum + entry.amountMinor, 0n);
+        selectedMinor += page.reduce((sum, entry) => sum + BigInt(entry.amountMinor), 0n);
         cursor = page.length > 0 ? { id: page[page.length - 1].id } : undefined;
         if (page.length < ALLOCATION_QUERY_PAGE_SIZE) break;
       } while (selectedMinor < amountMinor);
@@ -357,7 +358,7 @@ export class PayoutRequestTrait {
         targetType: 'payout_request',
         targetId: payoutRequest.id,
         beforeSnap: {
-          requestedAmountMinor: dto.amountMinor,
+          requestedAmountMinor: String(dto.amountMinor),
           currency,
           allocationCount: dto.earningsEntryIds?.length ?? 0,
         },
@@ -429,7 +430,7 @@ export class PayoutRequestTrait {
         include: { payoutAccount: true, allocations: { include: { earningsEntry: true } } },
       });
       if (!pkt) throw new BadRequestException('Payout request not found');
-      const expectedAmount = pkt.approvedAmountMinor ?? pkt.requestedAmountMinor;
+      const expectedAmount = BigInt(pkt.approvedAmountMinor ?? pkt.requestedAmountMinor);
       // ── Allocation-sum reconciliation ──────────────────────────
       // A partial approval (admin set approvedAmountMinor < requestedAmountMinor)
       // means the existing allocations overshoot the approved amount — we
@@ -439,12 +440,12 @@ export class PayoutRequestTrait {
       let allocations = [...pkt.allocations];
       let allocatedSum = allocations.reduce(
         (
-          sum: number,
+          sum: bigint,
           a: {
-            amountMinor: number;
+            amountMinor: bigint;
           },
-        ) => sum + a.amountMinor,
-        0,
+        ) => sum + BigInt(a.amountMinor),
+        0n,
       );
       if (allocatedSum > expectedAmount) {
         // Trim the over-allocated slice. We delete the excess allocation
@@ -452,7 +453,7 @@ export class PayoutRequestTrait {
         // so the remaining sum matches `expectedAmount`.
         let overage = allocatedSum - expectedAmount;
         const removedIds = new Set<string>();
-        for (let i = 0; i < allocations.length && overage > 0; i++) {
+        for (let i = 0; i < allocations.length && overage > 0n; i++) {
           const entry = allocations[i];
           if (entry.amountMinor <= overage) {
             // Entire allocation is excess — delete it
@@ -500,7 +501,7 @@ export class PayoutRequestTrait {
               data: { amountMinor: remaining },
             });
             allocatedSum -= overage;
-            overage = 0;
+            overage = 0n;
           }
         }
         allocations = allocations.filter((a) => !removedIds.has(a.id));
@@ -614,7 +615,7 @@ export class PayoutRequestTrait {
       // the payout is irreversibly flipped. When absent (e.g. path callers that
       // only have providerTxId + paidAt), the cross-check is skipped, preserving
       // the prior behavior so webhook/automated callers don't break.
-      expectedAmountMinor?: number;
+      expectedAmountMinor?: bigint;
       expectedCurrency?: string;
     },
   ) {

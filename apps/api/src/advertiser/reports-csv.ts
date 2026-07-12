@@ -10,11 +10,11 @@ export interface ReportRow {
   impressions: number;
   clicks: number;
   ctr: number;
-  spendMinor: number;
+  spendMinor: bigint;
   currency: string;
 }
 
-function csvCell(value: string | number): string {
+function csvCell(value: string | number | bigint): string {
   const s = String(value);
   if (/[",\n]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;

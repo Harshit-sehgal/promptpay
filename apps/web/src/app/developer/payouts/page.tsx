@@ -28,9 +28,9 @@ interface PayoutAccount {
 
 interface PayoutInfo {
   payoutAccounts: PayoutAccount[];
-  availableBalanceMinor: number;
-  availableBalanceByCurrency?: Record<string, number>;
-  minimumThresholdMinor: number;
+  availableBalanceMinor: bigint;
+  availableBalanceByCurrency?: Record<string, bigint>;
+  minimumThresholdMinor: bigint;
   currency: string;
   requiresTwoFactorForPayout?: boolean;
   twoFactorEnabled?: boolean;
@@ -39,7 +39,7 @@ interface PayoutInfo {
 interface PayoutRequest {
   id: string;
   status: string;
-  requestedAmountMinor: number;
+  requestedAmountMinor: bigint;
   currency: string;
   createdAt: string;
   paidAt?: string;
@@ -85,7 +85,7 @@ export default function DevPayoutsPage() {
     .filter((policy) => policy.providers.some((p) => p === (provider as PayoutProvider)))
     .map((policy) => policy.code)
     .sort();
-  const selectedAvailableMinor = availableBalanceByCurrency[selectedCurrency] ?? 0;
+  const selectedAvailableMinor = availableBalanceByCurrency[selectedCurrency] ?? 0n;
   const hasPayoutableBalance = Object.values(availableBalanceByCurrency).some((balanceMinor) =>
     info ? balanceMinor >= info.minimumThresholdMinor : false,
   );
@@ -172,8 +172,9 @@ export default function DevPayoutsPage() {
       setRequestError('Enable two-factor authentication before requesting a payout.');
       return;
     }
-    const amountMinor = majorToMinor(parseFloat(amount), selectedCurrency);
-    if (isNaN(amountMinor) || amountMinor <= 0) {
+    const amountMajor = parseFloat(amount);
+    const amountMinor = majorToMinor(amountMajor, selectedCurrency);
+    if (isNaN(amountMajor) || amountMinor <= 0n) {
       setRequestError('Enter a valid amount');
       return;
     }
@@ -339,7 +340,7 @@ export default function DevPayoutsPage() {
                     </label>
                     <input
                       type="number"
-                      step={minorToMajorInputValue(1, selectedCurrency)}
+                      step={minorToMajorInputValue(1n, selectedCurrency)}
                       min={minorToMajorInputValue(info.minimumThresholdMinor, selectedCurrency)}
                       max={minorToMajorInputValue(selectedAvailableMinor, selectedCurrency)}
                       value={amount}

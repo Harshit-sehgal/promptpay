@@ -97,8 +97,8 @@ export const advertiserApi = {
     api.get('/advertiser/campaigns', { params }),
   getCampaign: (id: string) => api.get(`/advertiser/campaigns/${id}`),
   getReports: (params?: Record<string, unknown>) => api.get('/advertiser/reports', { params }),
-  createDepositSession: (amountMinor: number, currency?: string) =>
-    api.post('/advertiser/deposit-session', { amountMinor, currency }),
+  createDepositSession: (amountMinor: bigint | number, currency?: string) =>
+    api.post('/advertiser/deposit-session', { amountMinor: Number(amountMinor), currency }),
 };
 
 export const adminApi = {
@@ -113,17 +113,20 @@ export const adminApi = {
   rejectCampaign: (id: string, reason: string) =>
     api.post(`/admin/campaigns/${id}/reject`, { reason }),
   getPendingPayouts: () => api.get('/admin/payouts/pending'),
-  approvePayout: (id: string, note?: string, approvedAmountMinor?: number) =>
+  approvePayout: (id: string, note?: string, approvedAmountMinor?: bigint | number) =>
     api.post(`/admin/payouts/${id}/approve`, {
       note,
-      ...(approvedAmountMinor !== undefined ? { approvedAmountMinor } : {}),
+      ...(approvedAmountMinor !== undefined
+        ? { approvedAmountMinor: Number(approvedAmountMinor) }
+        : {}),
     }),
   rejectPayout: (id: string, reason: string) => api.post(`/admin/payouts/${id}/reject`, { reason }),
   processPayout: (id: string) => api.post(`/admin/payouts/${id}/process`),
   markPayoutPaid: (
     id: string,
-    data: { providerTxId: string; paidAt: string; amountMinor: number; currency: string },
-  ) => api.post(`/admin/payouts/${id}/mark-paid`, data),
+    data: { providerTxId: string; paidAt: string; amountMinor: bigint | number; currency: string },
+  ) =>
+    api.post(`/admin/payouts/${id}/mark-paid`, { ...data, amountMinor: Number(data.amountMinor) }),
   getMoneyIntegrity: () => api.get('/admin/money-integrity'),
   getFraudFlags: (params?: Record<string, unknown>) => api.get('/admin/fraud', { params }),
   getFraudStats: () => api.get('/admin/fraud/stats'),

@@ -116,7 +116,12 @@ export class AdminController {
     @CurrentUser('id') userId: string,
     @Body() dto: ApprovePayoutDto,
   ) {
-    return this.service.approvePayout(id, userId, dto.note, dto.approvedAmountMinor);
+    return this.service.approvePayout(
+      id,
+      userId,
+      dto.note,
+      dto.approvedAmountMinor !== undefined ? BigInt(dto.approvedAmountMinor) : undefined,
+    );
   }
 
   @ApiOperation({ summary: 'Reject payout' })
@@ -142,7 +147,10 @@ export class AdminController {
     @CurrentUser('id') userId: string,
     @Body() dto: MarkPayoutPaidDto,
   ) {
-    return this.service.markPayoutPaid(id, dto);
+    return this.service.markPayoutPaid(id, {
+      ...dto,
+      amountMinor: BigInt(dto.amountMinor),
+    });
   }
 
   @ApiOperation({ summary: 'Get fraud flags' })

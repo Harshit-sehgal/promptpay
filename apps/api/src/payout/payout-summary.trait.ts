@@ -133,7 +133,13 @@ export class PayoutSummaryTrait {
     }
     if (allocatedRows) {
       for (const row of allocatedRows) {
-        this.addCurrencyAmount(rawBalancesByCurrency, row.currency, -(row.amountMinor ?? 0n));
+        this.addCurrencyAmount(
+          rawBalancesByCurrency,
+          row.currency,
+          -(row.amountMinor !== null && row.amountMinor !== undefined
+            ? BigInt(row.amountMinor)
+            : 0n),
+        );
       }
     }
     const availableBalanceByCurrency = this.availableCurrencyTotals(rawBalancesByCurrency);

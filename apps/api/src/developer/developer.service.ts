@@ -101,12 +101,13 @@ export class DeveloperService {
       confirmedEarningsByCurrency: {} as Record<string, bigint>,
       pendingEarningsByCurrency: {} as Record<string, bigint>,
       heldEarningsByCurrency: {} as Record<string, bigint>,
+      reversedEarningsByCurrency: {} as Record<string, bigint>,
       recoveryDebtByCurrency: {} as Record<string, bigint>,
       availableForPayoutByCurrency: {} as Record<string, bigint>,
       lifetimeEarningsByCurrency: {} as Record<string, bigint>,
     };
     for (const entry of entries) {
-      const amountMinor = entry._sum.amountMinor ?? 0;
+      const amountMinor = BigInt(entry._sum.amountMinor ?? 0);
       if (entry.entryType === 'debit') {
         addCurrencyAmount(summary.recoveryDebtByCurrency, entry.currency, amountMinor);
         if (entry.status !== 'reversed' && entry.status !== 'void') {
@@ -133,11 +134,7 @@ export class DeveloperService {
       else if (entry.status === 'held')
         addCurrencyAmount(summary.heldEarningsByCurrency, entry.currency, amountMinor);
       else if (entry.status === 'reversed')
-        summary.reversedEarningsByCurrency = addCurrencyAmount(
-          summary.reversedEarningsByCurrency,
-          entry.currency,
-          amountMinor,
-        );
+        addCurrencyAmount(summary.reversedEarningsByCurrency, entry.currency, amountMinor);
     }
     summary.confirmedEarningsByCurrency = nonNegativeCurrencyTotals(
       summary.confirmedEarningsByCurrency,
@@ -151,21 +148,21 @@ export class DeveloperService {
     );
     summary.estimatedEarnings =
       summary.estimatedEarningsByCurrency[primaryCurrency(summary.estimatedEarningsByCurrency)] ??
-      0;
+      0n;
     summary.confirmedEarnings =
       summary.confirmedEarningsByCurrency[primaryCurrency(summary.confirmedEarningsByCurrency)] ??
-      0;
+      0n;
     summary.pendingEarnings =
-      summary.pendingEarningsByCurrency[primaryCurrency(summary.pendingEarningsByCurrency)] ?? 0;
+      summary.pendingEarningsByCurrency[primaryCurrency(summary.pendingEarningsByCurrency)] ?? 0n;
     summary.heldEarnings =
-      summary.heldEarningsByCurrency[primaryCurrency(summary.heldEarningsByCurrency)] ?? 0;
+      summary.heldEarningsByCurrency[primaryCurrency(summary.heldEarningsByCurrency)] ?? 0n;
     summary.recoveryDebt =
-      summary.recoveryDebtByCurrency[primaryCurrency(summary.recoveryDebtByCurrency)] ?? 0;
+      summary.recoveryDebtByCurrency[primaryCurrency(summary.recoveryDebtByCurrency)] ?? 0n;
     summary.availableForPayout =
       summary.availableForPayoutByCurrency[primaryCurrency(summary.availableForPayoutByCurrency)] ??
-      0;
+      0n;
     summary.lifetimeEarnings =
-      summary.lifetimeEarningsByCurrency[primaryCurrency(summary.lifetimeEarningsByCurrency)] ?? 0;
+      summary.lifetimeEarningsByCurrency[primaryCurrency(summary.lifetimeEarningsByCurrency)] ?? 0n;
     return summary;
   }
 

@@ -385,7 +385,7 @@ export class CampaignService {
     }
   }
 
-  private getAdvertiserBalance(advertiserId: string, currency: string): Promise<number> {
+  private getAdvertiserBalance(advertiserId: string, currency: string): Promise<bigint> {
     return getAdvertiserBalance(this.prisma, advertiserId, currency);
   }
 }

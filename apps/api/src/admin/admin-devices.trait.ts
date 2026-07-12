@@ -236,7 +236,9 @@ export class AdminDevicesTrait {
   }) {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(100, Math.max(1, params.limit ?? 20));
-    const minAmountMinor = params.minAmountMinor ? BigInt(Math.max(1, params.minAmountMinor)) : 1n;
+    const minAmountMinor = params.minAmountMinor
+      ? BigInt(Math.max(1, Number(params.minAmountMinor)))
+      : 1n;
     const currency = normalizeOptionalCurrency(params.currency);
     const currencyFilter = currency ? { currency } : {};
     const [debitGroups, creditGroups] = await Promise.all([
@@ -252,9 +254,12 @@ export class AdminDevicesTrait {
         _sum: { amountMinor: true },
       }),
     ]);
-    const creditByUserCurrency = new Map<string, number>();
+    const creditByUserCurrency = new Map<string, bigint>();
     for (const credit of creditGroups) {
-      creditByUserCurrency.set(`${credit.userId}:${credit.currency}`, credit._sum.amountMinor ?? 0);
+      creditByUserCurrency.set(
+        `${credit.userId}:${credit.currency}`,
+        credit._sum.amountMinor ?? 0n,
+      );
     }
     const allDebtRows = debitGroups
       .map((debit) => {
@@ -273,9 +278,12 @@ export class AdminDevicesTrait {
         };
       })
       .filter((row) => row.outstandingDebtMinor >= minAmountMinor)
-      .sort(
-        (a, b) =>
-          b.outstandingDebtMinor - a.outstandingDebtMinor || a.userId.localeCompare(b.userId),
+      .sort((a, b) =>
+        a.outstandingDebtMinor > b.outstandingDebtMinor
+          ? -1
+          : a.outstandingDebtMinor < b.outstandingDebtMinor
+            ? 1
+            : a.userId.localeCompare(b.userId),
       );
     const total = allDebtRows.length;
     const rows = allDebtRows.slice((page - 1) * limit, page * limit);
@@ -409,7 +417,7 @@ export class AdminDevicesTrait {
       afterSnap: {
         userId: params.userId,
         status,
-        outstandingDebtMinor: debt.outstandingDebtMinor,
+        outstandingDebtMinor: String(debt.outstandingDebtMinor),
         currency: debt.currency,
         externalReference,
       },
@@ -467,11 +475,11 @@ export class AdminDevicesTrait {
       action: 'recovery_debt_case_resolved',
       targetType: 'recovery_debt_case',
       targetId: params.caseId,
-      beforeSnap: { status: existing.status, amountMinor: existing.amountMinor },
+      beforeSnap: { status: existing.status, amountMinor: String(existing.amountMinor) },
       afterSnap: {
         status: terminalStatus,
         userId: existing.userId,
-        currentOutstandingDebtMinor: debt.outstandingDebtMinor,
+        currentOutstandingDebtMinor: String(debt.outstandingDebtMinor),
         currency: debt.currency,
         externalReference,
       },

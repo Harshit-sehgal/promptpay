@@ -70,7 +70,7 @@ export class AdvertiserCampaignTrait {
         name: dto.name,
         category: dto.category,
         bidType: dto.bidType,
-        budgetTotalMinor: dto.budgetTotalMinor,
+        budgetTotalMinor: String(dto.budgetTotalMinor),
       },
     });
     return campaign;
@@ -195,7 +195,7 @@ export class AdvertiserCampaignTrait {
       throw new BadRequestException('Cannot resume campaign: budget has been fully spent');
     }
     const balance = await this.getAdvertiserBalance(advertiserId, campaign.currency);
-    if (balance <= 0) {
+    if (balance <= 0n) {
       throw new BadRequestException(
         'Cannot resume campaign: advertiser has no funded balance. Please deposit funds first.',
       );
@@ -291,7 +291,7 @@ export class AdvertiserCampaignTrait {
           archived: false as const,
           refundEntry: null as {
             id: string;
-            amountMinor: number;
+            amountMinor: bigint;
           } | null,
         };
       }
@@ -315,7 +315,7 @@ export class AdvertiserCampaignTrait {
       // issuing the Stripe refund (separate admin endpoint).
       let refundEntry: {
         id: string;
-        amountMinor: number;
+        amountMinor: bigint;
       } | null = null;
       if (unspentMinor > 0n) {
         try {
@@ -367,7 +367,7 @@ export class AdvertiserCampaignTrait {
       targetId: campaignId,
       beforeSnap: {
         oldStatus: campaign.status,
-        refundObligationMinor: result.unspentMinor,
+        refundObligationMinor: String(result.unspentMinor),
         currency: result.currency,
       },
     });
@@ -432,7 +432,14 @@ export class AdvertiserCampaignTrait {
       action: 'update_campaign',
       targetType: 'campaign',
       targetId: campaignId,
-      beforeSnap: { changes: dto },
+      beforeSnap: {
+        changes: {
+          ...dto,
+          bidAmountMinor: dto.bidAmountMinor !== undefined ? String(dto.bidAmountMinor) : undefined,
+          budgetTotalMinor:
+            dto.budgetTotalMinor !== undefined ? String(dto.budgetTotalMinor) : undefined,
+        },
+      },
     });
     return updated;
   }

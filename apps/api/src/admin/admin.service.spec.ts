@@ -100,24 +100,24 @@ describe('AdminService', () => {
       expect(report.campaignDiscrepancies).toEqual([]);
       expect(report.globalReconciliationByCurrency).toEqual({
         EUR: {
-          netAdvertiserSpendMinor: 200,
-          netDeveloperEarningsMinor: 120,
-          netPlatformFeeMinor: 60,
-          netReserveMinor: 20,
-          splitSumMinor: 200,
-          discrepancyMinor: 0,
+          netAdvertiserSpendMinor: 200n,
+          netDeveloperEarningsMinor: 120n,
+          netPlatformFeeMinor: 60n,
+          netReserveMinor: 20n,
+          splitSumMinor: 200n,
+          discrepancyMinor: 0n,
         },
         USD: {
-          netAdvertiserSpendMinor: 100,
-          netDeveloperEarningsMinor: 60,
-          netPlatformFeeMinor: 30,
-          netReserveMinor: 10,
-          splitSumMinor: 100,
-          discrepancyMinor: 0,
+          netAdvertiserSpendMinor: 100n,
+          netDeveloperEarningsMinor: 60n,
+          netPlatformFeeMinor: 30n,
+          netReserveMinor: 10n,
+          splitSumMinor: 100n,
+          discrepancyMinor: 0n,
         },
       });
       expect(report.negativeDeveloperBalances).toEqual([
-        { userId: 'dev-1', email: 'dev@example.com', balanceMinor: -50, currency: 'EUR' },
+        { userId: 'dev-1', email: 'dev@example.com', balanceMinor: -50n, currency: 'EUR' },
       ]);
       expect(report.status).toBe('unhealthy');
     });

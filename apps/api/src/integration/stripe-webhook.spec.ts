@@ -184,8 +184,8 @@ describe('Stripe Webhook Controller — reconciliation', () => {
         userId: user.id,
         payoutAccountId: account.id,
         status: payoutStatus as never,
-        requestedAmountMinor: 1000,
-        approvedAmountMinor: 1000,
+        requestedAmountMinor: 1000n,
+        approvedAmountMinor: 1000n,
         currency: 'USD',
       },
     });
@@ -203,7 +203,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
         userId: user.id,
         entryType: 'credit',
         status: 'confirmed',
-        amountMinor: 600,
+        amountMinor: 600n,
         currency: 'USD',
         idempotencyKey: `wh_e1_${providerTxId}`,
       },
@@ -213,7 +213,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
         userId: user.id,
         entryType: 'credit',
         status: 'confirmed',
-        amountMinor: 400,
+        amountMinor: 400n,
         currency: 'USD',
         idempotencyKey: `wh_e2_${providerTxId}`,
       },
@@ -253,7 +253,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
         advertiserId: advertiser.id,
         entryType: 'credit',
         status: 'confirmed',
-        amountMinor: 10_000,
+        amountMinor: 10_000n,
         currency: 'USD',
         stripePaymentIntentId: input.paymentIntentId,
         idempotencyKey: input.idempotencyKey,
@@ -364,13 +364,13 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     expect(res.status).toBe(200);
     const parent = await prisma.advertiserLedger.findUnique({ where: { id: creditId } });
     expect(parent?.status).toBe('confirmed');
-    expect(parent?.amountMinor).toBe(9_000);
+    expect(parent?.amountMinor).toBe(9_000n);
 
     const hold = await prisma.advertiserLedger.findFirst({
       where: { stripeDisputeId: 'dp_partial_freeze', entryType: 'hold' },
     });
     expect(hold?.status).toBe('held');
-    expect(hold?.amountMinor).toBe(1_000);
+    expect(hold?.amountMinor).toBe(1_000n);
   });
 
   it('restores exactly the disputed slice when a partial dispute is won', async () => {
@@ -416,18 +416,18 @@ describe('Stripe Webhook Controller — reconciliation', () => {
 
     const parent = await prisma.advertiserLedger.findUnique({ where: { id: creditId } });
     expect(parent?.status).toBe('confirmed');
-    expect(parent?.amountMinor).toBe(9_000);
+    expect(parent?.amountMinor).toBe(9_000n);
 
     const restored = await prisma.advertiserLedger.findFirst({
       where: { stripeDisputeId: 'dp_partial_won', entryType: 'credit', status: 'confirmed' },
     });
-    expect(restored?.amountMinor).toBe(1_000);
+    expect(restored?.amountMinor).toBe(1_000n);
 
     const creditSum = await prisma.advertiserLedger.aggregate({
       where: { advertiserId, entryType: 'credit', status: 'confirmed' },
       _sum: { amountMinor: true },
     });
-    expect(creditSum._sum.amountMinor).toBe(10_000);
+    expect(creditSum._sum.amountMinor).toBe(10_000n);
   });
 
   it('writes off exactly the disputed slice when a partial dispute is lost', async () => {
@@ -473,18 +473,18 @@ describe('Stripe Webhook Controller — reconciliation', () => {
 
     const parent = await prisma.advertiserLedger.findUnique({ where: { id: creditId } });
     expect(parent?.status).toBe('confirmed');
-    expect(parent?.amountMinor).toBe(9_000);
+    expect(parent?.amountMinor).toBe(9_000n);
 
     const reversal = await prisma.advertiserLedger.findFirst({
       where: { stripeDisputeId: 'dp_partial_lost', entryType: 'reversal', status: 'reversed' },
     });
-    expect(reversal?.amountMinor).toBe(1_000);
+    expect(reversal?.amountMinor).toBe(1_000n);
 
     const creditSum = await prisma.advertiserLedger.aggregate({
       where: { advertiserId, entryType: 'credit', status: 'confirmed' },
       _sum: { amountMinor: true },
     });
-    expect(creditSum._sum.amountMinor).toBe(9_000);
+    expect(creditSum._sum.amountMinor).toBe(9_000n);
 
     const platformDebit = await prisma.platformLedger.findFirst({
       where: {
@@ -493,7 +493,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
         idempotencyKey: { contains: 'dp_partial_lost' },
       },
     });
-    expect(platformDebit?.amountMinor).toBe(1_000);
+    expect(platformDebit?.amountMinor).toBe(1_000n);
   });
 
   // ── A-062: failure paths must NOT be acknowledged with HTTP 200 ──
