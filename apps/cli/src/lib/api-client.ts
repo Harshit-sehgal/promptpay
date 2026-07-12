@@ -4,6 +4,7 @@ import * as https from 'https';
 import * as os from 'os';
 
 import {
+  clearTokens,
   Credentials,
   getDeviceEventSecret,
   setCredentials,
@@ -332,11 +333,18 @@ export class ApiClient {
     // can be enforced without server-side geolocation. Falls back to the
     // developer's profile country server-side when omitted.
     const country = input.country ?? detectCountryCode();
+    // Normalize the tool name to a valid ToolType enum value, exactly as
+    // reportWaitState() does. Without this, the two correlated endpoints for
+    // a single wait state receive different toolType values (wait-state/start
+    // gets the normalized enum, ad-request gets the raw user string), and an
+    // @IsEnum(ToolType) validator on the ad-request DTO would silently reject
+    // the ad for any non-canonical tool name — breaking the money loop.
+    const normalizedTool = normalizeToolType(input.toolType);
     const payload = {
       deviceId: input.deviceId,
       sessionId: input.sessionId,
       waitStateId: input.waitStateId,
-      toolType: input.toolType,
+      toolType: normalizedTool,
       idempotencyKey: input.idempotencyKey,
       ...(country ? { country } : {}),
     };
@@ -419,6 +427,22 @@ export class ApiClient {
       }
       return refresh;
     } catch {
+      // The refresh token is dead (family revoked, session revoked server-side,
+      // or rotated by another client). Clear persisted tokens so the next CLI
+      // command surfaces a clean "not logged in" state instead of looping on
+      // 401→refresh-with-dead-token→401 forever. Mirrors the VSCode client
+      // (which clears currentTokens + calls clearTokens() on refresh failure).
+      if (this.creds) {
+        this.creds.accessToken = '';
+        this.creds.refreshToken = '';
+      }
+      try {
+        await clearTokens();
+      } catch {
+        // Best-effort — local file/keychain clear failure must not mask the
+        // original refresh failure. The in-memory wipe above already prevents
+        // further retry loops this process.
+      }
       return null;
     } finally {
       this._refreshInProgress = null;

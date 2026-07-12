@@ -17,8 +17,7 @@ export interface WaitStateEvent {
  * Signals that are emitted during wait-state lifecycle.
  */
 export type DetectorSignal =
-  | { type: 'wait_start'; event: WaitStateEvent }
-  | { type: 'wait_end'; event: WaitStateEvent };
+  { type: 'wait_start'; event: WaitStateEvent } | { type: 'wait_end'; event: WaitStateEvent };
 
 /**
  * Detects "wait states" when AI coding assistants appear to be thinking.
@@ -276,17 +275,22 @@ export class WaitStateDetector {
     const durationMs = Date.now() - this.waitStart;
     this.inWait = false;
 
-    // Only fire if wait was meaningful (>2s) — short flickers are noise
-    if (durationMs >= 2_000) {
-      const event: WaitStateEvent = {
-        startTime: this.waitStart,
-        durationMs,
-        tool: 'vscode',
-        waitStateId: this.waitStateId,
-      };
+    // Always emit the wait_end signal. extension.ts calls waitStateStart() on
+    // every wait_start, so suppressing wait_end for short (<2s) "flickers" was
+    // orphaning a wait_state_start row on the server with no matching end row
+    // and no server-computed duration — a steadily-growing analytics gap. The
+    // server applies its own WAIT_STATE_DURATION_TOLERANCE_SECONDS /
+    // WAIT_STATE_MAX_DURATION_SECONDS validation on the end event, so a
+    // legitimately short wait still records cleanly (duration 0 is refused by
+    // the server, but sub-2s waits are ≥1s here after the enterWait guard).
+    const event: WaitStateEvent = {
+      startTime: this.waitStart,
+      durationMs,
+      tool: 'vscode',
+      waitStateId: this.waitStateId,
+    };
 
-      this.emitSignal({ type: 'wait_end', event });
-    }
+    this.emitSignal({ type: 'wait_end', event });
 
     this.waitStart = 0;
     this.waitStateId = '';

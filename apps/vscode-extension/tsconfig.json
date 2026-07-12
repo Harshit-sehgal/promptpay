@@ -3,7 +3,7 @@
     "declaration": false,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "ES2024"],
     "module": "CommonJS",
     "outDir": "out",
     "rootDir": "src",
@@ -11,9 +11,9 @@
       "@waitlayer/shared": ["../../packages/shared/dist"]
     },
     "resolveJsonModule": true,
-        "skipLibCheck": true,
-    "sourceMap": false,     // Source maps removed for prod — out/*.js.map publish leaked full
-                            // TypeScript source (API endpoints, auth flow, secret storage keys).
+    "skipLibCheck": true,
+    "sourceMap": false, // Source maps removed for prod — out/*.js.map publish leaked full
+    // TypeScript source (API endpoints, auth flow, secret storage keys).
     "strict": true,
     "target": "ES2022",
     "types": ["node", "vscode"]

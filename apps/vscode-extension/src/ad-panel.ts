@@ -3,12 +3,15 @@ import * as vscode from 'vscode';
 
 export class AdPanel {
   private panel?: vscode.WebviewPanel;
-  private onComplete?: (clicked: boolean) => void;
-  // One-shot guard. The dispose handler races with the click handler — VS Code may
-  // dispose the panel after a click has already fired (or vice versa). Without this
-  // flag, `recordClick` and `recordImpressionEnd` would each fire twice and the
-  // server would return idempotency-rejected duplicates (or, worse, ledger drift).
-  private completed = false;
+  // Per-ad completion state. Each `show()` creates a fresh closure so a STALE
+  // panel (one orphaned by a sub-2s wait that never emitted wait_end, then
+  // replaced by the next `show()`) cannot fire the NEW ad's completion
+  // callback when it is eventually disposed. The one-shot guard lives inside
+  // the closure, not on the class instance — otherwise reassigning
+  // `this.completed = false` in the next `show()` would un-arm the prior
+  // panel's dispose. Callers descend through this ref so `hide()` can invoke
+  // the current ad's completion if the panel was never interacted with.
+  private active?: { fire: (clicked: boolean) => void; dispose: () => void };
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -28,10 +31,16 @@ export class AdPanel {
     },
     onComplete: (clicked: boolean) => void,
   ) {
-    this.onComplete = onComplete;
-    this.completed = false;
+    // Dispose any panel left over from a prior ad before creating a new one.
+    // Without this, the old WebviewPanel is orphaned (its onDidReceiveMessage /
+    // onDidDispose Disposables are dropped) and its eventual dispose races the
+    // new ad's lifecycle. For a short wait that was never given a wait_end
+    // signal, this is the only thing that prevents a stale dispose from firing
+    // the current ad's impression-qualification with a too-short duration.
+    this.active?.dispose();
+    this.active = undefined;
 
-    this.panel = vscode.window.createWebviewPanel(
+    const panel = vscode.window.createWebviewPanel(
       'waitlayerAd',
       'WaitLayer ad',
       vscode.ViewColumn.Beside,
@@ -40,34 +49,54 @@ export class AdPanel {
         retainContextWhenHidden: true,
       },
     );
+    this.panel = panel;
 
     const ctaUri = safeExternalUri(ad.ctaUrl);
 
-    this.panel.webview.html = renderHtml(ad, this.panel.webview, Boolean(ctaUri));
-    this.panel.webview.onDidReceiveMessage((msg) => {
+    panel.webview.html = renderHtml(ad, panel.webview, Boolean(ctaUri));
+
+    // Per-ad one-shot guard. The dispose handler races with the click handler
+    // — VS Code may dispose the panel after a click has already fired (or vice
+    // versa). Without this flag, `recordClick` and `recordImpressionEnd` would
+    // each fire twice and the server would return idempotency-rejected
+    // duplicates (or, worse, ledger drift). It is scoped to THIS ad, so a
+    // stale prior panel's dispose cannot trip it.
+    let completed = false;
+    const fireComplete = (clicked: boolean) => {
+      if (completed) return;
+      completed = true;
+      try {
+        onComplete(clicked);
+      } finally {
+        // Clear the active ref only if it still points at THIS ad — a newer
+        // show() may have already swapped it out, and we must not clobber it.
+        if (this.active?.fire === fireComplete) this.active = undefined;
+      }
+    };
+
+    panel.webview.onDidReceiveMessage((msg) => {
       if (msg.type === 'click') {
         if (ctaUri) {
           vscode.env.openExternal(ctaUri);
         }
-        this.fireComplete(true);
+        fireComplete(true);
       }
     });
-    this.panel.onDidDispose(() => {
-      this.fireComplete(false);
+    panel.onDidDispose(() => {
+      fireComplete(false);
     });
-  }
 
-  /** Dispatch the completion callback at most once. Subsequent calls (from a
-   *  racing dispose handler, repeated click events, etc.) are ignored. */
-  private fireComplete(clicked: boolean): void {
-    if (this.completed) return;
-    this.completed = true;
-    this.onComplete?.(clicked);
+    this.active = {
+      fire: fireComplete,
+      dispose: () => panel.dispose(),
+    };
   }
 
   hide() {
-    this.panel?.dispose();
-    this.panel = undefined;
+    // Reaching into `active` instead of `panel` ensures we only dispose if
+    // the panel is still the current ad's panel, and that a stale dispose (no
+    // completion callback) is captured by the per-ad guard above.
+    this.active?.dispose();
   }
 }
 

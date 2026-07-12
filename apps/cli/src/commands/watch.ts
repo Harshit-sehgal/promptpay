@@ -100,7 +100,24 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
       }
 
       const state = JSON.parse(raw) as WaitState;
-      if (!state.startTime || state.startTime === lastState?.startTime) {
+      // The marker file is user-written (shell templates, hand-edits). Guard
+      // against a malformed payload before trusting its fields in arithmetic
+      // and in the signed/idempotency payloads: a non-numeric or negative
+      // startTime would yield NaN durations and corrupt the wait-state record
+      // server-side, and a non-string tool would flow into signed payloads.
+      if (
+        typeof state !== 'object' ||
+        state === null ||
+        typeof state.startTime !== 'number' ||
+        !Number.isFinite(state.startTime) ||
+        state.startTime <= 0 ||
+        typeof state.tool !== 'string' ||
+        state.tool.length === 0
+      ) {
+        console.warn(chalk.yellow(`Ignoring malformed wait-state marker: ${raw}`));
+        return;
+      }
+      if (state.startTime === lastState?.startTime) {
         return;
       }
 

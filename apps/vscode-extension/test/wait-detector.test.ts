@@ -41,7 +41,11 @@ describe('WaitStateDetector', () => {
     expect(signals).toEqual(['start']);
   });
 
-  it('does not emit wait_end for sub-2s flickers but does for longer waits', () => {
+  it('emits wait_end for every started wait — including short flickers', () => {
+    // Every wait_start is persisted server-side as a wait_state_start row, so
+    // suppressing wait_end for sub-2s waits was orphaning start rows with no
+    // matching end row and no server-computed duration. endWait now always
+    // emits so each started wait is paired with an end.
     const ended: number[] = [];
     detector.onWaitStateStart(() => {});
     detector.onSignal((s) => {
@@ -49,16 +53,16 @@ describe('WaitStateDetector', () => {
     });
 
     detector.triggerManualWait('short');
-    detector.endManualWait(); // duration ~0ms → suppressed
-    expect(ended).toHaveLength(0);
+    detector.endManualWait(); // duration ~0ms → still emits to close the row
+    expect(ended).toHaveLength(1);
 
     const start = Date.now();
     detector.triggerManualWait('long');
-    // Busy-wait past the 2s meaningful-wait threshold so endWait fires.
+    // Busy-wait past the 2s meaningful-wait threshold so the duration is real.
     while (Date.now() - start < 2_100) {}
     detector.endManualWait();
-    expect(ended).toHaveLength(1);
-    expect(ended[0]).toBeGreaterThanOrEqual(2_000);
+    expect(ended).toHaveLength(2);
+    expect(ended[1]).toBeGreaterThanOrEqual(2_000);
   });
 
   it('does not stack concurrent waits — a single waitStateId is returned', () => {

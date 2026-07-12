@@ -476,24 +476,47 @@ export class ApiClient {
     // Ensure tokens are loaded before first request
     await this._initialized;
 
-    // Build auth header (skip for refresh endpoint itself)
-    const authHeaders: Record<string, string> = {};
-    if (!skipAuth && this.currentTokens?.accessToken) {
-      authHeaders['Authorization'] = `Bearer ${this.currentTokens.accessToken}`;
+    // Network-resilient retry (mirrors the CLI api-client `raw` wrapper, gap
+    // #31). The detector loop fires ad-request / recordAdRendered /
+    // recordImpressionEnd / recordClick synchronously inside the panel's
+    // close/click callbacks — those billing events MUST survive a transient
+    // blip (socket error, timeout, 429, 5xx) or the developer permanently
+    // loses CPM/CPC revenue for that impression: the panel is already gone,
+    // there is no second attempt at the call site. All event/recording
+    // endpoints carry idempotency keys (server-side CAS), so re-sending is
+    // safe — a duplicate delivery no-ops rather than double-charging. The
+    // per-call 401 refresh-retry logic inside _doRequest is a SEPARATE layer
+    // and intentionally excluded from this retry set (a 401 is an application
+    // error, not a transient failure). Application 4xx are not retried.
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; ; attempt++) {
+      // Rebuild the auth header on each attempt — the access token may have
+      // been refreshed by a 401 retry on a PRIOR attempt in this loop, and we
+      // must pin the freshest token into the headers before sending.
+      await this._initialized;
+      const authHeaders: Record<string, string> = {};
+      if (!skipAuth && this.currentTokens?.accessToken) {
+        authHeaders['Authorization'] = `Bearer ${this.currentTokens.accessToken}`;
+      }
+      try {
+        return await new Promise<T>((resolve, reject) => {
+          this._doRequest(
+            method,
+            path,
+            { ...reqHeaders, ...authHeaders },
+            body,
+            resolve,
+            reject,
+            false,
+            skipAuth,
+          );
+        });
+      } catch (err) {
+        if (attempt >= MAX_ATTEMPTS || !isRetryableError(err)) throw err;
+        const backoffMs = Math.min(500 * 2 ** (attempt - 1), 8000);
+        await sleep(backoffMs);
+      }
     }
-
-    return new Promise((resolve, reject) => {
-      this._doRequest(
-        method,
-        path,
-        { ...reqHeaders, ...authHeaders },
-        body,
-        resolve,
-        reject,
-        false,
-        skipAuth,
-      );
-    });
   }
 
   private _doRequest<T>(
@@ -559,7 +582,16 @@ export class ApiClient {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               resolve(parsed as T);
             } else {
-              reject(parsed);
+              // Inject the raw HTTP status into the rejected body so the
+              // transient-retry wrapper's isRetryableError() can branch on
+              // 429/5xx even when the server's JSON body omits or spells
+              // `statusCode` differently (the CLI does the same at
+              // attemptRaw's reject: `{ status: res.statusCode, ... }`).
+              if (isRecord(parsed)) {
+                reject({ statusCode: res.statusCode, ...parsed });
+              } else {
+                reject({ statusCode: res.statusCode, message: 'request failed' });
+              }
             }
           } catch (e: unknown) {
             reject(e);
@@ -600,6 +632,48 @@ function getRequestErrorMessage(err: unknown): string {
   if (isRecord(err) && typeof err.message === 'string') return err.message;
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+/** Whether a request failure is transient enough to retry (mirrors the CLI's
+ *  isRetryableError). Socket-level failures arrive as Error instances (codes
+ *  like ECONNRESET, ETIMEDOUT, ECONNREFUSED, ENOTFOUND, EAI_AGAIN,
+ *  ECONNABORTED); HTTP-level failures are non-2xx responses that the client
+ *  rejects as the parsed body object, which carries `statusCode` from Nest.
+ *  Retry 429 and any 5xx; do NOT retry application 4xx (auth, validation) —
+ *  those are the server telling us the request itself is wrong, and retrying
+ *  a 4xx double-writes where the server can't dedupe (e.g. auth/signup). */
+function isRetryableError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (
+      code &&
+      [
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ETIMEDOUT',
+        'ENOTFOUND',
+        'EAI_AGAIN',
+        'ECONNABORTED',
+      ].includes(code)
+    ) {
+      return true;
+    }
+    // The 30s wall-clock timeout surfaces an Error with a recognizable message
+    // ('WaitLayer request timed out after 30s...'). Retry once on a fresh socket.
+    if (err.message && err.message.toLowerCase().includes('timed out')) return true;
+    return false;
+  }
+  if (isRecord(err)) {
+    const status = typeof err.statusCode === 'number' ? err.statusCode : undefined;
+    if (status !== undefined && (status === 429 || status >= 500)) return true;
+  }
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, ms);
+  return promise;
 }
 
 function isDeviceRecoveryError(err: unknown): boolean {
