@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
 
 /**
@@ -13,7 +13,12 @@ const mock = vi.hoisted(() => ({
   secrets: {} as Record<string, string>,
   captured: [] as Array<Record<string, unknown>>,
   used: '' as string,
-  nextBody: '{}',
+  nextBody: JSON.stringify({
+    available: { amountMinor: '0', currency: 'USD' },
+    pending: { amountMinor: '0', currency: 'USD' },
+    total: { amountMinor: '0', currency: 'USD' },
+    paidOut: { amountMinor: '0', currency: 'USD' },
+  }),
   nextStatus: 200,
 }));
 
@@ -97,12 +102,13 @@ beforeEach(() => {
   mock.secrets = {};
   mock.captured = [];
   mock.used = '';
-  mock.nextBody = '{}';
+  mock.nextBody = JSON.stringify({
+    available: { amountMinor: '0', currency: 'USD' },
+    pending: { amountMinor: '0', currency: 'USD' },
+    total: { amountMinor: '0', currency: 'USD' },
+    paidOut: { amountMinor: '0', currency: 'USD' },
+  });
   mock.nextStatus = 200;
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
 });
 
 describe('ApiClient — URL / base-URL resolution', () => {

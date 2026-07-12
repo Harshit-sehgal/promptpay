@@ -9,6 +9,7 @@ import {
   setCredentials,
   storeDeviceEventSecret,
 } from './credentials';
+import { parseMinor } from './format';
 import { signPayload } from './signing';
 import { normalizeToolType } from './tool-types';
 
@@ -213,12 +214,12 @@ export class ApiClient {
     }>('GET', '/ledger/balance', undefined);
     return {
       available: {
-        amountMinor: Number(res.available.amountMinor),
+        amountMinor: parseMinor(res.available.amountMinor),
         currency: res.available.currency,
       },
-      pending: { amountMinor: Number(res.pending.amountMinor), currency: res.pending.currency },
-      total: { amountMinor: Number(res.total.amountMinor), currency: res.total.currency },
-      paidOut: { amountMinor: Number(res.paidOut.amountMinor), currency: res.paidOut.currency },
+      pending: { amountMinor: parseMinor(res.pending.amountMinor), currency: res.pending.currency },
+      total: { amountMinor: parseMinor(res.total.amountMinor), currency: res.total.currency },
+      paidOut: { amountMinor: parseMinor(res.paidOut.amountMinor), currency: res.paidOut.currency },
     };
   }
 
@@ -240,12 +241,12 @@ export class ApiClient {
       trustScore?: number;
     }>('GET', '/developer/dashboard', undefined);
     return {
-      estimatedEarnings: Number(res.estimatedEarnings),
-      confirmedEarnings: Number(res.confirmedEarnings),
-      pendingEarnings: Number(res.pendingEarnings),
-      heldEarnings: Number(res.heldEarnings),
-      availableForPayout: Number(res.availableForPayout),
-      lifetimeEarnings: Number(res.lifetimeEarnings),
+      estimatedEarnings: parseMinor(res.estimatedEarnings),
+      confirmedEarnings: parseMinor(res.confirmedEarnings),
+      pendingEarnings: parseMinor(res.pendingEarnings),
+      heldEarnings: parseMinor(res.heldEarnings),
+      availableForPayout: parseMinor(res.availableForPayout),
+      lifetimeEarnings: parseMinor(res.lifetimeEarnings),
       trustLevel: res.trustLevel,
       trustScore: res.trustScore,
     };

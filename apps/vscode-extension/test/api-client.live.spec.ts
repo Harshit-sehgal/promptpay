@@ -1,8 +1,16 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+/**
+ * Live smoke test for the VS Code extension ApiClient against a standalone API.
+ * This test mutates the target database (creates a developer account) and is
+ * therefore skipped unless `RUN_LIVE_TESTS=true` is set.
+ */
+const RUN_LIVE = process.env.RUN_LIVE_TESTS === 'true';
+const API_URL = process.env.WAITLAYER_API_URL || 'http://localhost:4002/api/v1';
+
 const mockSecrets: Record<string, string> = {};
 const mockConfig: Record<string, unknown> = {
-  apiUrl: 'http://localhost:4002/api/v1',
+  apiUrl: API_URL,
 };
 
 vi.mock('vscode', () => ({
@@ -47,7 +55,7 @@ async function createDeveloper(): Promise<{
 }> {
   const email = `vscode-live-${Date.now()}@waitlayer.local`;
   const password = 'TestPass123!';
-  const signupRes = await fetch('http://localhost:4002/api/v1/auth/signup', {
+  const signupRes = await fetch(`${API_URL}/auth/signup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -71,7 +79,7 @@ async function createDeveloper(): Promise<{
   return { email, ...body };
 }
 
-describe('ApiClient live smoke against standalone API', () => {
+describe.skipIf(!RUN_LIVE)('ApiClient live smoke against standalone API', () => {
   beforeAll(async () => {
     const tokens = await createDeveloper();
     mockSecrets['waitlayer.authTokens'] = JSON.stringify({
