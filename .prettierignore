@@ -1,0 +1,10 @@
+# Next.js auto-generated file (single-quote prettier output churns against
+# the double-quote form `next build` regenerates). The file header says it
+# should not be edited; keep prettier off it.
+apps/web/next-env.d.ts
+
+# Build artifacts.
+**/dist/**
+**/.next/**
+**/out/**
+**/build/**
