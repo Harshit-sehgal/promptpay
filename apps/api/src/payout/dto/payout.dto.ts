@@ -16,6 +16,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 import { payoutMinimumMinor, PayoutProvider } from '@waitlayer/shared';
 
+import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
+
 export class AddPayoutMethodDto {
   @ApiProperty()
   @IsEnum(PayoutProvider)
@@ -39,13 +41,11 @@ export class RequestPayoutDto {
   payoutAccountId!: string;
 
   @ApiProperty()
-  @IsInt()
+  @IsBigInt()
   // The per-currency payout minimum (see `payoutMinimumMinor()` in
   // @waitlayer/shared) is enforced in the service once the currency is
-  // parsed. class-validator's `@Min` takes a static number, not a
-  // per-field-value callback; the static floor below is a defensive lower
-  // bound. See A-031.
-  @Min(Number(payoutMinimumMinor(null)), {
+  // parsed. The static floor below is a defensive lower bound. See A-031.
+  @MinBigInt(BigInt(payoutMinimumMinor(null)), {
     message: (args) =>
       `Minimum payout is ${payoutMinimumMinor(
         (args.object as RequestPayoutDto).currency,

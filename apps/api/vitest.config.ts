@@ -1,10 +1,11 @@
-import { defineConfig } from 'vitest/config';
 import * as path from 'path';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    setupFiles: ['./src/test-setup.ts'],
     // Integration tests share one Postgres database (TRUNCATE in setup),
     // so test files must not run in parallel against it.
     fileParallelism: false,

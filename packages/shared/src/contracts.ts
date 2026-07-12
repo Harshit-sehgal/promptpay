@@ -124,11 +124,9 @@ export const AdRequestResponse = z.object({
       message: z.string(),
       label: z.string(),
       displayDomain: z.string(),
-      destinationUrl: z
-        .string()
-        .refine((v) => typeof v === 'string' && v.startsWith('https://'), {
-          message: 'destinationUrl must be an https:// URL',
-        }),
+      destinationUrl: z.string().refine((v) => typeof v === 'string' && v.startsWith('https://'), {
+        message: 'destinationUrl must be an https:// URL',
+      }),
       ctaText: z.string().nullable().optional(),
     })
     .nullable(),
@@ -196,7 +194,7 @@ export const PayoutAllocationResponse = z.object({
   id: z.string(),
   earningsEntryId: z.string(),
   payoutRequestId: z.string().optional(),
-  amountMinor: z.number().nonnegative(),
+  amountMinor: z.coerce.bigint().nonnegative(),
   createdAt: z.string().optional(),
 });
 
@@ -209,8 +207,8 @@ export const PayoutRequestResponse = z.object({
   // Align the contract with the DB and the service's stored value.
   payoutAccountId: z.string(),
   status: PayoutStatusSchema,
-  requestedAmountMinor: z.number().nonnegative(),
-  approvedAmountMinor: z.number().nullable().optional(),
+  requestedAmountMinor: z.coerce.bigint().nonnegative(),
+  approvedAmountMinor: z.coerce.bigint().nullable().optional(),
   currency: z.string(),
   reviewerId: z.string().nullable().optional(),
   reviewNote: z.string().nullable().optional(),
@@ -230,7 +228,7 @@ export const PayoutAvailableResponse = z.object({
       z.object({
         id: z.string(),
         userId: z.string(),
-        amountMinor: z.number(),
+        amountMinor: z.coerce.bigint(),
         currency: z.string(),
         status: LedgerStatusSchema,
         entryType: LedgerEntryTypeSchema,
@@ -238,10 +236,10 @@ export const PayoutAvailableResponse = z.object({
       }),
     )
     .optional(),
-  totalMinor: z.number().nonnegative(),
+  totalMinor: z.coerce.bigint().nonnegative(),
   currency: z.string(),
   count: z.number().nonnegative(),
-  totalsByCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
+  totalsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
 });
 
 // ══════════════════════════════════════════════════════════
@@ -251,24 +249,24 @@ export const PayoutAvailableResponse = z.object({
 /** GET /api/v1/ledger/balance response — used by extension status bar */
 export const LedgerBalanceResponse = z.object({
   available: z.object({
-    amountMinor: z.number().nonnegative(),
+    amountMinor: z.coerce.bigint().nonnegative(),
     currency: z.string(),
-    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
+    byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
   pending: z.object({
-    amountMinor: z.number().nonnegative(),
+    amountMinor: z.coerce.bigint().nonnegative(),
     currency: z.string(),
-    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
+    byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
   total: z.object({
-    amountMinor: z.number().nonnegative(),
+    amountMinor: z.coerce.bigint().nonnegative(),
     currency: z.string(),
-    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
+    byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
   paidOut: z.object({
-    amountMinor: z.number().nonnegative(),
+    amountMinor: z.coerce.bigint().nonnegative(),
     currency: z.string(),
-    byCurrency: z.record(z.string(), z.number().nonnegative()).optional(),
+    byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
 });
 
@@ -284,9 +282,9 @@ export const CreateCampaignResponse = z.object({
   status: CampaignStatusSchema,
   category: z.string(),
   bidType: BidTypeSchema,
-  bidAmountMinor: z.number().nonnegative(),
-  budgetTotalMinor: z.number().nonnegative(),
-  budgetSpentMinor: z.number().nonnegative(),
+  bidAmountMinor: z.coerce.bigint().nonnegative(),
+  budgetTotalMinor: z.coerce.bigint().nonnegative(),
+  budgetSpentMinor: z.coerce.bigint().nonnegative(),
   currency: z.string(),
   frequencyCapPerHour: z.number().int().nonnegative().optional(),
   frequencyCapPerDay: z.number().int().nonnegative().optional(),

@@ -136,6 +136,15 @@ Campaign moderation checklist:
 - [ ] Structured logging with request IDs.
 - [ ] Dependency scanning before release.
 
+## BigInt monetary migration checklist
+
+- [x] Prisma schema uses `BigInt` for all monetary columns (campaigns, ledgers, payouts, referrals, recovery debt).
+- [x] API DTOs validate monetary fields as `bigint` (custom `@IsBigInt()` / `@MinBigInt()` validators).
+- [x] Shared Zod response contracts coerce monetary fields to `bigint` to match wire serialization.
+- [x] BigInt serialization polyfill is loaded in both production (`main.ts`) and test (`test-setup.ts`) runtimes.
+- [x] Integration contract tests pass against the BigInt schema.
+- [x] Prisma migration history is consistent with the schema (no INTEGER/BigInt drift for new deployments).
+
 ## Policy pages required before private beta
 
 - [ ] Privacy Policy.
@@ -158,4 +167,3 @@ Private beta cannot start until:
 - [ ] Fraud holds are active.
 - [ ] Users can disable ads.
 - [ ] Ads are labeled in every surface.
-

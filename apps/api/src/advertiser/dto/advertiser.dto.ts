@@ -18,6 +18,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 import { BidType, depositMinimumMinor } from '@waitlayer/shared';
 
+import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
+
 const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'brl', 'mxn', 'sgd'] as const;
 
 export class CreateProfileDto {
@@ -60,14 +62,14 @@ export class CreateCampaignDto {
   currency?: string;
 
   @ApiProperty()
-  @IsInt()
-  @Min(1)
+  @IsBigInt()
+  @MinBigInt(1n)
   @Transform(({ value }) => BigInt(value))
   bidAmountMinor!: bigint;
 
   @ApiProperty()
-  @IsInt()
-  @Min(1)
+  @IsBigInt()
+  @MinBigInt(1n)
   @Transform(({ value }) => BigInt(value))
   budgetTotalMinor!: bigint;
 
@@ -97,15 +99,15 @@ export class UpdateCampaignDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsInt()
-  @Min(1)
+  @IsBigInt()
+  @MinBigInt(1n)
   @Transform(({ value }) => BigInt(value))
   bidAmountMinor?: bigint;
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsInt()
-  @Min(1)
+  @IsBigInt()
+  @MinBigInt(1n)
   @Transform(({ value }) => BigInt(value))
   budgetTotalMinor?: bigint;
   @ApiProperty({ required: false })
@@ -152,8 +154,8 @@ export class CreateCountryTargetingDto {
  *  number, not a per-field-value callback. */
 export class CreateDepositSessionDto {
   @ApiProperty()
-  @IsInt()
-  @Min(Number(depositMinimumMinor('USD')), {
+  @IsBigInt()
+  @MinBigInt(BigInt(depositMinimumMinor('USD')), {
     message: (args) =>
       `Minimum deposit is ${depositMinimumMinor(
         (args.object as CreateDepositSessionDto).currency ?? 'USD',

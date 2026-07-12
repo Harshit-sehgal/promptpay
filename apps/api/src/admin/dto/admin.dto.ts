@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsEnum,
   IsIn,
@@ -13,6 +13,8 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 
 import { FraudSeverity } from '@waitlayer/shared';
+
+import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
 
 // ── Campaign approval ──
 
@@ -53,10 +55,10 @@ export class ApprovePayoutDto {
    */
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Type(() => Number)
-  approvedAmountMinor?: number;
+  @IsBigInt()
+  @MinBigInt(1n)
+  @Transform(({ value }) => BigInt(value))
+  approvedAmountMinor?: bigint;
 }
 
 export class RejectPayoutDto {
@@ -77,9 +79,10 @@ export class MarkPayoutPaidDto {
   paidAt!: string;
 
   @ApiProperty()
-  @IsInt()
-  @Min(1)
-  amountMinor!: number;
+  @IsBigInt()
+  @MinBigInt(1n)
+  @Transform(({ value }) => BigInt(value))
+  amountMinor!: bigint;
 
   @ApiProperty()
   @IsString()

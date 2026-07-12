@@ -853,7 +853,7 @@ describe('End-to-End HTTP Integration Flow', () => {
       const cpcEarning = newDevEarnings.find(
         (e) => !oldDevEarnings.map((o) => o.id).includes(e.id),
       );
-      expect(cpcEarning?.amountMinor).toBe(300);
+      expect(cpcEarning?.amountMinor).toBe(300n);
       expect(cpcEarning?.campaignId).toBe(cpcCampaignId);
       expect(cpcEarning?.clickId).toBe(clickId);
 
@@ -1138,7 +1138,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .set('Authorization', `Bearer ${devToken}`)
         .expect(200);
 
-      expect(availRes.body.totalMinor).toBeGreaterThan(0);
+      expect(BigInt(availRes.body.totalMinor)).toBeGreaterThan(0n);
 
       // Create a payout request
       const res = await request(app.getHttpServer())
@@ -1146,14 +1146,14 @@ describe('End-to-End HTTP Integration Flow', () => {
         .set('Authorization', `Bearer ${devToken}`)
         .send({
           payoutAccountId,
-          amountMinor: 1200,
+          amountMinor: 1200n,
           currency: 'USD',
           earningsEntryIds: [earningEntryId],
         })
         .expect(201);
 
       expect(res.body.status).toBe('requested');
-      expect(res.body.requestedAmountMinor).toBe(1200);
+      expect(BigInt(res.body.requestedAmountMinor)).toBe(1200n);
       payoutId = res.body.id;
 
       // Earning entries status should remain confirmed after payout request, before admin processes it
@@ -1186,7 +1186,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({
           providerTxId: processRes.body.providerTxId,
           paidAt: new Date().toISOString(),
-          amountMinor: 1200,
+          amountMinor: 1200n,
           currency: 'USD',
         })
         .expect(201);
