@@ -16,8 +16,6 @@ import { PrismaService } from '../../config/prisma.service';
  */
 function extractJwtFromRequest(req: Request): string | null {
   // 1. Authorization: Bearer <token> (CLI / VSCode / external integrations)
-  const authHeader = req.headers.authorization;
-  console.log('[JWT DEBUG] extract', { authHeader: authHeader?.slice(0, 50) });
   const headerToken = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
   if (headerToken) return headerToken;
 

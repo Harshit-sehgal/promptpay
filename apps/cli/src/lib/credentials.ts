@@ -116,9 +116,32 @@ export async function getCredentials(): Promise<Credentials | null> {
   // keychain is unavailable) rather than the credential file. Load them now so
   // callers still receive a complete Credentials object. Legacy files that
   // still inline the tokens act as a fallback until the next write.
+  //
+  // Prefer tokens that are explicitly present in the credential file. This
+  // supports headless/CI setups that inject credentials.json directly and
+  // prevents a stale keychain entry from silently overriding freshly
+  // written credentials.
   const stored = await loadTokens();
-  const accessToken = stored?.accessToken ?? safe.accessToken;
-  const refreshToken = stored?.refreshToken ?? safe.refreshToken;
+  const accessToken = safe.accessToken || stored?.accessToken;
+  const refreshToken = safe.refreshToken || stored?.refreshToken;
+  if (!accessToken || !refreshToken) {
+    return null;
+  }
+  if (safe.accessToken && stored?.accessToken !== safe.accessToken) {
+    // Keep the keychain in sync with the explicit credential file so a
+    // future read that falls back to the keychain does not resurrect an
+    // old token. Only attempt the sync when a keychain backend is actually
+    // present; otherwise the write would go to the plaintext fallback and
+    // is unnecessary because the credential file is already authoritative.
+    const keytar = await loadKeytar();
+    if (keytar) {
+      try {
+        await saveTokens({ accessToken, refreshToken });
+      } catch {
+        // Best-effort sync; the in-memory tokens are still valid.
+      }
+    }
+  }
 
   return {
     email: safe.email,
