@@ -514,7 +514,8 @@ export class StripeWebhookController implements OnModuleInit {
       return;
     }
 
-    const totalRefunded = details.amountMinor;
+    const totalRefunded = BigInt(details.amountMinor);
+    let remaining = totalRefunded;
 
     // ── Platform cash side of the refund (written ONCE per refund, not per entry) ──
     // The inbound-cash side (`handlePaymentSuccess`) writes exactly one platform
@@ -565,8 +566,9 @@ export class StripeWebhookController implements OnModuleInit {
     // aggregate closes both windows: only one delivery wins the flip and it
     // wins it atomically with its threshold read.
     for (const entry of entries) {
-      const reversalAmount = entry.amountMinor < totalRefunded ? entry.amountMinor : totalRefunded;
-      if (reversalAmount <= 0) continue;
+      if (remaining <= 0n) break;
+      const reversalAmount = entry.amountMinor < remaining ? entry.amountMinor : remaining;
+      remaining -= reversalAmount;
 
       const idempotencyKey = `stripe_refund_${details.paymentIntentId}_${refund.id}_${entry.id}`;
       await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -756,6 +758,7 @@ export class StripeWebhookController implements OnModuleInit {
       const holdIdempotencyKey = `stripe_dispute_hold_${dispute.id}_${entry.id}`;
       await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         // Write the hold entry (idempotent by dispute+entry).
+        let holdCreated = false;
         try {
           await tx.advertiserLedger.create({
             data: {
@@ -771,6 +774,7 @@ export class StripeWebhookController implements OnModuleInit {
               description: `Dispute hold — dispute ${dispute.id} on paymentIntent ${details.paymentIntentId}`,
             },
           });
+          holdCreated = true;
         } catch (err: unknown) {
           if (getErrorCode(err) !== 'P2002') throw err;
           this.logger.warn(`Duplicate dispute hold ${holdIdempotencyKey} — skipping create`);
@@ -782,12 +786,15 @@ export class StripeWebhookController implements OnModuleInit {
         // row (created above) carries exactly `holdAmount`. The centralized
         // balance helper counts only `confirmed` `credit` rows, so spendable
         // balance drops by the disputed amount and the undisputed remainder
-        // stays available. Idempotent by dispute+entry via the hold row's
-        // idempotencyKey; re-runs find the parent already decremented.
-        await tx.advertiserLedger.updateMany({
-          where: { id: entry.id, status: 'confirmed' },
-          data: { amountMinor: { decrement: holdAmount } },
-        });
+        // stays available. The decrement runs ONLY when the hold row was
+        // freshly created (not on replay/idempotent skip), preventing a
+        // double-decrement on stall-reclaim re-delivery.
+        if (holdCreated) {
+          await tx.advertiserLedger.updateMany({
+            where: { id: entry.id, status: 'confirmed' },
+            data: { amountMinor: { decrement: holdAmount } },
+          });
+        }
       });
       remainingDisputeMinor -= holdAmount;
     }
