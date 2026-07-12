@@ -2,7 +2,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as vscode from 'vscode';
 
-import { signPayload } from '@waitlayer/shared';
+import { parseMinor, signPayload } from '@waitlayer/shared';
 
 import { ConfigurationManager } from './config';
 import { requestHostnameForUrl, resolveCredentialSafeUrl } from './transport-policy';
