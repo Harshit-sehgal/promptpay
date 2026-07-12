@@ -519,6 +519,34 @@ sort puts `'USD'` first when present, else the first present currency).
   - `apps/api/src/common/validators/non-monetary-int.validators.spec.ts` — 39 cases guarding that _non-monetary_ `Int` fields (pagination, frequency caps, ratings, `expiresInMinutes`, `maxAdsPerHour`, …) still enforce `@IsInt()` boundaries after the migration.
 - **Verified:** typecheck 14/14, lint 9/9, integration **503/503**, web vitest **86/86**, contract 34, plus BigInt validator specs (4 + 39 = 43 new cases) all green. Type fixes (DTO Zod schemas updated to `z.bigint()` / `z.coerce.bigint()` in `packages/shared/src/contracts.ts`; the existing `int4 → ::bigint` CAST fix from the multi-currency patch was the application-side complement) keep end-to-end behavior identical.
 
+## 2026-07-13 Cleanup — Debug-log leaks (loop-artifact class) + bigint/cosmetic fixes
+
+Two commits: `b17378e` and `dbaa2ce`.
+
+- **Debug-log secret leak class:** two prior loop/auto-edited files contained
+  `console.log(...)` leak with sensitive auth data committed to main:
+  `api-client.ts:515` (`authorization: Bearer <token>` + response bodies dumped
+  via `[CLI DEBUG]`), and `jwt.strategy.ts:50,62` (`[JWT DEBUG] validate` +
+  session lookup printing `jti`, `sub`, revocation status on every API request).
+  Both removed. This is a recurring pattern with automated edits — any future
+  `console.log` printing tokens, JWT claims, session IDs, or API response bodies
+  must be blocked pre-commit.
+- **BigInt type hazards** (non-crash in Node v24 — comparison ops between bigint
+  and Number work; only arithmetic `+ - * /` throws): `campaign.service.ts`
+  `getCampaignStats` — `spendMinor: || 0` → `?? 0n` and `budgetRemaining: : 0`
+  → `: 0n` (bigint fallback hygiene).
+- **Decomposition artifacts:** unreachable duplicate `return` block in
+  `advertiser-dashboard.trait.ts` `getBilling`; `private` visibility on two
+  extension trait methods (latent cross-trait access footgun).
+- **CSP:** `object-src 'none'` added (was implicit via `default-src 'self'`);
+  `frame-ancestors 'none'` / `base-uri 'self'` / `form-action 'self'` confirmed
+  explicit. `img-src https:` noted as permissive (campaign-creative images from
+  arbitrary CDNs are expected by product).
+
+Quality gates (forced fresh, no cache): typecheck 14/14, lint 9/9, API
+integration **567/567** (55 files), CLI 27/27 (6 files), web 86/86, vscode
+10/10. Web `next build` green.
+
 ## End-to-End SaaS Readiness Checks
 
 The three flows (developer / advertiser / admin) are code-complete step by step.
