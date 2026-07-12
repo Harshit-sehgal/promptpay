@@ -47,4 +47,18 @@ describe('formatCurrency', () => {
     expect(formatCurrency(0)).toBe('$0.00');
     expect(formatCurrency(9999)).toBe('$99.99');
   });
+
+  it('formats zero-decimal currencies (e.g. JPY)', () => {
+    expect(formatCurrency(1000, 'JPY')).toBe('¥1,000');
+    expect(formatCurrency(0, 'JPY')).toBe('¥0');
+  });
+
+  it('formats three-decimal currencies (e.g. BHD)', () => {
+    expect(formatCurrency(1000, 'BHD')).toMatch(/BHD.*1\.000/);
+    expect(formatCurrency(250, 'BHD')).toMatch(/BHD.*0\.250/);
+  });
+
+  it('formats with explicit currency symbol (e.g. EUR)', () => {
+    expect(formatCurrency(1250, 'EUR')).toBe('€12.50');
+  });
 });

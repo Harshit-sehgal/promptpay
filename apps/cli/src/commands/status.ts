@@ -26,19 +26,34 @@ export async function runStatus(opts: { period?: string }) {
     console.log(`${chalk.dim('Role:')}           ${creds.role}`);
     console.log();
     console.log(chalk.bold('Earnings'));
-    console.log(`  Available:  ${chalk.green.bold(formatCurrency(balance.available.amountMinor))}`);
-    console.log(`  Pending:    ${chalk.yellow(formatCurrency(balance.pending.amountMinor))}`);
-    console.log(`  Lifetime:   ${formatCurrency(balance.total.amountMinor)}`);
-    console.log(`  Paid out:   ${formatCurrency(balance.paidOut.amountMinor)}`);
+    console.log(
+      `  Available:  ${chalk.green.bold(formatCurrency(balance.available.amountMinor, balance.available.currency))}`,
+    );
+    console.log(
+      `  Pending:    ${chalk.yellow(formatCurrency(balance.pending.amountMinor, balance.pending.currency))}`,
+    );
+    console.log(
+      `  Lifetime:   ${formatCurrency(balance.total.amountMinor, balance.total.currency)}`,
+    );
+    console.log(
+      `  Paid out:   ${formatCurrency(balance.paidOut.amountMinor, balance.paidOut.currency)}`,
+    );
     console.log();
 
     console.log(chalk.bold(`Account Summary`));
+    // Overview fields don't carry per-field currency; use the balance's
+    // available currency as the best account-level default.
+    const overviewCurrency = balance.available.currency;
     console.log(
-      `  Est. Earnings:  ${chalk.green.bold(formatCurrency(overview.estimatedEarnings))}`,
+      `  Est. Earnings:  ${chalk.green.bold(formatCurrency(overview.estimatedEarnings, overviewCurrency))}`,
     );
-    console.log(`  Confirmed:      ${chalk.yellow(formatCurrency(overview.confirmedEarnings))}`);
-    console.log(`  Pending:        ${chalk.yellow(formatCurrency(overview.pendingEarnings))}`);
-    console.log(`  Lifetime:       ${formatCurrency(overview.lifetimeEarnings)}`);
+    console.log(
+      `  Confirmed:      ${chalk.yellow(formatCurrency(overview.confirmedEarnings, overviewCurrency))}`,
+    );
+    console.log(
+      `  Pending:        ${chalk.yellow(formatCurrency(overview.pendingEarnings, overviewCurrency))}`,
+    );
+    console.log(`  Lifetime:       ${formatCurrency(overview.lifetimeEarnings, overviewCurrency)}`);
     console.log(`  Trust Level:    ${overview.trustLevel}`);
     if (overview.trustScore) console.log(`  Trust Score:    ${overview.trustScore}`);
     console.log();
