@@ -62,4 +62,17 @@ describe('BigInt validators', () => {
     expect(properties).toContain('bidAmountMinor');
     expect(properties).toContain('budgetTotalMinor');
   });
+
+  it('accepts values equal to the minimum', async () => {
+    const dto = plainToInstance(CreateCampaignDto, {
+      name: 'Test',
+      category: 'developer-tools',
+      bidType: 'cpc',
+      currency: 'USD',
+      bidAmountMinor: 1n,
+      budgetTotalMinor: 1n,
+    });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
 });
