@@ -79,7 +79,7 @@ describe('StatusBar — state updates', () => {
     const bar = new StatusBar();
     bar.register(makeContext());
 
-    bar.setEarnings(12.5);
+    bar.setEarnings(1250, 'USD');
     expect(mock.item.text).toBe('$(zap) WaitLayer: $12.50');
     expect(mock.item.tooltip).toBe('Click for balance details');
   });
