@@ -3,14 +3,13 @@ import * as http from 'http';
 import * as https from 'https';
 import * as os from 'os';
 
-import { parseMinor } from '@waitlayer/shared';
-
 import {
   Credentials,
   getDeviceEventSecret,
   setCredentials,
   storeDeviceEventSecret,
 } from './credentials';
+import { parseMinor } from './format';
 import { signPayload } from './signing';
 import { normalizeToolType } from './tool-types';
 

@@ -307,19 +307,19 @@ export class ApiClient {
     const res = await this.get<RawBalance>('/ledger/balance');
     return {
       available: {
-        amountMinor: Number(res.available.amountMinor),
+        amountMinor: parseMinor(res.available.amountMinor),
         currency: res.available.currency,
       },
       pending: {
-        amountMinor: Number(res.pending.amountMinor),
+        amountMinor: parseMinor(res.pending.amountMinor),
         currency: res.pending.currency,
       },
       total: {
-        amountMinor: Number(res.total.amountMinor),
+        amountMinor: parseMinor(res.total.amountMinor),
         currency: res.total.currency,
       },
       paidOut: {
-        amountMinor: Number(res.paidOut.amountMinor),
+        amountMinor: parseMinor(res.paidOut.amountMinor),
         currency: res.paidOut.currency,
       },
     };
