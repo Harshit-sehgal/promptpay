@@ -24,7 +24,7 @@ export async function getAdvertiserBalance(
   client: BalanceClient,
   advertiserId: string,
   currency: string,
-): Promise<number> {
+): Promise<bigint> {
   const rows = await client.advertiserLedger.groupBy({
     by: ['entryType'],
     where: {
@@ -36,13 +36,13 @@ export async function getAdvertiserBalance(
     _sum: { amountMinor: true },
   });
 
-  let credits = 0;
-  let debits = 0;
-  let refunds = 0;
+  let credits = 0n;
+  let debits = 0n;
+  let refunds = 0n;
   for (const row of rows) {
-    if (row.entryType === 'credit') credits = row._sum.amountMinor ?? 0;
-    else if (row.entryType === 'debit') debits = row._sum.amountMinor ?? 0;
-    else if (row.entryType === 'refund') refunds = row._sum.amountMinor ?? 0;
+    if (row.entryType === 'credit') credits = row._sum.amountMinor ?? 0n;
+    else if (row.entryType === 'debit') debits = row._sum.amountMinor ?? 0n;
+    else if (row.entryType === 'refund') refunds = row._sum.amountMinor ?? 0n;
   }
   return credits - debits - refunds;
 }
@@ -55,7 +55,7 @@ export async function getAdvertiserBalance(
 export async function getAdvertiserBalancesByCurrency(
   client: BalanceClient,
   advertiserIds: string[],
-): Promise<Map<string, number>> {
+): Promise<Map<string, bigint>> {
   const rows = await client.advertiserLedger.groupBy({
     by: ['advertiserId', 'currency', 'entryType'],
     where: {
@@ -66,11 +66,11 @@ export async function getAdvertiserBalancesByCurrency(
     _sum: { amountMinor: true },
   });
 
-  const map = new Map<string, number>();
+  const map = new Map<string, bigint>();
   for (const row of rows) {
     const key = `${row.advertiserId}:${row.currency}`;
-    const current = map.get(key) ?? 0;
-    const amount = row._sum.amountMinor ?? 0;
+    const current = map.get(key) ?? 0n;
+    const amount = row._sum.amountMinor ?? 0n;
     if (row.entryType === 'credit') map.set(key, current + amount);
     else if (row.entryType === 'debit' || row.entryType === 'refund') {
       map.set(key, current - amount);

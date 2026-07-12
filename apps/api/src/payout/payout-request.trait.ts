@@ -25,12 +25,12 @@ export class PayoutRequestTrait {
   declare providers: Record<string, PayoutProviderHandler>;
 
   addCurrencyAmount(
-    totals: Record<string, number>,
+    totals: Record<string, bigint>,
     currency: string | null | undefined,
-    amountMinor: number,
+    amountMinor: bigint,
   ) {
     const key = (currency || 'USD').toUpperCase();
-    totals[key] = (totals[key] ?? 0) + amountMinor;
+    totals[key] = (totals[key] ?? 0n) + amountMinor;
   }
 
   /** Allocate specific confirmed earnings to a payout request */
@@ -38,7 +38,7 @@ export class PayoutRequestTrait {
     tx: Prisma.TransactionClient,
     payoutRequestId: string,
     userId: string,
-    amountMinor: number,
+    amountMinor: bigint,
     currency: string,
     specificEntryIds?: string[],
   ) {
@@ -79,7 +79,7 @@ export class PayoutRequestTrait {
       // loading a high-volume developer's entire ledger when a small payout
       // only needs the first few confirmed rows.
       candidateEntries = [];
-      let selectedMinor = 0;
+      let selectedMinor = 0n;
       let cursor:
         | {
             id: string;
@@ -93,7 +93,7 @@ export class PayoutRequestTrait {
           take: ALLOCATION_QUERY_PAGE_SIZE,
         });
         candidateEntries.push(...page);
-        selectedMinor += page.reduce((sum, entry) => sum + entry.amountMinor, 0);
+        selectedMinor += page.reduce((sum, entry) => sum + entry.amountMinor, 0n);
         cursor = page.length > 0 ? { id: page[page.length - 1].id } : undefined;
         if (page.length < ALLOCATION_QUERY_PAGE_SIZE) break;
       } while (selectedMinor < amountMinor);
@@ -102,11 +102,11 @@ export class PayoutRequestTrait {
     let remaining = amountMinor;
     const allocations: {
       earningsEntryId: string;
-      amountMinor: number;
+      amountMinor: bigint;
     }[] = [];
     for (const entry of candidateEntries) {
-      if (remaining <= 0) break;
-      const allocAmount = Math.min(entry.amountMinor, remaining);
+      if (remaining <= 0n) break;
+      const allocAmount = entry.amountMinor < remaining ? entry.amountMinor : remaining;
       if (allocAmount < entry.amountMinor) {
         const remainder = entry.amountMinor - allocAmount;
         // Split partial allocations: shrink the original row to the
@@ -159,7 +159,7 @@ export class PayoutRequestTrait {
       });
       remaining -= allocAmount;
     }
-    if (remaining > 0) {
+    if (remaining > 0n) {
       throw new BadRequestException(
         `Insufficient confirmed earnings to allocate. Short by ${remaining} minor units.`,
       );
@@ -208,7 +208,7 @@ export class PayoutRequestTrait {
     userId: string,
     dto: {
       payoutAccountId: string;
-      amountMinor: number;
+      amountMinor: bigint;
       currency: string;
       earningsEntryIds?: string[];
     },
@@ -268,11 +268,14 @@ export class PayoutRequestTrait {
         }),
       ]);
     const available =
-      (confirmedEarnings._sum.amountMinor || 0) -
-      (confirmedDebits._sum.amountMinor || 0) -
-      (allocatedTotal._sum.amountMinor || 0);
+      (confirmedEarnings._sum.amountMinor ?? 0n) -
+      (confirmedDebits._sum.amountMinor ?? 0n) -
+      (allocatedTotal._sum.amountMinor ?? 0n);
     if (dto.amountMinor > available) {
       throw new BadRequestException('Insufficient available earnings');
+    }
+    if (dto.amountMinor <= 0n) {
+      throw new BadRequestException('Payout amount must be positive');
     }
     if (openFlags > 0) {
       throw new ForbiddenException('Payout blocked due to pending fraud review');
