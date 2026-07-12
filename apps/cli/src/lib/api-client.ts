@@ -204,13 +204,22 @@ export class ApiClient {
 
   async getBalance() {
     // Backend returns { available: { amountMinor, currency }, pending: {...}, total: {...}, paidOut: {...} }
+    // Monetary BigInt values are serialized as strings; parse them back to numbers for the UI.
     const res = await this.raw<{
-      available: { amountMinor: number; currency: string };
-      pending: { amountMinor: number; currency: string };
-      total: { amountMinor: number; currency: string };
-      paidOut: { amountMinor: number; currency: string };
+      available: { amountMinor: number | string; currency: string };
+      pending: { amountMinor: number | string; currency: string };
+      total: { amountMinor: number | string; currency: string };
+      paidOut: { amountMinor: number | string; currency: string };
     }>('GET', '/ledger/balance', undefined);
-    return res;
+    return {
+      available: {
+        amountMinor: Number(res.available.amountMinor),
+        currency: res.available.currency,
+      },
+      pending: { amountMinor: Number(res.pending.amountMinor), currency: res.pending.currency },
+      total: { amountMinor: Number(res.total.amountMinor), currency: res.total.currency },
+      paidOut: { amountMinor: Number(res.paidOut.amountMinor), currency: res.paidOut.currency },
+    };
   }
 
   async getRequiredConsentVersions(): Promise<Record<string, string> | null> {
@@ -219,17 +228,27 @@ export class ApiClient {
 
   async getOverview() {
     // Backend returns full dashboard: { estimatedEarnings, confirmedEarnings, pendingEarnings, heldEarnings, availableForPayout, lifetimeEarnings, trustLevel, trustScore, settings }
+    // Monetary BigInt values are serialized as strings; parse them back to numbers for the UI.
     const res = await this.raw<{
-      estimatedEarnings: number;
-      confirmedEarnings: number;
-      pendingEarnings: number;
-      heldEarnings: number;
-      availableForPayout: number;
-      lifetimeEarnings: number;
+      estimatedEarnings: number | string;
+      confirmedEarnings: number | string;
+      pendingEarnings: number | string;
+      heldEarnings: number | string;
+      availableForPayout: number | string;
+      lifetimeEarnings: number | string;
       trustLevel: string;
       trustScore?: number;
     }>('GET', '/developer/dashboard', undefined);
-    return res;
+    return {
+      estimatedEarnings: Number(res.estimatedEarnings),
+      confirmedEarnings: Number(res.confirmedEarnings),
+      pendingEarnings: Number(res.pendingEarnings),
+      heldEarnings: Number(res.heldEarnings),
+      availableForPayout: Number(res.availableForPayout),
+      lifetimeEarnings: Number(res.lifetimeEarnings),
+      trustLevel: res.trustLevel,
+      trustScore: res.trustScore,
+    };
   }
 
   async getSettings() {

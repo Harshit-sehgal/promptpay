@@ -123,6 +123,18 @@ describe('End-to-End HTTP Integration Flow', () => {
   let payoutId: string;
 
   describe('1. Authentication & Onboarding', () => {
+    it('should expose required consent versions without authentication (A-047)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/consent/required-versions')
+        .expect(200);
+      expect(res.body).toHaveProperty('terms_of_service');
+      expect(res.body).toHaveProperty('privacy_policy');
+    });
+
+    it('should keep authenticated consent routes protected', async () => {
+      await request(app.getHttpServer()).get('/api/v1/consent/stale').expect(401);
+    });
+
     it('should successfully register a developer user', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')

@@ -10,7 +10,7 @@ import { RetentionCronService } from './retention.cron';
 
 @Module({
   imports: [PrismaModule, AuditModule],
-  controllers: [ComplianceController, ConsentVersionsController, ConsentAnonymousController],
+  controllers: [ConsentVersionsController, ConsentAnonymousController, ComplianceController],
   providers: [ComplianceService, RetentionCronService],
   exports: [ComplianceService],
 })

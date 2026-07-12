@@ -44,6 +44,19 @@ export interface Balance {
   paidOut: AmountEntry;
 }
 
+/** Raw API shape where monetary BigInt columns are serialized as strings. */
+interface RawAmountEntry {
+  amountMinor: number | string;
+  currency: string;
+}
+
+interface RawBalance {
+  available: RawAmountEntry;
+  pending: RawAmountEntry;
+  total: RawAmountEntry;
+  paidOut: RawAmountEntry;
+}
+
 interface ServerAdResponse {
   ad: Ad | null;
 }
@@ -55,7 +68,8 @@ interface RegisterDeviceResponse {
 
 export class ApiClient {
   private currentTokens: { accessToken?: string; refreshToken?: string } | null = null;
-  private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null = null;
+  private _refreshInProgress: Promise<{ accessToken: string; refreshToken: string } | null> | null =
+    null;
   private _initialized: Promise<void>;
   private deviceEventSecret: string | null = null;
 
@@ -77,7 +91,9 @@ export class ApiClient {
   async signEventPayload(payload: Record<string, unknown>): Promise<string> {
     await this._initialized;
     if (!this.deviceEventSecret) {
-      throw new Error('WaitLayer device is not registered with an event secret. Re-run device registration.');
+      throw new Error(
+        'WaitLayer device is not registered with an event secret. Re-run device registration.',
+      );
     }
     return signPayload(payload, this.deviceEventSecret);
   }
@@ -144,7 +160,10 @@ export class ApiClient {
     };
     let res: RegisterDeviceResponse;
     try {
-      res = await this.post<RegisterDeviceResponse>('/extension/register-device', registrationPayload);
+      res = await this.post<RegisterDeviceResponse>(
+        '/extension/register-device',
+        registrationPayload,
+      );
     } catch (err: unknown) {
       if (!isDeviceRecoveryError(err)) throw err;
       const recoverySupportToken = await vscode.window.showInputBox({
@@ -282,8 +301,28 @@ export class ApiClient {
   }
 
   async getBalance(): Promise<Balance> {
-    // Backend returns flat { available, pending, total, paidOut } (no data wrapper)
-    return this.get<Balance>('/ledger/balance');
+    // Backend returns flat { available, pending, total, paidOut } (no data wrapper).
+    // Monetary BigInt columns are serialized as strings; parse them back to numbers
+    // so downstream UI arithmetic works without implicit coercion.
+    const res = await this.get<RawBalance>('/ledger/balance');
+    return {
+      available: {
+        amountMinor: Number(res.available.amountMinor),
+        currency: res.available.currency,
+      },
+      pending: {
+        amountMinor: Number(res.pending.amountMinor),
+        currency: res.pending.currency,
+      },
+      total: {
+        amountMinor: Number(res.total.amountMinor),
+        currency: res.total.currency,
+      },
+      paidOut: {
+        amountMinor: Number(res.paidOut.amountMinor),
+        currency: res.paidOut.currency,
+      },
+    };
   }
 
   async promptLogin(): Promise<void> {
@@ -297,10 +336,10 @@ export class ApiClient {
 
     try {
       // First attempt: try normal login without TOTP
-      const res = await this.post<{ accessToken: string; refreshToken: string }>(
-        '/auth/login',
-        { email, password },
-      );
+      const res = await this.post<{ accessToken: string; refreshToken: string }>('/auth/login', {
+        email,
+        password,
+      });
       await this.handleLoginSuccess(res);
     } catch (err) {
       // The backend emits a structured 2FA challenge ({ twoFactorRequired: true })
@@ -334,14 +373,15 @@ export class ApiClient {
           );
         }
       } else {
-        vscode.window.showErrorMessage(
-          `WaitLayer: login failed — ${getRequestErrorMessage(err)}`,
-        );
+        vscode.window.showErrorMessage(`WaitLayer: login failed — ${getRequestErrorMessage(err)}`);
       }
     }
   }
 
-  private async handleLoginSuccess(res: { accessToken: string; refreshToken: string }): Promise<void> {
+  private async handleLoginSuccess(res: {
+    accessToken: string;
+    refreshToken: string;
+  }): Promise<void> {
     const tokens = { accessToken: res.accessToken, refreshToken: res.refreshToken };
     this.currentTokens = tokens;
     this.deviceUUID = null;
@@ -378,13 +418,7 @@ export class ApiClient {
   private async post<T>(path: string, body: Record<string, unknown>, skipAuth = false): Promise<T> {
     const bodyStr = JSON.stringify(body);
 
-    return this.request<T>(
-      'POST',
-      path,
-      headers(path, bodyStr),
-      bodyStr,
-      skipAuth,
-    );
+    return this.request<T>('POST', path, headers(path, bodyStr), bodyStr, skipAuth);
   }
 
   private async get<T>(path: string): Promise<T> {
@@ -408,7 +442,16 @@ export class ApiClient {
     }
 
     return new Promise((resolve, reject) => {
-      this._doRequest(method, path, { ...reqHeaders, ...authHeaders }, body, resolve, reject, false, skipAuth);
+      this._doRequest(
+        method,
+        path,
+        { ...reqHeaders, ...authHeaders },
+        body,
+        resolve,
+        reject,
+        false,
+        skipAuth,
+      );
     });
   }
 
@@ -451,12 +494,7 @@ export class ApiClient {
             const parsed = data.length ? JSON.parse(data) : {};
 
             // On 401, try token refresh and retry once (skip for auth endpoints)
-            if (
-              res.statusCode === 401 &&
-              !isRetry &&
-              !skipAuth &&
-              !path.includes('/auth/')
-            ) {
+            if (res.statusCode === 401 && !isRetry && !skipAuth && !path.includes('/auth/')) {
               const newTokens = await this.refreshTokens();
               if (newTokens) {
                 // Rebuild headers with new access token (replacing any old auth header)
@@ -497,10 +535,7 @@ export class ApiClient {
   }
 }
 
-function headers(
-  path: string,
-  bodyStr: string,
-): Record<string, string> {
+function headers(path: string, bodyStr: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(bodyStr).toString(),
