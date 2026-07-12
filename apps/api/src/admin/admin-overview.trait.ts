@@ -89,7 +89,7 @@ export class AdminOverviewTrait {
       totalReserveCredit,
       totalReserveReversal,
       totalCashCredit,
-      totalCashReversal,
+      totalCashOutflow,
     ] = await Promise.all([
       this.prisma.earningsLedger.groupBy({
         by: ['currency'],
@@ -160,7 +160,11 @@ export class AdminOverviewTrait {
       this.prisma.platformLedger.groupBy({
         by: ['currency'],
         _sum: { amountMinor: true },
-        where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.CASH, status: 'confirmed' },
+        where: {
+          entryType: { in: ['reversal', 'refund'] },
+          bucket: PLATFORM_BUCKETS.CASH,
+          status: 'confirmed',
+        },
       }),
     ]);
     const netEarningsByCurrency = netCurrencyAmounts(totalEarningsCredit, totalEarningsDebit);
@@ -172,7 +176,7 @@ export class AdminOverviewTrait {
     ]);
     const netPlatformByCurrency = netCurrencyAmounts(totalPlatformCredit, totalPlatformReversal);
     const netReserveByCurrency = netCurrencyAmounts(totalReserveCredit, totalReserveReversal);
-    const netCashByCurrency = netCurrencyAmounts(totalCashCredit, totalCashReversal);
+    const netCashByCurrency = netCurrencyAmounts(totalCashCredit, totalCashOutflow);
     const currencies = new Set([
       ...Object.keys(netEarningsByCurrency),
       ...Object.keys(netAdvertiserByCurrency),
@@ -190,7 +194,7 @@ export class AdminOverviewTrait {
           const netReserve = netReserveByCurrency[currency] ?? 0n;
           const netCash = netCashByCurrency[currency] ?? 0n;
           const netAdvertiserPosition = netAdvertiserPositionByCurrency[currency] ?? 0n;
-          const splitSum = netEarnings + netPlatform + netReserve + netCash;
+          const splitSum = netEarnings + netPlatform + netReserve;
           return [
             currency,
             {
