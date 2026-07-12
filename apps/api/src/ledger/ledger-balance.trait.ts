@@ -12,9 +12,9 @@ export class LedgerBalanceTrait {
   // ── Balance Queries ──
   /** Get total confirmed (available) earnings for a user */
   async getAvailableBalance(userId: string): Promise<{
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
-    byCurrency: Record<string, number>;
+    byCurrency: Record<string, bigint>;
   }> {
     const [credits, debits] = await Promise.all([
       this.prisma.earningsLedger.groupBy({
@@ -28,9 +28,9 @@ export class LedgerBalanceTrait {
         _sum: { amountMinor: true },
       }),
     ]);
-    const totals: Record<string, number> = {};
+    const totals: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(totals, credits);
-    this.addGroupedCurrencyTotals(totals, debits, -1);
+    this.addGroupedCurrencyTotals(totals, debits, -1n);
     const byCurrency = this.nonNegativeCurrencyTotals(totals);
     // Derive the primary currency from the user's ACTUAL balance
     // (largest positive), not a hardcoded 'USD'. Fixes the
@@ -38,7 +38,7 @@ export class LedgerBalanceTrait {
     // earnings saw `amountMinor: 0, currency: 'USD'`.
     const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency[currency] ?? 0,
+      amountMinor: byCurrency[currency] ?? 0n,
       currency,
       byCurrency,
     };
@@ -46,20 +46,20 @@ export class LedgerBalanceTrait {
 
   /** Get total pending (estimated + confirmed) earnings for a user */
   async getPendingBalance(userId: string): Promise<{
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
-    byCurrency: Record<string, number>;
+    byCurrency: Record<string, bigint>;
   }> {
     const result = await this.prisma.earningsLedger.groupBy({
       by: ['currency'],
       where: { userId, status: { in: ['estimated', 'pending'] }, entryType: 'credit' },
       _sum: { amountMinor: true },
     });
-    const byCurrency: Record<string, number> = {};
+    const byCurrency: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(byCurrency, result);
     const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency[currency] ?? 0,
+      amountMinor: byCurrency[currency] ?? 0n,
       currency,
       byCurrency,
     };
@@ -67,9 +67,9 @@ export class LedgerBalanceTrait {
 
   /** Get all-time total earnings for a user (excluding reversed/void) */
   async getTotalEarnings(userId: string): Promise<{
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
-    byCurrency: Record<string, number>;
+    byCurrency: Record<string, bigint>;
   }> {
     const [credits, debits] = await Promise.all([
       this.prisma.earningsLedger.groupBy({
@@ -83,13 +83,13 @@ export class LedgerBalanceTrait {
         _sum: { amountMinor: true },
       }),
     ]);
-    const totals: Record<string, number> = {};
+    const totals: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(totals, credits);
-    this.addGroupedCurrencyTotals(totals, debits, -1);
+    this.addGroupedCurrencyTotals(totals, debits, -1n);
     const byCurrency = this.nonNegativeCurrencyTotals(totals);
     const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency[currency] ?? 0,
+      amountMinor: byCurrency[currency] ?? 0n,
       currency,
       byCurrency,
     };
@@ -105,27 +105,27 @@ export class LedgerBalanceTrait {
     });
     return grouped.map((g) => ({
       status: g.status,
-      amountMinor: g._sum.amountMinor || 0,
+      amountMinor: g._sum.amountMinor || 0n,
       count: g._count,
     }));
   }
 
   /** Get paid-out total for a user */
   async getPaidOutTotal(userId: string): Promise<{
-    amountMinor: number;
+    amountMinor: bigint;
     currency: string;
-    byCurrency: Record<string, number>;
+    byCurrency: Record<string, bigint>;
   }> {
     const result = await this.prisma.earningsLedger.groupBy({
       by: ['currency'],
       where: { userId, status: 'paid', entryType: 'credit' },
       _sum: { amountMinor: true },
     });
-    const byCurrency: Record<string, number> = {};
+    const byCurrency: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(byCurrency, result);
     const currency = primaryCurrency(byCurrency);
     return {
-      amountMinor: byCurrency[currency] ?? 0,
+      amountMinor: byCurrency[currency] ?? 0n,
       currency,
       byCurrency,
     };

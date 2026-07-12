@@ -20,13 +20,13 @@ export class AdminOverviewTrait {
       this.prisma.fraudFlag.count({ where: { status: 'open' } }),
     ]);
     const totalPayoutsByCurrency = Object.fromEntries(
-      payouts.map((row) => [row.currency, row._sum.amountMinor ?? 0]),
+      payouts.map((row) => [row.currency, row._sum.amountMinor ?? 0n]),
     );
     return {
       activeUsers: users,
       activeCampaigns: campaigns,
       totalBillableImpressions: impressions,
-      totalPayoutsMinor: totalPayoutsByCurrency.USD ?? 0,
+      totalPayoutsMinor: totalPayoutsByCurrency.USD ?? 0n,
       totalPayoutsByCurrency,
       openFraudFlags: fraudFlags,
     };
@@ -40,7 +40,7 @@ export class AdminOverviewTrait {
       _sum: { amountMinor: true },
     });
     const debitMap = new Map(
-      advertiserDebits.map((d) => [`${d.campaignId}:${d.currency}`, d._sum.amountMinor ?? 0]),
+      advertiserDebits.map((d) => [`${d.campaignId}:${d.currency}`, d._sum.amountMinor ?? 0n]),
     );
     const debitCampaignIds = [
       ...new Set(
@@ -58,13 +58,13 @@ export class AdminOverviewTrait {
     const campaignDiscrepancies: Array<{
       campaignId: string;
       campaignName: string;
-      budgetSpentMinor: number;
-      ledgerDebits: number;
-      diff: number;
+      budgetSpentMinor: bigint;
+      ledgerDebits: bigint;
+      diff: bigint;
       currency: string;
     }> = [];
     for (const c of campaigns) {
-      const debits = debitMap.get(`${c.id}:${c.currency}`) ?? 0;
+      const debits = debitMap.get(`${c.id}:${c.currency}`) ?? 0n;
       if (c.budgetSpentMinor !== debits) {
         campaignDiscrepancies.push({
           campaignId: c.id,
@@ -153,10 +153,10 @@ export class AdminOverviewTrait {
       Array.from(currencies)
         .sort()
         .map((currency) => {
-          const netEarnings = netEarningsByCurrency[currency] ?? 0;
-          const netAdvertiser = netAdvertiserByCurrency[currency] ?? 0;
-          const netPlatform = netPlatformByCurrency[currency] ?? 0;
-          const netReserve = netReserveByCurrency[currency] ?? 0;
+          const netEarnings = netEarningsByCurrency[currency] ?? 0n;
+          const netAdvertiser = netAdvertiserByCurrency[currency] ?? 0n;
+          const netPlatform = netPlatformByCurrency[currency] ?? 0n;
+          const netReserve = netReserveByCurrency[currency] ?? 0n;
           const splitSum = netEarnings + netPlatform + netReserve;
           return [
             currency,
@@ -172,15 +172,15 @@ export class AdminOverviewTrait {
         }),
     );
     const usdGlobal = globalReconciliationByCurrency.USD ?? {
-      netAdvertiserSpendMinor: 0,
-      netDeveloperEarningsMinor: 0,
-      netPlatformFeeMinor: 0,
-      netReserveMinor: 0,
-      splitSumMinor: 0,
-      discrepancyMinor: 0,
+      netAdvertiserSpendMinor: 0n,
+      netDeveloperEarningsMinor: 0n,
+      netPlatformFeeMinor: 0n,
+      netReserveMinor: 0n,
+      splitSumMinor: 0n,
+      discrepancyMinor: 0n,
     };
     const globalDiscrepancy = Object.values(globalReconciliationByCurrency).some(
-      (row) => row.discrepancyMinor !== 0,
+      (row) => row.discrepancyMinor !== 0n,
     );
     // 3. Developer Negative Balances (bounded: aggregate earnings by
     //    user+currency, then fetch emails only for users with a negative balance
@@ -197,24 +197,24 @@ export class AdminOverviewTrait {
         _sum: { amountMinor: true },
       }),
     ]);
-    const developerBalances = new Map<string, number>();
+    const developerBalances = new Map<string, bigint>();
     for (const row of developerCreditGroups) {
       const key = `${row.userId}:${row.currency}`;
-      developerBalances.set(key, (developerBalances.get(key) ?? 0) + (row._sum.amountMinor ?? 0));
+      developerBalances.set(key, (developerBalances.get(key) ?? 0n) + (row._sum.amountMinor ?? 0n));
     }
     for (const row of developerDebitGroups) {
       const key = `${row.userId}:${row.currency}`;
-      developerBalances.set(key, (developerBalances.get(key) ?? 0) - (row._sum.amountMinor ?? 0));
+      developerBalances.set(key, (developerBalances.get(key) ?? 0n) - (row._sum.amountMinor ?? 0n));
     }
     const negativeDeveloperBalances: Array<{
       userId: string;
       email: string;
-      balanceMinor: number;
+      balanceMinor: bigint;
       currency: string;
     }> = [];
     const negativeUserIds: string[] = [];
     for (const [key, balance] of developerBalances) {
-      if (balance < 0) {
+      if (balance < 0n) {
         const [userId, currency] = key.split(':');
         negativeDeveloperBalances.push({ userId, email: userId, balanceMinor: balance, currency });
         negativeUserIds.push(userId);

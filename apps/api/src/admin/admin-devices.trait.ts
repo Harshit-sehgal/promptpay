@@ -236,7 +236,7 @@ export class AdminDevicesTrait {
   }) {
     const page = Math.max(1, params.page ?? 1);
     const limit = Math.min(100, Math.max(1, params.limit ?? 20));
-    const minAmountMinor = Math.max(1, params.minAmountMinor ?? 1);
+    const minAmountMinor = params.minAmountMinor ? BigInt(Math.max(1, params.minAmountMinor)) : 1n;
     const currency = normalizeOptionalCurrency(params.currency);
     const currencyFilter = currency ? { currency } : {};
     const [debitGroups, creditGroups] = await Promise.all([
@@ -258,10 +258,11 @@ export class AdminDevicesTrait {
     }
     const allDebtRows = debitGroups
       .map((debit) => {
-        const debitMinor = debit._sum.amountMinor ?? 0;
+        const debitMinor = debit._sum.amountMinor ?? 0n;
         const confirmedCreditMinor =
-          creditByUserCurrency.get(`${debit.userId}:${debit.currency}`) ?? 0;
-        const outstandingDebtMinor = Math.max(0, debitMinor - confirmedCreditMinor);
+          creditByUserCurrency.get(`${debit.userId}:${debit.currency}`) ?? 0n;
+        const outstandingDebtMinor =
+          debitMinor > confirmedCreditMinor ? debitMinor - confirmedCreditMinor : 0n;
         return {
           userId: debit.userId,
           currency: debit.currency,
@@ -489,14 +490,17 @@ export class AdminDevicesTrait {
         _sum: { amountMinor: true },
       }),
     ]);
-    const confirmedDebitMinor = confirmedDebits._sum.amountMinor ?? 0;
-    const confirmedCreditMinor = confirmedCredits._sum.amountMinor ?? 0;
+    const confirmedDebitMinor = confirmedDebits._sum.amountMinor ?? 0n;
+    const confirmedCreditMinor = confirmedCredits._sum.amountMinor ?? 0n;
     return {
       userId,
       currency,
       confirmedDebitMinor,
       confirmedCreditMinor,
-      outstandingDebtMinor: Math.max(0, confirmedDebitMinor - confirmedCreditMinor),
+      outstandingDebtMinor:
+        confirmedDebitMinor > confirmedCreditMinor
+          ? confirmedDebitMinor - confirmedCreditMinor
+          : 0n,
     };
   }
 }
