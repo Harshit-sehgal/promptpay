@@ -291,6 +291,7 @@ test suite were fixed (see "Critical fixes" below).
 - A unique constraint on `PayoutAllocation.earningsEntryId` would prevent the same entry being referenced twice; see prisma schema (verify the actual constraint before relying on it for race protection in concurrent payouts).
 - Provider readiness is checked before claiming an approved payout, so unimplemented or unconfigured automated providers cannot move a production payout into `processing`.
 - If a provider explicitly returns `failed` from initiation, the payout is marked `failed` and its allocations are deleted in one transaction, making the earnings available for a fresh request.
+- Provider availability is operator-gateable at deploy time via `WAITLAYER_PAYOUT_PROVIDER_STATUS` (API) / `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` (web, `apps/web/src/lib/payout-providers.ts`); the API rejects `coming_soon` providers at payout-method registration (`normalizePayoutMethod` → `payoutProviderLaunchStatus`), so the web UI gate and the server-side registry stay consistent (A-030).
 
 **Known limitation:**
 

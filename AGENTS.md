@@ -69,13 +69,18 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
   `available` | `coming_soon`; malformed/unknown keys ignored). Covered by
   `payout-providers.spec.ts`. Provider implementations exist in
   `apps/api/src/payout/providers/`.
-- **Gap (operator, not code):** which _automated_ rails (PayPal Payouts / Stripe
-  Connect / Wise) are actually enabled at the provider-account level depends on
-  operator-supplied credentials/approval (Stripe/Wise/PayPal keys) — an
-  environment/secret decision, not a source change. `FOUNDATION_STATUS.md` domain 7
-  still lists payouts as "Partial" (Razorpay/Payoneer stubs blocked in prod). The
-  web UI list is now deploy-configurable; the server-side provider registry should
-  honour the same gate when provider accounts are enabled.
+- **Operator credential gap (not code):** which _automated_ rails (PayPal Payouts
+  / Stripe Connect / Wise) are actually enabled at the provider-account level
+  depends on operator-supplied credentials/approval (Stripe/Wise/PayPal keys) — an
+  environment/secret decision, not a source change.
+- **Server-side gate RESOLVED (code, 2026-07-12):** the web UI list is
+  deploy-configurable via `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS`, and the
+  **API now honours the same gate** at payout-method registration —
+  `normalizePayoutMethod` (`apps/api/src/payout/payout-method.trait.ts`) calls
+  `payoutProviderLaunchStatus` (`packages/shared/src/payout-providers.ts`) and
+  throws `BadRequestException` for any `coming_soon` provider, so server-side
+  payout creation cannot register a gated provider. `FOUNDATION_STATUS.md` domain 7
+  updated to note deploy-time configurability.
 
 ### A-033 — Landing "Live" tool claims (runtime verification)
 
