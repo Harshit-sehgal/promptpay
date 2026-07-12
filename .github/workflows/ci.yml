@@ -153,3 +153,16 @@ jobs:
           if [ "$STATUS" = "404" ]; then echo "CONTROLLER ROUTE 404 — compiled image dropped a route"; exit 1; fi
           echo "Controller route resolved over TCP (status $STATUS; expected 400/401, not 404)"
           docker compose down -v
+  # Docs-drift guard: assert AGENTS.md's key claims still match the code.
+  # Cheap, no DB, no install — runs on plain node. Keeps the audit narrative
+  # honest (the prior standalone-404 false claim is now machine-enforced).
+  verify-audit-claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Verify AGENTS.md claims match code
+        run: node scripts/audit-claims.mjs
