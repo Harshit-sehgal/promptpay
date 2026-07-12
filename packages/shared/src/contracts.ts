@@ -208,7 +208,7 @@ export const PayoutRequestResponse = z.object({
   payoutAccountId: z.string(),
   status: PayoutStatusSchema,
   requestedAmountMinor: z.coerce.bigint().nonnegative(),
-  approvedAmountMinor: z.coerce.bigint().nullable().optional(),
+  approvedAmountMinor: z.coerce.bigint().nonnegative().nullable().optional(),
   currency: z.string(),
   reviewerId: z.string().nullable().optional(),
   reviewNote: z.string().nullable().optional(),
@@ -228,7 +228,7 @@ export const PayoutAvailableResponse = z.object({
       z.object({
         id: z.string(),
         userId: z.string(),
-        amountMinor: z.coerce.bigint(),
+        amountMinor: z.coerce.bigint().nonnegative(),
         currency: z.string(),
         status: LedgerStatusSchema,
         entryType: LedgerEntryTypeSchema,

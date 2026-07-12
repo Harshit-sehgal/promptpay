@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+import { formatMinorUnits } from '@waitlayer/shared';
+
 import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
 import { ApiClient } from './api-client';
@@ -33,7 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         const bal = await api.getBalance();
         vscode.window.showInformationMessage(
-          `WaitLayer: $${(bal.available.amountMinor / 100).toFixed(2)} available (pending $${(bal.pending.amountMinor / 100).toFixed(2)})`,
+          `WaitLayer: ${formatMinorUnits(BigInt(bal.available.amountMinor), bal.available.currency)} available (pending ${formatMinorUnits(BigInt(bal.pending.amountMinor), bal.pending.currency)})`,
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -43,9 +45,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('waitlayer.toggleAds', async () => {
       const enabled = await config.toggleAds();
-      vscode.window.showInformationMessage(
-        `WaitLayer: ads ${enabled ? 'enabled' : 'disabled'}`,
-      );
+      vscode.window.showInformationMessage(`WaitLayer: ads ${enabled ? 'enabled' : 'disabled'}`);
     }),
     vscode.commands.registerCommand('waitlayer.openDashboard', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://waitlayer.com/developer'));
@@ -115,27 +115,30 @@ export function activate(context: vscode.ExtensionContext) {
 
           // 5. Show ad in panel. Track when the impression became visible
           const impressionShownAt = Date.now();
-          panel.show({
-            headline: ad.title,
-            message: ad.message,
-            ctaText: ctaTextForAd(ad),
-            ctaUrl: ad.destinationUrl,
-            impressionToken: ad.impressionToken,
-          }, async (clicked) => {
-            try {
-              // Always qualify first — CPM bills here; CPC uses qualifiedAt as a gate.
-              const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
-              await api.recordImpressionEnd(ad.impressionToken, visibleDurationMs);
-              if (clicked) {
-                await api.recordClick(ad.impressionToken);
+          panel.show(
+            {
+              headline: ad.title,
+              message: ad.message,
+              ctaText: ctaTextForAd(ad),
+              ctaUrl: ad.destinationUrl,
+              impressionToken: ad.impressionToken,
+            },
+            async (clicked) => {
+              try {
+                // Always qualify first — CPM bills here; CPC uses qualifiedAt as a gate.
+                const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
+                await api.recordImpressionEnd(ad.impressionToken, visibleDurationMs);
+                if (clicked) {
+                  await api.recordClick(ad.impressionToken);
+                }
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
+              } finally {
+                panel.hide();
               }
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
-            } finally {
-              panel.hide();
-            }
-          });
+            },
+          );
         }
       } catch (err: unknown) {
         // Don't disrupt the IDE with a modal, but make the failure visible in
@@ -172,7 +175,7 @@ export function activate(context: vscode.ExtensionContext) {
   api
     .getBalance()
     .then((bal) => {
-      status.setEarnings(bal.available.amountMinor / 100);
+      status.setEarnings(bal.available.amountMinor, bal.available.currency);
     })
     .catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);

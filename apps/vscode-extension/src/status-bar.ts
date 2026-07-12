@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+import { formatMinorUnits } from '@waitlayer/shared';
+
 export class StatusBar {
   private bar?: vscode.StatusBarItem;
 
@@ -24,9 +26,14 @@ export class StatusBar {
     }
   }
 
-  setEarnings(available: number) {
+  /**
+   * Display available balance in the status bar. Formats minor units using
+   * the per-currency exponent (e.g. /100 for USD, /1 for JPY, /1000 for BHD)
+   * so zero-decimal and 3-decimal currencies render correctly.
+   */
+  setEarnings(amountMinor: number, currency: string) {
     if (this.bar) {
-      this.bar.text = `$(zap) WaitLayer: $${available.toFixed(2)}`;
+      this.bar.text = `$(zap) WaitLayer: ${formatMinorUnits(BigInt(amountMinor), currency)}`;
       this.bar.tooltip = `Click for balance details`;
     }
   }
