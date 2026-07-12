@@ -649,6 +649,37 @@ export class StripeWebhookController implements OnModuleInit {
       });
     }
 
+    // ── Retire any active dispute hold rows for this payment intent ──
+    // A refund returns money to the cardholder regardless of the dispute
+    // outcome — the dispute becomes moot (Stripe typically closes it when a
+    // charge is fully refunded). Any held slice that was frozen by a
+    // `charge.dispute.created` delivery is superseded by this refund; we
+    // retire the hold row(s) so the dispute-close handler (won/lost) has
+    // nothing left to erroneously release or write-off. The hold retire is
+    // CAS-gated on `status: 'held'` and no new hold-specific reversal row
+    // is needed — the advertiser's deposit credit has already been fully
+    // reversed above (the parent row and any won-restore credits excluded by
+    // `stripeDisputeId: null`). The net effect is a clean advertiser ledger
+    // with no orphaned hold rows awaiting a dispute resolution that won't
+    // come.
+    const holdRows = await this.prisma.advertiserLedger.findMany({
+      where: {
+        stripePaymentIntentId: details.paymentIntentId,
+        entryType: 'hold',
+        status: 'held',
+      },
+      select: { id: true },
+    });
+    for (const hold of holdRows) {
+      await this.prisma.advertiserLedger.updateMany({
+        where: { id: hold.id, status: 'held' },
+        data: { status: 'reversed' },
+      });
+      this.logger.log(
+        `Retired dispute hold ${hold.id} — superseded by refund ${refund.id} on PI ${details.paymentIntentId}`,
+      );
+    }
+
     // Update webhook event as processed
     await this.prisma.webhookEvent.updateMany({
       where: { provider: 'stripe', eventId: event.id },
