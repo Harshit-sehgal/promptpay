@@ -64,6 +64,12 @@ describe('AdminService', () => {
         { id: 'campaign-usd', name: 'USD campaign', budgetSpentMinor: 100, currency: 'USD' },
         { id: 'campaign-eur', name: 'EUR campaign', budgetSpentMinor: 200, currency: 'EUR' },
       ]);
+      // advertiserLedger.groupBy is called in this order by getMoneyIntegrityReport:
+      //   1. spend-vs-debit join (campaignId rows)
+      //   2. totalAdvertiserDebit (currency sums)
+      //   3. totalAdvertiserRefund (currency sums)
+      //   4. totalAdvertiserCredit (currency sums)  — cash-bucket reconciliation
+      //   5. totalAdvertiserReversal (currency sums) — advertiser net position
       mockPrisma.advertiserLedger.groupBy
         .mockResolvedValueOnce([
           { campaignId: 'campaign-usd', currency: 'USD', _sum: { amountMinor: 100 } },
@@ -73,7 +79,9 @@ describe('AdminService', () => {
           { currency: 'USD', _sum: { amountMinor: 100 } },
           { currency: 'EUR', _sum: { amountMinor: 200 } },
         ])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]) // totalAdvertiserCredit
+        .mockResolvedValueOnce([]); // totalAdvertiserReversal
       mockPrisma.earningsLedger.groupBy
         .mockResolvedValueOnce([
           { currency: 'USD', _sum: { amountMinor: 60 } },
@@ -82,6 +90,13 @@ describe('AdminService', () => {
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ userId: 'dev-1', currency: 'EUR', _sum: { amountMinor: 100 } }])
         .mockResolvedValueOnce([{ userId: 'dev-1', currency: 'EUR', _sum: { amountMinor: 150 } }]);
+      // platformLedger.groupBy is called in this order by getMoneyIntegrityReport:
+      //   1. totalPlatformCredit   (platform_fee credit)
+      //   2. totalPlatformReversal (platform_fee reversal)
+      //   3. totalReserveCredit     (fraud_reserve credit)
+      //   4. totalReserveReversal   (fraud_reserve reversal)
+      //   5. totalCashCredit        (cash credit)        — advertiser deposit cash bucket
+      //   6. totalCashReversal      (cash reversal)
       mockPrisma.platformLedger.groupBy
         .mockResolvedValueOnce([
           { currency: 'USD', _sum: { amountMinor: 30 } },
@@ -92,7 +107,9 @@ describe('AdminService', () => {
           { currency: 'USD', _sum: { amountMinor: 10 } },
           { currency: 'EUR', _sum: { amountMinor: 20 } },
         ])
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]) // totalCashCredit
+        .mockResolvedValueOnce([]); // totalCashReversal
       mockPrisma.user.findMany.mockResolvedValue([{ id: 'dev-1', email: 'dev@example.com' }]);
 
       const report = await service.getMoneyIntegrityReport();
@@ -101,17 +118,21 @@ describe('AdminService', () => {
       expect(report.globalReconciliationByCurrency).toEqual({
         EUR: {
           netAdvertiserSpendMinor: 200n,
+          netAdvertiserPositionMinor: -200n,
           netDeveloperEarningsMinor: 120n,
           netPlatformFeeMinor: 60n,
           netReserveMinor: 20n,
+          netCashMinor: 0n,
           splitSumMinor: 200n,
           discrepancyMinor: 0n,
         },
         USD: {
           netAdvertiserSpendMinor: 100n,
+          netAdvertiserPositionMinor: -100n,
           netDeveloperEarningsMinor: 60n,
           netPlatformFeeMinor: 30n,
           netReserveMinor: 10n,
+          netCashMinor: 0n,
           splitSumMinor: 100n,
           discrepancyMinor: 0n,
         },

@@ -43,6 +43,7 @@ packages/db/generated/
 *.pem
 *.key
 credentials.json
+credentials-snapshot.json
 
 # Turborepo
 .turbo/

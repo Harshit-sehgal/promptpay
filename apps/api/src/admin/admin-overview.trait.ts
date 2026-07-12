@@ -1,4 +1,4 @@
-import { isSupportedCurrency } from '@waitlayer/shared';
+import { isSupportedCurrency, primaryCurrency } from '@waitlayer/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
@@ -26,7 +26,7 @@ export class AdminOverviewTrait {
       activeUsers: users,
       activeCampaigns: campaigns,
       totalBillableImpressions: impressions,
-      totalPayoutsMinor: totalPayoutsByCurrency.USD ?? 0n,
+      totalPayoutsMinor: totalPayoutsByCurrency[primaryCurrency(totalPayoutsByCurrency)] ?? 0n,
       totalPayoutsByCurrency,
       openFraudFlags: fraudFlags,
     };
@@ -82,10 +82,14 @@ export class AdminOverviewTrait {
       totalEarningsDebit,
       totalAdvertiserDebit,
       totalAdvertiserRefund,
+      totalAdvertiserCredit,
+      totalAdvertiserReversal,
       totalPlatformCredit,
       totalPlatformReversal,
       totalReserveCredit,
       totalReserveReversal,
+      totalCashCredit,
+      totalCashReversal,
     ] = await Promise.all([
       this.prisma.earningsLedger.groupBy({
         by: ['currency'],
@@ -109,6 +113,16 @@ export class AdminOverviewTrait {
         by: ['currency'],
         _sum: { amountMinor: true },
         where: { entryType: 'refund', status: { in: ['confirmed', 'paid'] } },
+      }),
+      this.prisma.advertiserLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', status: 'confirmed' },
+      }),
+      this.prisma.advertiserLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'reversal', status: { in: ['confirmed', 'reversed'] } },
       }),
       this.prisma.platformLedger.groupBy({
         by: ['currency'],
@@ -138,16 +152,33 @@ export class AdminOverviewTrait {
           status: 'confirmed',
         },
       }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'credit', bucket: PLATFORM_BUCKETS.CASH, status: 'confirmed' },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: { entryType: 'reversal', bucket: PLATFORM_BUCKETS.CASH, status: 'confirmed' },
+      }),
     ]);
     const netEarningsByCurrency = netCurrencyAmounts(totalEarningsCredit, totalEarningsDebit);
     const netAdvertiserByCurrency = netCurrencyAmounts(totalAdvertiserDebit, totalAdvertiserRefund);
+    const netAdvertiserPositionByCurrency = netCurrencyAmounts(totalAdvertiserCredit, [
+      ...totalAdvertiserDebit,
+      ...totalAdvertiserRefund,
+      ...totalAdvertiserReversal,
+    ]);
     const netPlatformByCurrency = netCurrencyAmounts(totalPlatformCredit, totalPlatformReversal);
     const netReserveByCurrency = netCurrencyAmounts(totalReserveCredit, totalReserveReversal);
+    const netCashByCurrency = netCurrencyAmounts(totalCashCredit, totalCashReversal);
     const currencies = new Set([
       ...Object.keys(netEarningsByCurrency),
       ...Object.keys(netAdvertiserByCurrency),
       ...Object.keys(netPlatformByCurrency),
       ...Object.keys(netReserveByCurrency),
+      ...Object.keys(netCashByCurrency),
     ]);
     const globalReconciliationByCurrency = Object.fromEntries(
       Array.from(currencies)
@@ -157,14 +188,18 @@ export class AdminOverviewTrait {
           const netAdvertiser = netAdvertiserByCurrency[currency] ?? 0n;
           const netPlatform = netPlatformByCurrency[currency] ?? 0n;
           const netReserve = netReserveByCurrency[currency] ?? 0n;
-          const splitSum = netEarnings + netPlatform + netReserve;
+          const netCash = netCashByCurrency[currency] ?? 0n;
+          const netAdvertiserPosition = netAdvertiserPositionByCurrency[currency] ?? 0n;
+          const splitSum = netEarnings + netPlatform + netReserve + netCash;
           return [
             currency,
             {
               netAdvertiserSpendMinor: netAdvertiser,
+              netAdvertiserPositionMinor: netAdvertiserPosition,
               netDeveloperEarningsMinor: netEarnings,
               netPlatformFeeMinor: netPlatform,
               netReserveMinor: netReserve,
+              netCashMinor: netCash,
               splitSumMinor: splitSum,
               discrepancyMinor: netAdvertiser - splitSum,
             },
@@ -173,9 +208,11 @@ export class AdminOverviewTrait {
     );
     const usdGlobal = globalReconciliationByCurrency.USD ?? {
       netAdvertiserSpendMinor: 0n,
+      netAdvertiserPositionMinor: 0n,
       netDeveloperEarningsMinor: 0n,
       netPlatformFeeMinor: 0n,
       netReserveMinor: 0n,
+      netCashMinor: 0n,
       splitSumMinor: 0n,
       discrepancyMinor: 0n,
     };
@@ -249,6 +286,7 @@ export class AdminOverviewTrait {
         netDeveloperEarningsMinor: usdGlobal.netDeveloperEarningsMinor,
         netPlatformFeeMinor: usdGlobal.netPlatformFeeMinor,
         netReserveMinor: usdGlobal.netReserveMinor,
+        netCashMinor: usdGlobal.netCashMinor,
         splitSumMinor: usdGlobal.splitSumMinor,
         discrepancyMinor: usdGlobal.discrepancyMinor,
       },

@@ -122,11 +122,38 @@ export enum FraudFlagType {
   DUPLICATE_ACCOUNT = 'duplicate_account',
 }
 
+export enum FraudFlagStatus {
+  OPEN = 'open',
+  REVIEWING = 'reviewing',
+  RESOLVED_VALID = 'resolved_valid',
+  RESOLVED_INVALID = 'resolved_invalid',
+  ESCALATED = 'escalated',
+}
+
 export enum FraudSeverity {
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
   CRITICAL = 'critical',
+}
+
+export enum ApprovalDecision {
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+  CHANGES_REQUESTED = 'changes_requested',
+}
+
+export enum RecoveryDebtCaseStatus {
+  OPEN = 'open',
+  IN_COLLECTIONS = 'in_collections',
+  RECOVERED = 'recovered',
+  WRITTEN_OFF = 'written_off',
+  CLOSED = 'closed',
+}
+
+export enum ReferralStatus {
+  PENDING = 'pending',
+  REWARDED = 'rewarded',
 }
 // ── Prohibited Ad Categories ──
 export const PROHIBITED_CATEGORIES = [
