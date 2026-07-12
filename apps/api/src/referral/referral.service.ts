@@ -48,7 +48,7 @@ export class ReferralService {
       }),
     ]);
     const rewardsEarnedByCurrency = Object.fromEntries(
-      rewardGroups.map((row) => [row.currency, row._sum.amountMinor ?? 0]),
+      rewardGroups.map((row) => [row.currency, row._sum.amountMinor ?? 0n]),
     );
 
     const referrals = await this.prisma.referral.findMany({
@@ -289,7 +289,7 @@ export class ReferralService {
       totalRewardsMinor: r.rewards.reduce(
         (sum, rw) =>
           rw.status === 'reversed' || rw.status === 'void' ? sum : sum + rw.amountMinor,
-        0,
+        0n,
       ),
     }));
   }

@@ -151,22 +151,22 @@ export class LedgerAdminTrait {
         where: { entryType: 'credit', status: 'pending' },
       }),
     ]);
-    const earningsByCurrency: Record<string, number> = {};
+    const earningsByCurrency: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(earningsByCurrency, totalEarnings);
-    this.addGroupedCurrencyTotals(earningsByCurrency, totalEarningsDebit, -1);
+    this.addGroupedCurrencyTotals(earningsByCurrency, totalEarningsDebit, -1n);
     // Advertiser spend = gross debits (billed) minus refunds (reversed fraud, archive)
-    const advertiserByCurrency: Record<string, number> = {};
+    const advertiserByCurrency: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(advertiserByCurrency, totalAdvertiserDebit);
-    this.addGroupedCurrencyTotals(advertiserByCurrency, totalAdvertiserRefund, -1);
+    this.addGroupedCurrencyTotals(advertiserByCurrency, totalAdvertiserRefund, -1n);
     // Platform fees = gross credits (billed) minus reversals (reversed fraud)
-    const platformByCurrency: Record<string, number> = {};
+    const platformByCurrency: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(platformByCurrency, totalPlatformCredit);
-    this.addGroupedCurrencyTotals(platformByCurrency, totalPlatformReversal, -1);
+    this.addGroupedCurrencyTotals(platformByCurrency, totalPlatformReversal, -1n);
     // Fraud reserve = gross credits minus reversals (released on false-positive)
-    const reserveByCurrency: Record<string, number> = {};
+    const reserveByCurrency: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(reserveByCurrency, totalReserveCredit);
-    this.addGroupedCurrencyTotals(reserveByCurrency, totalReserveReversal, -1);
-    const pendingByCurrency: Record<string, number> = {};
+    this.addGroupedCurrencyTotals(reserveByCurrency, totalReserveReversal, -1n);
+    const pendingByCurrency: Record<string, bigint> = {};
     this.addGroupedCurrencyTotals(pendingByCurrency, pendingEarnings);
     // Derive each top-level scalar from the primary (largest-positive)
     // currency of its byCurrency map — consistent with getAvailableBalance /
@@ -176,11 +176,11 @@ export class LedgerAdminTrait {
     // to `{ USD: scalar }`, so the scalar is kept as a primary-currency value
     // rather than removed). Full multi-currency data lives on the byCurrency
     // maps below.
-    const earningsMinor = earningsByCurrency[primaryCurrency(earningsByCurrency)] ?? 0;
-    const pendingMinor = pendingByCurrency[primaryCurrency(pendingByCurrency)] ?? 0;
-    const advertiserMinor = advertiserByCurrency[primaryCurrency(advertiserByCurrency)] ?? 0;
-    const platformMinor = platformByCurrency[primaryCurrency(platformByCurrency)] ?? 0;
-    const reserveMinor = reserveByCurrency[primaryCurrency(reserveByCurrency)] ?? 0;
+    const earningsMinor = earningsByCurrency[primaryCurrency(earningsByCurrency)] ?? 0n;
+    const pendingMinor = pendingByCurrency[primaryCurrency(pendingByCurrency)] ?? 0n;
+    const advertiserMinor = advertiserByCurrency[primaryCurrency(advertiserByCurrency)] ?? 0n;
+    const platformMinor = platformByCurrency[primaryCurrency(platformByCurrency)] ?? 0n;
+    const reserveMinor = reserveByCurrency[primaryCurrency(reserveByCurrency)] ?? 0n;
     return {
       totalEarnings: earningsMinor,
       totalAdvertiserSpend: advertiserMinor,

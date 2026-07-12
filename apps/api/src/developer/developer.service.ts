@@ -89,21 +89,21 @@ export class DeveloperService {
       _sum: { amountMinor: true },
     });
     const summary = {
-      estimatedEarnings: 0,
-      confirmedEarnings: 0,
-      pendingEarnings: 0,
-      heldEarnings: 0,
-      reversedEarnings: 0,
-      recoveryDebt: 0,
-      availableForPayout: 0,
-      lifetimeEarnings: 0,
-      estimatedEarningsByCurrency: {} as Record<string, number>,
-      confirmedEarningsByCurrency: {} as Record<string, number>,
-      pendingEarningsByCurrency: {} as Record<string, number>,
-      heldEarningsByCurrency: {} as Record<string, number>,
-      recoveryDebtByCurrency: {} as Record<string, number>,
-      availableForPayoutByCurrency: {} as Record<string, number>,
-      lifetimeEarningsByCurrency: {} as Record<string, number>,
+      estimatedEarnings: 0n,
+      confirmedEarnings: 0n,
+      pendingEarnings: 0n,
+      heldEarnings: 0n,
+      reversedEarnings: 0n,
+      recoveryDebt: 0n,
+      availableForPayout: 0n,
+      lifetimeEarnings: 0n,
+      estimatedEarningsByCurrency: {} as Record<string, bigint>,
+      confirmedEarningsByCurrency: {} as Record<string, bigint>,
+      pendingEarningsByCurrency: {} as Record<string, bigint>,
+      heldEarningsByCurrency: {} as Record<string, bigint>,
+      recoveryDebtByCurrency: {} as Record<string, bigint>,
+      availableForPayoutByCurrency: {} as Record<string, bigint>,
+      lifetimeEarningsByCurrency: {} as Record<string, bigint>,
     };
     for (const entry of entries) {
       const amountMinor = entry._sum.amountMinor ?? 0;
@@ -132,7 +132,12 @@ export class DeveloperService {
         addCurrencyAmount(summary.confirmedEarningsByCurrency, entry.currency, amountMinor);
       else if (entry.status === 'held')
         addCurrencyAmount(summary.heldEarningsByCurrency, entry.currency, amountMinor);
-      else if (entry.status === 'reversed') summary.reversedEarnings += amountMinor;
+      else if (entry.status === 'reversed')
+        summary.reversedEarningsByCurrency = addCurrencyAmount(
+          summary.reversedEarningsByCurrency,
+          entry.currency,
+          amountMinor,
+        );
     }
     summary.confirmedEarningsByCurrency = nonNegativeCurrencyTotals(
       summary.confirmedEarningsByCurrency,
@@ -140,6 +145,9 @@ export class DeveloperService {
     summary.availableForPayoutByCurrency = { ...summary.confirmedEarningsByCurrency };
     summary.lifetimeEarningsByCurrency = nonNegativeCurrencyTotals(
       summary.lifetimeEarningsByCurrency,
+    );
+    summary.reversedEarningsByCurrency = nonNegativeCurrencyTotals(
+      summary.reversedEarningsByCurrency ?? {},
     );
     summary.estimatedEarnings =
       summary.estimatedEarningsByCurrency[primaryCurrency(summary.estimatedEarningsByCurrency)] ??
@@ -597,14 +605,17 @@ export class DeveloperService {
   }
 }
 
-function addCurrencyAmount(totals: Record<string, number>, currency: string, amountMinor: number) {
+function addCurrencyAmount(totals: Record<string, bigint>, currency: string, amountMinor: bigint) {
   const key = currency.toUpperCase();
-  totals[key] = (totals[key] ?? 0) + amountMinor;
+  totals[key] = (totals[key] ?? 0n) + amountMinor;
 }
 
-function nonNegativeCurrencyTotals(totals: Record<string, number>): Record<string, number> {
+function nonNegativeCurrencyTotals(totals: Record<string, bigint>): Record<string, bigint> {
   return Object.fromEntries(
-    Object.entries(totals).map(([currency, amountMinor]) => [currency, Math.max(0, amountMinor)]),
+    Object.entries(totals).map(([currency, amountMinor]) => [
+      currency,
+      amountMinor > 0n ? amountMinor : 0n,
+    ]),
   );
 }
 
