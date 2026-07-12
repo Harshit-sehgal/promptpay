@@ -1146,12 +1146,12 @@ export class StripeWebhookController implements OnModuleInit {
       return;
     }
 
-    // Snapshot confirmed allocation earnings IDs (best-guess; the tx re-checks
-    // via the per-row CAS `updateMany where status: 'confirmed'`).
-    const confirmedAllocations = payoutRequest.allocations.filter(
-      (a: { earningsEntry: { status: string } }) => a.earningsEntry.status === 'confirmed',
-    );
-    const earningsIds = confirmedAllocations.map(
+    // Collect ALL allocated earnings entry IDs (not just confirmed ones) so
+    // the post-check `paidCount === earningsIds.length` below actually
+    // detects a concurrent `holdEarnings` that flipped any allocated entry
+    // `confirmed → held`. See the markPayoutPaid comment in
+    // payout-request.trait.ts for the full rationale.
+    const earningsIds = payoutRequest.allocations.map(
       (a: { earningsEntryId: string }) => a.earningsEntryId,
     );
 

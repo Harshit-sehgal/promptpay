@@ -663,17 +663,17 @@ export class PayoutRequestTrait {
       );
     }
     const paidAtDate = new Date(data.paidAt);
-    // Collect the earnings entry IDs from allocations, but only those still in
-    // 'confirmed' status. This snapshot is a best-guess — the inner tx will
-    // re-check via `updateMany where status: 'confirmed'`.
-    const confirmedAllocations = payout.allocations.filter(
-      (a: {
-        earningsEntry: {
-          status: string;
-        };
-      }) => a.earningsEntry.status === 'confirmed',
-    );
-    const earningsIds = confirmedAllocations.map(
+    // Collect ALL earnings entry IDs from allocations. The inner tx
+    // updateMany is CAS-gated on `status: 'confirmed'` (only flips entries
+    // still in that state). The post-check `paidCount === earningsIds.length`
+    // then actually fails when a concurrent `holdEarnings` flipped any
+    // allocated entry to `held` — because the snapshot included it but the
+    // CAS didn't flip it. Previously we filtered to only `confirmed` here,
+    // making the post-check a tautology (earningsIds already matched what
+    // the updateMany could flip, so paidCount always equaled
+    // earningsIds.length). See the comment at line ~761 for the full
+    // explanation of why this guard must be real.
+    const earningsIds = payout.allocations.map(
       (a: { earningsEntryId: string }) => a.earningsEntryId,
     );
     // Single atomic transaction with an authoritative TOCTOU guard.
@@ -760,9 +760,11 @@ export class PayoutRequestTrait {
         });
         // Authoritative post-check: a concurrent fraud `holdEarnings` could have
         // flipped one or more allocated entries from `confirmed` → `held`
-        // between the snapshot read (line 590) and the CAS above. The
-        // conditional `updateMany` silently SKIPS those rows (no matching
-        // `confirmed` row), so without this check the payout would be marked
+        // between the snapshot read and the CAS above. We now snapshot ALL
+        // allocation IDs (not just confirmed) so that the conditional
+        // `updateMany` silently SKIPS any held-out entries (no matching
+        // `confirmed` row) and the `paidCount !== earningsIds.length` guard
+        // actually detects it. Without this guard the payout would be marked
         // `paid` while the held entries stay `held` — money left the platform
         // but the developer's earnings entry is orphaned in `held`. When the
         // flag later resolves as a false positive, `releaseEarnings` flips the
