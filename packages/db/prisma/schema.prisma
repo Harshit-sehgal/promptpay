@@ -910,7 +910,7 @@ model FraudFlag {
   evidence     Json
   reviewNote   String?
   reviewerId   String?
-  resolvedAt   DateTime?
+  resolvedAt   DateTime?              @db.Timestamptz
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
