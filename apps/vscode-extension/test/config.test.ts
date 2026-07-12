@@ -1,0 +1,164 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as vscode from 'vscode';
+
+/**
+ * Shared, mutable VS Code mock state. Because `vi.mock` factories are hoisted
+ * above all imports, the state object is created via `vi.hoisted` so it is
+ * available inside the factory and can be reset between tests.
+ */
+const mock = vi.hoisted(() => ({
+  config: {} as Record<string, unknown>,
+  secrets: {} as Record<string, string>,
+}));
+
+vi.mock('vscode', () => {
+  // A single stable configuration object so the same `update`/get spies are
+  // reused across calls (mirrors how VS Code returns one config per section).
+  const cfg = {
+    get: (key: string, def?: unknown) => (mock.config[key] !== undefined ? mock.config[key] : def),
+    update: vi.fn(async (key: string, value: unknown) => {
+      mock.config[key] = value;
+    }),
+    has: vi.fn(() => true),
+  };
+  return {
+    workspace: { getConfiguration: vi.fn(() => cfg) },
+    env: { machineId: 'test-machine-id' },
+    ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
+  };
+});
+
+import { ConfigurationManager } from '../src/config';
+
+function makeSecrets(): vscode.SecretStorage {
+  return {
+    get: vi.fn(async (key: string) => mock.secrets[key] ?? null),
+    store: vi.fn(async (key: string, value: string) => {
+      mock.secrets[key] = value;
+    }),
+    delete: vi.fn(async (key: string) => {
+      delete mock.secrets[key];
+    }),
+  } as unknown as vscode.SecretStorage;
+}
+
+function makeManager(): ConfigurationManager {
+  return new ConfigurationManager(makeSecrets());
+}
+
+beforeEach(() => {
+  mock.config = {};
+  mock.secrets = {};
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('ConfigurationManager — settings parsing & validation', () => {
+  it('resolves the API base URL from settings, falling back to the SaaS default', () => {
+    const mgr = makeManager();
+
+    mock.config['apiUrl'] = 'https://api.example.com/api/v1';
+    expect(mgr.getApiUrl()).toBe('https://api.example.com/api/v1');
+
+    delete mock.config['apiUrl'];
+    expect(mgr.getApiUrl()).toBe('https://api.waitlayer.com/api/v1');
+  });
+
+  it('reads adsEnabled as a boolean and defaults to enabled', async () => {
+    const mgr = makeManager();
+
+    expect(await mgr.adsEnabled()).toBe(true);
+
+    mock.config['adsEnabled'] = false;
+    expect(await mgr.adsEnabled()).toBe(false);
+
+    mock.config['adsEnabled'] = true;
+    expect(await mgr.adsEnabled()).toBe(true);
+  });
+
+  it('toggles ads off then on, persisting each value globally', async () => {
+    const mgr = makeManager();
+
+    expect(await mgr.adsEnabled()).toBe(true); // default on
+
+    const afterOff = await mgr.toggleAds();
+    expect(afterOff).toBe(false);
+    expect(await mgr.adsEnabled()).toBe(false);
+    expect(mock.config['adsEnabled']).toBe(false);
+
+    const afterOn = await mgr.toggleAds();
+    expect(afterOn).toBe(true);
+    expect(mock.config['adsEnabled']).toBe(true);
+  });
+
+  it('reads maxAdsPerHour, defaulting to 6', async () => {
+    const mgr = makeManager();
+
+    expect(await mgr.getMaxAdsPerHour()).toBe(6);
+
+    mock.config['maxAdsPerHour'] = 3;
+    expect(await mgr.getMaxAdsPerHour()).toBe(3);
+  });
+
+  it('reads inactivityTimeoutMs, defaulting to 15_000ms', () => {
+    const mgr = makeManager();
+
+    expect(mgr.getInactivityTimeoutMs()).toBe(15_000);
+
+    mock.config['inactivityTimeoutMs'] = 5_000;
+    expect(mgr.getInactivityTimeoutMs()).toBe(5_000);
+  });
+
+  it('reports quiet hours only when enabled and the current time is inside the window', async () => {
+    const mgr = makeManager();
+
+    // Disabled → never in quiet hours regardless of the clock.
+    mock.config['quietMode.enabled'] = false;
+    expect(await mgr.inQuietHours()).toBe(false);
+
+    // Enabled with an all-day window (00:00–23:59) always contains "now".
+    mock.config['quietMode.enabled'] = true;
+    mock.config['quietMode.start'] = '00:00';
+    mock.config['quietMode.end'] = '23:59';
+    expect(await mgr.inQuietHours()).toBe(true);
+  });
+});
+
+describe('ConfigurationManager — token storage', () => {
+  it('returns null tokens when nothing has been stored', async () => {
+    const mgr = makeManager();
+    expect(await mgr.getTokens()).toBeNull();
+  });
+
+  it('round-trips stored tokens through SecretStorage', async () => {
+    const mgr = makeManager();
+    const tokens = { accessToken: 'a-tok', refreshToken: 'r-tok' };
+
+    await mgr.storeTokens(tokens);
+    expect(await mgr.getTokens()).toEqual(tokens);
+  });
+
+  it('clears stored tokens', async () => {
+    const mgr = makeManager();
+    await mgr.storeTokens({ accessToken: 'a', refreshToken: 'r' });
+
+    await mgr.clearTokens();
+    expect(await mgr.getTokens()).toBeNull();
+  });
+});
+
+describe('ConfigurationManager — device fingerprint', () => {
+  it('generates a stable fingerprint from the machine id and persists it', async () => {
+    const mgr = makeManager();
+
+    const first = await mgr.getDeviceFingerprint();
+    expect(first).toMatch(/^[0-9a-f]{64}$/); // sha256 hex
+
+    // Second call returns the same value (read from persisted SecretStorage).
+    const second = await mgr.getDeviceFingerprint();
+    expect(second).toBe(first);
+    expect(mock.secrets['waitlayer.deviceFingerprint']).toBe(first);
+  });
+});

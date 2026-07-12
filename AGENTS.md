@@ -257,7 +257,10 @@ serving real routes against the live Postgres + Redis (2026-07-12):
   the earnings summary (`status.exit=0`). This clears A-040's "live compiled-binary
   run blocked" claim — the standalone API runtime is sound. The only remaining
   A-075 gap is `docker build` itself, blocked by the npm-registry `ETIMEDOUT` in
-  this sandbox (the Dockerfile code path + `USER node` + HEALTHCHECK are correct).
+  this sandbox (the Dockerfile code path + `USER node` + HEALTHCHECK are correct). The
+  `docker-build` CI job now boots the compiled API image and asserts a controller
+  route resolves over TCP (non-404), so a regressed standalone build fails CI
+  rather than shipping a 404-ing image.
 - **Strict CSP blocks Next.js hydration — RESOLVED (stale).** The committed
   `apps/web/next.config.js` `headers()` CSP is
   `script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client` (the per-request nonce was removed 2026-07-11 because a nonce silently broke hydration; the committed config is now nonce-free) — `'unsafe-inline'` lets Next.js inline bootstrap / Flight / React-refresh scripts hydrate.

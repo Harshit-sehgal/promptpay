@@ -145,6 +145,11 @@ jobs:
             fi
             sleep 2
           done
-          # Controllers resolve: docs-json is mounted by the same router.
-          curl -fsS http://localhost:4002/api/v1/docs-json | head -c 200
+          # Controllers resolve over TCP (guards the standalone-404 bug class):
+          # a 404 here means the compiled image dropped a route — fail the build.
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            http://localhost:4002/api/v1/auth/login \
+            -H 'Content-Type: application/json' -d '{}')
+          if [ "$STATUS" = "404" ]; then echo "CONTROLLER ROUTE 404 — compiled image dropped a route"; exit 1; fi
+          echo "Controller route resolved over TCP (status $STATUS; expected 400/401, not 404)"
           docker compose down -v
