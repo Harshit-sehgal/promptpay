@@ -16,10 +16,10 @@ import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlaye
 
 import { AuditService } from '../audit/audit.service';
 import { EventBus } from '../common/events/event-bus';
-import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode, getErrorMessage } from '../common/utils/errors';
 import { assertSafeJson } from '../common/utils/json-value';
 import { PrismaService } from '../config/prisma.service';
+import { ReferralService } from '../referral/referral.service';
 import { StripeProvider } from './providers';
 
 type RawBodyRequest = Request & { rawBody?: Buffer | string };
@@ -41,17 +41,13 @@ const WEBHOOK_EVENT = 'stripe.webhook';
 @Controller('payout/stripe')
 export class StripeWebhookController implements OnModuleInit {
   private readonly logger = new Logger(StripeWebhookController.name);
-  // When true, webhook events are acknowledged (200) and processed off the
-  // request thread via the in-process EventBus. Off by default so integration
-  // tests and synchronous callers still observe the processing effects before
-  // the response returns.
-  private readonly asyncProcessing = process.env.WEBHOOK_ASYNC_PROCESSING === 'true';
 
   constructor(
     private readonly stripe: StripeProvider,
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly eventBus: EventBus,
+    private readonly referral: ReferralService,
   ) {}
 
   onModuleInit() {
@@ -196,7 +192,8 @@ export class StripeWebhookController implements OnModuleInit {
       where: {
         provider: 'stripe',
         eventId: event.id,
-        processingStatus: { in: ['pending', 'processing'] },
+        processingStatus: existing.processingStatus,
+        processedAt: existing.processedAt,
       },
       data: {
         processingStatus: 'processing',
@@ -208,14 +205,9 @@ export class StripeWebhookController implements OnModuleInit {
       return { received: true, reason: 'claimed_by_other' };
     }
 
-    // 4. Process event — off the request thread when async mode is enabled,
-    //    otherwise inline (awaited) so behaviour is unchanged and synchronous
-    //    callers (integration tests) observe the effect before the 200 returns.
-    if (this.asyncProcessing) {
-      this.eventBus.dispatchAsync(WEBHOOK_EVENT, { event });
-      return { received: true, reason: 'accepted_async' };
-    }
-    await this.runProcessing(event);
+    // External Stripe delivery is processed synchronously. A 2xx is returned
+    // only after ledger reconciliation and the audit record have committed.
+    await this.runProcessing(event, true);
     return { received: true };
   }
 
@@ -225,7 +217,7 @@ export class StripeWebhookController implements OnModuleInit {
    * 30-min stall-reclaim path) can reprocess it. Used by both the inline and
    * async dispatch paths.
    */
-  private async runProcessing(event: Stripe.Event): Promise<void> {
+  private async runProcessing(event: Stripe.Event, rethrow = false): Promise<void> {
     try {
       await this.processEvent(event);
     } catch (err: unknown) {
@@ -235,6 +227,12 @@ export class StripeWebhookController implements OnModuleInit {
         where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
         data: { processingStatus: 'pending' },
       });
+      if (rethrow) {
+        throw new HttpException(
+          { received: false, reason: 'processing_failed' },
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
     }
   }
 
@@ -333,6 +331,7 @@ export class StripeWebhookController implements OnModuleInit {
 
     const advertiser = await this.prisma.advertiser.findUnique({
       where: { id: result.advertiserId },
+      include: { user: { select: { status: true } } },
     });
     if (!advertiser) {
       this.logger.error(`Advertiser ${result.advertiserId} not found for checkout ${sessionId}`);
@@ -341,6 +340,48 @@ export class StripeWebhookController implements OnModuleInit {
       await this.prisma.webhookEvent.updateMany({
         where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
         data: { processingStatus: 'processed', error: 'advertiser_not_found' },
+      });
+      return;
+    }
+    if (advertiser.user.status !== 'active') {
+      // The payment completed after the owner was restricted/deleted. Record
+      // the real cash receipt, but do not resurrect account linkage or grant
+      // spendable advertiser credit. The durable webhook error + audit entry
+      // routes this payment to operator refund/reconciliation review.
+      await this.prisma.platformLedger.upsert({
+        where: { idempotencyKey: `stripe_deposit_plat_${result.paymentIntentId}` },
+        create: {
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: result.amountMinor,
+          currency: result.currency.toUpperCase(),
+          bucket: 'cash',
+          referenceId: result.paymentIntentId,
+          idempotencyKey: `stripe_deposit_plat_${result.paymentIntentId}`,
+          description: `Orphaned Stripe deposit awaiting refund review — session ${sessionId}`,
+        },
+        update: {},
+      });
+      await this.audit.logStrict({
+        actorId: 'stripe_webhook',
+        actorRole: 'system',
+        action: 'stripe_deposit_refund_required',
+        targetType: 'advertiser',
+        targetId: advertiser.id,
+        beforeSnap: {
+          paymentIntentId: result.paymentIntentId,
+          amountMinor: String(result.amountMinor),
+          currency: result.currency,
+          userStatus: advertiser.user.status,
+        },
+      });
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
+        data: {
+          processingStatus: 'processed',
+          processedAt: new Date(),
+          error: 'advertiser_inactive_refund_required',
+        },
       });
       return;
     }
@@ -368,6 +409,7 @@ export class StripeWebhookController implements OnModuleInit {
 
     // Record deposit in advertiser ledger (credit) — idempotent by paymentIntentId
     const idempotencyKey = `stripe_deposit_${result.paymentIntentId}`;
+    let depositCreated = false;
     try {
       await this.prisma.advertiserLedger.create({
         data: {
@@ -381,6 +423,7 @@ export class StripeWebhookController implements OnModuleInit {
           description: `Stripe deposit — session ${sessionId}`,
         },
       });
+      depositCreated = true;
     } catch (err: unknown) {
       if (getErrorCode(err) === 'P2002') {
         this.logger.warn(
@@ -388,6 +431,38 @@ export class StripeWebhookController implements OnModuleInit {
         );
       } else {
         throw err;
+      }
+    }
+
+    // Refunds can arrive before checkout completion. The refund handler can
+    // record the real cash outflow without knowing the advertiser; on the first
+    // successful deposit insert, attach those prior cash refunds to the
+    // advertiser ledger. A duplicate checkout does not repeat this catch-up.
+    if (depositCreated) {
+      const earlierCashRefunds = await this.prisma.platformLedger.findMany({
+        where: {
+          bucket: 'cash',
+          entryType: 'refund',
+          status: 'confirmed',
+          referenceId: result.paymentIntentId,
+        },
+        select: { id: true, amountMinor: true, currency: true },
+      });
+      for (const cashRefund of earlierCashRefunds) {
+        await this.prisma.advertiserLedger.upsert({
+          where: { idempotencyKey: `stripe_refund_catchup_${cashRefund.id}` },
+          create: {
+            advertiserId: advertiser.id,
+            stripePaymentIntentId: result.paymentIntentId,
+            entryType: 'refund',
+            status: 'confirmed',
+            amountMinor: cashRefund.amountMinor,
+            currency: cashRefund.currency,
+            idempotencyKey: `stripe_refund_catchup_${cashRefund.id}`,
+            description: `Out-of-order Stripe refund reconciled after deposit — ${result.paymentIntentId}`,
+          },
+          update: {},
+        });
       }
     }
 
@@ -421,46 +496,52 @@ export class StripeWebhookController implements OnModuleInit {
       }
     }
 
-    // Update webhook event as processed
-    await this.prisma.webhookEvent.updateMany({
-      where: { provider: 'stripe', eventId: event.id },
-      data: { processingStatus: 'processed', processedAt: new Date() },
-    });
-
     // ── A-019: activate campaigns that were approved while unfunded ──
     // A campaign can reach `approved` before the advertiser has deposited. The
     // Stripe deposit webhook now credits the advertiser balance, so activate
     // any `approved` campaign that has an approved creative, remaining budget,
     // and a positive same-currency balance. This closes the gap where an
     // approved-then-funded campaign would otherwise never start serving.
-    const approvedCampaigns = await this.prisma.campaign.findMany({
-      where: { advertiserId: advertiser.id, status: 'approved' },
-      include: { creatives: { where: { status: 'approved' } } },
-    });
-    for (const campaign of approvedCampaigns) {
-      if (campaign.creatives.length === 0) continue;
-      if (campaign.budgetSpentMinor >= campaign.budgetTotalMinor) continue;
-      const balance = await getAdvertiserBalance(
-        this.prisma,
-        campaign.advertiserId,
-        campaign.currency,
+    // Activate every eligible campaign in one database-side statement. The
+    // previous findMany + per-campaign balance query was unbounded N+1 work on
+    // the webhook request and could time out for a large advertiser.
+    const activatedCount = await this.prisma.$executeRaw(Prisma.sql`
+      WITH balances AS (
+        SELECT
+          "advertiserId",
+          "currency",
+          SUM(
+            CASE
+              WHEN "entryType" IN ('credit', 'reversal') AND "status" = 'confirmed'
+                THEN "amountMinor"
+              WHEN "entryType" = 'debit' AND "status" = 'confirmed'
+                THEN -"amountMinor"
+              WHEN "entryType" = 'refund' AND "status" IN ('pending', 'confirmed')
+                THEN -"amountMinor"
+              ELSE 0
+            END
+          )::bigint AS balance
+        FROM "advertiser_ledger"
+        WHERE "advertiserId" = ${advertiser.id}
+        GROUP BY "advertiserId", "currency"
+      )
+      UPDATE "campaigns" c
+      SET "status" = 'active', "activatedAt" = NOW(), "updatedAt" = NOW()
+      FROM balances b
+      WHERE c."advertiserId" = b."advertiserId"
+        AND c."currency" = b."currency"
+        AND b.balance > 0
+        AND c."status" = 'approved'
+        AND c."budgetSpentMinor" < c."budgetTotalMinor"
+        AND EXISTS (
+          SELECT 1 FROM "ad_creatives" cr
+          WHERE cr."campaignId" = c."id" AND cr."status" = 'approved'
+        )
+    `);
+    if (activatedCount > 0) {
+      this.logger.log(
+        `Activated ${activatedCount} previously-unfunded campaign(s) after deposit for advertiser ${advertiser.id}`,
       );
-      if (balance > 0) {
-        // CAS-gated auto-activation: same pattern as
-        // approveCreative auto-activation. A concurrent
-        // archiveCampaign or admin rejectCampaign could flip
-        // the status away from 'approved' — a plain update
-        // would silently overwrite it.
-        const flip = await this.prisma.campaign.updateMany({
-          where: { id: campaign.id, status: 'approved' },
-          data: { status: 'active', activatedAt: new Date() },
-        });
-        if (flip.count > 0) {
-          this.logger.log(
-            `Activated previously-unfunded approved campaign ${campaign.id} after deposit`,
-          );
-        }
-      }
     }
 
     this.logger.log(
@@ -468,7 +549,7 @@ export class StripeWebhookController implements OnModuleInit {
     );
 
     // Audit: Stripe deposit — key money-in event, no actor id (system).
-    void this.audit.log({
+    await this.audit.logStrict({
       actorId: 'stripe_webhook',
       actorRole: 'system',
       action: 'stripe_deposit',
@@ -481,6 +562,10 @@ export class StripeWebhookController implements OnModuleInit {
         sessionId,
       },
     });
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
+    });
   }
 
   /** Reverse advertiser ledger entries when a charge is refunded */
@@ -490,6 +575,15 @@ export class StripeWebhookController implements OnModuleInit {
 
     if (!details.paymentIntentId) {
       this.logger.warn(`Refund event ${event.id} has no payment_intent — cannot reverse`);
+      // Mark the webhook event processed so the row converges to a terminal
+      // state — otherwise the 30-min stall-reclaim path would re-pull this
+      // event forever and Stripe would re-deliver on top of it. Without a
+      // payment_intent we have nothing to reconcile; the early-return is
+      // intentional and terminating. (Issue A-062.)
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
       return;
     }
 
@@ -584,6 +678,59 @@ export class StripeWebhookController implements OnModuleInit {
       return;
     }
 
+    // ── Restore parent-deposit remainder before reversing ──
+    // Issue A-063 / Round 27 Fix 1: handleDispute.decrement freezes the
+    // disputed slice by decrementing the parent deposit credit row's
+    // `amountMinor` by the held amount (the separate `hold` ledger row
+    // carries the full frozen value). When a refund arrives on a payment
+    // intent that was ALSO disputed, the per-entry reversal loop below
+    // bounds `reversalAmount = min(entry.amountMinor, remaining)` — but
+    // `entry.amountMinor` is now the **post-dispute decrement** remainder
+    // (e.g. 0 on a fully-disputed deposit). Net result: a 0-amount advertiser
+    // refund row, the parent still flips to `reversed`, and the full
+    // deposit balance becomes orphaned as spendable against a deposit
+    // that's been returned to the cardholder.
+    //
+    // Fix: before the reversal loop, re-increment each parent credit row by
+    // every held-slice that was decremented from it. The held row's
+    // `amountMinor` IS the slice that was removed at dispute time; adding it
+    // back restores the parent to its original deposit value, and the
+    // subsequent reversal loop writes the correct full refund. CAS-gated on
+    // `status: { notIn: ['reversed','void'] }` so we never touch a parent
+    // that's already been settled by a prior full refund.
+    //
+    // Pairing hold → parent: same `stripePaymentIntentId` with the matching
+    // (advertiserId, campaignId) triple used by the dispute decrement.
+    // Idempotent: a re-delivery of the same refund finds the holds already
+    // retired (status ≠ 'held') and skips them.
+    const heldRows = await this.prisma.advertiserLedger.findMany({
+      where: {
+        stripePaymentIntentId: details.paymentIntentId,
+        entryType: 'hold',
+        status: 'held',
+      },
+      select: {
+        id: true,
+        amountMinor: true,
+        advertiserId: true,
+        campaignId: true,
+        currency: true,
+      },
+    });
+    for (const hold of heldRows) {
+      await this.prisma.advertiserLedger.updateMany({
+        where: {
+          stripePaymentIntentId: details.paymentIntentId,
+          advertiserId: hold.advertiserId,
+          campaignId: hold.campaignId,
+          entryType: 'credit',
+          status: { notIn: ['reversed', 'void'] },
+          stripeDisputeId: null,
+        },
+        data: { amountMinor: { increment: hold.amountMinor } },
+      });
+    }
+
     // Create a reversal entry for each active entry on this payment intent.
     // Each refund row is idempotent on `stripe_refund_{pi}_{refundId}_{entryId}`
     // (so a re-delivered webhook for the SAME refund.id is a no-op P2002 skip).
@@ -627,32 +774,9 @@ export class StripeWebhookController implements OnModuleInit {
           this.logger.warn(`Duplicate refund entry for ${idempotencyKey} — skipping`);
         }
 
-        // Re-aggregate INSIDE the transaction: the threshold now reflects
-        // every refund row visible at this serializable point, so the
-        // flip decision is consistent with the refund write above.
-        const totalReversed = await tx.advertiserLedger.aggregate({
-          where: {
-            stripePaymentIntentId: details.paymentIntentId,
-            entryType: 'refund',
-          },
-          _sum: { amountMinor: true },
-        });
-        if ((totalReversed._sum.amountMinor ?? 0n) < entry.amountMinor) {
-          return; // not yet fully reversed — leave parent in its active state
-        }
-
-        // CAS flip: only wins if the parent row is still in an active
-        // status. A concurrent delivery that already flipped it sees
-        // count === 0 here and is a clean no-op (no re-mark, no error).
-        const cas = await tx.advertiserLedger.updateMany({
-          where: { id: entry.id, status: { notIn: ['reversed', 'void'] } },
-          data: { status: 'reversed' },
-        });
-        if (cas.count === 0) {
-          this.logger.warn(
-            `Parent entry ${entry.id} already reversed/void — refund ${refund.id} recorded but flip skipped`,
-          );
-        }
+        // Keep the original deposit credit immutable/confirmed. The central
+        // balance formula subtracts confirmed refund rows; also reversing the
+        // parent credit would subtract the same refund twice.
       });
     }
 
@@ -687,18 +811,12 @@ export class StripeWebhookController implements OnModuleInit {
       );
     }
 
-    // Update webhook event as processed
-    await this.prisma.webhookEvent.updateMany({
-      where: { provider: 'stripe', eventId: event.id },
-      data: { processingStatus: 'processed', processedAt: new Date() },
-    });
-
     this.logger.log(
       `Refund processed: paymentIntent=${details.paymentIntentId}, amount=${totalRefunded} ${details.currency}`,
     );
 
     // Audit: Stripe refund — money out event
-    void this.audit.log({
+    await this.audit.logStrict({
       actorId: 'stripe_webhook',
       actorRole: 'system',
       action: 'stripe_refund',
@@ -709,6 +827,10 @@ export class StripeWebhookController implements OnModuleInit {
         currency: details.currency,
         refundId: refund.id,
       },
+    });
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
     });
   }
 
@@ -878,16 +1000,11 @@ export class StripeWebhookController implements OnModuleInit {
     //     same dispute can leave holds stranded after the legitimate one is
     //     resolved.
     //
-    // Round 23 (MED #3) closed this by routing the deduplication through a
-    // pre-check keyed on `evidence.stripeDisputeId`. The FraudFlag model has
-    // no unique constraint on the JSON evidence path (`@@index` only), so
-    // the P2002 catch below (defensive — there for the day someone adds such
-    // a constraint) is the only DB-level guard. The pre-check is the real
-    // safety; the catch is future-proofing.
-    const existingForDispute = await this.prisma.fraudFlag.findFirst({
-      where: {
-        evidence: { path: ['stripeDisputeId'], equals: dispute.id },
-      },
+    // Fast-path duplicate check. The typed @unique stripeDisputeId column is
+    // the authoritative concurrency floor; the P2002 catch below closes the
+    // read/create race between distinct Stripe event ids for one dispute.
+    const existingForDispute = await this.prisma.fraudFlag.findUnique({
+      where: { stripeDisputeId: dispute.id },
       select: { id: true },
     });
     if (existingForDispute) {
@@ -899,6 +1016,7 @@ export class StripeWebhookController implements OnModuleInit {
         await this.prisma.fraudFlag.create({
           data: {
             userId: advertiser.userId,
+            stripeDisputeId: dispute.id,
             flagType: FraudFlagType.shared_payout_destination,
             severity: details.status === 'lost' ? FraudSeverity.critical : FraudSeverity.high,
             status: FraudFlagStatus.open,
@@ -919,25 +1037,17 @@ export class StripeWebhookController implements OnModuleInit {
         if (getErrorCode(err) === 'P2002') {
           this.logger.warn(`Duplicate dispute flag for ${dispute.id} — skipping`);
         } else {
-          this.logger.error(
-            `Failed to create fraud flag for dispute ${dispute.id}: ${getErrorMessage(err)}`,
-          );
+          throw err;
         }
       }
     }
-
-    // Update webhook event as processed
-    await this.prisma.webhookEvent.updateMany({
-      where: { provider: 'stripe', eventId: event.id },
-      data: { processingStatus: 'processed', processedAt: new Date() },
-    });
 
     this.logger.log(
       `Dispute flagged + frozen: paymentIntent=${details.paymentIntentId}, advertiser=${advertiserId}, reason=${details.reason}`,
     );
 
     // Audit: dispute opened — funds frozen, flag created
-    void this.audit.log({
+    await this.audit.logStrict({
       actorId: 'stripe_webhook',
       actorRole: 'system',
       action: 'stripe_dispute_created',
@@ -949,6 +1059,10 @@ export class StripeWebhookController implements OnModuleInit {
         amountMinor: String(details.amountMinor),
         advertiserId,
       },
+    });
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
     });
   }
 
@@ -1070,17 +1184,12 @@ export class StripeWebhookController implements OnModuleInit {
       });
     }
 
-    await this.prisma.webhookEvent.updateMany({
-      where: { provider: 'stripe', eventId: event.id },
-      data: { processingStatus: 'processed', processedAt: new Date() },
-    });
-
     this.logger.log(
       `Dispute closed (${dispute.status}): dispute=${dispute.id}, holds_processed=${holdEntries.length}`,
     );
 
     // Audit: dispute closed — funds released or written off
-    void this.audit.log({
+    await this.audit.logStrict({
       actorId: 'stripe_webhook',
       actorRole: 'system',
       action: 'stripe_dispute_closed',
@@ -1091,6 +1200,10 @@ export class StripeWebhookController implements OnModuleInit {
         holdsProcessed: holdEntries.length,
         paymentIntentId: details.paymentIntentId,
       },
+    });
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
     });
   }
 
@@ -1146,6 +1259,15 @@ export class StripeWebhookController implements OnModuleInit {
     // Idempotent fast-path: already paid means the webhook is a re-delivery.
     if (payoutRequest.status === 'paid') {
       this.logger.log(`Stripe payout.paid for ${providerTxId} — already paid, acknowledging`);
+      await this.referral.processReferralRewards(payoutRequest.userId);
+      await this.audit.logStrict({
+        actorId: 'stripe_webhook',
+        actorRole: 'system',
+        action: 'stripe_payout_paid',
+        targetType: 'payout_request',
+        targetId: payoutRequestId,
+        beforeSnap: { providerTxId, replay: true },
+      });
       await this.prisma.webhookEvent.updateMany({
         where: { provider: 'stripe', eventId: event.id },
         data: { processingStatus: 'processed', processedAt: new Date() },
@@ -1212,8 +1334,28 @@ export class StripeWebhookController implements OnModuleInit {
           }
         }
 
+        await txCnx.platformLedger.upsert({
+          where: { idempotencyKey: `developer_payout_cash_${payoutRequestId}` },
+          create: {
+            entryType: 'reversal',
+            status: 'confirmed',
+            amountMinor: payoutRequest.approvedAmountMinor ?? payoutRequest.requestedAmountMinor,
+            currency: payoutRequest.currency,
+            bucket: 'cash',
+            referenceId: payoutRequestId,
+            idempotencyKey: `developer_payout_cash_${payoutRequestId}`,
+            description: `Developer payout cash settled — payout ${payoutRequestId}`,
+          },
+          update: {},
+        });
+
         return { claimed: 1 as const };
       });
+      if ('conflict' in result) {
+        throw new Error(
+          `Stripe payout.paid for ${payoutRequestId} conflicts with local status '${result.conflict}'`,
+        );
+      }
       claimed = result.claimed;
     } catch (err: unknown) {
       // Throwing inside the tx rolls back the payoutRequest flip + payoutTx
@@ -1223,33 +1365,26 @@ export class StripeWebhookController implements OnModuleInit {
       this.logger.error(
         `Stripe payout.paid reconciliation failed for ${payoutRequestId} (will retry): ${getErrorMessage(err)}`,
       );
-      await this.prisma.webhookEvent.updateMany({
-        where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
-        data: { processingStatus: 'pending' },
-      });
-      return;
+      throw err;
     }
-
-    await this.prisma.webhookEvent.updateMany({
-      where: { provider: 'stripe', eventId: event.id },
-      data: { processingStatus: 'processed', processedAt: new Date() },
-    });
 
     this.logger.log(
       `Stripe payout.paid: payoutRequest=${payoutRequestId}, providerTxId=${providerTxId}, claimed=${claimed}`,
     );
 
-    if (claimed) {
-      // Audit: payout completed
-      void this.audit.log({
-        actorId: 'stripe_webhook',
-        actorRole: 'system',
-        action: 'stripe_payout_paid',
-        targetType: 'payout_request',
-        targetId: payoutRequestId,
-        beforeSnap: { providerTxId },
-      });
-    }
+    await this.referral.processReferralRewards(payoutRequest.userId);
+    await this.audit.logStrict({
+      actorId: 'stripe_webhook',
+      actorRole: 'system',
+      action: 'stripe_payout_paid',
+      targetType: 'payout_request',
+      targetId: payoutRequestId,
+      beforeSnap: { providerTxId, claimed: Boolean(claimed) },
+    });
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
+    });
   }
 
   /**
@@ -1281,80 +1416,33 @@ export class StripeWebhookController implements OnModuleInit {
       return;
     }
 
-    const payoutRequestId = tx.payoutRequestId;
-    // Idempotent fast-path: already failed means the webhook is a re-delivery.
-    if (tx.payoutRequest.status === 'failed') {
-      this.logger.log(`Stripe payout.failed for ${providerTxId} — already failed, acknowledging`);
-      await this.prisma.webhookEvent.updateMany({
-        where: { provider: 'stripe', eventId: event.id },
-        data: { processingStatus: 'processed', processedAt: new Date() },
-      });
-      return;
-    }
+    const failureReason =
+      `Stripe bank payout ${payout.id} reached ${payout.status}; ` +
+      'the preceding platform transfer may already be in the connected account and requires manual reconciliation';
 
-    // The Stripe `Payout` resource surfaces failure detail only on expanded
-    // sub-resources; for the webhook we record the payout id + status as the
-    // failure reason so an admin can correlate to the Stripe dashboard. The
-    // authoritative terminal state lives on the row, not this string.
-    const failureReason = `Stripe payout ${payout.id} failed (status=${payout.status})`;
-
-    // Single atomic transaction:
-    //   1. CAS-flip PayoutRequest from approved/processing → failed (so a
-    //      concurrent markPayoutPaid doesn't double-flip).
-    //   2. Mark the per-provider PayoutTransaction row failed (gate on the
-    //      same pre-states — its own terminal transition).
-    //   3. Delete the PayoutAllocation rows for this request so the developer's
-    //      earnings entries are un-reserved — they become available again for
-    //      a fresh payout request after the admin corrects the destination
-    //      account via `processPayout`. Without this, the allocations keep
-    //      referencing a `failed` request and `getAvailableForPayout` excludes
-    //      them, but the entries are no longer being paid out — they'd be
-    //      stranded in limbo (allocated-but-not-paid, never retriable).
-    //      Earnings rows themselves stay `confirmed` (they were never paid),
-    //      so no earnings-status flip is needed on failure.
-    await this.prisma.$transaction(async (txCnx: Prisma.TransactionClient) => {
-      const claimed = await txCnx.payoutRequest.updateMany({
-        where: { id: payoutRequestId, status: { in: ['approved', 'processing'] } },
-        data: { status: 'failed' },
-      });
-      if (claimed.count === 0) {
-        // Lost the race — a concurrent caller already moved this payout to a
-        // terminal state (paid or failed). Nothing to do; the per-tx row below
-        // is also gated so it no-ops. Don't throw — failures are not retriable
-        // the way `paid` holdings are; the admin will initiate a fresh
-        // PayoutRequest after fixing the destination.
-        return;
-      }
-
-      await txCnx.payoutTransaction.updateMany({
-        where: { id: tx.id, status: { in: ['approved', 'processing'] } },
-        data: { status: 'failed', failureReason: `Stripe payout failed: ${failureReason}` },
-      });
-
-      // Un-reserve the allocations so the developer's earnings become
-      // available for a retry payout. The EarningsLedger rows stay `confirmed`.
-      await txCnx.payoutAllocation.deleteMany({
-        where: { payoutRequestId },
-      });
+    // Do not release allocations or mark the request failed. Stripe Connect
+    // first transfers funds to the connected account; a later bank-payout
+    // failure returns money to that connected account, not necessarily to the
+    // platform. Releasing here can double-pay the developer.
+    await this.prisma.payoutTransaction.update({
+      where: { id: tx.id },
+      data: { failureReason },
     });
-
-    await this.prisma.webhookEvent.updateMany({
-      where: { provider: 'stripe', eventId: event.id },
-      data: { processingStatus: 'processed', processedAt: new Date() },
-    });
-
-    this.logger.log(
-      `Stripe payout.failed: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId}, reason=${failureReason}`,
+    this.logger.warn(
+      `Stripe payout requires reconciliation: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId}`,
     );
 
-    // Audit: payout failed — needs retry
-    void this.audit.log({
+    await this.audit.logStrict({
       actorId: 'stripe_webhook',
       actorRole: 'system',
-      action: 'stripe_payout_failed',
+      action: 'stripe_payout_requires_review',
       targetType: 'payout_request',
       targetId: tx.payoutRequestId,
       beforeSnap: { providerTxId, failureReason },
+    });
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
     });
   }
 }

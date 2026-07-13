@@ -98,16 +98,25 @@ export class ExtensionDeviceReportTrait {
         recoveryMode = await this.assertDeviceRecoveryProof(userId, dto, existingDevice.id);
       }
       const rotatedSecret = crypto.randomBytes(32).toString('hex');
-      const updated = await this.prisma.device.update({
-        where: { id: existingDevice.id },
-        data: {
-          toolType: dto.toolType as ToolTypeEnum,
-          extensionVersion: dto.extensionVersion,
-          platform: dto.platform,
-          eventSecret: rotatedSecret,
-          lastSeenAt: new Date(),
-        },
-      });
+      const updateData = {
+        toolType: dto.toolType as ToolTypeEnum,
+        extensionVersion: dto.extensionVersion,
+        platform: dto.platform,
+        eventSecret: rotatedSecret,
+        lastSeenAt: new Date(),
+      };
+      const updated =
+        recoveryMode === 'support'
+          ? await this.consumeSupportRecoveryAndRotate(
+              userId,
+              existingDevice.id,
+              dto.recoverySupportToken!,
+              updateData,
+            )
+          : await this.prisma.device.update({
+              where: { id: existingDevice.id },
+              data: updateData,
+            });
       await this.audit.log({
         actorId: userId,
         actorRole: 'developer',
@@ -310,30 +319,82 @@ export class ExtensionDeviceReportTrait {
       });
       throw new UnauthorizedException('Support recovery token is invalid or expired');
     }
-    const consumed = await this.prisma.deviceRecoveryToken.updateMany({
-      where: {
-        id: recoveryToken.id,
-        userId,
-        deviceId,
-        tokenHash,
-        usedAt: null,
-        revokedAt: null,
-        expiresAt: { gt: now },
-      },
-      data: { usedAt: now },
-    });
-    if (consumed.count !== 1) {
-      await this.audit.log({
-        actorId: userId,
-        actorRole: 'developer',
-        action: 'device_secret_recovery_rejected',
-        targetType: 'device',
-        targetId: deviceId,
-        afterSnap: { reason: 'support_token_race_lost' },
-      });
-      throw new UnauthorizedException('Support recovery token is invalid or expired');
-    }
     return 'support';
+  }
+
+  /**
+   * Atomically consume the one-time support token and rotate the device secret.
+   * If the device write fails, PostgreSQL rolls the token's usedAt change back,
+   * so an operator-issued recovery credential is never burned without actually
+   * restoring the device.
+   */
+  async consumeSupportRecoveryAndRotate(
+    userId: string,
+    deviceId: string,
+    supportToken: string,
+    updateData: {
+      toolType: ToolTypeEnum;
+      extensionVersion?: string;
+      platform?: string;
+      eventSecret: string;
+      lastSeenAt: Date;
+    },
+  ) {
+    const tokenHash = hashDeviceRecoveryToken(supportToken);
+    const now = new Date();
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const recoveryToken = await tx.deviceRecoveryToken.findUnique({
+          where: { tokenHash },
+          select: {
+            id: true,
+            userId: true,
+            deviceId: true,
+            expiresAt: true,
+            usedAt: true,
+            revokedAt: true,
+          },
+        });
+        if (
+          !recoveryToken ||
+          recoveryToken.userId !== userId ||
+          recoveryToken.deviceId !== deviceId ||
+          recoveryToken.usedAt ||
+          recoveryToken.revokedAt ||
+          recoveryToken.expiresAt <= now
+        ) {
+          throw new UnauthorizedException('Support recovery token is invalid or expired');
+        }
+        const consumed = await tx.deviceRecoveryToken.updateMany({
+          where: {
+            id: recoveryToken.id,
+            userId,
+            deviceId,
+            tokenHash,
+            usedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: now },
+          },
+          data: { usedAt: now },
+        });
+        if (consumed.count !== 1) {
+          throw new UnauthorizedException('Support recovery token is invalid or expired');
+        }
+        return tx.device.update({ where: { id: deviceId }, data: updateData });
+      });
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        await this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'device_secret_recovery_rejected',
+          targetType: 'device',
+          targetId: deviceId,
+          afterSnap: { reason: 'support_token_invalid_or_race_lost' },
+        });
+      }
+      throw error;
+    }
   }
 
   async reportAd(
@@ -360,53 +421,55 @@ export class ExtensionDeviceReportTrait {
     if (!(await this.verifyDeviceSignature(impression.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
-    // Create report and invalidate the impression. If the impression was
-    // already billed (isBillable=true), we must also reverse the ledger
+    // Create the report once and invalidate the impression. If the impression was
+    // billed, we must also reverse the ledger
     // entries — otherwise the advertiser stays debited, the developer keeps
     // earnings, and platform keeps fee + fraud_reserve for an impression we
     // now believe was invalid (3-way money orphan). reverseEarnings is
-    // idempotent (deterministic `-rev` idempotency keys with upsert no-op),
-    // so calling it when no ledger rows exist yet (impression reported
-    // before qualification billed it) is a safe no-op. Guard on the prior
-    // isBillable value so we don't reverse twice for a re-report (a second
-    // report on an already-invalidated impression sees isBillable=false and
-    // skips the reverse — the first report already did it).
-    const wasBillable = impression.isBillable;
-    const [report] = await this.prisma.$transaction([
-      this.prisma.adReport.create({
-        data: {
-          impressionId: impression.id,
-          creativeId: impression.creativeId,
-          userId,
-          reason: dto.reason,
-          details: dto.details,
-        },
-      }),
-      this.prisma.adImpression.update({
-        where: { id: impression.id },
-        data: {
-          isBillable: false,
-          invalidationReason: `user_reported:${dto.reason}`,
-          invalidatedAt: new Date(),
-        },
-      }),
-    ]);
-    // Reverse the money only if this impression had been billed. A
-    // reported-but-not-yet-qualified impression has no ledger rows to
-    // reverse. reverseEarnings leaves 'paid' developer entries in place
+    // idempotent (deterministic reversal keys with upsert no-op), so it MUST be
+    // retried even after isBillable was already flipped false. The old guard on
+    // the snapshot value permanently skipped compensation when the first
+    // reversal attempt failed after the report transaction committed.
+    const existingReport = await this.prisma.adReport.findFirst({
+      where: { impressionId: impression.id, userId },
+      orderBy: { createdAt: 'asc' },
+    });
+    let report = existingReport;
+    if (!report) {
+      [report] = await this.prisma.$transaction([
+        this.prisma.adReport.create({
+          data: {
+            impressionId: impression.id,
+            creativeId: impression.creativeId,
+            userId,
+            reason: dto.reason,
+            details: dto.details,
+          },
+        }),
+        this.prisma.adImpression.update({
+          where: { id: impression.id },
+          data: {
+            isBillable: false,
+            invalidationReason: `user_reported:${dto.reason}`,
+            invalidatedAt: new Date(),
+          },
+        }),
+      ]);
+    }
+    // Always attempt the deterministic reversal. A reported-but-never-billed
+    // impression has no forward ledger rows, making this a safe no-op. Paid
+    // developer entries remain immutable
     // (matureEarnings already moved them past reversal) — those require a
     // separate claw-back flow documented in the ledger; the surface here
     // reports `paidSkipped` so the caller/operator knows money already left.
-    if (wasBillable) {
-      const result = await this.ledger.reverseEarnings(
-        { impressionId: impression.id },
-        `User-reported ad: ${dto.reason}`,
+    const result = await this.ledger.reverseEarnings(
+      { impressionId: impression.id },
+      `User-reported ad: ${dto.reason}`,
+    );
+    if (result.paidSkipped > 0) {
+      this.logger.warn(
+        `reportAd: ${result.paidSkipped} paid earnings entry(ies) for impression ${impression.id} could not be reversed (already paid out)`,
       );
-      if (result.paidSkipped > 0) {
-        this.logger.warn(
-          `reportAd: ${result.paidSkipped} paid earnings entry(ies) for impression ${impression.id} could not be reversed (already paid out)`,
-        );
-      }
     }
     // Audit log for ad report (security-relevant: impression invalidated)
     void this.audit.log({

@@ -4,7 +4,11 @@ node_modules
 dist
 coverage
 .turbo
-.env.local
-.env.*.local
+.env
+**/.env
+.env.*
+**/.env.*
+!.env.example
+!**/.env.example
 *.md
 .DS_Store

@@ -19,7 +19,7 @@ const STATIC_CACHEABLE_PATHS = [
 ];
 
 /**
- * Next.js middleware that gates protected routes on the httpOnly
+ * Next.js proxy that gates protected routes on the httpOnly
  * `access_token` cookie.
  *
  * History:
@@ -31,7 +31,7 @@ const STATIC_CACHEABLE_PATHS = [
  *       `localStorage`, exposed to any XSS exfiltration.
  *   (3) Now (this version) tokens live in httpOnly cookies (`access_token` +
  *       `refresh_token`) set by the Next.js Route Handlers — not reachable
- *       by JavaScript at all. Middleware verifies the httpOnly `access_token`
+ *       by JavaScript at all. The proxy verifies the httpOnly `access_token`
  *       cookie the same way.
  *
  * Edge-runtime compatible: `jose` is zero-dependency and works in Next.js
@@ -70,7 +70,7 @@ function getJwtSecret(): Uint8Array | null {
   return new TextEncoder().encode(raw);
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Fail fast in production if the web env (in particular JWT_SECRET, which
   // must match the API's) is missing/unsafe. In dev/test this is a no-op
   // (A-016). Throwing here surfaces the misconfiguration instead of silently
@@ -120,13 +120,12 @@ export async function middleware(request: NextRequest) {
     const secret = getJwtSecret();
     if (!secret) return false;
     try {
-      await jwtVerify(refreshCookie.value, secret, { clockTolerance: '30s' });
-      return true;
-    } catch (e) {
-      // Signature is valid but the token is expired → still a legitimate
-      // (ours) token the client can refresh. Any other error means the
-      // cookie is forged/garbage and must not grant passage.
-      return e instanceof errors.JWTExpired;
+      const { payload } = await jwtVerify(refreshCookie.value, secret, {
+        clockTolerance: '30s',
+      });
+      return payload.aud === 'refresh' && Boolean(payload.sub) && Boolean(payload.jti);
+    } catch {
+      return false;
     }
   };
 
@@ -146,7 +145,10 @@ export async function middleware(request: NextRequest) {
     if (!secret) {
       return redirectToLogin(pathname, request);
     }
-    await jwtVerify(token, secret, { clockTolerance: '30s' });
+    const { payload } = await jwtVerify(token, secret, { clockTolerance: '30s' });
+    if (payload.aud !== 'access' || !payload.sub || !payload.jti) {
+      return redirectToLogin(pathname, request);
+    }
     return NextResponse.next();
   } catch (err) {
     if (err instanceof errors.JWTExpired && (await hasValidRefresh())) {
@@ -157,17 +159,6 @@ export async function middleware(request: NextRequest) {
 }
 
 function redirectToLogin(_pathname: string, request: NextRequest): NextResponse {
-  // NOTE: previously this appended `?returnUrl=<pathname>` to the login URL.
-  // That param was never read by /auth/login (no consumer existed) AND posed
-  // a latent open-redirect: if a future login page naively read+redirected
-  // to it, an attacker could replay a crafted `returnUrl` against a victim's
-  // still-valid cookie to bounce them off-site after a legitimate login.
-  // Post-login, the browser naturally lands on the dashboard the auth-context
-  // chooses — no server-side return target is needed. Dropped to remove both
-  // the dead param and the redirect-oracle surface. The `pathname` argument is
-  // retained in the signature (prefixed `_`) for future audit routing — e.g.
-  // logging the original protected route on a redirect — without re-introducing
-  // a client-controllable redirect target.
   const loginUrl = new URL('/auth/login', request.url);
   return NextResponse.redirect(loginUrl);
 }
@@ -175,7 +166,7 @@ function redirectToLogin(_pathname: string, request: NextRequest): NextResponse 
 export const config = {
   matcher: [
     /*
-     * Match only protected prefix paths so middleware (including jose JWT
+     * Match only protected prefix paths so the proxy (including jose JWT
      * verification) is loaded in Edge runtime only for auth-gated pages, not
      * for every public page (homepage, login, signup, etc.). Public pages
      * pass through without the Edge runtime cost.
@@ -186,7 +177,7 @@ export const config = {
     '/developer/:path*',
     '/advertiser/:path*',
     '/admin/:path*',
-    // Public static/marketing pages — middleware handles caching headers
+    // Public static/marketing pages — the proxy handles caching headers
     '/',
     '/pricing',
     '/comparison',

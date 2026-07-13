@@ -163,7 +163,8 @@ export const adminApi = {
   toggleToolIntegration: (slug: string, isActive: boolean) =>
     api.post(`/admin/tools/${slug}/toggle`, { isActive: String(isActive) }),
   getWebhookEvents: (params?: Record<string, unknown>) => api.get('/admin/webhooks', { params }),
-  getPendingArchiveRefunds: () => api.get('/admin/refunds/archive/pending'),
+  getPendingArchiveRefunds: (params?: { page?: number; limit?: number }) =>
+    api.get('/admin/refunds/archive/pending', { params }),
   confirmArchiveRefund: (id: string, stripeRefundPaymentIntentId: string) =>
     api.post(`/admin/refunds/archive/${id}/confirm`, { stripeRefundPaymentIntentId }),
   getDevices: (params?: Record<string, unknown>) => api.get('/admin/devices', { params }),

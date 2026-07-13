@@ -2403,6 +2403,72 @@ describe('E2E Money Loop', () => {
       expect(mockPrisma.device.update).not.toHaveBeenCalled();
     });
 
+    it('rolls back support-token consumption when device-secret rotation fails', async () => {
+      const userId = uid('u');
+      const deviceId = uid('dev');
+      const supportToken = 'support-token-rotation-failure-123456789';
+      const tokenHash = crypto.createHash('sha256').update(supportToken, 'utf8').digest('hex');
+      const existingDevice = {
+        id: deviceId,
+        userId,
+        eventSecret: 'old-event-secret',
+        fingerprintHash: 'atomic-support-recovery-fp',
+        toolType: 'claude_code',
+      };
+      const tokenRow = {
+        id: 'atomic-support-token-id',
+        userId,
+        deviceId,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 15 * 60_000),
+        usedAt: null as Date | null,
+        revokedAt: null,
+      };
+
+      mockPrisma.device.findUnique.mockResolvedValue(existingDevice);
+      mockPrisma.user.findUnique.mockResolvedValue({
+        passwordHash: null,
+        googleId: null,
+        email: 'future-provider@example.com',
+      });
+      mockPrisma.deviceRecoveryToken.findUnique.mockImplementation(() =>
+        Promise.resolve({ ...tokenRow }),
+      );
+      mockPrisma.$transaction.mockImplementationOnce(async (callback: any) => {
+        const usedBefore = tokenRow.usedAt;
+        const tx = {
+          deviceRecoveryToken: {
+            findUnique: vi.fn(() => Promise.resolve({ ...tokenRow })),
+            updateMany: vi.fn(({ data }: any) => {
+              tokenRow.usedAt = data.usedAt;
+              return Promise.resolve({ count: 1 });
+            }),
+          },
+          device: {
+            update: vi.fn().mockRejectedValue(new Error('device write failed')),
+          },
+        };
+        try {
+          return await callback(tx);
+        } catch (error) {
+          // Model PostgreSQL transaction rollback for the in-memory token row.
+          tokenRow.usedAt = usedBefore;
+          throw error;
+        }
+      });
+
+      await expect(
+        svc.extension.registerDevice(userId, {
+          toolType: 'claude_code',
+          fingerprintHash: existingDevice.fingerprintHash,
+          recoverySupportToken: supportToken,
+        }),
+      ).rejects.toThrow('device write failed');
+
+      expect(tokenRow.usedAt).toBeNull();
+      expect(mockPrisma.device.update).not.toHaveBeenCalled();
+    });
+
     it('lists users with unrecovered paid-fraud debt and attaches their latest collections case', async () => {
       const userId = uid('u');
       mockPrisma.earningsLedger.groupBy

@@ -1,4 +1,4 @@
-import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FraudService } from './fraud.service';
 
@@ -58,6 +58,8 @@ const mockPrisma = {
   waitStateEvent: {
     groupBy: vi.fn(),
   },
+  $executeRaw: vi.fn().mockResolvedValue(1),
+  $queryRaw: vi.fn().mockResolvedValue([{ count: 0 }]),
   $transaction: vi.fn((...args: any[]) => {
     if (typeof args[0] === 'function') return args[0](mockPrisma);
     return Promise.all(args.map((fn: Function) => fn()));
@@ -88,6 +90,8 @@ describe('FraudService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.$executeRaw.mockResolvedValue(1);
+    mockPrisma.$queryRaw.mockResolvedValue([{ count: 0 }]);
     service = new FraudService(prismaRef, mockLedger);
   });
 
@@ -113,13 +117,31 @@ describe('FraudService', () => {
         }),
       );
       mockPrisma.device.count.mockResolvedValue(1);
-      mockPrisma.waitStateEvent.groupBy.mockResolvedValue([{ _count: 33 }]);
+      mockPrisma.$queryRaw.mockResolvedValue([{ count: 10 }]);
       mockPrisma.payoutRequest.count.mockResolvedValue(3);
       mockPrisma.trustScore.upsert.mockResolvedValue({ score: 90 });
 
       const score = await service.computeTrustScore('u-2');
       // 40 base + 15 age + 10 email + 15 github + 10 device + 10 activity + 15 payouts
       expect(score).toBeGreaterThan(90);
+    });
+
+    it('awards activity points for distinct days rather than raw event volume', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      // The SQL result represents one distinct UTC day even if that day had
+      // many wait-state events.
+      mockPrisma.$queryRaw.mockResolvedValue([{ count: 1 }]);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 42 });
+      mockPrisma.user.update.mockResolvedValue({});
+
+      await expect(service.computeTrustScore('u-burst')).resolves.toBe(42);
+      expect(mockPrisma.trustScore.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ activityPatternPts: 1, deviceConsistPts: 0 }),
+        }),
+      );
     });
 
     it('applies critical penalties', async () => {
@@ -136,7 +158,7 @@ describe('FraudService', () => {
         }),
       );
       mockPrisma.device.count.mockResolvedValue(1);
-      mockPrisma.waitStateEvent.groupBy.mockResolvedValue([{ _count: 30 }]);
+      mockPrisma.$queryRaw.mockResolvedValue([{ count: 10 }]);
       mockPrisma.payoutRequest.count.mockResolvedValue(2);
       mockPrisma.trustScore.upsert.mockResolvedValue({ score: 60 });
 
@@ -231,6 +253,7 @@ describe('FraudService', () => {
         severity: 'high',
       });
       expect(flag.id).toBe('flag-1');
+      expect(mockPrisma.$executeRaw).toHaveBeenCalled();
       expect(mockPrisma.fraudFlag.create).toHaveBeenCalled();
       expect(mockPrisma.trustScore.upsert).toHaveBeenCalled();
     });
@@ -249,7 +272,10 @@ describe('FraudService', () => {
       // releaseEarnings twice. Mock returns count=1 (the claim wins).
       mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.user.findUnique.mockResolvedValue(
-        mockUserWithFlags({ emailVerified: true, createdAt: new Date(Date.now() - 90 * 24 * 3600_000) }),
+        mockUserWithFlags({
+          emailVerified: true,
+          createdAt: new Date(Date.now() - 90 * 24 * 3600_000),
+        }),
       );
       mockPrisma.device.count.mockResolvedValue(1);
       mockPrisma.waitStateEvent.groupBy.mockResolvedValue([]);
@@ -260,6 +286,38 @@ describe('FraudService', () => {
       expect(result.isValid).toBe(true);
       expect(result.status).toBe('resolved_valid');
       expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalled();
+    });
+
+    it('retries idempotent ledger reconciliation after the flag status already committed', async () => {
+      const baseFlag = {
+        id: 'flag-retry',
+        userId: 'u-1',
+        impressionId: 'imp-retry',
+        clickId: null,
+        flagType: 'invalid_impression',
+        severity: 'high',
+      };
+      mockPrisma.fraudFlag.findUnique
+        .mockResolvedValueOnce({ ...baseFlag, status: 'open' })
+        .mockResolvedValueOnce({ ...baseFlag, status: 'resolved_valid' });
+      mockPrisma.fraudFlag.updateMany.mockResolvedValueOnce({ count: 1 });
+      mockLedger.reverseEarnings
+        .mockRejectedValueOnce(new Error('ledger unavailable after flag commit'))
+        .mockResolvedValueOnce({ reversed: 1, paidSkipped: 0 });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await expect(
+        service.resolveFlag('flag-retry', 'reviewer-1', true, 'confirmed'),
+      ).rejects.toThrow('ledger unavailable');
+      await expect(
+        service.resolveFlag('flag-retry', 'reviewer-1', true, 'confirmed'),
+      ).resolves.toMatchObject({ status: 'resolved_valid', isValid: true });
+
+      expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalledTimes(1);
+      expect(mockLedger.reverseEarnings).toHaveBeenCalledTimes(2);
     });
   });
 });

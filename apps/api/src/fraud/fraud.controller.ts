@@ -13,6 +13,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { Roles } from '../common/decorators';
 import { CurrentUser } from '../common/decorators';
+import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -21,7 +22,7 @@ import { FraudService } from './fraud.service';
 
 @ApiTags('Fraud')
 @Controller('fraud')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminMfaStepUpGuard)
 export class FraudController {
   constructor(private fraudService: FraudService) {}
 

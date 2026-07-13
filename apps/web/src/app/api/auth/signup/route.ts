@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { apiBaseUrl, applyAuthCookies, stripAuthTokens } from '../_lib/cookies';
+import {
+  apiBaseUrl,
+  applyAuthCookies,
+  applyRateLimitIdentity,
+  rateLimitIdentity,
+  stripAuthTokens,
+} from '../_lib/cookies';
 import { readLimitedJsonBody, rejectCrossOriginMutation } from '../_lib/request-guards';
 
 export async function POST(req: NextRequest) {
@@ -10,15 +16,20 @@ export async function POST(req: NextRequest) {
     const bodyResult = await readLimitedJsonBody(req);
     if (!bodyResult.ok) return bodyResult.response;
     const body = bodyResult.body;
+    const identity = rateLimitIdentity(req);
 
     const signupRes = await fetch(`${apiBaseUrl()}/auth/signup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...identity.headers },
       body: JSON.stringify(body),
     });
     const signupData = await signupRes.json();
     if (!signupRes.ok) {
-      return NextResponse.json(signupData, { status: signupRes.status });
+      return applyRateLimitIdentity(
+        NextResponse.json(signupData, { status: signupRes.status }),
+        identity,
+        req.headers,
+      );
     }
 
     const { accessToken, refreshToken, user } = signupData as {
@@ -38,7 +49,11 @@ export async function POST(req: NextRequest) {
     }
 
     const response = NextResponse.json(stripAuthTokens({ ...signupData, user: fullUser }), { status: 201 });
-    return applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers });
+    return applyRateLimitIdentity(
+      applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers }),
+      identity,
+      req.headers,
+    );
   } catch (err: unknown) {
     console.error('Signup Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

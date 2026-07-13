@@ -1,5 +1,46 @@
 import { z } from 'zod';
 
+const PAYOUT_PROVIDERS = new Set([
+  'paypal_email',
+  'manual',
+  'paypal_payouts',
+  'stripe_connect',
+  'wise',
+]);
+
+function validProviderStatusJson(value: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    return Object.entries(parsed).every(
+      ([provider, status]) =>
+        PAYOUT_PROVIDERS.has(provider) && (status === 'available' || status === 'coming_soon'),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isProductionOrigin(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return (
+      url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
+      !url.pathname.replace(/\/+$/, '') &&
+      !url.search &&
+      !url.hash &&
+      host !== 'localhost' &&
+      host !== '127.0.0.1' &&
+      host !== '::1'
+    );
+  } catch {
+    return false;
+  }
+}
+
 const envSchema = z
   .object({
     // General
@@ -14,11 +55,11 @@ const envSchema = z
     REDIS_URL: z.string().optional(),
 
     // API
-    API_PORT: z.coerce.number().default(4002),
+    API_PORT: z.coerce.number().int().min(1).max(65_535).default(4002),
     API_BASE_URL: z.string().default('http://localhost:4002'),
 
     // Web
-    WEB_PORT: z.coerce.number().default(3000),
+    WEB_PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
     WEB_BASE_URL: z.string().default('http://localhost:3000'),
 
     // Reverse-proxy trust hops. Behind an LB/ingress, `req.ip` resolves to the
@@ -26,7 +67,7 @@ const envSchema = z
     // per-IP brute-force tracking and rate limiting, so a wrong value either
     // (a) keys abuse controls off the proxy IP (trivially bypassable) or
     // (b) over-trusts client-supplied X-Forwarded-For (IP spoofing). Must be a
-    // positive integer; default 1 (single reverse proxy).
+    // non-negative integer; 0 is valid for direct exposure, default 1.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(1),
 
     // Auth
@@ -63,6 +104,7 @@ const envSchema = z
 
     // Google OAuth (extension + web sign-in)
     GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_TOKENINFO_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(5_000),
     // Mock Google is off by default. The verifier accepts either the current
     // MOCK_GOOGLE_ENABLED=1 flag or the legacy ALLOW_MOCK_GOOGLE=true alias,
     // and still requires NODE_ENV !== 'production'.
@@ -71,8 +113,13 @@ const envSchema = z
 
     // Email
     EMAIL_DRIVER: z.enum(['console', 'resend']).default('console'),
-    EMAIL_FROM: z.string().default('noreply@waitlayer.local'),
+    EMAIL_FROM: z.email().default('noreply@waitlayer.local'),
     RESEND_API_KEY: z.string().optional(),
+    EMAIL_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(10_000),
+
+    // Keyed pseudonymization for IP addresses and other low-entropy values.
+    // A plain SHA-256 hash is reversible by enumerating the IPv4 space.
+    PRIVACY_HASH_KEY: z.string().min(32).optional(),
 
     // Sentry (error monitoring)
     SENTRY_DSN: z.string().optional(),
@@ -81,17 +128,21 @@ const envSchema = z
     // Payout security: when 'true', requesting a payout requires the account to
     // have MFA (TOTP) enrolled. Off by default so existing developer flows are
     // unaffected until 2FA adoption is broad enough.
-    PAYOUT_REQUIRE_2FA: z.string().optional(),
+    PAYOUT_REQUIRE_2FA: z.enum(['true', 'false']).default('false'),
     // Payout security: anti-account-takeover control. When > 0, a payout sent to
     // a destination that was added/changed within this many hours requires the
     // account to have MFA enrolled. This blocks an attacker who gains a session
     // from silently repointing payouts to a fresh destination. Off (0) by
     // default so existing developer flows are unaffected until enabled.
-    PAYOUT_DESTINATION_COOLDOWN_HOURS: z.string().optional(),
+    PAYOUT_DESTINATION_COOLDOWN_HOURS: z.coerce.number().int().min(0).max(720).default(0),
+    ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     // A-030: server-side mirror of the web's NEXT_PUBLIC_WAITLAYER_PAYOUT_
     // PROVIDER_STATUS gate. JSON map provider -> 'available' | 'coming_soon'.
     // Operators set this on the API so registration rejects gated providers.
-    WAITLAYER_PAYOUT_PROVIDER_STATUS: z.string().optional(),
+    WAITLAYER_PAYOUT_PROVIDER_STATUS: z
+      .string()
+      .refine(validProviderStatusJson, 'must be a valid known-provider status JSON map')
+      .optional(),
 
     // PayPal (payouts — later)
     PAYPAL_CLIENT_ID: z.string().optional(),
@@ -100,11 +151,13 @@ const envSchema = z
 
     // Wise (payouts — dev stub, real API in production when configured)
     WISE_API_TOKEN: z.string().optional(),
-    WISE_API_VERSION: z.string().default('3.0'),
     // WISE_PROFILE_ID selects the Wise business profile that holds the balance
     // used to fund developer payouts. Required for live transfers.
     WISE_PROFILE_ID: z.string().optional(),
     WISE_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
+    // Fail closed until the operator has verified the account-specific email
+    // recipient corridor in Wise sandbox/live.
+    WISE_EMAIL_RECIPIENTS_VERIFIED: z.enum(['true', 'false']).default('false'),
 
     // ── Feature / behaviour toggles ──
 
@@ -118,18 +171,28 @@ const envSchema = z
     // acknowledged (HTTP 200) and processed off the request thread via the
     // in-process event bus. When 'false' (default), processing stays inline so
     // behaviour is unchanged and integration tests remain synchronous.
-    WEBHOOK_ASYNC_PROCESSING: z.enum(['true', 'false']).default('false'),
+    // Legacy switch retained only to reject stale deploy manifests. Webhooks
+    // are processed synchronously; `true` would otherwise be a silent no-op.
+    WEBHOOK_ASYNC_PROCESSING: z.literal('false').optional(),
+    SWAGGER_ENABLED: z.enum(['true', 'false']).default('false'),
 
     // ── Cron intervals (ms) ──
     // All crons fall back to safe defaults; operators can override per deploy.
-    PAYOUT_POLL_INTERVAL_MS: z.coerce.number().int().min(60_000).default(600_000),
-    RETENTION_CRON_INTERVAL_MS: z.coerce.number().int().min(3_600_000).default(86_400_000),
-    LEDGER_MATURATION_INTERVAL_MS: z.coerce.number().int().min(60_000).default(600_000),
+    PAYOUT_POLL_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(600_000),
+    PAYOUT_POLL_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
+    RETENTION_CRON_INTERVAL_MS: z.coerce.number().int().min(3_600_000).max(604_800_000).default(86_400_000),
+    LEDGER_MATURATION_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(600_000),
+    LEDGER_MATURATION_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(500),
+    LEDGER_MATURATION_RUN_CAP: z.coerce.number().int().min(1).max(20_000).default(5_000),
+    WEBHOOK_RECLAIM_CRON: z.enum(['true', 'false']).optional(),
+    WEBHOOK_RECLAIM_CRON_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(300_000),
+    WEBHOOK_RECLAIM_CRON_AGE_MS: z.coerce.number().int().min(60_000).max(2_592_000_000).default(2_100_000),
+    WEBHOOK_RECLAIM_CRON_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(100),
 
     // Per-call timeout (ms) for external PSP provider calls (initiate / status
     // checks). Protects cron loops and payout processing from hanging on an
     // unresponsive provider.
-    PROVIDER_CALL_TIMEOUT_MS: z.coerce.number().int().min(1_000).default(15_000),
+    PROVIDER_CALL_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(15_000),
   })
   .refine(
     (env) => {
@@ -140,6 +203,48 @@ const envSchema = z
       message:
         'REDIS_URL is required in production for distributed rate limiting and brute-force tracking',
       path: ['REDIS_URL'],
+    },
+  )
+  .refine(
+    (env) => env.NODE_ENV !== 'production' || env.PAYOUT_REQUIRE_2FA === 'true',
+    {
+      message: 'PAYOUT_REQUIRE_2FA=true is required in production.',
+      path: ['PAYOUT_REQUIRE_2FA'],
+    },
+  )
+  .refine(
+    (env) => env.NODE_ENV !== 'production' || Boolean(env.PRIVACY_HASH_KEY),
+    {
+      message: 'PRIVACY_HASH_KEY is required in production and must be at least 32 characters.',
+      path: ['PRIVACY_HASH_KEY'],
+    },
+  )
+  .refine(
+    (env) =>
+      env.NODE_ENV !== 'production' ||
+      (env.EMAIL_DRIVER === 'resend' &&
+        Boolean(env.RESEND_API_KEY) &&
+        !env.EMAIL_FROM.toLowerCase().includes('waitlayer.local') &&
+        !env.EMAIL_FROM.toLowerCase().includes('no-reply@waitlayer.dev')),
+    {
+      message: 'Production email requires resend credentials and a non-development sender.',
+      path: ['EMAIL_DRIVER'],
+    },
+  )
+  .refine(
+    (env) =>
+      env.NODE_ENV !== 'production' ||
+      (isProductionOrigin(env.API_BASE_URL) && isProductionOrigin(env.WEB_BASE_URL)),
+    {
+      message: 'API_BASE_URL and WEB_BASE_URL must be credential-free HTTPS origins in production.',
+      path: ['WEB_BASE_URL'],
+    },
+  )
+  .refine(
+    (env) => env.NODE_ENV !== 'production' || env.WEBHOOK_RECLAIM_CRON !== 'false',
+    {
+      message: 'WEBHOOK_RECLAIM_CRON cannot be explicitly disabled in production.',
+      path: ['WEBHOOK_RECLAIM_CRON'],
     },
   )
   .refine(

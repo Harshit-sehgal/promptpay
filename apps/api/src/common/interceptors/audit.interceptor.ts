@@ -1,7 +1,6 @@
-import * as crypto from 'crypto';
 import { from, Observable } from 'rxjs';
 import { throwError } from 'rxjs';
-import { catchError, switchMap, tap } from 'rxjs/operators';
+import { catchError, concatMap, map, switchMap } from 'rxjs/operators';
 import {
   CallHandler,
   ExecutionContext,
@@ -15,6 +14,7 @@ import type { Prisma } from '@waitlayer/db';
 
 import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../config/prisma.service';
+import { privacyPseudonym } from '../utils/privacy-hash';
 
 export const AUDIT_METADATA_KEY = 'audit';
 
@@ -131,10 +131,15 @@ export class AuditInterceptor implements NestInterceptor {
         };
 
         return next.handle().pipe(
-          tap(() => {
-            // Successful mutation — fire-and-forget. Errors handled inside
-            // AuditService.log.
-            this.audit.log(actor);
+          concatMap((value) => {
+            // Account erasure has already scrubbed historical audit snapshots
+            // and IP pseudonyms. Do not recreate either in the success record;
+            // retain only the minimal action/actor/target/time evidence.
+            const successActor =
+              action === 'delete_account'
+                ? { ...actor, ipHash: undefined, beforeSnap: undefined }
+                : actor;
+            return from(this.audit.logStrict(successActor)).pipe(map(() => value));
           }),
           catchError((err) => {
             // Failed mutation — sensitive admin attempts that errored
@@ -321,7 +326,7 @@ function hashIp(req: AuditedRequest): string | undefined {
   const ip = req.ip ?? forwardedIp?.split(',')[0]?.trim() ?? req.connection?.remoteAddress;
   if (!ip || ip === 'unknown') return undefined;
 
-  return crypto.createHash('sha256').update(ip).digest('hex').slice(0, 16);
+  return privacyPseudonym(ip, 'audit-ip');
 }
 
 /**
@@ -332,16 +337,38 @@ function hashIp(req: AuditedRequest): string | undefined {
  * cheap and JSON keeps the field absent rather than storing an empty
  * object).
  */
-function scrubBody(body: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+export function scrubBody(
+  body: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
   if (!body || typeof body !== 'object') return undefined;
-  const REDACT = new Set(['password', 'token', 'accessToken', 'refreshToken', 'signature']);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(body)) {
-    if (REDACT.has(k)) {
+    if (isSensitiveAuditField(k)) {
       out[k] = '[redacted]';
+    } else if (Array.isArray(v)) {
+      out[k] = v.map((item) =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? scrubBody(item as Record<string, unknown>)
+          : item,
+      );
+    } else if (v && typeof v === 'object') {
+      out[k] = scrubBody(v as Record<string, unknown>);
     } else {
       out[k] = v;
     }
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function isSensitiveAuditField(field: string): boolean {
+  const normalized = field.replace(/[-_\s]/g, '').toLowerCase();
+  return (
+    normalized.includes('password') ||
+    normalized.includes('token') ||
+    normalized.includes('secret') ||
+    normalized.includes('signature') ||
+    normalized.includes('privatekey') ||
+    normalized === 'apikey' ||
+    normalized === 'authorization'
+  );
 }

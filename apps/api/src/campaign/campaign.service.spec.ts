@@ -8,19 +8,26 @@ import { PrismaService } from '../config/prisma.service';
 import { CampaignService } from './campaign.service';
 
 function makeService() {
-  const prisma = {
+  const prisma: any = {
     advertiser: { findUnique: vi.fn() },
     campaign: { findUnique: vi.fn() },
     adCreative: {
       create: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    $executeRaw: vi.fn().mockResolvedValue(1),
+    $transaction: vi.fn((callback: (tx: any) => unknown) => callback(prisma)),
   };
-  const audit = { log: vi.fn().mockResolvedValue(undefined) };
+  const audit = {
+    log: vi.fn().mockResolvedValue(undefined),
+    logStrict: vi.fn().mockResolvedValue(undefined),
+  };
 
   return {
     prisma,
+    audit,
     service: new CampaignService(
       prisma as unknown as PrismaService,
       audit as unknown as AuditService,
@@ -61,6 +68,29 @@ describe('CampaignService creative URL policy', () => {
         displayDomain: 'example.com',
       }),
     });
+    expect(ctx.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'create_creative', targetId: 'creative-1' }),
+      ctx.prisma,
+    );
+  });
+
+  it('does not acknowledge creative creation when durable audit persistence fails', async () => {
+    ctx.prisma.campaign.findUnique.mockResolvedValue({ id: 'camp-1', status: 'draft' });
+    ctx.prisma.adCreative.create.mockResolvedValue({ id: 'creative-1' });
+    ctx.audit.logStrict.mockRejectedValue(new Error('audit unavailable'));
+
+    await expect(
+      ctx.service.createCreative(
+        'camp-1',
+        {
+          title: 'Safe ad',
+          sponsoredMessage: 'Try this developer tool',
+          destinationUrl: 'https://example.com/offer',
+          displayDomain: 'example.com',
+        },
+        { role: 'admin', userId: 'admin-1' },
+      ),
+    ).rejects.toThrow('audit unavailable');
   });
 
   it('rejects deceptive display domains on create', async () => {
@@ -78,6 +108,25 @@ describe('CampaignService creative URL policy', () => {
         { role: 'admin' },
       ),
     ).rejects.toThrow(BadRequestException);
+    expect(ctx.prisma.adCreative.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects creation beyond the bounded per-campaign creative quota', async () => {
+    ctx.prisma.campaign.findUnique.mockResolvedValue({ id: 'camp-1', status: 'draft' });
+    ctx.prisma.adCreative.count.mockResolvedValue(100);
+
+    await expect(
+      ctx.service.createCreative(
+        'camp-1',
+        {
+          title: 'One too many',
+          sponsoredMessage: 'Bound storage growth',
+          destinationUrl: 'https://example.com/offer',
+          displayDomain: 'example.com',
+        },
+        { role: 'admin' },
+      ),
+    ).rejects.toThrow(/at most 100 creatives/);
     expect(ctx.prisma.adCreative.create).not.toHaveBeenCalled();
   });
 
@@ -151,6 +200,8 @@ describe('CampaignService creative URL policy', () => {
       data: { status: 'rejected', rejectionReason: reason },
     });
     expect(updated.rejectionReason).toBe(reason);
+    expect(ctx.audit.log).not.toHaveBeenCalled();
+    expect(ctx.audit.logStrict).not.toHaveBeenCalled();
   });
 
   it('rejects a creative rejection with an empty reason (A-045)', async () => {

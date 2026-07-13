@@ -17,6 +17,15 @@ import { PayoutService } from './payout.service';
 export class PayoutController {
   constructor(private service: PayoutService) {}
 
+  @ApiOperation({ summary: 'Get runtime payout provider availability' })
+  @Get('providers')
+  @UseGuards(RejectApiKeyGuard)
+  @Roles('developer')
+  @RequiredScopes('payout:read')
+  getPayoutProviderAvailability() {
+    return this.service.getPayoutProviderAvailability();
+  }
+
   @ApiOperation({ summary: 'Add payout method' })
   @Post('method')
   @UseGuards(RejectApiKeyGuard)
@@ -64,6 +73,7 @@ export class PayoutController {
 
   @ApiOperation({ summary: 'Get payout history' })
   @Get('history')
+  @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('ledger:read')
   getPayoutHistory(@CurrentUser('id') userId: string, @Query() query: PayoutHistoryQueryDto) {

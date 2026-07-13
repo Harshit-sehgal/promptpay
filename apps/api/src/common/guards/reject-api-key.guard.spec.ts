@@ -56,6 +56,7 @@ describe('sensitive API-key route boundaries (A-070)', () => {
     expect(guardsFor(PayoutController.prototype.addPayoutMethod)).toContain(RejectApiKeyGuard);
     expect(guardsFor(PayoutController.prototype.getPayoutInfo)).toContain(RejectApiKeyGuard);
     expect(guardsFor(PayoutController.prototype.requestPayout)).toContain(RejectApiKeyGuard);
+    expect(guardsFor(PayoutController.prototype.getPayoutHistory)).toContain(RejectApiKeyGuard);
   });
 
   it('keeps developer controller API-key-free — no @AllowApiKey() at class level', () => {

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { apiBaseUrl, applyAuthCookies, stripAuthTokens } from '../_lib/cookies';
+import {
+  apiBaseUrl,
+  applyAuthCookies,
+  applyRateLimitIdentity,
+  rateLimitIdentity,
+  stripAuthTokens,
+} from '../_lib/cookies';
 import { readLimitedJsonBody, rejectCrossOriginMutation } from '../_lib/request-guards';
 
 export async function POST(req: NextRequest) {
@@ -10,16 +16,21 @@ export async function POST(req: NextRequest) {
     const bodyResult = await readLimitedJsonBody(req);
     if (!bodyResult.ok) return bodyResult.response;
     const body = bodyResult.body;
+    const identity = rateLimitIdentity(req);
 
     // 1. Call the API login endpoint
     const loginRes = await fetch(`${apiBaseUrl()}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...identity.headers },
       body: JSON.stringify(body),
     });
     const loginData = await loginRes.json();
     if (!loginRes.ok) {
-      return NextResponse.json(loginData, { status: loginRes.status });
+      return applyRateLimitIdentity(
+        NextResponse.json(loginData, { status: loginRes.status }),
+        identity,
+        req.headers,
+      );
     }
 
     const { accessToken, refreshToken, user } = loginData as {
@@ -41,7 +52,11 @@ export async function POST(req: NextRequest) {
 
     // 3. Set httpOnly cookies + return user (NOT tokens) to browser
     const response = NextResponse.json(stripAuthTokens({ ...loginData, user: fullUser }), { status: 200 });
-    return applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers });
+    return applyRateLimitIdentity(
+      applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers }),
+      identity,
+      req.headers,
+    );
   } catch (err: unknown) {
     console.error('Login Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

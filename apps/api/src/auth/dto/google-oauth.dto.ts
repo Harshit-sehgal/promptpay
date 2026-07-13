@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -22,6 +22,15 @@ export class GoogleOAuthDto {
   @IsString()
   @Matches(/^\d{6}$/, { message: 'twoFactorToken must be a 6-digit TOTP code' })
   twoFactorToken?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @Matches(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/, {
+    message: 'twoFactorBackupCode must be a valid backup code',
+  })
+  twoFactorBackupCode?: string;
 
   /**
    * Required proof of age/terms acceptance for FIRST-TIME Google signups. When

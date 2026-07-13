@@ -2,6 +2,11 @@ import Stripe from 'stripe';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import {
+  requireProviderSafeMinorAmount,
+  STRIPE_MAX_MINOR_AMOUNT,
+} from '../../common/utils/provider-amount';
+import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import type { PayoutProviderHandler } from '../payout.service';
 import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 
@@ -59,7 +64,13 @@ export class StripeProvider {
               name: 'WaitLayer Ad Credit Deposit',
               description: `Deposit for advertiser ${params.advertiserId}`,
             },
-            unit_amount: Number(params.amountMinor),
+            unit_amount: Number(
+              requireProviderSafeMinorAmount(
+                params.amountMinor,
+                'Stripe Checkout',
+                STRIPE_MAX_MINOR_AMOUNT,
+              ),
+            ),
           },
           quantity: 1,
         },
@@ -240,15 +251,14 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
     const connectedAccount = params.destination?.trim();
     if (!connectedAccount || !connectedAccount.startsWith('acct_')) {
       throw new Error(
-        `Invalid Stripe Connect destination '${connectedAccount}': a developer payout method must store a Stripe connected account id (acct_...).`,
+        'Invalid Stripe Connect destination: a developer payout method must store a connected account id (acct_...).',
       );
     }
 
     // Stripe expects integer minor units (cents) and a lowercase currency code.
-    const amount = Math.round(Number(params.amountMinor));
-    if (amount <= 0) {
-      throw new Error(`Refusing Stripe Connect payout with non-positive amount: ${amount}`);
-    }
+    const amount = Number(
+      requireProviderSafeMinorAmount(params.amountMinor, 'Stripe Connect', STRIPE_MAX_MINOR_AMOUNT),
+    );
 
     const transferGroup = `wl_payout_${params.payoutRequestId}`;
     const transfer = await this.stripe.transfers.create(
@@ -283,8 +293,7 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
           idempotencyKey: `${transferGroup}_payout`,
         },
       );
-    } catch (err: unknown) {
-      const payoutError = err instanceof Error ? err.message : String(err);
+    } catch {
       try {
         await this.stripe.transfers.createReversal(
           transfer.id,
@@ -298,22 +307,24 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
           },
           { idempotencyKey: `${transferGroup}_transfer_reversal` },
         );
-      } catch (reversalErr: unknown) {
-        const reversalError =
-          reversalErr instanceof Error ? reversalErr.message : String(reversalErr);
+      } catch {
         throw new PayoutProviderUnsafeFailure(
           `Stripe Connect payout creation failed after transfer ${transfer.id}, and automatic transfer reversal failed. ` +
-            `Do not release payout allocations until Stripe is reconciled manually. payoutError=${payoutError}; reversalError=${reversalError}`,
+            'Do not release payout allocations until Stripe is reconciled manually.',
         );
       }
 
       throw new Error(
-        `Stripe Connect payout creation failed after transfer ${transfer.id}; transfer was reversed. payoutError=${payoutError}`,
+        `Stripe Connect payout creation failed after transfer ${transfer.id}; transfer was reversed.`,
       );
     }
 
+    const accountRef = privacyPseudonym(
+      connectedAccount,
+      'stripe-connect-payout-destination',
+    ).slice(0, 12);
     this.logger.log(
-      `Stripe Connect payout initiated: request=${params.payoutRequestId}, account=${connectedAccount}, amount=${amount} ${params.currency}, stripeTransfer=${transfer.id}, stripePayout=${payout.id}`,
+      `Stripe Connect payout initiated: request=${params.payoutRequestId}, accountRef=${accountRef}, amount=${amount} ${params.currency}, stripeTransfer=${transfer.id}, stripePayout=${payout.id}`,
     );
 
     return { providerTxId: payout.id, status: payout.status ?? 'pending' };
@@ -331,7 +342,7 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
     const connectedAccount = context?.destination?.trim();
     if (!connectedAccount || !connectedAccount.startsWith('acct_')) {
       throw new Error(
-        `Invalid Stripe Connect status destination '${connectedAccount}': a connected account id (acct_...) is required to retrieve a connected-account payout.`,
+        'Invalid Stripe Connect status destination: a connected account id (acct_...) is required.',
       );
     }
     const payout = await this.stripe.payouts.retrieve(
@@ -339,8 +350,14 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
       {},
       { stripeAccount: connectedAccount },
     );
+    const status =
+      payout.status === 'paid'
+        ? 'paid'
+        : payout.status === 'failed' || payout.status === 'canceled'
+          ? 'requires_review'
+          : 'processing';
     return {
-      status: payout.status,
+      status,
       paidAt: payout.arrival_date ? new Date(payout.arrival_date * 1000) : undefined,
     };
   }

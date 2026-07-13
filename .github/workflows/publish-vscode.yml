@@ -1,5 +1,8 @@
 name: Publish VS Code Extension
 
+permissions:
+  contents: read
+
 on:
   release:
     types: [published]
@@ -13,12 +16,13 @@ on:
 jobs:
   package-vscode:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
         with:
-          version: 11
-      - uses: actions/setup-node@v6
+          version: 11.9.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: pnpm
@@ -30,15 +34,19 @@ jobs:
       - name: Package VSIX
         run: |
           mkdir -p ../../artifacts/vscode
-          npx --yes @vscode/vsce@latest package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
+          pnpm exec vsce package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
         working-directory: apps/vscode-extension
       - name: Smoke test VSIX metadata
         run: |
           test -s artifacts/vscode/waitlayer-vscode.vsix
-          unzip -p artifacts/vscode/waitlayer-vscode.vsix extension/package.json > /tmp/waitlayer-vscode-package.json
+          rm -rf /tmp/waitlayer-vsix
+          mkdir -p /tmp/waitlayer-vsix
+          unzip -q artifacts/vscode/waitlayer-vscode.vsix -d /tmp/waitlayer-vsix
+          cp /tmp/waitlayer-vsix/extension/package.json /tmp/waitlayer-vscode-package.json
           node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
+          node scripts/verify-vsix-artifact.cjs /tmp/waitlayer-vsix/extension
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: waitlayer-vscode-vsix
           path: artifacts/vscode/waitlayer-vscode.vsix
@@ -48,14 +56,15 @@ jobs:
     needs: package-vscode
     if: github.event_name == 'workflow_dispatch' && inputs.publish == true
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: vscode-marketplace
     steps:
       - name: Download VSIX artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: waitlayer-vscode-vsix
           path: artifacts/vscode
       - name: Publish VSIX to Marketplace
-        run: npx --yes @vscode/vsce@latest publish --packagePath artifacts/vscode/waitlayer-vscode.vsix
+        run: npx --yes @vscode/vsce@3.9.2 publish --packagePath artifacts/vscode/waitlayer-vscode.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}

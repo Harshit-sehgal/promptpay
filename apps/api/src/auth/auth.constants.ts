@@ -6,6 +6,8 @@ export interface TokenPayload {
   family?: string;
   jti?: string;
   aud?: string;
+  /** Unix timestamp (seconds) of the most recent MFA proof in this token chain. */
+  mfaAt?: number;
 }
 
 export interface AccessTokenPayload {
@@ -14,6 +16,7 @@ export interface AccessTokenPayload {
   jti: string;
   aud: string;
   family?: string;
+  mfaAt?: number;
 }
 
 export interface EmailVerificationPayload {

@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Req,
   UnauthorizedException,
@@ -20,12 +21,16 @@ import { AuthService } from './auth.service';
 import {
   ForgotPasswordDto,
   GoogleOAuthDto,
+  LinkGoogleDto,
   LoginDto,
   RefreshDto,
   ResetPasswordDto,
   SignUpDto,
+  SetSocialPasswordDto,
   TwoFactorDisableDto,
   TwoFactorEnableDto,
+  TwoFactorSetupDto,
+  TwoFactorBackupCodesRegenerateDto,
   VerifyEmailConfirmDto,
 } from './dto';
 
@@ -124,6 +129,44 @@ export class AuthController {
     return this.authService.logout(userId, jti);
   }
 
+  @ApiOperation({ summary: 'Log out using the refresh session' })
+  @Post('logout/refresh')
+  @HttpCode(HttpStatus.OK)
+  logoutByRefresh(@Body() dto: RefreshDto) {
+    return this.authService.logoutByRefreshToken(dto.refreshToken);
+  }
+
+  @ApiOperation({ summary: 'List current account sessions' })
+  @Get('sessions')
+  @UseGuards(JwtAuthGuard)
+  listSessions(@CurrentUser('id') userId: string, @CurrentUser('jti') jti: string) {
+    return this.authService.listSessions(userId, jti);
+  }
+
+  @ApiOperation({ summary: 'Revoke all other sessions' })
+  @Post('sessions/revoke-others')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  revokeOtherSessions(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('jti') jti: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.authService.revokeOtherSessions(userId, jti, role);
+  }
+
+  @ApiOperation({ summary: 'Revoke one owned session' })
+  @Post('sessions/:id/revoke')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  revokeSession(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: string,
+    @Param('id') sessionId: string,
+  ) {
+    return this.authService.revokeSession(userId, sessionId, role);
+  }
+
   @ApiOperation({ summary: 'Get current user' })
   @Get('me')
   @UseGuards(JwtAuthGuard)
@@ -164,8 +207,8 @@ export class AuthController {
   @Post('2fa/setup')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  setupTwoFactor(@CurrentUser('id') userId: string) {
-    return this.authService.setupTwoFactor(userId);
+  setupTwoFactor(@CurrentUser('id') userId: string, @Body() dto: TwoFactorSetupDto) {
+    return this.authService.setupTwoFactor(userId, dto);
   }
 
   @ApiOperation({ summary: 'Enable two-factor auth' })
@@ -174,12 +217,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async enableTwoFactor(
     @CurrentUser('id') userId: string,
+    @CurrentUser('jti') jti: string,
     @Body() dto: TwoFactorEnableDto,
     @Req() req: Request,
   ) {
     try {
       await BruteForceGuard.assertCanAttempt(req, userId);
-      const result = await this.authService.enableTwoFactor(userId, dto.token);
+      const result = await this.authService.enableTwoFactor(
+        userId,
+        dto.token,
+        jti,
+      );
       await BruteForceGuard.resetOnSuccess(req, userId);
       return result;
     } catch (err: unknown) {
@@ -188,6 +236,18 @@ export class AuthController {
       }
       throw err;
     }
+  }
+
+  @ApiOperation({ summary: 'Regenerate one-time two-factor backup codes' })
+  @Post('2fa/backup-codes/regenerate')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  regenerateTwoFactorBackupCodes(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('jti') jti: string,
+    @Body() dto: TwoFactorBackupCodesRegenerateDto,
+  ) {
+    return this.authService.regenerateTwoFactorBackupCodes(userId, dto.token, jti);
   }
 
   @ApiOperation({ summary: 'Disable two-factor auth' })
@@ -247,6 +307,30 @@ export class AuthController {
       }
       throw err;
     }
+  }
+
+  @ApiOperation({ summary: 'Set a password on a social-login account' })
+  @Post('password/set')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  setSocialPassword(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('jti') jti: string,
+    @Body() dto: SetSocialPasswordDto,
+  ) {
+    return this.authService.setSocialAccountPassword(userId, jti, dto);
+  }
+
+  @ApiOperation({ summary: 'Link Google after explicit account reauthentication' })
+  @Post('link/google')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  linkGoogle(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('jti') jti: string,
+    @Body() dto: LinkGoogleDto,
+  ) {
+    return this.authService.linkGoogle(userId, jti, dto);
   }
 
   @ApiOperation({ summary: 'Get auth config' })

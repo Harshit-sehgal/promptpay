@@ -601,31 +601,62 @@ describe('API Contract Tests', () => {
       expect(() => PayoutAvailableResponse.parse(res.body)).not.toThrow();
     });
 
-    // Payout request requires confirmed earnings — validate schema only (no balance needed)
-    it('POST /payout/request schema is structurally valid', () => {
-      // Verify the schema itself parses a valid-looking object. The schema now
-      // marks `payoutAccountId` as required (the database FK is NOT NULL) and
-      // each allocation's `payoutRequestId`/`createdAt` as required (also
-      // NOT NULL columns the service always includes), so the mock carries
-      // them.
-      const mock = {
-        id: 'req-1',
-        userId: 'u-1',
-        payoutAccountId: 'pa-1',
-        status: 'requested',
-        requestedAmountMinor: 1000,
-        currency: 'USD',
-        allocations: [
-          {
-            id: 'a-1',
-            earningsEntryId: 'e-1',
-            payoutRequestId: 'req-1',
-            amountMinor: 1000,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      };
-      expect(() => PayoutRequestResponse.parse(mock)).not.toThrow();
+    // Round 27 Fix 9: this now performs a real HTTP call against the live
+    // endpoint to assert endpoint↔schema drift, instead of parsing a synthetic
+    // mock object that the schema could drift from silently.
+    it('POST /payout/request schema is structurally valid (real HTTP)', async () => {
+      // Set up a verified payout account for the dev and seed a confirmed
+      // earnings row directly in the DB so the request passes the
+      // available-balance gate.
+      const userId = (await prisma.user.findUniqueOrThrow({
+        where: { email: 'contract-dev@test.com' },
+      })).id;
+      // Ensure emailVerified is true so the requestPayout guard passes.
+      await prisma.user.updateMany({
+        where: { id: userId },
+        data: { emailVerified: true },
+      });
+      const account = await prisma.payoutAccount.create({
+        data: {
+          userId,
+          // Use PAYPAL_PAYOUTS to avoid the @@unique([userId, provider, isActive])
+          // collision with the PAYPAL_EMAIL account created by POST /payout/method above.
+          provider: PayoutProvider.PAYPAL_PAYOUTS,
+          destination: 'contract-dev-req@paypal.com',
+          currency: 'USD',
+          isVerified: true,
+          isActive: true,
+        },
+      });
+      await prisma.earningsLedger.create({
+        data: {
+          userId,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: 10_000,
+          currency: 'USD',
+          idempotencyKey: 'contract-payout-request-seed',
+          description: 'Seed for payout/request contract test',
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/payout/request')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({
+          payoutAccountId: account.id,
+          amountMinor: 1000,
+          currency: 'USD',
+        });
+
+      // The endpoint should accept the request and return a PayoutRequest
+      // payload. We allow either a 201 (created) or the legacy 200 (some APIs
+      // prefer a typed response over a literal 201).
+      expect([200, 201]).toContain(res.status);
+      expect(res.body).toBeTruthy();
+      // The minimal structural check the original mock-parsing test asserted:
+      // the schema parses the real response without throwing.
+      expect(() => PayoutRequestResponse.parse(res.body)).not.toThrow();
     });
   });
 

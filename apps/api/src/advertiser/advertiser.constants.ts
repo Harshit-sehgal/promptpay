@@ -28,6 +28,7 @@ export const ADVERTISER_EXPORT_LIMITS = {
   campaigns: 1000,
   creatives: 2000,
   billingLedger: 10000,
+  consents: 1000,
 };
 
 // A-074: bound the heavy campaign payload returned by getDashboard. Only a

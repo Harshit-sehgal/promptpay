@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 
@@ -15,6 +14,9 @@ import {
   normalizeCreativeUpdate,
 } from '../common/utils/external-url-policy';
 import { PrismaService } from '../config/prisma.service';
+
+const MAX_CREATIVES_PER_CAMPAIGN = 100;
+const MAX_COUNTRY_TARGETS = 249;
 
 /**
  * Actor carrying the caller's identity for ownership checks at the service
@@ -30,8 +32,6 @@ export interface ServiceActor {
 
 @Injectable()
 export class CampaignService {
-  private readonly logger = new Logger(CampaignService.name);
-
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
@@ -62,42 +62,48 @@ export class CampaignService {
       );
     }
 
-    // Verify campaign exists and is in draft/rejected
-    const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
-    if (!campaign) throw new NotFoundException('Campaign not found');
-    if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
-      throw new BadRequestException('Creatives can only be added to draft/rejected campaigns');
-    }
-
     const creativeDestination = normalizeCreativeDestination(dto);
 
-    const creative = await this.prisma.adCreative.create({
-      data: {
-        campaignId,
-        title: dto.title,
-        sponsoredMessage: dto.sponsoredMessage,
-        destinationUrl: creativeDestination.destinationUrl,
-        displayDomain: creativeDestination.displayDomain,
-        ctaText: dto.ctaText ?? null,
-      },
-    });
-
-    void this.audit
-      .log({
-        actorId: actor?.userId ?? 'unknown',
-        actorRole: actor?.role ?? 'advertiser',
-        action: 'create_creative',
-        targetType: 'creative',
-        targetId: creative.id,
-        beforeSnap: { campaignId },
-      })
-      .catch((auditErr) => {
-        this.logger.error(
-          `Audit log failed for create_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`campaign-creatives:${campaignId}`}))`;
+      const campaign = await tx.campaign.findUnique({
+        where: { id: campaignId },
+        select: { status: true },
+      });
+      if (!campaign) throw new NotFoundException('Campaign not found');
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        throw new BadRequestException('Creatives can only be added to draft/rejected campaigns');
+      }
+      const creativeCount = await tx.adCreative.count({ where: { campaignId } });
+      if (creativeCount >= MAX_CREATIVES_PER_CAMPAIGN) {
+        throw new BadRequestException(
+          `A campaign can contain at most ${MAX_CREATIVES_PER_CAMPAIGN} creatives`,
         );
+      }
+      const creative = await tx.adCreative.create({
+        data: {
+          campaignId,
+          title: dto.title,
+          sponsoredMessage: dto.sponsoredMessage,
+          destinationUrl: creativeDestination.destinationUrl,
+          displayDomain: creativeDestination.displayDomain,
+          ctaText: dto.ctaText ?? null,
+        },
       });
 
-    return creative;
+      await this.audit.logStrict(
+        {
+          actorId: actor?.userId ?? 'unknown',
+          actorRole: actor?.role ?? 'advertiser',
+          action: 'create_creative',
+          targetType: 'creative',
+          targetId: creative.id,
+          beforeSnap: { campaignId },
+        },
+        tx,
+      );
+      return creative;
+    });
   }
 
   async updateCreative(
@@ -126,32 +132,30 @@ export class CampaignService {
     const creativeDestination = normalizeCreativeUpdate(dto, creative.destinationUrl);
 
     // Updating a creative resets it to draft status for re-review
-    const updated = await this.prisma.adCreative.update({
-      where: { id: creativeId },
-      data: {
-        ...dto,
-        ...creativeDestination,
-        status: 'draft',
-        rejectionReason: null,
-      },
-    });
-
-    void this.audit
-      .log({
-        actorId: actor?.userId ?? 'unknown',
-        actorRole: actor?.role ?? 'advertiser',
-        action: 'update_creative',
-        targetType: 'creative',
-        targetId: creativeId,
-        beforeSnap: { campaignId: creative.campaignId },
-      })
-      .catch((auditErr) => {
-        this.logger.error(
-          `Audit log failed for update_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
-        );
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.adCreative.update({
+        where: { id: creativeId },
+        data: {
+          ...dto,
+          ...creativeDestination,
+          status: 'draft',
+          rejectionReason: null,
+        },
       });
 
-    return updated;
+      await this.audit.logStrict(
+        {
+          actorId: actor?.userId ?? 'unknown',
+          actorRole: actor?.role ?? 'advertiser',
+          action: 'update_creative',
+          targetType: 'creative',
+          targetId: creativeId,
+          beforeSnap: { campaignId: creative.campaignId },
+        },
+        tx,
+      );
+      return updated;
+    });
   }
 
   async getCreatives(campaignId: string, actor?: ServiceActor) {
@@ -159,6 +163,7 @@ export class CampaignService {
     return this.prisma.adCreative.findMany({
       where: { campaignId },
       orderBy: { createdAt: 'desc' },
+      take: MAX_CREATIVES_PER_CAMPAIGN,
     });
   }
 
@@ -200,22 +205,9 @@ export class CampaignService {
       }
     }
 
-    // Admin creative approval/rejection — actorId flows from controller in
-    // the future; for now fall back to 'admin' so the audit row is well-formed.
-    void this.audit
-      .log({
-        actorId: 'admin',
-        actorRole: 'admin',
-        action: 'approve_creative',
-        targetType: 'creative',
-        targetId: creativeId,
-        beforeSnap: { campaignId: creative.campaignId, oldStatus: creative.status },
-      })
-      .catch((auditErr) => {
-        this.logger.error(
-          `Audit log failed for approve_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
-        );
-      });
+    // The controller's strict AuditInterceptor records the authenticated admin
+    // actor. Do not emit a second hardcoded actorId='admin' row here: that
+    // duplicate was misleading forensic evidence.
 
     return { creative: updated, campaignActivated };
   }
@@ -237,20 +229,8 @@ export class CampaignService {
       data: { status: 'rejected', rejectionReason: reason },
     });
 
-    void this.audit
-      .log({
-        actorId: 'admin',
-        actorRole: 'admin',
-        action: 'reject_creative',
-        targetType: 'creative',
-        targetId: creativeId,
-        beforeSnap: { campaignId: creative.campaignId, reason },
-      })
-      .catch((auditErr) => {
-        this.logger.error(
-          `Audit log failed for reject_creative: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
-        );
-      });
+    // Strict audit is provided by the controller interceptor with the real
+    // reviewer identity; no duplicate service-level row.
 
     return rejected;
   }
@@ -262,38 +242,38 @@ export class CampaignService {
     targets: Array<{ countryCode: string; include: boolean }>,
     actor?: ServiceActor,
   ) {
+    if (targets.length > MAX_COUNTRY_TARGETS) {
+      throw new BadRequestException(
+        `Country targeting supports at most ${MAX_COUNTRY_TARGETS} ISO country entries`,
+      );
+    }
     await this.assertCampaignOwnership(campaignId, actor);
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign) throw new NotFoundException('Campaign not found');
 
-    // Replace all targeting
-    await this.prisma.$transaction([
-      this.prisma.countryTargeting.deleteMany({ where: { campaignId } }),
-      this.prisma.countryTargeting.createMany({
+    // Replace targeting and persist its audit row atomically.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.countryTargeting.deleteMany({ where: { campaignId } });
+      await tx.countryTargeting.createMany({
         data: targets.map((t) => ({
           campaignId,
           countryCode: t.countryCode.trim().toUpperCase(),
           include: t.include,
         })),
-      }),
-    ]);
-
-    void this.audit
-      .log({
-        actorId: actor?.userId ?? 'unknown',
-        actorRole: actor?.role ?? 'advertiser',
-        action: 'set_country_targeting',
-        targetType: 'campaign',
-        targetId: campaignId,
-        beforeSnap: { countryCount: targets.length },
-      })
-      .catch((auditErr) => {
-        this.logger.error(
-          `Audit log failed for set_country_targeting: ${auditErr instanceof Error ? auditErr.message : String(auditErr)}`,
-        );
       });
-
-    return this.prisma.countryTargeting.findMany({ where: { campaignId } });
+      await this.audit.logStrict(
+        {
+          actorId: actor?.userId ?? 'unknown',
+          actorRole: actor?.role ?? 'advertiser',
+          action: 'set_country_targeting',
+          targetType: 'campaign',
+          targetId: campaignId,
+          beforeSnap: { countryCount: targets.length },
+        },
+        tx,
+      );
+      return tx.countryTargeting.findMany({ where: { campaignId } });
+    });
   }
 
   // ── Stats ──

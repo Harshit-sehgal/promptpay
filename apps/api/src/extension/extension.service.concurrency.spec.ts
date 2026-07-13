@@ -112,7 +112,7 @@ function makePrisma() {
       platformLedger: prisma.platformLedger,
       adImpression: { updateMany: prisma.adImpression.updateMany },
       // Tagged-template form used by the advisory lock (pg_advisory_xact_lock).
-      $executeRaw: vi.fn(async () => undefined),
+      $executeRaw: vi.fn(async () => 1),
       $executeRawUnsafe: vi.fn(async () => 1),
     };
     const run = txChain.then(() => cb(tx));
@@ -147,6 +147,42 @@ function makeImpression(token: string, campaignId: string, bidAmountMinor = 100)
 }
 
 describe('concurrent billable impressions cannot overdraw advertiser balance (A-055)', () => {
+  it('persists server-authoritative qualification time and clamps reported duration', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2026-07-13T12:00:00.000Z');
+    vi.setSystemTime(now);
+    try {
+      const prisma = makePrisma();
+      const service = new ExtensionService(
+        prisma,
+        { log: vi.fn().mockResolvedValue(undefined) } as any,
+        {
+          calculateSplit: vi.fn(() => ({ userShare: 70n, platformShare: 20n, reserveShare: 10n })),
+          getHoldDays: vi.fn(() => 7),
+        } as any,
+        { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,
+        {} as any,
+        {} as any,
+      );
+      (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
+      prisma.adImpression.findUnique.mockResolvedValue(makeImpression('tok-1', 'camp-1'));
+
+      await service.recordQualifiedImpression('user-1', {
+        impressionToken: 'tok-1',
+        qualifiedAt: '2035-01-01T00:00:00.000Z',
+        visibleDurationMs: 500_000,
+        idempotencyKey: 'idem-tok-1',
+        signature: 'sig',
+      });
+
+      const qualificationWrite = prisma.adImpression.updateMany.mock.calls[0][0].data;
+      expect(qualificationWrite.qualifiedAt).toEqual(now);
+      expect(qualificationWrite.visibleDurationMs).toBe(10_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('bills exactly one of two concurrent one-bid-balance impressions and rejects the other', async () => {
     const prisma = makePrisma();
     const audit = { log: vi.fn().mockResolvedValue(undefined) } as any;

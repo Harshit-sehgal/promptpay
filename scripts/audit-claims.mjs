@@ -2,7 +2,7 @@
 // cannot silently drift from the code. Run in CI (verify-audit-claims job) and
 // locally via `node scripts/audit-claims.mjs`. No dependencies — Node built-ins
 // only, so it runs without pnpm install.
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -22,6 +22,13 @@ function check(name, cond) {
 // A-075: Docker image runs as non-root.
 const dockerfile = read('Dockerfile');
 check('Dockerfile runs as non-root (USER node)', /^\s*USER node\b/m.test(dockerfile));
+check(
+  'Docker build tools are exact-version pinned and JWT has no default build secret',
+  dockerfile.includes('pnpm@11.9.0') &&
+    dockerfile.includes('prisma@7.8.0') &&
+    /^ARG JWT_SECRET\s*$/m.test(dockerfile) &&
+    !/^ARG JWT_SECRET=/m.test(dockerfile),
+);
 
 // A-018: web CSP allows the Google Identity frame-src.
 const nextConfig = read('apps/web/next.config.js');
@@ -51,8 +58,36 @@ check(
 // CI guards the standalone-404 bug class (compiled API must serve routes).
 const ci = read('.github/workflows/ci.yml');
 check(
-  'CI docker-build fails if a controller route 404s',
-  ci.includes('CONTROLLER ROUTE 404'),
+  'CI docker-build requires the compiled login route to return validation status 400',
+  ci.includes("if [ \"$STATUS\" != \"400\" ]") &&
+    ci.includes('Unexpected login validation status') &&
+    ci.includes('/api/v1/auth/login'),
+);
+
+// Workflow actions execute third-party code with repository context. Require
+// immutable commit pins in every workflow; readable `# vN` comments preserve
+// upgrade context without trusting a mutable tag at runtime.
+const workflowDir = resolve(ROOT, '.github/workflows');
+const mutableActionRefs = readdirSync(workflowDir)
+  .filter((name) => /\.ya?ml$/.test(name))
+  .flatMap((name) => {
+    const source = read(`.github/workflows/${name}`);
+    return [...source.matchAll(/\buses:\s*[^\s@]+@([^\s#]+)/g)]
+      .map((match) => match[1])
+      .filter((ref) => !/^[0-9a-f]{40}$/.test(ref))
+      .map((ref) => `${name}:${ref}`);
+  });
+check('GitHub Actions are pinned to immutable commit SHAs', mutableActionRefs.length === 0);
+
+const workspaceConfig = read('pnpm-workspace.yaml');
+check(
+  'pnpm supply-chain quarantine and blocked Scarf install telemetry stay enabled',
+  /minimumReleaseAge:\s*1440\b/.test(workspaceConfig) &&
+    /'@scarf\/scarf':\s*false\b/.test(workspaceConfig),
+);
+check(
+  'audited Hono server override stays pinned',
+  /'@hono\/node-server':\s*1\.19\.13\b/.test(workspaceConfig),
 );
 
 // AGENTS.md reflects the CI-guarded correction (narrative tied to the guard).

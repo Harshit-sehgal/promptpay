@@ -1,3 +1,4 @@
+export * from './account-security.dto';
 export * from './google-oauth.dto';
 export * from './login.dto';
 export * from './password-reset.dto';

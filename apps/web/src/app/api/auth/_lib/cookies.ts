@@ -1,3 +1,4 @@
+import { createHmac, randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 
 /**
@@ -14,7 +15,7 @@ import { NextResponse } from 'next/server';
  *   shrinks to "the XSS can act as the logged-in user" — which is the same
  *   threat surface as a CSRF, not a 30-day secret theft.
  *
- * Cookie name `access_token` — verified by `middleware.ts` to gate protected
+ * Cookie name `access_token` — verified by `proxy.ts` to gate protected
  * routes (replaces the legacy non-httpOnly `session` cookie).
  */
 // Bare cookie names. The `__Host-` prefix is added at write time by
@@ -25,6 +26,81 @@ import { NextResponse } from 'next/server';
 export const COOKIE_ACCESS = 'access_token';
 export const COOKIE_REFRESH = 'refresh_token';
 const DEFAULT_API_BASE_URL = 'http://localhost:4002/api/v1';
+const CLIENT_ID_COOKIE = 'wl_client_id';
+
+export interface RateLimitIdentity {
+  headers: Record<string, string>;
+  clientId: string;
+  isNew: boolean;
+}
+
+/**
+ * Stable browser identity for BFF-originated rate limits. The API accepts it
+ * only with an HMAC produced by this server. A separate keyed network digest
+ * keeps cookie deletion from bypassing the global route throttle without ever
+ * forwarding a raw client IP to the API.
+ */
+export function rateLimitIdentity(req: {
+  cookies: { get(name: string): { value?: string } | undefined };
+  headers: Headers;
+}): RateLimitIdentity {
+  const existing =
+    req.cookies.get(`__Host-${CLIENT_ID_COOKIE}`)?.value ?? req.cookies.get(CLIENT_ID_COOKIE)?.value;
+  const validExisting = existing && /^[0-9a-f-]{36}$/i.test(existing) ? existing : undefined;
+  const clientId = validExisting ?? randomUUID();
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error('JWT_SECRET is required to sign BFF client identity headers');
+  }
+  const hops = Math.min(3, Math.max(1, Number(process.env.BFF_TRUST_PROXY_HOPS ?? 1)));
+  const forwarded = (req.headers.get('x-forwarded-for') ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const networkSource = forwarded[Math.max(0, forwarded.length - hops)] ?? 'unknown';
+  const networkHash = createHmac('sha256', secret)
+    .update(`waitlayer-bff-network-v1:${networkSource}`)
+    .digest('hex');
+  const signature = createHmac('sha256', secret)
+    .update(`waitlayer-bff-client-v2:${clientId}:${networkHash}`)
+    .digest('hex');
+  return {
+    clientId,
+    isNew: !validExisting,
+    headers: {
+      'x-waitlayer-client-id': clientId,
+      'x-waitlayer-client-network': networkHash,
+      'x-waitlayer-client-signature': `v2.${signature}`,
+    },
+  };
+}
+
+export function applyRateLimitIdentity(
+  response: NextResponse,
+  identity: RateLimitIdentity,
+  headers: Headers,
+): NextResponse {
+  if (!identity.isNew) return response;
+  response.cookies.set(`__Host-${CLIENT_ID_COOKIE}`, identity.clientId, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'strict',
+    path: '/',
+    maxAge: 365 * 24 * 60 * 60,
+  });
+  // Plain HTTP development cannot store __Host- cookies. Keep a host-only
+  // HttpOnly fallback solely for that environment.
+  if (!isSecure(headers)) {
+    response.cookies.set(CLIENT_ID_COOKIE, identity.clientId, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60,
+    });
+  }
+  return response;
+}
 
 /**
  * Cookie name actually written to the browser. When the connection is Secure
@@ -68,7 +144,7 @@ export function readAuthCookie(
   // can set `access_token` with `Domain=.example.com` and forge a session.
   // Only accept the bare name when the connection is not known to be Secure
   // (`secure !== true`): i.e. when `secure` is false OR unspecified. This matches
-  // the middleware's inline cookie read and keeps production (`secure === true`)
+  // the proxy's inline cookie read and keeps production (`secure === true`)
   // from ever trusting the forgeable bare name.
   if (secure !== true) {
     return req.cookies.get(base)?.value;
@@ -78,7 +154,7 @@ export function readAuthCookie(
 
 /**
  * JWT access token TTL — must match JWT_ACCESS_TTL on the API (15m default).
- * Used for the access_token cookie's Max-Age. The middleware tolerates the
+ * Used for the access_token cookie's Max-Age. The proxy tolerates the
  * token being expired at route guard time because 30d refresh is the
  * authoritative session lifetime.
  */
@@ -245,21 +321,30 @@ export function clearAuthCookies(response: NextResponse, headers: Headers): Next
 }
 
 /**
- * Get the upstream API base URL from env. `NEXT_PUBLIC_API_URL` is exposed
- * to both client and server (Next.js convention), so the same value the
- * client uses is reachable from Route Handlers.
+ * Get the server-side upstream API base URL. Container deployments should use
+ * API_INTERNAL_URL so BFF route handlers do not attempt to call the browser's
+ * localhost/public endpoint from inside the web container.
  */
 export function apiBaseUrl(): string {
   // Default `localhost:4002` matches the API's API_PORT default (4002).
-  const rawUrl = process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL;
+  const rawUrl =
+    process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL;
   const url = new URL(rawUrl);
   const hostname = normalizeUrlHostname(url.hostname);
   const isLoopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  const isSingleLabelInternal = !hostname.includes('.');
 
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback)) {
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    (url.protocol !== 'https:' &&
+      !(url.protocol === 'http:' && (isLoopback || isSingleLabelInternal)))
+  ) {
     throw new Error(
-      `WaitLayer web refuses to send credentials over ${url.protocol}. ` +
-        'Set NEXT_PUBLIC_API_URL to an https:// endpoint, or http://localhost for local development.',
+      'WaitLayer web refuses to send credentials to an unsafe API endpoint. ' +
+        'Use HTTPS, loopback HTTP, or a single-label internal service URL without credentials/query/hash.',
     );
   }
 

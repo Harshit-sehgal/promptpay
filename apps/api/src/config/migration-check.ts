@@ -21,17 +21,12 @@ const MIGRATION_NAME = /^\d{14}_[\w-]+$/;
 
 /**
  * List migration directory names that look like Prisma migrations
- * (`<timestamp>_<name>`). Returns an empty array when the migrations
- * directory is not present (e.g. a production image that ships only the
- * generated client) so the check degrades gracefully.
+ * (`<timestamp>_<name>`). Filesystem errors intentionally propagate so the
+ * caller can fail closed in production instead of treating a broken image
+ * that omitted migrations as "up to date".
  */
 export async function listFolderMigrations(dir: string = MIGRATION_DIR): Promise<string[]> {
-  let entries: string[];
-  try {
-    entries = await fs.readdir(dir);
-  } catch {
-    return [];
-  }
+  const entries = await fs.readdir(dir);
   return entries.filter((name) => MIGRATION_NAME.test(name)).sort();
 }
 
@@ -49,17 +44,46 @@ export async function verifyMigrationsApplied(
   prisma: PrismaService,
   dir: string = MIGRATION_DIR,
 ): Promise<string[]> {
-  const folderMigrations = await listFolderMigrations(dir);
-  if (folderMigrations.length === 0) return [];
+  let folderMigrations: string[];
+  try {
+    folderMigrations = await listFolderMigrations(dir);
+  } catch (error) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[migration-check] Migration directory is unavailable; the production image must include Prisma migrations',
+        { cause: error },
+      );
+    }
+    const detail = `Migration directory is unavailable at ${dir}: ${error instanceof Error ? error.message : String(error)}`;
+    console.warn(`[WaitLayer] ${detail}`);
+    return [];
+  }
+  if (folderMigrations.length === 0) {
+    const detail = `No Prisma migration directories were found at ${dir}`;
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`[migration-check] ${detail}`);
+    }
+    console.warn(`[WaitLayer] ${detail}`);
+    return [];
+  }
 
   let applied: AppliedMigrationRow[];
   try {
     applied = await prisma.$queryRaw<AppliedMigrationRow[]>`
-      SELECT migration_name FROM _prisma_migrations WHERE rolled_back_at IS NULL
+      SELECT migration_name
+      FROM _prisma_migrations
+      WHERE finished_at IS NOT NULL
+        AND rolled_back_at IS NULL
     `;
-  } catch {
-    // The migrations table may not exist yet (fresh DB pre-deploy). Let the
-    // deploy step create it; don't fail startup here.
+  } catch (error) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[migration-check] Could not read completed migrations from _prisma_migrations',
+        { cause: error },
+      );
+    }
+    const detail = `Could not read completed migrations from _prisma_migrations: ${error instanceof Error ? error.message : String(error)}`;
+    console.warn(`[WaitLayer] ${detail}`);
     return folderMigrations;
   }
 

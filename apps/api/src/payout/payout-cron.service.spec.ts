@@ -5,6 +5,7 @@ import { PayoutStatus } from '@waitlayer/shared';
 import { PayoutCronService } from './payout-cron.service';
 
 const mockPrisma = {
+  $queryRaw: vi.fn().mockResolvedValue([{ key: 'payout-status-poll' }]),
   payoutRequest: {
     findMany: vi.fn(),
     findUnique: vi.fn(),
@@ -37,12 +38,22 @@ const mockPayoutService = {
   markPayoutFailed: vi.fn().mockResolvedValue({ status: 'failed', id: 'req_123' }),
 };
 
+const mockReferral = {
+  reconcilePendingReferralRewards: vi
+    .fn()
+    .mockResolvedValue({ checked: 0, rewarded: 0, failed: 0, hasMore: false }),
+};
+
 describe('PayoutCronService', () => {
   let service: PayoutCronService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new PayoutCronService(mockPrisma as any, mockPayoutService as any);
+    service = new PayoutCronService(
+      mockPrisma as any,
+      mockPayoutService as any,
+      mockReferral as any,
+    );
     // Prevent the actual interval from starting in tests
     vi.spyOn(service as any, 'pollProcessingPayouts').mockResolvedValue({ checked: 0, completed: 0, failed: 0 });
   });
@@ -69,6 +80,8 @@ describe('PayoutCronService', () => {
             take: 1,
           },
         },
+        orderBy: [{ processedAt: 'asc' }, { id: 'asc' }],
+        take: 100,
       });
     });
 
@@ -114,6 +127,8 @@ describe('PayoutCronService', () => {
           id: 'req_1',
           status: 'processing',
           currency: 'USD',
+          requestedAmountMinor: 2500n,
+          approvedAmountMinor: null,
           payoutAccount: { provider: 'paypal_payouts', destination: 'dev@paypal.com' },
           transactions: [{ providerTxId: 'pp_tx_123' }],
         },
@@ -131,6 +146,8 @@ describe('PayoutCronService', () => {
       expect(mockPayoutService.markPayoutPaid).toHaveBeenCalledWith('req_1', {
         providerTxId: 'pp_tx_123',
         paidAt: paidAt.toISOString(),
+        expectedAmountMinor: 2500n,
+        expectedCurrency: 'USD',
       });
     });
 

@@ -1,5 +1,8 @@
-import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { createHash } from 'crypto';
+import { Logger } from '@nestjs/common';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { StripeConnectPayoutProvider } from './stripe.provider';
 
 function makeProvider(opts: { secretKey?: string; nodeEnv?: string }) {
@@ -14,7 +17,13 @@ function makeProvider(opts: { secretKey?: string; nodeEnv?: string }) {
 }
 
 // Minimal Stripe SDK double that records the `stripeAccount` header used.
-function fakeStripe(options: { payoutCreateFails?: boolean; reversalFails?: boolean } = {}) {
+function fakeStripe(
+  options: {
+    payoutCreateFails?: boolean;
+    reversalFails?: boolean;
+    retrieveStatus?: string;
+  } = {},
+) {
   const calls: { args: any; opts: any }[] = [];
   const retrieveCalls: { providerTxId: string; opts: any }[] = [];
   const transferCalls: { args: any; opts: any }[] = [];
@@ -43,7 +52,11 @@ function fakeStripe(options: { payoutCreateFails?: boolean; reversalFails?: bool
       }),
       retrieve: vi.fn(async (providerTxId: string, _params: any, opts: any) => {
         retrieveCalls.push({ providerTxId, opts });
-        return { id: providerTxId, status: 'paid', arrival_date: 1700000000 };
+        return {
+          id: providerTxId,
+          status: options.retrieveStatus ?? 'paid',
+          arrival_date: 1700000000,
+        };
       }),
     },
   };
@@ -73,6 +86,7 @@ describe('StripeConnectPayoutProvider', () => {
   describe('initiate', () => {
     it('funds the connected account, creates a payout there, and returns the Stripe payout id', async () => {
       const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      const logSpy = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
       // Inject the fake Stripe client.
       (provider as any).stripe = fakeStripe();
 
@@ -103,6 +117,17 @@ describe('StripeConnectPayoutProvider', () => {
       expect(calls[0].args.currency).toBe('usd');
       expect(calls[0].args.metadata.payoutRequestId).toBe('req_1');
       expect(calls[0].args.metadata.transferId).toBe('tr_test_123');
+      const logText = logSpy.mock.calls.flat().join(' ');
+      expect(logText).not.toContain('acct_developer123');
+      expect(logText).toContain(
+        privacyPseudonym(
+          'acct_developer123',
+          'stripe-connect-payout-destination',
+        ).slice(0, 12),
+      );
+      expect(logText).not.toContain(
+        createHash('sha256').update('acct_developer123').digest('hex').slice(0, 10),
+      );
     });
 
     it('refuses a non-acct_ destination so production money never goes to an unknown account', async () => {
@@ -131,6 +156,22 @@ describe('StripeConnectPayoutProvider', () => {
           currency: 'USD',
         }),
       ).rejects.toThrow(/non-positive amount/);
+    });
+
+    it('rejects an amount above Stripe minor-unit limits before moving funds', async () => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      const stripe = fakeStripe();
+      (provider as any).stripe = stripe;
+
+      await expect(
+        provider.initiate({
+          payoutRequestId: 'req_too_large',
+          destination: 'acct_dev',
+          amountMinor: 100_000_000n,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(/maximum safely supported/);
+      expect(stripe.transfers.create).not.toHaveBeenCalled();
     });
 
     it('reverses the transfer if connected-account payout creation fails', async () => {
@@ -189,6 +230,15 @@ describe('StripeConnectPayoutProvider', () => {
         providerTxId: 'po_test_123',
         opts: { stripeAccount: 'acct_developer123' },
       });
+    });
+
+    it.each(['failed', 'canceled'])('maps bank payout %s to requires_review', async (status) => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      (provider as any).stripe = fakeStripe({ retrieveStatus: status });
+
+      await expect(
+        provider.checkStatus('po_test_review', { destination: 'acct_developer123' }),
+      ).resolves.toMatchObject({ status: 'requires_review' });
     });
   });
 });

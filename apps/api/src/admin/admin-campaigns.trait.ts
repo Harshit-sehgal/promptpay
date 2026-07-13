@@ -163,12 +163,18 @@ export class AdminCampaignsTrait {
   }
 
   // ── Archive Refunds ──
-  async getPendingArchiveRefunds() {
-    return this.prisma.advertiserLedger.findMany({
+  async getPendingArchiveRefunds(params: { page?: number; limit?: number } = {}) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params.limit ?? 20));
+    const where = {
+      entryType: 'refund' as const,
+      status: 'pending' as const,
+      idempotencyKey: { startsWith: 'archive_refund_' },
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.advertiserLedger.findMany({
       where: {
-        entryType: 'refund',
-        status: 'pending',
-        idempotencyKey: { startsWith: 'archive_refund_' },
+        ...where,
       },
       include: {
         advertiser: {
@@ -188,7 +194,12 @@ export class AdminCampaignsTrait {
         },
       },
       orderBy: { createdAt: 'asc' },
-    });
+      skip: (page - 1) * limit,
+      take: limit,
+      }),
+      this.prisma.advertiserLedger.count({ where }),
+    ]);
+    return { items, total, page, limit, hasMore: page * limit < total };
   }
 
   /**

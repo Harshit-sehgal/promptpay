@@ -34,27 +34,43 @@ export class AdminOverviewTrait {
 
   async getMoneyIntegrityReport() {
     // 1. Campaign Spend vs Advertiser Debits
-    const advertiserDebits = await this.prisma.advertiserLedger.groupBy({
-      by: ['campaignId', 'currency'],
-      where: { entryType: 'debit', status: { in: ['confirmed', 'paid'] } },
-      _sum: { amountMinor: true },
-    });
-    const debitMap = new Map(
-      advertiserDebits.map((d) => [`${d.campaignId}:${d.currency}`, d._sum.amountMinor ?? 0n]),
-    );
-    const debitCampaignIds = [
-      ...new Set(
-        advertiserDebits.map((d) => d.campaignId).filter((id): id is string => id !== null),
-      ),
-    ];
-    // Bounded: only load campaigns that could be discrepant (recorded spend or a
-    // matching ledger debit) instead of scanning the entire campaign table.
-    const campaigns = await this.prisma.campaign.findMany({
-      where: {
-        OR: [{ budgetSpentMinor: { not: 0 } }, { id: { in: debitCampaignIds } }],
-      },
-      select: { id: true, name: true, budgetSpentMinor: true, currency: true },
-    });
+    const campaignRows = await this.prisma.$queryRaw<
+      Array<{
+        campaignId: string;
+        campaignName: string;
+        budgetSpentMinor: bigint;
+        ledgerDebits: bigint;
+        diff: bigint;
+        currency: string;
+        total: bigint;
+      }>
+    >`
+      WITH debits AS (
+        SELECT "campaignId", "currency", SUM("amountMinor")::bigint AS amount
+        FROM "advertiser_ledger"
+        WHERE "entryType" = 'debit'
+          AND "status" IN ('confirmed', 'paid')
+          AND "campaignId" IS NOT NULL
+        GROUP BY "campaignId", "currency"
+      ), discrepancies AS (
+        SELECT
+          c."id" AS "campaignId",
+          c."name" AS "campaignName",
+          c."budgetSpentMinor"::bigint AS "budgetSpentMinor",
+          COALESCE(d.amount, 0)::bigint AS "ledgerDebits",
+          (c."budgetSpentMinor" - COALESCE(d.amount, 0))::bigint AS diff,
+          c."currency" AS currency
+        FROM "campaigns" c
+        LEFT JOIN debits d
+          ON d."campaignId" = c."id" AND d."currency" = c."currency"
+        WHERE c."budgetSpentMinor" <> COALESCE(d.amount, 0)
+      )
+      SELECT *, COUNT(*) OVER()::bigint AS total
+      FROM discrepancies
+      ORDER BY ABS(diff) DESC, "campaignId" ASC
+      LIMIT 101
+    `;
+    const campaignDiscrepancyTotal = Number(campaignRows[0]?.total ?? 0n);
     const campaignDiscrepancies: Array<{
       campaignId: string;
       campaignName: string;
@@ -62,20 +78,8 @@ export class AdminOverviewTrait {
       ledgerDebits: bigint;
       diff: bigint;
       currency: string;
-    }> = [];
-    for (const c of campaigns) {
-      const debits = debitMap.get(`${c.id}:${c.currency}`) ?? 0n;
-      if (c.budgetSpentMinor !== debits) {
-        campaignDiscrepancies.push({
-          campaignId: c.id,
-          campaignName: c.name,
-          budgetSpentMinor: c.budgetSpentMinor,
-          ledgerDebits: debits,
-          diff: c.budgetSpentMinor - debits,
-          currency: c.currency,
-        });
-      }
-    }
+    }> = campaignRows.slice(0, 100).map(({ total: _total, ...row }) => row);
+    const campaignDiscrepanciesHasMore = campaignRows.length > 100;
     // 2. Global Split Reconciliation
     const [
       totalEarningsCredit,
@@ -223,60 +227,55 @@ export class AdminOverviewTrait {
     const globalDiscrepancy = Object.values(globalReconciliationByCurrency).some(
       (row) => row.discrepancyMinor !== 0n,
     );
-    // 3. Developer Negative Balances (bounded: aggregate earnings by
-    //    user+currency, then fetch emails only for users with a negative balance
-    //    instead of loading every developer row first).
-    const [developerCreditGroups, developerDebitGroups] = await Promise.all([
-      this.prisma.earningsLedger.groupBy({
-        by: ['userId', 'currency'],
-        where: { status: 'confirmed', entryType: 'credit' },
-        _sum: { amountMinor: true },
-      }),
-      this.prisma.earningsLedger.groupBy({
-        by: ['userId', 'currency'],
-        where: { status: 'confirmed', entryType: 'debit' },
-        _sum: { amountMinor: true },
-      }),
-    ]);
-    const developerBalances = new Map<string, bigint>();
-    for (const row of developerCreditGroups) {
-      const key = `${row.userId}:${row.currency}`;
-      developerBalances.set(
-        key,
-        (developerBalances.get(key) ?? 0n) + BigInt(row._sum.amountMinor ?? 0),
-      );
-    }
-    for (const row of developerDebitGroups) {
-      const key = `${row.userId}:${row.currency}`;
-      developerBalances.set(
-        key,
-        (developerBalances.get(key) ?? 0n) - BigInt(row._sum.amountMinor ?? 0),
-      );
-    }
+    // 3. Developer negative balances. Aggregate/filter in Postgres and cap the
+    // incident list so a high-volume ledger cannot exhaust API memory.
+    const negativeRows = await this.prisma.$queryRaw<
+      Array<{
+        userId: string;
+        email: string;
+        balanceMinor: bigint;
+        currency: string;
+        total: bigint;
+      }>
+    >`
+      WITH balances AS (
+        SELECT
+          "userId",
+          "currency",
+          SUM(
+            CASE
+              WHEN "entryType" = 'credit' THEN "amountMinor"
+              WHEN "entryType" = 'debit' THEN -"amountMinor"
+              ELSE 0
+            END
+          )::bigint AS balance
+        FROM "earnings_ledger"
+        WHERE "status" = 'confirmed'
+          AND "entryType" IN ('credit', 'debit')
+        GROUP BY "userId", "currency"
+      ), negative AS (
+        SELECT
+          b."userId" AS "userId",
+          u."email" AS email,
+          b.balance AS "balanceMinor",
+          b."currency" AS currency
+        FROM balances b
+        INNER JOIN "users" u ON u."id" = b."userId"
+        WHERE b.balance < 0
+      )
+      SELECT *, COUNT(*) OVER()::bigint AS total
+      FROM negative
+      ORDER BY "balanceMinor" ASC, "userId" ASC, currency ASC
+      LIMIT 101
+    `;
+    const negativeDeveloperBalanceTotal = Number(negativeRows[0]?.total ?? 0n);
     const negativeDeveloperBalances: Array<{
       userId: string;
       email: string;
       balanceMinor: bigint;
       currency: string;
-    }> = [];
-    const negativeUserIds: string[] = [];
-    for (const [key, balance] of developerBalances) {
-      if (balance < 0n) {
-        const [userId, currency] = key.split(':');
-        negativeDeveloperBalances.push({ userId, email: userId, balanceMinor: balance, currency });
-        negativeUserIds.push(userId);
-      }
-    }
-    if (negativeUserIds.length > 0) {
-      const users = await this.prisma.user.findMany({
-        where: { id: { in: negativeUserIds } },
-        select: { id: true, email: true },
-      });
-      const emailById = new Map(users.map((u) => [u.id, u.email]));
-      for (const row of negativeDeveloperBalances) {
-        row.email = emailById.get(row.userId) ?? row.userId;
-      }
-    }
+    }> = negativeRows.slice(0, 100).map(({ total: _total, ...row }) => row);
+    const negativeDeveloperBalancesHasMore = negativeRows.length > 100;
     return {
       timestamp: new Date().toISOString(),
       status:
@@ -296,7 +295,11 @@ export class AdminOverviewTrait {
       },
       globalReconciliationByCurrency,
       campaignDiscrepancies,
+      campaignDiscrepancyTotal,
+      campaignDiscrepanciesHasMore,
       negativeDeveloperBalances,
+      negativeDeveloperBalanceTotal,
+      negativeDeveloperBalancesHasMore,
     };
   }
 

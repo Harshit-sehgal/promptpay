@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -47,6 +47,7 @@ const tracker = new Map<string, { failures: number; lockUntil: number; lastFailu
 let redisCounter: RedisWindowCounter | null = null;
 let configuredRedisUrl: string | undefined;
 let failClosed = false;
+let bffIdentitySecret: string | undefined;
 
 @Injectable()
 export class BruteForceGuard implements CanActivate, OnApplicationShutdown {
@@ -72,11 +73,13 @@ export class BruteForceGuard implements CanActivate, OnApplicationShutdown {
   static configure(config: ConfigService): void {
     const redisUrl = config.get<string>('REDIS_URL');
     const nodeEnv = config.get<string>('NODE_ENV');
-    this.configureRuntime(redisUrl, nodeEnv === 'production');
+    this.configureRuntime(redisUrl, nodeEnv === 'production', config.get<string>('JWT_SECRET'));
   }
 
-  static configureForTests(options: { redisUrl?: string; nodeEnv?: string } = {}): void {
-    this.configureRuntime(options.redisUrl, options.nodeEnv === 'production');
+  static configureForTests(
+    options: { redisUrl?: string; nodeEnv?: string; jwtSecret?: string } = {},
+  ): void {
+    this.configureRuntime(options.redisUrl, options.nodeEnv === 'production', options.jwtSecret);
   }
 
   static async resetForTests(): Promise<void> {
@@ -161,8 +164,13 @@ export class BruteForceGuard implements CanActivate, OnApplicationShutdown {
     }
   }
 
-  private static configureRuntime(redisUrl: string | undefined, shouldFailClosed: boolean): void {
+  private static configureRuntime(
+    redisUrl: string | undefined,
+    shouldFailClosed: boolean,
+    jwtSecret?: string,
+  ): void {
     failClosed = shouldFailClosed;
+    bffIdentitySecret = jwtSecret;
     if (!redisUrl) {
       redisCounter = null;
       configuredRedisUrl = undefined;
@@ -269,10 +277,45 @@ function resolvePath(req: RequestLike): string {
 }
 
 function resolveIp(req: RequestLike): string {
+  const bffIdentity = verifiedBffIdentity(req);
+  if (bffIdentity) return `bff-client:${bffIdentity.clientId}`;
   // req.ip is Express's resolved client IP (honours the `trust proxy` setting).
   // Never read x-forwarded-for directly - an attacker controls that header and
   // can rotate it per request to defeat the counter.
   return req.ip ?? req.connection?.remoteAddress ?? 'unknown';
+}
+
+export function verifiedBffIdentity(
+  req: RequestLike,
+): { clientId: string; networkHash: string } | null {
+  const secret = bffIdentitySecret ?? process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) return null;
+  const header = (name: string): string | undefined => {
+    const value = req.headers?.[name];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const clientId = header('x-waitlayer-client-id');
+  const networkHash = header('x-waitlayer-client-network');
+  const supplied = header('x-waitlayer-client-signature');
+  if (
+    !clientId ||
+    !/^[0-9a-f-]{36}$/i.test(clientId) ||
+    !networkHash ||
+    !/^[0-9a-f]{64}$/i.test(networkHash) ||
+    !supplied?.startsWith('v2.')
+  ) {
+    return null;
+  }
+  const expected = createHmac('sha256', secret)
+    .update(`waitlayer-bff-client-v2:${clientId}:${networkHash}`)
+    .digest('hex');
+  const actual = supplied.slice(3);
+  const expectedBytes = Buffer.from(expected);
+  const actualBytes = Buffer.from(actual);
+  if (expectedBytes.length !== actualBytes.length || !timingSafeEqual(expectedBytes, actualBytes)) {
+    return null;
+  }
+  return { clientId, networkHash };
 }
 
 function normalizeTarget(target?: string): string {

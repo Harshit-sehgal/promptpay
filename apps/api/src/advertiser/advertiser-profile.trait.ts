@@ -11,6 +11,7 @@ import { DEFAULT_COMPANY_NAME } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import { eraseAccountIdentity } from '../common/utils/account-erasure';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { buildCappedExportMeta, splitCappedRows } from '../common/utils/export-metadata';
 import { normalizeOptionalPublicHttpsUrl } from '../common/utils/external-url-policy';
@@ -105,15 +106,21 @@ export class AdvertiserProfileTrait {
             take: ADVERTISER_EXPORT_LIMITS.billingLedger + 1,
           })
         : [],
-      this.prisma.consent.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
+      this.prisma.consent.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: ADVERTISER_EXPORT_LIMITS.consents + 1,
+      }),
     ]);
     const campaigns = splitCappedRows(campaignRows, ADVERTISER_EXPORT_LIMITS.campaigns);
     const creatives = splitCappedRows(creativeRows, ADVERTISER_EXPORT_LIMITS.creatives);
     const billingLedger = splitCappedRows(ledgerRows, ADVERTISER_EXPORT_LIMITS.billingLedger);
+    const consent = splitCappedRows(consents, ADVERTISER_EXPORT_LIMITS.consents);
     const exportMeta = buildCappedExportMeta({
       campaigns: campaigns.meta,
       creatives: creatives.meta,
       billingLedger: billingLedger.meta,
+      consent: consent.meta,
     });
     void this.audit.log({
       actorId: userId,
@@ -128,7 +135,7 @@ export class AdvertiserProfileTrait {
       campaigns: campaigns.data,
       creatives: creatives.data,
       billingLedger: billingLedger.data,
-      consent: consents,
+      consent: consent.data,
       exportMeta,
     };
   }
@@ -178,36 +185,7 @@ export class AdvertiserProfileTrait {
       // but fail closed rather than allow unauthenticated erasure.
       throw new UnauthorizedException('Unable to verify account ownership for deletion');
     }
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          status: 'deleted',
-          email: `deleted-${userId}@waitlayer.com`,
-          passwordHash: null,
-          googleId: null,
-          githubId: null,
-          googleVerified: false,
-          githubVerified: false,
-          emailVerified: false,
-          twoFactorEnabled: false,
-          twoFactorSecret: null,
-          name: null,
-          referralCode: null,
-          country: null,
-        },
-      }),
-      this.prisma.advertiser.updateMany({
-        where: { userId },
-        data: {
-          companyName: 'Deleted Advertiser',
-          billingEmail: `deleted-${userId}@waitlayer.com`,
-          websiteUrl: null,
-        },
-      }),
-      this.prisma.session.updateMany({ where: { userId }, data: { revoked: true } }),
-      this.prisma.apiKey.updateMany({ where: { ownerId: userId }, data: { isActive: false } }),
-    ]);
+    await eraseAccountIdentity(this.prisma, userId);
     void this.audit.log({
       actorId: userId,
       actorRole: 'advertiser',

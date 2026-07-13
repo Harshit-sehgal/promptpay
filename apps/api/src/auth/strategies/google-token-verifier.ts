@@ -34,10 +34,12 @@ export interface GoogleIdTokenPayload {
 export class GoogleTokenVerifier {
   private readonly clientId: string;
   private readonly enabled: boolean;
+  private readonly timeoutMs: number;
 
   constructor(private config: ConfigService) {
     this.clientId = this.config.get<string>('GOOGLE_CLIENT_ID', '')!;
     this.enabled = !!this.clientId;
+    this.timeoutMs = this.config.get<number>('GOOGLE_TOKENINFO_TIMEOUT_MS', 5_000);
   }
 
   /** Verify a Google ID token and return the decoded payload */
@@ -78,15 +80,29 @@ export class GoogleTokenVerifier {
     }
 
     // Call Google's tokeninfo endpoint to verify the token
-    const response = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+        { signal: AbortSignal.timeout(this.timeoutMs) },
+      );
+    } catch {
+      throw new UnauthorizedException('Google token verification is temporarily unavailable');
+    }
 
     if (!response.ok) {
       throw new UnauthorizedException('Invalid Google ID token');
     }
 
     const payload = (await response.json()) as GoogleIdTokenPayload;
+
+    if (
+      typeof payload.email !== 'string' ||
+      payload.email.length > 254 ||
+      !payload.email.includes('@')
+    ) {
+      throw new UnauthorizedException('Google token contains an invalid email');
+    }
 
     // Google's tokeninfo endpoint returns `email_verified` as the STRING
     // "true"/"false" (not a JSON boolean). The earlier interface typed it

@@ -19,7 +19,7 @@ const SECURITY_HEADERS = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests;",
   },
   {
     key: 'X-Content-Type-Options',
@@ -42,6 +42,8 @@ const SECURITY_HEADERS = [
 const nextConfig = {
   transpilePackages: ['@waitlayer/ui', '@waitlayer/shared', '@waitlayer/config'],
   typedRoutes: true,
+  crossOrigin: 'anonymous',
+  experimental: { sri: { algorithm: 'sha384' } },
   outputFileTracingRoot: path.join(__dirname, '../../'),
 
   async headers() {

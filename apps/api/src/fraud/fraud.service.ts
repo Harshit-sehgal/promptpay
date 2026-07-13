@@ -7,18 +7,24 @@ import {
   Prisma,
   TrustLevel,
 } from '@waitlayer/db';
-import { FraudFlagType,FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@waitlayer/shared';
+import { FraudFlagType, FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@waitlayer/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 
 @Injectable()
 export class FraudService {
-  constructor(private prisma: PrismaService, private ledger: LedgerService) {}
+  constructor(
+    private prisma: PrismaService,
+    private ledger: LedgerService,
+  ) {}
 
   // ── Rate Limit Checks ──
 
-  async checkImpressionRateLimit(userId: string, deviceId: string): Promise<{ allowed: boolean; reason?: string }> {
+  async checkImpressionRateLimit(
+    userId: string,
+    deviceId: string,
+  ): Promise<{ allowed: boolean; reason?: string }> {
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
     const [userCount, deviceCount] = await Promise.all([
@@ -55,7 +61,10 @@ export class FraudService {
     return { allowed: true };
   }
 
-  async checkClickPatterns(userId: string, impressionId: string): Promise<{ allowed: boolean; reason?: string }> {
+  async checkClickPatterns(
+    userId: string,
+    impressionId: string,
+  ): Promise<{ allowed: boolean; reason?: string }> {
     // One click per impression
     const existing = await this.prisma.adClick.count({
       where: { impressionId },
@@ -98,7 +107,10 @@ export class FraudService {
   }
 
   /** Check for self-clicking (advertiser clicking own ads via developer account) */
-  async checkSelfClick(userId: string, campaignId: string): Promise<{ allowed: boolean; reason?: string }> {
+  async checkSelfClick(
+    userId: string,
+    campaignId: string,
+  ): Promise<{ allowed: boolean; reason?: string }> {
     const campaign = await this.prisma.campaign.findUnique({
       where: { id: campaignId },
       include: { advertiser: true },
@@ -122,31 +134,33 @@ export class FraudService {
   // ── Trust Score Computation ──
 
   async computeTrustScore(userId: string): Promise<number> {
-    // Optimistic-concurrency guard against the trust-recompute race.
-    // The function reads inputs, computes a deterministic score/level, then
-    // writes trustScore + user.trustLevel. Two concurrent recomputes can each
-    // read a different snapshot (e.g. one sees a fraud flag the other doesn't
-    // yet). Last-write-wins on user.trustLevel would let a *stale* recompute
-    // (that read its inputs before a fresher one's writes landed) overwrite
-    // the fresher level — reverting a just-applied penalty or promotion.
-    //
-    // We close that by re-reading the `trustScore.updatedAt` we observed at
-    // the top and making the closing `user.trustLevel` write conditional on
-    // the trustScore row being unchanged since our read (`updateMany where`
-    // join on the trustScore's updatedAt). On a first computation (no row
-    // yet) there is no stale-write hazard, so the CAS is skipped. If the CAS
-    // rejects (count === 0), a fresher write landed concurrently — we accept
-    // that fresher level and return our computed score without overwriting.
-    const user = await this.prisma.user.findUnique({
+    // Serialize the complete read-compute-write cycle per user. The previous
+    // optimistic guard compared trust_scores.updatedAt with the timestamp read
+    // BEFORE its own upsert; because @updatedAt changes on that upsert, every
+    // recomputation after the first skipped the users.trustLevel write. A
+    // transaction-scoped advisory lock both fixes that self-invalidating CAS
+    // and prevents a stale concurrent computation from overwriting a newer
+    // score/level pair.
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`trust-score:${userId}`}))`;
+        return this.computeTrustScoreLocked(tx, userId);
+      },
+      { timeout: 10_000 },
+    );
+  }
+
+  private async computeTrustScoreLocked(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<number> {
+    const user = await tx.user.findUnique({
       where: { id: userId },
       include: {
-        trustScore: true,
         fraudFlags: { where: { status: { in: ['open', 'reviewing'] } } },
       },
     });
     if (!user) return TRUST_SCORE.INITIAL;
-
-    const observedTrustUpdatedAt = user.trustScore?.updatedAt ?? null;
 
     let score: number = TRUST_SCORE.INITIAL;
 
@@ -168,25 +182,26 @@ export class FraudService {
     score += googleVerifiedPts;
 
     // Device consistency: +5 for single device, +3 for 2-3, 0 for 4+
-    const deviceCount = await this.prisma.device.count({ where: { userId } });
-    const deviceConsistPts = deviceCount === 1 ? 10 : deviceCount <= 3 ? 5 : 0;
+    const deviceCount = await tx.device.count({ where: { userId } });
+    const deviceConsistPts = deviceCount === 1 ? 10 : deviceCount >= 2 && deviceCount <= 3 ? 5 : 0;
     score += deviceConsistPts;
 
-    // Activity pattern: based on consistent usage (max 10)
-    const daysActive = await this.prisma.waitStateEvent.groupBy({
-      by: ['userId'],
-      where: {
-        userId,
-        eventType: 'wait_state_start',
-        createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-      },
-      _count: true,
-    });
-    const activityPatternPts = Math.min(10, Math.floor((daysActive[0]?._count || 0) / 3));
+    // Activity consistency is based on DISTINCT UTC calendar days, not raw
+    // event count. Counting every wait_state_start let a client spam 30
+    // starts in one burst and immediately obtain the full 10-point trust
+    // bonus intended to represent a month of recurring usage.
+    const activityRows = await tx.$queryRaw<Array<{ count: number }>>`
+      SELECT COUNT(DISTINCT DATE("createdAt" AT TIME ZONE 'UTC'))::int AS "count"
+      FROM "wait_state_events"
+      WHERE "userId" = ${userId}
+        AND "eventType" = 'wait_state_start'
+        AND "createdAt" >= ${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)}
+    `;
+    const activityPatternPts = Math.min(10, activityRows[0]?.count ?? 0);
     score += activityPatternPts;
 
     // Payout history: +5 per successful payout, max 20
-    const paidPayouts = await this.prisma.payoutRequest.count({
+    const paidPayouts = await tx.payoutRequest.count({
       where: { userId, status: 'paid' },
     });
     const payoutHistoryPts = Math.min(20, paidPayouts * 5);
@@ -195,11 +210,16 @@ export class FraudService {
     // Fraud penalties: subtract based on severity
     const fraudPenaltyPts = user.fraudFlags.reduce((acc: number, f: { severity: string }) => {
       switch (f.severity) {
-        case 'critical': return acc + 20;
-        case 'high': return acc + 10;
-        case 'medium': return acc + 5;
-        case 'low': return acc + 1;
-        default: return acc;
+        case 'critical':
+          return acc + 20;
+        case 'high':
+          return acc + 10;
+        case 'medium':
+          return acc + 5;
+        case 'low':
+          return acc + 1;
+        default:
+          return acc;
       }
     }, 0);
     score -= fraudPenaltyPts;
@@ -208,13 +228,17 @@ export class FraudService {
     score = Math.max(TRUST_SCORE.MIN, Math.min(TRUST_SCORE.MAX, score));
 
     // Determine trust level
-    const level = score >= TRUST_SCORE.THRESHOLDS.HIGH_TRUST ? TrustLevel.high_trust
-      : score >= TRUST_SCORE.THRESHOLDS.NORMAL ? TrustLevel.normal
-      : score >= TRUST_SCORE.THRESHOLDS.LOW_TRUST ? TrustLevel.low_trust
-      : TrustLevel.new;
+    const level =
+      score >= TRUST_SCORE.THRESHOLDS.HIGH_TRUST
+        ? TrustLevel.high_trust
+        : score >= TRUST_SCORE.THRESHOLDS.NORMAL
+          ? TrustLevel.normal
+          : score >= TRUST_SCORE.THRESHOLDS.LOW_TRUST
+            ? TrustLevel.low_trust
+            : TrustLevel.new;
 
     // Update trust score record
-    await this.prisma.trustScore.upsert({
+    await tx.trustScore.upsert({
       where: { userId },
       create: {
         userId,
@@ -244,32 +268,10 @@ export class FraudService {
       },
     });
 
-    // Update user trust level. On a first computation there's no prior
-    // trustScore row, so no stale-write hazard — set unconditionally. On a
-    // subsequent computation, only flip user.trustLevel if the trustScore
-    // row is unchanged since we read it (observedTrustUpdatedAt). A concurrent
-    // recompute that wrote a fresher level changed trustScore.updatedAt, so
-    // this conditional update is rejected (count === 0) and we leave the
-    // user's level to the fresher write rather than reverting it. The
-    // trustScore row itself was upserted above; if a fresher competitor
-    // upserts after us it overwrites our score — deterministic, so the
-    // last writer converges to the correct value.
-    if (observedTrustUpdatedAt === null) {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { trustLevel: level },
-      });
-    } else {
-      await this.prisma.$executeRaw`
-        UPDATE "users" SET "trustLevel" = ${level}::"TrustLevel"
-        WHERE "id" = ${userId}
-          AND EXISTS (
-            SELECT 1 FROM "trust_scores" t
-            WHERE t."userId" = ${userId}
-              AND t."updatedAt" = ${observedTrustUpdatedAt}
-          )
-      `;
-    }
+    await tx.user.update({
+      where: { id: userId },
+      data: { trustLevel: level },
+    });
 
     return score;
   }
@@ -296,10 +298,15 @@ export class FraudService {
     // both insert duplicate open flags.)
     const flag = await this.prisma.$transaction(async (tx) => {
       if (params.userId) {
+        // The transaction alone does not serialize a find-then-create at the
+        // default isolation level. Lock the logical (user,type) key so two
+        // concurrent detections cannot both observe no open flag and insert a
+        // duplicate before either commits.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`fraud-flag:${params.userId}:${params.flagType}`}))`;
         const existing = await tx.fraudFlag.findFirst({
           where: {
             userId: params.userId,
-            status: DbFraudFlagStatus.open,
+            status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] },
             flagType: params.flagType as DbFraudFlagType,
           },
         });
@@ -355,28 +362,44 @@ export class FraudService {
     //     earnings, potentially including NEW holds created under different
     //     flags between the two resolution attempts.
     // The authoritative state guard is the conditional updateMany.
-    const newStatus = isValid ? DbFraudFlagStatus.resolved_valid : DbFraudFlagStatus.resolved_invalid;
+    const newStatus = isValid
+      ? DbFraudFlagStatus.resolved_valid
+      : DbFraudFlagStatus.resolved_invalid;
 
-    const result = await this.prisma.fraudFlag.updateMany({
-      where: { id: flagId, status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] } },
-      data: {
-        status: newStatus,
-        reviewerId,
-        reviewNote,
-        resolvedAt: new Date(),
-      },
-    });
+    let claimed = false;
+    if (
+      flag.status === DbFraudFlagStatus.open ||
+      flag.status === DbFraudFlagStatus.reviewing
+    ) {
+      const result = await this.prisma.fraudFlag.updateMany({
+        where: { id: flagId, status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] } },
+        data: {
+          status: newStatus,
+          reviewerId,
+          reviewNote,
+          resolvedAt: new Date(),
+        },
+      });
+      claimed = result.count === 1;
+    }
 
-    if (result.count === 0) {
+    if (!claimed && flag.status !== newStatus) {
       const existing = await this.prisma.fraudFlag.findUnique({
         where: { id: flagId },
         select: { status: true },
       });
+      // A concurrent resolver may have completed the same decision after our
+      // snapshot. Treat that as a retryable replay; opposite decisions remain
+      // rejected and never run money compensation.
+      if (existing?.status === newStatus) {
+        claimed = false;
+      } else {
       throw new BadRequestException(
         existing
           ? `Fraud flag cannot be resolved from status '${existing.status}'`
           : 'Fraud flag not found',
       );
+      }
     }
 
     // If flag was valid (fraud confirmed) and user has held earnings,
@@ -447,14 +470,13 @@ export class FraudService {
   }
 
   async getFlagStats() {
-    const [open, reviewing, resolvedValid, resolvedInvalid, escalated] =
-      await Promise.all([
-        this.prisma.fraudFlag.count({ where: { status: 'open' } }),
-        this.prisma.fraudFlag.count({ where: { status: 'reviewing' } }),
-        this.prisma.fraudFlag.count({ where: { status: 'resolved_valid' } }),
-        this.prisma.fraudFlag.count({ where: { status: 'resolved_invalid' } }),
-        this.prisma.fraudFlag.count({ where: { status: 'escalated' } }),
-      ]);
+    const [open, reviewing, resolvedValid, resolvedInvalid, escalated] = await Promise.all([
+      this.prisma.fraudFlag.count({ where: { status: 'open' } }),
+      this.prisma.fraudFlag.count({ where: { status: 'reviewing' } }),
+      this.prisma.fraudFlag.count({ where: { status: 'resolved_valid' } }),
+      this.prisma.fraudFlag.count({ where: { status: 'resolved_invalid' } }),
+      this.prisma.fraudFlag.count({ where: { status: 'escalated' } }),
+    ]);
 
     return { open, reviewing, resolvedValid, resolvedInvalid, escalated };
   }

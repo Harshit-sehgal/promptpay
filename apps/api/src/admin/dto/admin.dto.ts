@@ -14,6 +14,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 import { FraudSeverity } from '@waitlayer/shared';
 
+import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
 
 // ── Campaign approval ──
@@ -57,7 +58,7 @@ export class ApprovePayoutDto {
   @IsOptional()
   @IsBigInt()
   @MinBigInt(1n)
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   approvedAmountMinor?: bigint;
 }
 
@@ -81,7 +82,7 @@ export class MarkPayoutPaidDto {
   @ApiProperty()
   @IsBigInt()
   @MinBigInt(1n)
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   amountMinor!: bigint;
 
   @ApiProperty()
@@ -206,6 +207,23 @@ export class AdminDevicesQueryDto {
   @MaxLength(50)
   toolType?: string;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @Type(() => Number)
+  limit?: number;
+}
+
+export class ArchiveRefundQueueQueryDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()

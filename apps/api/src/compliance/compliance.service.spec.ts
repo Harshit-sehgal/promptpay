@@ -9,7 +9,10 @@ const mockPrisma = {
     create: vi.fn(),
     findFirst: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
   },
+  $executeRaw: vi.fn().mockResolvedValue(1),
+  $transaction: vi.fn((callback: (tx: any) => unknown) => callback(mockPrisma)),
 } as any;
 
 const audit = {
@@ -27,6 +30,7 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.consent.findFirst.mockResolvedValue(null);
+    mockPrisma.consent.count.mockResolvedValue(0);
   });
 
   it('records a null-user consent with a hashed visitorId on accept', async () => {
@@ -93,7 +97,19 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
     expect(mockPrisma.consent.create).not.toHaveBeenCalled();
   });
 
-  it('updates rather than duplicates an existing anonymous consent for the same visitor + purpose', async () => {
+  it('rejects a client-supplied stale or invented policy version', async () => {
+    const service = makeService();
+    await expect(
+      service.recordAnonymousConsent({
+        visitorId: VISITOR,
+        purpose: 'marketing_cookies',
+        policyVersion: '2099-01-01',
+      }),
+    ).rejects.toThrow('not current');
+    expect(mockPrisma.consent.create).not.toHaveBeenCalled();
+  });
+
+  it('appends a changed anonymous choice instead of mutating prior legal evidence', async () => {
     const service = makeService();
     mockPrisma.consent.findFirst.mockResolvedValue({
       id: 'c-existing',
@@ -103,8 +119,8 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
       version: '2026-07-01',
       granted: false,
     });
-    mockPrisma.consent.update.mockResolvedValue({
-      id: 'c-existing',
+    mockPrisma.consent.create.mockResolvedValue({
+      id: 'c-new-choice',
       userId: null,
       visitorIdHash: VISITOR_HASH,
       purpose: 'marketing_cookies',
@@ -118,10 +134,37 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
       granted: true,
     });
 
+    expect(mockPrisma.consent.update).not.toHaveBeenCalled();
+    expect(mockPrisma.consent.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.consent.create.mock.calls[0][0].data.granted).toBe(true);
+    expect(mockPrisma.consent.findFirst).toHaveBeenCalledWith({
+      where: { visitorIdHash: VISITOR_HASH, purpose: 'marketing_cookies' },
+      orderBy: { createdAt: 'desc' },
+    });
+  });
+
+  it('returns the latest row without appending on an exact replay', async () => {
+    const service = makeService();
+    const existing = {
+      id: 'c-existing',
+      userId: null,
+      visitorIdHash: VISITOR_HASH,
+      purpose: 'marketing_cookies',
+      version: '2026-07-01',
+      granted: false,
+    };
+    mockPrisma.consent.findFirst.mockResolvedValue(existing);
+
+    await expect(
+      service.recordAnonymousConsent({
+        visitorId: VISITOR,
+        purpose: 'marketing_cookies',
+        granted: false,
+      }),
+    ).resolves.toBe(existing);
+    expect(mockPrisma.$executeRaw).toHaveBeenCalled();
     expect(mockPrisma.consent.create).not.toHaveBeenCalled();
-    expect(mockPrisma.consent.update).toHaveBeenCalledTimes(1);
-    expect(mockPrisma.consent.update.mock.calls[0][0].where).toEqual({ id: 'c-existing' });
-    expect(mockPrisma.consent.update.mock.calls[0][0].data.granted).toBe(true);
+    expect(audit.log).not.toHaveBeenCalled();
   });
 
   it('does not store the raw visitorId — only its hash', async () => {
@@ -134,5 +177,75 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
     expect(data.visitorIdHash).toBe(VISITOR_HASH);
     // No field carries the plaintext id.
     expect(JSON.stringify(data)).not.toContain(VISITOR);
+  });
+});
+
+describe('ComplianceService — stale consent semantics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.consent.count.mockResolvedValue(0);
+  });
+
+  it('honours a current explicit marketing-cookie decline without re-prompting', async () => {
+    const service = makeService();
+    mockPrisma.consent.findFirst.mockImplementation(({ where }: any) => {
+      if (where.purpose === 'marketing_cookies') {
+        return Promise.resolve({
+          purpose: 'marketing_cookies',
+          version: '2026-07-01',
+          granted: false,
+        });
+      }
+      return Promise.resolve({ purpose: where.purpose, version: '2026-07-01', granted: true });
+    });
+
+    await expect(service.getStaleConsents('user-1')).resolves.toEqual([]);
+  });
+
+  it('still treats declined required terms or privacy consent as stale', async () => {
+    const service = makeService();
+    mockPrisma.consent.findFirst.mockImplementation(({ where }: any) =>
+      Promise.resolve({
+        purpose: where.purpose,
+        version: '2026-07-01',
+        granted: where.purpose !== 'terms_of_service',
+      }),
+    );
+
+    await expect(service.getStaleConsents('user-1')).resolves.toEqual(['terms_of_service']);
+  });
+
+  it('rejects an outdated authenticated policy acknowledgement', async () => {
+    const service = makeService();
+    await expect(
+      service.recordConsent('user-1', 'developer', 'privacy_policy', '2025-01-01', true),
+    ).rejects.toThrow('not current');
+    expect(mockPrisma.consent.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects arbitrary authenticated consent purposes that could grow storage', async () => {
+    const service = makeService();
+    await expect(
+      service.recordConsent('user-1', 'developer', 'attacker_defined_purpose', '2026-07-01'),
+    ).rejects.toThrow(/Unsupported consent purpose/);
+    expect(mockPrisma.consent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not append duplicate authenticated consent state', async () => {
+    const service = makeService();
+    const existing = {
+      id: 'consent-existing',
+      userId: 'user-1',
+      purpose: 'privacy_policy',
+      version: '2026-07-01',
+      granted: true,
+    };
+    mockPrisma.consent.findFirst.mockResolvedValue(existing);
+
+    await expect(
+      service.recordConsent('user-1', 'developer', 'privacy_policy', '2026-07-01', true),
+    ).resolves.toBe(existing);
+    expect(mockPrisma.consent.create).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
   });
 });

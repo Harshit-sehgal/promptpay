@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -23,16 +26,25 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
       JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
-      REDIS_URL: ''
+      REDIS_URL: redis://localhost:6379
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
         with:
-          version: 11
-      - uses: actions/setup-node@v6
+          version: 11.9.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: pnpm
@@ -54,11 +66,13 @@ jobs:
         run: pnpm run build
 
       # Migration release gate (A-012): apply all migrations, then assert the
-      # database is fully migrated (no pending migrations / drift).
+      # database is fully migrated and exactly matches schema.prisma.
       - name: Apply migrations
-        run: pnpm --filter @waitlayer/db migrate deploy
-      - name: Assert no migration drift
-        run: pnpm --filter @waitlayer/db migrate status
+        run: pnpm --filter @waitlayer/db migrate:deploy
+      - name: Assert no pending migrations
+        run: pnpm --filter @waitlayer/db migrate:status
+      - name: Assert migration-built schema has no drift
+        run: pnpm --filter @waitlayer/db migrate:drift
 
       - name: Test
         run: pnpm test
@@ -71,11 +85,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
         with:
-          version: 11
-      - uses: actions/setup-node@v6
+          version: 11.9.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: pnpm
@@ -98,13 +112,17 @@ jobs:
       - name: Package VS Code extension (no publish)
         run: |
           mkdir -p ../../artifacts/vscode
-          npx --yes @vscode/vsce@latest package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
+          pnpm exec vsce package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
         working-directory: apps/vscode-extension
       - name: Smoke test VSIX metadata
         run: |
           test -s artifacts/vscode/waitlayer-vscode.vsix
-          unzip -p artifacts/vscode/waitlayer-vscode.vsix extension/package.json > /tmp/waitlayer-vscode-package.json
+          rm -rf /tmp/waitlayer-vsix
+          mkdir -p /tmp/waitlayer-vsix
+          unzip -q artifacts/vscode/waitlayer-vscode.vsix -d /tmp/waitlayer-vsix
+          cp /tmp/waitlayer-vsix/extension/package.json /tmp/waitlayer-vscode-package.json
           node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
+          node scripts/verify-vsix-artifact.cjs /tmp/waitlayer-vsix/extension
 
   # Build the Docker images and prove the COMPILED artifacts actually serve
   # traffic. The integration suite only exercises the source AppModule via
@@ -115,17 +133,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@b0f76dfb45f55f8421693e4803ac7bb65143bd34 # v6
         with:
-          version: 11
-      - uses: actions/setup-node@v6
+          version: 11.9.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # The main build-and-test job already typechecks and lints against the
       # source tree. Re-run here in the docker-build context so a Dockerfile or
@@ -157,6 +175,9 @@ jobs:
             if curl -fsS http://localhost:4002/api/v1/health/ready; then
               echo "API healthy over TCP"; break
             fi
+            if [ "$i" -eq 30 ]; then
+              echo "API container did not become ready within timeout"; exit 1
+            fi
             sleep 2
           done
           # Controllers resolve over TCP (guards the standalone-404 bug class):
@@ -164,9 +185,11 @@ jobs:
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
             http://localhost:4002/api/v1/auth/login \
             -H 'Content-Type: application/json' -d '{}')
-          if [ "$STATUS" = "404" ]; then echo "CONTROLLER ROUTE 404 — compiled image dropped a route"; exit 1; fi
-          echo "Controller route resolved over TCP (status $STATUS; expected 400/401, not 404)"
+          if [ "$STATUS" != "400" ]; then echo "Unexpected login validation status: $STATUS (expected 400)"; exit 1; fi
+          echo "Controller route resolved over TCP with expected validation status 400"
           docker compose down -v
+        env:
+          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
 
       # Build and boot the web image, then verify it serves a 200 on the
       # root path. This closes the gap where the API image is tested but the
@@ -184,7 +207,38 @@ jobs:
             fi
             sleep 2
           done
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+              http://localhost:3000/api/auth/login \
+              -H 'Content-Type: application/json' \
+              -H 'Origin: http://localhost:3000' \
+              -d '{}')
+            if [ "$STATUS" = "400" ]; then
+              echo "Web BFF reached the API and returned validation status 400"; break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Web BFF never reached a healthy API (last status $STATUS)"; exit 1
+            fi
+            sleep 2
+          done
+          AUTH_STATUS=$(curl -s -o /tmp/waitlayer-auth.json -w '%{http_code}' \
+            -c /tmp/waitlayer-cookies.txt -X POST \
+            http://localhost:3000/api/auth/google \
+            -H 'Content-Type: application/json' \
+            -H 'Origin: http://localhost:3000' \
+            -d '{"idToken":"mock-google-token-docker-ci","role":"developer","ageConfirmed":true,"termsAccepted":true,"policyVersion":"2026-07-01"}')
+          if [ "$AUTH_STATUS" != "200" ]; then
+            echo "Web BFF mock sign-in failed with status $AUTH_STATUS"; exit 1
+          fi
+          PROTECTED_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            -b /tmp/waitlayer-cookies.txt http://localhost:3000/developer)
+          if [ "$PROTECTED_STATUS" != "200" ]; then
+            echo "Protected web route rejected API-issued cookie (status $PROTECTED_STATUS)"; exit 1
+          fi
+          echo "Web BFF sign-in and protected-route JWT verification succeeded"
           docker compose down -v
+        env:
+          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
   # Docs-drift guard: assert AGENTS.md's key claims still match the code.
   # Cheap, no DB, no install — runs on plain node. Keeps the audit narrative
   # honest (the prior standalone-404 false claim is now machine-enforced).
@@ -192,8 +246,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 22
       - name: Verify AGENTS.md claims match code

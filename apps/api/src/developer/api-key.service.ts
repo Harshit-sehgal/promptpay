@@ -12,6 +12,9 @@ import {
 
 const REMOVED_SENSITIVE_SCOPE_SET = new Set<string>(REMOVED_SENSITIVE_API_KEY_SCOPES);
 const UNSUPPORTED_SCOPE_SET = new Set<string>(UNSUPPORTED_API_KEY_SCOPES);
+const ACTIVE_KEY_LIMIT = 20;
+const KEY_HISTORY_LIMIT = 100;
+const API_KEY_PATTERN = /^wl_[a-f0-9]{64}$/;
 
 @Injectable()
 export class ApiKeyService {
@@ -28,7 +31,7 @@ export class ApiKeyService {
   async generateApiKey(userId: string, scopes: string[], advertiserId?: string, expiresAt?: string) {
     const owner = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { status: true },
+      select: { status: true, role: true },
     });
     if (!owner || !isActiveAccountStatus(owner.status)) {
       throw new ForbiddenException('Account is not eligible to create API keys');
@@ -76,35 +79,53 @@ export class ApiKeyService {
     const keyHash = this.hashKey(plainKey);
     const keyPrefix = plainKey.slice(0, 10); // first 10 chars for display/identification
 
-    const apiKey = await this.prisma.apiKey.create({
-      data: {
-        ownerId: userId,
-        advertiserId: advertiserId ?? null,
-        keyHash,
-        keyPrefix,
-        scopes,
-        isActive: true,
-        expiresAt: parsedExpiresAt,
-      },
-    });
-
-    // Audit: a long-lived credential issuance event. The plain key is
-    // NOT recorded (only the prefix); future `audit` queries surface
-    // who minted which key and with what scope, so a key minted with a
-    // stolen session can be traced back even though the key itself
-    // outlives the session revoke.
-    void this.audit.log({
-      actorId: userId,
-      actorRole: 'developer',
-      action: 'api_key_minted',
-      targetType: 'api_key',
-      targetId: apiKey.id,
-      afterSnap: {
-        scopes,
-        advertiserId: advertiserId ?? null,
-        expiresAt: parsedExpiresAt?.toISOString() ?? null,
-        keyPrefix,
-      },
+    const apiKey = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`api-key:${userId}`}, 0))`;
+      const [activeCount, historyCount] = await Promise.all([
+        tx.apiKey.count({
+          where: {
+            ownerId: userId,
+            isActive: true,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        }),
+        tx.apiKey.count({ where: { ownerId: userId } }),
+      ]);
+      if (activeCount >= ACTIVE_KEY_LIMIT) {
+        throw new BadRequestException(`At most ${ACTIVE_KEY_LIMIT} active API keys are allowed`);
+      }
+      if (historyCount >= KEY_HISTORY_LIMIT) {
+        throw new BadRequestException(
+          `API key history limit reached (${KEY_HISTORY_LIMIT}); contact support`,
+        );
+      }
+      const created = await tx.apiKey.create({
+        data: {
+          ownerId: userId,
+          advertiserId: advertiserId ?? null,
+          keyHash,
+          keyPrefix,
+          scopes,
+          isActive: true,
+          expiresAt: parsedExpiresAt,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: owner.role,
+          action: 'api_key_minted',
+          targetType: 'api_key',
+          targetId: created.id,
+          afterSnap: {
+            scopes,
+            advertiserId: advertiserId ?? null,
+            expiresAt: parsedExpiresAt?.toISOString() ?? null,
+            keyPrefix,
+          },
+        },
+      });
+      return created;
     });
 
     // Return full details with the plain key — this is the ONLY time it is revealed
@@ -123,7 +144,7 @@ export class ApiKeyService {
    * Returns the ApiKey record if valid (active, not expired, scopes match).
    */
   async validateApiKey(keyPlain: string) {
-    if (!keyPlain || typeof keyPlain !== 'string') {
+    if (!keyPlain || typeof keyPlain !== 'string' || !API_KEY_PATTERN.test(keyPlain)) {
       // Single opaque message — never disclose whether the key exists, is
       // revoked, or expired (those distinctions would let an attacker
       // enumerate key liveness).
@@ -208,6 +229,7 @@ export class ApiKeyService {
         expiresAt: true,
       },
       orderBy: { createdAt: 'desc' },
+      take: KEY_HISTORY_LIMIT,
     });
   }
 
@@ -227,29 +249,30 @@ export class ApiKeyService {
       throw new ForbiddenException('You can only revoke your own API keys');
     }
 
-    const revoked = await this.prisma.apiKey.update({
-      where: { id: keyId },
-      data: { isActive: false },
-      select: {
-        id: true,
-        keyPrefix: true,
-        scopes: true,
-        isActive: true,
-        createdAt: true,
-        expiresAt: true,
-      },
-    });
-
-    // Audit: credential destruction. A revoked key is inert, but the
-    // audit row gives ops the "who revoked which key + when" trail
-    // (matching the mint event).
-    void this.audit.log({
-      actorId: userId,
-      actorRole: 'developer',
-      action: 'api_key_revoked',
-      targetType: 'api_key',
-      targetId: keyId,
-      afterSnap: { keyPrefix: revoked.keyPrefix },
+    const revoked = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.apiKey.update({
+        where: { id: keyId },
+        data: { isActive: false },
+        select: {
+          id: true,
+          keyPrefix: true,
+          scopes: true,
+          isActive: true,
+          createdAt: true,
+          expiresAt: true,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'api_key_revoked',
+          targetType: 'api_key',
+          targetId: keyId,
+          afterSnap: { keyPrefix: updated.keyPrefix },
+        },
+      });
+      return updated;
     });
 
     return revoked;

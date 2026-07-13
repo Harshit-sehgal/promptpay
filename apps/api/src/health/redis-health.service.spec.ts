@@ -60,7 +60,7 @@ describe('RedisHealthService (A-053)', () => {
     vi.mocked(createClient).mockReturnValueOnce(failing as never);
 
     const first = await service.check();
-    expect(first.status).toBe('error');
+    expect(first).toEqual({ status: 'error', error: 'Redis unreachable' });
 
     const recovered = makeClient({ isReady: true });
     vi.mocked(createClient).mockReturnValueOnce(recovered as never);
@@ -85,5 +85,29 @@ describe('RedisHealthService (A-053)', () => {
 
     expect((await service.check()).status).toBe('connected');
     expect(fresh.connect).toHaveBeenCalled();
+  });
+
+  it('coalesces concurrent probes onto one in-flight Redis connection', async () => {
+    let finishConnect!: () => void;
+    const connectGate = new Promise<void>((resolve) => {
+      finishConnect = resolve;
+    });
+    const client = makeClient();
+    client.connect = vi.fn(async () => {
+      await connectGate;
+      client.isReady = true;
+    });
+    vi.mocked(createClient).mockReturnValue(client as never);
+
+    const first = service.check();
+    const second = service.check();
+
+    expect(createClient).toHaveBeenCalledTimes(1);
+    expect(client.connect).toHaveBeenCalledTimes(1);
+    finishConnect();
+
+    await expect(first).resolves.toMatchObject({ status: 'connected' });
+    await expect(second).resolves.toMatchObject({ status: 'connected' });
+    expect(client.ping).toHaveBeenCalledTimes(2);
   });
 });

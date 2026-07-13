@@ -3,21 +3,24 @@ packages:
   - "packages/*"
 
 overrides:
+  '@hono/node-server': 1.19.13
   multer: 2.2.0
   postcss: 8.5.16
 
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
-  '@scarf/scarf': true
+  '@scarf/scarf': false
   '@sentry/cli': true
   '@sentry/node-cpu-profiler': true
+  '@vscode/vsce-sign': true
+  esbuild: true
   keytar: true
   prisma: true
   sharp: true
   unrs-resolver: true
 
-# Disable minimum-release-age check so that recently-published packages
-# (e.g. @typescript 7.0.2 architecture-specific optional packages) do not
-# block pnpm install / pre-commit hooks. The default is 1440 minutes (24h).
-minimumReleaseAge: 0
+# Quarantine brand-new package releases for 24 hours. Frozen-lockfile CI uses
+# the reviewed graph below; intentional upgrades are retried after this window
+# rather than making a just-published artifact immediately installable.
+minimumReleaseAge: 1440

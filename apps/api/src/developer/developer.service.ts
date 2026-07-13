@@ -12,6 +12,7 @@ import { LedgerStatus, primaryCurrency } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
+import { eraseAccountIdentity } from '../common/utils/account-erasure';
 import { buildCappedExportMeta, splitCappedRows } from '../common/utils/export-metadata';
 import { PrismaService } from '../config/prisma.service';
 import { EmailService } from '../email/email.service';
@@ -46,6 +47,7 @@ const DEVELOPER_EXPORT_LIMITS = {
   impressions: 1000,
   clicks: 1000,
   payouts: 1000,
+  consents: 1000,
 };
 
 @Injectable()
@@ -417,6 +419,7 @@ export class DeveloperService {
         this.prisma.consent.findMany({
           where: { userId },
           orderBy: { createdAt: 'desc' },
+          take: DEVELOPER_EXPORT_LIMITS.consents + 1,
         }),
       ],
     );
@@ -424,11 +427,13 @@ export class DeveloperService {
     const impressions = splitCappedRows(impressionRows, DEVELOPER_EXPORT_LIMITS.impressions);
     const clicks = splitCappedRows(clickRows, DEVELOPER_EXPORT_LIMITS.clicks);
     const payouts = splitCappedRows(payoutRows, DEVELOPER_EXPORT_LIMITS.payouts);
+    const consent = splitCappedRows(consents, DEVELOPER_EXPORT_LIMITS.consents);
     const exportMeta = buildCappedExportMeta({
       earnings: earnings.meta,
       impressions: impressions.meta,
       clicks: clicks.meta,
       payouts: payouts.meta,
+      consent: consent.meta,
     });
     // Audit the self-service export request so bulk exfiltration via a
     // compromised token is traceable even after the data has left the
@@ -447,7 +452,7 @@ export class DeveloperService {
       impressions: impressions.data,
       clicks: clicks.data,
       payouts: payouts.data,
-      consent: consents,
+      consent: consent.data,
       exportMeta,
     };
   }
@@ -458,46 +463,8 @@ export class DeveloperService {
       await this.verifySelfDeleteStepUp(userId, options);
     }
 
-    // Capture the email before anonymization so we can send the deletion
-    // confirmation to the user's real inbox.
-    const prior = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-    const priorEmail = prior?.email;
-
-    // Anonymize user data, revoke all sessions and API keys.
-    // The FK ON DELETE SET NULL on api_keys.ownerId will null the owner
-    // column when the User row is eventually hard-deleted; this explicit
-    // bulk-revoke ensures keys are inert NOW even without a hard-delete.
-    const result = await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: userId },
-        data: {
-          status: 'deleted',
-          email: `deleted-${userId}@waitlayer.com`,
-          passwordHash: null,
-          googleId: null,
-          githubId: null,
-          googleVerified: false,
-          githubVerified: false,
-          emailVerified: false,
-          twoFactorEnabled: false,
-          twoFactorSecret: null,
-          name: null,
-          referralCode: null,
-          country: null,
-        },
-      }),
-      this.prisma.session.updateMany({
-        where: { userId },
-        data: { revoked: true },
-      }),
-      this.prisma.apiKey.updateMany({
-        where: { ownerId: userId },
-        data: { isActive: false },
-      }),
-    ]);
+    const result = await eraseAccountIdentity(this.prisma, userId);
+    const priorEmail = result.priorEmail;
     // Audit: account self-deletion is an irreversible destructive action.
     // Record it so a malicious deletion (compromised token) leaves a
     // forensic trail separate from the (now-anonymized) row itself.
@@ -512,18 +479,20 @@ export class DeveloperService {
     // Send a deletion confirmation email (non-blocking; silent email
     // failures must never fail the deletion itself).
     if (priorEmail && !priorEmail.startsWith('deleted-')) {
-      void this.email.sendAccountDeleted(priorEmail).catch((err) => {
+      void this.email.sendAccountDeleted(priorEmail).catch(() => {
         this.audit.log({
           actorId: auditActor?.actorId ?? userId,
           actorRole: auditActor?.actorRole ?? 'developer',
           action: 'delete_account_email_failed',
           targetType: 'user',
           targetId: userId,
-          afterSnap: { reason: err instanceof Error ? err.message : String(err) },
+          // Provider errors can contain recipient/provider response data. Keep
+          // the durable audit event useful without persisting that text.
+          afterSnap: { reason: 'delivery_failed' },
         });
       });
     }
-    return result;
+    return { deleted: true };
   }
 
   private async verifySelfDeleteStepUp(userId: string, options: DeleteAccountOptions) {

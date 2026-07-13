@@ -568,7 +568,7 @@ export class ExtensionAdTrait {
       await this.prisma.adImpression.update({
         where: { id: impression.id },
         data: {
-          qualifiedAt: new Date(dto.qualifiedAt),
+          qualifiedAt: new Date(),
           visibleDurationMs: dto.visibleDurationMs,
           isBillable: false,
           invalidationReason: 'account_not_active',
@@ -628,8 +628,8 @@ export class ExtensionAdTrait {
       await this.prisma.adImpression.update({
         where: { id: impression.id },
         data: {
-          qualifiedAt: new Date(dto.qualifiedAt),
-          visibleDurationMs: dto.visibleDurationMs,
+          qualifiedAt: new Date(),
+          visibleDurationMs: effectiveDurationMs,
           isBillable: false,
         },
       });
@@ -643,8 +643,8 @@ export class ExtensionAdTrait {
       const claim = await this.prisma.adImpression.updateMany({
         where: { id: impression.id, qualifiedAt: null },
         data: {
-          qualifiedAt: new Date(dto.qualifiedAt),
-          visibleDurationMs: dto.visibleDurationMs,
+          qualifiedAt: new Date(),
+          visibleDurationMs: effectiveDurationMs,
           isBillable: true,
         },
       });
@@ -695,8 +695,8 @@ export class ExtensionAdTrait {
         const claim = await tx.adImpression.updateMany({
           where: { id: impression.id, qualifiedAt: null },
           data: {
-            qualifiedAt: new Date(dto.qualifiedAt),
-            visibleDurationMs: dto.visibleDurationMs,
+            qualifiedAt: new Date(),
+            visibleDurationMs: effectiveDurationMs,
             isBillable: true,
           },
         });
@@ -717,11 +717,13 @@ export class ExtensionAdTrait {
         }
         // (2) Atomic spend increment — rejects when budget would overflow OR the
         // campaign is no longer `active`.
-        const spent: number = await tx.$executeRawUnsafe(
-          `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
-          impression.campaign.bidAmountMinor,
-          impression.campaignId,
-        );
+        const spent: number = await tx.$executeRaw`
+          UPDATE "campaigns"
+          SET "budgetSpentMinor" = "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)}
+          WHERE "id" = ${impression.campaignId}
+            AND "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)} <= "budgetTotalMinor"
+            AND "status" = 'active'
+        `;
         if (spent === 0) {
           throw new BudgetExhaustedError();
         }
@@ -788,8 +790,8 @@ export class ExtensionAdTrait {
         await this.prisma.adImpression.update({
           where: { id: impression.id },
           data: {
-            qualifiedAt: new Date(dto.qualifiedAt),
-            visibleDurationMs: dto.visibleDurationMs,
+            qualifiedAt: new Date(),
+            visibleDurationMs: effectiveDurationMs,
             isBillable: false,
             invalidationReason: 'budget_exhausted',
           },
@@ -800,8 +802,8 @@ export class ExtensionAdTrait {
         await this.prisma.adImpression.update({
           where: { id: impression.id },
           data: {
-            qualifiedAt: new Date(dto.qualifiedAt),
-            visibleDurationMs: dto.visibleDurationMs,
+            qualifiedAt: new Date(),
+            visibleDurationMs: effectiveDurationMs,
             isBillable: false,
             invalidationReason: 'insufficient_advertiser_balance',
           },
@@ -945,7 +947,10 @@ export class ExtensionAdTrait {
             sessionId: impression.sessionId,
             campaignId: impression.campaignId,
             creativeId: impression.creativeId,
-            clickedAt: new Date(dto.clickedAt),
+            // Billing/analytics timestamps are server-authoritative. The
+            // signed client value remains part of proof-of-possession, but a
+            // compromised client cannot backdate/future-date click metrics.
+            clickedAt: new Date(),
             targetUrl: creative.destinationUrl,
             idempotencyKey: dto.idempotencyKey,
           },
@@ -954,11 +959,13 @@ export class ExtensionAdTrait {
           // Atomic budget guard for CPC clicks — same pattern as CPM above,
           // including the `status = 'active'` TOCTOU guard against
           // concurrent archive/pause.
-          const spent: number = await tx.$executeRawUnsafe(
-            `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
-            impression.campaign.bidAmountMinor,
-            impression.campaignId,
-          );
+          const spent: number = await tx.$executeRaw`
+            UPDATE "campaigns"
+            SET "budgetSpentMinor" = "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)}
+            WHERE "id" = ${impression.campaignId}
+              AND "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)} <= "budgetTotalMinor"
+              AND "status" = 'active'
+          `;
           if (spent === 0) {
             throw new ConflictException('Campaign budget exhausted or no longer active');
           }

@@ -14,8 +14,14 @@ import { Injectable, NestMiddleware } from '@nestjs/common';
 @Injectable()
 export class RequestIdMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
-    const incoming = (req.headers['x-request-id'] as string | undefined)?.trim();
-    const requestId = incoming || randomUUID();
+    const header = req.headers['x-request-id'];
+    const incoming = typeof header === 'string' ? header.trim() : undefined;
+    // Request ids flow into access/error logs and response headers. Accept a
+    // deliberately small opaque alphabet only; control characters, spaces,
+    // comma-joined duplicate headers, and oversized values are replaced with
+    // a server UUID instead of enabling log/header injection or high-cardinality
+    // telemetry abuse.
+    const requestId = incoming && /^[A-Za-z0-9_-]{1,64}$/.test(incoming) ? incoming : randomUUID();
     req.headers['x-request-id'] = requestId;
     try {
       res.setHeader('x-request-id', requestId);

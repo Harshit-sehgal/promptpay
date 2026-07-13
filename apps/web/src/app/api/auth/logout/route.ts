@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import {
   apiBaseUrl,
+  applyRateLimitIdentity,
   clearAuthCookies,
-  COOKIE_ACCESS,
+  COOKIE_REFRESH,
   isSecure,
   readAuthCookie,
+  rateLimitIdentity,
 } from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
 
@@ -26,14 +28,14 @@ export async function POST(req: NextRequest) {
     // cookies is correct. Network errors and 5xx responses propagate as
     // non-200 so the client surfaces a retryable failure rather than a false
     // sense of security.
-    const accessToken = readAuthCookie(req, COOKIE_ACCESS, isSecure(req.headers));
+    const refreshToken = readAuthCookie(req, COOKIE_REFRESH, isSecure(req.headers));
+    const identity = rateLimitIdentity(req);
     let apiRes: Response;
     try {
-      apiRes = await fetch(`${apiBaseUrl()}/auth/logout`, {
+      apiRes = await fetch(`${apiBaseUrl()}/auth/logout/refresh`, {
         method: 'POST',
-        headers: accessToken
-          ? { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
-          : { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...identity.headers },
+        body: JSON.stringify({ refreshToken }),
       });
     } catch {
       // Network error — don't clear cookies; the revocation didn't happen.
@@ -56,7 +58,11 @@ export async function POST(req: NextRequest) {
     // The API confirmed revocation (2xx) OR the token was already dead (401).
     // In either case the session row is either now revoked or already was —
     // clearing cookies is safe.
-    return clearAuthCookies(NextResponse.json({ ok: true }, { status: 200 }), req.headers);
+    return applyRateLimitIdentity(
+      clearAuthCookies(NextResponse.json({ ok: true }, { status: 200 }), req.headers),
+      identity,
+      req.headers,
+    );
   } catch (err: unknown) {
     console.error('Logout Route Handler error:', err instanceof Error ? err.message : String(err));
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

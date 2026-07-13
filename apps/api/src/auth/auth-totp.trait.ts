@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import * as bcrypt from 'bcryptjs';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
 import { BadRequestException, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -7,6 +8,11 @@ import { buildOtpAuthUrl, generateTotpSecret, verifyTotp } from '@waitlayer/shar
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
+import { TwoFactorSetupDto } from './dto';
+import { GoogleTokenVerifier } from './strategies/google-token-verifier';
+
+const BACKUP_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const BACKUP_CODE_COUNT = 10;
 
 export class AuthTotpTrait {
   declare prisma: PrismaService;
@@ -14,6 +20,7 @@ export class AuthTotpTrait {
   declare audit: AuditService;
   declare logger: Logger;
   declare totpEncryptionKey: Buffer;
+  declare googleVerifier: GoogleTokenVerifier;
 
   /** ── Two-Factor Authentication (TOTP) ──
    *  Enrollment is a two-step flow:
@@ -25,7 +32,7 @@ export class AuthTotpTrait {
    *  Disabling requires a valid current code (step-up) to prevent an attacker
    *  who has taken over a session from silently turning MFA off.
    */
-  async setupTwoFactor(userId: string) {
+  async setupTwoFactor(userId: string, proof: TwoFactorSetupDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
     if (user.twoFactorEnabled) {
@@ -33,10 +40,35 @@ export class AuthTotpTrait {
         'Disable two-factor authentication before setting up a new secret',
       );
     }
+    let reauthenticated = false;
+    if (user.passwordHash && proof.currentPassword) {
+      reauthenticated = await bcrypt.compare(proof.currentPassword, user.passwordHash);
+    }
+    if (!reauthenticated && user.googleId && proof.googleIdToken) {
+      const google = await this.googleVerifier.verify(proof.googleIdToken);
+      reauthenticated =
+        google.email_verified &&
+        google.sub === user.googleId &&
+        google.email.trim().toLowerCase() === user.email.trim().toLowerCase();
+    }
+    if (!reauthenticated) {
+      throw new UnauthorizedException('Reauthentication is required before setting up 2FA');
+    }
     const secret = generateTotpSecret();
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { twoFactorSecret: this.encryptTotpSecret(secret) },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { twoFactorSecret: this.encryptTotpSecret(secret) },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: user.role,
+          action: 'two_factor_setup_started',
+          targetType: 'user',
+          targetId: userId,
+        },
+      });
     });
     return {
       secret,
@@ -44,7 +76,7 @@ export class AuthTotpTrait {
     };
   }
 
-  async enableTwoFactor(userId: string, token: string) {
+  async enableTwoFactor(userId: string, token: string, currentJti?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
     if (!user.twoFactorSecret) {
@@ -54,22 +86,31 @@ export class AuthTotpTrait {
     if (!secret || !verifyTotp(secret, token)) {
       throw new BadRequestException('Invalid or expired 2FA code');
     }
-    const updateData: Prisma.UserUpdateInput = { twoFactorEnabled: true };
+    const backupCodes = this.generateBackupCodes();
+    const updateData: Prisma.UserUpdateInput = {
+      twoFactorEnabled: true,
+      twoFactorBackupCodeHashes: backupCodes.map((code) => this.hashBackupCode(code)),
+    };
     if (!this.isEncryptedTotpSecret(user.twoFactorSecret)) {
       updateData.twoFactorSecret = this.encryptTotpSecret(secret);
     }
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: updateData,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: updateData });
+      await tx.session.updateMany({
+        where: { userId, ...(currentJti ? { id: { not: currentJti } } : {}) },
+        data: { revoked: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: user.role,
+          action: 'two_factor_enabled',
+          targetType: 'user',
+          targetId: userId,
+        },
+      });
     });
-    void this.audit.log({
-      actorId: userId,
-      actorRole: user.role,
-      action: 'two_factor_enabled',
-      targetType: 'user',
-      targetId: userId,
-    });
-    return { twoFactorEnabled: true };
+    return { twoFactorEnabled: true, backupCodes };
   }
 
   async disableTwoFactor(userId: string, token: string) {
@@ -83,16 +124,25 @@ export class AuthTotpTrait {
     if (!secret || !verifyTotp(secret, token)) {
       throw new BadRequestException('Invalid or expired 2FA code');
     }
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { twoFactorEnabled: false, twoFactorSecret: null },
-    });
-    void this.audit.log({
-      actorId: userId,
-      actorRole: user.role,
-      action: 'two_factor_disabled',
-      targetType: 'user',
-      targetId: userId,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          twoFactorEnabled: false,
+          twoFactorSecret: null,
+          twoFactorBackupCodeHashes: [],
+        },
+      });
+      await tx.session.updateMany({ where: { userId }, data: { revoked: true } });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: user.role,
+          action: 'two_factor_disabled',
+          targetType: 'user',
+          targetId: userId,
+        },
+      });
     });
     return { twoFactorEnabled: false };
   }
@@ -105,7 +155,7 @@ export class AuthTotpTrait {
       .slice(0, 16);
   }
 
-  assertTwoFactorSatisfied(
+  async assertTwoFactorSatisfied(
     user: {
       id: string;
       role: string;
@@ -113,7 +163,8 @@ export class AuthTotpTrait {
       twoFactorSecret?: string | null;
     },
     token?: string,
-  ) {
+    backupCode?: string,
+  ): Promise<void> {
     if (!user.twoFactorEnabled) return;
     const secret = user.twoFactorSecret ? this.decryptTotpSecret(user.twoFactorSecret) : null;
     if (!secret) {
@@ -132,7 +183,7 @@ export class AuthTotpTrait {
     // No token supplied yet → emit a structured 2FA challenge so clients
     // (web, CLI, VS Code) can prompt for the code and resubmit, rather than
     // returning the same generic "invalid credentials" as a bad password.
-    if (!token) {
+    if (!token && !backupCode) {
       void this.audit.log({
         actorId: user.id,
         actorRole: user.role,
@@ -145,7 +196,9 @@ export class AuthTotpTrait {
         twoFactorRequired: true,
       });
     }
-    if (!verifyTotp(secret, token)) {
+    if (token && verifyTotp(secret, token)) return;
+    if (backupCode && (await this.consumeBackupCode(user, backupCode))) return;
+    {
       void this.audit.log({
         actorId: user.id,
         actorRole: user.role,
@@ -156,6 +209,79 @@ export class AuthTotpTrait {
       });
       throw new UnauthorizedException('Invalid two-factor authentication code');
     }
+  }
+
+  async regenerateTwoFactorBackupCodes(userId: string, token: string, currentJti?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new BadRequestException('Two-factor authentication is not enabled');
+    }
+    const secret = this.decryptTotpSecret(user.twoFactorSecret);
+    if (!secret || !verifyTotp(secret, token)) {
+      throw new UnauthorizedException('Invalid two-factor authentication code');
+    }
+    const backupCodes = this.generateBackupCodes();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { twoFactorBackupCodeHashes: backupCodes.map((code) => this.hashBackupCode(code)) },
+      });
+      await tx.session.updateMany({
+        where: { userId, ...(currentJti ? { id: { not: currentJti } } : {}) },
+        data: { revoked: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: user.role,
+          action: 'two_factor_backup_codes_regenerated',
+          targetType: 'user',
+          targetId: userId,
+        },
+      });
+    });
+    return { backupCodes };
+  }
+
+  generateBackupCodes(): string[] {
+    return Array.from({ length: BACKUP_CODE_COUNT }, () => {
+      const chars = Array.from(randomBytes(12), (byte) => BACKUP_CODE_ALPHABET[byte & 31]);
+      return `${chars.slice(0, 4).join('')}-${chars.slice(4, 8).join('')}-${chars
+        .slice(8, 12)
+        .join('')}`;
+    });
+  }
+
+  hashBackupCode(code: string): string {
+    return createHmac('sha256', this.totpEncryptionKey)
+      .update(`waitlayer-2fa-backup-v1:${code.trim().toUpperCase()}`)
+      .digest('hex');
+  }
+
+  async consumeBackupCode(
+    user: { id: string; role: string },
+    backupCode: string,
+  ): Promise<boolean> {
+    const hash = this.hashBackupCode(backupCode);
+    return this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.$executeRaw`
+        UPDATE "users"
+           SET "two_factor_backup_code_hashes" = array_remove("two_factor_backup_code_hashes", ${hash})
+         WHERE "id" = ${user.id}
+           AND ${hash} = ANY("two_factor_backup_code_hashes")
+      `;
+      if (consumed !== 1) return false;
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'two_factor_backup_code_used',
+          targetType: 'user',
+          targetId: user.id,
+        },
+      });
+      return true;
+    });
   }
 
   buildTotpEncryptionKey(): Buffer {

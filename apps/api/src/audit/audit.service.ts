@@ -76,8 +76,12 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async write(entry: AuditLogEntry): Promise<void> {
-    await this.prisma.auditLog.create({
+  private async write(
+    entry: AuditLogEntry,
+    client: Pick<PrismaService, 'auditLog'> | Pick<Prisma.TransactionClient, 'auditLog'> = this
+      .prisma,
+  ): Promise<void> {
+    await client.auditLog.create({
       data: {
         actorId: entry.actorId,
         actorRole: entry.actorRole,
@@ -89,6 +93,19 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
         ipHash: entry.ipHash,
       },
     });
+  }
+
+  /**
+   * Persist a security- or money-critical audit entry before the operation is
+   * acknowledged. Unlike `log`, this deliberately propagates database errors:
+   * callers that require an auditable state transition must fail closed rather
+   * than return success while the evidence is only queued in memory.
+   */
+  async logStrict(
+    entry: AuditLogEntry,
+    client?: Pick<Prisma.TransactionClient, 'auditLog'>,
+  ): Promise<void> {
+    await this.write(entry, client);
   }
 
   /**

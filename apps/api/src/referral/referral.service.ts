@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { primaryCurrency, REFERRAL } from '@waitlayer/shared';
@@ -10,6 +10,7 @@ import { LedgerService } from '../ledger/ledger.service';
 @Injectable()
 export class ReferralService {
   private readonly webBaseUrl: string;
+  private readonly logger = new Logger(ReferralService.name);
 
   constructor(
     private prisma: PrismaService,
@@ -297,6 +298,36 @@ export class ReferralService {
         });
     }
     return result;
+  }
+
+  /** Bounded retry worker for paid users whose first-payout reward is pending. */
+  async reconcilePendingReferralRewards(limit = 100) {
+    const take = Math.min(Math.max(Math.trunc(limit), 1), 500);
+    const candidates = await this.prisma.referral.findMany({
+      where: {
+        status: 'pending',
+        referred: { payoutRequests: { some: { status: 'paid' } } },
+      },
+      select: { referredId: true },
+      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+      take,
+    });
+    let rewarded = 0;
+    let failed = 0;
+    for (const candidate of candidates) {
+      try {
+        const result = await this.processReferralRewards(candidate.referredId);
+        if (result) rewarded++;
+      } catch (err: unknown) {
+        failed++;
+        this.logger.error(
+          `Pending referral reconciliation failed for referredUserId=${candidate.referredId}: ${
+            err instanceof Error ? err.message : err
+          }`,
+        );
+      }
+    }
+    return { checked: candidates.length, rewarded, failed, hasMore: candidates.length === take };
   }
 
   /** Get referral history: list of referrals made by the user with status */

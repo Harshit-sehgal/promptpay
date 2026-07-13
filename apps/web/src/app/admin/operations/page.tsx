@@ -123,18 +123,18 @@ export default function AdminOperationsPage() {
         ...(webhookStatus ? { processingStatus: webhookStatus } : {}),
         ...(webhookProvider ? { provider: webhookProvider } : {}),
       }),
-      adminApi.getPendingArchiveRefunds(),
+      adminApi.getPendingArchiveRefunds({ page: 1, limit: 100 }),
     ])
       .then(([integrityRes, toolsRes, webhookRes, refundsRes]: [
         { data: MoneyIntegrityReport },
         { data: ToolIntegration[] },
         { data: WebhookEventsResponse },
-        { data: ArchiveRefundObligation[] },
+        { data: { items: ArchiveRefundObligation[] } },
       ]) => {
         setIntegrity(integrityRes.data);
         setTools(toolsRes.data);
         setWebhooks(webhookRes.data);
-        setRefunds(refundsRes.data);
+        setRefunds(refundsRes.data.items);
       })
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load operations data')))
       .finally(() => setLoading(false));
@@ -174,8 +174,10 @@ export default function AdminOperationsPage() {
         return next;
       });
       await adminApi
-        .getPendingArchiveRefunds()
-        .then((res: { data: ArchiveRefundObligation[] }) => setRefunds(res.data));
+        .getPendingArchiveRefunds({ page: 1, limit: 100 })
+        .then((res: { data: { items: ArchiveRefundObligation[] } }) =>
+          setRefunds(res.data.items),
+        );
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Archive refund confirmation failed'));
     } finally {

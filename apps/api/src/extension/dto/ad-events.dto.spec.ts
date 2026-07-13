@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import { ToolType } from '@waitlayer/shared';
 
-import { AdRequestDto } from './ad-events.dto';
+import { AdRequestDto, QualifiedImpressionDto } from './ad-events.dto';
+import { WaitStateEndDto } from './wait-state.dto';
 
 function baseValid(): AdRequestDto {
   const d = new AdRequestDto();
@@ -39,5 +40,38 @@ describe('AdRequestDto category slug validation (A-057)', () => {
       const errors = await validate(dto);
       expect(errors.length, `${field}=${JSON.stringify(value)}`).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('extension event numeric boundary validation', () => {
+  it('rejects non-integer or day-exceeding visible durations', async () => {
+    const dto = new QualifiedImpressionDto();
+    dto.impressionToken = 'impression-token';
+    dto.qualifiedAt = new Date().toISOString();
+    dto.idempotencyKey = 'idem-1';
+    dto.signature = 'signature';
+
+    dto.visibleDurationMs = 5_000.5;
+    expect((await validate(dto)).some((error) => error.property === 'visibleDurationMs')).toBe(
+      true,
+    );
+
+    dto.visibleDurationMs = 86_400_001;
+    expect((await validate(dto)).some((error) => error.property === 'visibleDurationMs')).toBe(
+      true,
+    );
+
+    dto.visibleDurationMs = 5_000;
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects partially numeric wait-state durations', async () => {
+    const dto = new WaitStateEndDto();
+    dto.waitStateId = 'wait-1';
+    dto.idempotencyKey = 'idem-1';
+    dto.signature = 'signature';
+    dto.durationSeconds = '10seconds';
+
+    expect((await validate(dto)).some((error) => error.property === 'durationSeconds')).toBe(true);
   });
 });

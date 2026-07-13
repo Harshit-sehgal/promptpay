@@ -29,6 +29,8 @@ export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestr
   // already-expired refresh token before any DB write.
   private static readonly INTERVAL_MS = 60 * 60 * 1000; // 1 hour
   private static readonly GRACE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+  private static readonly BATCH_SIZE = 500;
+  private static readonly MAX_BATCHES_PER_RUN = 10;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -45,32 +47,62 @@ export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestr
     });
 
     this.intervalId = setInterval(() => {
-      this.runCleanup();
+      void this.runCleanup().catch(() => {
+        // runCleanup logs operational failures and keeps the next tick alive.
+      });
     }, SessionCleanupCron.INTERVAL_MS);
   }
 
-  private async runCleanup() {
+  async runCleanup(): Promise<{ acquired: boolean; deleted: number }> {
     if (this.running) {
       this.logger.warn('Session cleanup already in flight — skipping overlapping run');
-      return;
+      return { acquired: false, deleted: 0 };
     }
     this.running = true;
     try {
       const cutoff = new Date(Date.now() - SessionCleanupCron.GRACE_MS);
-      const result = await this.prisma.session.deleteMany({
-        where: { expiresAt: { lt: cutoff } },
-      });
-      if (result.count > 0) {
+      const result = await this.prisma.$transaction(
+        async (tx) => {
+          const lockRows = await tx.$queryRaw<Array<{ acquired: boolean }>>`
+            SELECT pg_try_advisory_xact_lock(hashtext('waitlayer-session-cleanup')) AS "acquired"
+          `;
+          if (!lockRows[0]?.acquired) return { acquired: false, deleted: 0 };
+
+          let deleted = 0;
+          for (let batch = 0; batch < SessionCleanupCron.MAX_BATCHES_PER_RUN; batch++) {
+            const count = await tx.$executeRaw`
+              WITH doomed AS (
+                SELECT "id" FROM "sessions"
+                WHERE "expiresAt" < ${cutoff}
+                ORDER BY "expiresAt", "id"
+                LIMIT ${SessionCleanupCron.BATCH_SIZE}
+              )
+              DELETE FROM "sessions" target
+              USING doomed
+              WHERE target."id" = doomed."id"
+            `;
+            deleted += count;
+            if (count < SessionCleanupCron.BATCH_SIZE) break;
+          }
+          return { acquired: true, deleted };
+        },
+        { timeout: 30_000 },
+      );
+      if (!result.acquired) {
+        this.logger.warn('Session cleanup is running on another replica — skipping this tick');
+      } else if (result.deleted > 0) {
         this.logger.log(
-          `Pruned ${result.count} expired session(s) (cutoff=${cutoff.toISOString()})`,
+          `Pruned ${result.deleted} expired session(s) (cutoff=${cutoff.toISOString()})`,
         );
       }
+      return result;
     } catch (err) {
       // Cron errors must not crash the app — log and continue.
       this.logger.error(
         'Session cleanup cron failed',
         err instanceof Error ? err.stack : String(err),
       );
+      return { acquired: false, deleted: 0 };
     } finally {
       this.running = false;
     }

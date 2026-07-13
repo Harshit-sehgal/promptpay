@@ -103,11 +103,9 @@ export class ExtensionWaitTrait {
       return existing;
     }
     const claimedDurationSeconds =
-      typeof dto.durationSeconds === 'string'
-        ? parseInt(dto.durationSeconds, 10)
-        : dto.durationSeconds;
+      typeof dto.durationSeconds === 'string' ? Number(dto.durationSeconds) : dto.durationSeconds;
     if (
-      Number.isNaN(claimedDurationSeconds) ||
+      !Number.isInteger(claimedDurationSeconds) ||
       claimedDurationSeconds < 0 ||
       claimedDurationSeconds > WAIT_STATE_MAX_DURATION_SECONDS
     ) {

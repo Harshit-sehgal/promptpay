@@ -75,41 +75,25 @@ export class LoggingInterceptor implements NestInterceptor {
   }
 }
 
-const SENSITIVE_QUERY_PARAMS = new Set([
-  'token',
-  'code',
-  'signature',
-  'password',
-  'secret',
-  'access_token',
-  'refresh_token',
-  'id_token',
-  'api_key',
-  'apikey',
-]);
-
 /**
- * Redact sensitive query parameters from a URL before logging.
- * Preserves the origin, path and non-sensitive query params; replaces any
- * sensitive value with `[redacted]`. Works on both full URLs and
- * path+query strings. On parse failure, falls back to a best-effort regex
- * that scrubs the entire query string to avoid leaking secrets.
+ * Redact every query-parameter value before logging.
+ *
+ * An allowlist of secret-looking names is not sufficient here: ordinary
+ * parameters such as `email`, `search`, `destination`, and `reason` routinely
+ * contain PII or user-provided text. Keep parameter names for route-level
+ * diagnostics while removing all values and fragments. Works on both full
+ * URLs and path+query strings. On parse failure, scrub the entire query.
  */
-function redactUrl(raw: string): string {
+export function redactUrl(raw: string): string {
   try {
     const parsed = new URL(raw, 'http://localhost');
-    let changed = false;
     parsed.searchParams.forEach((_value, key) => {
-      if (SENSITIVE_QUERY_PARAMS.has(key.toLowerCase())) {
-        parsed.searchParams.set(key, '[redacted]');
-        changed = true;
-      }
+      parsed.searchParams.set(key, '[redacted]');
     });
-    if (!changed) return raw;
     // For absolute URLs, preserve the origin; for path-only strings, drop it.
     const isAbsolute = /^https?:\/\//i.test(raw);
     const origin = isAbsolute ? `${parsed.origin}` : '';
-    return `${origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    return `${origin}${parsed.pathname}${parsed.search}`;
   } catch {
     // Fallback: if the URL is malformed, scrub the query string entirely
     // rather than risk logging sensitive params.

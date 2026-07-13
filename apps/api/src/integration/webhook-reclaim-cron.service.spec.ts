@@ -40,14 +40,18 @@ const orphanRow = (id: string, ageMs: number) => ({
 
 describe('WebhookReclaimCronService (A-062)', () => {
   const ORIGINAL_ENV = process.env.WEBHOOK_RECLAIM_CRON;
+  const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 
   afterEach(() => {
     if (ORIGINAL_ENV === undefined) delete process.env.WEBHOOK_RECLAIM_CRON;
     else process.env.WEBHOOK_RECLAIM_CRON = ORIGINAL_ENV;
+    if (ORIGINAL_NODE_ENV === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = ORIGINAL_NODE_ENV;
     vi.restoreAllMocks();
   });
 
-  it('does nothing when disabled (env default off)', async () => {
+  it('does nothing when explicitly disabled outside production', async () => {
+    process.env.NODE_ENV = 'test';
     process.env.WEBHOOK_RECLAIM_CRON = 'false';
     const { prisma, eventBus } = makeMocks();
     const service = new WebhookReclaimCronService(prisma, eventBus);
@@ -57,6 +61,16 @@ describe('WebhookReclaimCronService (A-062)', () => {
     expect(result).toEqual({ found: 0, requeued: 0 });
     expect(prisma.webhookEvent.findMany).not.toHaveBeenCalled();
     expect(eventBus.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('is enabled by default in production when the override is absent', async () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.WEBHOOK_RECLAIM_CRON;
+    const { prisma, eventBus } = makeMocks();
+    prisma.webhookEvent.seed([orphanRow('prod', 40 * 60 * 1000)]);
+    const service = new WebhookReclaimCronService(prisma, eventBus);
+
+    await expect(service.reclaimOrphanedWebhooks()).resolves.toEqual({ found: 1, requeued: 1 });
   });
 
   it('re-queues orphaned rows when enabled', async () => {
@@ -73,9 +87,9 @@ describe('WebhookReclaimCronService (A-062)', () => {
     expect(prisma.webhookEvent.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          provider: 'stripe',
-          eventId: 'evt_a',
-          processingStatus: { in: ['pending', 'processing'] },
+          id: 'a',
+          processingStatus: 'processing',
+          updatedAt: expect.any(Date),
         },
         data: { processingStatus: 'pending' },
       }),

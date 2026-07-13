@@ -1,9 +1,10 @@
 // Sentry instrument MUST be the first import — it hooks Node.js internals
 // before any module is loaded so all spans and errors are captured correctly.
+// eslint-disable-next-line import/order
+import './instrument';
 import cookieParser from 'cookie-parser';
 import { json, raw, urlencoded } from 'express';
 import helmet from 'helmet';
-import './instrument';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -127,17 +128,19 @@ async function bootstrap() {
   // Machine-readable API contract + interactive UI at /api/v1/docs. This is
   // read-only documentation; it never alters requests. Useful for the web,
   // CLI, and (future) external developer clients.
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('WaitLayer API')
-    .setDescription('Privacy-first reward marketplace for AI wait time and developer attention')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addApiKey(undefined, 'X-Api-Key')
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/v1/docs', app, document, {
-    swaggerOptions: { persistAuthorization: true },
-  });
+  if (env.NODE_ENV !== 'production' || env.SWAGGER_ENABLED === 'true') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('WaitLayer API')
+      .setDescription('Privacy-first reward marketplace for AI wait time and developer attention')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .addApiKey(undefined, 'X-Api-Key')
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/v1/docs', app, document, {
+      swaggerOptions: { persistAuthorization: false },
+    });
+  }
 
   await app.listen(env.API_PORT);
   console.log(`🚀 WaitLayer API running on http://localhost:${env.API_PORT}`);

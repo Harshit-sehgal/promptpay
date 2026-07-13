@@ -29,7 +29,13 @@ function baseProdEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv 
     JWT_SECRET: 'a-very-long-production-jwt-secret-value-32plus!!',
     REDIS_URL: 'redis://localhost:6379',
     TOTP_SECRET_ENCRYPTION_KEY: 'production-totp-encryption-key-32plus!!!',
+    PRIVACY_HASH_KEY: 'production-privacy-hmac-key-at-least-32-characters',
+    API_BASE_URL: 'https://api.waitlayer.com',
     WEB_BASE_URL: 'https://app.waitlayer.com',
+    EMAIL_DRIVER: 'resend',
+    EMAIL_FROM: 'security@waitlayer.com',
+    RESEND_API_KEY: 'resend-production-key',
+    PAYOUT_REQUIRE_2FA: 'true',
     ...overrides,
   } as NodeJS.ProcessEnv;
 }
@@ -121,6 +127,41 @@ describe('env validation (config module)', () => {
   it('rejects TRUST_PROXY_HOPS above 3', () => {
     const result = envSchema.safeParse(baseDevEnv({ TRUST_PROXY_HOPS: '4' }));
     expect(result.success).toBe(false);
+  });
+
+  it.each(['0', '65536', '1.5'])('rejects an invalid API port (%s)', (API_PORT) => {
+    expect(envSchema.safeParse(baseDevEnv({ API_PORT })).success).toBe(false);
+  });
+
+  it('rejects production payout configuration without mandatory MFA', () => {
+    expect(envSchema.safeParse(baseProdEnv({ PAYOUT_REQUIRE_2FA: 'false' })).success).toBe(false);
+  });
+
+  it('rejects explicitly disabling webhook reclaim in production', () => {
+    expect(envSchema.safeParse(baseProdEnv({ WEBHOOK_RECLAIM_CRON: 'false' })).success).toBe(false);
+  });
+
+  it('rejects the removed async-webhook switch in every environment', () => {
+    expect(envSchema.safeParse(baseDevEnv({ WEBHOOK_ASYNC_PROCESSING: 'true' })).success).toBe(false);
+  });
+
+  it('strictly validates payout-provider override JSON', () => {
+    expect(
+      envSchema.safeParse(
+        baseDevEnv({ WAITLAYER_PAYOUT_PROVIDER_STATUS: '{"unknown":"available"}' }),
+      ).success,
+    ).toBe(false);
+    expect(
+      envSchema.safeParse(
+        baseDevEnv({ WAITLAYER_PAYOUT_PROVIDER_STATUS: '{"wise":"coming_soon"}' }),
+      ).success,
+    ).toBe(true);
+  });
+
+  it('bounds operational timeout and cron controls', () => {
+    expect(envSchema.safeParse(baseDevEnv({ EMAIL_PROVIDER_TIMEOUT_MS: '999' })).success).toBe(false);
+    expect(envSchema.safeParse(baseDevEnv({ PROVIDER_CALL_TIMEOUT_MS: '120001' })).success).toBe(false);
+    expect(envSchema.safeParse(baseDevEnv({ WEBHOOK_RECLAIM_CRON_BATCH_SIZE: '1001' })).success).toBe(false);
   });
 
   it('loadEnv returns parsed config for a valid environment', () => {

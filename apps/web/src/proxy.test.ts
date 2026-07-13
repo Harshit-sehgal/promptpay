@@ -2,7 +2,7 @@ import { SignJWT } from 'jose';
 import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { middleware } from './middleware';
+import { proxy } from './proxy';
 
 const SECRET = 'test-secret-at-least-32-characters-long-0123456789';
 const OTHER_SECRET = 'other-secret-at-least-32-characters-long-0123456';
@@ -27,7 +27,7 @@ function isRedirect(res: Response): boolean {
   return res.status === 307 || res.headers.get('location') !== null;
 }
 
-describe('protected-route middleware JWT_SECRET (A-016)', () => {
+describe('protected-route proxy JWT_SECRET (A-016)', () => {
   const original = process.env.JWT_SECRET;
 
   afterEach(() => {
@@ -38,21 +38,21 @@ describe('protected-route middleware JWT_SECRET (A-016)', () => {
   it('allows a valid token signed with the configured secret', async () => {
     process.env.JWT_SECRET = SECRET;
     const token = await makeToken(SECRET);
-    const res = await middleware(makeReq(token));
+    const res = await proxy(makeReq(token));
     expect(isRedirect(res)).toBe(false);
   });
 
   it('redirects when JWT_SECRET does not match the token signature', async () => {
     process.env.JWT_SECRET = OTHER_SECRET;
     const token = await makeToken(SECRET);
-    const res = await middleware(makeReq(token));
+    const res = await proxy(makeReq(token));
     expect(isRedirect(res)).toBe(true);
   });
 
   it('redirects when JWT_SECRET is missing', async () => {
     delete process.env.JWT_SECRET;
     const token = await makeToken(SECRET);
-    const res = await middleware(makeReq(token));
+    const res = await proxy(makeReq(token));
     expect(isRedirect(res)).toBe(true);
   });
 
@@ -61,7 +61,7 @@ describe('protected-route middleware JWT_SECRET (A-016)', () => {
     const req = makeReq();
     // Attacker tries to satisfy the old "any refresh value passes" branch.
     req.cookies.set('__Host-refresh_token', 'forged-value');
-    const res = await middleware(req);
+    const res = await proxy(req);
     expect(isRedirect(res)).toBe(true);
   });
 
@@ -70,7 +70,7 @@ describe('protected-route middleware JWT_SECRET (A-016)', () => {
     const refresh = await makeToken(SECRET); // any secret-signed JWT works as refresh
     const req = makeReq();
     req.cookies.set('__Host-refresh_token', refresh);
-    const res = await middleware(req);
+    const res = await proxy(req);
     expect(isRedirect(res)).toBe(false);
   });
 });

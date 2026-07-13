@@ -203,6 +203,8 @@ model User {
   // storage; legacy plaintext values are only tolerated for read compatibility.
   twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
   twoFactorSecret  String? @map("two_factor_secret")
+  // One-time recovery codes are stored as keyed HMACs, never plaintext.
+  twoFactorBackupCodeHashes String[] @default([]) @map("two_factor_backup_code_hashes")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -902,6 +904,9 @@ model FraudFlag {
   impression   AdImpression?   @relation(fields: [impressionId], references: [id], onDelete: SetNull)
   clickId      String?
   click        AdClick?        @relation(fields: [clickId], references: [id], onDelete: SetNull)
+  // First-class idempotency key for Stripe dispute flags. Kept outside JSON
+  // evidence so Prisma drift checks and the database can enforce uniqueness.
+  stripeDisputeId String?       @unique
   flagType     FraudFlagType
   severity     FraudSeverity   @default(medium)
   status       FraudFlagStatus @default(open)
@@ -1047,6 +1052,16 @@ model AuditLog {
   @@index([actorId, createdAt])
   @@index([targetType, targetId, createdAt])
   @@map("audit_logs")
+}
+
+model CronLease {
+  key       String   @id
+  ownerId   String
+  expiresAt DateTime @db.Timestamptz
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("cron_leases")
 }
 
 // ══════════════════════════════════════════════════════════

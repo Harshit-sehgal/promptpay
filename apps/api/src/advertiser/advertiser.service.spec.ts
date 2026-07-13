@@ -1,3 +1,4 @@
+import * as bcrypt from 'bcryptjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 
@@ -14,10 +15,11 @@ function makePrisma() {
   // returned {count:0} for updateMany and null for findUnique, breaking the
   // unit tests.
   const prisma = {
-    user: { findUnique: vi.fn() },
-    advertiser: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn() },
+    advertiser: { findUnique: vi.fn(), update: vi.fn() },
     campaign: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       updateMany: vi.fn(),
       update: vi.fn(),
@@ -27,20 +29,54 @@ function makePrisma() {
       count: vi.fn(),
       findMany: vi.fn(),
       groupBy: vi.fn(),
+      updateMany: vi.fn(),
     },
     adClick: {
       count: vi.fn(),
       findMany: vi.fn(),
       groupBy: vi.fn(),
+      updateMany: vi.fn(),
     },
-    advertiserLedger: { groupBy: vi.fn(), findMany: vi.fn() },
+    advertiserLedger: { groupBy: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
+    earningsLedger: { aggregate: vi.fn(), findFirst: vi.fn() },
+    recoveryDebtCase: { findFirst: vi.fn() },
+    payoutRequest: { findFirst: vi.fn() },
+    deviceRecoveryToken: { updateMany: vi.fn() },
+    session: { updateMany: vi.fn() },
+    apiKey: { updateMany: vi.fn() },
+    payoutAccount: { updateMany: vi.fn() },
+    userSettings: { updateMany: vi.fn() },
+    waitStateEvent: { updateMany: vi.fn() },
+    auditLog: { updateMany: vi.fn() },
     adCreative: { updateMany: vi.fn(), findMany: vi.fn() },
     consent: { findMany: vi.fn() },
     // A-068: daily trend uses $queryRaw for server-side day-bucket aggregation.
     $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
     $transaction: vi.fn(async (cb: any) => cb(prisma)),
   };
   return prisma;
+}
+
+function prepareErasureMocks(prisma: ReturnType<typeof makePrisma>) {
+  prisma.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 0n } });
+  prisma.earningsLedger.findFirst.mockResolvedValue(null);
+  prisma.recoveryDebtCase.findFirst.mockResolvedValue(null);
+  prisma.payoutRequest.findFirst.mockResolvedValue(null);
+  prisma.advertiserLedger.groupBy.mockResolvedValue([]);
+  prisma.advertiserLedger.findFirst.mockResolvedValue(null);
+  prisma.campaign.findFirst.mockResolvedValue(null);
+  prisma.campaign.updateMany.mockResolvedValue({ count: 0 });
+  prisma.deviceRecoveryToken.updateMany.mockResolvedValue({ count: 0 });
+  prisma.session.updateMany.mockResolvedValue({ count: 0 });
+  prisma.apiKey.updateMany.mockResolvedValue({ count: 0 });
+  prisma.payoutAccount.updateMany.mockResolvedValue({ count: 0 });
+  prisma.userSettings.updateMany.mockResolvedValue({ count: 0 });
+  prisma.waitStateEvent.updateMany.mockResolvedValue({ count: 0 });
+  prisma.adImpression.updateMany.mockResolvedValue({ count: 0 });
+  prisma.adClick.updateMany.mockResolvedValue({ count: 0 });
+  prisma.auditLog.updateMany.mockResolvedValue({ count: 0 });
+  prisma.$executeRaw.mockResolvedValue(1);
 }
 
 function makeService(prisma: ReturnType<typeof makePrisma>) {
@@ -123,7 +159,9 @@ describe('AdvertiserService.exportData truncation metadata (A-072)', () => {
     prisma.advertiserLedger.findMany.mockResolvedValue(
       Array.from({ length: 10001 }, (_, i) => ({ id: `ledger_${i}` })),
     );
-    prisma.consent.findMany.mockResolvedValue([{ id: 'consent_1' }]);
+    prisma.consent.findMany.mockResolvedValue(
+      Array.from({ length: 1001 }, (_, i) => ({ id: `consent_${i}` })),
+    );
   });
 
   it('adds explicit truncation metadata for capped advertiser collections', async () => {
@@ -141,6 +179,7 @@ describe('AdvertiserService.exportData truncation metadata (A-072)', () => {
     expect(exported.campaigns).toHaveLength(1000);
     expect(exported.creatives).toHaveLength(1);
     expect(exported.billingLedger).toHaveLength(10000);
+    expect(exported.consent).toHaveLength(1000);
     expect(exported.exportMeta).toMatchObject({
       exportType: 'self_service_recent_activity',
       complete: false,
@@ -149,8 +188,63 @@ describe('AdvertiserService.exportData truncation metadata (A-072)', () => {
         campaigns: { limit: 1000, returned: 1000, truncated: true },
         creatives: { limit: 2000, returned: 1, truncated: false },
         billingLedger: { limit: 10000, returned: 10000, truncated: true },
+        consent: { limit: 1000, returned: 1000, truncated: true },
       },
     });
+  });
+});
+
+describe('AdvertiserService.deleteAccount financial preflight and erasure', () => {
+  it('pseudonymizes advertiser identity only after financial obligations are clear', async () => {
+    const prisma = makePrisma();
+    const service = makeService(prisma);
+    prepareErasureMocks(prisma);
+    const passwordHash = await bcrypt.hash('correct-password', 12);
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'advertiser@example.com',
+      status: 'active',
+      passwordHash,
+      googleId: null,
+    });
+    prisma.advertiser.findUnique.mockResolvedValue({ id: 'adv-1' });
+
+    await expect(
+      service.deleteAccount('user-1', { currentPassword: 'correct-password' }),
+    ).resolves.toEqual({ deleted: true });
+    expect(prisma.advertiser.update).toHaveBeenCalledWith({
+      where: { id: 'adv-1' },
+      data: expect.objectContaining({
+        billingEmail: 'deleted-user-1@waitlayer.com',
+        stripeCustomerId: null,
+      }),
+    });
+    expect(prisma.payoutAccount.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+    );
+  });
+
+  it('blocks deletion while advertiser funds remain', async () => {
+    const prisma = makePrisma();
+    const service = makeService(prisma);
+    prepareErasureMocks(prisma);
+    const passwordHash = await bcrypt.hash('correct-password', 12);
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'advertiser@example.com',
+      status: 'active',
+      passwordHash,
+      googleId: null,
+    });
+    prisma.advertiser.findUnique.mockResolvedValue({ id: 'adv-1' });
+    prisma.advertiserLedger.groupBy.mockResolvedValue([
+      { currency: 'USD', entryType: 'credit', _sum: { amountMinor: 100n } },
+    ] as never);
+
+    await expect(
+      service.deleteAccount('user-1', { currentPassword: 'correct-password' }),
+    ).rejects.toThrow(/funded balance/);
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
 

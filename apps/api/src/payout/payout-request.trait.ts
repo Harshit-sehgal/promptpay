@@ -2,7 +2,11 @@ import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 
 import { EarningsLedger, Prisma } from '@waitlayer/db';
-import { payoutMinimumMinor, PayoutStatus } from '@waitlayer/shared';
+import {
+  payoutMinimumMinor,
+  payoutProviderLaunchStatus,
+  PayoutStatus,
+} from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
@@ -284,6 +288,9 @@ export class PayoutRequestTrait {
     if (!account || account.userId !== userId) {
       throw new BadRequestException('Invalid payout account');
     }
+    if (!account.isActive) {
+      throw new ForbiddenException('Payout destination is inactive');
+    }
     // Payout destination verification is a money-movement safety gate: funds
     // must only leave to a destination an operator (or the provider) has
     // verified (ownership challenge, provider verification, etc.). An
@@ -427,9 +434,33 @@ export class PayoutRequestTrait {
       // ── Re-read allocations + earnings entries (row-locked by the updateMany above) ──
       const pkt = await tx.payoutRequest.findUnique({
         where: { id: payoutId },
-        include: { payoutAccount: true, allocations: { include: { earningsEntry: true } } },
+        include: {
+          user: { select: { status: true } },
+          payoutAccount: true,
+          // Round 27 Fix 6: explicit `orderBy` so the trim loop below trims a
+          // deterministic allocation slice across retries / Postgres versions.
+          // Prisma relation includes default to no implicit ordering, which
+          // made "oldest-first to keep the most recently allocated slice"
+          // implementation-defined and could trim a different slice on a
+          // markPayoutFailed → re-process cycle.
+          allocations: { orderBy: { createdAt: 'asc' }, include: { earningsEntry: true } },
+        },
       });
       if (!pkt) throw new BadRequestException('Payout request not found');
+      if (pkt.user.status !== 'active') {
+        throw new ForbiddenException('Payout user is no longer active');
+      }
+      if (!pkt.payoutAccount.isActive || !pkt.payoutAccount.isVerified) {
+        throw new ForbiddenException('Payout destination is no longer active and verified');
+      }
+      const launchOverrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+      if (
+        payoutProviderLaunchStatus(pkt.payoutAccount.provider, launchOverrides) === 'coming_soon'
+      ) {
+        throw new BadRequestException(
+          `Payout provider "${pkt.payoutAccount.provider}" is currently gated`,
+        );
+      }
       const expectedAmount = BigInt(pkt.approvedAmountMinor ?? pkt.requestedAmountMinor);
       // ── Allocation-sum reconciliation ──────────────────────────
       // A partial approval (admin set approvedAmountMinor < requestedAmountMinor)
@@ -476,9 +507,38 @@ export class PayoutRequestTrait {
             });
             if (earningsEntry && earningsEntry.amountMinor > remaining) {
               const remainderMinor = earningsEntry.amountMinor - remaining;
-              await tx.earningsLedger.update({
-                where: { id: earningsEntry.id },
-                data: { amountMinor: remaining },
+              // Round 27 Fix 5: CAS-pin the earnings retire to `status: 'confirmed'`
+              // so a concurrent `holdEarnings` (fraud service) can't be silently
+              // overwritten. If this row was concurrently held, the count===0 path
+              // throws a clear 400 instead of silently retiring a held row
+              // (which would flip it to 'reversed' and orphan the hold — a latent
+              // money leak). Adversarially reviewed.
+              const retire = await tx.earningsLedger.updateMany({
+                where: { id: earningsEntry.id, status: 'confirmed' },
+                data: {
+                  status: 'reversed',
+                  description: `Superseded by partial payout approval ${payoutId}`,
+                },
+              });
+              if (retire.count === 0) {
+                throw new BadRequestException(
+                  `Earnings entry ${earningsEntry.id} was concurrently modified — cannot split`,
+                );
+              }
+              const paidSlice = await tx.earningsLedger.create({
+                data: {
+                  userId: earningsEntry.userId,
+                  campaignId: earningsEntry.campaignId,
+                  impressionId: earningsEntry.impressionId,
+                  clickId: earningsEntry.clickId,
+                  entryType: earningsEntry.entryType,
+                  status: 'confirmed',
+                  amountMinor: remaining,
+                  currency: earningsEntry.currency,
+                  availableAt: earningsEntry.availableAt,
+                  idempotencyKey: `payout_slice_${payoutId}_${earningsEntry.id}`,
+                  description: earningsEntry.description ?? 'Payout partial-approval slice',
+                },
               });
               await tx.earningsLedger.create({
                 data: {
@@ -495,11 +555,17 @@ export class PayoutRequestTrait {
                   description: earningsEntry.description ?? 'Payout partial-approval remainder',
                 },
               });
+              await tx.payoutAllocation.update({
+                where: { id: entry.id },
+                data: { amountMinor: remaining, earningsEntryId: paidSlice.id },
+              });
+              entry.earningsEntryId = paidSlice.id;
+              entry.amountMinor = remaining;
+            } else {
+              throw new BadRequestException(
+                `Allocated earnings entry ${entry.earningsEntryId} is missing or smaller than its partial approval slice`,
+              );
             }
-            await tx.payoutAllocation.update({
-              where: { id: entry.id },
-              data: { amountMinor: remaining },
-            });
             allocatedSum -= overage;
             overage = 0n;
           }
@@ -525,7 +591,15 @@ export class PayoutRequestTrait {
           );
         }
       }
-      return pkt;
+      const placeholder = await tx.payoutTransaction.create({
+        data: {
+          payoutRequestId: pkt.id,
+          provider: pkt.payoutAccount.provider,
+          providerTxId: `initiate_pending_${pkt.id}`,
+          status: PayoutStatus.PROCESSING,
+        },
+      });
+      return { ...pkt, placeholderTransactionId: placeholder.id };
     });
     const provider = this.providers[payout.payoutAccount.provider];
     if (!provider) {
@@ -539,9 +613,7 @@ export class PayoutRequestTrait {
       status: string;
     };
     try {
-      // Wrap the external PSP initiation in a timeout + circuit breaker (per
-      // provider) so an unresponsive provider fails closed (markPayoutFailed)
-      // instead of hanging the request thread indefinitely.
+      // Wrap the external PSP initiation in a timeout + circuit breaker.
       result = await providerBreaker.call(`initiate:${payout.payoutAccount.provider}`, () =>
         withTimeout(
           () =>
@@ -556,16 +628,58 @@ export class PayoutRequestTrait {
       );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      if (err instanceof PayoutProviderUnsafeFailure) {
-        this.logger.error(`Unsafe payout provider failure for payout ${payout.id}: ${message}`);
-        throw new BadRequestException(message);
-      }
-      await this.markPayoutFailed(payout.id, {
-        provider: payout.payoutAccount.provider,
-        providerTxId: `initiate_failed_${payout.id}`,
-        failureReason: `Provider initiate threw before a safe provider transaction was recorded: ${message}`,
+      await this.prisma.payoutTransaction.updateMany({
+        where: { id: payout.placeholderTransactionId, status: PayoutStatus.PROCESSING },
+        data: {
+          failureReason:
+            'Provider initiation threw or timed out; remote outcome requires reconciliation before allocations can be released',
+        },
       });
-      throw new BadRequestException(`Payout provider initiation failed: ${message}`);
+      this.logger.error(`Ambiguous provider initiation for payout ${payout.id}: ${message}`);
+      throw new BadRequestException(
+        err instanceof PayoutProviderUnsafeFailure
+          ? err.message
+          : 'Payout provider outcome is unknown; allocations remain reserved for reconciliation',
+      );
+    }
+    const recorded = await this.prisma.$transaction(async (tx) => {
+      const providerTxUpdate = await tx.payoutTransaction.updateMany({
+        where: {
+          id: payout.placeholderTransactionId,
+          providerTxId: `initiate_pending_${payout.id}`,
+          status: PayoutStatus.PROCESSING,
+        },
+        data: { providerTxId: result.providerTxId, failureReason: null },
+      });
+      if (providerTxUpdate.count !== 1) {
+        throw new Error(
+          `Could not bind provider transaction ${result.providerTxId} to payout ${payout.id}`,
+        );
+      }
+      // Stripe Connect transfers platform cash to the connected account before
+      // its bank payout reaches `paid`; account for the outflow immediately.
+      if (payout.payoutAccount.provider === 'stripe_connect') {
+        await tx.platformLedger.upsert({
+          where: { idempotencyKey: `developer_payout_cash_${payout.id}` },
+          create: {
+            entryType: 'reversal',
+            status: 'confirmed',
+            amountMinor: expectedAmount,
+            currency: payout.currency,
+            bucket: 'cash',
+            referenceId: payout.id,
+            idempotencyKey: `developer_payout_cash_${payout.id}`,
+            description: `Developer payout cash initiated — payout ${payout.id}`,
+          },
+          update: {},
+        });
+      }
+      return providerTxUpdate;
+    });
+    if (recorded.count !== 1) {
+      throw new BadRequestException(
+        'Provider payout was initiated but local reconciliation failed; allocations remain reserved',
+      );
     }
     if (result.status === PayoutStatus.FAILED) {
       await this.markPayoutFailed(payout.id, {
@@ -575,14 +689,13 @@ export class PayoutRequestTrait {
       });
       return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.FAILED };
     }
-    await this.prisma.payoutTransaction.create({
-      data: {
-        payoutRequestId: payout.id,
-        provider: payout.payoutAccount.provider,
+    if (result.status === PayoutStatus.PAID) {
+      await this.markPayoutPaid(payout.id, {
         providerTxId: result.providerTxId,
-        status: 'processing',
-      },
-    });
+        paidAt: new Date().toISOString(),
+      });
+      return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.PAID };
+    }
     return { payoutId, providerTxId: result.providerTxId, status: 'processing' };
   }
 
@@ -647,8 +760,26 @@ export class PayoutRequestTrait {
         );
       }
     }
-    // Idempotency fast-path: if already paid, return immediately
+    const authoritativeAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
+    // Idempotency fast-path: replay the idempotent money side-effects too. A
+    // prior call may have committed the paid state before referral processing
+    // failed, and legacy paid payouts may predate cash-ledger accounting.
     if (payout.status === 'paid') {
+      await this.prisma.platformLedger.upsert({
+        where: { idempotencyKey: `developer_payout_cash_${payoutId}` },
+        create: {
+          entryType: 'reversal',
+          status: 'confirmed',
+          amountMinor: authoritativeAmount,
+          currency: payout.currency,
+          bucket: 'cash',
+          referenceId: payoutId,
+          idempotencyKey: `developer_payout_cash_${payoutId}`,
+          description: `Developer payout cash settled — payout ${payoutId}`,
+        },
+        update: {},
+      });
+      await this.referral.processReferralRewards(payout.userId);
       return this.prisma.payoutRequest.findUnique({
         where: { id: payoutId },
         include: { allocations: true },
@@ -785,26 +916,31 @@ export class PayoutRequestTrait {
           );
         }
       }
+      await tx.platformLedger.upsert({
+        where: { idempotencyKey: `developer_payout_cash_${payoutId}` },
+        create: {
+          entryType: 'reversal',
+          status: 'confirmed',
+          amountMinor: authoritativeAmount,
+          currency: payout.currency,
+          bucket: 'cash',
+          referenceId: payoutId,
+          idempotencyKey: `developer_payout_cash_${payoutId}`,
+          description: `Developer payout cash settled — payout ${payoutId}`,
+        },
+        update: {},
+      });
       return tx.payoutRequest.findUnique({
         where: { id: payoutId },
         include: { allocations: true },
       });
     });
-    // After successfully marking as paid, check referral rewards.
-    // Use the transaction result, not the stale outer `payout` snapshot — if the
-    // tx found the payout already paid (count === 0), don't re-fire the reward.
+    // Await the idempotent referral reward. If it fails, callers receive an
+    // error and may replay mark-paid; the payout cron also reclaims pending
+    // referrals independently.
     const paidPayout = result;
     if (paidPayout?.status === 'paid') {
-      this.referral.processReferralRewards(paidPayout.userId).catch((err) => {
-        // A failed referral reward has two possible paths:
-        //  (a) transient DB error — log + operator can retry; or
-        //  (b) referrer pair already credited (idempotent-P2002 catch = no-op).
-        //  Log both so the first-payout-referral path isn't silent in its log.
-        this.logger.error(
-          `Referral reward processing failed for userId=${paidPayout.userId}: ` +
-            `${err instanceof Error ? err.message : err}`,
-        );
-      });
+      await this.referral.processReferralRewards(paidPayout.userId);
     }
     return (
       paidPayout ??

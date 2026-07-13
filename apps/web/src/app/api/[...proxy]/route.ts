@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import {
   apiBaseUrl,
+  applyRateLimitIdentity,
   COOKIE_ACCESS,
   COOKIE_REFRESH,
   isSecure,
   readAuthCookie,
+  rateLimitIdentity,
 } from '../auth/_lib/cookies';
 import {
   MAX_API_ROUTE_BODY_BYTES,
@@ -57,6 +59,10 @@ export const ALLOWED_PATH_PREFIXES = [
   '/auth/2fa/setup',
   '/auth/2fa/enable',
   '/auth/2fa/disable',
+  '/auth/2fa/backup-codes/regenerate',
+  '/auth/link/google',
+  '/auth/password/set',
+  '/auth/sessions',
 
   // Developer
   '/developer/dashboard',
@@ -170,7 +176,11 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
     }
 
     const url = upstreamUrl(pathname, req.nextUrl.search);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const identity = rateLimitIdentity(req);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...identity.headers,
+    };
 
     // Forward the access token from the httpOnly cookie as a Bearer header
     const accessToken = readAuthCookie(req, COOKIE_ACCESS, isSecure(req.headers));
@@ -230,18 +240,25 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       // route — every other route still has `secret` stripped (including the
       // `eventSecret` used for device signing).
       const allowSetupSecret = pathWithoutApi === '/auth/2fa/setup';
-      responseBody = stripSensitiveFields(responseBody, allowSetupSecret);
-      return NextResponse.json(responseBody, { status: responseStatus });
+      const allowBackupCodes =
+        pathWithoutApi === '/auth/2fa/enable' ||
+        pathWithoutApi === '/auth/2fa/backup-codes/regenerate';
+      responseBody = stripSensitiveFields(responseBody, allowSetupSecret, allowBackupCodes);
+      return applyRateLimitIdentity(
+        NextResponse.json(responseBody, { status: responseStatus }),
+        identity,
+        req.headers,
+      );
     }
 
     // Non-JSON upstream responses (e.g. CSV exports) are forwarded verbatim
     // with their original content-type so the browser can download them
     // directly instead of wrapping plain text in a JSON envelope.
     const textBody = await upstreamRes.text();
-    return new NextResponse(textBody, {
+    return applyRateLimitIdentity(new NextResponse(textBody, {
       status: responseStatus,
       headers: { 'Content-Type': contentType || 'text/plain' },
-    });
+    }), identity, req.headers);
   } catch (proxyErr) {
     console.error(
       '[WaitLayer] Proxy error:',
@@ -301,10 +318,14 @@ const SENSITIVE_FIELDS = new Set([
   'recoverySeed',
 ]);
 
-export function stripSensitiveFields(value: unknown, allowSetupSecret = false): unknown {
+export function stripSensitiveFields(
+  value: unknown,
+  allowSetupSecret = false,
+  allowBackupCodes = false,
+): unknown {
   if (value === null || value === undefined) return value;
   if (Array.isArray(value)) {
-    return value.map((v) => stripSensitiveFields(v, allowSetupSecret));
+    return value.map((v) => stripSensitiveFields(v, allowSetupSecret, allowBackupCodes));
   }
   if (typeof value === 'object') {
     const obj = value as Record<string, unknown>;
@@ -317,8 +338,12 @@ export function stripSensitiveFields(value: unknown, allowSetupSecret = false): 
         stripped[key] = obj[key];
         continue;
       }
+      if (allowBackupCodes && key === 'backupCodes') {
+        stripped[key] = obj[key];
+        continue;
+      }
       if (SENSITIVE_FIELDS.has(key)) continue;
-      stripped[key] = stripSensitiveFields(obj[key], allowSetupSecret);
+      stripped[key] = stripSensitiveFields(obj[key], allowSetupSecret, allowBackupCodes);
     }
     return stripped;
   }

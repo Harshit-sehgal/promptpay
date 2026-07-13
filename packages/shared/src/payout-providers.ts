@@ -1,8 +1,7 @@
-// A-030: All five payout providers ship as 'available'. PayPal Payouts, Stripe
-// Connect, and Wise are automated rails; paypal_email and manual are
-// admin-processed. Which automated rails are actually live at the
-// provider-account level is an OPERATOR launch decision (credentials/approval),
-// not a code change — see AGENTS.md.
+// PayPal Payouts and Stripe Connect have executable automated integrations;
+// paypal_email and manual are admin-processed. Wise stays coming_soon by
+// default because its email-recipient corridor is account/country dependent
+// and must be verified by the operator before it is exposed.
 //
 // To let operators gate a provider on/off at deploy time WITHOUT a code edit,
 // the static statuses can be overridden per-environment via a JSON map of
@@ -55,8 +54,8 @@ export const PAYOUT_PROVIDERS: PayoutProviderInfo[] = [
   {
     provider: 'wise',
     label: 'Wise',
-    status: 'available',
-    note: 'Available — automated at launch',
+    status: 'coming_soon',
+    note: 'Coming soon — requires verified Wise recipient capability',
   },
 ];
 
@@ -92,24 +91,28 @@ export function applyPayoutProviderOverrides(
 /**
  * Resolve a single provider's launch status from the operator override map.
  * Stable domain concept + test seam (allowed under ts-no-tiny-functions):
- * returns 'coming_soon' only when the provider is explicitly gated, 'available'
- * otherwise, or null when there is no override map at all. The API calls this
- * at registration so server-side payout creation honours the same gate the web
- * UI uses (A-030). Malformed/empty/unknown values return null (treated as
- * available by the caller).
+ * Starts from the checked-in catalogue and applies a valid operator override.
+ * Unknown providers fail closed as coming_soon. This prevents an absent or
+ * malformed environment variable from silently turning a gated provider on.
  */
 export function payoutProviderLaunchStatus(
   provider: string,
   overridesJson?: string,
-): PayoutProviderLaunchStatus | null {
-  if (!overridesJson) return null;
+): PayoutProviderLaunchStatus {
+  const base = PAYOUT_PROVIDERS.find((entry) => entry.provider === provider)?.status;
+  if (!base) return 'coming_soon';
+  if (!overridesJson) return base;
   let overrides: unknown;
   try {
     overrides = JSON.parse(overridesJson);
   } catch {
-    return null;
+    return base;
   }
-  if (typeof overrides !== 'object' || overrides === null) return null;
+  if (typeof overrides !== 'object' || overrides === null) return base;
   const map = overrides as Record<string, unknown>;
-  return map[provider] === 'coming_soon' ? 'coming_soon' : 'available';
+  const override = map[provider];
+  return typeof override === 'string' &&
+    (VALID_LAUNCH_STATUSES as string[]).includes(override)
+    ? (override as PayoutProviderLaunchStatus)
+    : base;
 }

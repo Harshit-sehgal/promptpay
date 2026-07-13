@@ -13,12 +13,14 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
+import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { AdminService } from './admin.service';
 import {
   AdminDevicesQueryDto,
+  ArchiveRefundQueueQueryDto,
   AdminMetricsQueryDto,
   ApproveCampaignDto,
   ApprovePayoutDto,
@@ -40,7 +42,7 @@ import {
 
 @ApiTags('Admin')
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminMfaStepUpGuard)
 @UseInterceptors(AuditInterceptor)
 @Roles('admin', 'super_admin')
 export class AdminController {
@@ -328,8 +330,8 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Get pending archive refunds' })
   @Get('refunds/archive/pending')
-  getPendingArchiveRefunds() {
-    return this.service.getPendingArchiveRefunds();
+  getPendingArchiveRefunds(@Query() query: ArchiveRefundQueueQueryDto) {
+    return this.service.getPendingArchiveRefunds(query);
   }
 
   /**

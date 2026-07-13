@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
 import {
   isProviderSupportedForCurrency,
+  PAYOUT_PROVIDERS,
   PayoutProvider,
   payoutProviderLaunchStatus,
 } from '@waitlayer/shared';
@@ -88,6 +89,12 @@ export class PayoutMethodTrait {
         `Payout provider "${dto.provider}" is not available for registration (launch status: coming_soon).`,
       );
     }
+    const readiness = this.providers[dto.provider]?.readiness?.();
+    if (readiness && !readiness.ok) {
+      throw new BadRequestException(
+        `Payout provider "${dto.provider}" is not available for registration: ${readiness.reason}`,
+      );
+    }
     const provider = dto.provider as PayoutProvider;
     const destination = dto.destination?.trim();
     if (!destination) {
@@ -125,5 +132,34 @@ export class PayoutMethodTrait {
   /** Expose the provider map so the payout cron can check status on processing payouts */
   getProvider(providerName: string): PayoutProviderHandler | undefined {
     return this.providers[providerName];
+  }
+
+  getPayoutProviderAvailability() {
+    const overrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+    return {
+      providers: PAYOUT_PROVIDERS.map((info) => {
+        const handler = this.providers[info.provider];
+        const readiness = handler?.readiness?.();
+        const launchStatus = payoutProviderLaunchStatus(info.provider, overrides);
+        const isStub = handler instanceof StubPayoutProvider;
+        const available =
+          launchStatus === 'available' && Boolean(handler) && !isStub && readiness?.ok !== false;
+        const reason =
+          launchStatus === 'coming_soon'
+            ? info.note
+            : !handler || isStub
+              ? 'Provider integration is not implemented.'
+              : readiness && !readiness.ok
+                ? readiness.reason
+                : null;
+        return {
+          provider: info.provider,
+          label: info.label,
+          status: available ? ('available' as const) : ('coming_soon' as const),
+          note: info.note,
+          reason,
+        };
+      }),
+    };
   }
 }

@@ -1,6 +1,9 @@
+import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
+import { acquireCronLease } from '../common/utils/cron-lease';
+import { PrismaService } from '../config/prisma.service';
 import { AdminService } from './admin.service';
 
 /**
@@ -33,10 +36,12 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
   private intervalId?: NodeJS.Timeout;
   private startupTimeoutId?: NodeJS.Timeout;
   private running = false;
+  private readonly ownerId = randomUUID();
 
   constructor(
     private admin: AdminService,
     private audit: AuditService,
+    private prisma: PrismaService,
   ) {}
 
   onApplicationBootstrap() {
@@ -55,6 +60,16 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
     if (this.running) return; // guard against overlap if a scan overruns the interval
     this.running = true;
     try {
+      if (
+        !(await acquireCronLease(
+          this.prisma,
+          'money-integrity',
+          this.ownerId,
+          MoneyIntegrityCronService.INTERVAL_MS - 5_000,
+        ))
+      ) {
+        return;
+      }
       const report = await this.admin.getMoneyIntegrityReport();
       if (report.status === 'healthy') return;
 
@@ -87,7 +102,7 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
           discrepancies.join('; '),
       );
 
-      void this.audit.log({
+      await this.audit.logStrict({
         actorId: 'system',
         actorRole: 'system',
         action: 'money_integrity_discrepancy',

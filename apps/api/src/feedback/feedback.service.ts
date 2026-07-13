@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
+import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { CreateFeedbackDto } from './dto/feedback.dto';
 
 /**
@@ -38,7 +39,7 @@ export class FeedbackService {
     }
     const contactEmail = dto.email?.trim().toLowerCase() || null;
 
-    await this.audit.log({
+    await this.audit.logStrict({
       actorId: meta.userId ?? 'anonymous',
       actorRole: meta.userId ? 'developer' : 'anonymous',
       action: 'feedback_submitted',
@@ -51,15 +52,24 @@ export class FeedbackService {
         contactEmail,
         hasEmail: Boolean(contactEmail),
         length: text.length,
-        ip: meta.ip,
-        userAgent: meta.userAgent,
+        ipHash: meta.ip ? privacyPseudonym(meta.ip, 'feedback-ip') : undefined,
+        userAgentFamily: coarseUserAgent(meta.userAgent),
       },
     });
 
     this.logger.log(
-      `Feedback received (category=${dto.category ?? 'other'}, rating=${dto.rating ?? '-'}, contact=${contactEmail ?? 'none'})`,
+      `Feedback received (category=${dto.category ?? 'other'}, rating=${dto.rating ?? '-'}, hasContact=${Boolean(contactEmail)})`,
     );
 
     return { received: true };
   }
+}
+
+function coarseUserAgent(userAgent?: string): string | undefined {
+  if (!userAgent) return undefined;
+  if (/Firefox/i.test(userAgent)) return 'Firefox';
+  if (/Edg/i.test(userAgent)) return 'Edge';
+  if (/Chrome|Chromium/i.test(userAgent)) return 'Chromium';
+  if (/Safari/i.test(userAgent)) return 'Safari';
+  return 'Other';
 }

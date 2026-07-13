@@ -18,6 +18,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 import { BidType, depositMinimumMinor } from '@waitlayer/shared';
 
+import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
 
 const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'brl', 'mxn', 'sgd'] as const;
@@ -64,13 +65,13 @@ export class CreateCampaignDto {
   @ApiProperty()
   @IsBigInt()
   @MinBigInt(1n)
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   bidAmountMinor!: bigint;
 
   @ApiProperty()
   @IsBigInt()
   @MinBigInt(1n)
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   budgetTotalMinor!: bigint;
 
   @ApiProperty({ required: false })
@@ -101,14 +102,14 @@ export class UpdateCampaignDto {
   @IsOptional()
   @IsBigInt()
   @MinBigInt(1n)
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   bidAmountMinor?: bigint;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBigInt()
   @MinBigInt(1n)
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   budgetTotalMinor?: bigint;
   @ApiProperty({ required: false })
   @IsOptional()
@@ -161,7 +162,7 @@ export class CreateDepositSessionDto {
         (args.object as CreateDepositSessionDto).currency ?? 'USD',
       )} minor units`,
   })
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   amountMinor!: bigint;
 
   @ApiProperty({ required: false })

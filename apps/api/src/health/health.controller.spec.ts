@@ -7,6 +7,20 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { HealthController } from './health.controller';
 
+function databaseProbePrisma(result: 'ok' | 'error') {
+  const tx = {
+    $executeRaw: vi.fn().mockResolvedValue(0),
+    $queryRaw:
+      result === 'ok'
+        ? vi.fn().mockResolvedValue([{ '?column?': 1 }])
+        : vi.fn().mockRejectedValue(new Error('down')),
+  };
+  return {
+    tx,
+    $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+  };
+}
+
 describe('HealthController route security', () => {
   it('keeps the liveness endpoint unguarded for infrastructure probes', () => {
     const guards = Reflect.getMetadata(GUARDS_METADATA, HealthController.prototype.check);
@@ -24,16 +38,21 @@ describe('HealthController route security', () => {
 
 describe('HealthController readiness (A-042)', () => {
   it('returns ok when DB and Redis are healthy', async () => {
-    const prisma = { $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]) };
+    const prisma = databaseProbePrisma('ok');
     const redis = { check: vi.fn().mockResolvedValue({ status: 'connected' }) };
     const controller = new HealthController(prisma as never, redis as never);
 
     const res = await controller.ready();
     expect(res.status).toBe('ok');
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      maxWait: 2000,
+      timeout: 2500,
+    });
+    expect(prisma.tx.$executeRaw).toHaveBeenCalled();
   });
 
   it('throws 503 when the database is unreachable', async () => {
-    const prisma = { $queryRaw: vi.fn().mockRejectedValue(new Error('down')) };
+    const prisma = databaseProbePrisma('error');
     const redis = { check: vi.fn().mockResolvedValue({ status: 'connected' }) };
     const controller = new HealthController(prisma as never, redis as never);
 
@@ -42,7 +61,7 @@ describe('HealthController readiness (A-042)', () => {
   });
 
   it('throws 503 when Redis is down', async () => {
-    const prisma = { $queryRaw: vi.fn().mockResolvedValue([{}]) };
+    const prisma = databaseProbePrisma('ok');
     const redis = { check: vi.fn().mockResolvedValue({ status: 'error' }) };
     const controller = new HealthController(prisma as never, redis as never);
 

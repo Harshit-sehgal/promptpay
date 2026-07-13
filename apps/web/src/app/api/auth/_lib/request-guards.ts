@@ -22,7 +22,14 @@ export function rejectCrossOriginMutation(req: NextRequest): NextResponse | null
   }
 
   const referer = req.headers.get('referer');
-  if (!referer) return null;
+  if (!referer) {
+    // Modern browsers provide Fetch Metadata even when Origin/Referer is
+    // stripped. Fail closed unless it explicitly proves same-origin; an absent
+    // signal must not turn a mutating cookie-authenticated endpoint into CSRF.
+    return req.headers.get('sec-fetch-site') === 'same-origin'
+      ? null
+      : forbiddenOriginResponse();
+  }
 
   try {
     return new URL(referer).origin === expectedOrigin ? null : forbiddenOriginResponse();

@@ -1,4 +1,5 @@
 import * as bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -8,13 +9,21 @@ import { DEFAULT_COMPANY_NAME, UserRole } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
+import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
 import { TokenPayload } from './auth.constants';
 import { AuthEmailTrait } from './auth-email.trait';
 import { AuthSessionTrait } from './auth-session.trait';
 import { AuthTotpTrait } from './auth-totp.trait';
 import { GoogleOAuthDto, LoginDto, SignUpDto } from './dto';
+import { normalizeAuthEmail } from './email-normalization';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
+
+// Cost-matched dummy hash for unknown/social-only/inactive accounts. Performing
+// exactly one bcrypt comparison on every password-login path prevents account
+// existence and account-type timing oracles.
+const DUMMY_PASSWORD_HASH =
+  '$2b$12$yM0nJf2yL6WOrYktKZzAruQ79UYryiVNYm7ldEcj53Z/l2mVxLzyS';
 
 export class AuthCoreTrait {
   declare prisma: PrismaService;
@@ -26,6 +35,7 @@ export class AuthCoreTrait {
 
   /** ── Sign Up ── */
   async signUp(dto: SignUpDto) {
+    const email = normalizeAuthEmail(dto.email);
     // A-034: every self-service account creation must prove the user accepted
     // the required age/terms/privacy consent. Refuse creation otherwise so the
     // acceptance is auditable per user and policy version.
@@ -40,33 +50,41 @@ export class AuthCoreTrait {
     // signups race past this check; the P2002 catch below translates the
     // unique-constraint failure into the same ConflictException so the
     // loser always sees a clean 409 instead of a 500.
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const existing = await this.findUserByAuthEmail(email);
     if (existing) throw new ConflictException('Email already registered');
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const referralCode = await this.generateReferralCode();
     const { user, consentRows } = await this.prisma.$transaction(async (tx) => {
       let createdUser;
-      try {
-        createdUser = await tx.user.create({
-          data: {
-            email: dto.email,
-            passwordHash,
-            name: dto.name,
-            role: dto.role,
-            country: dto.country,
-            referralCode,
-          },
-        });
-      } catch (err: unknown) {
-        // Concurrent signups with the same email race past the pre-check
-        // above. The `email @unique` constraint is THE authoritative source of
-        // truth — translate P2002 into ConflictException so the loser doesn't
-        // see a raw Prisma error (500) leak past the API surface.
-        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-          throw new ConflictException('Email already registered');
+      let candidateReferralCode = referralCode;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          createdUser = await tx.user.create({
+            data: {
+              email,
+              passwordHash,
+              name: dto.name,
+              role: dto.role,
+              country: dto.country,
+              referralCode: candidateReferralCode,
+            },
+          });
+          break;
+        } catch (err: unknown) {
+          if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') {
+            throw err;
+          }
+          if (uniqueViolationIncludes(err, 'email')) {
+            throw new ConflictException('Email already registered');
+          }
+          if (uniqueViolationIncludes(err, 'referral')) {
+            candidateReferralCode = randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
+            continue;
+          }
+          throw err;
         }
-        throw err;
       }
+      if (!createdUser) throw new ConflictException('Could not allocate a unique referral code');
       // Developer onboarding: create settings + trust score
       if (dto.role === UserRole.DEVELOPER) {
         await tx.userSettings.create({ data: { userId: createdUser.id } });
@@ -78,7 +96,7 @@ export class AuthCoreTrait {
           data: {
             userId: createdUser.id,
             companyName: dto.name || DEFAULT_COMPANY_NAME,
-            billingEmail: dto.email,
+            billingEmail: email,
           },
         });
       }
@@ -104,19 +122,20 @@ export class AuthCoreTrait {
         'signup',
         signupConsentVersions,
       );
+      await tx.auditLog.create({
+        data: {
+          actorId: createdUser.id,
+          actorRole: createdUser.role,
+          action: 'signup',
+          targetType: 'user',
+          targetId: createdUser.id,
+          afterSnap: { role: createdUser.role },
+        },
+      });
       return { user: createdUser, consentRows };
     });
     const tokens = await this.generateTokenPair(user.id, user.role);
     this.logSignupConsents(user, consentRows, 'signup');
-    // Audit log: new user registration (fire-and-forget)
-    void this.audit.log({
-      actorId: user.id,
-      actorRole: user.role,
-      action: 'signup',
-      targetType: 'user',
-      targetId: user.id,
-      afterSnap: { email: user.email, role: user.role },
-    });
     return {
       user: this.sanitizeUser(user),
       ...tokens,
@@ -125,54 +144,35 @@ export class AuthCoreTrait {
 
   /** ── Login ── */
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user) {
+    const email = normalizeAuthEmail(dto.email);
+    const user = await this.findUserByAuthEmail(email);
+    const valid = await bcrypt.compare(dto.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!user || !valid || !user.passwordHash || !isActiveAccountStatus(user.status)) {
       // Audit: login attempt for unknown email
-      void this.audit.log({
+      await this.audit.logStrict({
         actorId: 'anonymous',
         actorRole: 'anonymous',
         action: 'login_failed',
         targetType: 'user',
-        targetId: dto.email,
-        afterSnap: { reason: 'unknown_email' },
+        targetId: user?.id ?? privacyPseudonym(email, 'login-target'),
+        afterSnap: { reason: 'invalid_credentials' },
       });
       throw new UnauthorizedException('Invalid credentials');
     }
-    // ── Order matters: check account status BEFORE running the
-    // bcrypt.compare, so a banned/deleted account's password is never
-    // disclosed via the "Account is not active" oracle that previously
-    // fired only after a successful compare. ──
-    if (!isActiveAccountStatus(user.status)) {
-      // Always throw the same generic message to avoid status enumeration.
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    if (!user.passwordHash) {
-      // Do not disclose that the account exists but uses social login.
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    const valid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!valid) {
-      // Audit: failed password attempt
-      void this.audit.log({
-        actorId: user.id,
-        actorRole: user.role,
-        action: 'login_failed',
-        targetType: 'user',
-        targetId: user.id,
-        afterSnap: { reason: 'bad_password' },
-      });
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    this.assertTwoFactorSatisfied(user, dto.twoFactorToken);
-    const tokens = await this.generateTokenPair(user.id, user.role);
-    // Audit: successful login
-    void this.audit.log({
+    await this.assertTwoFactorSatisfied(user, dto.twoFactorToken, dto.twoFactorBackupCode);
+    await this.audit.logStrict({
       actorId: user.id,
       actorRole: user.role,
       action: 'login_success',
       targetType: 'user',
       targetId: user.id,
     });
+    const tokens = await this.generateTokenPair(
+      user.id,
+      user.role,
+      undefined,
+      user.twoFactorEnabled ? Math.floor(Date.now() / 1000) : undefined,
+    );
     return {
       user: this.sanitizeUser(user),
       ...tokens,
@@ -191,7 +191,7 @@ export class AuthCoreTrait {
       throw new UnauthorizedException('Google account email is not verified');
     }
     const googleId = payload.sub;
-    const email = payload.email;
+    const email = normalizeAuthEmail(payload.email);
     const name = payload.name || undefined;
     const role = dto.role || UserRole.DEVELOPER;
     // 1. Find by googleId
@@ -201,8 +201,13 @@ export class AuthCoreTrait {
       if (!isActiveAccountStatus(user.status)) {
         throw new UnauthorizedException('Invalid credentials');
       }
-      this.assertTwoFactorSatisfied(user, dto.twoFactorToken);
-      const tokens = await this.generateTokenPair(user.id, user.role);
+      await this.assertTwoFactorSatisfied(user, dto.twoFactorToken, dto.twoFactorBackupCode);
+      const tokens = await this.generateTokenPair(
+        user.id,
+        user.role,
+        undefined,
+        user.twoFactorEnabled ? Math.floor(Date.now() / 1000) : undefined,
+      );
       return { user: this.sanitizeUser(user), ...tokens };
     }
     // 2. Find by email — REFUSE silent email-link to prevent account takeover.
@@ -212,16 +217,16 @@ export class AuthCoreTrait {
     //    user must explicitly link Google from inside the existing account
     //    (see /auth/link/google) after proving ownership via password or a
     //    fresh signed email-link request.
-    const existingByEmail = await this.prisma.user.findUnique({ where: { email } });
+    const existingByEmail = await this.findUserByAuthEmail(email);
     if (existingByEmail) {
       // Audit the attempted takeover so the real owner can detect it.
-      void this.audit.log({
+      await this.audit.logStrict({
         actorId: 'anonymous',
         actorRole: 'anonymous',
         action: 'google_link_blocked_existing_email',
         targetType: 'user',
         targetId: existingByEmail.id,
-        afterSnap: { email, googleSub: googleId },
+        afterSnap: { reason: 'existing_email_requires_explicit_link' },
       });
       throw new ConflictException(
         'An account with this email already exists. Sign in with your password and link Google from your account settings.',
@@ -241,18 +246,37 @@ export class AuthCoreTrait {
     const signupConsentVersions = this.resolveSignupConsentVersions(dto.policyVersion);
     const referralCode = await this.generateReferralCode();
     const googleSignup = await this.prisma.$transaction(async (tx) => {
-      const createdUser = await tx.user.create({
-        data: {
-          email,
-          googleId,
-          name,
-          role,
-          googleVerified: true,
-          emailVerified: true,
-          referralCode,
-          // No passwordHash — social login only
-        },
-      });
+      let createdUser;
+      let candidateReferralCode = referralCode;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        try {
+          createdUser = await tx.user.create({
+            data: {
+              email,
+              googleId,
+              name,
+              role,
+              googleVerified: true,
+              emailVerified: true,
+              referralCode: candidateReferralCode,
+            },
+          });
+          break;
+        } catch (err: unknown) {
+          if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') {
+            throw err;
+          }
+          if (uniqueViolationIncludes(err, 'email') || uniqueViolationIncludes(err, 'google')) {
+            throw new ConflictException('Account already exists');
+          }
+          if (uniqueViolationIncludes(err, 'referral')) {
+            candidateReferralCode = randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (!createdUser) throw new ConflictException('Could not allocate a unique referral code');
       // Developer onboarding: create settings + trust score
       if (role === UserRole.DEVELOPER) {
         await tx.userSettings.create({ data: { userId: createdUser.id } });
@@ -299,114 +323,105 @@ export class AuthCoreTrait {
     if (payload.aud !== 'refresh' || !payload.jti) {
       throw new UnauthorizedException('Invalid refresh token payload');
     }
-    // ── Atomic refresh rotation with concurrency hardening ──
-    // 1) Revoke the old session via a conditional UPDATE keyed on
-    //    `revoked = false`. This is the DB-level CAS: if two concurrent
-    //    refreshes land, exactly one wins (count === 1).
-    // 2) Only AFTER the old session is atomically revoked do we re-verify
-    //    the token hash and load the user. If the CAS fails, another
-    //    refresh won the race — invalidate the whole token family.
-    const revokeResult = await this.prisma.session.updateMany({
-      where: { id: payload.jti, revoked: false },
-      data: { revoked: true },
-    });
-    if (revokeResult.count === 0) {
-      // Lost the race OR a prior refresh already revoked this session.
-      // Load the session to learn its family, then revoke everything in it.
-      const racedSession = await this.prisma.session.findUnique({
-        where: { id: payload.jti },
-        select: { tokenFamily: true, revoked: true },
+    const jti = payload.jti;
+    // Serialize all rotations/reuse handling in a token family. The advisory
+    // transaction lock closes the race where a replay revokes a family before
+    // the winning request has inserted its child session.
+    const familyLock = payload.family ?? jti;
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${familyLock}, 0))`;
+      const revokeResult = await tx.session.updateMany({
+        where: { id: jti, userId: payload.sub, revoked: false },
+        data: { revoked: true },
       });
-      if (payload.family || racedSession?.tokenFamily) {
-        await this.prisma.session.updateMany({
+      if (revokeResult.count === 0) {
+        const racedSession = await tx.session.findUnique({
+          where: { id: jti },
+          select: { tokenFamily: true },
+        });
+        const family = racedSession?.tokenFamily ?? payload.family;
+        await tx.session.updateMany({
+          where: { userId: payload.sub, ...(family ? { tokenFamily: family } : {}) },
+          data: { revoked: true },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: payload.sub,
+            actorRole: 'unknown',
+            action: 'refresh_reuse_detected',
+            targetType: 'session',
+            targetId: jti,
+            afterSnap: { reason: 'cas_lost', family: family ?? null },
+          },
+        });
+        return { error: 'reuse' as const };
+      }
+
+      const session = await tx.session.findUnique({ where: { id: jti } });
+      if (!session) return { error: 'invalid' as const };
+      if (!(await this.verifyRefreshTokenHash(refreshToken, session.tokenHash))) {
+        await tx.session.updateMany({
           where: {
             userId: payload.sub,
-            tokenFamily: racedSession?.tokenFamily ?? payload.family!,
+            ...(session.tokenFamily ? { tokenFamily: session.tokenFamily } : {}),
           },
           data: { revoked: true },
         });
-      } else {
-        await this.revokeAllSessions(payload.sub);
+        await tx.auditLog.create({
+          data: {
+            actorId: payload.sub,
+            actorRole: 'unknown',
+            action: 'refresh_reuse_detected',
+            targetType: 'session',
+            targetId: jti,
+            afterSnap: { reason: 'hash_mismatch', family: session.tokenFamily },
+          },
+        });
+        return { error: 'hash' as const };
       }
-      // Forensic trail: a refresh-token replay is the canonical theft
-      // signal reuse-detection exists to surface. Audit it so ops can
-      // query `action='refresh_reuse_detected'` for incident response.
-      void this.audit.log({
-        actorId: payload.sub,
-        actorRole: 'unknown',
-        action: 'refresh_reuse_detected',
-        targetType: 'session',
-        targetId: payload.jti,
-        afterSnap: {
-          reason: 'cas_lost',
-          family: racedSession?.tokenFamily ?? payload.family ?? null,
-        },
-      });
+      const user = await tx.user.findUnique({ where: { id: payload.sub } });
+      if (!user || !isActiveAccountStatus(user.status)) return { error: 'inactive' as const };
+      const tokens = await this.generateTokenPair(
+        user.id,
+        user.role,
+        session.tokenFamily || undefined,
+        payload.mfaAt,
+        tx,
+      );
+      return { tokens };
+    });
+    if ('tokens' in outcome) return outcome.tokens;
+    if (outcome.error === 'reuse') {
       throw new UnauthorizedException('Token reuse detected — family sessions revoked');
     }
-    // CAS succeeded — now load the session to verify the token hash and
-    // get the family. If the row was deleted between updateMany and this
-    // read, treat as forged token.
-    const session = await this.prisma.session.findUnique({
-      where: { id: payload.jti },
-    });
-    if (!session) {
-      // Should not happen since we just successfully revoked it. Be safe.
-      throw new UnauthorizedException('Session not found');
-    }
-    // Verify token hash. A mismatch means the JWT was tampered or belongs
-    // to a different family — invalidate the family.
-    const isMatch = await bcrypt.compare(refreshToken, session.tokenHash);
-    if (!isMatch) {
-      await this.prisma.session.updateMany({
-        where: { userId: payload.sub, tokenFamily: session.tokenFamily },
-        data: { revoked: true },
-      });
-      // Hash mismatch = a tampered JWT or a token from a different family
-      // (theft / forgery attempt). Audit so the family-revoke is visible.
-      void this.audit.log({
-        actorId: payload.sub,
-        actorRole: 'unknown',
-        action: 'refresh_reuse_detected',
-        targetType: 'session',
-        targetId: payload.jti,
-        afterSnap: {
-          reason: 'hash_mismatch',
-          family: session.tokenFamily,
-        },
-      });
+    if (outcome.error === 'hash') {
       throw new UnauthorizedException('Token hash mismatch — family sessions revoked');
     }
-    // Rotate: issue new token pair
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user || !isActiveAccountStatus(user.status)) {
-      throw new UnauthorizedException('Account is not active');
-    }
-    return this.generateTokenPair(user.id, user.role, session.tokenFamily || undefined);
+    throw new UnauthorizedException('Invalid refresh session');
   }
 
   /** ── Logout ── */
   async logout(userId: string, jti?: string) {
-    if (jti) {
-      await this.prisma.session.updateMany({
-        where: { id: jti, userId },
-        data: { revoked: true },
-      });
-    } else {
-      await this.revokeAllSessions(userId);
-    }
-    // Log who logged out (requires fetching role — fetch user briefly here)
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { role: true },
     });
-    void this.audit.log({
-      actorId: userId,
-      actorRole: user?.role ?? 'unknown',
-      action: 'logout',
-      targetType: 'session',
-      targetId: userId,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { userId, ...(jti ? { id: jti } : {}) },
+        data: { revoked: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: user?.role ?? 'unknown',
+          action: 'logout',
+          targetType: 'session',
+          targetId: jti ?? userId,
+        },
+      });
     });
+    return { loggedOut: true };
   }
 
   /** ── Get Current User ── */
@@ -444,5 +459,23 @@ export class AuthCoreTrait {
   getGoogleClientId() {
     return this.config.get<string>('GOOGLE_CLIENT_ID', '');
   }
+
+  async findUserByAuthEmail(email: string) {
+    const canonical = normalizeAuthEmail(email);
+    const exact = await this.prisma.user.findUnique({ where: { email: canonical } });
+    if (exact) return exact;
+    // Transitional compatibility until the canonicalization migration has
+    // normalized legacy mixed-case rows.
+    return this.prisma.user.findFirst({
+      where: { email: { equals: canonical, mode: 'insensitive' } },
+    });
+  }
 }
 export interface AuthCoreTrait extends AuthTotpTrait, AuthSessionTrait, AuthEmailTrait {}
+
+function uniqueViolationIncludes(
+  error: Prisma.PrismaClientKnownRequestError,
+  field: string,
+): boolean {
+  return JSON.stringify(error.meta?.target ?? '').toLowerCase().includes(field.toLowerCase());
+}

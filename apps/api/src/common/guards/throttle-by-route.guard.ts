@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ThrottlerGuard, ThrottlerRequest } from '@nestjs/throttler';
 
-import { RequestLike } from './brute-force.guard';
+import { RequestLike, verifiedBffIdentity } from './brute-force.guard';
 
 @Injectable()
 export class ThrottleByRouteGuard extends ThrottlerGuard {
   protected override async getTracker(req: RequestLike): Promise<string> {
+    const bffIdentity = verifiedBffIdentity(req);
+    if (bffIdentity) return `bff-network:${bffIdentity.networkHash}`;
     // req.ip is Express's resolved client IP (honours the `trust proxy`
     // setting in main.ts). Avoid reading x-forwarded-for directly — an
     // attacker can rotate that header per request and defeat the rate limit.

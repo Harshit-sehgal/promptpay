@@ -238,7 +238,20 @@ export class PayoutSummaryTrait {
     const [payouts, total] = await Promise.all([
       this.prisma.payoutRequest.findMany({
         where: { userId },
-        include: { payoutAccount: true, transactions: true, allocations: true },
+        include: {
+          payoutAccount: {
+            select: {
+              id: true,
+              provider: true,
+              currency: true,
+              isActive: true,
+              isVerified: true,
+              createdAt: true,
+            },
+          },
+          transactions: true,
+          allocations: true,
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,

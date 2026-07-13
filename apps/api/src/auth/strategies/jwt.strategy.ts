@@ -46,7 +46,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string; role: string; jti: string; aud?: string }) {
+  async validate(payload: { sub: string; role: string; jti: string; aud?: string; mfaAt?: number }) {
     if (payload.aud !== 'access') {
       throw new UnauthorizedException('Invalid token audience');
     }
@@ -64,11 +64,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, role: true, status: true, trustLevel: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        trustLevel: true,
+        twoFactorEnabled: true,
+      },
     });
     if (!user || !isActiveAccountStatus(user.status)) {
       throw new UnauthorizedException('User is not active');
     }
-    return { ...user, jti: payload.jti };
+    return { ...user, jti: payload.jti, mfaAt: payload.mfaAt };
   }
 }

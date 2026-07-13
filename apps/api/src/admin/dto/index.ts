@@ -1,5 +1,6 @@
 export {
   AdminDevicesQueryDto,
+  ArchiveRefundQueueQueryDto,
   AdminMetricsQueryDto,
   ApproveCampaignDto,
   ApprovePayoutDto,

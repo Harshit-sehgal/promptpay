@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   apiBaseUrl,
   applyAuthCookies,
+  applyRateLimitIdentity,
   clearAuthCookies,
   COOKIE_REFRESH,
   isSecure,
   readAuthCookie,
+  rateLimitIdentity,
 } from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
 
@@ -20,22 +22,23 @@ export async function POST(req: NextRequest) {
     if (!refreshToken) {
       return NextResponse.json({ message: 'No refresh token' }, { status: 401 });
     }
+    const identity = rateLimitIdentity(req);
 
     const apiRes = await fetch(`${apiBaseUrl()}/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...identity.headers },
       body: JSON.stringify({ refreshToken }),
     });
     const data = await apiRes.json();
     if (!apiRes.ok) {
       // Refresh failed — clear stale cookies
-      return clearAuthCookies(
+      return applyRateLimitIdentity(clearAuthCookies(
         NextResponse.json(
           { message: (data as { message?: string }).message || 'Refresh failed' },
           { status: apiRes.status },
         ),
         req.headers,
-      );
+      ), identity, req.headers);
     }
 
     const { accessToken, refreshToken: newRefresh } = data as {
@@ -47,11 +50,15 @@ export async function POST(req: NextRequest) {
       { user: (data as Record<string, unknown>).user || null },
       { status: 200 },
     );
-    return applyAuthCookies(response, {
-      accessToken,
-      refreshToken: newRefresh,
-      headers: req.headers,
-    });
+    return applyRateLimitIdentity(
+      applyAuthCookies(response, {
+        accessToken,
+        refreshToken: newRefresh,
+        headers: req.headers,
+      }),
+      identity,
+      req.headers,
+    );
   } catch (err: unknown) {
     console.error(
       'Token Refresh Route Handler error:',

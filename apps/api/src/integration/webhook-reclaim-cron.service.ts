@@ -19,10 +19,9 @@ import { PrismaService } from '../config/prisma.service';
  * window, so the two never fight over the same row) and re-queues them onto the
  * in-process EventBus, which re-runs the controller's reconciliation handler.
  *
- * OPT-IN: disabled unless `WEBHOOK_RECLAIM_CRON === 'true'`. Default is OFF so
- * existing behaviour is unchanged and single-instance deployments don't double
- * process. Enable only in multi-instance / high-durability deployments where a
- * background worker should own orphan reclamation.
+ * Production-safe default: enabled in production unless explicitly set false;
+ * non-production environments remain opt-in. The row-level compare-and-set
+ * claim below prevents multiple replicas from dispatching the same orphan.
  */
 const WEBHOOK_EVENT = 'stripe.webhook';
 
@@ -32,7 +31,9 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
   private intervalId?: NodeJS.Timeout;
   private reclaimInFlight = false;
 
-  private readonly enabled = process.env.WEBHOOK_RECLAIM_CRON === 'true';
+  private readonly enabled =
+    process.env.WEBHOOK_RECLAIM_CRON === 'true' ||
+    (process.env.NODE_ENV === 'production' && process.env.WEBHOOK_RECLAIM_CRON !== 'false');
   private readonly POLL_INTERVAL_MS = Number(
     process.env.WEBHOOK_RECLAIM_CRON_INTERVAL_MS ?? 300_000,
   );
@@ -58,9 +59,17 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
     this.logger.log(
       `Starting webhook reclaim cron (interval=${this.POLL_INTERVAL_MS}ms, orphanAge=${this.ORPHAN_AGE_MS}ms)...`,
     );
-    void this.reclaimOrphanedWebhooks();
+    void this.reclaimOrphanedWebhooks().catch((err: unknown) => {
+      this.logger.error(
+        `Webhook reclaim startup run failed: ${err instanceof Error ? err.message : err}`,
+      );
+    });
     this.intervalId = setInterval(() => {
-      void this.reclaimOrphanedWebhooks();
+      void this.reclaimOrphanedWebhooks().catch((err: unknown) => {
+        this.logger.error(
+          `Webhook reclaim interval failed: ${err instanceof Error ? err.message : err}`,
+        );
+      });
     }, this.POLL_INTERVAL_MS);
   }
 
@@ -107,16 +116,17 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
           );
           continue;
         }
-        // Reset to 'pending' so the row's state reflects re-queueing and any
-        // concurrent processor sees a clean claimable row.
-        await this.prisma.webhookEvent.updateMany({
+        // Exact compare-and-set claim: another replica may have changed this
+        // row after the scan. Only the winner dispatches the payload.
+        const claim = await this.prisma.webhookEvent.updateMany({
           where: {
-            provider: row.provider,
-            eventId: row.eventId,
-            processingStatus: { in: ['pending', 'processing'] },
+            id: row.id,
+            processingStatus: row.processingStatus,
+            updatedAt: row.updatedAt,
           },
           data: { processingStatus: 'pending' },
         });
+        if (claim.count === 0) continue;
         // Re-run the controller's reconciliation handler via the shared bus.
         // The handler performs its own failure recovery (resets to 'pending' on
         // error) so a failed reprocessing stays reclaimable.

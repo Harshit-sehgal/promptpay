@@ -46,11 +46,13 @@ export class LedgerEarningsTrait {
       // impression row was already inserted at request time but isBillable
       // is the authoritative billability flag and is set false by callers
       // when this path throws `campaign_archived`.
-      const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
-        bidAmountMinor,
-        campaignId,
-      );
+      const spent: number = await tx.$executeRaw(Prisma.sql`
+        UPDATE "campaigns"
+        SET "budgetSpentMinor" = "budgetSpentMinor" + ${bidAmountMinor}::bigint
+        WHERE "id" = ${campaignId}
+          AND "budgetSpentMinor" + ${bidAmountMinor}::bigint <= "budgetTotalMinor"
+          AND "status" = 'active'
+      `);
       if (spent === 0) {
         // The increment failed — either budget exhausted or the campaign is
         // no longer active (paused/archived). Distinguish so callers can mark
@@ -141,11 +143,13 @@ export class LedgerEarningsTrait {
     const idempotencyBase = `clk-${clickId}`;
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Status guard — see the matching comment on recordImpressionEarnings.
-      const spent: number = await tx.$executeRawUnsafe(
-        `UPDATE "campaigns" SET "budgetSpentMinor" = "budgetSpentMinor" + $1::bigint WHERE "id" = $2 AND "budgetSpentMinor" + $1::bigint <= "budgetTotalMinor" AND "status" = 'active'`,
-        clickBidMinor,
-        campaignId,
-      );
+      const spent: number = await tx.$executeRaw(Prisma.sql`
+        UPDATE "campaigns"
+        SET "budgetSpentMinor" = "budgetSpentMinor" + ${clickBidMinor}::bigint
+        WHERE "id" = ${campaignId}
+          AND "budgetSpentMinor" + ${clickBidMinor}::bigint <= "budgetTotalMinor"
+          AND "status" = 'active'
+      `);
       if (spent === 0) {
         throw new ConflictException('Campaign budget exhausted or no longer active');
       }
@@ -212,14 +216,37 @@ export class LedgerEarningsTrait {
   // ── State Transitions ──
   /** Mature estimated earnings to confirmed after hold period */
   async matureEarnings() {
-    const updated = await this.prisma.earningsLedger.updateMany({
-      where: {
-        status: 'estimated',
-        availableAt: { lte: new Date() },
-      },
-      data: { status: 'confirmed' },
-    });
-    return { matured: updated.count };
+    const batchSize = Math.min(
+      Math.max(Number(process.env.MATURE_EARNINGS_BATCH_SIZE) || 500, 1),
+      1_000,
+    );
+    const runLimit = Math.min(
+      Math.max(Number(process.env.MATURE_EARNINGS_RUN_LIMIT) || 5_000, batchSize),
+      20_000,
+    );
+    const cutoff = new Date();
+    let matured = 0;
+    while (matured < runLimit) {
+      const ids = await this.prisma.earningsLedger.findMany({
+        where: { status: 'estimated', availableAt: { lte: cutoff } },
+        select: { id: true },
+        orderBy: [{ availableAt: 'asc' }, { id: 'asc' }],
+        take: Math.min(batchSize, runLimit - matured),
+      });
+      if (ids.length === 0) break;
+      const updated = await this.prisma.earningsLedger.updateMany({
+        where: { id: { in: ids.map((row) => row.id) }, status: 'estimated' },
+        data: { status: 'confirmed' },
+      });
+      matured += updated.count;
+      if (ids.length < batchSize) break;
+    }
+    const hasMore =
+      (await this.prisma.earningsLedger.findFirst({
+        where: { status: 'estimated', availableAt: { lte: cutoff } },
+        select: { id: true },
+      })) !== null;
+    return { matured, hasMore };
   }
 
   /** Transition a single earning entry to a new status (with validation).

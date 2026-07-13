@@ -1,9 +1,13 @@
+import { randomUUID } from 'crypto';
 import { Injectable, Logger,OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { PayoutStatus } from '@waitlayer/shared';
 
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
+import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
+import { ReferralService } from '../referral/referral.service';
+import { boundedPositiveInt } from './payout.constants';
 import { PayoutService } from './payout.service';
 
 /**
@@ -26,27 +30,38 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
   private readonly logger = new Logger(PayoutCronService.name);
   private intervalId?: NodeJS.Timeout;
   private pollInFlight = false;
+  private readonly ownerId = randomUUID();
   // Configurable via PAYOUT_POLL_INTERVAL_MS (default 10 minutes).
   private readonly POLL_INTERVAL_MS = Number(
     process.env.PAYOUT_POLL_INTERVAL_MS ?? 600_000,
   );
   /** Skip payouts processed within the last N ms (anti-fast-poll) */
   private readonly STALL_THRESHOLD_MS = 120_000; // 2 minutes
+  private readonly BATCH_SIZE = boundedPositiveInt(
+    Number(process.env.PAYOUT_POLL_BATCH_SIZE),
+    100,
+    500,
+  );
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly payoutService: PayoutService,
+    private readonly referral: ReferralService,
   ) {}
 
   async onApplicationBootstrap() {
     this.logger.log('Starting payout status polling cron...');
     // Fire-and-forget startup poll. Provider calls can be slow; application
     // readiness should not depend on an external payout status check.
-    void this.pollProcessingPayouts();
+    void this.pollProcessingPayouts().catch((err: unknown) => {
+      this.logger.error(`Payout startup poll failed: ${err instanceof Error ? err.message : err}`);
+    });
 
     // Then poll on interval
     this.intervalId = setInterval(() => {
-      this.pollProcessingPayouts();
+      void this.pollProcessingPayouts().catch((err: unknown) => {
+        this.logger.error(`Payout interval poll failed: ${err instanceof Error ? err.message : err}`);
+      });
     }, this.POLL_INTERVAL_MS);
   }
 
@@ -70,8 +85,28 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
     const cutoff = new Date(Date.now() - this.STALL_THRESHOLD_MS);
 
     try {
+      if (
+        !(await acquireCronLease(
+          this.prisma,
+          'payout-status-poll',
+          this.ownerId,
+          Math.max(this.POLL_INTERVAL_MS - 1_000, 30_000),
+        ))
+      ) {
+        return { checked: 0, completed: 0, failed: 0 };
+      }
+      // Durable retry for a paid payout whose referral side-effect failed
+      // after the payout transaction committed.
+      await this.referral.reconcilePendingReferralRewards(this.BATCH_SIZE);
       // Find processing payouts that were claimed at least STALL_THRESHOLD_MS ago
       // (avoid re-checking payouts that were just submitted by processPayout)
+      // `approvedAmountMinor` and `currency` are selected specifically to feed
+      // `markPayoutPaid`'s amount/currency cross-check (Round 27 Fix 2): the
+      // admin DTO supplies these from the request body, but the cron has no
+      // body — the next-best authoritative source is the stored values on the
+      // PayoutRequest itself (the operator approved / requested them, so any
+      // null / 0 / wrong-currency stored value is exactly the latent bug the
+      // cross-check is meant to surface):
       const processingPayouts = await this.prisma.payoutRequest.findMany({
         where: {
           status: PayoutStatus.PROCESSING,
@@ -85,6 +120,8 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
             take: 1,
           },
         },
+        orderBy: [{ processedAt: 'asc' }, { id: 'asc' }],
+        take: this.BATCH_SIZE,
       });
 
       if (processingPayouts.length === 0) return { checked: 0, completed: 0, failed: 0 };
@@ -137,9 +174,19 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
               `Payout ${payout.id} (${payout.payoutAccount.provider}:${providerTxId}) is confirmed paid — auto-completing`,
             );
 
+            // Round 27 Fix 2: pass the stored approved/requested amount +
+            // currency as the cross-check fields so markPayoutPaid's
+            // `expectedAmountMinor !== undefined` guard fires for the cron
+            // path. The provider's checkStatus returns no amount (only
+            // status + paidAt), so we cannot cross-check against the
+            // provider — but we CAN self-check that the stored values are
+            // coherent: caught null / 0 / wrong-currency would surface here
+            // instead of silently flipping a payout to `paid`.
             await this.payoutService.markPayoutPaid(payout.id, {
               providerTxId,
               paidAt: (status.paidAt ?? new Date()).toISOString(),
+              expectedAmountMinor: payout.approvedAmountMinor ?? payout.requestedAmountMinor,
+              expectedCurrency: payout.currency,
             });
 
             completed++;

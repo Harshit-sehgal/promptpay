@@ -1,9 +1,11 @@
-import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { minorToMajorInputValue } from '@waitlayer/shared';
 
+import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
+import { privacyPseudonym } from '../../common/utils/privacy-hash';
+import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 import { PayoutProviderHandler } from '../payout.service';
 
 interface PayPalTokenResponse {
@@ -12,12 +14,17 @@ interface PayPalTokenResponse {
 }
 
 interface PayPalPayoutResponse {
-  items?: Array<{ payout_item_id?: string }>;
+  batch_header?: {
+    payout_batch_id?: string;
+    batch_status?: string;
+  };
 }
 
 interface PayPalPayoutStatusResponse {
-  transaction_status?: string;
-  time_processed?: string;
+  batch_header?: {
+    batch_status?: string;
+    time_completed?: string;
+  };
 }
 
 /**
@@ -28,7 +35,7 @@ interface PayPalPayoutStatusResponse {
  *
  * Flow:
  *  1. `initiate()` → calls PayPal /v1/payments/payouts API to create a payout item
- *  2. `checkStatus()` → calls PayPal /v1/payments/payouts-item/<id> to check status
+ *  2. `checkStatus()` → calls PayPal /v1/payments/payouts/<batch-id> to check status
  *
  * The PayPal Payouts SDK handles OAuth token management automatically.
  */
@@ -86,8 +93,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`PayPal OAuth failed: ${res.status} ${text}`);
+      throw new Error(`PayPal OAuth failed with status ${res.status}`);
     }
 
     const data = (await res.json()) as PayPalTokenResponse;
@@ -117,13 +123,11 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
 
     const email = params.destination?.trim();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      throw new Error(`Invalid PayPal payout destination '${email}': must be a recipient email.`);
+      throw new Error('Invalid PayPal payout destination: must be a recipient email.');
     }
 
-    const amount = minorToMajorInputValue(params.amountMinor, params.currency);
-    if (!(Number(amount) > 0)) {
-      throw new Error(`Refusing PayPal payout with non-positive amount: ${amount}`);
-    }
+    const safeAmountMinor = requireProviderSafeMinorAmount(params.amountMinor, 'PayPal Payouts');
+    const amount = minorToMajorInputValue(safeAmountMinor, params.currency);
 
     const token = await this.getAccessToken();
     const senderItemId = `wl_${params.payoutRequestId}`;
@@ -157,19 +161,30 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      this.logger.error(`PayPal payout initiate failed: ${res.status} ${text}`);
-      // Return as failed rather than throwing — let the system retry
+      this.logger.error(`PayPal payout initiate failed with status ${res.status}`);
+      if (res.status === 429 || res.status >= 500) {
+        throw new PayoutProviderUnsafeFailure(
+          `PayPal payout outcome is ambiguous after HTTP ${res.status}; reconcile sender_batch_id=batch_${params.payoutRequestId}`,
+        );
+      }
       return { providerTxId: `paypal_failed_${params.payoutRequestId}`, status: 'failed' };
     }
 
     const data = (await res.json()) as PayPalPayoutResponse;
-    const payoutItemId = data.items?.[0]?.payout_item_id ?? `paypal_${params.payoutRequestId}`;
+    const payoutBatchId = data.batch_header?.payout_batch_id;
+    if (!payoutBatchId) {
+      throw new PayoutProviderUnsafeFailure(
+        `PayPal accepted payout batch_${params.payoutRequestId} but returned no payout_batch_id; reconcile before retrying`,
+      );
+    }
 
-    const destHash = createHash('sha256').update(email).digest('hex').slice(0, 8);
-    this.logger.log(`PayPal payout initiated: ${payoutItemId} for recipient ${destHash}`);
+    const recipientRef = privacyPseudonym(email, 'paypal-payout-destination').slice(0, 12);
+    this.logger.log(`PayPal payout initiated: ${payoutBatchId} for recipient ${recipientRef}`);
 
-    return { providerTxId: payoutItemId, status: 'processing' };
+    return {
+      providerTxId: payoutBatchId,
+      status: data.batch_header?.batch_status === 'SUCCESS' ? 'paid' : 'processing',
+    };
   }
 
   /**
@@ -182,33 +197,37 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
 
     const token = await this.getAccessToken();
 
-    const res = await fetch(`${this.baseUrl}/v1/payments/payouts-item/${providerTxId}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+    const res = await fetch(
+      `${this.baseUrl}/v1/payments/payouts/${encodeURIComponent(providerTxId)}?page_size=1&page=1&total_required=true`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       },
-    });
+    );
 
     if (!res.ok) {
-      const text = await res.text();
-      this.logger.error(`PayPal status check failed: ${res.status} ${text}`);
+      this.logger.error(`PayPal status check failed with status ${res.status}`);
       return { status: 'processing' };
     }
 
     const data = (await res.json()) as PayPalPayoutStatusResponse;
-    const paypalStatus = data.transaction_status;
+    const paypalStatus = data.batch_header?.batch_status;
 
     // Map PayPal statuses to our PayoutStatus
     switch (paypalStatus) {
       case 'SUCCESS':
         return {
           status: 'paid',
-          paidAt: data.time_processed ? new Date(data.time_processed) : new Date(),
+          paidAt: data.batch_header?.time_completed
+            ? new Date(data.batch_header.time_completed)
+            : new Date(),
         };
+      case 'DENIED':
+      case 'CANCELED':
       case 'FAILED':
-      case 'RETURNED':
-      case 'BLOCKED':
         return { status: 'failed' };
       case 'ONHOLD':
       case 'PENDING':

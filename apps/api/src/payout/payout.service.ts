@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { AuditService } from '../audit/audit.service';
@@ -21,6 +21,8 @@ import {
 
 @Injectable()
 export class PayoutService {
+  public readonly logger = new Logger(PayoutService.name);
+
   constructor(
     public prisma: PrismaService,
     public ledger: LedgerService,

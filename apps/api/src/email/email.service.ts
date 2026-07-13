@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { privacyPseudonym } from '../common/utils/privacy-hash';
+
 export interface EmailMessage {
   to: string;
   subject: string;
@@ -30,12 +32,14 @@ export class EmailService {
   private readonly from: string;
   private readonly webBaseUrl: string;
   private readonly resendApiKey: string;
+  private readonly providerTimeoutMs: number;
 
   constructor(private config: ConfigService) {
     this.driver = this.config.get<string>('EMAIL_DRIVER', 'console');
     this.from = this.config.get<string>('EMAIL_FROM', 'WaitLayer <no-reply@waitlayer.dev>');
     this.webBaseUrl = this.config.get<string>('WEB_BASE_URL', 'http://localhost:3000');
     this.resendApiKey = this.config.get<string>('RESEND_API_KEY', '');
+    this.providerTimeoutMs = this.config.get<number>('EMAIL_PROVIDER_TIMEOUT_MS', 10_000);
 
     if (this.driver === 'resend' && !this.resendApiKey) {
       this.logger.warn('EMAIL_DRIVER=resend but RESEND_API_KEY is not set — falling back to console driver');
@@ -93,12 +97,13 @@ export class EmailService {
   }
 
   async send(msg: EmailMessage): Promise<EmailSendResult> {
+    const recipientRef = privacyPseudonym(msg.to.trim().toLowerCase(), 'email-recipient').slice(0, 16);
     // Final defensive check — even if a future misconfiguration slipped past
     // the constructor (e.g. ENV toggled at runtime via a test), never log a
     // production email body. Use delivered=false so callers can react.
     if (process.env.NODE_ENV === 'production' && this.driver === 'console') {
       this.logger.error(
-        `Refusing to send production email via console driver to=${msg.to} subject="${msg.subject}". ` +
+        `Refusing to send production email via console driver recipientRef=${recipientRef}. ` +
           'This would log password-reset/verify tokens to stdout.',
       );
       return { delivered: false, driver: 'console' };
@@ -109,11 +114,15 @@ export class EmailService {
           return await this.sendViaResend(msg);
         case 'console':
         default:
-          this.logger.log(`[console email] to=${msg.to} subject="${msg.subject}"`);
+          this.logger.log(`[console email] recipientRef=${recipientRef} subject="${msg.subject}"`);
           return { delivered: true, driver: 'console' };
       }
     } catch (err) {
-      this.logger.error(`Email delivery failed (driver=${this.driver}, to=${msg.to}): ${(err as Error).message}`);
+      this.logger.error(
+        `Email delivery failed (driver=${this.driver}, recipientRef=${recipientRef}): ${
+          err instanceof Error ? err.name : 'UnknownError'
+        }`,
+      );
       return { delivered: false, driver: this.driver };
     }
   }
@@ -191,6 +200,7 @@ export class EmailService {
   private async sendViaResend(msg: EmailMessage): Promise<EmailSendResult> {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      signal: AbortSignal.timeout(this.providerTimeoutMs),
       headers: {
         Authorization: `Bearer ${this.resendApiKey}`,
         'Content-Type': 'application/json',
@@ -205,8 +215,10 @@ export class EmailService {
     });
 
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      this.logger.error(`Resend API error ${res.status}: ${body.slice(0, 500)}`);
+      // Provider bodies may echo addresses/content. Keep only the status and a
+      // safe request id for correlation; never copy the raw body into logs.
+      const requestId = res.headers.get('x-request-id') ?? res.headers.get('request-id') ?? 'none';
+      this.logger.error(`Resend API error status=${res.status} requestId=${requestId}`);
       return { delivered: false, driver: 'resend' };
     }
     return { delivered: true, driver: 'resend' };

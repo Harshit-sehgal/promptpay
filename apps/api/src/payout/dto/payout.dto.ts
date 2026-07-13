@@ -16,6 +16,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 import { payoutMinimumMinor, PayoutProvider } from '@waitlayer/shared';
 
+import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
 
 export class AddPayoutMethodDto {
@@ -51,7 +52,7 @@ export class RequestPayoutDto {
         (args.object as RequestPayoutDto).currency,
       )} minor units`,
   })
-  @Transform(({ value }) => BigInt(value))
+  @Transform(toBigIntOrOriginal)
   amountMinor!: bigint;
 
   @ApiProperty()

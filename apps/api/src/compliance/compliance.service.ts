@@ -1,10 +1,19 @@
 import { createHash } from 'crypto';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 
+import { Prisma } from '@waitlayer/db';
+
 import { AuditService } from '../audit/audit.service';
 import { assertSafeJson } from '../common/utils/json-value';
 import { PrismaService } from '../config/prisma.service';
 import { CURRENT_CONSENT_VERSIONS } from './consent-versions';
+
+const REQUIRED_GRANTED_CONSENT_PURPOSES = new Set(['privacy_policy', 'terms_of_service']);
+const ALLOWED_CONSENT_PURPOSES = new Set([
+  ...Object.keys(CURRENT_CONSENT_VERSIONS),
+  'ccpa_opt_out',
+]);
+const MAX_CONSENT_EVENTS_PER_PURPOSE = 1_000;
 
 const DEFAULT_RETENTION_DAYS: Record<string, number> = {
   webhook_events: 90,
@@ -12,6 +21,8 @@ const DEFAULT_RETENTION_DAYS: Record<string, number> = {
   sessions: 30,
   export_cache: 7,
 };
+const RETENTION_BATCH_SIZE = 500;
+const RETENTION_MAX_BATCHES_PER_CATEGORY = 10;
 
 @Injectable()
 export class ComplianceService {
@@ -31,6 +42,15 @@ export class ComplianceService {
     granted = true,
     metadata?: Record<string, unknown>,
   ) {
+    if (!ALLOWED_CONSENT_PURPOSES.has(purpose)) {
+      throw new BadRequestException(`Unsupported consent purpose: ${purpose}`);
+    }
+    const currentVersion =
+      CURRENT_CONSENT_VERSIONS[purpose as keyof typeof CURRENT_CONSENT_VERSIONS] ??
+      CURRENT_CONSENT_VERSIONS.privacy_policy;
+    if (version !== currentVersion) {
+      throw new BadRequestException(`Consent version for ${purpose} is not current`);
+    }
     // Validate user-supplied consent metadata before it is persisted to the
     // JSON column (rejects prototype-pollution / non-serializable input).
     if (metadata) {
@@ -40,17 +60,36 @@ export class ComplianceService {
         throw new BadRequestException('Consent metadata is not a valid JSON value');
       }
     }
-    const row = await this.prisma.consent.create({
-      data: { userId, purpose, version, granted, metadata: metadata as object | undefined },
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user-consent:${userId}:${purpose}`}))`;
+      const existing = await tx.consent.findFirst({
+        where: { userId, purpose },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing && existing.granted === granted && existing.version === version) {
+        return { row: existing, changed: false as const };
+      }
+      const count = await tx.consent.count({ where: { userId, purpose } });
+      if (count >= MAX_CONSENT_EVENTS_PER_PURPOSE) {
+        throw new BadRequestException(
+          `Consent history limit reached for ${purpose}; contact support to record another change`,
+        );
+      }
+      const row = await tx.consent.create({
+        data: { userId, purpose, version, granted, metadata: metadata as object | undefined },
+      });
+      return { row, changed: true as const };
     });
-    void this.audit.log({
-      actorId: userId,
-      actorRole,
-      action: granted ? 'consent_granted' : 'consent_revoked',
-      targetType: 'consent',
-      targetId: row.id,
-    });
-    return row;
+    if (result.changed) {
+      void this.audit.log({
+        actorId: userId,
+        actorRole,
+        action: granted ? 'consent_granted' : 'consent_revoked',
+        targetType: 'consent',
+        targetId: result.row.id,
+      });
+    }
+    return result.row;
   }
 
   /**
@@ -78,47 +117,53 @@ export class ComplianceService {
 
     const visitorIdHash = createHash('sha256').update(dto.visitorId).digest('hex');
     const granted = dto.granted ?? true;
-    const version =
-      dto.policyVersion ??
+    const currentVersion =
       CURRENT_CONSENT_VERSIONS[dto.purpose as keyof typeof CURRENT_CONSENT_VERSIONS];
+    if (dto.policyVersion && dto.policyVersion !== currentVersion) {
+      throw new BadRequestException(`Consent version for ${dto.purpose} is not current`);
+    }
+    const version = currentVersion;
 
-    const existing = await this.prisma.consent.findFirst({
-      where: { visitorIdHash, purpose: dto.purpose },
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Serialize the logical visitor+purpose stream. A transaction without
+      // this lock does not make find-then-create safe at READ COMMITTED: two
+      // concurrent choices could both observe no current row and append the
+      // same state. The lock also gives us a deterministic latest-choice read.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`anonymous-consent:${visitorIdHash}:${dto.purpose}`}))`;
+      const existing = await tx.consent.findFirst({
+        where: { visitorIdHash, purpose: dto.purpose },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Exact replay is idempotent. A changed choice is append-only so grant →
+      // revoke → grant remains a legally useful history rather than mutating
+      // the original evidence row in place.
+      if (existing && existing.granted === granted && existing.version === version) {
+        return { row: existing, changed: false as const };
+      }
+      const row = await tx.consent.create({
+        data: {
+          userId: null,
+          visitorIdHash,
+          purpose: dto.purpose,
+          version,
+          granted,
+          metadata: { method: 'anonymous_cookie' },
+        },
+      });
+      return { row, changed: true as const };
     });
 
-    if (existing) {
-      const row = await this.prisma.consent.update({
-        where: { id: existing.id },
-        data: { granted, version, metadata: { method: 'anonymous_cookie' } },
-      });
+    if (result.changed) {
       void this.audit.log({
         actorId: 'anonymous',
         actorRole: 'anonymous',
         action: granted ? 'consent_granted' : 'consent_revoked',
         targetType: 'consent',
-        targetId: row.id,
+        targetId: result.row.id,
       });
-      return row;
     }
-
-    const row = await this.prisma.consent.create({
-      data: {
-        userId: null,
-        visitorIdHash,
-        purpose: dto.purpose,
-        version,
-        granted,
-        metadata: { method: 'anonymous_cookie' },
-      },
-    });
-    void this.audit.log({
-      actorId: 'anonymous',
-      actorRole: 'anonymous',
-      action: granted ? 'consent_granted' : 'consent_revoked',
-      targetType: 'consent',
-      targetId: row.id,
-    });
-    return row;
+    return result.row;
   }
 
   async getConsent(userId: string, purpose: string) {
@@ -149,8 +194,14 @@ export class ComplianceService {
   async getStaleConsents(userId: string): Promise<string[]> {
     const stale: string[] = [];
     for (const [purpose, version] of Object.entries(CURRENT_CONSENT_VERSIONS)) {
-      const current = await this.isConsented(userId, purpose, version);
-      if (!current) stale.push(purpose);
+      const row = await this.getConsent(userId, purpose);
+      const hasCurrentChoice = row?.version === version;
+      const requiresGrant = REQUIRED_GRANTED_CONSENT_PURPOSES.has(purpose);
+      // Optional consent (currently marketing cookies) is current once the
+      // user made an explicit choice for this policy version. Treating a
+      // current `granted=false` row as stale causes an endless re-prompt and
+      // pressures users to reverse a valid privacy choice.
+      if (!hasCurrentChoice || (requiresGrant && !row?.granted)) stale.push(purpose);
     }
     return stale;
   }
@@ -169,33 +220,57 @@ export class ComplianceService {
 
   /** Purge one category's rows older than its configured retention window. */
   async purge(category: string): Promise<number> {
-    const cfg = await this.prisma.dataRetentionConfig.findUnique({ where: { category } });
-    if (!cfg || cfg.retainDays === null || cfg.retainDays === undefined) {
-      return 0; // retain indefinitely
+    return this.prisma.$transaction(async (tx) => {
+      const cfg = await tx.dataRetentionConfig.findUnique({ where: { category } });
+      return this.purgeConfiguredCategory(tx, category, cfg?.retainDays);
+    });
+  }
+
+  async runAllRetention() {
+    return this.prisma.$transaction(
+      async (tx) => {
+        const lockRows = await tx.$queryRaw<Array<{ acquired: boolean }>>`
+          SELECT pg_try_advisory_xact_lock(hashtext('waitlayer-retention-cron')) AS "acquired"
+        `;
+        if (!lockRows[0]?.acquired) {
+          this.logger.warn('Retention purge is running on another replica — skipping this tick');
+          return { acquired: false, deleted: 0 };
+        }
+        const cfgs = await tx.dataRetentionConfig.findMany({
+          orderBy: { category: 'asc' },
+          take: 100,
+        });
+        let deleted = 0;
+        for (const cfg of cfgs) {
+          deleted += await this.purgeConfiguredCategory(tx, cfg.category, cfg.retainDays);
+        }
+        return { acquired: true, deleted };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 30_000 },
+    );
+  }
+
+  private async purgeConfiguredCategory(
+    tx: Prisma.TransactionClient,
+    category: string,
+    retainDays: number | null | undefined,
+  ): Promise<number> {
+    if (retainDays === null || retainDays === undefined) return 0;
+    if (!Number.isInteger(retainDays) || retainDays < 0) {
+      throw new Error(`Invalid retention window for ${category}: retainDays must be non-negative`);
     }
-    const cutoff = new Date(Date.now() - cfg.retainDays * 24 * 60 * 60 * 1000);
+    if (category === 'export_cache') return 0;
+    if (!['webhook_events', 'audit_logs', 'sessions'].includes(category)) {
+      this.logger.warn(`Unknown retention category: ${category}`);
+      return 0;
+    }
+
+    const cutoff = new Date(Date.now() - retainDays * 24 * 60 * 60 * 1000);
     let deleted = 0;
-    switch (category) {
-      case 'webhook_events':
-        deleted = (
-          await this.prisma.webhookEvent.deleteMany({ where: { createdAt: { lt: cutoff } } })
-        ).count;
-        break;
-      case 'audit_logs':
-        deleted = (await this.prisma.auditLog.deleteMany({ where: { createdAt: { lt: cutoff } } }))
-          .count;
-        break;
-      case 'sessions':
-        // Sessions expire by `expiresAt`; purge those already past the cutoff.
-        deleted = (await this.prisma.session.deleteMany({ where: { expiresAt: { lt: cutoff } } }))
-          .count;
-        break;
-      case 'export_cache':
-        // No dedicated table; export responses are not persisted server-side.
-        return 0;
-      default:
-        this.logger.warn(`Unknown retention category: ${category}`);
-        return 0;
+    for (let batch = 0; batch < RETENTION_MAX_BATCHES_PER_CATEGORY; batch++) {
+      const count = await this.deleteRetentionBatch(tx, category, cutoff);
+      deleted += count;
+      if (count < RETENTION_BATCH_SIZE) break;
     }
     this.logger.log(
       `Retention purge: category=${category} deleted=${deleted} before ${cutoff.toISOString()}`,
@@ -203,10 +278,48 @@ export class ComplianceService {
     return deleted;
   }
 
-  async runAllRetention() {
-    const cfgs = await this.prisma.dataRetentionConfig.findMany();
-    for (const cfg of cfgs) {
-      await this.purge(cfg.category);
+  private deleteRetentionBatch(
+    tx: Prisma.TransactionClient,
+    category: string,
+    cutoff: Date,
+  ): Promise<number> {
+    if (category === 'webhook_events') {
+      return tx.$executeRaw`
+        WITH doomed AS (
+          SELECT "id" FROM "webhook_events"
+          WHERE "createdAt" < ${cutoff}
+          ORDER BY "createdAt", "id"
+          LIMIT ${RETENTION_BATCH_SIZE}
+        )
+        DELETE FROM "webhook_events" target
+        USING doomed
+        WHERE target."id" = doomed."id"
+      `;
     }
+    if (category === 'audit_logs') {
+      return tx.$executeRaw`
+        WITH doomed AS (
+          SELECT "id" FROM "audit_logs"
+          WHERE "createdAt" < ${cutoff}
+          ORDER BY "createdAt", "id"
+          LIMIT ${RETENTION_BATCH_SIZE}
+        )
+        DELETE FROM "audit_logs" target
+        USING doomed
+        WHERE target."id" = doomed."id"
+      `;
+    }
+    // Sessions retain for N days after expiry, mirroring the previous policy.
+    return tx.$executeRaw`
+      WITH doomed AS (
+        SELECT "id" FROM "sessions"
+        WHERE "expiresAt" < ${cutoff}
+        ORDER BY "expiresAt", "id"
+        LIMIT ${RETENTION_BATCH_SIZE}
+      )
+      DELETE FROM "sessions" target
+      USING doomed
+      WHERE target."id" = doomed."id"
+    `;
   }
 }

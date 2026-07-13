@@ -19,7 +19,8 @@
     "seed": "tsx prisma/seed.ts",
     "db:seed": "tsx prisma/seed.ts",
     "migrate:deploy": "prisma migrate deploy",
-    "migrate:status": "prisma migrate status"
+    "migrate:status": "prisma migrate status",
+    "migrate:drift": "prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

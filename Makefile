@@ -3,7 +3,7 @@
 # Usage: make <target>
 # Most targets defer to pnpm workspace filters.
 
-.PHONY: install dev build typecheck lint test db-generate db-migrate \
+.PHONY: install dev build typecheck lint test db-generate db-migrate db-deploy db-status db-drift \
         db-studio start-api start-web clean help
 
 help: ## Show this help
@@ -34,6 +34,15 @@ db-generate: ## Regenerate the Prisma client
 
 db-migrate: ## Apply Prisma migrations (dev)
 	pnpm --filter @waitlayer/db migrate
+
+db-deploy: ## Apply committed Prisma migrations (deployment)
+	pnpm --filter @waitlayer/db migrate:deploy
+
+db-status: ## Check for pending Prisma migrations
+	pnpm --filter @waitlayer/db migrate:status
+
+db-drift: ## Compare the migration-built database with schema.prisma
+	pnpm --filter @waitlayer/db migrate:drift
 
 db-studio: ## Open Prisma Studio
 	pnpm --filter @waitlayer/db studio

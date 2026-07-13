@@ -7,7 +7,8 @@ type BalanceClient = Pick<PrismaService, 'advertiserLedger'>;
  * truth referenced by campaign activation, ad serving, resume, and billing
  * (issues A-054 / A-039 / A-055).
  *
- *   spendable = Σ confirmed credits − Σ confirmed debits − Σ confirmed refunds
+ *   spendable = confirmed credits + confirmed reversals − confirmed debits
+ *               − pending/confirmed refunds
  *
  * Notes:
  *  - `refund` rows are archive-refund obligations (entryType = 'refund'). They
@@ -26,12 +27,12 @@ export async function getAdvertiserBalance(
   currency: string,
 ): Promise<bigint> {
   const rows = await client.advertiserLedger.groupBy({
-    by: ['entryType'],
+    by: ['entryType', 'status'],
     where: {
       advertiserId,
       currency,
-      status: 'confirmed',
-      entryType: { in: ['credit', 'debit', 'refund'] },
+      status: { in: ['pending', 'confirmed'] },
+      entryType: { in: ['credit', 'debit', 'refund', 'reversal'] },
     },
     _sum: { amountMinor: true },
   });
@@ -39,12 +40,16 @@ export async function getAdvertiserBalance(
   let credits = 0n;
   let debits = 0n;
   let refunds = 0n;
+  let reversals = 0n;
   for (const row of rows) {
-    if (row.entryType === 'credit') credits = BigInt(row._sum.amountMinor ?? 0);
-    else if (row.entryType === 'debit') debits = BigInt(row._sum.amountMinor ?? 0);
-    else if (row.entryType === 'refund') refunds = BigInt(row._sum.amountMinor ?? 0);
+    const amount = BigInt(row._sum.amountMinor ?? 0);
+    if (row.entryType === 'refund') refunds += amount;
+    else if (row.status !== 'confirmed') continue;
+    else if (row.entryType === 'credit') credits += amount;
+    else if (row.entryType === 'debit') debits += amount;
+    else if (row.entryType === 'reversal') reversals += amount;
   }
-  return credits - debits - refunds;
+  return credits + reversals - debits - refunds;
 }
 
 /**
@@ -57,11 +62,11 @@ export async function getAdvertiserBalancesByCurrency(
   advertiserIds: string[],
 ): Promise<Map<string, bigint>> {
   const rows = await client.advertiserLedger.groupBy({
-    by: ['advertiserId', 'currency', 'entryType'],
+    by: ['advertiserId', 'currency', 'entryType', 'status'],
     where: {
       advertiserId: { in: advertiserIds },
-      status: 'confirmed',
-      entryType: { in: ['credit', 'debit', 'refund'] },
+      status: { in: ['pending', 'confirmed'] },
+      entryType: { in: ['credit', 'debit', 'refund', 'reversal'] },
     },
     _sum: { amountMinor: true },
   });
@@ -71,8 +76,11 @@ export async function getAdvertiserBalancesByCurrency(
     const key = `${row.advertiserId}:${row.currency}`;
     const current = map.get(key) ?? 0n;
     const amount = BigInt(row._sum.amountMinor ?? 0);
-    if (row.entryType === 'credit') map.set(key, current + amount);
-    else if (row.entryType === 'debit' || row.entryType === 'refund') {
+    if (row.entryType === 'refund') map.set(key, current - amount);
+    else if (row.status !== 'confirmed') continue;
+    else if (row.entryType === 'credit' || row.entryType === 'reversal') {
+      map.set(key, current + amount);
+    } else if (row.entryType === 'debit') {
       map.set(key, current - amount);
     }
   }

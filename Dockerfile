@@ -1,6 +1,6 @@
 # ── Base Stage: pnpm + dependencies ──
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@11 --activate
+RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 WORKDIR /app
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
@@ -31,8 +31,14 @@ RUN pnpm --filter @waitlayer/db run generate
 # docker-compose.yml used to) does NOT reach the built assets: the middleware
 # bakes `undefined` and every protected route redirects to /login (A-083),
 # and the client has no API URL. They MUST be build args in production.
-# Defaults keep `docker build` from failing locally but MUST be overridden.
-ARG JWT_SECRET=dev-only-docker-compose-jwt-secret-at-least-32-char
+# A build-time JWT secret is mandatory because Next.js inlines it into the
+# middleware bundle. Public/default secrets would make production tokens
+# forgeable, so local demo builds must opt into the documented dev value.
+ARG JWT_SECRET
+ARG ALLOW_INSECURE_DEV_BUILD=
+RUN test -n "$JWT_SECRET" \
+  && { test "$ALLOW_INSECURE_DEV_BUILD" = "1" \
+    || test "$JWT_SECRET" != "dev-only-docker-compose-jwt-secret-at-least-32-char"; }
 ENV JWT_SECRET=$JWT_SECRET
 ARG NEXT_PUBLIC_API_URL=http://localhost:4002/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
@@ -77,7 +83,7 @@ COPY --from=build /app/package.json ./
 # Install the Prisma CLI globally. It is needed both to (re)generate the
 # production Prisma client and to run migrations in the entrypoint. Installing
 # it globally keeps it out of node_modules (which is pruned of all dev deps).
-RUN npm install -g prisma@7
+RUN npm install -g prisma@7.8.0
 
 # Drop devDependencies from the runtime image. `pnpm prune` does NOT prune a
 # workspace, so we reinstall production-only from the pnpm store inherited from

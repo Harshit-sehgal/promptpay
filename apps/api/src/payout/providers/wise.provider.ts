@@ -1,10 +1,14 @@
-import { createHash } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { minorToMajorInputValue } from '@waitlayer/shared';
+import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
 
+import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
+import { privacyPseudonym } from '../../common/utils/privacy-hash';
+import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 import { PayoutProviderHandler } from '../payout.service';
+
+const WISE_MAX_MINOR_AMOUNT = 999_999_999n;
 
 /**
  * Wise (formerly TransferWise) payout provider.
@@ -32,21 +36,22 @@ export class WisePayoutProvider implements PayoutProviderHandler {
   private readonly logger = new Logger(WisePayoutProvider.name);
   private readonly token: string;
   private readonly profileId: string;
-  private readonly apiVersion: string;
   private readonly baseUrl: string;
   private readonly enabled: boolean;
   private readonly nodeEnv: string;
+  private readonly emailRecipientsVerified: boolean;
 
   constructor(private config: ConfigService) {
     this.token = this.config.get<string>('WISE_API_TOKEN', '');
     this.profileId = this.config.get<string>('WISE_PROFILE_ID', '');
-    this.apiVersion = this.config.get<string>('WISE_API_VERSION', '3.0');
     const mode = this.config.get<string>('WISE_MODE', 'sandbox');
-    // Sandbox: api.sandbox.transferwise.tech ; Live: api.transferwise.com
+    // Wise Sandbox V2 and production hosts.
     this.baseUrl =
-      mode === 'live' ? 'https://api.transferwise.com' : 'https://api.sandbox.transferwise.tech';
+      mode === 'live' ? 'https://api.wise.com' : 'https://api.wise-sandbox.com';
     this.enabled = !!(this.token && this.profileId);
     this.nodeEnv = this.config.get<string>('NODE_ENV', process.env.NODE_ENV || 'development');
+    this.emailRecipientsVerified =
+      this.config.get<string>('WISE_EMAIL_RECIPIENTS_VERIFIED', 'false') === 'true';
   }
 
   readiness(): { ok: true } | { ok: false; reason: string } {
@@ -63,6 +68,13 @@ export class WisePayoutProvider implements PayoutProviderHandler {
         reason: 'Wise payout provider is disabled (no WISE_API_TOKEN/WISE_PROFILE_ID).',
       };
     }
+    if (!this.emailRecipientsVerified) {
+      return {
+        ok: false,
+        reason:
+          'Wise email-recipient payouts are not verified for this account. Set WISE_EMAIL_RECIPIENTS_VERIFIED=true only after Wise approval and live capability verification.',
+      };
+    }
     return { ok: true };
   }
 
@@ -76,23 +88,28 @@ export class WisePayoutProvider implements PayoutProviderHandler {
 
   /**
    * Resolve (or create) a Wise recipient account for the destination email.
-   * Uses the v2 profile-specific accounts endpoint. We look up existing
+   * Uses the profile/currency-filtered v1 accounts endpoint. Wise documents
+   * email-recipient support as corridor/account dependent, which is why this
+   * entire provider is also capability-gated.
    * accounts for the email first to avoid duplicating recipients.
    */
-  private async resolveRecipient(destination: string): Promise<string> {
+  private async resolveRecipient(destination: string, currency: string): Promise<string> {
     // List existing accounts for this profile, find one matching the email.
     const listRes = await fetch(
-      `${this.baseUrl}/v1/profiles/${this.profileId}/accounts?profileId=${this.profileId}`,
+      `${this.baseUrl}/v1/accounts?profileId=${encodeURIComponent(this.profileId)}&currency=${encodeURIComponent(currency)}`,
       { headers: this.headers() },
     );
     if (listRes.ok) {
       const accounts = (await listRes.json()) as Array<{
         id: number;
         accountHolderName?: string;
+        currency?: string;
         details?: Record<string, unknown>;
       }>;
       const existing = accounts.find(
-        (a) => (a.details?.email as string)?.toLowerCase() === destination.toLowerCase(),
+        (a) =>
+          (a.details?.email as string)?.toLowerCase() === destination.toLowerCase() &&
+          a.currency?.toUpperCase() === currency,
       );
       if (existing) return String(existing.id);
     }
@@ -106,14 +123,13 @@ export class WisePayoutProvider implements PayoutProviderHandler {
       body: JSON.stringify({
         profileId: Number(this.profileId),
         accountHolderName: destination,
-        currency: 'USD',
+        currency,
         type: 'email',
         details: { email: destination },
       }),
     });
     if (!createRes.ok) {
-      const text = await createRes.text();
-      throw new Error(`Wise recipient creation failed: ${createRes.status} ${text}`);
+      throw new Error(`Wise recipient creation failed with status ${createRes.status}`);
     }
     const created = (await createRes.json()) as { id: number };
     return String(created.id);
@@ -131,22 +147,23 @@ export class WisePayoutProvider implements PayoutProviderHandler {
     amount: number,
     currency: string,
   ): Promise<string> {
-    const quoteRes = await fetch(`${this.baseUrl}/v1/quotes`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify({
-        profileId: Number(this.profileId),
-        sourceCurrency: currency,
-        targetCurrency: currency,
-        targetAmount: amount,
-        rateType: 'FIXED',
-        payOut: 'BANK_TRANSFER',
-        preferredPayIn: 'BALANCE',
-      }),
-    });
+    const quoteRes = await fetch(
+      `${this.baseUrl}/v3/profiles/${encodeURIComponent(this.profileId)}/quotes`,
+      {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({
+          sourceCurrency: currency,
+          targetCurrency: currency,
+          targetAmount: amount,
+          targetAccount: Number(recipientId),
+          payOut: 'BANK_TRANSFER',
+          preferredPayIn: 'BALANCE',
+        }),
+      },
+    );
     if (!quoteRes.ok) {
-      const text = await quoteRes.text();
-      throw new Error(`Wise quote creation failed: ${quoteRes.status} ${text}`);
+      throw new Error(`Wise quote creation failed with status ${quoteRes.status}`);
     }
     const quote = (await quoteRes.json()) as { id: string };
     if (!quote.id) {
@@ -168,23 +185,33 @@ export class WisePayoutProvider implements PayoutProviderHandler {
       this.logger.warn('Wise not configured — returning stub response');
       return { providerTxId: `dev_stub_wise_${params.payoutRequestId}`, status: 'processing' };
     }
+    const readiness = this.readiness();
+    if (!readiness.ok) throw new Error(readiness.reason);
 
     const email = params.destination?.trim();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      throw new Error(`Invalid Wise payout destination '${email}': must be a recipient email.`);
+      throw new Error('Invalid Wise payout destination: must be a recipient email.');
     }
 
-    const amount = Number(minorToMajorInputValue(params.amountMinor, params.currency));
-    if (!(amount > 0)) {
-      throw new Error(`Refusing Wise payout with non-positive amount: ${amount}`);
+    const currency = params.currency.toUpperCase();
+    const safeAmountMinor = requireProviderSafeMinorAmount(
+      params.amountMinor,
+      'Wise',
+      WISE_MAX_MINOR_AMOUNT,
+    );
+    const amount = Number(minorToMajorInputValue(safeAmountMinor, currency));
+    if (majorToMinor(amount, currency) !== safeAmountMinor) {
+      throw new Error(
+        `Refusing Wise payout amount ${safeAmountMinor}: conversion would lose minor-unit precision`,
+      );
     }
 
-    const recipientId = await this.resolveRecipient(email);
+    const recipientId = await this.resolveRecipient(email, currency);
 
     // Wise requires a quote before a transfer: the quote captures the rate and
     // the balance draw. A transfer sent without a valid `quoteUuid` is rejected
     // by Wise, so we create one first and fail closed if it cannot be created.
-    const quoteUuid = await this.createQuote(recipientId, amount, params.currency.toUpperCase());
+    const quoteUuid = await this.createQuote(recipientId, amount, currency);
 
     const transferRes = await fetch(`${this.baseUrl}/v1/transfers`, {
       method: 'POST',
@@ -199,20 +226,45 @@ export class WisePayoutProvider implements PayoutProviderHandler {
         },
         sourceOfFunds: 'balances',
         amount,
-        currency: params.currency.toUpperCase(),
+        currency,
       }),
     });
 
     if (!transferRes.ok) {
-      const text = await transferRes.text();
-      this.logger.error(`Wise transfer create failed: ${transferRes.status} ${text}`);
+      this.logger.error(`Wise transfer create failed with status ${transferRes.status}`);
+      if (transferRes.status === 429 || transferRes.status >= 500) {
+        throw new PayoutProviderUnsafeFailure(
+          `Wise transfer outcome is ambiguous after HTTP ${transferRes.status}; reconcile by customerTransactionId wl_${params.payoutRequestId}`,
+        );
+      }
       return { providerTxId: `wise_failed_${params.payoutRequestId}`, status: 'failed' };
     }
 
     const transfer = (await transferRes.json()) as { id: number; status?: string };
-    // Log only a short hash of the destination email — never the raw PII.
-    const destHash = createHash('sha256').update(email).digest('hex').slice(0, 8);
-    this.logger.log(`Wise payout initiated: transfer=${transfer.id} for recipient ${destHash}`);
+    const paymentRes = await fetch(
+      `${this.baseUrl}/v3/profiles/${encodeURIComponent(this.profileId)}/transfers/${transfer.id}/payments`,
+      {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({ type: 'BALANCE' }),
+      },
+    );
+    if (!paymentRes.ok) {
+      // The transfer now exists and remains fundable/cancellable in Wise. A
+      // funding error of any class must not release local allocations; an
+      // operator must reconcile or cancel the remote transfer first.
+      throw new PayoutProviderUnsafeFailure(
+        `Wise transfer ${transfer.id} funding was not confirmed after HTTP ${paymentRes.status}; reconcile before releasing allocations`,
+      );
+    }
+    const payment = (await paymentRes.json()) as { status?: string; errorCode?: string };
+    if (payment.status !== 'COMPLETED') {
+      throw new PayoutProviderUnsafeFailure(
+        `Wise transfer ${transfer.id} funding returned ${payment.status ?? 'an unknown status'}; reconcile before releasing allocations`,
+      );
+    }
+    const recipientRef = privacyPseudonym(email, 'wise-payout-destination').slice(0, 12);
+    this.logger.log(`Wise payout initiated: transfer=${transfer.id} for recipient ${recipientRef}`);
     return { providerTxId: String(transfer.id), status: transfer.status ?? 'processing' };
   }
 

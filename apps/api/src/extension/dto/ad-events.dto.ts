@@ -3,6 +3,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -16,6 +17,8 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 
 import { ToolType } from '@waitlayer/shared';
+
+import { WAIT_STATE_MAX_DURATION_SECONDS } from '../extension.constants';
 
 export class AdRequestDto {
   @ApiProperty()
@@ -124,7 +127,9 @@ export class QualifiedImpressionDto {
 
   @ApiProperty()
   @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(WAIT_STATE_MAX_DURATION_SECONDS * 1000)
   visibleDurationMs!: number;
 
   @ApiProperty()

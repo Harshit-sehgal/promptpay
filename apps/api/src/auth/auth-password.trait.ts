@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcryptjs';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
@@ -11,6 +11,9 @@ import { PasswordResetPayload } from './auth.constants';
 import { AuthEmailTrait } from './auth-email.trait';
 import { AuthSessionTrait } from './auth-session.trait';
 import { AuthTotpTrait } from './auth-totp.trait';
+import { LinkGoogleDto, SetSocialPasswordDto } from './dto';
+import { normalizeAuthEmail } from './email-normalization';
+import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 
 export class AuthPasswordTrait {
   declare prisma: PrismaService;
@@ -19,6 +22,7 @@ export class AuthPasswordTrait {
   declare email: EmailService;
   declare audit: AuditService;
   declare jwtSecret: string;
+  declare googleVerifier: GoogleTokenVerifier;
 
   /** ── Password Reset: Request ──
    *  Always returns a generic message to prevent account enumeration.
@@ -29,7 +33,12 @@ export class AuthPasswordTrait {
     const generic = {
       message: 'If an account exists for that email, a password reset link has been sent',
     };
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const canonical = normalizeAuthEmail(email);
+    const user =
+      (await this.prisma.user.findUnique({ where: { email: canonical } })) ??
+      (await this.prisma.user.findFirst({
+        where: { email: { equals: canonical, mode: 'insensitive' } },
+      }));
     if (!user || !isActiveAccountStatus(user.status)) {
       return generic;
     }
@@ -75,23 +84,93 @@ export class AuthPasswordTrait {
       throw new BadRequestException('Reset token is no longer valid');
     }
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+      await tx.session.updateMany({ where: { userId: user.id }, data: { revoked: true } });
+      await tx.apiKey.updateMany({ where: { ownerId: user.id }, data: { isActive: false } });
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'password_reset',
+          targetType: 'user',
+          targetId: user.id,
+        },
+      });
     });
-    // Security: sign out everywhere after a password change
-    await this.revokeAllSessions(user.id);
     // Best-effort notification — never fail the reset because of email delivery
     void this.email.sendPasswordChanged(user.email).catch(() => undefined);
-    // Audit log: password reset completed
-    void this.audit.log({
-      actorId: user.id,
-      actorRole: user.role,
-      action: 'password_reset',
-      targetType: 'user',
-      targetId: user.id,
-    });
     return { message: 'Password reset successfully. Please sign in with your new password.' };
+  }
+
+  async setSocialAccountPassword(userId: string, currentJti: string, dto: SetSocialPasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !isActiveAccountStatus(user.status)) throw new UnauthorizedException();
+    if (user.passwordHash) throw new ConflictException('This account already has a password');
+    if (!user.googleId) throw new BadRequestException('A linked Google account is required');
+    const proof = await this.googleVerifier.verify(dto.googleIdToken);
+    if (
+      !proof.email_verified ||
+      proof.sub !== user.googleId ||
+      normalizeAuthEmail(proof.email) !== normalizeAuthEmail(user.email)
+    ) {
+      throw new UnauthorizedException('Google reauthentication does not match this account');
+    }
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      await tx.session.updateMany({
+        where: { userId, id: { not: currentJti } },
+        data: { revoked: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: user.role,
+          action: 'password_set',
+          targetType: 'user',
+          targetId: userId,
+        },
+      });
+    });
+    void this.email.sendPasswordChanged(user.email).catch(() => undefined);
+    return { passwordSet: true };
+  }
+
+  async linkGoogle(userId: string, currentJti: string, dto: LinkGoogleDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !isActiveAccountStatus(user.status)) throw new UnauthorizedException();
+    if (user.passwordHash) {
+      if (!dto.currentPassword || !(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+    }
+    const proof = await this.googleVerifier.verify(dto.idToken);
+    if (!proof.email_verified || normalizeAuthEmail(proof.email) !== normalizeAuthEmail(user.email)) {
+      throw new UnauthorizedException('Google account email must match this account');
+    }
+    const owner = await this.prisma.user.findUnique({ where: { googleId: proof.sub } });
+    if (owner && owner.id !== userId) throw new ConflictException('Google account is already linked');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { googleId: proof.sub, googleVerified: true, emailVerified: true },
+      });
+      await tx.session.updateMany({
+        where: { userId, id: { not: currentJti } },
+        data: { revoked: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          actorRole: user.role,
+          action: 'google_linked',
+          targetType: 'user',
+          targetId: userId,
+        },
+      });
+    });
+    return { googleLinked: true };
   }
 }
 export interface AuthPasswordTrait extends AuthSessionTrait, AuthEmailTrait, AuthTotpTrait {}

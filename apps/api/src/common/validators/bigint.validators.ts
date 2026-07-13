@@ -25,7 +25,7 @@ export function IsBigInt(validationOptions?: ValidationOptions): PropertyDecorat
 
 /**
  * Validates that a BigInt value is >= minValue.
- * Must be used together with @Transform(({ value }) => BigInt(value)) and @IsBigInt().
+ * Must be used together with @Transform(toBigIntOrOriginal) and @IsBigInt().
  */
 export function MinBigInt(
   minValue: bigint,

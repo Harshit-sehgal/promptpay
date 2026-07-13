@@ -1,3 +1,7 @@
+// Instrumentation executes before Nest ConfigModule; load .env at this earliest
+// boundary so a local SENTRY_DSN is visible before any application imports.
+import 'dotenv/config';
+
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 

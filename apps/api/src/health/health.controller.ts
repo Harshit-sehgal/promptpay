@@ -20,6 +20,7 @@ import { RedisHealthService } from './redis-health.service';
 @Controller('health')
 @SkipThrottle()
 export class HealthController {
+  private static readonly DATABASE_PROBE_TIMEOUT_MS = 2_000;
   private readonly logger = new Logger(HealthController.name);
 
   constructor(
@@ -39,7 +40,7 @@ export class HealthController {
 
     // Database connectivity check
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.checkDatabase();
       checks['database'] = 'connected';
     } catch {
       checks['database'] = { status: 'error' as const, error: 'Database unreachable' };
@@ -73,7 +74,7 @@ export class HealthController {
     let ready = true;
 
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.checkDatabase();
       checks['database'] = 'connected';
     } catch {
       ready = false;
@@ -111,7 +112,7 @@ export class HealthController {
     };
 
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.checkDatabase();
       checks['database'] = 'connected';
 
       const redis = await this.redis.check();
@@ -135,5 +136,21 @@ export class HealthController {
     }
 
     return checks;
+  }
+
+  private async checkDatabase(): Promise<void> {
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Bound both server execution and Prisma pool acquisition. A plain
+        // SELECT 1 can otherwise hang readiness indefinitely when Postgres is
+        // reachable at the socket layer but saturated/unresponsive.
+        await tx.$executeRaw`SET LOCAL statement_timeout = '2000ms'`;
+        await tx.$queryRaw`SELECT 1`;
+      },
+      {
+        maxWait: HealthController.DATABASE_PROBE_TIMEOUT_MS,
+        timeout: HealthController.DATABASE_PROBE_TIMEOUT_MS + 500,
+      },
+    );
   }
 }

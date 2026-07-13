@@ -57,6 +57,9 @@ services:
     build:
       context: .
       target: api
+      args:
+        JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
+        ALLOW_INSECURE_DEV_BUILD: '1'
     ports:
       - '4002:4002'
     environment:
@@ -69,7 +72,7 @@ services:
       # The @waitlayer/config refine() rejects keys containing "change-me" or
       # "replace-with" — placeholders below are crafted to pass validation
       # while being trivially distinguishable from real secrets.
-      JWT_SECRET: dev-only-docker-compose-jwt-secret-at-least-32-char
+      JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 30d
       API_PORT: '4002'
@@ -119,6 +122,7 @@ services:
       # dev-runtime `environment:` block so local `docker compose up` works.
       args:
         JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
+        ALLOW_INSECURE_DEV_BUILD: '1'
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
         NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:-http://localhost:3000}
@@ -130,8 +134,9 @@ services:
       - '3000:3000'
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
+      API_INTERNAL_URL: http://api:4002/api/v1
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
-      JWT_SECRET: dev-only-docker-compose-jwt-secret-at-least-32-char
+      JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
       # Match the api service — dev convenience compose uses NODE_ENV=development
       # so the mock-google sign-in button remains available for local testing.
       NODE_ENV: development

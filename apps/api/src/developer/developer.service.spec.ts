@@ -18,20 +18,46 @@ const mockPrisma = {
   earningsLedger: {
     findMany: vi.fn(),
     groupBy: vi.fn(),
+    aggregate: vi.fn(),
+    findFirst: vi.fn(),
   },
+  recoveryDebtCase: { findFirst: vi.fn() },
   adImpression: {
     findMany: vi.fn(),
+    updateMany: vi.fn(),
   },
   adClick: {
     findMany: vi.fn(),
+    updateMany: vi.fn(),
   },
   payoutRequest: {
     findMany: vi.fn(),
+    findFirst: vi.fn(),
   },
   consent: {
     findMany: vi.fn(),
   },
-  $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+  advertiser: {
+    findUnique: vi.fn(),
+    update: vi.fn(),
+  },
+  advertiserLedger: {
+    groupBy: vi.fn(),
+    findFirst: vi.fn(),
+  },
+  campaign: {
+    findFirst: vi.fn(),
+    updateMany: vi.fn(),
+  },
+  deviceRecoveryToken: { updateMany: vi.fn() },
+  payoutAccount: { updateMany: vi.fn() },
+  userSettings: { updateMany: vi.fn() },
+  waitStateEvent: { updateMany: vi.fn() },
+  auditLog: { updateMany: vi.fn() },
+  $executeRaw: vi.fn(),
+  $transaction: vi.fn(async (arg: any) =>
+    typeof arg === 'function' ? arg(mockPrisma) : Promise.all(arg),
+  ),
 };
 
 const mockFraud = {} as any;
@@ -53,6 +79,23 @@ describe('DeveloperService', () => {
     mockPrisma.user.update.mockResolvedValue({ id: 'user_123', status: 'deleted' });
     mockPrisma.session.updateMany.mockResolvedValue({ count: 2 });
     mockPrisma.apiKey.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 0n } });
+    mockPrisma.earningsLedger.findFirst.mockResolvedValue(null);
+    mockPrisma.recoveryDebtCase.findFirst.mockResolvedValue(null);
+    mockPrisma.payoutRequest.findFirst.mockResolvedValue(null);
+    mockPrisma.advertiser.findUnique.mockResolvedValue(null);
+    mockPrisma.advertiserLedger.groupBy.mockResolvedValue([]);
+    mockPrisma.advertiserLedger.findFirst.mockResolvedValue(null);
+    mockPrisma.campaign.findFirst.mockResolvedValue(null);
+    mockPrisma.campaign.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.deviceRecoveryToken.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.payoutAccount.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.userSettings.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.waitStateEvent.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.adImpression.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.adClick.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.auditLog.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.$executeRaw.mockResolvedValue(1);
     service = new DeveloperService(
       mockPrisma as any,
       mockFraud,
@@ -167,10 +210,10 @@ describe('DeveloperService', () => {
       });
       expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
         where: { userId: 'user_123' },
-        data: { revoked: true },
+        data: { revoked: true, deviceHash: null, ipHash: null },
       });
       expect(mockPrisma.apiKey.updateMany).toHaveBeenCalledWith({
-        where: { ownerId: 'user_123' },
+        where: { OR: [{ ownerId: 'user_123' }] },
         data: { isActive: false },
       });
       expect(mockAudit.log).toHaveBeenCalledWith({
@@ -180,6 +223,27 @@ describe('DeveloperService', () => {
         targetType: 'user',
         targetId: 'user_123',
       });
+    });
+
+    it('blocks deletion while developer earnings remain claimable', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user_123',
+        email: 'dev@test.com',
+        passwordHash: await bcrypt.hash('correct-password', 12),
+        googleId: null,
+        status: 'active',
+      });
+      mockPrisma.earningsLedger.aggregate.mockResolvedValue({
+        _sum: { amountMinor: 100n },
+      });
+
+      await expect(
+        service.deleteAccount('user_123', {
+          confirmation: 'DELETE_MY_ACCOUNT',
+          currentPassword: 'correct-password',
+        }),
+      ).rejects.toThrow(/earnings remain/);
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
     });
   });
 
@@ -196,7 +260,9 @@ describe('DeveloperService', () => {
       mockPrisma.payoutRequest.findMany.mockResolvedValue(
         Array.from({ length: 1001 }, (_, i) => ({ id: `payout_${i}` })),
       );
-      mockPrisma.consent.findMany.mockResolvedValue([{ id: 'consent_1' }]);
+      mockPrisma.consent.findMany.mockResolvedValue(
+        Array.from({ length: 1001 }, (_, i) => ({ id: `consent_${i}` })),
+      );
 
       const exported = await service.exportData('user_123');
 
@@ -206,10 +272,14 @@ describe('DeveloperService', () => {
       expect(mockPrisma.adImpression.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ take: 1001, orderBy: { createdAt: 'desc' } }),
       );
+      expect(mockPrisma.consent.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 1001, orderBy: { createdAt: 'desc' } }),
+      );
       expect(exported.earnings).toHaveLength(10000);
       expect(exported.impressions).toHaveLength(1000);
       expect(exported.clicks).toHaveLength(1);
       expect(exported.payouts).toHaveLength(1000);
+      expect(exported.consent).toHaveLength(1000);
       expect(exported.exportMeta).toMatchObject({
         exportType: 'self_service_recent_activity',
         complete: false,
@@ -219,6 +289,7 @@ describe('DeveloperService', () => {
           impressions: { limit: 1000, returned: 1000, truncated: true },
           clicks: { limit: 1000, returned: 1, truncated: false },
           payouts: { limit: 1000, returned: 1000, truncated: true },
+          consent: { limit: 1000, returned: 1000, truncated: true },
         },
       });
       expect(exported.exportMeta.generatedAt).toEqual(expect.any(String));

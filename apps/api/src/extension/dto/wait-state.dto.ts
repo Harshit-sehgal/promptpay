@@ -1,4 +1,4 @@
-import { IsEnum, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 import { ToolType } from '@waitlayer/shared';
@@ -47,6 +47,7 @@ export class WaitStateEndDto {
   @IsString()
   @MinLength(1)
   @MaxLength(16)
+  @Matches(/^\d+$/, { message: 'durationSeconds must contain decimal digits only' })
   durationSeconds!: string; // serialized as string from extension, parsed to int
 
   @ApiProperty()
