@@ -57,6 +57,18 @@ export const PAYOUT_PROVIDERS: PayoutProviderInfo[] = [
     status: 'coming_soon',
     note: 'Coming soon — requires verified Wise recipient capability',
   },
+  {
+    provider: 'payoneer',
+    label: 'Payoneer',
+    status: 'coming_soon',
+    note: 'Coming soon — Payoneer integration not yet available',
+  },
+  {
+    provider: 'razorpay',
+    label: 'Razorpay',
+    status: 'coming_soon',
+    note: 'Coming soon — Razorpay integration not yet available',
+  },
 ];
 
 const VALID_LAUNCH_STATUSES: PayoutProviderLaunchStatus[] = ['available', 'coming_soon'];
@@ -111,8 +123,7 @@ export function payoutProviderLaunchStatus(
   if (typeof overrides !== 'object' || overrides === null) return base;
   const map = overrides as Record<string, unknown>;
   const override = map[provider];
-  return typeof override === 'string' &&
-    (VALID_LAUNCH_STATUSES as string[]).includes(override)
+  return typeof override === 'string' && (VALID_LAUNCH_STATUSES as string[]).includes(override)
     ? (override as PayoutProviderLaunchStatus)
     : base;
 }

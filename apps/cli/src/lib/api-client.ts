@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import * as dns from 'dns';
 import * as http from 'http';
 import * as https from 'https';
 import * as os from 'os';
@@ -62,12 +63,22 @@ if (isLoopbackUrl(API_URL)) {
  * `en_US.UTF-8` -> `US`). Used for privacy-safe, developer-opt-in country
  * targeting (A-056). Returns undefined when no locale-derived country is
  * available; the server falls back to the profile country.
+ *
+ * Locales without a country component (`C`, `POSIX`, `C.UTF-8` — common in
+ * Docker/CI/dev environments) intentionally return `undefined`. The server
+ * uses the profile country as the fallback, so this is not a defect — it's
+ * an explicit "no locale-derived country" signal. If a developer running
+ * the CLI locally doesn't see country-targeted ads, check `locale` output:
+ * `LC_ALL=en_US.UTF-8` or `LANG=en_US.UTF-8` will derive `US`; `LANG=C.UTF-8`
+ * will not.
  */
 export function detectCountryCode(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const raw = env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? env.LANGUAGE;
   if (!raw) return undefined;
   const match = raw.split(/[.\s]/)[0]?.split('_')[1];
   if (match && /^[A-Za-z]{2}$/.test(match)) return match.toUpperCase();
+  // Deliberately undefined — no country code derivable from a C/POSIX locale.
+  // This is the correct outcome; the server falls back to profile country.
   return undefined;
 }
 
@@ -535,12 +546,43 @@ export class ApiClient {
       return promise;
     }
     const transport = url.protocol === 'https:' ? https : http;
+    // DNS resolution timeout: req.setTimeout covers established-connection
+    // wall clock but NOT the DNS lookup phase. A hung resolver (misconfigured
+    // /etc/resolv.conf, unreachable DNS server, captive portal) would block
+    // every CLI API call indefinitely. Bound the lookup explicitly so a dead
+    // resolver fails fast instead of hanging the user's terminal. The 5s
+    // budget is shared with connection setup under the 30s req.setTimeout
+    // ceiling above.
+    const lookupWithTimeout = (
+      hostname: string,
+      _options: dns.LookupOptions,
+      cb: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+    ) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const err: NodeJS.ErrnoException = new Error(`DNS resolution timed out for ${hostname}`);
+        err.code = 'DNSLOOKUP_TIMEOUT';
+        cb(err, '', 4);
+      }, 5_000);
+      dns.lookup(hostname, _options, (err, address, family) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        // Node returns LookupAddress | LookupAddress[] depending on the
+        // `all` option; contract with our single-address cb is a string.
+        const addr = typeof address === 'string' ? address : (address[0]?.address ?? '');
+        cb(err as NodeJS.ErrnoException | null, addr, family);
+      });
+    };
     const req = transport.request(
       {
         method,
         hostname: requestHostname,
         port: url.port || (url.protocol === 'https:' ? 443 : 80),
         path: url.pathname + url.search,
+        lookup: lookupWithTimeout,
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(bodyStr).toString(),
@@ -551,8 +593,38 @@ export class ApiClient {
         let data = '';
         res.on('data', (chunk) => (data += chunk));
         res.on('end', async () => {
+          let parsed: unknown;
           try {
-            const parsed = data.length ? JSON.parse(data) : {};
+            parsed = data.length ? JSON.parse(data) : {};
+          } catch {
+            // The response body is not valid JSON (e.g. a proxy/load-balancer
+            // HTML error page). We can't extract a structured error message,
+            // but the status code is still the authoritative signal — if this
+            // is a 401 we should attempt token refresh, and if not we reject
+            // with a clear description instead of the generic "Invalid JSON
+            // response" which hides the real cause from the user.
+            if (res.statusCode === 401 && this.creds?.refreshToken && !_isRefreshAttempt) {
+              const newTokens = await this.refreshTokens();
+              if (newTokens) {
+                try {
+                  resolve(await this.attemptRaw<T>(method, path, body, true));
+                } catch (retryErr) {
+                  reject(retryErr);
+                }
+                return;
+              }
+              reject({ status: 401, message: 'unauthorized' });
+              return;
+            }
+            reject(
+              new Error(
+                `Server returned ${res.statusCode} with a non-JSON body` +
+                  (data.length ? ` (first 100 chars: ${data.slice(0, 100)})` : ''),
+              ),
+            );
+            return;
+          }
+          try {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               resolve(parsed as T);
               return;

@@ -171,17 +171,34 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(...commands);
 
-  // Boot message
-  api
-    .getBalance()
-    .then((bal) => {
-      status.setEarnings(bal.available.amountMinor, bal.available.currency);
-    })
-    .catch((err) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[WaitLayer] Initial balance fetch failed: ${msg}`);
-      status.setLoggedOut();
-    });
+  // Boot balance fetch. On transient failure (network not up yet at
+  // activation time, device not registered) retry once after 30s so the
+  // status bar self-heals without the user clicking "login" again. A
+  // second failure leaves the status bar as "logged out" — the user
+  // can manually run `WaitLayer: Show Earnings` or `WaitLayer: Login`
+  // to re-attempt. Without this retry, any extension-activation-time
+  // network hiccup permanently showed "logged out" with no recovery path
+  // other than IDE restart or explicit login.
+  let bootRetried = false;
+  const fetchBootBalance = () => {
+    api
+      .getBalance()
+      .then((bal) => {
+        status.setEarnings(bal.available.amountMinor, bal.available.currency);
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!bootRetried) {
+          bootRetried = true;
+          console.warn(`[WaitLayer] Initial balance fetch failed — retrying in 30s: ${msg}`);
+          setTimeout(fetchBootBalance, 30_000);
+        } else {
+          console.warn(`[WaitLayer] Initial balance fetch failed after retry: ${msg}`);
+          status.setLoggedOut();
+        }
+      });
+  };
+  fetchBootBalance();
 }
 
 export function deactivate() {

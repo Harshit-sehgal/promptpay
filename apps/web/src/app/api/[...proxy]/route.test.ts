@@ -23,11 +23,15 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+const TEST_JWT_SECRET = 'test-secret-that-is-at-least-32-chars-long!';
+
 describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
   beforeEach(() => {
+    process.env.JWT_SECRET = TEST_JWT_SECRET;
     vi.stubGlobal('fetch', vi.fn());
   });
   afterEach(() => {
+    delete process.env.JWT_SECRET;
     vi.unstubAllGlobals();
   });
 

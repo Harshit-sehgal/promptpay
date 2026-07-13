@@ -2,6 +2,7 @@ export * from './constants';
 export * from './contracts';
 export * from './currency';
 export * from './enums';
+export * from './feature-flags';
 export * from './parse';
 export * from './password-policy';
 export * from './payout-providers';

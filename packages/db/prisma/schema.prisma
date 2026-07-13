@@ -218,6 +218,9 @@ model User {
   payoutAccounts             PayoutAccount[]
   earnings                   EarningsLedger[]
   payoutRequests             PayoutRequest[]
+  // Approvals this admin issued as a campaign reviewer (nullable FK on
+  // CampaignApproval.reviewerId with ON DELETE SET NULL — see there).
+  campaignApprovals          CampaignApproval[] @relation("CampaignReviewer")
   trustScore                 TrustScore?
   fraudFlags                 FraudFlag[]
   adReports                  AdReport[]
@@ -961,7 +964,13 @@ model CampaignApproval {
   id         String           @id @default(uuid())
   campaignId String
   campaign   Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  reviewerId String
+  // Nullable + ON DELETE SET NULL: a historical approval record survives even
+  // after the admin who reviewed it is deleted (reviewer becomes NULL instead
+  // of cascading or refusing the user delete). FK is added by migration
+  // 20260714000000; previously reviewerId had no FK so garbage UUIDs could
+  // be inserted silently.
+  reviewerId String?
+  reviewer   User?            @relation("CampaignReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
   decision   ApprovalDecision
   reason     String?
   checklist  Json?
@@ -1118,8 +1127,10 @@ model ReferralReward {
   // DB-level guard: at most one reward per referral. The service-layer check-then-create
   // in processReferralRewards is racy when markPayoutPaid is invoked concurrently or
   // retried by a webhook; a unique index here is the authoritative floor.
+  // Note: @@unique([referralId]) already maintains a B-tree on referralId in Postgres,
+  // so no separate @@index([referralId]) is needed — a duplicate index was removed in
+  // migration 20260714000000 (it doubled write cost on every insert with no read benefit).
   @@unique([referralId])
-  @@index([referralId])
   @@index([userId])
   @@map("referral_rewards")
 }

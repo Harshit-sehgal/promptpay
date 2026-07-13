@@ -56,12 +56,25 @@ describe('applyPayoutProviderOverrides (A-030)', () => {
 });
 
 describe('resolved provider lists honour operator overrides at module load', () => {
-  it('default (no env) gates wise and exposes the other four as available', () => {
+  it('default (no env) gates the coming-soon providers and exposes the available ones', () => {
     // The test process does not set NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS.
-    // Wise is coming_soon by default (operator must verify the corridor); the
-    // other four providers are available.
-    expect(AVAILABLE_PAYOUT_PROVIDERS).toHaveLength(4);
-    expect(COMING_SOON_PAYOUT_PROVIDERS).toHaveLength(1);
-    expect(COMING_SOON_PAYOUT_PROVIDERS[0]?.provider).toBe('wise');
+    // The base catalogue (single source of truth in @waitlayer/shared) lists
+    // four providers available at launch (paypal_email, manual, paypal_payouts,
+    // stripe_connect) and three coming-soon (wise — corridor must be verified
+    // by the operator; payoneer + razorpay — integrations not yet built). The
+    // coming-soon entries exist so operators can promote them via the env-var
+    // override at deploy time without a code edit; the API layer still
+    // fail-closes registration for unsupported providers.
+    expect(AVAILABLE_PAYOUT_PROVIDERS.map((p) => p.provider).sort()).toEqual([
+      'manual',
+      'paypal_email',
+      'paypal_payouts',
+      'stripe_connect',
+    ]);
+    expect(COMING_SOON_PAYOUT_PROVIDERS.map((p) => p.provider).sort()).toEqual([
+      'payoneer',
+      'razorpay',
+      'wise',
+    ]);
   });
 });

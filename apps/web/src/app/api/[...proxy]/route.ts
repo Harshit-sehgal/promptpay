@@ -285,12 +285,23 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
  * cloud credential pairs, reset/verification tokens, mnemonics/seed phrases,
  * and one-time recovery codes.
  *
- * Note: the admin device-recovery flow intentionally surfaces its one-time
- * token via the field `recoverySupportToken` (NOT the generic `token`), and
- * API-key creation surfaces the plain key via `plainKey`. Those specific
- * display fields are deliberately NOT in this set so the web UI can show them
- * once; the generic `token` name, however, is stripped because it is almost
- * always an auth/credential secret when returned from an arbitrary endpoint.
+ * KEEPING THIS CURRENT: when a new API endpoint returns a new sensitive-shaped
+ * field name not already in this set, add it here. The proxy is a single choke
+ * point; one line added here strips the field from every non-allowlisted route.
+ * Audit cadence: grep API DTO/trait/controller return shapes for `secret`,
+ * `key`, `token`, `credential`, `password`, `private`, `mnemonic`, `seed`,
+ * `recovery` at least once per quarter.
+ *
+ * Deliberately NOT in this set (one-time display fields):
+ *   - `recoverySupportToken` — admin device recovery flow surfaces this once
+ *   - `plainKey` — API-key creation surfaces this once
+ *   - `otpauthUrl` — TOTP setup QR URI
+ *   - `backupCodes` — 2FA enable/regenerate one-time display
+ *
+ * Deliberately NOT in this set (stripped earlier in the pipeline):
+ *   - `twoFactorSecret` — `sanitizeUser` already omits it from every auth response
+ *   - `twoFactorBackupCodeHashes` — never returned to the browser
+ *   - `passwordHash` — never returned to the browser; `sanitizeUser` strips it
  */
 const SENSITIVE_FIELDS = new Set([
   'accessToken',
@@ -307,8 +318,12 @@ const SENSITIVE_FIELDS = new Set([
   'secretKey',
   'secret_key',
   'accessKey',
+  'access_key',
   'accessKeyId',
   'secretAccessKey',
+  'secret_access_key',
+  'clientSecret',
+  'client_secret',
   'resetToken',
   'resetPasswordToken',
   'passwordResetToken',

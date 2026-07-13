@@ -22,11 +22,15 @@ function jsonResponse(status = 200) {
 // A-049: logout must wait for the server revocation before clearing cookies.
 // A failed logout (network error or 5xx) must leave the session visibly alive
 // (cookies uncleared) so the user can retry, instead of a false "logged out".
+const TEST_JWT_SECRET = 'test-secret-that-is-at-least-32-chars-long!';
+
 describe('logout route (A-049)', () => {
   beforeEach(() => {
+    process.env.JWT_SECRET = TEST_JWT_SECRET;
     vi.stubGlobal('fetch', vi.fn());
   });
   afterEach(() => {
+    delete process.env.JWT_SECRET;
     vi.unstubAllGlobals();
   });
 
