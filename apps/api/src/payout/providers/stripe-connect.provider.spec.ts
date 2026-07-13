@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
-import { Logger } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Logger } from '@nestjs/common';
 
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { StripeConnectPayoutProvider } from './stripe.provider';
@@ -120,10 +120,7 @@ describe('StripeConnectPayoutProvider', () => {
       const logText = logSpy.mock.calls.flat().join(' ');
       expect(logText).not.toContain('acct_developer123');
       expect(logText).toContain(
-        privacyPseudonym(
-          'acct_developer123',
-          'stripe-connect-payout-destination',
-        ).slice(0, 12),
+        privacyPseudonym('acct_developer123', 'stripe-connect-payout-destination').slice(0, 12),
       );
       expect(logText).not.toContain(
         createHash('sha256').update('acct_developer123').digest('hex').slice(0, 10),

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
-import { Logger } from '@nestjs/common';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Logger } from '@nestjs/common';
 
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { WisePayoutProvider } from './wise.provider';
@@ -177,32 +177,37 @@ describe('WisePayoutProvider', () => {
       ['HTTP 500', new Response('{}', { status: 500 })],
       ['REJECTED body', new Response(JSON.stringify({ status: 'REJECTED' }), { status: 200 })],
       ['malformed body', new Response(JSON.stringify({}), { status: 200 })],
-    ])('keeps allocations reserved when post-transfer funding returns %s', async (_label, response) => {
-      const p = makeProvider({ token: 'tok', profileId: '123' });
-      vi.stubGlobal(
-        'fetch',
-        vi
-          .fn()
-          .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
-          .mockResolvedValueOnce(new Response(JSON.stringify({ id: 555 }), { status: 200 }))
-          .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'quote-safe' }), { status: 200 }))
-          .mockResolvedValueOnce(
-            new Response(JSON.stringify({ id: 999, status: 'incoming_payment_waiting' }), {
-              status: 200,
-            }),
-          )
-          .mockResolvedValueOnce(response),
-      );
+    ])(
+      'keeps allocations reserved when post-transfer funding returns %s',
+      async (_label, response) => {
+        const p = makeProvider({ token: 'tok', profileId: '123' });
+        vi.stubGlobal(
+          'fetch',
+          vi
+            .fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+            .mockResolvedValueOnce(new Response(JSON.stringify({ id: 555 }), { status: 200 }))
+            .mockResolvedValueOnce(
+              new Response(JSON.stringify({ id: 'quote-safe' }), { status: 200 }),
+            )
+            .mockResolvedValueOnce(
+              new Response(JSON.stringify({ id: 999, status: 'incoming_payment_waiting' }), {
+                status: 200,
+              }),
+            )
+            .mockResolvedValueOnce(response),
+        );
 
-      await expect(
-        p.initiate({
-          payoutRequestId: 'req_funding_failure',
-          destination: 'dev@example.com',
-          amountMinor: 2500n,
-          currency: 'USD',
-        }),
-      ).rejects.toMatchObject({ name: 'PayoutProviderUnsafeFailure' });
-    });
+        await expect(
+          p.initiate({
+            payoutRequestId: 'req_funding_failure',
+            destination: 'dev@example.com',
+            amountMinor: 2500n,
+            currency: 'USD',
+          }),
+        ).rejects.toMatchObject({ name: 'PayoutProviderUnsafeFailure' });
+      },
+    );
 
     it('treats a definitive transfer 400 as failed and a 500 as ambiguous', async () => {
       const run = async (status: number) => {
@@ -234,9 +239,19 @@ describe('WisePayoutProvider', () => {
   describe('checkStatus', () => {
     it('maps a successful Wise transfer state to paid', async () => {
       const p = makeProvider({ token: 'tok', profileId: '123' });
-      vi.stubGlobal('fetch', vi.fn(async () =>
-        new Response(JSON.stringify({ status: 'outgoing_payment_sent', created: '2026-01-01T00:00:00.000Z' }), { status: 200 }),
-      ));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                status: 'outgoing_payment_sent',
+                created: '2026-01-01T00:00:00.000Z',
+              }),
+              { status: 200 },
+            ),
+        ),
+      );
 
       const res = await p.checkStatus('transfer_1');
 
@@ -249,8 +264,12 @@ describe('WisePayoutProvider', () => {
       const p = makeProvider({ token: 'tok', profileId: '123' });
       const fetchMock = vi
         .fn()
-        .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'funds_refunded' }), { status: 200 }))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'incoming_payment_waiting' }), { status: 200 }));
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ status: 'funds_refunded' }), { status: 200 }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ status: 'incoming_payment_waiting' }), { status: 200 }),
+        );
       vi.stubGlobal('fetch', fetchMock);
 
       await expect(p.checkStatus('transfer_2')).resolves.toMatchObject({ status: 'failed' });

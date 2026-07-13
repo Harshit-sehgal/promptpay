@@ -1,6 +1,6 @@
 // Sentry instrument MUST be the first import — it hooks Node.js internals
 // before any module is loaded so all spans and errors are captured correctly.
-// eslint-disable-next-line import/order
+// eslint-disable-next-line simple-import-sort/imports
 import './instrument';
 import cookieParser from 'cookie-parser';
 import { json, raw, urlencoded } from 'express';

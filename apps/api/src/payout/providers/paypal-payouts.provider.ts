@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 
 import { minorToMajorInputValue } from '@waitlayer/shared';
 
-import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
-import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
+import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
 import { PayoutProviderHandler } from '../payout.service';
+import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 
 interface PayPalTokenResponse {
   access_token: string;

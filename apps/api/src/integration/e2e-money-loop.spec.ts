@@ -65,6 +65,7 @@ const mockPrisma = {
     create: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    count: vi.fn().mockResolvedValue(0),
   },
   // ── CampaignApproval ──
   campaignApproval: {
@@ -198,6 +199,7 @@ const mockPrisma = {
           advertiserId,
           currency,
           entryType: 'credit',
+          status: 'confirmed',
           _sum: { amountMinor: 10000_00n },
         },
       ];
@@ -437,6 +439,7 @@ describe('E2E Money Loop', () => {
         advertiserId,
         currency: 'USD',
         entryType: 'credit',
+        status: 'confirmed',
         _sum: { amountMinor: 10000_00n },
       }));
     });
@@ -742,6 +745,7 @@ describe('E2E Money Loop', () => {
           advertiserId: ADS_PROFILE_ID,
           currency: 'USD',
           entryType: 'credit',
+          status: 'confirmed',
           _sum: { amountMinor: 1000_00n },
         },
       ]);
@@ -930,11 +934,10 @@ describe('E2E Money Loop', () => {
 
       // No existing impression (no idempotency cache)
       mockPrisma.adImpression.findFirst.mockResolvedValue(null);
-
-      // Frequency cap: recent impressions (none)
+      // Recent billable + recent impressions (none) — keeps recentBillableCampaignIds
+      // and the per-campaign frequency-cap counts at 0 so the campaign stays eligible.
       mockPrisma.adImpression.findMany.mockResolvedValue([]);
 
-      // Active campaigns with approved creatives
       mockPrisma.campaign.findMany.mockResolvedValue([
         {
           id: CAMPAIGN_ID,
@@ -1535,16 +1538,27 @@ describe('E2E Money Loop', () => {
 
   describe('Phase 7: Earnings mature from estimated to confirmed', () => {
     it('matures estimated entries past their availableAt date', async () => {
+      mockPrisma.earningsLedger.findMany.mockResolvedValue([
+        { id: 'e1' },
+        { id: 'e2' },
+        { id: 'e3' },
+      ]);
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 3 });
 
-      await svc.ledger.matureEarnings();
+      const result = await svc.ledger.matureEarnings();
 
-      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith(
+      expect(result.matured).toBe(3);
+      expect(mockPrisma.earningsLedger.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
             status: 'estimated',
-            availableAt: expect.any(Object), // lte: now
+            availableAt: expect.objectContaining({ lte: expect.any(Date) }),
           }),
+        }),
+      );
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: 'estimated' }),
           data: { status: 'confirmed' },
         }),
       );
@@ -1780,6 +1794,7 @@ describe('E2E Money Loop', () => {
           advertiserId: advProfileId,
           currency: 'USD',
           entryType: 'credit',
+          status: 'confirmed',
           _sum: { amountMinor: 10000_00n },
         },
       ]);

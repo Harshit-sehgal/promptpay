@@ -50,9 +50,15 @@ export const authApi = {
     api.post('/auth/password/reset', { token, newPassword }),
   confirmEmailVerification: (token: string) => api.post('/auth/verify-email/confirm', { token }),
   requestEmailVerification: () => api.post('/auth/verify-email/request'),
-  setup2fa: () => api.post('/auth/2fa/setup'),
+  setup2fa: (data?: { currentPassword: string }) => api.post('/auth/2fa/setup', data),
   enable2fa: (token: string) => api.post('/auth/2fa/enable', { token }),
   disable2fa: (token: string) => api.post('/auth/2fa/disable', { token }),
+  linkGoogle: (idToken: string, currentPassword: string) =>
+    api.post('/auth/link/google', { idToken, currentPassword }),
+  revokeSession: (sessionId: string) => api.post(`/auth/sessions/${sessionId}/revoke`),
+  revokeOtherSessions: () => api.post('/auth/sessions/revoke-others'),
+  regenerate2faBackupCodes: (token: string) =>
+    api.post('/auth/2fa/backup-codes/regenerate', { token }),
 };
 
 export const developerApi = {
@@ -99,6 +105,7 @@ export const advertiserApi = {
   getReports: (params?: Record<string, unknown>) => api.get('/advertiser/reports', { params }),
   createDepositSession: (amountMinor: bigint | number, currency?: string) =>
     api.post('/advertiser/deposit-session', { amountMinor: Number(amountMinor), currency }),
+  createApiKey: (scopes: string[]) => api.post('/advertiser/api-keys', { scopes }),
 };
 
 export const adminApi = {
@@ -185,6 +192,7 @@ export const payoutApi = {
   getHistory: (params?: Record<string, unknown>) => api.get('/payout/history', { params }),
   getAvailable: () =>
     api.get('/payout/available').then((r) => ok(PayoutAvailableResponse.parse(r.data))),
+  getProviders: () => api.get('/payout/providers'),
 };
 
 export const ledgerApi = {

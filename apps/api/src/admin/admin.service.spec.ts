@@ -16,6 +16,7 @@ const mockPrisma: any = {
     updateMany: vi.fn(),
     create: vi.fn(),
   },
+  $queryRaw: vi.fn().mockResolvedValue([]),
   user: {
     findMany: vi.fn(),
   },
@@ -27,6 +28,7 @@ const mockPrisma: any = {
     findUnique: vi.fn(),
     groupBy: vi.fn(),
     updateMany: vi.fn(),
+    count: vi.fn().mockResolvedValue(0),
   },
   platformLedger: {
     groupBy: vi.fn(),
@@ -64,17 +66,13 @@ describe('AdminService', () => {
         { id: 'campaign-usd', name: 'USD campaign', budgetSpentMinor: 100, currency: 'USD' },
         { id: 'campaign-eur', name: 'EUR campaign', budgetSpentMinor: 200, currency: 'EUR' },
       ]);
-      // advertiserLedger.groupBy is called in this order by getMoneyIntegrityReport:
-      //   1. spend-vs-debit join (campaignId rows)
-      //   2. totalAdvertiserDebit (currency sums)
-      //   3. totalAdvertiserRefund (currency sums)
-      //   4. totalAdvertiserCredit (currency sums)  — cash-bucket reconciliation
-      //   5. totalAdvertiserReversal (currency sums) — advertiser net position
+      // advertiserLedger.groupBy call order in getMoneyIntegrityReport:
+      //   1. totalAdvertiserDebit    (entryType debit, status confirmed/paid)
+      //   2. totalAdvertiserRefund    (entryType refund, status confirmed/paid)
+      //   3. totalAdvertiserCredit    (entryType credit, status confirmed)
+      //   4. totalAdvertiserReversal  (entryType reversal, status confirmed/reversed)
+      // The spend-vs-debit campaign join now runs through $queryRaw, not groupBy.
       mockPrisma.advertiserLedger.groupBy
-        .mockResolvedValueOnce([
-          { campaignId: 'campaign-usd', currency: 'USD', _sum: { amountMinor: 100 } },
-          { campaignId: 'campaign-eur', currency: 'EUR', _sum: { amountMinor: 200 } },
-        ])
         .mockResolvedValueOnce([
           { currency: 'USD', _sum: { amountMinor: 100 } },
           { currency: 'EUR', _sum: { amountMinor: 200 } },
@@ -111,6 +109,20 @@ describe('AdminService', () => {
         .mockResolvedValueOnce([]) // totalCashCredit
         .mockResolvedValueOnce([]); // totalCashReversal
       mockPrisma.user.findMany.mockResolvedValue([{ id: 'dev-1', email: 'dev@example.com' }]);
+      // $queryRaw call order in getMoneyIntegrityReport:
+      //   1. campaign discrepancies (WITH debits join) -> empty
+      //   2. negative developer balances (WITH balances join) -> dev-1
+      mockPrisma.$queryRaw
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            userId: 'dev-1',
+            email: 'dev@example.com',
+            balanceMinor: -50n,
+            currency: 'EUR',
+            total: 1n,
+          },
+        ]);
 
       const report = await service.getMoneyIntegrityReport();
 
@@ -149,7 +161,13 @@ describe('AdminService', () => {
       const rows = [{ id: 'refund-entry-1' }];
       mockPrisma.advertiserLedger.findMany.mockResolvedValue(rows);
 
-      await expect(service.getPendingArchiveRefunds()).resolves.toBe(rows);
+      await expect(service.getPendingArchiveRefunds()).resolves.toEqual({
+        items: rows,
+        total: 0,
+        page: 1,
+        limit: 20,
+        hasMore: false,
+      });
 
       expect(mockPrisma.advertiserLedger.findMany).toHaveBeenCalledWith({
         where: {
@@ -175,6 +193,8 @@ describe('AdminService', () => {
           },
         },
         orderBy: { createdAt: 'asc' },
+        skip: 0,
+        take: 20,
       });
     });
   });

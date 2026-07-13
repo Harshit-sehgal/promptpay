@@ -7,8 +7,8 @@ import {
   clearAuthCookies,
   COOKIE_REFRESH,
   isSecure,
-  readAuthCookie,
   rateLimitIdentity,
+  readAuthCookie,
 } from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
 
@@ -32,13 +32,17 @@ export async function POST(req: NextRequest) {
     const data = await apiRes.json();
     if (!apiRes.ok) {
       // Refresh failed — clear stale cookies
-      return applyRateLimitIdentity(clearAuthCookies(
-        NextResponse.json(
-          { message: (data as { message?: string }).message || 'Refresh failed' },
-          { status: apiRes.status },
+      return applyRateLimitIdentity(
+        clearAuthCookies(
+          NextResponse.json(
+            { message: (data as { message?: string }).message || 'Refresh failed' },
+            { status: apiRes.status },
+          ),
+          req.headers,
         ),
+        identity,
         req.headers,
-      ), identity, req.headers);
+      );
     }
 
     const { accessToken, refreshToken: newRefresh } = data as {

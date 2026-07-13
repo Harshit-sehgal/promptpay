@@ -444,7 +444,7 @@ describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
       creatives: [{ status: 'approved' }],
     });
     prisma.advertiserLedger.groupBy.mockResolvedValue([
-      { entryType: 'credit', _sum: { amountMinor: 5000 } },
+      { entryType: 'credit', status: 'confirmed', _sum: { amountMinor: 5000 } },
     ]);
     prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
     prisma.campaign.findUnique

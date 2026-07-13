@@ -44,6 +44,25 @@ interface PayoutRequest {
   createdAt: string;
   paidAt?: string;
 }
+export interface PayoutProviderReadiness {
+  provider: string;
+  label: string;
+  status: 'available' | 'coming_soon';
+  note: string;
+  reason: string | null;
+}
+
+/**
+ * Effective, selectable payout providers: only those the API reports as
+ * `available` (not `coming_soon` and not missing). Fails closed to an empty
+ * list when readiness could not be fetched (A-030).
+ */
+export function selectablePayoutProviders(
+  readiness: PayoutProviderReadiness[] | undefined,
+): PayoutProviderReadiness[] {
+  if (!readiness) return [];
+  return readiness.filter((p) => p.status === 'available');
+}
 
 interface PayoutHistoryResponse {
   payouts: PayoutRequest[];

@@ -2,11 +2,11 @@ import Stripe from 'stripe';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import {
   requireProviderSafeMinorAmount,
   STRIPE_MAX_MINOR_AMOUNT,
 } from '../../common/utils/provider-amount';
-import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import type { PayoutProviderHandler } from '../payout.service';
 import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 

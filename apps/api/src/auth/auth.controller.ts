@@ -25,12 +25,12 @@ import {
   LoginDto,
   RefreshDto,
   ResetPasswordDto,
-  SignUpDto,
   SetSocialPasswordDto,
+  SignUpDto,
+  TwoFactorBackupCodesRegenerateDto,
   TwoFactorDisableDto,
   TwoFactorEnableDto,
   TwoFactorSetupDto,
-  TwoFactorBackupCodesRegenerateDto,
   VerifyEmailConfirmDto,
 } from './dto';
 
@@ -223,11 +223,7 @@ export class AuthController {
   ) {
     try {
       await BruteForceGuard.assertCanAttempt(req, userId);
-      const result = await this.authService.enableTwoFactor(
-        userId,
-        dto.token,
-        jti,
-      );
+      const result = await this.authService.enableTwoFactor(userId, dto.token, jti);
       await BruteForceGuard.resetOnSuccess(req, userId);
       return result;
     } catch (err: unknown) {

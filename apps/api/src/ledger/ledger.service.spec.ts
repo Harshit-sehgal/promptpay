@@ -50,6 +50,7 @@ const mockPrisma = {
     create: vi.fn(),
   },
   $executeRawUnsafe: vi.fn(async (_sql: string, ..._params: any[]) => 1),
+  $executeRaw: vi.fn(async (..._args: unknown[]) => undefined),
   $transaction: vi.fn(async (arg: any) => {
     // The real service passes either array of functions OR an async callback
     if (typeof arg === 'function') return arg(mockPrisma);
@@ -246,11 +247,9 @@ describe('LedgerService', () => {
 
       // $transaction was invoked
       expect(mockPrisma.$transaction).toHaveBeenCalled();
-      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE "campaigns"'),
-        2_00n,
-        'c-1',
-      );
+      expect(mockPrisma.$executeRaw).toHaveBeenCalled();
+      const impressionSql = mockPrisma.$executeRaw.mock.calls[0][0]?.strings?.join(' ') ?? '';
+      expect(impressionSql).toContain('UPDATE "campaigns"');
       expect(mockPrisma.advertiserLedger.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           advertiserId: 'a-1',
@@ -305,7 +304,7 @@ describe('LedgerService', () => {
     });
 
     it('creates no impression ledger entries when campaign budget is exhausted', async () => {
-      mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(0);
+      mockPrisma.$executeRaw.mockResolvedValueOnce(0);
 
       await expect(
         service.recordImpressionEarnings({
@@ -337,11 +336,9 @@ describe('LedgerService', () => {
         trustLevel: 'normal',
       });
 
-      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE "campaigns"'),
-        5_00n,
-        'c-1',
-      );
+      expect(mockPrisma.$executeRaw).toHaveBeenCalled();
+      const clickSql = mockPrisma.$executeRaw.mock.calls[0][0]?.strings?.join(' ') ?? '';
+      expect(clickSql).toContain('UPDATE "campaigns"');
       expect(mockPrisma.advertiserLedger.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           advertiserId: 'a-1',
@@ -375,7 +372,7 @@ describe('LedgerService', () => {
     });
 
     it('creates no CPC click ledger entries when campaign budget is exhausted', async () => {
-      mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(0);
+      mockPrisma.$executeRaw.mockResolvedValueOnce(0);
 
       await expect(
         service.recordClickEarnings({

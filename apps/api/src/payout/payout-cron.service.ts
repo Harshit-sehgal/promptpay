@@ -1,10 +1,10 @@
 import { randomUUID } from 'crypto';
-import { Injectable, Logger,OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { PayoutStatus } from '@waitlayer/shared';
 
-import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 import { acquireCronLease } from '../common/utils/cron-lease';
+import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 import { PrismaService } from '../config/prisma.service';
 import { ReferralService } from '../referral/referral.service';
 import { boundedPositiveInt } from './payout.constants';
@@ -32,9 +32,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
   private pollInFlight = false;
   private readonly ownerId = randomUUID();
   // Configurable via PAYOUT_POLL_INTERVAL_MS (default 10 minutes).
-  private readonly POLL_INTERVAL_MS = Number(
-    process.env.PAYOUT_POLL_INTERVAL_MS ?? 600_000,
-  );
+  private readonly POLL_INTERVAL_MS = Number(process.env.PAYOUT_POLL_INTERVAL_MS ?? 600_000);
   /** Skip payouts processed within the last N ms (anti-fast-poll) */
   private readonly STALL_THRESHOLD_MS = 120_000; // 2 minutes
   private readonly BATCH_SIZE = boundedPositiveInt(
@@ -60,7 +58,9 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
     // Then poll on interval
     this.intervalId = setInterval(() => {
       void this.pollProcessingPayouts().catch((err: unknown) => {
-        this.logger.error(`Payout interval poll failed: ${err instanceof Error ? err.message : err}`);
+        this.logger.error(
+          `Payout interval poll failed: ${err instanceof Error ? err.message : err}`,
+        );
       });
     }, this.POLL_INTERVAL_MS);
   }
@@ -126,9 +126,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
 
       if (processingPayouts.length === 0) return { checked: 0, completed: 0, failed: 0 };
 
-      this.logger.log(
-        `Polling status for ${processingPayouts.length} processing payout(s)...`,
-      );
+      this.logger.log(`Polling status for ${processingPayouts.length} processing payout(s)...`);
 
       let checked = 0;
       let completed = 0;
@@ -220,9 +218,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
 
       return { checked, completed, failed: failedCount };
     } catch (err) {
-      this.logger.error(
-        `Payout polling cron failed: ${err instanceof Error ? err.message : err}`,
-      );
+      this.logger.error(`Payout polling cron failed: ${err instanceof Error ? err.message : err}`);
       return { checked: 0, completed: 0, failed: 0 };
     } finally {
       this.pollInFlight = false;

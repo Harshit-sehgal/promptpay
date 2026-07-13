@@ -21,7 +21,10 @@ import { BidType, depositMinimumMinor } from '@waitlayer/shared';
 import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
 
-const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'brl', 'mxn', 'sgd'] as const;
+// Single source of truth: @waitlayer/shared CURRENCY_POLICY. Keep aligned to
+// the shared policy table — otherwise a deposit could be requested for a
+// currency the platform doesn't support, and Stripe would silently reject.
+const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'jpy', 'brl'] as const;
 
 export class CreateProfileDto {
   @ApiProperty()

@@ -16,10 +16,12 @@ function makeReq(token?: string): NextRequest {
   return req;
 }
 
-async function makeToken(secret: string): Promise<string> {
+async function makeToken(secret: string, aud: string = 'access'): Promise<string> {
   return new SignJWT({ sub: 'u1', role: 'developer' })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject('u1')
+    .setAudience(aud)
+    .setJti('jti-test-1')
     .sign(new TextEncoder().encode(secret));
 }
 
@@ -67,7 +69,7 @@ describe('protected-route proxy JWT_SECRET (A-016)', () => {
 
   it('passes through a valid signed refresh cookie with no access token', async () => {
     process.env.JWT_SECRET = SECRET;
-    const refresh = await makeToken(SECRET); // any secret-signed JWT works as refresh
+    const refresh = await makeToken(SECRET, 'refresh'); // refresh-typed JWT works as refresh
     const req = makeReq();
     req.cookies.set('__Host-refresh_token', refresh);
     const res = await proxy(req);

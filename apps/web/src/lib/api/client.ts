@@ -9,14 +9,18 @@ import axios from 'axios';
  * Only targets fields ending in `Minor` or `ByCurrency` to avoid converting
  * non-monetary numeric strings (e.g. `providerTxId`, `userId`).
  */
-function coerceBigInts(obj: unknown): unknown {
+export function coerceBigInts(obj: unknown): unknown {
   if (obj === null || typeof obj !== 'object') return obj;
   if (obj instanceof Date) return obj;
   if (Array.isArray(obj)) return obj.map(coerceBigInts);
 
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
-    if (key.endsWith('Minor') && typeof value === 'string' && /^-?\d+$/.test(value)) {
+    if (
+      (key.endsWith('Minor') || key.endsWith('Earnings') || key.endsWith('Debits')) &&
+      typeof value === 'string' &&
+      /^-?\d+$/.test(value)
+    ) {
       result[key] = BigInt(value);
     } else if (key.endsWith('ByCurrency') && typeof value === 'object' && value !== null) {
       const coerced: Record<string, unknown> = {};
@@ -29,6 +33,24 @@ function coerceBigInts(obj: unknown): unknown {
     } else {
       result[key] = value;
     }
+  }
+  return result;
+}
+
+/**
+ * Inverse of `coerceBigInts` — recursively convert `bigint` values to exact
+ * decimal strings so they survive JSON serialization in outgoing request
+ * bodies (which would otherwise throw "Do not know how to serialize a BigInt").
+ */
+export function serializeBigInts(obj: unknown): unknown {
+  if (typeof obj === 'bigint') return obj.toString();
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return obj;
+  if (Array.isArray(obj)) return obj.map(serializeBigInts);
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    result[key] = serializeBigInts(value);
   }
   return result;
 }

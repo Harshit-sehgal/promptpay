@@ -8,8 +8,11 @@ import { REMOVED_SENSITIVE_API_KEY_SCOPES } from './dto/api-key.dto';
 
 function makeService() {
   const prisma = {
+    $transaction: vi.fn((cb) => cb(prisma)),
+    $executeRaw: vi.fn(),
     user: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     advertiser: {
       findUnique: vi.fn(),
@@ -17,7 +20,12 @@ function makeService() {
     apiKey: {
       create: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
+      count: vi.fn(),
+    },
+    auditLog: {
+      create: vi.fn(),
     },
   };
   const audit = {
@@ -42,6 +50,7 @@ describe('ApiKeyService account-status policy', () => {
 
   it('mints API keys for active users', async () => {
     ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
+    ctx.prisma.user.findFirst.mockResolvedValue({ status: 'active' });
     ctx.prisma.apiKey.create.mockResolvedValue({
       id: 'key-1',
       keyPrefix: 'wl_abcdef0',
@@ -64,6 +73,7 @@ describe('ApiKeyService account-status policy', () => {
 
   it('rejects API-key minting for restricted users', async () => {
     ctx.prisma.user.findUnique.mockResolvedValue({ status: 'restricted' });
+    ctx.prisma.user.findFirst.mockResolvedValue({ status: 'restricted' });
 
     await expect(ctx.service.generateApiKey('user-1', ['reports:read'])).rejects.toThrow(
       ForbiddenException,
@@ -73,6 +83,7 @@ describe('ApiKeyService account-status policy', () => {
 
   it('rejects minting keys with money-movement / destructive scopes', async () => {
     ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
+    ctx.prisma.user.findFirst.mockResolvedValue({ status: 'active' });
 
     for (const scope of ['payout:write', 'payout:read', 'developer:write']) {
       await expect(ctx.service.generateApiKey('user-1', [scope])).rejects.toThrow(
@@ -84,6 +95,7 @@ describe('ApiKeyService account-status policy', () => {
 
   it('rejects minting unsupported extension/report-write scopes', async () => {
     ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
+    ctx.prisma.user.findFirst.mockResolvedValue({ status: 'active' });
 
     for (const scope of ['extension:read', 'extension:write', 'reports:write']) {
       await expect(ctx.service.generateApiKey('user-1', [scope])).rejects.toThrow(
@@ -95,6 +107,7 @@ describe('ApiKeyService account-status policy', () => {
 
   it('still mints ordinary ledger/report read keys', async () => {
     ctx.prisma.user.findUnique.mockResolvedValue({ status: 'active' });
+    ctx.prisma.user.findFirst.mockResolvedValue({ status: 'active' });
     ctx.prisma.apiKey.create.mockResolvedValue({
       id: 'key-2',
       keyPrefix: 'wl_abcdef0',
@@ -177,7 +190,9 @@ describe('ApiKeyService account-status policy', () => {
     });
     ctx.prisma.apiKey.update.mockResolvedValue({});
 
-    await expect(ctx.service.validateApiKey('wl_test')).resolves.toMatchObject({ id: 'key-1' });
+    await expect(ctx.service.validateApiKey('wl_' + 'a'.repeat(64))).resolves.toMatchObject({
+      id: 'key-1',
+    });
     expect(ctx.prisma.apiKey.update).toHaveBeenCalledWith({
       where: { id: 'key-1' },
       data: { lastUsedAt: expect.any(Date) },

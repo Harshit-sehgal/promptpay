@@ -45,10 +45,16 @@ function formatDateShort(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function periodPreset(days: number): { from: string; to: string } {
-  const to = new Date();
-  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+export function periodPreset(
+  days: number,
+  reference: Date = new Date(),
+): { from: string; to: string } {
+  const to = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
+  const from = new Date(to);
+  from.setDate(to.getDate() - (days - 1));
+  const ymd = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { from: ymd(from), to: ymd(to) };
 }
 
 const PRESETS = [
@@ -64,7 +70,15 @@ const PRESETS = [
 
 // ── Mini bar chart ──
 
-function MiniBar({ values, maxValue, color }: { values: number[]; maxValue: number; color: string }) {
+function MiniBar({
+  values,
+  maxValue,
+  color,
+}: {
+  values: number[];
+  maxValue: number;
+  color: string;
+}) {
   const max = Math.max(maxValue, 1);
   return (
     <div className="flex items-end gap-[2px] h-8">
@@ -132,7 +146,8 @@ export default function AdvertiserReportsPage() {
     };
     if (campaignFilter) params.campaignId = campaignFilter;
 
-    advertiserApi.getReports(params)
+    advertiserApi
+      .getReports(params)
       .then((res: { data: ReportsData }) => setData(res.data))
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load reports')))
       .finally(() => setLoading(false));
@@ -233,7 +248,9 @@ export default function AdvertiserReportsPage() {
         >
           <option value="">All campaigns</option>
           {data?.rows.map((r) => (
-            <option key={r.campaignId} value={r.campaignId}>{r.campaignName}</option>
+            <option key={r.campaignId} value={r.campaignId}>
+              {r.campaignName}
+            </option>
           ))}
         </select>
         <button
@@ -251,7 +268,9 @@ export default function AdvertiserReportsPage() {
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
           <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-300 text-xs underline mt-1">Dismiss</button>
+          <button onClick={() => setError(null)} className="text-red-300 text-xs underline mt-1">
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -259,27 +278,17 @@ export default function AdvertiserReportsPage() {
         <>
           {/* Summary stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-            <StatCard
-              label="Impressions"
-              value={formatNumber(displayStats!.impressions)}
-            />
-            <StatCard
-              label="Clicks"
-              value={formatNumber(displayStats!.clicks)}
-            />
-            <StatCard
-              label="Avg CTR"
-              value={formatPercent(displayStats!.ctr * 100)}
-            />
+            <StatCard label="Impressions" value={formatNumber(displayStats!.impressions)} />
+            <StatCard label="Clicks" value={formatNumber(displayStats!.clicks)} />
+            <StatCard label="Avg CTR" value={formatPercent(displayStats!.ctr * 100)} />
             <StatCard
               label="Total spend"
-              value={formatCurrencyBreakdown(displayStats!.spendByCurrency ?? { USD: displayStats!.spend })}
+              value={formatCurrencyBreakdown(
+                displayStats!.spendByCurrency ?? { USD: displayStats!.spend },
+              )}
               valueColor="text-brand-500"
             />
-            <StatCard
-              label="Campaigns"
-              value={formatNumber(displayStats!.campaigns)}
-            />
+            <StatCard label="Campaigns" value={formatNumber(displayStats!.campaigns)} />
           </div>
 
           {/* Daily trend chart */}
@@ -287,7 +296,8 @@ export default function AdvertiserReportsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
               <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
                 <h3 className="text-white text-sm font-semibold mb-3">
-                  Daily impressions <span className="text-ink-400 font-normal">({data.dailyTrend.length} days)</span>
+                  Daily impressions{' '}
+                  <span className="text-ink-400 font-normal">({data.dailyTrend.length} days)</span>
                 </h3>
                 <div className="flex items-end gap-1 h-20 mb-2">
                   <MiniBar
@@ -303,7 +313,8 @@ export default function AdvertiserReportsPage() {
               </div>
               <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
                 <h3 className="text-white text-sm font-semibold mb-3">
-                  Daily clicks <span className="text-ink-400 font-normal">({data.dailyTrend.length} days)</span>
+                  Daily clicks{' '}
+                  <span className="text-ink-400 font-normal">({data.dailyTrend.length} days)</span>
                 </h3>
                 <div className="flex items-end gap-1 h-20 mb-2">
                   <MiniBar
@@ -358,30 +369,49 @@ export default function AdvertiserReportsPage() {
                     >
                       {/* Campaign name (full width on mobile) */}
                       <div className="md:col-span-3">
-                        <p className="text-white text-sm font-medium truncate">{row.campaignName}</p>
+                        <p className="text-white text-sm font-medium truncate">
+                          {row.campaignName}
+                        </p>
                       </div>
 
                       {/* Metrics */}
                       <div className="grid grid-cols-2 md:col-span-7 md:grid-cols-4 gap-2">
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">Impressions</span>
-                          <span className="text-white font-mono text-sm">{formatNumber(row.impressions)}</span>
+                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                            Impressions
+                          </span>
+                          <span className="text-white font-mono text-sm">
+                            {formatNumber(row.impressions)}
+                          </span>
                           <div className="h-1 bg-ink-700 rounded-full mt-1 overflow-hidden md:hidden">
-                            <div className="h-full bg-brand-500 rounded-full" style={{ width: `${impShare}%` }} />
+                            <div
+                              className="h-full bg-brand-500 rounded-full"
+                              style={{ width: `${impShare}%` }}
+                            />
                           </div>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">Clicks</span>
-                          <span className="text-ink-300 font-mono text-sm">{formatNumber(row.clicks)}</span>
+                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                            Clicks
+                          </span>
+                          <span className="text-ink-300 font-mono text-sm">
+                            {formatNumber(row.clicks)}
+                          </span>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">CTR</span>
-                          <span className={`font-mono text-sm ${row.ctr > 1 ? 'text-emerald-400' : 'text-ink-300'}`}>
+                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                            CTR
+                          </span>
+                          <span
+                            className={`font-mono text-sm ${row.ctr > 1 ? 'text-emerald-400' : 'text-ink-300'}`}
+                          >
                             {formatPercent(row.ctr * 100)}
                           </span>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">Spend</span>
+                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                            Spend
+                          </span>
                           <span className="text-white font-mono text-sm">
                             {formatCurrency(row.spendMinor, row.currency)}
                           </span>
@@ -390,12 +420,17 @@ export default function AdvertiserReportsPage() {
 
                       {/* Status */}
                       <div className="md:col-span-2 flex items-center justify-end">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider ${
-                          row.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' :
-                          row.status === 'paused' ? 'bg-amber-500/20 text-amber-400' :
-                          row.status === 'archived' ? 'bg-ink-600 text-ink-400' :
-                          'bg-ink-600 text-ink-300'
-                        }`}>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider ${
+                            row.status === 'active'
+                              ? 'bg-emerald-500/20 text-emerald-400'
+                              : row.status === 'paused'
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : row.status === 'archived'
+                                  ? 'bg-ink-600 text-ink-400'
+                                  : 'bg-ink-600 text-ink-300'
+                          }`}
+                        >
                           {row.status}
                         </span>
                       </div>
@@ -419,11 +454,19 @@ export default function AdvertiserReportsPage() {
                     <p className="text-white text-sm font-semibold">Total</p>
                   </div>
                   <div className="grid grid-cols-2 md:col-span-7 md:grid-cols-4 gap-2">
-                    <span className="text-white font-mono text-sm font-semibold">{formatNumber(data.summary.totalImpressions)}</span>
-                    <span className="text-ink-300 font-mono text-sm">{formatNumber(data.summary.totalClicks)}</span>
-                    <span className="text-ink-300 font-mono text-sm">{formatPercent(data.summary.avgCtr * 100)}</span>
                     <span className="text-white font-mono text-sm font-semibold">
-                      {formatCurrencyBreakdown(data.summary.totalSpendByCurrency ?? { USD: data.summary.totalSpendMinor })}
+                      {formatNumber(data.summary.totalImpressions)}
+                    </span>
+                    <span className="text-ink-300 font-mono text-sm">
+                      {formatNumber(data.summary.totalClicks)}
+                    </span>
+                    <span className="text-ink-300 font-mono text-sm">
+                      {formatPercent(data.summary.avgCtr * 100)}
+                    </span>
+                    <span className="text-white font-mono text-sm font-semibold">
+                      {formatCurrencyBreakdown(
+                        data.summary.totalSpendByCurrency ?? { USD: data.summary.totalSpendMinor },
+                      )}
                     </span>
                   </div>
                   <div className="md:col-span-2" />

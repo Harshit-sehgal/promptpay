@@ -45,7 +45,20 @@ const DEPOSIT_CURRENCIES = Object.keys(CURRENCY_POLICY).map((code) => ({
   label: code,
 }));
 
-const FIXED_AMOUNTS = [{ minor: 5000 }, { minor: 10000 }, { minor: 25000 }, { minor: 50000 }];
+// Per-currency deposit presets (minor units). Keeps choices sensible and
+// never below the per-currency floor (A-031). USD is the baseline; JPY offers
+// small-yen presets; any other currency scales from its policy minimum.
+const DEPOSIT_PRESETS_MINOR: Record<string, bigint[]> = {
+  USD: [100n, 5000n, 10000n, 25000n, 50000n],
+  JPY: [100n, 250n, 500n],
+};
+
+export function depositPresetMinorUnits(currency: string): bigint[] {
+  const presets = DEPOSIT_PRESETS_MINOR[currency.toUpperCase()];
+  if (presets) return presets;
+  const min = depositMinimumMinor(currency);
+  return [min, min * 50n, min * 100n, min * 250n, min * 500n];
+}
 
 // Per-currency floor comes from the shared policy; USD is the baseline.
 const MIN_DEPOSIT_MINOR = depositMinimumMinor('USD');
@@ -56,7 +69,7 @@ export default function AdvertiserBillingPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Deposit flow state
-  const [selectedMinor, setSelectedMinor] = useState<number | null>(null);
+  const [selectedMinor, setSelectedMinor] = useState<bigint | null>(null);
   const [customAmount, setCustomAmount] = useState('');
   const [showCustom, setShowCustom] = useState(false);
   const [depositCurrency, setDepositCurrency] =
@@ -82,7 +95,7 @@ export default function AdvertiserBillingPage() {
       if (isNaN(parsed) || parsed < 1) return null;
       return BigInt(parsed) * 100n; // Convert dollars to minor units
     }
-    return selectedMinor !== null ? BigInt(selectedMinor) : null;
+    return selectedMinor;
   };
 
   const handleDeposit = async () => {
@@ -200,22 +213,22 @@ export default function AdvertiserBillingPage() {
 
             {/* Amount presets */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {FIXED_AMOUNTS.map((amt) => (
+              {depositPresetMinorUnits(depositCurrency).map((amount) => (
                 <button
-                  key={amt.minor}
+                  key={amount.toString()}
                   onClick={() => {
-                    setSelectedMinor(amt.minor);
+                    setSelectedMinor(amount);
                     setShowCustom(false);
                     setCustomAmount('');
                     setDepositError(null);
                   }}
                   className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all border ${
-                    !showCustom && selectedMinor === amt.minor
+                    !showCustom && selectedMinor === amount
                       ? 'bg-brand-500 border-brand-400 text-white shadow-lg shadow-brand-500/20'
                       : 'bg-ink-700 border-ink-600 text-ink-200 hover:border-ink-500 hover:text-white'
                   }`}
                 >
-                  {formatCurrency(amt.minor, displayDepositCurrency)}
+                  {formatCurrency(amount, displayDepositCurrency)}
                 </button>
               ))}
               <button

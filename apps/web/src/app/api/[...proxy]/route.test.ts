@@ -9,7 +9,11 @@ type ReqInit = { method?: string; body?: string; headers?: HeadersInit };
 
 function makeReq(path: string, init: ReqInit = {}): NextRequest {
   const method = init.method ?? (init.body ? 'POST' : 'GET');
-  return new NextRequest(new URL(BASE + path), { method, body: init.body, headers: init.headers });
+  return new NextRequest(new URL(BASE + path), {
+    method,
+    body: init.body,
+    headers: { origin: BASE, ...(init.headers ?? {}) },
+  });
 }
 
 function jsonResponse(body: unknown, status = 200) {

@@ -10,8 +10,11 @@ import { AuthService } from './auth.service';
 // ── Prisma mock ──
 const mockPrisma = {
   $transaction: vi.fn((cb) => cb(mockPrisma)),
+  $queryRaw: vi.fn().mockResolvedValue([]),
+  $executeRaw: vi.fn().mockResolvedValue([]),
   user: {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
   },
@@ -28,7 +31,14 @@ const mockPrisma = {
     updateMany: vi.fn(),
     deleteMany: vi.fn(),
   },
+  apiKey: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+  auditLog: { create: vi.fn().mockResolvedValue({}) },
 };
+// Email canonicalization: auth resolves user.findUnique then user.findFirst.
+// Mirror findFirst onto findUnique so every `findUnique` stub also drives `findFirst`.
+mockPrisma.user.findFirst.mockImplementation(
+  () => mockPrisma.user.findUnique.getMockImplementation()?.() ?? Promise.resolve(undefined),
+);
 const prismaRef = mockPrisma as any;
 
 function makeService(overrides?: Record<string, string>) {
@@ -60,6 +70,7 @@ function makeService(overrides?: Record<string, string>) {
   } as any;
   const audit = {
     log: vi.fn().mockResolvedValue(undefined),
+    logStrict: vi.fn().mockResolvedValue(undefined),
   } as any;
 
   return {
@@ -953,16 +964,22 @@ describe('AuthService', () => {
 
   describe('two-factor setup', () => {
     it('stores the TOTP secret encrypted while returning the provisioning secret once', async () => {
-      const { service } = makeService();
+      const { service, googleVerifier } = makeService();
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'u-setup',
         email: 'setup@test.com',
         role: 'developer',
         twoFactorEnabled: false,
         twoFactorSecret: null,
+        googleId: 'g-setup',
+      });
+      googleVerifier.verify.mockResolvedValue({
+        email_verified: true,
+        sub: 'g-setup',
+        email: 'setup@test.com',
       });
 
-      const result = await service.setupTwoFactor('u-setup');
+      const result = await service.setupTwoFactor('u-setup', { googleIdToken: 'tok' });
       const storedSecret = mockPrisma.user.update.mock.calls[0][0].data.twoFactorSecret;
 
       expect(result.secret).toEqual(expect.any(String));

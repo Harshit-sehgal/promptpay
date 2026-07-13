@@ -3,10 +3,10 @@ import { ConfigService } from '@nestjs/config';
 
 import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
 
-import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
-import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
+import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
 import { PayoutProviderHandler } from '../payout.service';
+import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 
 const WISE_MAX_MINOR_AMOUNT = 999_999_999n;
 
@@ -46,8 +46,7 @@ export class WisePayoutProvider implements PayoutProviderHandler {
     this.profileId = this.config.get<string>('WISE_PROFILE_ID', '');
     const mode = this.config.get<string>('WISE_MODE', 'sandbox');
     // Wise Sandbox V2 and production hosts.
-    this.baseUrl =
-      mode === 'live' ? 'https://api.wise.com' : 'https://api.wise-sandbox.com';
+    this.baseUrl = mode === 'live' ? 'https://api.wise.com' : 'https://api.wise-sandbox.com';
     this.enabled = !!(this.token && this.profileId);
     this.nodeEnv = this.config.get<string>('NODE_ENV', process.env.NODE_ENV || 'development');
     this.emailRecipientsVerified =

@@ -8,7 +8,7 @@ const BASE = 'https://app.example';
 function makeReq(init: { cookie?: string } = {}): NextRequest {
   return new NextRequest(new URL(BASE + '/api/auth/logout'), {
     method: 'POST',
-    headers: init.cookie ? { cookie: init.cookie } : undefined,
+    headers: { origin: BASE, ...(init.cookie ? { cookie: init.cookie } : {}) },
   });
 }
 
@@ -37,9 +37,13 @@ describe('logout route (A-049)', () => {
     const res = await POST(makeReq({ cookie: 'access_token=valid' }));
 
     expect(res.status).toBe(200);
-    const cleared = res.cookies.getAll();
+    const cleared = res.cookies
+      .getAll()
+      .filter((c) => c.name.includes('access_token') || c.name.includes('refresh_token'));
     expect(cleared.length).toBeGreaterThan(0);
-    // Every cleared cookie is forced to an empty value with maxAge 0.
+    // Every cleared auth cookie is forced to an empty value with maxAge 0.
+    // (The BFF also sets a non-auth __Host-wl_client_id identity cookie for
+    // rate limiting — that one must survive logout.)
     for (const c of cleared) {
       expect(c.value).toBe('');
       expect(c.maxAge).toBe(0);

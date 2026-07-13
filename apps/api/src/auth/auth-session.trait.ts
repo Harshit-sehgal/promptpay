@@ -6,9 +6,9 @@ import { JwtService } from '@nestjs/jwt';
 
 import { Prisma } from '@waitlayer/db';
 
+import { AuditService } from '../audit/audit.service';
 import { SIGNUP_CONSENT_PURPOSES } from '../compliance/consent-versions';
 import { PrismaService } from '../config/prisma.service';
-import { AuditService } from '../audit/audit.service';
 import {
   AccessTokenPayload,
   SignupConsentMethod,

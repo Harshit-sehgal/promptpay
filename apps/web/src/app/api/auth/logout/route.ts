@@ -6,8 +6,8 @@ import {
   clearAuthCookies,
   COOKIE_REFRESH,
   isSecure,
-  readAuthCookie,
   rateLimitIdentity,
+  readAuthCookie,
 } from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
 

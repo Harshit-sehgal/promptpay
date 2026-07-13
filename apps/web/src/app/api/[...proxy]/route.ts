@@ -6,8 +6,8 @@ import {
   COOKIE_ACCESS,
   COOKIE_REFRESH,
   isSecure,
-  readAuthCookie,
   rateLimitIdentity,
+  readAuthCookie,
 } from '../auth/_lib/cookies';
 import {
   MAX_API_ROUTE_BODY_BYTES,
@@ -255,10 +255,14 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
     // with their original content-type so the browser can download them
     // directly instead of wrapping plain text in a JSON envelope.
     const textBody = await upstreamRes.text();
-    return applyRateLimitIdentity(new NextResponse(textBody, {
-      status: responseStatus,
-      headers: { 'Content-Type': contentType || 'text/plain' },
-    }), identity, req.headers);
+    return applyRateLimitIdentity(
+      new NextResponse(textBody, {
+        status: responseStatus,
+        headers: { 'Content-Type': contentType || 'text/plain' },
+      }),
+      identity,
+      req.headers,
+    );
   } catch (proxyErr) {
     console.error(
       '[WaitLayer] Proxy error:',

@@ -20,6 +20,7 @@ import { getErrorCode, getErrorMessage } from '../common/utils/errors';
 import { assertSafeJson } from '../common/utils/json-value';
 import { PrismaService } from '../config/prisma.service';
 import { ReferralService } from '../referral/referral.service';
+import { PayoutService } from './payout.service';
 import { StripeProvider } from './providers';
 
 type RawBodyRequest = Request & { rawBody?: Buffer | string };
@@ -48,6 +49,7 @@ export class StripeWebhookController implements OnModuleInit {
     private readonly audit: AuditService,
     private readonly eventBus: EventBus,
     private readonly referral: ReferralService,
+    private readonly payout: PayoutService,
   ) {}
 
   onModuleInit() {
@@ -505,6 +507,14 @@ export class StripeWebhookController implements OnModuleInit {
     // Activate every eligible campaign in one database-side statement. The
     // previous findMany + per-campaign balance query was unbounded N+1 work on
     // the webhook request and could time out for a large advertiser.
+    // Mirrors the centralized `getAdvertiserBalance`/`getAdvertiserBalancesByCurrency`
+    // spendable formula — including the Round 29 fix: a `pending` archive refund
+    // is the platform's *obligation* to issue a refund (cash has NOT left yet), so
+    // it must NOT reserve the advertiser's balance. Only a `confirmed` refund
+    // (admin has issued the Stripe refund) reduces spendable. Subtracting pending
+    // refunds here would block reactivation of a refunded-balance campaign that
+    // the admin has not yet confirmed the Stripe refund for, and would otherwise
+    // leave a funded-then-archived-then-unarchivable advertiser stuck.
     const activatedCount = await this.prisma.$executeRaw(Prisma.sql`
       WITH balances AS (
         SELECT
@@ -516,7 +526,7 @@ export class StripeWebhookController implements OnModuleInit {
                 THEN "amountMinor"
               WHEN "entryType" = 'debit' AND "status" = 'confirmed'
                 THEN -"amountMinor"
-              WHEN "entryType" = 'refund' AND "status" IN ('pending', 'confirmed')
+              WHEN "entryType" = 'refund' AND "status" = 'confirmed'
                 THEN -"amountMinor"
               ELSE 0
             END
@@ -671,6 +681,26 @@ export class StripeWebhookController implements OnModuleInit {
       this.logger.warn(
         `No active ledger entries found for paymentIntent ${details.paymentIntentId} in refund ${event.id} — cash refund recorded, advertiser side skipped`,
       );
+      // Round 27 Fix 10: audit-log the platform-cash debit even on the
+      // orphan-advertiser-side path. Stripe moved money OUT against this PI;
+      // the platform refund row was written, but the audit trail was blank —
+      // investigators relying on `audit_logs` would see no record of this
+      // specific refund event. Mirror the normal-path audit shape so an
+      // operator can search `payment_intent` + `refundId` and find this
+      // delivery regardless of whether the advertiser side was reversed.
+      await this.audit.logStrict({
+        actorId: 'stripe_webhook',
+        actorRole: 'system',
+        action: 'stripe_refund_orphan_advertiser',
+        targetType: 'payment_intent',
+        targetId: details.paymentIntentId ?? '',
+        beforeSnap: {
+          amountMinor: String(totalRefunded),
+          currency: details.currency,
+          refundId: refund.id,
+          orphanReason: 'no_active_ledger_entries',
+        },
+      });
       await this.prisma.webhookEvent.updateMany({
         where: { provider: 'stripe', eventId: event.id },
         data: { processingStatus: 'processed', processedAt: new Date() },
@@ -1390,11 +1420,25 @@ export class StripeWebhookController implements OnModuleInit {
   /**
    * Stripe `payout.failed` — a Stripe Connect payout failed. Forward-
    * compatible hook (see handlePayoutPaid). When a matching PayoutTransaction
-   * is found, flip the parent `PayoutRequest` to `failed` (gated on
-   * `approved`/`processing`) and record the failure reason on the
-   * `PayoutTransaction`. The held developer earnings allocations remain
-   * 'confirmed' on the earnings ledger — the payout can be retried by an
-   * admin via `processPayout` after correcting the destination account.
+   * is found, delegate to `PayoutService.markPayoutFailed`, which is the same
+   * canonical transition the admin `POST /admin/payouts/:id/fail` and the
+   * provider-initiate failure path use: CAS-flip PayoutRequest from
+   * `approved`/`processing` → `failed`, stamp the failure reason on the
+   * PayoutTransaction, and delete the payout allocations so the reserved
+   * confirmed earnings become available for a fresh payout request. Earnings
+   * rows stay `confirmed` (they were never paid, just reserved). This is the
+   * same write shape as `markPayoutPaid`, mirrored for the failure direction
+   * so the two terminal transitions are symmetric.
+   *
+   * Round 29: the previous handler logged a `requires_review` audit but did
+   * NOT flip the request, did NOT release the allocations, and did NOT stamp
+   * `PayoutTransaction.status = 'failed'`. That left the PayoutRequest stuck
+   * in `processing` and the allocations reserving earnings — the developer
+   * could not retry the payout because (a) `requestPayout` saw the
+   * still-`processing` PayoutRequest on the developer side and (b) the
+   * reserved earnings were blocked by the still-attached allocations. The
+   * `markPayoutFailed` delegation is the canonical, single-source-of-truth
+   * transition that closes both windows.
    */
   private async handlePayoutFailed(event: Stripe.Event): Promise<void> {
     const payout = event.data.object as Stripe.Payout;
@@ -1402,7 +1446,7 @@ export class StripeWebhookController implements OnModuleInit {
 
     const tx = await this.prisma.payoutTransaction.findFirst({
       where: { provider: 'stripe_connect', providerTxId },
-      include: { payoutRequest: { include: { allocations: true } } },
+      select: { id: true, payoutRequestId: true, provider: true },
     });
 
     if (!tx) {
@@ -1420,22 +1464,46 @@ export class StripeWebhookController implements OnModuleInit {
       `Stripe bank payout ${payout.id} reached ${payout.status}; ` +
       'the preceding platform transfer may already be in the connected account and requires manual reconciliation';
 
-    // Do not release allocations or mark the request failed. Stripe Connect
-    // first transfers funds to the connected account; a later bank-payout
-    // failure returns money to that connected account, not necessarily to the
-    // platform. Releasing here can double-pay the developer.
-    await this.prisma.payoutTransaction.update({
-      where: { id: tx.id },
-      data: { failureReason },
-    });
-    this.logger.warn(
-      `Stripe payout requires reconciliation: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId}`,
+    try {
+      await this.payout.markPayoutFailed(tx.payoutRequestId, {
+        provider: tx.provider,
+        providerTxId,
+        failureReason,
+      });
+    } catch (err: unknown) {
+      // markPayoutFailed throws BadRequestException when the PayoutRequest is
+      // in a state that cannot transition to failed (e.g. already paid, or a
+      // terminal state we don't expect a Stripe failure to land in). The
+      // webhook layer must NOT propagate that as a 5xx — the event was a
+      // legitimate Stripe delivery, we just can't act on it. Log + audit +
+      // mark processed so the row doesn't sit in 'processing' forever.
+      const errMsg = getErrorMessage(err);
+      this.logger.warn(
+        `Stripe payout.failed for ${providerTxId} did not transition PayoutRequest ${tx.payoutRequestId} to failed: ${errMsg}`,
+      );
+      await this.audit.logStrict({
+        actorId: 'stripe_webhook',
+        actorRole: 'system',
+        action: 'stripe_payout_failed_no_transition',
+        targetType: 'payout_request',
+        targetId: tx.payoutRequestId,
+        beforeSnap: { providerTxId, failureReason, error: errMsg },
+      });
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
+      return;
+    }
+
+    this.logger.log(
+      `Stripe payout.failed: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId} — PayoutRequest failed, allocations released`,
     );
 
     await this.audit.logStrict({
       actorId: 'stripe_webhook',
       actorRole: 'system',
-      action: 'stripe_payout_requires_review',
+      action: 'stripe_payout_failed',
       targetType: 'payout_request',
       targetId: tx.payoutRequestId,
       beforeSnap: { providerTxId, failureReason },

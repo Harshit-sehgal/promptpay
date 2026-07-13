@@ -22,8 +22,7 @@ import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 // Cost-matched dummy hash for unknown/social-only/inactive accounts. Performing
 // exactly one bcrypt comparison on every password-login path prevents account
 // existence and account-type timing oracles.
-const DUMMY_PASSWORD_HASH =
-  '$2b$12$yM0nJf2yL6WOrYktKZzAruQ79UYryiVNYm7ldEcj53Z/l2mVxLzyS';
+const DUMMY_PASSWORD_HASH = '$2b$12$yM0nJf2yL6WOrYktKZzAruQ79UYryiVNYm7ldEcj53Z/l2mVxLzyS';
 
 export class AuthCoreTrait {
   declare prisma: PrismaService;
@@ -329,7 +328,7 @@ export class AuthCoreTrait {
     // the winning request has inserted its child session.
     const familyLock = payload.family ?? jti;
     const outcome = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${familyLock}, 0))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${familyLock}, 0))`;
       const revokeResult = await tx.session.updateMany({
         where: { id: jti, userId: payload.sub, revoked: false },
         data: { revoked: true },
@@ -477,5 +476,7 @@ function uniqueViolationIncludes(
   error: Prisma.PrismaClientKnownRequestError,
   field: string,
 ): boolean {
-  return JSON.stringify(error.meta?.target ?? '').toLowerCase().includes(field.toLowerCase());
+  return JSON.stringify(error.meta?.target ?? '')
+    .toLowerCase()
+    .includes(field.toLowerCase());
 }

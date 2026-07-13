@@ -44,23 +44,33 @@ interface LedgerRow {
 
 function groupAdvertiserLedger(
   store: LedgerRow[],
-  where: { advertiserId: string; currency: string; status: string; entryType: { in: string[] } },
+  where: {
+    advertiserId: string;
+    currency: string;
+    status: string | { in: string[] };
+    entryType: { in: string[] };
+  },
 ) {
+  const statuses = typeof where.status === 'string' ? [where.status] : where.status.in;
   const rows = store.filter(
     (r) =>
       r.advertiserId === where.advertiserId &&
       r.currency === where.currency &&
-      r.status === where.status &&
+      statuses.includes(r.status) &&
       where.entryType.in.includes(r.entryType),
   );
-  const byType: Record<string, number> = {};
+  // Mirror Prisma's `groupBy({ by: ['entryType', 'status'] })` — each returned
+  // bucket must carry BOTH fields so the balance formula's
+  // `row.status !== 'confirmed'` skip works.
+  const byKey: Record<string, bigint> = {};
   for (const r of rows) {
-    byType[r.entryType] = (byType[r.entryType] ?? 0n) + r.amountMinor;
+    const key = `${r.entryType}|${r.status}`;
+    byKey[key] = (byKey[key] ?? 0n) + r.amountMinor;
   }
-  return (['credit', 'debit', 'refund'] as const).map((entryType) => ({
-    entryType,
-    _sum: { amountMinor: byType[entryType] ?? 0n },
-  }));
+  return Object.entries(byKey).map(([key, amountMinor]) => {
+    const [entryType, status] = key.split('|');
+    return { entryType, status, _sum: { amountMinor } };
+  });
 }
 
 function makePrisma() {
@@ -111,6 +121,9 @@ function makePrisma() {
       earningsLedger: prisma.earningsLedger,
       platformLedger: prisma.platformLedger,
       adImpression: { updateMany: prisma.adImpression.updateMany },
+      // Max-creatives guard: production code calls tx.adCreative.count(...) for
+      // the per-campaign creative limit check.
+      adCreative: { count: vi.fn().mockResolvedValue(0) },
       // Tagged-template form used by the advisory lock (pg_advisory_xact_lock).
       $executeRaw: vi.fn(async () => 1),
       $executeRawUnsafe: vi.fn(async () => 1),
@@ -274,7 +287,6 @@ describe('concurrent billable impressions cannot overdraw advertiser balance (A-
       idempotencyKey: `idem-${token}`,
       signature: 'sig',
     });
-
     const res1 = await service.recordQualifiedImpression('user-1', dto('tok-1'));
     const res2 = await service.recordQualifiedImpression('user-1', dto('tok-2'));
 

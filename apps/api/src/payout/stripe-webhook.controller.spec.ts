@@ -54,12 +54,19 @@ function makeController(options: { depositDuplicate?: boolean } = {}) {
     logStrict: vi.fn().mockResolvedValue(undefined),
   };
   const referral = { processReferralRewards: vi.fn().mockResolvedValue(undefined) };
+  // Round 29: StripeWebhookController now depends on PayoutService for
+  // handlePayoutFailed's markPayoutFailed delegation. Tests that don't
+  // exercise the payout-failed path pass a stub here; the integration
+  // test (`src/integration/stripe-webhook.spec.ts`) wires the real
+  // PayoutService through the Nest container.
+  const payout = { markPayoutFailed: vi.fn().mockResolvedValue(undefined) };
   const controller = new StripeWebhookController(
     stripe as never,
     prisma as never,
     audit as never,
     { on: vi.fn() } as never,
     referral as never,
+    payout as never,
   );
   return { controller: controller as any, prisma, stripe, audit };
 }
@@ -89,6 +96,7 @@ describe('StripeWebhookController money reconciliation', () => {
       { log: vi.fn() } as never,
       { on: vi.fn() } as never,
       { processReferralRewards: vi.fn().mockResolvedValue(undefined) } as never,
+      { markPayoutFailed: vi.fn().mockResolvedValue(undefined) } as never,
     ) as any;
     controller.processEvent = vi.fn().mockRejectedValue(new Error('ledger unavailable'));
 

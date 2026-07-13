@@ -24,12 +24,12 @@ describe('applyPayoutProviderOverrides (A-030)', () => {
   it('overrides a known provider status', () => {
     const resolved = applyPayoutProviderOverrides(
       PAYOUT_PROVIDERS,
-      JSON.stringify({ wise: 'coming_soon' }),
+      JSON.stringify({ stripe_connect: 'coming_soon' }),
     );
-    const wise = resolved.find((p) => p.provider === 'wise');
-    expect(wise?.status).toBe('coming_soon');
+    const stripeConnect = resolved.find((p) => p.provider === 'stripe_connect');
+    expect(stripeConnect?.status).toBe('coming_soon');
     // Other providers are untouched.
-    expect(resolved.find((p) => p.provider === 'stripe_connect')?.status).toBe('available');
+    expect(resolved.find((p) => p.provider === 'paypal_email')?.status).toBe('available');
   });
 
   it('ignores unknown provider keys', () => {
@@ -43,22 +43,25 @@ describe('applyPayoutProviderOverrides (A-030)', () => {
   it('ignores invalid status values', () => {
     const resolved = applyPayoutProviderOverrides(
       PAYOUT_PROVIDERS,
-      JSON.stringify({ wise: 'disabled' }),
+      JSON.stringify({ paypal_email: 'disabled' }),
     );
-    expect(resolved.find((p) => p.provider === 'wise')?.status).toBe('available');
+    expect(resolved.find((p) => p.provider === 'paypal_email')?.status).toBe('available');
   });
 
   it('does not mutate the base array', () => {
     const base = PAYOUT_PROVIDERS.map((p) => ({ ...p }));
-    applyPayoutProviderOverrides(base, JSON.stringify({ wise: 'coming_soon' }));
-    expect(base.find((p) => p.provider === 'wise')?.status).toBe('available');
+    applyPayoutProviderOverrides(base, JSON.stringify({ paypal_email: 'coming_soon' }));
+    expect(base.find((p) => p.provider === 'paypal_email')?.status).toBe('available');
   });
 });
 
 describe('resolved provider lists honour operator overrides at module load', () => {
-  it('default (no env) exposes all five providers as available', () => {
+  it('default (no env) gates wise and exposes the other four as available', () => {
     // The test process does not set NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS.
-    expect(AVAILABLE_PAYOUT_PROVIDERS).toHaveLength(5);
-    expect(COMING_SOON_PAYOUT_PROVIDERS).toHaveLength(0);
+    // Wise is coming_soon by default (operator must verify the corridor); the
+    // other four providers are available.
+    expect(AVAILABLE_PAYOUT_PROVIDERS).toHaveLength(4);
+    expect(COMING_SOON_PAYOUT_PROVIDERS).toHaveLength(1);
+    expect(COMING_SOON_PAYOUT_PROVIDERS[0]?.provider).toBe('wise');
   });
 });

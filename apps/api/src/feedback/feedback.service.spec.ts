@@ -6,8 +6,8 @@ import { CreateFeedbackDto } from './dto/feedback.dto';
 import { FeedbackService } from './feedback.service';
 
 function makeService() {
-  const auditLog = vi.fn();
-  const audit = { log: auditLog } as unknown as AuditService;
+  const auditLog = vi.fn().mockResolvedValue(undefined);
+  const audit = { log: auditLog, logStrict: auditLog } as unknown as AuditService;
   const service = new FeedbackService(audit);
   return { service, auditLog };
 }

@@ -1,5 +1,5 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 import { IsBcryptPasswordLength } from '../../common/validators/password.validator';

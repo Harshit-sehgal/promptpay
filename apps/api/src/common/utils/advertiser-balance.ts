@@ -8,13 +8,17 @@ type BalanceClient = Pick<PrismaService, 'advertiserLedger'>;
  * (issues A-054 / A-039 / A-055).
  *
  *   spendable = confirmed credits + confirmed reversals − confirmed debits
- *               − pending/confirmed refunds
+ *               − confirmed refunds
  *
  * Notes:
  *  - `refund` rows are archive-refund obligations (entryType = 'refund'). They
  *    are created with `status: 'pending'` (cash has not yet left the platform)
  *    and only reduce the spendable balance once an admin confirms the Stripe
- *    refund (`status: 'confirmed'`). See A-054.
+ *    refund (`status: 'confirmed'`). A `pending` refund must NOT reserve the
+ *    advertiser's balance — see admin-campaigns.trait.ts `confirmArchiveRefund`
+ *    and the archive-refund comment in advertiser-campaign.trait.ts. (Round 29
+ *    fixed a bug where the code subtracted any `refund` row regardless of
+ *    status; the doc-comment was already correct, the implementation was not.)
  *  - Dispute holds / reversals live on row `status` ('held' / 'reversed'),
  *    not on entryType, so the `status: 'confirmed'` filter already excludes
  *    them from spendable balance.
@@ -43,7 +47,22 @@ export async function getAdvertiserBalance(
   let reversals = 0n;
   for (const row of rows) {
     const amount = BigInt(row._sum.amountMinor ?? 0);
-    if (row.entryType === 'refund') refunds += amount;
+    // A `refund` row only reduces the spendable balance once an admin has
+    // confirmed the Stripe refund (`status: 'confirmed'`). A `pending` refund
+    // is the platform's *obligation* to issue a refund after archiving a
+    // campaign — the cash has NOT yet left the platform (see
+    // admin-campaigns.trait.ts confirmArchiveRefund), so it must not reserve
+    // the advertiser's balance. The previous code subtracted any `refund`
+    // row regardless of status, contradicting the doc-comment and the
+    // archive-refund confirm flow. (Round 29.)
+    if (row.entryType === 'refund') {
+      if (row.status === 'confirmed') refunds += amount;
+      continue;
+    }
+    // `credit`/`debit`/`reversal` rows only count when `status: 'confirmed'`.
+    // `pending` rows of these types have no business meaning here (the helpers
+    // above query `status: { in: ['pending','confirmed'] }` only so `refund`
+    // pending rows can be EXCLUDED — see the comment block at the top).
     else if (row.status !== 'confirmed') continue;
     else if (row.entryType === 'credit') credits += amount;
     else if (row.entryType === 'debit') debits += amount;
@@ -76,8 +95,13 @@ export async function getAdvertiserBalancesByCurrency(
     const key = `${row.advertiserId}:${row.currency}`;
     const current = map.get(key) ?? 0n;
     const amount = BigInt(row._sum.amountMinor ?? 0);
-    if (row.entryType === 'refund') map.set(key, current - amount);
-    else if (row.status !== 'confirmed') continue;
+    // Pending archive refunds must NOT reserve the advertiser's balance —
+    // see getAdvertiserBalance above. Only subtract a `refund` once an admin
+    // has confirmed the Stripe refund issuance. (Round 29.)
+    if (row.entryType === 'refund') {
+      if (row.status === 'confirmed') map.set(key, current - amount);
+      continue;
+    } else if (row.status !== 'confirmed') continue;
     else if (row.entryType === 'credit' || row.entryType === 'reversal') {
       map.set(key, current + amount);
     } else if (row.entryType === 'debit') {
