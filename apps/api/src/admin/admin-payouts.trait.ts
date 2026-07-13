@@ -99,7 +99,30 @@ export class AdminPayoutsTrait {
           : 'Payout not found',
       );
     }
-    return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+    const updated = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+
+    // Audit: admin payout approval — financial admin operation involving real
+    // money movement. Forensic trail must identify the approving admin and
+    // the authorised amount.
+    void this.audit
+      .log({
+        actorId: reviewerId,
+        actorRole: 'admin',
+        action: 'approve_payout',
+        targetType: 'payout_request',
+        targetId: payoutId,
+        beforeSnap: {
+          approvedAmountMinor: resolvedApprovedAmount.toString(),
+          note,
+          partial: approvedAmountMinor !== undefined,
+        },
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[AdminPayoutsTrait] audit log failure (approve_payout): ${msg}`);
+      });
+
+    return updated;
   }
 
   async rejectPayout(payoutId: string, reviewerId: string, reason: string) {
@@ -136,7 +159,25 @@ export class AdminPayoutsTrait {
           : 'Payout not found',
       );
     }
-    return this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+    const updated = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+
+    // Audit: admin payout rejection — releases held earnings. Forensic trail
+    // must identify the rejecting admin and the rejection reason.
+    void this.audit
+      .log({
+        actorId: reviewerId,
+        actorRole: 'admin',
+        action: 'reject_payout',
+        targetType: 'payout_request',
+        targetId: payoutId,
+        beforeSnap: { reason },
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[AdminPayoutsTrait] audit log failure (reject_payout): ${msg}`);
+      });
+
+    return updated;
   }
 
   async processPayout(payoutId: string) {

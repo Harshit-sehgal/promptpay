@@ -8,6 +8,7 @@ import {
   LedgerStatus,
   PayoutProvider,
   PayoutStatus,
+  ToolType,
   TrustLevel,
   UserRole,
   UserStatus,
@@ -23,6 +24,7 @@ const PayoutStatusSchema = z.nativeEnum(PayoutStatus);
 const PayoutProviderSchema = z.nativeEnum(PayoutProvider);
 const LedgerStatusSchema = z.nativeEnum(LedgerStatus);
 const LedgerEntryTypeSchema = z.nativeEnum(LedgerEntryType);
+const ToolTypeSchema = z.nativeEnum(ToolType);
 
 // ══════════════════════════════════════════════════════════
 // Auth API Contracts
@@ -51,6 +53,13 @@ export const SignupUserSchema = z.object({
   // the DB so a missing field is indistinguishable from `false` everywhere.
   googleVerified: z.boolean(),
   githubVerified: z.boolean(),
+  // TOTP enrollment flag mirrors the Prisma `User.twoFactorEnabled` column
+  // (`@default(false)`, non-nullable). `sanitizeUser` keeps this field on
+  // the signup/login/me response and the web client reads it (auth-context +
+  // developer settings/payouts gate payout flows on it). Omitting it from
+  // the contract made the derived `User` type silently lose the field and
+  // left clients to rederive truth with a `.?? false` fallback.
+  twoFactorEnabled: z.boolean(),
   referralCode: z.string().nullable().optional(),
   createdAt: z.string(),
 });
@@ -82,7 +91,11 @@ export const RegisterDeviceResponse = z.object({
   id: z.string().uuid(),
   userId: z.string(),
   fingerprintHash: z.string(),
-  toolType: z.string(),
+  // `Device.toolType` is a `ToolTypeEnum` in Prisma and the controller writes
+  // one of the shared `ToolType` values — constrain the contract to the enum
+  // so an unexpected provider string fails at the API boundary instead of
+  // being accepted as an arbitrary string and propagating downstream.
+  toolType: ToolTypeSchema,
   publicKey: z.string().nullable().optional(),
   extensionVersion: z.string().optional(),
   platform: z.string().optional(),
@@ -101,7 +114,7 @@ export const WaitStateStartResponse = z.object({
   sessionId: z.string(),
   eventType: z.literal('wait_state_start'),
   waitStateId: z.string(),
-  toolType: z.string(),
+  toolType: ToolTypeSchema,
   createdAt: z.string().optional(),
 });
 
@@ -193,9 +206,13 @@ export const PayoutMethodResponse = z.object({
 export const PayoutAllocationResponse = z.object({
   id: z.string(),
   earningsEntryId: z.string(),
-  payoutRequestId: z.string().optional(),
+  // Prisma `PayoutAllocation.payoutRequestId` is a NOT NULL FK and
+  // `createdAt` is `@default(now())` non-nullable. Marking them optional
+  // masked a server path that dropped one of these — now required to match
+  // the row the service actually persists.
+  payoutRequestId: z.string(),
   amountMinor: z.coerce.bigint().nonnegative(),
-  createdAt: z.string().optional(),
+  createdAt: z.string(),
 });
 
 export const PayoutRequestResponse = z.object({
@@ -214,8 +231,12 @@ export const PayoutRequestResponse = z.object({
   reviewNote: z.string().nullable().optional(),
   processedAt: z.string().nullable().optional(),
   paidAt: z.string().nullable().optional(),
-  providerTxId: z.string().nullable().optional(),
-  failureReason: z.string().nullable().optional(),
+  // NOTE: `providerTxId` and `failureReason` were previously listed here but
+  // are fabricated — they live on the `PayoutTransaction` child relation
+  // (model PayoutTransaction), not on `PayoutRequest`. The payout read paths
+  // never `include: { transactions: ... }` nor flatten those fields onto the
+  // PayoutRequest body, so the contract keys would never match live data.
+  // Removed so the contract reflects what the endpoint actually returns.
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
   allocations: z.array(PayoutAllocationResponse).optional(),
@@ -286,9 +307,14 @@ export const CreateCampaignResponse = z.object({
   budgetTotalMinor: z.coerce.bigint().nonnegative(),
   budgetSpentMinor: z.coerce.bigint().nonnegative(),
   currency: z.string(),
-  frequencyCapPerHour: z.number().int().nonnegative().optional(),
-  frequencyCapPerDay: z.number().int().nonnegative().optional(),
-  qualityScore: z.number().nullable().optional(),
+  // Prisma `Campaign` defaults these (`@default(2)` / `@default(6)` /
+  // `@default(0)`) and the create path returns the full row, so the live
+  // body always carries concrete numbers. Marking them optional let a
+  // malformed `undefined` silently pass the contract — now required to
+  // match the DB not-null + service output.
+  frequencyCapPerHour: z.number().int().nonnegative(),
+  frequencyCapPerDay: z.number().int().nonnegative(),
+  qualityScore: z.number(),
   submittedAt: z.string().nullable().optional(),
   approvedAt: z.string().nullable().optional(),
   activatedAt: z.string().nullable().optional(),

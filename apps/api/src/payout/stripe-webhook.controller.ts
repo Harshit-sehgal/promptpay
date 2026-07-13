@@ -446,13 +446,20 @@ export class StripeWebhookController implements OnModuleInit {
         campaign.currency,
       );
       if (balance > 0) {
-        await this.prisma.campaign.update({
-          where: { id: campaign.id },
+        // CAS-gated auto-activation: same pattern as
+        // approveCreative auto-activation. A concurrent
+        // archiveCampaign or admin rejectCampaign could flip
+        // the status away from 'approved' — a plain update
+        // would silently overwrite it.
+        const flip = await this.prisma.campaign.updateMany({
+          where: { id: campaign.id, status: 'approved' },
           data: { status: 'active', activatedAt: new Date() },
         });
-        this.logger.log(
-          `Activated previously-unfunded approved campaign ${campaign.id} after deposit`,
-        );
+        if (flip.count > 0) {
+          this.logger.log(
+            `Activated previously-unfunded approved campaign ${campaign.id} after deposit`,
+          );
+        }
       }
     }
 

@@ -186,11 +186,16 @@ export class CampaignService {
       if (hasBudget) {
         const balance = await this.getAdvertiserBalance(campaign.advertiserId, campaign.currency);
         if (balance > 0) {
-          await this.prisma.campaign.update({
-            where: { id: campaign.id },
+          // CAS-gated auto-activation: a concurrent archiveCampaign or
+          // rejectCampaign could flip the status away from 'approved'
+          // between our read and this write, and a plain `update` would
+          // silently overwrite it — reactivating an archived/rejected
+          // campaign whose unspent budget was meant to be refunded.
+          const flip = await this.prisma.campaign.updateMany({
+            where: { id: campaign.id, status: 'approved' },
             data: { status: 'active', activatedAt: new Date() },
           });
-          campaignActivated = true;
+          campaignActivated = flip.count > 0;
         }
       }
     }

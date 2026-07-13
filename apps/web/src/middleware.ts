@@ -156,9 +156,19 @@ export async function middleware(request: NextRequest) {
   }
 }
 
-function redirectToLogin(pathname: string, request: NextRequest): NextResponse {
+function redirectToLogin(_pathname: string, request: NextRequest): NextResponse {
+  // NOTE: previously this appended `?returnUrl=<pathname>` to the login URL.
+  // That param was never read by /auth/login (no consumer existed) AND posed
+  // a latent open-redirect: if a future login page naively read+redirected
+  // to it, an attacker could replay a crafted `returnUrl` against a victim's
+  // still-valid cookie to bounce them off-site after a legitimate login.
+  // Post-login, the browser naturally lands on the dashboard the auth-context
+  // chooses — no server-side return target is needed. Dropped to remove both
+  // the dead param and the redirect-oracle surface. The `pathname` argument is
+  // retained in the signature (prefixed `_`) for future audit routing — e.g.
+  // logging the original protected route on a redirect — without re-introducing
+  // a client-controllable redirect target.
   const loginUrl = new URL('/auth/login', request.url);
-  loginUrl.searchParams.set('returnUrl', pathname);
   return NextResponse.redirect(loginUrl);
 }
 

@@ -2,12 +2,14 @@ import { BadRequestException } from '@nestjs/common';
 
 import { CampaignStatus, Prisma } from '@waitlayer/db';
 
+import { AuditService } from '../audit/audit.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { getErrorCode } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';
 
 export class AdminCampaignsTrait {
   declare prisma: PrismaService;
+  declare audit: AuditService;
 
   async getPendingCampaigns(
     query: {
@@ -100,6 +102,21 @@ export class AdminCampaignsTrait {
       });
       return { campaign: freshCampaign };
     });
+    // Audit: admin campaign approval — high-stakes lifecycle decision.
+    void this.audit
+      .log({
+        actorId: reviewerId,
+        actorRole: 'admin',
+        action: 'approve_campaign',
+        targetType: 'campaign',
+        targetId: campaignId,
+        beforeSnap: { oldStatus: 'submitted', newStatus, activated: canActivate },
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[AdminCampaignsTrait] audit log failure (approve_campaign): ${msg}`);
+      });
+
     return {
       campaign: result.campaign,
       activated: canActivate,
@@ -113,7 +130,7 @@ export class AdminCampaignsTrait {
     if (!campaign || campaign.status !== 'submitted') {
       throw new BadRequestException('Campaign must be in submitted status to reject');
     }
-    return this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       const flip = await tx.campaign.updateMany({
         where: { id: campaignId, status: 'submitted' },
         data: { status: 'rejected' },
@@ -128,6 +145,21 @@ export class AdminCampaignsTrait {
       });
       return flip;
     });
+
+    // Audit: admin campaign rejection — permanently closes a campaign.
+    void this.audit
+      .log({
+        actorId: reviewerId,
+        actorRole: 'admin',
+        action: 'reject_campaign',
+        targetType: 'campaign',
+        targetId: campaignId,
+        beforeSnap: { oldStatus: 'submitted', reason },
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[AdminCampaignsTrait] audit log failure (reject_campaign): ${msg}`);
+      });
   }
 
   // ── Archive Refunds ──

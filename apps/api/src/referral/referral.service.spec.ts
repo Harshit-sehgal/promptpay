@@ -23,11 +23,13 @@ function makePrisma() {
 
 describe('ReferralService.processReferralRewards payoutable earnings (A-041)', () => {
   let prisma: ReturnType<typeof makePrisma>;
+  let audit: { log: ReturnType<typeof vi.fn> };
   let service: ReferralService;
 
   beforeEach(() => {
     prisma = makePrisma();
-    const ledger = {} as any;
+    audit = { log: vi.fn().mockResolvedValue(undefined) };
+    const ledger = { audit } as any;
     const config = { get: vi.fn().mockReturnValue('http://localhost:3000') } as any;
     service = new ReferralService(prisma as any, ledger, config);
 
@@ -61,6 +63,15 @@ describe('ReferralService.processReferralRewards payoutable earnings (A-041)', (
       idempotencyKey: `ref-rew-earn-ref-1`,
     });
 
+    // Audit log fired exactly once for the rewarded referral.
+    expect(audit.log).toHaveBeenCalledTimes(1);
+    const auditArg = audit.log.mock.calls[0][0];
+    expect(auditArg).toMatchObject({
+      action: 'process_referral_rewards',
+      targetType: 'referral',
+      targetId: 'ref-1',
+    });
+
     // Second call must be a no-op (reward already exists) — no second earnings row.
     prisma.referral.findFirst.mockResolvedValueOnce({
       id: 'ref-1',
@@ -73,5 +84,7 @@ describe('ReferralService.processReferralRewards payoutable earnings (A-041)', (
     const second = await service.processReferralRewards('referred-1');
     expect(second).toBeNull();
     expect(prisma.earningsLedger.create).toHaveBeenCalledTimes(1);
+    // Idempotent no-op must NOT emit a second audit row.
+    expect(audit.log).toHaveBeenCalledTimes(1);
   });
 });

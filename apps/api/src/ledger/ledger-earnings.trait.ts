@@ -438,7 +438,21 @@ export class LedgerEarningsTrait {
           description: reason ? `Reversed: ${reason}` : undefined,
         },
       });
-      // 2. Advertiser refund — full bid back to the advertiser.
+      // 2. Advertiser compensating credit — full bid back to the advertiser.
+      //    The original `debit` row is preserved for audit (irreversible
+      //    accounting), but we write a matching credit to restore the
+      //    advertiser's spendable balance to pre-fraud level.
+      //
+      //    entryType is intentionally `credit` (NOT `refund`). The centralised
+      //    getAdvertiserBalance formula sums: confirmed credits − confirmed
+      //    debits − confirmed refunds. A `refund` entryType is a cash-outflow
+      //    row (Stripe archive refunds) that is subtracted from balance —
+      //    writing `refund` here would DOUBLE-PENALISE the advertiser by
+      //    keeping the original debit AND subtracting the compensation, net
+      //    draining 2× the fraud bid from the deposit pool. A `credit` entry
+      //    simply offsets the original debit (x − x = 0), restoring
+      //    the correct pre-fraud balance.
+      //
       //    Skipped when the original row never recorded a matching
       //    advertiser debit (e.g. a hypothetical entry without a spend,
       //    or pre-existing data predating the schema).
@@ -448,12 +462,12 @@ export class LedgerEarningsTrait {
           create: {
             advertiserId: advDebit.advertiserId,
             campaignId: advDebit.campaignId,
-            entryType: 'refund',
+            entryType: 'credit',
             status: 'confirmed',
             amountMinor: advDebit.amountMinor,
             currency: advDebit.currency,
             idempotencyKey: `${advDebit.idempotencyKey}-rev`,
-            description: `Refund — ${entityLabel} ${entityId} reversed${reason ? `: ${reason}` : ''}`,
+            description: `Fraud-reversal credit — ${entityLabel} ${entityId} reversed${reason ? `: ${reason}` : ''}`,
           },
           update: {}, // idempotent: do nothing on a replay
         });

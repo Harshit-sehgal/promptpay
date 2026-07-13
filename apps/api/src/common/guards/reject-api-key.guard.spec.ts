@@ -3,16 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 
+import { ALLOW_API_KEY } from '../../common/decorators/allow-api-key.decorator';
 import { DeveloperController } from '../../developer/developer.controller';
 import { PayoutController } from '../../payout/payout.controller';
 import { RejectApiKeyGuard } from './reject-api-key.guard';
 
 /**
- * A-037: advertiser export-data / delete-account are JWT-only by design. Their
- * controller is class-decorated `@AllowApiKey()` so a long-lived
- * `advertiser:write` key must NOT be able to silently export or erase an
- * account. The RejectApiKeyGuard enforces that at the Nest layer; these tests
- * prove the guard fires for API-key requests and passes for JWT requests.
+ * A-037: Self-service privacy/destructive write routes must be JWT-only.
+ * Controllers may allow API keys at the class level for other endpoints,
+ * so sensitive methods use RejectApiKeyGuard as a belt-and-suspenders backstop
+ * against machine-to-machine callers.
+ *
+ * DeveloperController no longer carries @AllowApiKey() at all (R25) — API keys
+ * are rejected by JwtAuthGuard default behavior, so RejectApiKeyGuard is not
+ * needed on its methods. The class-level absence of the AllowApiKey metadata
+ * flag is tested below as a stronger gate.
  */
 function buildContext(req: Partial<Request>) {
   return {
@@ -24,7 +29,9 @@ describe('RejectApiKeyGuard (A-037)', () => {
   const guard = new RejectApiKeyGuard();
 
   it('rejects a request that carries an API-key principal', () => {
-    const req = { apiKey: { scopes: ['advertiser:write'], advertiserId: 'adv-1', ownerId: 'owner-1' } };
+    const req = {
+      apiKey: { scopes: ['advertiser:write'], advertiserId: 'adv-1', ownerId: 'owner-1' },
+    };
     expect(() => guard.canActivate(buildContext(req))).toThrow(ForbiddenException);
   });
 
@@ -46,26 +53,17 @@ describe('sensitive API-key route boundaries (A-070)', () => {
   }
 
   it('keeps payout money/destination routes JWT-only even though the controller allows API keys', () => {
-    expect(guardsFor(PayoutController.prototype.addPayoutMethod)).toContain(
-      RejectApiKeyGuard,
-    );
-    expect(guardsFor(PayoutController.prototype.getPayoutInfo)).toContain(
-      RejectApiKeyGuard,
-    );
-    expect(guardsFor(PayoutController.prototype.requestPayout)).toContain(
-      RejectApiKeyGuard,
-    );
+    expect(guardsFor(PayoutController.prototype.addPayoutMethod)).toContain(RejectApiKeyGuard);
+    expect(guardsFor(PayoutController.prototype.getPayoutInfo)).toContain(RejectApiKeyGuard);
+    expect(guardsFor(PayoutController.prototype.requestPayout)).toContain(RejectApiKeyGuard);
   });
 
-  it('keeps developer privacy/destructive write routes JWT-only', () => {
-    expect(guardsFor(DeveloperController.prototype.updateSettings)).toContain(
-      RejectApiKeyGuard,
-    );
-    expect(guardsFor(DeveloperController.prototype.exportData)).toContain(
-      RejectApiKeyGuard,
-    );
-    expect(guardsFor(DeveloperController.prototype.deleteAccount)).toContain(
-      RejectApiKeyGuard,
-    );
+  it('keeps developer controller API-key-free — no @AllowApiKey() at class level', () => {
+    // Developer endpoints are JWT-only by controller policy (R25: @AllowApiKey
+    // removed from the class entirely). The absence of the AllowApiKey metadata
+    // flag means JwtAuthGuard rejects API keys by default — a stronger gate
+    // than per-method RejectApiKeyGuard.
+    const classMeta = Reflect.getMetadata(ALLOW_API_KEY, DeveloperController);
+    expect(classMeta).toBeUndefined();
   });
 });

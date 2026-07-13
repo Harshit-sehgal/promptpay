@@ -604,8 +604,10 @@ describe('API Contract Tests', () => {
     // Payout request requires confirmed earnings — validate schema only (no balance needed)
     it('POST /payout/request schema is structurally valid', () => {
       // Verify the schema itself parses a valid-looking object. The schema now
-      // marks `payoutAccountId` as required (the database FK is NOT NULL) so
-      // the mock must include it.
+      // marks `payoutAccountId` as required (the database FK is NOT NULL) and
+      // each allocation's `payoutRequestId`/`createdAt` as required (also
+      // NOT NULL columns the service always includes), so the mock carries
+      // them.
       const mock = {
         id: 'req-1',
         userId: 'u-1',
@@ -613,7 +615,15 @@ describe('API Contract Tests', () => {
         status: 'requested',
         requestedAmountMinor: 1000,
         currency: 'USD',
-        allocations: [{ id: 'a-1', earningsEntryId: 'e-1', amountMinor: 1000 }],
+        allocations: [
+          {
+            id: 'a-1',
+            earningsEntryId: 'e-1',
+            payoutRequestId: 'req-1',
+            amountMinor: 1000,
+            createdAt: new Date().toISOString(),
+          },
+        ],
       };
       expect(() => PayoutRequestResponse.parse(mock)).not.toThrow();
     });

@@ -2,10 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 
 export class AdminIntegrationsTrait {
   declare prisma: PrismaService;
+  declare audit: AuditService;
 
   // ── Tool Integrations ──
   async getToolIntegrations() {
@@ -28,6 +30,26 @@ export class AdminIntegrationsTrait {
         `Tool integration "${slug}" was just toggled by another admin. Reload to see the current state.`,
       );
     }
+
+    // Audit: admin tool integration toggle has fleet-wide impact (gates
+    // whether developers can register devices for this tool type) —
+    // forensic trail must record who toggled the integration and when.
+    void this.audit
+      .log({
+        actorId: 'admin', // toggleToolIntegration currently has no actor id — coming in controller refactor
+        actorRole: 'admin',
+        action: 'toggle_tool_integration',
+        targetType: 'tool_integration',
+        targetId: slug,
+        beforeSnap: { previousState: tool.isActive, newState: isActive },
+      })
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(
+          `[AdminIntegrationsTrait] audit log failure (toggle_tool_integration): ${msg}`,
+        );
+      });
+
     return this.prisma.toolIntegration.findUnique({ where: { slug } });
   }
 

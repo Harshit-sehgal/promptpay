@@ -460,7 +460,7 @@ describe('LedgerService', () => {
      * stranded. These tests pin the compensating writes by checking each
      * upsert's idempotency key + entryType.
      */
-    it('writes the three compensating entries (advertiser refund + 2 platform reversals)', async () => {
+    it('writes the three compensating entries (advertiser credit + 2 platform reversals)', async () => {
       const impressionId = 'imp-abc';
       // Pre-flight: read the impression's advertisement debit + platform rows
       mockPrisma.advertiserLedger.findUnique.mockResolvedValueOnce({
@@ -524,15 +524,15 @@ describe('LedgerService', () => {
         }),
       });
 
-      // 2. Advertiser refund with the FULL bid (advertiser must not pay for
-      //    fraud) under the `-rev` idempotency suffix.
+      // 2. Advertiser compensating credit with the FULL bid (advertiser must
+      //    not pay for fraud) under the `-rev` idempotency suffix.
       expect(mockPrisma.advertiserLedger.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { idempotencyKey: `imp-${impressionId}-adv-rev` },
           create: expect.objectContaining({
             advertiserId: 'adv-1',
             campaignId: 'cmp-1',
-            entryType: 'refund',
+            entryType: 'credit',
             status: 'confirmed',
             amountMinor: 1000n,
             currency: 'USD',
@@ -731,13 +731,13 @@ describe('LedgerService', () => {
         }),
       );
 
-      // 2. Advertiser refund keyed on the click prefix.
+      // 2. Advertiser compensating credit keyed on the click prefix.
       expect(mockPrisma.advertiserLedger.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { idempotencyKey: `clk-${clickId}-adv-rev` },
           create: expect.objectContaining({
             advertiserId: 'adv-click',
-            entryType: 'refund',
+            entryType: 'credit',
             amountMinor: 500n,
           }),
         }),

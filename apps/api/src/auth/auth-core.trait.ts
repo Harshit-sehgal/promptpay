@@ -425,6 +425,13 @@ export class AuthCoreTrait {
         passwordHash: true,
         googleVerified: true,
         githubVerified: true,
+        // Surface the TOTP enrollment flag so clients (web settings +
+        // payouts 2FA gate, CLI/VSCode trust display) see the real value.
+        // Previously this column was omitted from the `select`, so `/auth/me`
+        // never carried it — the shared `MeResponse` contract, which DOES
+        // list `twoFactorEnabled`, drifted silently and the web UI's
+        // "verified" badge fell back to `false` even for enrolled users.
+        twoFactorEnabled: true,
         referralCode: true,
         createdAt: true,
       },

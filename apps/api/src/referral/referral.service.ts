@@ -209,7 +209,7 @@ export class ReferralService {
       if (insideReward) return null;
 
       try {
-        const [platformEntry, reward] = await Promise.all([
+        const [_platformEntry, _reward, _earnings] = await Promise.all([
           tx.platformLedger.create({
             data: {
               entryType: 'credit',
@@ -256,7 +256,12 @@ export class ReferralService {
           data: { status: 'rewarded' },
         });
 
-        return { reward, platformEntry };
+        return {
+          referralId: referral.id,
+          referrerId: referral.referrerId,
+          amountMinor: rewardAmount,
+          currency: REFERRAL.CURRENCY,
+        };
       } catch (err: unknown) {
         if (isUniqueConstraintViolation(err)) {
           return null; // Already rewarded — idempotent
@@ -265,6 +270,32 @@ export class ReferralService {
       }
     });
 
+    // Audit: referral reward is a money-mutation path (platformLedger credit +
+    // earningsLedger credit + referralReward + referral status flip all land
+    // atomically above). Surface a forensic record of the credited reward so a
+    // later payout against this balance is traceable. Logged only when the
+    // transaction actually committed a reward — idempotent no-ops (null result)
+    // are intentionally silent to avoid audit noise on retried/duplicate calls.
+    if (result) {
+      void this.ledger.audit
+        .log({
+          actorId: 'referral_service',
+          actorRole: 'system',
+          action: 'process_referral_rewards',
+          targetType: 'referral',
+          targetId: result.referralId,
+          beforeSnap: {
+            referredUserId,
+            referrerId: result.referrerId,
+            rewardAmountMinor: result.amountMinor.toString(),
+            currency: result.currency,
+          },
+        })
+        .catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.warn(`[ReferralService] audit log failure: ${msg}`);
+        });
+    }
     return result;
   }
 
