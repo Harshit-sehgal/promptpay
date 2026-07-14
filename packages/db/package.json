@@ -16,14 +16,15 @@
     "push": "prisma db push",
     "studio": "prisma studio",
     "seed-tools": "tsx prisma/seed-tools.ts",
-    "seed": "tsx prisma/seed.ts",
-    "db:seed": "tsx prisma/seed.ts",
+    "seed": "tsx prisma/seed-tools.ts",
+    "seed:demo": "tsx prisma/seed.ts",
+    "db:seed": "tsx prisma/seed-tools.ts",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
     "migrate:drift": "prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed-tools.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
