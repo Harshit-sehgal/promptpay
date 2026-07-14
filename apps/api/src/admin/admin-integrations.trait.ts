@@ -2,12 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
-import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 
 export class AdminIntegrationsTrait {
   declare prisma: PrismaService;
-  declare audit: AuditService;
 
   // ── Tool Integrations ──
   async getToolIntegrations() {
@@ -31,25 +29,11 @@ export class AdminIntegrationsTrait {
       );
     }
 
-    // Audit: admin tool integration toggle has fleet-wide impact (gates
-    // whether developers can register devices for this tool type) —
-    // forensic trail must record who toggled the integration and when.
-    void this.audit
-      .log({
-        actorId: 'admin', // toggleToolIntegration currently has no actor id — coming in controller refactor
-        actorRole: 'admin',
-        action: 'toggle_tool_integration',
-        targetType: 'tool_integration',
-        targetId: slug,
-        beforeSnap: { previousState: tool.isActive, newState: isActive },
-      })
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(
-          `[AdminIntegrationsTrait] audit log failure (toggle_tool_integration): ${msg}`,
-        );
-      });
-
+    // AdminController is class-wide wrapped by AuditInterceptor. It records the
+    // authenticated actor, target slug, request body, and pre-mutation state on
+    // both success and failure. Do not emit a duplicate row with a fabricated
+    // generic actor id: that previously attributed every toggle to "admin" and
+    // obscured the authoritative request-level forensic event.
     return this.prisma.toolIntegration.findUnique({ where: { slug } });
   }
 
