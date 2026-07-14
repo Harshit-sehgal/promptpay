@@ -1181,3 +1181,32 @@ model DataRetentionConfig {
 
   @@map("data_retention_config")
 }
+
+// ══════════════════════════════════════════════════════════
+// Email Queue
+// ══════════════════════════════════════════════════════════
+
+// Persisted queue for transactional emails that failed immediate delivery.
+// Retried by EmailQueueCron with exponential backoff until success, permanent
+// failure, or the row expires. The content-hash unique constraint coalesces
+// duplicate messages so a burst of identical failures does not multiply
+// queue depth.
+model EmailQueue {
+  id          String   @id @default(uuid())
+  to          String
+  subject     String
+  html        String
+  text        String?
+  contentHash String   @unique @map("content_hash")
+  retryCount  Int      @default(0) @map("retry_count")
+  nextRetryAt DateTime @db.Timestamptz @map("next_retry_at")
+  expiresAt   DateTime @db.Timestamptz @map("expires_at")
+  lastError   String?  @map("last_error")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([nextRetryAt])
+  @@index([expiresAt])
+  @@map("email_queue")
+}

@@ -8,6 +8,8 @@ export interface EmailMessage {
   subject: string;
   html: string;
   text?: string;
+  /** Optional per-message TTL (ms) bounding how long a failed send may be retried from the queue. */
+  ttlMs?: number;
 }
 
 export interface EmailSendResult {
@@ -42,7 +44,9 @@ export class EmailService {
     this.providerTimeoutMs = this.config.get<number>('EMAIL_PROVIDER_TIMEOUT_MS', 10_000);
 
     if (this.driver === 'resend' && !this.resendApiKey) {
-      this.logger.warn('EMAIL_DRIVER=resend but RESEND_API_KEY is not set — falling back to console driver');
+      this.logger.warn(
+        'EMAIL_DRIVER=resend but RESEND_API_KEY is not set — falling back to console driver',
+      );
       this.driver = 'console';
     }
 
@@ -71,10 +75,7 @@ export class EmailService {
       // silently flagged by SPF/DKIM checks for any production domain that
       // doesn't literally match the `.dev` suffix. Three-hour password-reset
       // windows burn expensively on this.
-      if (
-        this.from === 'WaitLayer <no-reply@waitlayer.dev>' &&
-        !process.env.EMAIL_FROM
-      ) {
+      if (this.from === 'WaitLayer <no-reply@waitlayer.dev>' && !process.env.EMAIL_FROM) {
         throw new Error(
           'EMAIL_FROM must be set in production — the dev default ' +
             '"WaitLayer <no-reply@waitlayer.dev>" uses a .dev TLD that breaks ' +
@@ -84,10 +85,7 @@ export class EmailService {
       }
       // Same WEB_BASE_URL guard — a dev default would silently produce
       // non-functional password-reset and email-verification links.
-      if (
-        this.webBaseUrl === 'http://localhost:3000' &&
-        !process.env.WEB_BASE_URL
-      ) {
+      if (this.webBaseUrl === 'http://localhost:3000' && !process.env.WEB_BASE_URL) {
         throw new Error(
           'WEB_BASE_URL must be set in production — the dev default ' +
             'http://localhost:3000 produces password-reset and email-verify links that do not function. Set WEB_BASE_URL to your production web URL.',
@@ -97,7 +95,10 @@ export class EmailService {
   }
 
   async send(msg: EmailMessage): Promise<EmailSendResult> {
-    const recipientRef = privacyPseudonym(msg.to.trim().toLowerCase(), 'email-recipient').slice(0, 16);
+    const recipientRef = privacyPseudonym(msg.to.trim().toLowerCase(), 'email-recipient').slice(
+      0,
+      16,
+    );
     // Final defensive check — even if a future misconfiguration slipped past
     // the constructor (e.g. ENV toggled at runtime via a test), never log a
     // production email body. Use delivered=false so callers can react.
@@ -127,10 +128,10 @@ export class EmailService {
     }
   }
 
-  /** Email verification link (24h token) */
-  async sendEmailVerification(to: string, token: string): Promise<EmailSendResult> {
+  /** Build the email-verification message (24h token) without sending. */
+  buildEmailVerification(to: string, token: string): EmailMessage {
     const link = `${this.webBaseUrl}/auth/verify-email?token=${encodeURIComponent(token)}`;
-    return this.send({
+    return {
       to,
       subject: 'Verify your WaitLayer email',
       text: `Verify your email address by opening this link (valid for 24 hours):\n\n${link}\n\nIf you did not create a WaitLayer account, you can ignore this email.`,
@@ -141,13 +142,18 @@ export class EmailService {
         'Verify email',
         'If you did not create a WaitLayer account, you can safely ignore this email.',
       ),
-    });
+    };
   }
 
-  /** Password reset link (1h token) */
-  async sendPasswordReset(to: string, token: string): Promise<EmailSendResult> {
+  /** Email verification link (24h token) */
+  async sendEmailVerification(to: string, token: string): Promise<EmailSendResult> {
+    return this.send(this.buildEmailVerification(to, token));
+  }
+
+  /** Build the password-reset message (1h token) without sending. */
+  buildPasswordReset(to: string, token: string): EmailMessage {
     const link = `${this.webBaseUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
-    return this.send({
+    return {
       to,
       subject: 'Reset your WaitLayer password',
       text: `Reset your WaitLayer password by opening this link (valid for 1 hour):\n\n${link}\n\nIf you did not request a password reset, you can ignore this email.`,
@@ -158,12 +164,17 @@ export class EmailService {
         'Reset password',
         'If you did not request a password reset, you can safely ignore this email — your password will not change.',
       ),
-    });
+    };
   }
 
-  /** Security notification after a successful password change */
-  async sendPasswordChanged(to: string): Promise<EmailSendResult> {
-    return this.send({
+  /** Password reset link (1h token) */
+  async sendPasswordReset(to: string, token: string): Promise<EmailSendResult> {
+    return this.send(this.buildPasswordReset(to, token));
+  }
+
+  /** Build the password-changed notification (no token) without sending. */
+  buildPasswordChanged(to: string): EmailMessage {
+    return {
       to,
       subject: 'Your WaitLayer password was changed',
       text: 'Your WaitLayer password was just changed and all active sessions were signed out. If this was not you, reset your password immediately and contact support.',
@@ -174,12 +185,17 @@ export class EmailService {
         null,
         'If this was not you, reset your password immediately and contact support.',
       ),
-    });
+    };
   }
 
-  /** Confirmation that an account was deleted and its PII anonymized */
-  async sendAccountDeleted(to: string): Promise<EmailSendResult> {
-    return this.send({
+  /** Security notification after a successful password change */
+  async sendPasswordChanged(to: string): Promise<EmailSendResult> {
+    return this.send(this.buildPasswordChanged(to));
+  }
+
+  /** Build the account-deleted confirmation (no token) without sending. */
+  buildAccountDeleted(to: string): EmailMessage {
+    return {
       to,
       subject: 'Your WaitLayer account has been deleted',
       text:
@@ -192,7 +208,12 @@ export class EmailService {
         null,
         'If this was not you, contact support immediately.',
       ),
-    });
+    };
+  }
+
+  /** Confirmation that an account was deleted and its PII anonymized */
+  async sendAccountDeleted(to: string): Promise<EmailSendResult> {
+    return this.send(this.buildAccountDeleted(to));
   }
 
   // ── Private ──

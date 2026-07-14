@@ -29,8 +29,14 @@ describe('EmailQueueCron', () => {
   it('acquires the cross-replica cron lease before processing', async () => {
     await cron.processQueue();
     expect(mockPrisma.$queryRaw).toHaveBeenCalled();
-    const rawQuery = mockPrisma.$queryRaw.mock.calls[0][0];
-    expect(rawQuery).toContain('email-queue-process');
+    const rawQuery = mockPrisma.$queryRaw.mock.calls[0][0] as {
+      strings: readonly string[];
+      values: readonly unknown[];
+    };
+    // acquireCronLease uses a parameterized Prisma.sql template, so the lease
+    // key is a bound value (not inline SQL text).
+    expect(rawQuery.strings.join('')).toContain('cron_leases');
+    expect(rawQuery.values).toContain('email-queue-process');
   });
 
   it('purges expired rows before processing', async () => {

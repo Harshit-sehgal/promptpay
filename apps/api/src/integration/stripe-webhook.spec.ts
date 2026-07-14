@@ -118,8 +118,14 @@ async function cleanupStripeWebhookSpecRows(prisma: PrismaService) {
 describe('Stripe Webhook Controller — reconciliation', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-
+  let previousRedisUrl: string | undefined;
   beforeAll(async () => {
+    // Force in-memory throttling so local verification does not inherit Redis
+    // throttle counters (and so app.init() does not block on a Redis connect).
+    // Mirrors contract-tests/e2e-http-flow specs.
+    previousRedisUrl = process.env.REDIS_URL;
+    process.env.REDIS_URL = '';
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -157,6 +163,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
       await cleanupStripeWebhookSpecRows(prisma);
     }
     if (app) await app.close();
+    process.env.REDIS_URL = previousRedisUrl;
   });
 
   async function seedPaidScenario(providerTxId: string, payoutStatus: string) {
