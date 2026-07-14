@@ -24,14 +24,25 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 const TEST_JWT_SECRET = 'test-secret-that-is-at-least-32-chars-long!';
+const TEST_JWT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4mwTmn+U56X+qoCNYMdI
+BKKzBOdk80n4+3Uuy0xn7CuPMSH0sqVOWYpTI0TsN+IhOjkRmmjWCedIE0YWexnl
+kQyW6fpGIuoZdV+eM1pcc/9fdpYg+QXJR4/FHHnVqhdV/6pTv7LyUlX/DBi1wqJV
+RIzT9+t+t6CJYbxto6dKKbPd/RLlK7WOpYEYZyceqTkYmnRrykVJ/gzu5CvU+G9q
+i3bV9nKQHzKwygjeCB6GrGj01a2UC/cSeGUPk5u9CJZyt6xhOU5+vkp93lXd/miw
+gof3a82t/8tncdL9XsSThXyuQbeTTMVUQFo3UVAyPhyXVYwi7aZcOWxlJ4j0AJYj
+WwIDAQAB
+-----END PUBLIC KEY-----`;
 
 describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
   beforeEach(() => {
     process.env.JWT_SECRET = TEST_JWT_SECRET;
+    process.env.JWT_PUBLIC_KEY = TEST_JWT_PUBLIC_KEY;
     vi.stubGlobal('fetch', vi.fn());
   });
   afterEach(() => {
     delete process.env.JWT_SECRET;
+    delete process.env.JWT_PUBLIC_KEY;
     vi.unstubAllGlobals();
   });
 

@@ -4,6 +4,8 @@ import { Test } from '@nestjs/testing';
 
 import { loadEnv } from '@waitlayer/config';
 
+import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
+
 describe('Nest ConfigService wiring (A-017)', () => {
   beforeEach(() => {
     // Ensure unrelated real env does not leak into the isolated module.
@@ -21,6 +23,8 @@ describe('Nest ConfigService wiring (A-017)', () => {
                 NODE_ENV: 'test',
                 DATABASE_URL: 'postgres://localhost:5432/test',
                 JWT_SECRET: 'test-secret-at-least-32-characters-long-0000000000',
+                JWT_PRIVATE_KEY: TEST_JWT_PRIVATE_KEY,
+                JWT_PUBLIC_KEY: TEST_JWT_PUBLIC_KEY,
               } as NodeJS.ProcessEnv),
           ],
         }),

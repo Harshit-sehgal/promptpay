@@ -22,7 +22,7 @@ export class PayoutController {
   @UseGuards(RejectApiKeyGuard)
   @Roles('developer')
   @RequiredScopes('payout:read')
-  getPayoutProviderAvailability() {
+  async getPayoutProviderAvailability() {
     return this.service.getPayoutProviderAvailability();
   }
 

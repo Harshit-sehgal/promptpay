@@ -104,6 +104,8 @@ function makePrisma() {
       update: vi.fn(async (args: any) => args.data),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
+    $executeRaw: vi.fn(async () => 1),
+    $executeRawUnsafe: vi.fn(async () => 1),
   };
 
   // Serialize transaction callbacks through a promise chain so concurrent

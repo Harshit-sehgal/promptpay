@@ -38,6 +38,7 @@ const webEnvSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     JWT_SECRET: z.string().min(32).optional(),
+    JWT_PUBLIC_KEY: z.string().optional(),
     NEXT_PUBLIC_API_URL: z.string().optional(),
     API_INTERNAL_URL: z.string().optional(),
     BFF_TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(3).default(1),
@@ -49,6 +50,23 @@ const webEnvSchema = z
       (!env.JWT_SECRET || PUBLIC_JWT_SECRETS.has(env.JWT_SECRET))
     ) {
       ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'production secret required' });
+    }
+    if (env.NODE_ENV === 'production' && !env.JWT_PUBLIC_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['JWT_PUBLIC_KEY'],
+        message: 'production public key required',
+      });
+    }
+    if (
+      env.NODE_ENV === 'production' &&
+      (!env.JWT_SECRET || PUBLIC_JWT_SECRETS.has(env.JWT_SECRET))
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['JWT_SECRET'],
+        message: 'production HMAC secret required for BFF identity signing',
+      });
     }
     if (
       env.NODE_ENV === 'production' &&
@@ -69,6 +87,7 @@ const webEnvSchema = z
 export interface WebEnv {
   NODE_ENV: 'development' | 'production' | 'test';
   JWT_SECRET?: string;
+  JWT_PUBLIC_KEY?: string;
   NEXT_PUBLIC_API_URL?: string;
   API_INTERNAL_URL?: string;
   BFF_TRUST_PROXY_HOPS?: number;
@@ -91,6 +110,7 @@ export function validateWebEnv(source: NodeJS.ProcessEnv = process.env): WebEnv 
     return {
       NODE_ENV: (source.NODE_ENV as WebEnv['NODE_ENV']) ?? 'development',
       JWT_SECRET: source.JWT_SECRET,
+      JWT_PUBLIC_KEY: source.JWT_PUBLIC_KEY,
       NEXT_PUBLIC_API_URL: source.NEXT_PUBLIC_API_URL,
       API_INTERNAL_URL: source.API_INTERNAL_URL,
       BFF_TRUST_PROXY_HOPS: source.BFF_TRUST_PROXY_HOPS

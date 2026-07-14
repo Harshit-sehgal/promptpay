@@ -11,7 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
 import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
-import { TokenPayload } from './auth.constants';
+import { audienceIncludes, TokenPayload } from './auth.constants';
 import { AuthEmailTrait } from './auth-email.trait';
 import { AuthSessionTrait } from './auth-session.trait';
 import { AuthTotpTrait } from './auth-totp.trait';
@@ -31,6 +31,7 @@ export class AuthCoreTrait {
   declare googleVerifier: GoogleTokenVerifier;
   declare audit: AuditService;
   declare jwtSecret: string;
+  declare publicKey: string;
 
   /** ── Sign Up ── */
   async signUp(dto: SignUpDto) {
@@ -314,12 +315,15 @@ export class AuthCoreTrait {
     let payload: TokenPayload;
     try {
       payload = await this.jwt.verifyAsync<TokenPayload>(refreshToken, {
-        secret: this.jwtSecret,
+        secret: this.publicKey,
+        algorithms: ['RS256'],
+        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
+        audience: this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
       });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    if (payload.aud !== 'refresh' || !payload.jti) {
+    if (!audienceIncludes(payload.aud, 'refresh') || !payload.jti) {
       throw new UnauthorizedException('Invalid refresh token payload');
     }
     const jti = payload.jti;

@@ -4,6 +4,11 @@ import { PrismaService } from '../config/prisma.service';
 import { EmailService } from './email.service';
 import { EmailQueueService } from './email-queue.service';
 
+const mockConfig = (secret?: string) =>
+  ({
+    get: vi.fn((key: string) => (key === 'EMAIL_QUEUE_SECRET' ? secret : undefined)),
+  }) as unknown as import('@nestjs/config').ConfigService;
+
 describe('EmailQueueService', () => {
   const mockPrisma = {
     emailQueue: {
@@ -49,7 +54,11 @@ describe('EmailQueueService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new EmailQueueService(mockEmail, mockPrisma);
+    service = new EmailQueueService(
+      mockEmail,
+      mockPrisma,
+      mockConfig('test-email-queue-secret-32-bytes'),
+    );
   });
 
   it('returns delivered=true when EmailService succeeds', async () => {
@@ -64,7 +73,7 @@ describe('EmailQueueService', () => {
     expect(mockPrisma.emailQueue.findUnique).not.toHaveBeenCalled();
   });
 
-  it('queues a failed send and returns delivered=false', async () => {
+  it('queues a failed send and returns delivered=true once persisted', async () => {
     mockEmail.send.mockResolvedValueOnce({ delivered: false, driver: 'resend' });
     const result = await service.enqueueOrSend({
       to: 'a@b.com',
@@ -72,11 +81,37 @@ describe('EmailQueueService', () => {
       html: '<p>hi</p>',
       text: 'hi',
     });
-    expect(result.delivered).toBe(false);
+    expect(result.delivered).toBe(true);
     expect(mockPrisma.emailQueue.create).toHaveBeenCalledTimes(1);
     const args = mockPrisma.emailQueue.create.mock.calls[0][0];
     expect(args.data.contentHash).toBeDefined();
     expect(args.data.nextRetryAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('encrypts html and text before persisting', async () => {
+    mockEmail.send.mockResolvedValueOnce({ delivered: false, driver: 'resend' });
+    await service.enqueueOrSend({
+      to: 'a@b.com',
+      subject: 'Hello',
+      html: '<p>hi</p>',
+      text: 'hi',
+    });
+    const args = mockPrisma.emailQueue.create.mock.calls[0][0];
+    expect(args.data.html).not.toContain('<p>hi</p>');
+    expect(args.data.text).not.toContain('hi');
+    expect(args.data.html).toMatch(/^v1:/);
+    expect(args.data.text).toMatch(/^v1:/);
+  });
+
+  it('round-trips encrypted payloads through decrypt()', async () => {
+    const original = '<p>reset token: abc123</p>';
+    const encrypted = service.encrypt(original);
+    expect(encrypted).not.toContain('abc123');
+    expect(service.decrypt(encrypted)).toBe(original);
+  });
+
+  it('decrypts legacy plaintext payloads during rollout', async () => {
+    expect(service.decrypt('<p>plain</p>')).toBe('<p>plain</p>');
   });
 
   it('updates an existing row without resetting retry count', async () => {

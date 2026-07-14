@@ -7,6 +7,7 @@ import { acquireCronLease } from '../common/utils/cron-lease';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 import { PrismaService } from '../config/prisma.service';
 import { ReferralService } from '../referral/referral.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { boundedPositiveInt } from './payout.constants';
 import { PayoutService } from './payout.service';
 
@@ -45,6 +46,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
     private readonly prisma: PrismaService,
     private readonly payoutService: PayoutService,
     private readonly referral: ReferralService,
+    private readonly runtimeConfig: RuntimeConfigService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -76,6 +78,10 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
    * Find all processing payouts with a checkable provider and poll their status.
    */
   async pollProcessingPayouts(): Promise<{ checked: number; completed: number; failed: number }> {
+    if (!(await this.runtimeConfig.isAutoPayoutProcessingEnabled())) {
+      this.logger.log('Automatic payout processing is disabled — skipping poll');
+      return { checked: 0, completed: 0, failed: 0 };
+    }
     if (this.pollInFlight) {
       this.logger.warn('Payout status polling already in flight — skipping overlapping poll');
       return { checked: 0, completed: 0, failed: 0 };

@@ -1,4 +1,4 @@
-import { beforeEach,describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PayoutStatus } from '@waitlayer/shared';
 
@@ -44,6 +44,10 @@ const mockReferral = {
     .mockResolvedValue({ checked: 0, rewarded: 0, failed: 0, hasMore: false }),
 };
 
+const mockRuntimeConfig = {
+  isAutoPayoutProcessingEnabled: vi.fn().mockResolvedValue(true),
+};
+
 describe('PayoutCronService', () => {
   let service: PayoutCronService;
 
@@ -53,9 +57,14 @@ describe('PayoutCronService', () => {
       mockPrisma as any,
       mockPayoutService as any,
       mockReferral as any,
+      mockRuntimeConfig as any,
     );
     // Prevent the actual interval from starting in tests
-    vi.spyOn(service as any, 'pollProcessingPayouts').mockResolvedValue({ checked: 0, completed: 0, failed: 0 });
+    vi.spyOn(service as any, 'pollProcessingPayouts').mockResolvedValue({
+      checked: 0,
+      completed: 0,
+      failed: 0,
+    });
   });
 
   describe('pollProcessingPayouts', () => {

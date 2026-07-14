@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
 import { getErrorCode } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { CAMPAIGN_TRANSITIONS } from './advertiser.constants';
 import { AdvertiserProfileTrait } from './advertiser-profile.trait';
 
@@ -14,6 +15,7 @@ export class AdvertiserCampaignTrait {
   declare prisma: PrismaService;
   declare campaignService: CampaignService;
   declare audit: AuditService;
+  declare runtimeConfig: RuntimeConfigService;
   declare logger: Logger;
 
   /** Create a new campaign (always starts in DRAFT) */
@@ -47,6 +49,9 @@ export class AdvertiserCampaignTrait {
     // Validate campaign category (blocks prohibited categories)
     await this.campaignService.validateCampaignCategory(dto.category);
     const currency = dto.currency?.trim().toUpperCase() || 'USD';
+    if (!(await this.runtimeConfig.isCurrencyAllowed(currency))) {
+      throw new BadRequestException(`Currency "${currency}" is currently blocked`);
+    }
     const campaign = await this.prisma.campaign.create({
       data: {
         advertiserId,
@@ -396,6 +401,9 @@ export class AdvertiserCampaignTrait {
     // in a funded non-USD balance (otherwise a non-USD deposit is stranded).
     if (dto.currency !== undefined) {
       dto.currency = dto.currency.trim().toUpperCase();
+      if (!(await this.runtimeConfig.isCurrencyAllowed(dto.currency))) {
+        throw new BadRequestException(`Currency "${dto.currency}" is currently blocked`);
+      }
     }
     // Re-validate inputs — the createCampaign path enforces bounds, but
     // an update can be used to bypass them. Mirror the same checks.

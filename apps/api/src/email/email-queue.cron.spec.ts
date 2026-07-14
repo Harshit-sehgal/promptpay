@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../config/prisma.service';
 import { EmailService } from './email.service';
 import { EmailQueueCron } from './email-queue.cron';
+import { EmailQueueService } from './email-queue.service';
 
 describe('EmailQueueCron', () => {
   const mockPrisma = {
@@ -19,11 +20,18 @@ describe('EmailQueueCron', () => {
     send: vi.fn().mockResolvedValue({ delivered: true, driver: 'resend' }),
   } as unknown as EmailService;
 
+  const mockQueue = {
+    decrypt: vi.fn((s: string) => s),
+    encrypt: vi.fn((s: string) => `v1:encrypted:${s}`),
+  } as unknown as EmailQueueService;
+
   let cron: EmailQueueCron;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    cron = new EmailQueueCron(mockPrisma, mockEmail);
+    // Default: lease acquired, no queued rows.
+    mockPrisma.$queryRaw.mockResolvedValue([{ key: 'email-queue-process' }]);
+    cron = new EmailQueueCron(mockPrisma, mockEmail, mockQueue);
   });
 
   it('acquires the cross-replica cron lease before processing', async () => {
@@ -51,16 +59,18 @@ describe('EmailQueueCron', () => {
   });
 
   it('deletes queued row when retry succeeds', async () => {
-    mockPrisma.emailQueue.findMany.mockResolvedValue([
-      {
-        id: 'q-1',
-        to: 'a@b.com',
-        subject: 'Hello',
-        html: '<p>hi</p>',
-        text: 'hi',
-        retryCount: 2,
-      },
-    ]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([
+        {
+          id: 'q-1',
+          to: 'a@b.com',
+          subject: 'Hello',
+          html: '<p>hi</p>',
+          text: 'hi',
+          retryCount: 2,
+        },
+      ]);
 
     const result = await cron.processQueue();
 
@@ -73,18 +83,35 @@ describe('EmailQueueCron', () => {
     expect(result.permanentFailures).toBe(0);
   });
 
+  it('uses FOR UPDATE SKIP LOCKED to fetch due rows', async () => {
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([]);
+    await cron.processQueue();
+    // First $queryRaw is the cron lease; the batch fetch is the second call.
+    const rawQuery = mockPrisma.$queryRaw.mock.calls[1][0] as {
+      strings: readonly string[];
+      values: readonly unknown[];
+    };
+    const sql = rawQuery.strings.join('');
+    expect(sql).toContain('FOR UPDATE SKIP LOCKED');
+    expect(sql).toContain('email_queue');
+  });
+
   it('updates retry count when retry fails', async () => {
     mockEmail.send.mockResolvedValueOnce({ delivered: false, driver: 'resend' });
-    mockPrisma.emailQueue.findMany.mockResolvedValue([
-      {
-        id: 'q-2',
-        to: 'a@b.com',
-        subject: 'Hello',
-        html: '<p>hi</p>',
-        text: 'hi',
-        retryCount: 1,
-      },
-    ]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([
+        {
+          id: 'q-2',
+          to: 'a@b.com',
+          subject: 'Hello',
+          html: '<p>hi</p>',
+          text: 'hi',
+          retryCount: 1,
+        },
+      ]);
 
     const result = await cron.processQueue();
 
@@ -100,16 +127,18 @@ describe('EmailQueueCron', () => {
 
   it('gives up after max retries and deletes the row', async () => {
     mockEmail.send.mockResolvedValueOnce({ delivered: false, driver: 'resend' });
-    mockPrisma.emailQueue.findMany.mockResolvedValue([
-      {
-        id: 'q-3',
-        to: 'a@b.com',
-        subject: 'Hello',
-        html: '<p>hi</p>',
-        text: 'hi',
-        retryCount: 8,
-      },
-    ]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([
+        {
+          id: 'q-3',
+          to: 'a@b.com',
+          subject: 'Hello',
+          html: '<p>hi</p>',
+          text: 'hi',
+          retryCount: 8,
+        },
+      ]);
 
     const result = await cron.processQueue();
 
@@ -121,16 +150,18 @@ describe('EmailQueueCron', () => {
   it('only retries due rows and purges expired rows', async () => {
     mockEmail.send.mockResolvedValueOnce({ delivered: true, driver: 'resend' });
     mockPrisma.emailQueue.deleteMany.mockResolvedValueOnce({ count: 3 });
-    mockPrisma.emailQueue.findMany.mockResolvedValue([
-      {
-        id: 'q-due',
-        to: 'due@b.com',
-        subject: 'Due',
-        html: '<p>due</p>',
-        text: 'due',
-        retryCount: 0,
-      },
-    ]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([{ key: 'email-queue-process' }])
+      .mockResolvedValueOnce([
+        {
+          id: 'q-due',
+          to: 'due@b.com',
+          subject: 'Due',
+          html: '<p>due</p>',
+          text: 'due',
+          retryCount: 0,
+        },
+      ]);
 
     const result = await cron.processQueue();
 

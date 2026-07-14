@@ -6,6 +6,7 @@ import { PassportStrategy } from '@nestjs/passport';
 
 import { isActiveAccountStatus } from '../../common/utils/account-status';
 import { PrismaService } from '../../config/prisma.service';
+import { audienceIncludes } from '../auth.constants';
 
 /**
  * Dual-source JWT extraction: Authorization header OR httpOnly `access_token`
@@ -33,21 +34,30 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     config: ConfigService,
     private prisma: PrismaService,
   ) {
-    const secret = config.get<string>('JWT_SECRET');
-    if (!secret || secret.length < 32) {
+    const publicKey = config.get<string>('JWT_PUBLIC_KEY');
+    if (!publicKey) {
       throw new Error(
-        'JWT_SECRET must be defined and at least 32 characters. Set a strong secret in your environment.',
+        'JWT_PUBLIC_KEY must be defined for RS256 token verification. Set the public key in your environment.',
       );
     }
     super({
       jwtFromRequest: extractJwtFromRequest as JwtFromRequestFunction,
       ignoreExpiration: false,
-      secretOrKey: secret,
+      secretOrKey: publicKey,
+      algorithms: ['RS256'],
+      issuer: config.get<string>('JWT_ISSUER', 'waitlayer'),
+      audience: config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
     });
   }
 
-  async validate(payload: { sub: string; role: string; jti: string; aud?: string; mfaAt?: number }) {
-    if (payload.aud !== 'access') {
+  async validate(payload: {
+    sub: string;
+    role: string;
+    jti: string;
+    aud?: string | string[];
+    mfaAt?: number;
+  }) {
+    if (!audienceIncludes(payload.aud, 'access')) {
       throw new UnauthorizedException('Invalid token audience');
     }
     if (!payload.jti) {

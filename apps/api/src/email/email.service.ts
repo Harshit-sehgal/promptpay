@@ -135,6 +135,8 @@ export class EmailService {
       to,
       subject: 'Verify your WaitLayer email',
       text: `Verify your email address by opening this link (valid for 24 hours):\n\n${link}\n\nIf you did not create a WaitLayer account, you can ignore this email.`,
+      // Queue retention must not outlive the 24h verification token.
+      ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Verify your email',
         `<p>Confirm this email address for your WaitLayer account. The link is valid for <strong>24 hours</strong>.</p>`,
@@ -157,6 +159,8 @@ export class EmailService {
       to,
       subject: 'Reset your WaitLayer password',
       text: `Reset your WaitLayer password by opening this link (valid for 1 hour):\n\n${link}\n\nIf you did not request a password reset, you can ignore this email.`,
+      // Queue retention must not outlive the 1h reset token.
+      ttlMs: 60 * 60 * 1000,
       html: this.layout(
         'Reset your password',
         `<p>We received a request to reset your WaitLayer password. The link is valid for <strong>1 hour</strong>.</p>`,
@@ -178,6 +182,8 @@ export class EmailService {
       to,
       subject: 'Your WaitLayer password was changed',
       text: 'Your WaitLayer password was just changed and all active sessions were signed out. If this was not you, reset your password immediately and contact support.',
+      // Security notifications are time-sensitive; bound queue retention.
+      ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Password changed',
         `<p>Your WaitLayer password was just changed and all active sessions were signed out.</p>`,
@@ -201,6 +207,8 @@ export class EmailService {
       text:
         'Your WaitLayer account has been permanently deleted. Your personal information has been anonymized ' +
         'and all active sessions and API keys have been revoked. If this was not you, contact support immediately.',
+      // Account-deletion confirmations are time-sensitive; bound queue retention.
+      ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Account deleted',
         `<p>Your WaitLayer account has been <strong>permanently deleted</strong>. Your personal information has been anonymized and all active sessions and API keys have been revoked.</p>`,

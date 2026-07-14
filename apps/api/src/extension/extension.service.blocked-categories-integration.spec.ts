@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createMockRuntimeConfig } from '../runtime-config/test-helpers';
 import { ExtensionService } from './extension.service';
 
 // A-039/A-055 balance helper is mocked so the post-filter advertiser-balance
@@ -64,6 +65,7 @@ function buildService(prismaMock: any) {
   const fraud = {} as any;
   const compliance = { isConsented: vi.fn(async () => false) } as any;
   const googleVerifier = {} as any;
+  const runtimeConfig = createMockRuntimeConfig();
   const service = new ExtensionService(
     prismaMock,
     audit,
@@ -71,6 +73,7 @@ function buildService(prismaMock: any) {
     fraud,
     compliance,
     googleVerifier,
+    runtimeConfig,
   );
 
   // Collapse the heavy post-filter machinery so we only assert selection.

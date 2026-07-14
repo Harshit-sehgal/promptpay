@@ -424,6 +424,11 @@ model Campaign {
   bidAmountMinor      BigInt
   budgetTotalMinor    BigInt
   budgetSpentMinor    BigInt         @default(0)
+  // Reserved budget for impressions that have been served but not yet
+  // qualified/billed. budgetSpentMinor + budgetReservedMinor must never
+  // exceed budgetTotalMinor. Reserved amounts are released if the impression
+  // fails to qualify (fraud, timeout, budget exhaustion, etc.).
+  budgetReservedMinor BigInt         @default(0)
   currency            String         @default("USD")
   frequencyCapPerHour Int            @default(2)
   frequencyCapPerDay  Int            @default(6)
@@ -1180,6 +1185,30 @@ model DataRetentionConfig {
   updatedAt DateTime @updatedAt
 
   @@map("data_retention_config")
+}
+
+// ══════════════════════════════════════════════════════════
+// System Settings (runtime kill-switches)
+// ══════════════════════════════════════════════════════════
+
+// Operator-tunable runtime switches. Each row controls a single feature,
+// region, provider, or version. The `value` is JSON so booleans, strings,
+// and future structured values can coexist. `scope` + `target` form a
+// namespaced key: e.g. scope=ads, target=global → key "ads.global".
+// Changes are cached in-memory with a short TTL so hot paths do not hit
+// the database on every request.
+model SystemSetting {
+  id        String   @id @default(uuid())
+  scope     String   // e.g. 'ads', 'deposits', 'payouts', 'provider', 'tool', 'country', 'currency', 'extension'
+  target    String   // e.g. 'global', 'stripe', 'US', 'USD', '1.2.3'
+  value     Json     // { enabled: boolean } or future structured config
+  reason    String?
+  updatedBy String?  @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([scope, target])
+  @@index([scope])
+  @@map("system_settings")
 }
 
 // ══════════════════════════════════════════════════════════

@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PrismaService } from '../../config/prisma.service';
+import { TEST_JWT_PUBLIC_KEY } from '../__fixtures__/test-keys';
 import { JwtStrategy } from './jwt.strategy';
 
 function makeStrategy() {
@@ -16,7 +17,7 @@ function makeStrategy() {
   };
   const config = {
     get: vi.fn((key: string) => {
-      if (key === 'JWT_SECRET') return 'test-secret-at-least-32-characters-long';
+      if (key === 'JWT_PUBLIC_KEY') return TEST_JWT_PUBLIC_KEY;
       return undefined;
     }),
   } as unknown as ConfigService;
@@ -57,7 +58,12 @@ describe('JwtStrategy', () => {
     });
 
     await expect(
-      strategy.validate({ sub: 'u-restricted', role: 'developer', jti: 'sess-restricted', aud: 'access' }),
+      strategy.validate({
+        sub: 'u-restricted',
+        role: 'developer',
+        jti: 'sess-restricted',
+        aud: 'access',
+      }),
     ).rejects.toThrow(UnauthorizedException);
   });
 

@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import {
   ManualPayoutProvider,
   PayPalEmailPayoutProvider,
@@ -32,6 +33,7 @@ export class PayoutService {
     public paypalPayouts: PayPalPayoutsProvider,
     public stripeConnect: StripeConnectPayoutProvider,
     public wise: WisePayoutProvider,
+    public runtimeConfig: RuntimeConfigService,
   ) {
     this.providers = {
       manual: new ManualPayoutProvider(),

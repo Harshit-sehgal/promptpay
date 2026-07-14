@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { AuditService } from '../audit/audit.service';
 import { CURRENT_CONSENT_VERSIONS, SIGNUP_CONSENT_PURPOSES } from '../compliance/consent-versions';
 import { PrismaService } from '../config/prisma.service';
-import { EmailService } from '../email/email.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { FraudService } from '../fraud/fraud.service';
 import {
   EmailVerificationPayload,
@@ -19,7 +19,7 @@ export class AuthEmailTrait {
   declare jwt: JwtService;
   declare config: ConfigService;
   declare fraud: FraudService;
-  declare email: EmailService;
+  declare email: EmailQueueService;
   declare audit: AuditService;
   declare jwtSecret: string;
 
@@ -88,9 +88,16 @@ export class AuthEmailTrait {
       throw new BadRequestException('Email is already verified');
     }
     // Stateless token: contains userId, email, and action. Valid for 24 hours.
+    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
     const token = await this.jwt.signAsync(
-      { sub: user.id, email: user.email, action: 'email-verification' },
-      { secret: this.jwtSecret, expiresIn: '24h' },
+      {
+        sub: user.id,
+        email: user.email,
+        action: 'email-verification',
+        iss: issuer,
+        aud: 'email-verification',
+      },
+      { secret: this.jwtSecret, algorithm: 'HS256', expiresIn: '24h' },
     );
     const result = await this.email.sendEmailVerification(user.email, token);
     if (!result.delivered) {
@@ -113,7 +120,12 @@ export class AuthEmailTrait {
   async confirmEmailVerification(token: string) {
     let payload: EmailVerificationPayload;
     try {
-      payload = await this.jwt.verifyAsync(token, { secret: this.jwtSecret });
+      payload = await this.jwt.verifyAsync(token, {
+        secret: this.jwtSecret,
+        algorithms: ['HS256'],
+        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
+        audience: 'email-verification',
+      });
     } catch {
       throw new BadRequestException('Invalid or expired verification token');
     }

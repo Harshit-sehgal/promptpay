@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { generateTotp } from '@waitlayer/shared';
 
+import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from './__fixtures__/test-keys';
 import { AuthService } from './auth.service';
 
 // ── Prisma mock ──
@@ -44,12 +45,16 @@ const prismaRef = mockPrisma as any;
 function makeService(overrides?: Record<string, string>) {
   const secret = overrides?.JWT_SECRET ?? 'test-secret-at-least-32-characters-long';
   const jwt = new JwtService({
-    secret,
-    signOptions: { expiresIn: '15m' },
+    privateKey: TEST_JWT_PRIVATE_KEY,
+    publicKey: TEST_JWT_PUBLIC_KEY,
+    signOptions: { algorithm: 'RS256', expiresIn: '15m' },
+    verifyOptions: { algorithms: ['RS256'] },
   });
   const config = {
     get: vi.fn((key: string, fallback?: string) => {
       if (key === 'JWT_SECRET') return secret;
+      if (key === 'JWT_PRIVATE_KEY') return TEST_JWT_PRIVATE_KEY;
+      if (key === 'JWT_PUBLIC_KEY') return TEST_JWT_PUBLIC_KEY;
       if (key === 'JWT_ACCESS_TTL') return '15m';
       if (key === 'JWT_REFRESH_TTL') return '30d';
       if (key === 'NODE_ENV') return 'test';
@@ -81,9 +86,15 @@ function makeService(overrides?: Record<string, string>) {
     fraud,
     email,
     createAccessToken: (sub: string, role: string, ttl = '15m', jti = 'access-jti') =>
-      jwt.signAsync({ sub, role, aud: 'access', jti }, { expiresIn: ttl } as any),
+      jwt.signAsync({ sub, role, aud: ['waitlayer-client', 'access'], jti }, {
+        expiresIn: ttl,
+        issuer: 'waitlayer',
+      } as any),
     createRefreshToken: (sub: string, role: string, family: string, ttl = '30d', jti = 'sess-1') =>
-      jwt.signAsync({ sub, role, family, aud: 'refresh', jti }, { expiresIn: ttl } as any),
+      jwt.signAsync({ sub, role, family, aud: ['waitlayer-client', 'refresh'], jti }, {
+        expiresIn: ttl,
+        issuer: 'waitlayer',
+      } as any),
   };
 }
 
@@ -92,14 +103,30 @@ describe('AuthService', () => {
     vi.clearAllMocks();
   });
 
-  describe('constructor — JWT secret validation', () => {
+  describe('constructor — JWT key validation', () => {
     it('rejects JWT_SECRET shorter than 32 characters', () => {
       expect(() => makeService({ JWT_SECRET: 'too-short' })).toThrow(
         'JWT_SECRET must be defined and at least 32 characters',
       );
     });
 
-    it('accepts JWT_SECRET of 32+ characters', () => {
+    it('rejects missing RS256 keys', () => {
+      const config = {
+        get: vi.fn((key: string, fallback?: string) => {
+          if (key === 'JWT_SECRET') return 'test-secret-at-least-32-characters-long';
+          if (key === 'JWT_ACCESS_TTL') return '15m';
+          if (key === 'JWT_REFRESH_TTL') return '30d';
+          if (key === 'NODE_ENV') return 'test';
+          return fallback ?? null;
+        }),
+      } as unknown as ConfigService;
+      const jwt = new JwtService({});
+      expect(
+        () => new AuthService(prismaRef, jwt, config, {} as any, {} as any, {} as any, {} as any),
+      ).toThrow('JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be defined for RS256 token signing');
+    });
+
+    it('accepts RS256 keys and JWT_SECRET of 32+ characters', () => {
       expect(() => makeService()).not.toThrow();
     });
   });
@@ -670,7 +697,11 @@ describe('AuthService', () => {
       const { service, jwt } = makeService();
       const expired = await jwt.signAsync(
         { sub: 'u-verify', email: 'test@verify.com', action: 'email-verification' },
-        { secret: 'test-secret-at-least-32-characters-long', expiresIn: '-1h' } as any,
+        {
+          secret: 'test-secret-at-least-32-characters-long',
+          algorithm: 'HS256',
+          expiresIn: '-1h',
+        } as any,
       );
       await expect(service.confirmEmailVerification(expired)).rejects.toThrow(BadRequestException);
     });
@@ -781,8 +812,18 @@ describe('AuthService', () => {
       );
 
       const wrongAction = await jwt.signAsync(
-        { sub: 'u-reset', action: 'email-verification', fp: 'abc' },
-        { expiresIn: '1h' } as any,
+        {
+          sub: 'u-reset',
+          action: 'email-verification',
+          fp: 'abc',
+          iss: 'waitlayer',
+          aud: 'password-reset',
+        },
+        {
+          secret: 'test-secret-at-least-32-characters-long',
+          algorithm: 'HS256',
+          expiresIn: '1h',
+        } as any,
       );
       await expect(service.resetPassword(wrongAction, 'new-password-123')).rejects.toThrow(
         'Invalid token action',

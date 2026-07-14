@@ -1,4 +1,4 @@
-import { errors, jwtVerify } from 'jose';
+import { errors, importSPKI, jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { validateWebEnv } from '@/lib/web-env';
@@ -55,19 +55,32 @@ const STATIC_CACHEABLE_PATHS = [
  * is missing/unsafe so callers fail closed (redirect to login) instead of
  * verifying tokens against a bogus `"undefined"` key.
  */
-function getJwtSecret(): Uint8Array | null {
-  const raw = process.env.JWT_SECRET;
-  if (!raw || raw.length < 32) {
+let cachedRawKey: string | undefined;
+let cachedPublicKeyPromise: Promise<CryptoKey | null> | undefined;
+
+async function getJwtPublicKey(): Promise<CryptoKey | null> {
+  const raw = process.env.JWT_PUBLIC_KEY;
+  if (!raw) {
     if (process.env.NODE_ENV === 'production') {
       console.error(
-        '[waitlayer] JWT_SECRET is missing or too short in the web middleware. ' +
+        '[waitlayer] JWT_PUBLIC_KEY is missing in the web middleware. ' +
           'It must be present at build time (Edge runtime inlines env vars). ' +
           'All protected routes will fail closed.',
       );
     }
     return null;
   }
-  return new TextEncoder().encode(raw);
+  // Cache the imported key across requests in the same Edge runtime invocation.
+  // The env var is inlined at build time, so the cached key remains valid.
+  // If the raw key ever changes (e.g., in tests), invalidate the cache.
+  if (!cachedPublicKeyPromise || cachedRawKey !== raw) {
+    cachedRawKey = raw;
+    cachedPublicKeyPromise = importSPKI(raw.replace(/\\n/g, '\n'), 'RS256').catch((err) => {
+      console.error('[waitlayer] JWT_PUBLIC_KEY is invalid SPKI/PEM:', err);
+      return null;
+    });
+  }
+  return cachedPublicKeyPromise;
 }
 
 export async function proxy(request: NextRequest) {
@@ -108,22 +121,35 @@ export async function proxy(request: NextRequest) {
 
   // The edge gate must not trust the mere *presence* of a refresh cookie value
   // (a forged `refresh_token=anything` cookie would otherwise bypass the
-  // redirect). A valid refresh cookie is one signed by our own JWT_SECRET —
+  // redirect). A valid refresh cookie is one signed by our own JWT_PRIVATE_KEY —
   // even if expired, the client-side interceptor will silently refresh it.
   // Anything else (bad signature, malformed) is treated as absent.
   const hasValidRefresh = async (): Promise<boolean> => {
     if (!refreshCookie?.value) return false;
-    // Edge middleware inlines `process.env.JWT_SECRET` at *build* time. If the
-    // secret is only injected at container/serverless runtime, this is
+    // Edge middleware inlines `process.env.JWT_PUBLIC_KEY` at *build* time. If the
+    // public key is only injected at container/serverless runtime, this is
     // `undefined` and verification is impossible — fail closed rather than
     // verifying against a bogus key.
-    const secret = getJwtSecret();
-    if (!secret) return false;
+    const publicKey = await getJwtPublicKey();
+    if (!publicKey) return false;
     try {
-      const { payload } = await jwtVerify(refreshCookie.value, secret, {
+      const { payload, protectedHeader } = await jwtVerify(refreshCookie.value, publicKey, {
+        algorithms: ['RS256'],
+        issuer: process.env.JWT_ISSUER || 'waitlayer',
+        audience: process.env.JWT_AUDIENCE || 'waitlayer-client',
         clockTolerance: '30s',
       });
-      return payload.aud === 'refresh' && Boolean(payload.sub) && Boolean(payload.jti);
+      if (protectedHeader.typ !== 'JWT' || !protectedHeader.kid) {
+        return false;
+      }
+      const audience = payload.aud;
+      return (
+        (typeof audience === 'string'
+          ? audience === 'refresh'
+          : Boolean(audience?.includes('refresh'))) &&
+        Boolean(payload.sub) &&
+        Boolean(payload.jti)
+      );
     } catch {
       return false;
     }
@@ -137,16 +163,30 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    // Verify the JWT access token with the same secret the NestJS API uses
-    // (configured via the shared JWT_SECRET env var, inlined at build time for
+    // Verify the JWT access token with the public key that matches the API's
+    // private key (configured via JWT_PUBLIC_KEY, inlined at build time for
     // the Edge runtime). Tolerate a small clock skew so a brief token-expiry
-    // boundary doesn't bounce users. If the secret is unavailable, fail closed.
-    const secret = getJwtSecret();
-    if (!secret) {
+    // boundary doesn't bounce users. If the public key is unavailable, fail closed.
+    const publicKey = await getJwtPublicKey();
+    if (!publicKey) {
       return redirectToLogin(pathname, request);
     }
-    const { payload } = await jwtVerify(token, secret, { clockTolerance: '30s' });
-    if (payload.aud !== 'access' || !payload.sub || !payload.jti) {
+    const { payload, protectedHeader } = await jwtVerify(token, publicKey, {
+      algorithms: ['RS256'],
+      issuer: process.env.JWT_ISSUER || 'waitlayer',
+      audience: process.env.JWT_AUDIENCE || 'waitlayer-client',
+      clockTolerance: '30s',
+    });
+    if (protectedHeader.typ !== 'JWT' || !protectedHeader.kid) {
+      return redirectToLogin(pathname, request);
+    }
+    const audience = payload.aud;
+    if (
+      !audience ||
+      (typeof audience === 'string' ? audience !== 'access' : !audience.includes('access')) ||
+      !payload.sub ||
+      !payload.jti
+    ) {
       return redirectToLogin(pathname, request);
     }
     return NextResponse.next();

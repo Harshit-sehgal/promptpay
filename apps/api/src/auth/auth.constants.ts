@@ -5,7 +5,7 @@ export interface TokenPayload {
   role: string;
   family?: string;
   jti?: string;
-  aud?: string;
+  aud?: string | string[];
   /** Unix timestamp (seconds) of the most recent MFA proof in this token chain. */
   mfaAt?: number;
 }
@@ -14,7 +14,8 @@ export interface AccessTokenPayload {
   sub: string;
   role: string;
   jti: string;
-  aud: string;
+  aud: string | string[];
+  iss?: string;
   family?: string;
   mfaAt?: number;
 }
@@ -41,3 +42,13 @@ export type SignupConsentRecord = {
   purpose: string;
   version: string;
 };
+
+/**
+ * Check whether a JWT audience claim (string or array) includes a given
+ * value. This centralises the type handling so callers don't need to repeat
+ * typeof checks across the auth traits.
+ */
+export function audienceIncludes(aud: string | string[] | undefined, value: string): boolean {
+  if (!aud) return false;
+  return typeof aud === 'string' ? aud === value : aud.includes(value);
+}

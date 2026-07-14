@@ -15,7 +15,7 @@ import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { eraseAccountIdentity } from '../common/utils/account-erasure';
 import { buildCappedExportMeta, splitCappedRows } from '../common/utils/export-metadata';
 import { PrismaService } from '../config/prisma.service';
-import { EmailService } from '../email/email.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { FraudService } from '../fraud/fraud.service';
 
 interface DeveloperSettingsUpdate {
@@ -57,7 +57,7 @@ export class DeveloperService {
     private fraud: FraudService,
     private audit: AuditService,
     private googleVerifier: GoogleTokenVerifier,
-    private email: EmailService,
+    private email: EmailQueueService,
   ) {}
 
   async getDashboard(userId: string) {

@@ -24,6 +24,7 @@ import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { LedgerService } from '../ledger/ledger.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { isCountryEligible, normalizeCountryCode } from './country-targeting';
 import {
   adCacheKey,
@@ -47,6 +48,7 @@ export class ExtensionAdTrait {
   declare ledger: LedgerService;
   declare fraud: FraudService;
   declare compliance: ComplianceService;
+  declare runtimeConfig: RuntimeConfigService;
   declare adCache: LRUCache<string, { ad: ServedAd }>;
   declare logger: Logger;
 
@@ -126,6 +128,10 @@ export class ExtensionAdTrait {
     if (waitEnd && waitEnd.createdAt >= waitStart.createdAt) {
       throw new BadRequestException('Wait state has already ended');
     }
+    // Global platform kill-switch for advertising
+    if (!(await this.runtimeConfig.isAdsEnabled())) {
+      return { ad: null, reason: 'platform_ads_paused' };
+    }
     // Check user settings
     const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
     if (settings && !settings.adsEnabled) {
@@ -162,6 +168,10 @@ export class ExtensionAdTrait {
       (await this.prisma.user
         .findUnique({ where: { id: userId }, select: { country: true } })
         .then((u) => normalizeCountryCode(u?.country)));
+    // Runtime kill-switch: blocked countries
+    if (!(await this.runtimeConfig.isCountryAllowed(userCountry))) {
+      return { ad: null, reason: 'country_blocked' };
+    }
     // Idempotency: return same ad if we already served one for this
     // user/device/waitStateId. Keys are NAMESPACED by userId + deviceId so two
     // different users who collide on a client-generated waitStateId or
@@ -202,7 +212,22 @@ export class ExtensionAdTrait {
         status: 'active',
         id: { notIn: recentBillableCampaignIds }, // Frequency cap: don't show same campaign within the hour
       },
-      include: {
+      // Use a single select so we can fetch budgetReservedMinor alongside
+      // relations. Prisma forbids mixing top-level include and select.
+      select: {
+        id: true,
+        advertiserId: true,
+        name: true,
+        status: true,
+        category: true,
+        bidType: true,
+        bidAmountMinor: true,
+        budgetTotalMinor: true,
+        budgetSpentMinor: true,
+        budgetReservedMinor: true,
+        currency: true,
+        frequencyCapPerHour: true,
+        frequencyCapPerDay: true,
         creatives: {
           where: { status: 'approved' },
         },
@@ -230,7 +255,13 @@ export class ExtensionAdTrait {
     }));
     const initialEligible = campaignsWithSafeCreatives.filter((c) => {
       if (c.creatives.length === 0) return false;
-      if (BigInt(c.budgetSpentMinor) >= BigInt(c.budgetTotalMinor)) return false;
+      // Account for both committed spend and in-flight reservations so a
+      // campaign with no real budget remaining is not selected.
+      if (
+        BigInt(c.budgetSpentMinor) + BigInt(c.budgetReservedMinor ?? 0n) >=
+        BigInt(c.budgetTotalMinor)
+      )
+        return false;
       // Category filter
       if (isCategoryBlocked(effectiveBlocked, c.category)) return false;
       if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category))
@@ -291,6 +322,35 @@ export class ExtensionAdTrait {
     const creative = selected.creatives[0];
     const impressionToken = crypto.randomUUID();
     const impressionTokenHash = crypto.createHash('sha256').update(impressionToken).digest('hex');
+
+    // ── Atomic budget reservation ──
+    // CPM impressions reserve campaign budget before the impression is created
+    // so two concurrent ad requests cannot both see "budget remaining" and
+    // serve ads that later fail the qualification-time guard. CPC impressions
+    // are free; clicks are charged at click time without a reservation.
+    // The reservation is released if the impression never qualifies.
+    const isCpmCampaign = selected.bidType === 'cpm';
+    const bidAmount = BigInt(selected.bidAmountMinor);
+    let reservationReleased = false;
+    const maybeReleaseReservation = async () => {
+      if (reservationReleased || !isCpmCampaign) return;
+      reservationReleased = true;
+      await this.releaseBudgetReservation(selected.id, bidAmount);
+    };
+
+    if (isCpmCampaign) {
+      const reserved = await this.prisma.$executeRaw`
+        UPDATE "campaigns"
+        SET "budgetReservedMinor" = "budgetReservedMinor" + ${bidAmount}
+        WHERE "id" = ${selected.id}
+          AND "status" = 'active'
+          AND "budgetSpentMinor" + "budgetReservedMinor" + ${bidAmount} <= "budgetTotalMinor"
+      `;
+      if (reserved === 0) {
+        return { ad: null, reason: 'no_eligible_campaign' };
+      }
+    }
+
     const ad = {
       impressionToken,
       campaignId: selected.id,
@@ -312,33 +372,40 @@ export class ExtensionAdTrait {
     // time. On a P2034/serialization failure we retry the whole claim.
     let claim: Awaited<ReturnType<ExtensionService['claimImpression']>>;
     let attempt = 0;
-    for (;;) {
-      try {
-        claim = await this.claimImpression({
-          userId,
-          deviceId: dto.deviceId,
-          sessionId: dto.sessionId,
-          waitStateId: dto.waitStateId,
-          idempotencyKey: dto.idempotencyKey,
-          campaignId: selected.id,
-          creativeId: creative.id,
-          impressionTokenHash,
-          maxPerHour,
-          oneHourAgo,
-        });
-        break;
-      } catch (err) {
-        if (isSerializationError(err) && ++attempt < FREQUENCY_CAP_TXN_MAX_RETRIES) {
-          continue;
+    try {
+      for (;;) {
+        try {
+          claim = await this.claimImpression({
+            userId,
+            deviceId: dto.deviceId,
+            sessionId: dto.sessionId,
+            waitStateId: dto.waitStateId,
+            idempotencyKey: dto.idempotencyKey,
+            campaignId: selected.id,
+            creativeId: creative.id,
+            impressionTokenHash,
+            maxPerHour,
+            oneHourAgo,
+          });
+          break;
+        } catch (err) {
+          if (isSerializationError(err) && ++attempt < FREQUENCY_CAP_TXN_MAX_RETRIES) {
+            continue;
+          }
+          throw err;
         }
-        throw err;
       }
-    }
-    if (claim.status === 'duplicate') {
-      throw new ConflictException('Ad already requested for this wait state');
-    }
-    if (claim.status === 'cap_reached') {
-      return { ad: null, reason: 'user_hourly_cap_reached' };
+      if (claim.status === 'duplicate') {
+        await maybeReleaseReservation();
+        throw new ConflictException('Ad already requested for this wait state');
+      }
+      if (claim.status === 'cap_reached') {
+        await maybeReleaseReservation();
+        return { ad: null, reason: 'user_hourly_cap_reached' };
+      }
+    } catch (err) {
+      await maybeReleaseReservation();
+      throw err;
     }
     // Save to LRU cache for immediate retries. Both keys map to the same ad
     // so a retry on either lookup hits the bounded cache. LRU's TTL evicts
@@ -480,6 +547,20 @@ export class ExtensionAdTrait {
   }
 
   // ── Ad Event Tracking ──
+  /**
+   * Release a previously reserved campaign budget. Safe to call multiple times:
+   * the UPDATE only decrements when the reserved amount is still present.
+   */
+  async releaseBudgetReservation(campaignId: string, amount: bigint): Promise<void> {
+    if (amount <= 0n) return;
+    await this.prisma.$executeRaw`
+      UPDATE "campaigns"
+      SET "budgetReservedMinor" = "budgetReservedMinor" - ${amount}
+      WHERE "id" = ${campaignId}
+        AND "budgetReservedMinor" >= ${amount}
+    `;
+  }
+
   async recordRendered(
     userId: string,
     dto: {
@@ -565,6 +646,10 @@ export class ExtensionAdTrait {
       throw new ForbiddenException('Invalid request signature');
     }
     if (!isActiveAccountStatus(impression.user.status)) {
+      await this.releaseBudgetReservation(
+        impression.campaignId,
+        BigInt(impression.campaign.bidAmountMinor),
+      );
       await this.prisma.adImpression.update({
         where: { id: impression.id },
         data: {
@@ -625,12 +710,17 @@ export class ExtensionAdTrait {
     const isBillable = rateCheck.allowed;
     if (!isBillable) {
       // Record the impression as qualified but not billable — fraud was flagged
+      await this.releaseBudgetReservation(
+        impression.campaignId,
+        BigInt(impression.campaign.bidAmountMinor),
+      );
       await this.prisma.adImpression.update({
         where: { id: impression.id },
         data: {
           qualifiedAt: new Date(),
           visibleDurationMs: effectiveDurationMs,
           isBillable: false,
+          invalidationReason: rateCheck.reason || 'fraud_detected',
         },
       });
       return {
@@ -715,14 +805,18 @@ export class ExtensionAdTrait {
         if (advertiserBalance < impression.campaign.bidAmountMinor) {
           throw new AdvertiserBalanceExhaustedError();
         }
-        // (2) Atomic spend increment — rejects when budget would overflow OR the
-        // campaign is no longer `active`.
+        // (2) Convert the reserved budget to spent budget. The reservation was
+        // made at requestAd time; here we atomically decrement reserved and
+        // increment spent. The status guard is intentionally omitted: an
+        // in-flight impression that was served while the campaign was active
+        // must still be able to convert its reservation even if the campaign
+        // is paused/archived before qualification.
         const spent: number = await tx.$executeRaw`
           UPDATE "campaigns"
-          SET "budgetSpentMinor" = "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)}
+          SET "budgetSpentMinor" = "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)},
+              "budgetReservedMinor" = "budgetReservedMinor" - ${BigInt(impression.campaign.bidAmountMinor)}
           WHERE "id" = ${impression.campaignId}
-            AND "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)} <= "budgetTotalMinor"
-            AND "status" = 'active'
+            AND "budgetReservedMinor" >= ${BigInt(impression.campaign.bidAmountMinor)}
         `;
         if (spent === 0) {
           throw new BudgetExhaustedError();
@@ -787,6 +881,10 @@ export class ExtensionAdTrait {
       });
     } catch (err) {
       if (err instanceof BudgetExhaustedError) {
+        await this.releaseBudgetReservation(
+          impression.campaignId,
+          impression.campaign.bidAmountMinor,
+        );
         await this.prisma.adImpression.update({
           where: { id: impression.id },
           data: {
@@ -799,6 +897,10 @@ export class ExtensionAdTrait {
         return { qualified: false, impressionId: impression.id, reason: 'budget_exhausted' };
       }
       if (err instanceof AdvertiserBalanceExhaustedError) {
+        await this.releaseBudgetReservation(
+          impression.campaignId,
+          impression.campaign.bidAmountMinor,
+        );
         await this.prisma.adImpression.update({
           where: { id: impression.id },
           data: {
@@ -956,15 +1058,14 @@ export class ExtensionAdTrait {
           },
         });
         if (isCpcBid && split) {
-          // Atomic budget guard for CPC clicks — same pattern as CPM above,
-          // including the `status = 'active'` TOCTOU guard against
-          // concurrent archive/pause.
+          // Atomic budget guard for CPC clicks. The status guard is omitted
+          // so a click served while the campaign was active can still bill even
+          // if the campaign is paused/archived before the click is recorded.
           const spent: number = await tx.$executeRaw`
             UPDATE "campaigns"
             SET "budgetSpentMinor" = "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)}
             WHERE "id" = ${impression.campaignId}
               AND "budgetSpentMinor" + ${BigInt(impression.campaign.bidAmountMinor)} <= "budgetTotalMinor"
-              AND "status" = 'active'
           `;
           if (spent === 0) {
             throw new ConflictException('Campaign budget exhausted or no longer active');

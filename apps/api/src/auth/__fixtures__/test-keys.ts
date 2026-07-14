@@ -1,0 +1,47 @@
+/**
+ * Test RSA key pair for RS256 JWT signing/verification in unit tests.
+ * These are intentionally low-security test keys and must NEVER be used
+ * in production or any real deployment.
+ *
+ * This file lives under __fixtures__ so it is clearly test-only and should
+ * not be imported by production code.
+ */
+
+export const TEST_JWT_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDibBOaf5Tnpf6q
+gI1gx0gEorME52TzSfj7dS7LTGfsK48xIfSypU5ZilMjROw34iE6ORGaaNYJ50gT
+RhZ7GeWRDJbp+kYi6hl1X54zWlxz/192liD5BclHj8UcedWqF1X/qlO/svJSVf8M
+GLXColVEjNP36363oIlhvG2jp0ops939EuUrtY6lgRhnJx6pORiadGvKRUn+DO7k
+K9T4b2qLdtX2cpAfMrDKCN4IHoasaPTVrZQL9xJ4ZQ+Tm70IlnK3rGE5Tn6+Sn3e
+Vd3+aLCCh/drza3/y2dx0v1exJOFfK5Bt5NMxVRAWjdRUDI+HJdVjCLtplw5bGUn
+iPQAliNbAgMBAAECggEAEd17Mn6MjjaPwH5CKXev3AXGYEWttnCIv7aASbQuovjQ
+5IyMVSgr5W6/npHKnaIvAvwLwoYxFTj1e+fU0EO71FUM90szC4AzIAq6XczsbI6i
+xqWT1nI5bncOk2+dhz0uIO0cjIyfCBYW+KpedQv/9Fe0ReSD7BMzo82NTRNfC6kq
+ecQl0DkCo0wF63sHAyhuqQwFpuBFtB/EwWRAeYMZxJ/BMEo99kXTd7XaV39qbv2i
+fO+DNG8IgoTQRXUpcGvl/2L8tnzfE2Qro3fCq05xRwBMhhxuUxL+p48uvshpm1FP
+k37urpWW+Zwp+qIBqzt8wOaDflwoZahcRVWgBgabOQKBgQD876Ku3EFr8TFeVINn
+/iKkg70LVEqI4MK2POwYW1bQE3nAwT86ad2ogvyJSZbeka9qX9mhcYKxFKw0fTFT
+eFNklB9pq8935W2PxTWDLbCePAdmIR54CiPPNqRzM8ayf/YVJpCYL874SIYmjjQY
+gBu3zvYggXFC0WQf7s71paAJFwKBgQDlKjhwUGcr8mjqRH7bJUxTcKLyBB4S1KPV
+rmCqW3iVVWgs611N3Fqjs9kwF4F4wXXkChnYK1lzlKsacWNJ2an1kcDxvKW2lV96
+ayO25Q+SFIVxVuozjumAcMGcCqfqcPWyXTgAod/0Vx9JaHaiOIZxgJUZTRW5Upub
+Ouj1Nr2aXQKBgQDM2+oPZiU2n+s0U476s0KrrGd4vZSAuEn7/+vY7mGptZxvGhVz
+4jq9ORoAt7GSIrzIk0lZEO6hLfUrrho9WL9yPuYSWC15FkFeqINm86KRBl2XwktD
+PjMyqTcYd17/Q9Sz3MBQAqjHPzYoFBTtoxTQErgWK8DoNV+63ViSbMrpkQKBgQCN
+95HvQmAoAYytVLGh4YFfT7AibhqTX9f/UH/iCbiyCq725Phwe8pLD+fEu0siG/eE
+xh0spe5MhBVb1FLGNWntD9aP62ZdrjvwAt+lNlJnFP92L3n3ZtmREElg+dj8i+4q
+CUXgXmf3XuGrAGQ+KvZe6mFzwyVqIZr0l5IqFzduoQKBgF4JsvH/Cf/t9gDwUhCK
+ewt/YllC4ooH9ZvbDXsW/GnP+zW4D2UKRq/8xCAUnBZZIycV4xZeXQTWj1H0gAFe
+Tx+aVsKQzTAS3gIl0B5OV1jjo87CQRrovoiOsa3z0G/ty+cKJjLAza8Kd42CKnhs
+RzYsUtSNKBt6HbKgkJzrUqLP
+-----END PRIVATE KEY-----`;
+
+export const TEST_JWT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4mwTmn+U56X+qoCNYMdI
+BKKzBOdk80n4+3Uuy0xn7CuPMSH0sqVOWYpTI0TsN+IhOjkRmmjWCedIE0YWexnl
+kQyW6fpGIuoZdV+eM1pcc/9fdpYg+QXJR4/FHHnVqhdV/6pTv7LyUlX/DBi1wqJV
+RIzT9+t+t6CJYbxto6dKKbPd/RLlK7WOpYEYZyceqTkYmnRrykVJ/gzu5CvU+G9q
+i3bV9nKQHzKwygjeCB6GrGj01a2UC/cSeGUPk5u9CJZyt6xhOU5+vkp93lXd/miw
+gof3a82t/8tncdL9XsSThXyuQbeTTMVUQFo3UVAyPhyXVYwi7aZcOWxlJ4j0AJYj
+WwIDAQAB
+-----END PUBLIC KEY-----`;

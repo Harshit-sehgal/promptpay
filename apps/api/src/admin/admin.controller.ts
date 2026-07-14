@@ -17,6 +17,7 @@ import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { AdminService } from './admin.service';
 import {
   AdminDevicesQueryDto,
@@ -35,7 +36,9 @@ import {
   RejectPayoutDto,
   ResolveFraudFlagDto,
   ResolveRecoveryDebtCaseDto,
+  ToggleRuntimeConfigDto,
   ToggleToolIntegrationDto,
+  UpdateRuntimeConfigDto,
   UsersQueryDto,
   WebhookEventsQueryDto,
 } from './dto';
@@ -46,7 +49,10 @@ import {
 @UseInterceptors(AuditInterceptor)
 @Roles('admin', 'super_admin')
 export class AdminController {
-  constructor(private service: AdminService) {}
+  constructor(
+    private service: AdminService,
+    private runtimeConfig: RuntimeConfigService,
+  ) {}
 
   @ApiOperation({ summary: 'Get admin overview' })
   @Get('overview')
@@ -352,5 +358,35 @@ export class AdminController {
       entryId: id,
       stripeRefundPaymentIntentId,
     });
+  }
+
+  // ── Runtime Kill Switches ──
+
+  @ApiOperation({ summary: 'List runtime kill switches' })
+  @Get('settings')
+  getRuntimeSettings() {
+    return this.runtimeConfig.getAll();
+  }
+
+  @ApiOperation({ summary: 'Update a runtime setting (raw JSON value)' })
+  @Post('settings/:scope/:target')
+  updateRuntimeSetting(
+    @Param('scope') scope: string,
+    @Param('target') target: string,
+    @CurrentUser('id') actorId: string,
+    @Body() dto: UpdateRuntimeConfigDto,
+  ) {
+    return this.runtimeConfig.setRaw(scope, target, dto.value, actorId, dto.reason);
+  }
+
+  @ApiOperation({ summary: 'Toggle a runtime boolean switch' })
+  @Post('settings/:scope/:target/toggle')
+  toggleRuntimeSetting(
+    @Param('scope') scope: string,
+    @Param('target') target: string,
+    @CurrentUser('id') actorId: string,
+    @Body() dto: ToggleRuntimeConfigDto,
+  ) {
+    return this.runtimeConfig.setBoolean({ scope, target }, dto.enabled, actorId, dto.reason);
   }
 }

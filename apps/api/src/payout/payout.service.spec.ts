@@ -42,6 +42,11 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}, requir
     ),
   } as unknown as ConstructorParameters<typeof PayoutService>[4];
   const referral = { processReferralRewards: vi.fn().mockResolvedValue(undefined) };
+  const runtimeConfig = {
+    isPayoutRequestsEnabled: vi.fn().mockResolvedValue(true),
+    isProviderEnabled: vi.fn().mockResolvedValue(true),
+    isCurrencyAllowed: vi.fn().mockResolvedValue(true),
+  };
   const service = new PayoutService(
     prisma as never,
     {} as LedgerService,
@@ -51,6 +56,7 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}, requir
     {} as never,
     {} as never,
     {} as never,
+    runtimeConfig as never,
   );
   return { prisma, service };
 }
@@ -497,21 +503,27 @@ describe('markPayoutPaid terminal state transition', () => {
       allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }],
     };
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({
-      payoutRequest: {
-        findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payoutPaid),
-        updateMany,
-        update: vi.fn(),
-        findFirst: vi.fn(),
-      },
-      payoutTransaction: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), findFirst: vi.fn(), create: vi.fn() },
-      earningsLedger: {
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-        aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
-      },
-      platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
-      payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
-    }));
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payoutPaid),
+          updateMany,
+          update: vi.fn(),
+          findFirst: vi.fn(),
+        },
+        payoutTransaction: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          create: vi.fn(),
+        },
+        earningsLedger: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
+        },
+        platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
+      }),
+    );
     const { service } = makePayoutService({
       payoutRequest: {
         findUnique: vi.fn().mockResolvedValue(payoutPaid),
@@ -521,7 +533,11 @@ describe('markPayoutPaid terminal state transition', () => {
         findFirst: vi.fn(),
         update: vi.fn(),
       },
-      payoutTransaction: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), findFirst: vi.fn(), create: vi.fn() },
+      payoutTransaction: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
       earningsLedger: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
@@ -545,10 +561,21 @@ describe('markPayoutPaid terminal state transition', () => {
   });
 
   it('rejects amount cross-check mismatch when expectedAmountMinor is supplied (Fix 2 regression lock)', async () => {
-    const payout =
-      { id: 'payout-1', status: 'approved', approvedAmountMinor: 5000n, currency: 'usd', payoutAccount: { id: 'pa-1', provider: 'manual' }, allocations: [] };
+    const payout = {
+      id: 'payout-1',
+      status: 'approved',
+      approvedAmountMinor: 5000n,
+      currency: 'usd',
+      payoutAccount: { id: 'pa-1', provider: 'manual' },
+      allocations: [],
+    };
     const { service } = makePayoutService({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue(payout), updateMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue(payout),
+        updateMany: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
     });
 
     await expect(() =>
@@ -563,30 +590,55 @@ describe('markPayoutPaid terminal state transition', () => {
 
   it('rejects when allocated earnings entries are concurrently held and rolls back the paid transition', async () => {
     const payout = {
-      id: 'payout-1', userId: 'u1', status: 'approved', approvedAmountMinor: 1000n, currency: 'usd',
+      id: 'payout-1',
+      userId: 'u1',
+      status: 'approved',
+      approvedAmountMinor: 1000n,
+      currency: 'usd',
       payoutAccount: { id: 'pa-1', provider: 'manual', isActive: true, isVerified: true },
-      allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }, { id: 'alloc-2', earningsEntryId: 'earn-2' }],
+      allocations: [
+        { id: 'alloc-1', earningsEntryId: 'earn-1' },
+        { id: 'alloc-2', earningsEntryId: 'earn-2' },
+      ],
     };
     // Two earnings entries, but only one gets marked paid (the other was held).
-    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn(),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          update: vi.fn(),
+        },
+        payoutTransaction: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          create: vi.fn(),
+        },
+        earningsLedger: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }), // only 1 of 2 was paid
+        },
+        platformLedger: { upsert: vi.fn() },
+        payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
+      }),
+    );
+    const { service } = makePayoutService({
       payoutRequest: {
-        findUnique: vi.fn(),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUnique: vi.fn().mockResolvedValue(payout),
+        updateMany: vi.fn(),
         findFirst: vi.fn(),
         update: vi.fn(),
       },
-      payoutTransaction: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), findFirst: vi.fn(), create: vi.fn() },
-      earningsLedger: {
+      payoutTransaction: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-        aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }), // only 1 of 2 was paid
+        findFirst: vi.fn(),
+        create: vi.fn(),
       },
-      platformLedger: { upsert: vi.fn() },
-      payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
-    }));
-    const { service } = makePayoutService({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue(payout), updateMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
-      payoutTransaction: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), findFirst: vi.fn(), create: vi.fn() },
-      earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }) },
+      earningsLedger: {
+        updateMany: vi.fn(),
+        aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
+      },
       $transaction: $tx,
     });
 
@@ -600,18 +652,29 @@ describe('markPayoutPaid terminal state transition', () => {
 
   it('returns the payout idempotently when already paid with PayoutTransaction already in paid status', async () => {
     const alreadyPaid = {
-      id: 'payout-1', userId: 'u1', status: 'paid', approvedAmountMinor: 1000n, currency: 'usd',
+      id: 'payout-1',
+      userId: 'u1',
+      status: 'paid',
+      approvedAmountMinor: 1000n,
+      currency: 'usd',
       payoutAccount: { id: 'pa-1', provider: 'manual', isActive: true, isVerified: true },
       allocations: [],
     };
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
-    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue(alreadyPaid), updateMany, findFirst: vi.fn(), update: vi.fn() },
-      payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
-      earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
-      platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
-      payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
-    }));
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValue(alreadyPaid),
+          updateMany,
+          findFirst: vi.fn(),
+          update: vi.fn(),
+        },
+        payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
+        earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
+        platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
+      }),
+    );
     // The pre-tx findUnique returns 'approved' so the method enters the tx path
     // (status !== 'paid'); but inside the tx the CAS returns count 0 because
     // a concurrent caller already flipped it to 'paid' — and the tx re-read
@@ -623,7 +686,12 @@ describe('markPayoutPaid terminal state transition', () => {
       allocations: [],
     };
     const { service } = makePayoutService({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue(preTx), updateMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue(preTx),
+        updateMany: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
       payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
       earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
       platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
@@ -639,31 +707,37 @@ describe('markPayoutPaid terminal state transition', () => {
 
   it('creates a PayoutTransaction when no existing transaction row is found (missing-tx branch)', async () => {
     const payout = {
-      id: 'payout-1', userId: 'u1', status: 'approved', approvedAmountMinor: 1000n, currency: 'usd',
+      id: 'payout-1',
+      userId: 'u1',
+      status: 'approved',
+      approvedAmountMinor: 1000n,
+      currency: 'usd',
       payoutAccount: { id: 'pa-1', provider: 'manual', isActive: true, isVerified: true },
       allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }],
     };
     // No existing PayoutTransaction — verify we create one + don't double-insert.
     const txCreate = vi.fn().mockResolvedValue({ id: 'ptx-new' });
-    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({
-      payoutRequest: {
-        findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payout),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-        findFirst: vi.fn(),
-        update: vi.fn(),
-      },
-      payoutTransaction: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        findFirst: vi.fn().mockResolvedValue(null),
-        create: txCreate,
-      },
-      earningsLedger: {
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-        aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
-      },
-      platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
-      payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
-    }));
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payout),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          update: vi.fn(),
+        },
+        payoutTransaction: {
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: txCreate,
+        },
+        earningsLedger: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
+        },
+        platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
+      }),
+    );
     const { service } = makePayoutService({
       payoutRequest: {
         findUnique: vi.fn().mockResolvedValue(payout),
@@ -672,7 +746,10 @@ describe('markPayoutPaid terminal state transition', () => {
         update: vi.fn(),
       },
       payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
-      earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }) },
+      earningsLedger: {
+        updateMany: vi.fn(),
+        aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
+      },
       platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
       $transaction: $tx,
     });
@@ -694,20 +771,42 @@ describe('markPayoutPaid terminal state transition', () => {
 describe('markPayoutFailed terminal state transition', () => {
   it('CAS-flips payoutRequest from approved/processing and asserts the where clause', async () => {
     const payout = {
-      id: 'payout-1', status: 'approved', approvedAmountMinor: 1000n, currency: 'usd',
+      id: 'payout-1',
+      status: 'approved',
+      approvedAmountMinor: 1000n,
+      currency: 'usd',
       payoutAccount: { id: 'pa-1', provider: 'manual' },
       allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }],
     };
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payout), updateMany, findFirst: vi.fn(), update: vi.fn() },
-      payoutTransaction: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), findFirst: vi.fn(), create: vi.fn() },
-      payoutAllocation: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }), updateMany: vi.fn() },
-      earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
-      platformLedger: { upsert: vi.fn() },
-    }));
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payout),
+          updateMany,
+          findFirst: vi.fn(),
+          update: vi.fn(),
+        },
+        payoutTransaction: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          create: vi.fn(),
+        },
+        payoutAllocation: {
+          deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+          updateMany: vi.fn(),
+        },
+        earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
+        platformLedger: { upsert: vi.fn() },
+      }),
+    );
     const { service } = makePayoutService({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue(payout), updateMany, findFirst: vi.fn(), update: vi.fn() },
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue(payout),
+        updateMany,
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
       payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
       payoutAllocation: { deleteMany: vi.fn() },
       $transaction: $tx,
@@ -726,17 +825,34 @@ describe('markPayoutFailed terminal state transition', () => {
   });
 
   it('returns idempotently when payout is already failed', async () => {
-    const alreadyFailed = { id: 'payout-1', status: 'failed', allocations: [], payoutAccount: { provider: 'manual' } };
+    const alreadyFailed = {
+      id: 'payout-1',
+      status: 'failed',
+      allocations: [],
+      payoutAccount: { provider: 'manual' },
+    };
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
-    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue(alreadyFailed), updateMany, findFirst: vi.fn(), update: vi.fn() },
-      payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
-      payoutAllocation: { deleteMany: vi.fn(), updateMany: vi.fn() },
-      earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
-      platformLedger: { upsert: vi.fn() },
-    }));
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValue(alreadyFailed),
+          updateMany,
+          findFirst: vi.fn(),
+          update: vi.fn(),
+        },
+        payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
+        payoutAllocation: { deleteMany: vi.fn(), updateMany: vi.fn() },
+        earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
+        platformLedger: { upsert: vi.fn() },
+      }),
+    );
     const { service } = makePayoutService({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue({ ...alreadyFailed }), updateMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue({ ...alreadyFailed }),
+        updateMany: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
       payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
       payoutAllocation: { deleteMany: vi.fn() },
       $transaction: $tx,
@@ -752,20 +868,42 @@ describe('markPayoutFailed terminal state transition', () => {
 
   it('deletes payout allocations to free confirmed earnings for a new request', async () => {
     const payout = {
-      id: 'payout-1', status: 'processing', approvedAmountMinor: 1000n, currency: 'usd',
+      id: 'payout-1',
+      status: 'processing',
+      approvedAmountMinor: 1000n,
+      currency: 'usd',
       payoutAccount: { id: 'pa-1', provider: 'manual' },
-      allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }, { id: 'alloc-2', earningsEntryId: 'earn-2' }],
+      allocations: [
+        { id: 'alloc-1', earningsEntryId: 'earn-1' },
+        { id: 'alloc-2', earningsEntryId: 'earn-2' },
+      ],
     };
     const deleteMany = vi.fn().mockResolvedValue({ count: 2 });
-    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) => cb({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payout), updateMany: vi.fn().mockResolvedValue({ count: 1 }), findFirst: vi.fn(), update: vi.fn() },
-      payoutTransaction: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), findFirst: vi.fn(), create: vi.fn() },
-      payoutAllocation: { deleteMany, updateMany: vi.fn() },
-      earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
-      platformLedger: { upsert: vi.fn() },
-    }));
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payout),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          update: vi.fn(),
+        },
+        payoutTransaction: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          create: vi.fn(),
+        },
+        payoutAllocation: { deleteMany, updateMany: vi.fn() },
+        earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
+        platformLedger: { upsert: vi.fn() },
+      }),
+    );
     const { service } = makePayoutService({
-      payoutRequest: { findUnique: vi.fn().mockResolvedValue(payout), updateMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue(payout),
+        updateMany: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
       payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
       payoutAllocation: { deleteMany: vi.fn() },
       $transaction: $tx,

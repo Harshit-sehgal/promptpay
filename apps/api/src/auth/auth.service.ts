@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
-import { EmailService } from '../email/email.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { FraudService } from '../fraud/fraud.service';
 import { AuthCoreTrait } from './auth-core.trait';
 import { AuthEmailTrait } from './auth-email.trait';
@@ -28,6 +28,7 @@ export class AuthService {
   // Logger` — TS rejects a private field that an extended trait interface
   // expects to be public (TS2430).
   readonly logger = new Logger(AuthService.name);
+  readonly publicKey: string;
 
   constructor(
     public prisma: PrismaService,
@@ -35,7 +36,7 @@ export class AuthService {
     public config: ConfigService,
     public googleVerifier: GoogleTokenVerifier,
     public fraud: FraudService,
-    public email: EmailService,
+    public email: EmailQueueService,
     public audit: AuditService,
   ) {
     // Brand the config strings as `StringValue` so they satisfy jsonwebtoken's
@@ -44,13 +45,21 @@ export class AuthService {
     // would fail at sign time, not typecheck.
     this.accessTtl = this.config.get<string>('JWT_ACCESS_TTL', '15m') as StringValue;
     this.refreshTtl = this.config.get<string>('JWT_REFRESH_TTL', '30d') as StringValue;
-    const secret = this.config.get<string>('JWT_SECRET');
-    if (!secret || secret.length < 32) {
+    const privateKey = this.config.get<string>('JWT_PRIVATE_KEY');
+    const publicKey = this.config.get<string>('JWT_PUBLIC_KEY');
+    const hmacSecret = this.config.get<string>('JWT_SECRET');
+    if (!privateKey || !publicKey) {
       throw new Error(
-        'JWT_SECRET must be defined and at least 32 characters. Set a strong secret in your environment (e.g. `openssl rand -base64 48`).',
+        'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be defined for RS256 token signing.',
       );
     }
-    this.jwtSecret = secret;
+    if (!hmacSecret || hmacSecret.length < 32) {
+      throw new Error(
+        'JWT_SECRET must be defined and at least 32 characters for refresh-token HMAC and BFF identity signing.',
+      );
+    }
+    this.publicKey = publicKey;
+    this.jwtSecret = hmacSecret;
     this.totpEncryptionKey = this.buildTotpEncryptionKey();
   }
 }

@@ -5,6 +5,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { CampaignService } from '../campaign/campaign.service';
+import { createMockRuntimeConfig } from '../runtime-config/test-helpers';
 import { AdvertiserService, buildReportsDateFilter } from './advertiser.service';
 
 function makePrisma() {
@@ -83,7 +84,14 @@ function makeService(prisma: ReturnType<typeof makePrisma>) {
   const audit = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
   const campaignService = {} as unknown as CampaignService;
   const googleVerifier = { verify: vi.fn() } as unknown as GoogleTokenVerifier;
-  return new AdvertiserService(prisma as any, campaignService, audit, googleVerifier);
+  const runtimeConfig = createMockRuntimeConfig();
+  return new AdvertiserService(
+    prisma as any,
+    campaignService,
+    audit,
+    googleVerifier,
+    runtimeConfig,
+  );
 }
 
 describe('AdvertiserService.getDashboard CTR ratio (A-024)', () => {

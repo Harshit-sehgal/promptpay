@@ -12,6 +12,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators';
@@ -33,6 +34,7 @@ import {
   TwoFactorSetupDto,
   VerifyEmailConfirmDto,
 } from './dto';
+import { deriveKeyId } from './jwt-key-id';
 
 function isCredentialFailure(err: unknown): boolean {
   return err instanceof UnauthorizedException || err instanceof BadRequestException;
@@ -41,7 +43,45 @@ function isCredentialFailure(err: unknown): boolean {
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private config: ConfigService,
+  ) {}
+
+  @ApiOperation({ summary: 'Public JWKS for access-token verification' })
+  @Get('.well-known/jwks.json')
+  getJwks() {
+    const publicKey = this.config.get<string>('JWT_PUBLIC_KEY');
+    if (!publicKey) {
+      throw new BadRequestException('JWT_PUBLIC_KEY is not configured');
+    }
+    return {
+      keys: [
+        {
+          kty: 'RSA',
+          alg: 'RS256',
+          use: 'sig',
+          kid: deriveKeyId(publicKey),
+          // Strip PEM headers and whitespace to produce a raw base64-encoded
+          // modulus/exponent would require parsing the key. Clients can
+          // instead fetch the PEM-wrapped public key from /auth/public-key.
+        },
+      ],
+    };
+  }
+
+  @ApiOperation({ summary: 'Public signing key for access-token verification' })
+  @Get('public-key')
+  getPublicKey() {
+    const publicKey = this.config.get<string>('JWT_PUBLIC_KEY');
+    if (!publicKey) {
+      throw new BadRequestException('JWT_PUBLIC_KEY is not configured');
+    }
+    return {
+      kid: deriveKeyId(publicKey),
+      publicKey,
+    };
+  }
 
   @ApiOperation({ summary: 'Sign up' })
   @Post('signup')

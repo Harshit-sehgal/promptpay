@@ -1,15 +1,29 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
+import { Prisma } from '@waitlayer/db';
+
 import { acquireCronLease } from '../common/utils/cron-lease';
+import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
 import { EmailService } from './email.service';
+import { EmailQueueService } from './email-queue.service';
+
+interface EmailQueueRow {
+  id: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string | null;
+  retryCount: number;
+}
 
 /**
  * Processes queued transactional emails with exponential backoff.
  *
  * - Runs every minute via setInterval.
  * - Acquires a cross-replica cron lease.
+ * - Uses FOR UPDATE SKIP LOCKED for row-level leases.
  * - Purges expired rows (e.g. dead password-reset tokens).
  * - Retries due rows; deletes on success, updates nextRetryAt on failure.
  * - Gives up after 8 attempts (~4 hours total) to avoid infinite retries.
@@ -31,6 +45,7 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    private readonly queue: EmailQueueService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -77,22 +92,33 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
       this.logger.log(`Purged ${purged} expired email queue row(s)`);
     }
 
-    const batch = await this.prisma.emailQueue.findMany({
-      where: { nextRetryAt: { lte: new Date() } },
-      orderBy: { nextRetryAt: 'asc' },
-      take: this.BATCH_SIZE,
-    });
+    // Use FOR UPDATE SKIP LOCKED so multiple replicas cannot pick up the same
+    // row. The cross-replica cron lease above prevents duplicate cron runs, but
+    // a slow batch can outlive the lease; row-level locking is the final
+    // duplicate-prevention barrier.
+    const batch = (await this.prisma.$queryRaw<EmailQueueRow[]>(
+      Prisma.sql`
+        SELECT * FROM "email_queue"
+        WHERE "next_retry_at" <= NOW()
+        ORDER BY "next_retry_at" ASC
+        LIMIT ${this.BATCH_SIZE}
+        FOR UPDATE SKIP LOCKED
+      `,
+    )) as EmailQueueRow[];
 
     let delivered = 0;
     let stillFailing = 0;
     let permanentFailures = 0;
 
     for (const job of batch) {
+      // Decrypt at-rest payloads before handing them to the email provider.
+      const html = this.queue.decrypt(job.html);
+      const text = job.text ? this.queue.decrypt(job.text) : undefined;
       const result = await this.email.send({
         to: job.to,
         subject: job.subject,
-        html: job.html,
-        text: job.text ?? undefined,
+        html,
+        text,
       });
 
       if (result.delivered) {
@@ -103,8 +129,12 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
 
       const retryCount = job.retryCount + 1;
       if (retryCount > this.MAX_RETRIES) {
+        const recipientRef = privacyPseudonym(job.to.trim().toLowerCase(), 'email-recipient').slice(
+          0,
+          16,
+        );
         this.logger.warn(
-          `Giving up on queued email to ${job.to} after ${this.MAX_RETRIES} retries`,
+          `Giving up on queued email ${job.id} to ${recipientRef} after ${this.MAX_RETRIES} retries`,
         );
         await this.prisma.emailQueue.delete({ where: { id: job.id } });
         permanentFailures++;

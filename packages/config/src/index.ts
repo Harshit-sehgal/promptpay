@@ -75,6 +75,18 @@ const envSchema = z
     // "change-me-in-production-32chars-ok") passes zod and is forgeable in
     // any deployment that ships it. The refine() below rejects the small
     // set of known public placeholders so they cannot reach production.
+    //
+    // JWT_PRIVATE_KEY / JWT_PUBLIC_KEY: RS256 key pair for access/refresh
+    // tokens. The private key lives ONLY in the API; the public key is shared
+    // with the web middleware so it can verify httpOnly cookies at the Edge.
+    // JWT_SECRET: symmetric secret used for refresh-token HMAC integrity and
+    // BFF rate-limit identity signing. It is NOT used for JWT signing.
+    JWT_PRIVATE_KEY: z.string().optional(),
+    JWT_PUBLIC_KEY: z.string().optional(),
+    // Standard JWT issuer/audience. Defaults keep dev/test simple while
+    // allowing production to pin tokens to a concrete deployment.
+    JWT_ISSUER: z.string().default('waitlayer'),
+    JWT_AUDIENCE: z.string().default('waitlayer-client'),
     JWT_SECRET: z
       .string()
       .min(32)
@@ -84,12 +96,16 @@ const envSchema = z
           !s.includes('replace-with') &&
           !s.startsWith('dev-jwt-secret'),
         { message: 'JWT_SECRET must not be a known placeholder' },
-      ),
+      )
+      .optional(),
     JWT_ACCESS_TTL: z.string().default('15m'),
     JWT_REFRESH_TTL: z.string().default('30d'),
     // App-level encryption key for server-stored TOTP secrets. Required in
     // production so a database-only leak does not expose reusable MFA seeds.
     TOTP_SECRET_ENCRYPTION_KEY: z.string().optional(),
+    // App-level encryption key for queued email payloads. Required in production
+    // so a database-only leak does not expose password-reset/email-verify tokens.
+    EMAIL_QUEUE_SECRET: z.string().min(32).optional(),
     // Extension events use per-device eventSecret values issued at device
     // registration. There is intentionally no shared global extension HMAC.
 
@@ -180,13 +196,33 @@ const envSchema = z
     // All crons fall back to safe defaults; operators can override per deploy.
     PAYOUT_POLL_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(600_000),
     PAYOUT_POLL_BATCH_SIZE: z.coerce.number().int().min(1).max(500).default(100),
-    RETENTION_CRON_INTERVAL_MS: z.coerce.number().int().min(3_600_000).max(604_800_000).default(86_400_000),
-    LEDGER_MATURATION_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(600_000),
+    RETENTION_CRON_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(3_600_000)
+      .max(604_800_000)
+      .default(86_400_000),
+    LEDGER_MATURATION_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(86_400_000)
+      .default(600_000),
     LEDGER_MATURATION_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(500),
     LEDGER_MATURATION_RUN_CAP: z.coerce.number().int().min(1).max(20_000).default(5_000),
     WEBHOOK_RECLAIM_CRON: z.enum(['true', 'false']).optional(),
-    WEBHOOK_RECLAIM_CRON_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(300_000),
-    WEBHOOK_RECLAIM_CRON_AGE_MS: z.coerce.number().int().min(60_000).max(2_592_000_000).default(2_100_000),
+    WEBHOOK_RECLAIM_CRON_INTERVAL_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(86_400_000)
+      .default(300_000),
+    WEBHOOK_RECLAIM_CRON_AGE_MS: z.coerce
+      .number()
+      .int()
+      .min(60_000)
+      .max(2_592_000_000)
+      .default(2_100_000),
     WEBHOOK_RECLAIM_CRON_BATCH_SIZE: z.coerce.number().int().min(1).max(1_000).default(100),
 
     // Per-call timeout (ms) for external PSP provider calls (initiate / status
@@ -206,19 +242,24 @@ const envSchema = z
     },
   )
   .refine(
-    (env) => env.NODE_ENV !== 'production' || env.PAYOUT_REQUIRE_2FA === 'true',
+    (env) => {
+      if (env.NODE_ENV !== 'production') return true;
+      return Boolean(env.JWT_PRIVATE_KEY) && Boolean(env.JWT_PUBLIC_KEY) && Boolean(env.JWT_SECRET);
+    },
     {
-      message: 'PAYOUT_REQUIRE_2FA=true is required in production.',
-      path: ['PAYOUT_REQUIRE_2FA'],
+      message:
+        'JWT_PRIVATE_KEY, JWT_PUBLIC_KEY and JWT_SECRET are required in production. JWT_SECRET is used for refresh-token HMAC and BFF identity signing.',
+      path: ['JWT_PRIVATE_KEY'],
     },
   )
-  .refine(
-    (env) => env.NODE_ENV !== 'production' || Boolean(env.PRIVACY_HASH_KEY),
-    {
-      message: 'PRIVACY_HASH_KEY is required in production and must be at least 32 characters.',
-      path: ['PRIVACY_HASH_KEY'],
-    },
-  )
+  .refine((env) => env.NODE_ENV !== 'production' || env.PAYOUT_REQUIRE_2FA === 'true', {
+    message: 'PAYOUT_REQUIRE_2FA=true is required in production.',
+    path: ['PAYOUT_REQUIRE_2FA'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.PRIVACY_HASH_KEY), {
+    message: 'PRIVACY_HASH_KEY is required in production and must be at least 32 characters.',
+    path: ['PRIVACY_HASH_KEY'],
+  })
   .refine(
     (env) =>
       env.NODE_ENV !== 'production' ||
@@ -240,13 +281,10 @@ const envSchema = z
       path: ['WEB_BASE_URL'],
     },
   )
-  .refine(
-    (env) => env.NODE_ENV !== 'production' || env.WEBHOOK_RECLAIM_CRON !== 'false',
-    {
-      message: 'WEBHOOK_RECLAIM_CRON cannot be explicitly disabled in production.',
-      path: ['WEBHOOK_RECLAIM_CRON'],
-    },
-  )
+  .refine((env) => env.NODE_ENV !== 'production' || env.WEBHOOK_RECLAIM_CRON !== 'false', {
+    message: 'WEBHOOK_RECLAIM_CRON cannot be explicitly disabled in production.',
+    path: ['WEBHOOK_RECLAIM_CRON'],
+  })
   .refine(
     (env) => {
       if (

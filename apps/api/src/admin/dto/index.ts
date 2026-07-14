@@ -19,3 +19,4 @@ export {
   UsersQueryDto,
   WebhookEventsQueryDto,
 } from './admin.dto';
+export { ToggleRuntimeConfigDto, UpdateRuntimeConfigDto } from './runtime-config.dto';

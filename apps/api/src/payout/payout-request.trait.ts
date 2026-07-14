@@ -2,16 +2,13 @@ import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 
 import { EarningsLedger, Prisma } from '@waitlayer/db';
-import {
-  payoutMinimumMinor,
-  payoutProviderLaunchStatus,
-  PayoutStatus,
-} from '@waitlayer/shared';
+import { payoutMinimumMinor, payoutProviderLaunchStatus, PayoutStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 import { PrismaService } from '../config/prisma.service';
 import { ReferralService } from '../referral/referral.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import {
   ALLOCATION_QUERY_PAGE_SIZE,
   PayoutProviderHandler,
@@ -25,6 +22,7 @@ export class PayoutRequestTrait {
   declare referral: ReferralService;
   declare audit: AuditService;
   declare config: ConfigService;
+  declare runtimeConfig: RuntimeConfigService;
   declare logger: Logger;
   declare providers: Record<string, PayoutProviderHandler>;
 
@@ -218,6 +216,9 @@ export class PayoutRequestTrait {
       earningsEntryIds?: string[];
     },
   ) {
+    if (!(await this.runtimeConfig.isPayoutRequestsEnabled())) {
+      throw new BadRequestException('Payout requests are temporarily disabled');
+    }
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
     if (user.status === 'restricted' || user.status === 'banned') {
@@ -240,6 +241,9 @@ export class PayoutRequestTrait {
     }
     // Minimum threshold check — per-currency floor from the currency policy.
     const currency = dto.currency.trim().toUpperCase();
+    if (!(await this.runtimeConfig.isCurrencyAllowed(currency))) {
+      throw new BadRequestException(`Currency "${currency}" is currently blocked`);
+    }
     const minPayout = payoutMinimumMinor(currency);
     if (dto.amountMinor < minPayout) {
       throw new BadRequestException(`Minimum payout is ${minPayout} ${currency} minor units`);
@@ -398,6 +402,11 @@ export class PayoutRequestTrait {
       if (!preflightProvider) {
         throw new BadRequestException(
           `Payout provider "${preflight.payoutAccount.provider}" not implemented`,
+        );
+      }
+      if (!(await this.runtimeConfig.isProviderEnabled(preflight.payoutAccount.provider))) {
+        throw new BadRequestException(
+          `Payout provider "${preflight.payoutAccount.provider}" is currently disabled`,
         );
       }
       const readiness = preflightProvider.readiness?.();
@@ -605,6 +614,11 @@ export class PayoutRequestTrait {
     if (!provider) {
       throw new BadRequestException(
         `Payout provider "${payout.payoutAccount.provider}" not implemented`,
+      );
+    }
+    if (!(await this.runtimeConfig.isProviderEnabled(payout.payoutAccount.provider))) {
+      throw new BadRequestException(
+        `Payout provider "${payout.payoutAccount.provider}" is currently disabled`,
       );
     }
     const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;

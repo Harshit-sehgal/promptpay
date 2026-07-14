@@ -6,7 +6,7 @@ import { JwtService } from '@nestjs/jwt';
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
 import { PrismaService } from '../config/prisma.service';
-import { EmailService } from '../email/email.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { PasswordResetPayload } from './auth.constants';
 import { AuthEmailTrait } from './auth-email.trait';
 import { AuthSessionTrait } from './auth-session.trait';
@@ -19,7 +19,7 @@ export class AuthPasswordTrait {
   declare prisma: PrismaService;
   declare jwt: JwtService;
   declare config: ConfigService;
-  declare email: EmailService;
+  declare email: EmailQueueService;
   declare audit: AuditService;
   declare jwtSecret: string;
   declare googleVerifier: GoogleTokenVerifier;
@@ -42,13 +42,16 @@ export class AuthPasswordTrait {
     if (!user || !isActiveAccountStatus(user.status)) {
       return generic;
     }
+    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
     const token = await this.jwt.signAsync(
       {
         sub: user.id,
         action: 'password-reset',
         fp: this.passwordFingerprint(user.passwordHash),
+        iss: issuer,
+        aud: 'password-reset',
       },
-      { secret: this.jwtSecret, expiresIn: '1h' },
+      { secret: this.jwtSecret, algorithm: 'HS256', expiresIn: '1h' },
     );
     await this.email.sendPasswordReset(user.email, token);
     // Fail-closed: expose the raw token only when explicitly in dev/test.
@@ -66,7 +69,12 @@ export class AuthPasswordTrait {
   async resetPassword(token: string, newPassword: string) {
     let payload: PasswordResetPayload;
     try {
-      payload = await this.jwt.verifyAsync<PasswordResetPayload>(token, { secret: this.jwtSecret });
+      payload = await this.jwt.verifyAsync<PasswordResetPayload>(token, {
+        secret: this.jwtSecret,
+        algorithms: ['HS256'],
+        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
+        audience: 'password-reset',
+      });
     } catch {
       throw new BadRequestException('Invalid or expired reset token');
     }
@@ -146,11 +154,15 @@ export class AuthPasswordTrait {
       }
     }
     const proof = await this.googleVerifier.verify(dto.idToken);
-    if (!proof.email_verified || normalizeAuthEmail(proof.email) !== normalizeAuthEmail(user.email)) {
+    if (
+      !proof.email_verified ||
+      normalizeAuthEmail(proof.email) !== normalizeAuthEmail(user.email)
+    ) {
       throw new UnauthorizedException('Google account email must match this account');
     }
     const owner = await this.prisma.user.findUnique({ where: { googleId: proof.sub } });
-    if (owner && owner.id !== userId) throw new ConflictException('Google account is already linked');
+    if (owner && owner.id !== userId)
+      throw new ConflictException('Google account is already linked');
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },

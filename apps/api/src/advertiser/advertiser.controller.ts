@@ -29,6 +29,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { DeleteAccountDto } from '../developer/dto';
 import { StripeProvider } from '../payout/providers';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { AdvertiserService } from './advertiser.service';
 import {
   CreateCampaignDto,
@@ -79,6 +80,7 @@ export class AdvertiserController {
     private service: AdvertiserService,
     private stripe: StripeProvider,
     private config: ConfigService,
+    private runtimeConfig: RuntimeConfigService,
   ) {}
 
   @ApiOperation({ summary: 'Create advertiser profile' })
@@ -298,6 +300,9 @@ export class AdvertiserController {
   @Post('deposit-session')
   @RequiredScopes('advertiser:write')
   async createDepositSession(@Req() req: Request, @Body() dto: CreateDepositSessionDto) {
+    if (!(await this.runtimeConfig.isDepositsEnabled())) {
+      throw new BadRequestException('Deposits are temporarily disabled');
+    }
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     const webBaseUrl = this.config.get<string>('WEB_BASE_URL');
@@ -313,6 +318,9 @@ export class AdvertiserController {
     // policy with a higher `depositMinimumMinor` for a specific currency is
     // enforced here. See A-031.
     const currency = dto.currency ?? 'usd';
+    if (!(await this.runtimeConfig.isCurrencyAllowed(currency))) {
+      throw new BadRequestException(`Currency "${currency}" is currently blocked`);
+    }
     const minimum = depositMinimumMinor(currency);
     const amountMinor = BigInt(dto.amountMinor);
     if (amountMinor < BigInt(minimum)) {

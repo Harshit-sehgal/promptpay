@@ -11,6 +11,7 @@ import { SIGNUP_CONSENT_PURPOSES } from '../compliance/consent-versions';
 import { PrismaService } from '../config/prisma.service';
 import {
   AccessTokenPayload,
+  audienceIncludes,
   SignupConsentMethod,
   SignupConsentRecord,
   SignupConsentVersions,
@@ -24,6 +25,7 @@ export class AuthSessionTrait {
   declare refreshTtl: StringValue;
   declare audit: AuditService;
   declare jwtSecret: string;
+  declare publicKey: string;
 
   async createSignupConsentRecords(
     tx: Prisma.TransactionClient,
@@ -63,15 +65,22 @@ export class AuthSessionTrait {
     const family = existingFamily || randomUUID();
     // Pre-generate a session ID to use as jti in the access token
     const jti = randomUUID();
+    const audience = this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
+    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(
-        { sub: userId, role, jti, aud: 'access', mfaAt } satisfies AccessTokenPayload & {
-          aud: string;
-        },
+        {
+          sub: userId,
+          role,
+          jti,
+          iss: issuer,
+          aud: [audience, 'access'],
+          mfaAt,
+        } as AccessTokenPayload,
         { expiresIn: this.accessTtl },
       ),
       this.jwt.signAsync(
-        { sub: userId, role, family, jti, aud: 'refresh', mfaAt },
+        { sub: userId, role, family, jti, iss: issuer, aud: [audience, 'refresh'], mfaAt },
         { expiresIn: this.refreshTtl },
       ),
     ]);
@@ -115,16 +124,19 @@ export class AuthSessionTrait {
   }
 
   async logoutByRefreshToken(refreshToken: string) {
-    let payload: { sub?: string; jti?: string; aud?: string };
+    let payload: { sub?: string; jti?: string; aud?: string | string[] };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
-        secret: this.jwtSecret,
+        secret: this.publicKey,
+        algorithms: ['RS256'],
+        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
+        audience: this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
         ignoreExpiration: true,
       });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    if (payload.aud !== 'refresh' || !payload.sub || !payload.jti) {
+    if (!audienceIncludes(payload.aud, 'refresh') || !payload.sub || !payload.jti) {
       throw new UnauthorizedException('Invalid refresh token');
     }
     const user = await this.prisma.user.findUnique({

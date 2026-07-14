@@ -2,6 +2,7 @@ import * as bcrypt from 'bcryptjs';
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'crypto';
 import { BadRequestException, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 
 import { Prisma } from '@waitlayer/db';
 import { buildOtpAuthUrl, generateTotpSecret, verifyTotp } from '@waitlayer/shared';
@@ -16,6 +17,7 @@ const BACKUP_CODE_COUNT = 10;
 
 export class AuthTotpTrait {
   declare prisma: PrismaService;
+  declare jwt: JwtService;
   declare config: ConfigService;
   declare audit: AuditService;
   declare logger: Logger;
@@ -339,5 +341,56 @@ export class AuthTotpTrait {
     } catch {
       return null;
     }
+  }
+
+  /** ── Action-Scoped MFA Step-Up ──
+   *  Issues a short-lived RS256 token that proves the user recently supplied
+   *  a valid TOTP (or backup code). The token is scoped to a single action
+   *  (e.g., `payout:request`) and must be presented in the `x-step-up-token`
+   *  header for the sensitive mutation.
+   */
+  async createStepUpToken(userId: string, action: string, token: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+        twoFactorEnabled: true,
+        twoFactorSecret: true,
+        twoFactorBackupCodeHashes: true,
+      },
+    });
+    if (!user) throw new BadRequestException('User not found');
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new BadRequestException('Two-factor authentication is not enabled');
+    }
+
+    const secret = this.decryptTotpSecret(user.twoFactorSecret);
+    if (!secret) {
+      throw new UnauthorizedException('Two-factor authentication is misconfigured');
+    }
+
+    const verified = verifyTotp(secret, token) || (await this.consumeBackupCode(user, token));
+    if (!verified) {
+      throw new UnauthorizedException('Invalid two-factor authentication code');
+    }
+
+    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
+    const audience = this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
+    const stepUpToken = await this.jwt.signAsync(
+      { sub: userId, action, aud: [audience, 'step-up'], iss: issuer },
+      { expiresIn: '5m' },
+    );
+
+    await this.audit.log({
+      actorId: userId,
+      actorRole: user.role,
+      action: 'step_up_issued',
+      targetType: 'user',
+      targetId: userId,
+      afterSnap: { action },
+    });
+
+    return { stepUpToken, expiresIn: '5m' };
   }
 }

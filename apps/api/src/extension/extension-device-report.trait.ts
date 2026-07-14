@@ -17,6 +17,7 @@ import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { hashDeviceRecoveryToken, hasMatchingSecret } from './extension.constants';
 
 export class ExtensionDeviceReportTrait {
@@ -24,6 +25,7 @@ export class ExtensionDeviceReportTrait {
   declare audit: AuditService;
   declare ledger: LedgerService;
   declare googleVerifier: GoogleTokenVerifier;
+  declare runtimeConfig: RuntimeConfigService;
   declare logger: Logger;
   declare recentAuditRejections: LRUCache<string, boolean>;
 
@@ -44,6 +46,13 @@ export class ExtensionDeviceReportTrait {
   ) {
     // Privacy: reject payloads containing prohibited data fields
     this.enforcePrivacyOn(dto);
+    // Runtime kill-switch: tool integration and extension version
+    if (!(await this.runtimeConfig.isToolEnabled(dto.toolType))) {
+      throw new ForbiddenException(`Tool integration "${dto.toolType}" is currently disabled`);
+    }
+    if (!(await this.runtimeConfig.isExtensionVersionAllowed(dto.extensionVersion))) {
+      throw new ForbiddenException('Extension version is blocked or below the minimum version');
+    }
     // Enforce minimum extension version for the requested tool.
     await this.assertMinimumExtensionVersion(dto.toolType, dto.extensionVersion);
     // Check for duplicate device (same user + same fingerprint = re-registration).

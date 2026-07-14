@@ -52,6 +52,7 @@ describe('CampaignSpendGuardCron', () => {
         currency: 'USD',
         budgetTotalMinor: 1000n,
         budgetSpentMinor: 1000n,
+        budgetReservedMinor: 0n,
       },
     ]);
     prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
@@ -76,6 +77,7 @@ describe('CampaignSpendGuardCron', () => {
         currency: 'USD',
         budgetTotalMinor: 1000n,
         budgetSpentMinor: 0n,
+        budgetReservedMinor: 0n,
       },
     ]);
     prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
@@ -98,6 +100,7 @@ describe('CampaignSpendGuardCron', () => {
         currency: 'USD',
         budgetTotalMinor: 1000n,
         budgetSpentMinor: 100n,
+        budgetReservedMinor: 0n,
       },
     ]);
     prisma.campaign.updateMany.mockResolvedValue({ count: 0 });
@@ -124,6 +127,7 @@ describe('CampaignSpendGuardCron', () => {
         currency: 'USD',
         budgetTotalMinor: 1000n,
         budgetSpentMinor: 1000n,
+        budgetReservedMinor: 0n,
       },
     ]);
     prisma.campaign.updateMany.mockResolvedValue({ count: 0 });

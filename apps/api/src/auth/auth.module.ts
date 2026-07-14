@@ -7,6 +7,7 @@ import { EmailModule } from '../email/email.module';
 import { FraudModule } from '../fraud/fraud.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { deriveKeyId } from './jwt-key-id';
 import { SessionCleanupCron } from './session-cleanup.cron';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -18,10 +19,30 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const accessTtl = config.get<string>('JWT_ACCESS_TTL', '15m');
+        const privateKey = config.get<string>('JWT_PRIVATE_KEY');
+        const publicKey = config.get<string>('JWT_PUBLIC_KEY');
+        if (!privateKey || !publicKey) {
+          throw new Error(
+            'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be defined for RS256 token signing.',
+          );
+        }
+        // Derive a stable key ID from the public key so verification can
+        // detect key rotation and clients can select the right JWKS key.
+        const kid = deriveKeyId(publicKey);
+        const issuer = config.get<string>('JWT_ISSUER', 'waitlayer');
+        const audience = config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
         return {
-          secret: config.get<string>('JWT_SECRET'),
+          privateKey,
+          publicKey,
           signOptions: {
+            algorithm: 'RS256',
+            keyid: kid,
             expiresIn: accessTtl as unknown as number,
+          },
+          verifyOptions: {
+            algorithms: ['RS256'],
+            issuer,
+            audience,
           },
         };
       },

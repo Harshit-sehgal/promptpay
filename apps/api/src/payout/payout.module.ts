@@ -4,6 +4,7 @@ import { EventBus } from '../common/events/event-bus';
 import { WebhookReclaimCronService } from '../integration/webhook-reclaim-cron.service';
 import { LedgerModule } from '../ledger/ledger.module';
 import { ReferralModule } from '../referral/referral.module';
+import { RuntimeConfigModule } from '../runtime-config/runtime-config.module';
 import { PayoutController } from './payout.controller';
 import { PayoutService } from './payout.service';
 import { PayoutCronService } from './payout-cron.service';
@@ -16,7 +17,7 @@ import {
 import { StripeWebhookController } from './stripe-webhook.controller';
 
 @Module({
-  imports: [LedgerModule, ReferralModule],
+  imports: [LedgerModule, ReferralModule, RuntimeConfigModule],
   controllers: [PayoutController, StripeWebhookController],
   providers: [
     PayoutService,

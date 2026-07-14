@@ -1,6 +1,8 @@
-import { createHash } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
+import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
 import { EmailMessage, EmailService } from './email.service';
 
@@ -30,11 +32,27 @@ export interface EmailQueueSendResult {
 @Injectable()
 export class EmailQueueService {
   private readonly logger = new Logger(EmailQueueService.name);
+  private readonly encryptionKey: Buffer;
 
   constructor(
     private readonly email: EmailService,
     private readonly prisma: PrismaService,
-  ) {}
+    private readonly config: ConfigService,
+  ) {
+    const secret = this.config.get<string>('EMAIL_QUEUE_SECRET');
+    if (secret && secret.length >= 32) {
+      this.encryptionKey = createHash('sha256').update(secret).digest();
+    } else if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'EMAIL_QUEUE_SECRET is required in production and must be at least 32 characters to encrypt queued email payloads.',
+      );
+    } else {
+      // Dev/test deterministic fallback so local tests pass without env churn.
+      this.encryptionKey = createHash('sha256')
+        .update('waitlayer-dev-email-queue-secret-32-bytes-min')
+        .digest();
+    }
+  }
 
   /** Try to send immediately; queue for retry on failure. */
   async enqueueOrSend(msg: EmailMessage): Promise<EmailQueueSendResult> {
@@ -46,6 +64,7 @@ export class EmailQueueService {
     // Persist for retry. Use the message TTL to bound stale retries.
     const ttlMs = msg.ttlMs ?? 24 * 60 * 60 * 1000;
     const now = Date.now();
+    // Hash the plaintext so duplicate detection works regardless of encryption.
     const contentHash = this.hashContent(msg);
     const nextRetryAt = new Date(now + this.baseDelayMs(0));
     const expiresAt = new Date(now + ttlMs);
@@ -55,6 +74,11 @@ export class EmailQueueService {
         where: { contentHash },
       });
 
+      // Encrypt sensitive payloads at rest so a database-only leak does not
+      // expose password-reset or email-verify tokens.
+      const encryptedHtml = this.encrypt(msg.html);
+      const encryptedText = msg.text ? this.encrypt(msg.text) : null;
+
       if (existing) {
         // Preserve the existing retry count so repeated duplicates cannot
         // reset the backoff clock and keep a failing message alive forever.
@@ -62,6 +86,8 @@ export class EmailQueueService {
         await this.prisma.emailQueue.update({
           where: { id: existing.id },
           data: {
+            html: encryptedHtml,
+            text: encryptedText,
             nextRetryAt:
               existing.nextRetryAt < new Date(now + retryDelayMs)
                 ? existing.nextRetryAt
@@ -75,20 +101,29 @@ export class EmailQueueService {
           data: {
             to: msg.to,
             subject: msg.subject,
-            html: msg.html,
-            text: msg.text ?? null,
+            html: encryptedHtml,
+            text: encryptedText,
             contentHash,
             nextRetryAt,
             expiresAt,
           },
         });
       }
+
+      // The message is durably queued and will be retried by EmailQueueCron.
+      return { delivered: true };
     } catch (err) {
-      this.logger.error(
-        `Failed to persist queued email for ${msg.to}: ${err instanceof Error ? err.message : err}`,
+      const recipientRef = privacyPseudonym(msg.to.trim().toLowerCase(), 'email-recipient').slice(
+        0,
+        16,
       );
+      this.logger.error(
+        `Failed to persist queued email for ${recipientRef}: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
+      return { delivered: false };
     }
-    return { delivered: false };
   }
 
   async sendEmailVerification(to: string, token: string): Promise<EmailQueueSendResult> {
@@ -116,5 +151,32 @@ export class EmailQueueService {
   /** Exponential backoff: 1min, 2min, 4min, 8min, 16min, 32min, 64min, 128min. */
   private baseDelayMs(retryCount: number): number {
     return Math.min(2 ** retryCount, 2 ** 8) * 60_000;
+  }
+
+  /** Encrypt a queued payload using AES-256-GCM. */
+  encrypt(plaintext: string): string {
+    const iv = randomBytes(16);
+    const cipher = createCipheriv('aes-256-gcm', this.encryptionKey, iv);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `v1:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+  }
+
+  /** Decrypt a queued payload encrypted with {@link encrypt}. */
+  decrypt(ciphertext: string): string {
+    if (!ciphertext.startsWith('v1:')) {
+      // Rollout compatibility: legacy plaintext rows decrypt to themselves.
+      return ciphertext;
+    }
+    const [, ivHex, tagHex, dataHex] = ciphertext.split(':');
+    if (!ivHex || !tagHex || !dataHex) {
+      throw new Error('Malformed encrypted email payload');
+    }
+    const iv = Buffer.from(ivHex, 'hex');
+    const tag = Buffer.from(tagHex, 'hex');
+    const encrypted = Buffer.from(dataHex, 'hex');
+    const decipher = createDecipheriv('aes-256-gcm', this.encryptionKey, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
   }
 }

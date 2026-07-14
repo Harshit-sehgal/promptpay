@@ -7,6 +7,7 @@ import { ComplianceService } from '../compliance/compliance.service';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { ServedAd } from './extension.constants';
 import { ExtensionAdTrait } from './extension-ad.trait';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
@@ -21,6 +22,7 @@ export class ExtensionService {
     public fraud: FraudService,
     public compliance: ComplianceService,
     public googleVerifier: GoogleTokenVerifier,
+    public runtimeConfig: RuntimeConfigService,
   ) {}
   adCache: LRUCache<string, { ad: ServedAd }> = new LRUCache<
     string,

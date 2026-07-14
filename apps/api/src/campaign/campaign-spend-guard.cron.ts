@@ -82,6 +82,7 @@ export class CampaignSpendGuardCron implements OnApplicationBootstrap, OnModuleD
           currency: true,
           budgetTotalMinor: true,
           budgetSpentMinor: true,
+          budgetReservedMinor: true,
         },
       });
 
@@ -138,10 +139,14 @@ export class CampaignSpendGuardCron implements OnApplicationBootstrap, OnModuleD
       currency: string;
       budgetTotalMinor: bigint;
       budgetSpentMinor: bigint;
+      budgetReservedMinor: bigint;
     },
     balanceMap: Map<string, bigint>,
   ): 'budget_exhausted' | 'advertiser_balance_depleted' | null {
-    if (campaign.budgetSpentMinor >= campaign.budgetTotalMinor) {
+    // Treat committed + reserved as committed for pause purposes. A campaign
+    // whose remaining budget is entirely tied up in in-flight reservations has
+    // no spendable budget left and should stop being selected by requestAd.
+    if (campaign.budgetSpentMinor + campaign.budgetReservedMinor >= campaign.budgetTotalMinor) {
       return 'budget_exhausted';
     }
     const balance = balanceMap.get(`${campaign.advertiserId}:${campaign.currency}`) ?? 0n;

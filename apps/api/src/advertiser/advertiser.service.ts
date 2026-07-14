@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { CampaignService } from '../campaign/campaign.service';
 import { PrismaService } from '../config/prisma.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { AdvertiserCampaignTrait } from './advertiser-campaign.trait';
 import { AdvertiserDashboardTrait } from './advertiser-dashboard.trait';
 import { AdvertiserProfileTrait } from './advertiser-profile.trait';
@@ -15,6 +16,7 @@ export class AdvertiserService {
     public campaignService: CampaignService,
     public audit: AuditService,
     public googleVerifier: GoogleTokenVerifier,
+    public runtimeConfig: RuntimeConfigService,
   ) {}
 }
 

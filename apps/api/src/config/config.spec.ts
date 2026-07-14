@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { envSchema, loadEnv } from '@waitlayer/config';
 
+import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
+
 // All env values are provided as a plain object (mimicking process.env, which
 // is always strings in real life). z.coerce.number() handles numeric coercion
 // from string inputs, so we pass strings where a real deploy would.
@@ -16,6 +18,8 @@ function baseDevEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
     NODE_ENV: 'development',
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
     JWT_SECRET: 'a-very-long-development-jwt-secret-value-32plus',
+    JWT_PRIVATE_KEY: TEST_JWT_PRIVATE_KEY,
+    JWT_PUBLIC_KEY: TEST_JWT_PUBLIC_KEY,
     ...overrides,
   } as NodeJS.ProcessEnv;
 }
@@ -27,6 +31,8 @@ function baseProdEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv 
     NODE_ENV: 'production',
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
     JWT_SECRET: 'a-very-long-production-jwt-secret-value-32plus!!',
+    JWT_PRIVATE_KEY: TEST_JWT_PRIVATE_KEY,
+    JWT_PUBLIC_KEY: TEST_JWT_PUBLIC_KEY,
     REDIS_URL: 'redis://localhost:6379',
     TOTP_SECRET_ENCRYPTION_KEY: 'production-totp-encryption-key-32plus!!!',
     PRIVACY_HASH_KEY: 'production-privacy-hmac-key-at-least-32-characters',
@@ -142,7 +148,9 @@ describe('env validation (config module)', () => {
   });
 
   it('rejects the removed async-webhook switch in every environment', () => {
-    expect(envSchema.safeParse(baseDevEnv({ WEBHOOK_ASYNC_PROCESSING: 'true' })).success).toBe(false);
+    expect(envSchema.safeParse(baseDevEnv({ WEBHOOK_ASYNC_PROCESSING: 'true' })).success).toBe(
+      false,
+    );
   });
 
   it('strictly validates payout-provider override JSON', () => {
@@ -159,9 +167,15 @@ describe('env validation (config module)', () => {
   });
 
   it('bounds operational timeout and cron controls', () => {
-    expect(envSchema.safeParse(baseDevEnv({ EMAIL_PROVIDER_TIMEOUT_MS: '999' })).success).toBe(false);
-    expect(envSchema.safeParse(baseDevEnv({ PROVIDER_CALL_TIMEOUT_MS: '120001' })).success).toBe(false);
-    expect(envSchema.safeParse(baseDevEnv({ WEBHOOK_RECLAIM_CRON_BATCH_SIZE: '1001' })).success).toBe(false);
+    expect(envSchema.safeParse(baseDevEnv({ EMAIL_PROVIDER_TIMEOUT_MS: '999' })).success).toBe(
+      false,
+    );
+    expect(envSchema.safeParse(baseDevEnv({ PROVIDER_CALL_TIMEOUT_MS: '120001' })).success).toBe(
+      false,
+    );
+    expect(
+      envSchema.safeParse(baseDevEnv({ WEBHOOK_RECLAIM_CRON_BATCH_SIZE: '1001' })).success,
+    ).toBe(false);
   });
 
   it('loadEnv returns parsed config for a valid environment', () => {

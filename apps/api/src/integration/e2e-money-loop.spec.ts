@@ -16,6 +16,7 @@ import { ExtensionService } from '../extension/extension.service';
 import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { PayoutService } from '../payout/payout.service';
+import { createMockRuntimeConfig } from '../runtime-config/test-helpers';
 
 // HMAC secret must match what ExtensionService uses
 const HMAC_SECRET = 'dev-secret-change-me-do-not-use-in-production';
@@ -350,6 +351,7 @@ interface TestFixtures {
 function makeServices(): TestFixtures {
   // AuditService — real instance (its prisma is mocked)
   const audit = new AuditService(prismaRef);
+  const runtimeConfig = createMockRuntimeConfig();
 
   // LedgerService — real instance with mocked prisma + real audit
   // (reverseEarnings emits a fire-and-forget audit log after the $transaction;
@@ -372,6 +374,7 @@ function makeServices(): TestFixtures {
     fraud,
     compliance,
     mockGoogleVerifier as any,
+    runtimeConfig,
   );
 
   // CampaignService — real instance with mocked prisma + real audit (audit is fire-and-forget; safe to share)
@@ -379,7 +382,13 @@ function makeServices(): TestFixtures {
 
   // AdvertiserService — real instance with mocked prisma and real campaign service + audit
   // (A-044 added the GoogleTokenVerifier dep so deleteAccount can step-up reauth Google-only accounts.)
-  const advertiser = new AdvertiserService(prismaRef, campaign, audit, mockGoogleVerifier as any);
+  const advertiser = new AdvertiserService(
+    prismaRef,
+    campaign,
+    audit,
+    mockGoogleVerifier as any,
+    runtimeConfig,
+  );
 
   // PayoutService — real instance with mocked prisma, real ledger + audit, dummy paypal payouts provider
   const payoutConfig = {
@@ -397,6 +406,7 @@ function makeServices(): TestFixtures {
     {} as any,
     {} as any,
     {} as any,
+    runtimeConfig,
   );
 
   const developer = new DeveloperService(prismaRef, fraud, audit, mockGoogleVerifier as any);

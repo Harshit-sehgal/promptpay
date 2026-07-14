@@ -11,12 +11,15 @@ import {
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
+import { RUNTIME_CONFIG_KEYS } from '../runtime-config/runtime-config.service';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { PayoutProviderHandler, StubPayoutProvider } from './payout.constants';
 
 export class PayoutMethodTrait {
   declare prisma: PrismaService;
   declare audit: AuditService;
   declare config: ConfigService;
+  declare runtimeConfig: RuntimeConfigService;
   declare providers: Record<string, PayoutProviderHandler>;
 
   toDbPayoutProvider(provider: string): DbPayoutProvider {
@@ -35,7 +38,7 @@ export class PayoutMethodTrait {
       currency?: string;
     },
   ) {
-    const { provider, destination, currency } = this.normalizePayoutMethod(dto);
+    const { provider, destination, currency } = await this.normalizePayoutMethod(dto);
     const method = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Deactivate the current active method and create the replacement atomically.
       // The DB enforces at most one active account per user/provider with a
@@ -66,12 +69,19 @@ export class PayoutMethodTrait {
     return method;
   }
 
-  normalizePayoutMethod(dto: { provider: string; destination: string; currency?: string }): {
+  async normalizePayoutMethod(dto: {
+    provider: string;
+    destination: string;
+    currency?: string;
+  }): Promise<{
     provider: PayoutProvider;
     destination: string;
     currency: string;
-  } {
+  }> {
     this.toDbPayoutProvider(dto.provider);
+    if (!(await this.runtimeConfig.isProviderEnabled(dto.provider))) {
+      throw new BadRequestException(`Payout provider "${dto.provider}" is currently disabled`);
+    }
     // Reject providers that have no real PSP integration. `payoneer` and
     // `razorpay` are registered only as `StubPayoutProvider` (whose `initiate`
     // throws in production) and must never be persisted as a payout account —
@@ -134,32 +144,44 @@ export class PayoutMethodTrait {
     return this.providers[providerName];
   }
 
-  getPayoutProviderAvailability() {
+  async getPayoutProviderAvailability() {
     const overrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+    const blockedProviders = await this.runtimeConfig.getStringArray(
+      RUNTIME_CONFIG_KEYS.BLOCKED_PAYOUT_PROVIDERS,
+      [],
+    );
     return {
-      providers: PAYOUT_PROVIDERS.map((info) => {
-        const handler = this.providers[info.provider];
-        const readiness = handler?.readiness?.();
-        const launchStatus = payoutProviderLaunchStatus(info.provider, overrides);
-        const isStub = handler instanceof StubPayoutProvider;
-        const available =
-          launchStatus === 'available' && Boolean(handler) && !isStub && readiness?.ok !== false;
-        const reason =
-          launchStatus === 'coming_soon'
-            ? info.note
-            : !handler || isStub
-              ? 'Provider integration is not implemented.'
-              : readiness && !readiness.ok
-                ? readiness.reason
-                : null;
-        return {
-          provider: info.provider,
-          label: info.label,
-          status: available ? ('available' as const) : ('coming_soon' as const),
-          note: info.note,
-          reason,
-        };
-      }),
+      providers: await Promise.all(
+        PAYOUT_PROVIDERS.map(async (info) => {
+          const handler = this.providers[info.provider];
+          const readiness = handler?.readiness?.();
+          const launchStatus = payoutProviderLaunchStatus(info.provider, overrides);
+          const isStub = handler instanceof StubPayoutProvider;
+          const isRuntimeBlocked = blockedProviders.includes(info.provider);
+          const available =
+            !isRuntimeBlocked &&
+            launchStatus === 'available' &&
+            Boolean(handler) &&
+            !isStub &&
+            readiness?.ok !== false;
+          const reason = isRuntimeBlocked
+            ? 'Provider is temporarily disabled by operator.'
+            : launchStatus === 'coming_soon'
+              ? info.note
+              : !handler || isStub
+                ? 'Provider integration is not implemented.'
+                : readiness && !readiness.ok
+                  ? readiness.reason
+                  : null;
+          return {
+            provider: info.provider,
+            label: info.label,
+            status: available ? ('available' as const) : ('coming_soon' as const),
+            note: info.note,
+            reason,
+          };
+        }),
+      ),
     };
   }
 }
