@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators';
+import { ActionStepUp, ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
@@ -28,6 +29,7 @@ import {
   ResetPasswordDto,
   SetSocialPasswordDto,
   SignUpDto,
+  StepUpRequestDto,
   TwoFactorBackupCodesRegenerateDto,
   TwoFactorDisableDto,
   TwoFactorEnableDto,
@@ -288,7 +290,8 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Disable two-factor auth' })
   @Post('2fa/disable')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActionStepUpGuard)
+  @ActionStepUp('2fa:disable')
   @HttpCode(HttpStatus.OK)
   async disableTwoFactor(
     @CurrentUser('id') userId: string,
@@ -376,5 +379,13 @@ export class AuthController {
     return {
       googleClientId: this.authService.getGoogleClientId(),
     };
+  }
+
+  @ApiOperation({ summary: 'Obtain an action-scoped MFA step-up token' })
+  @Post('step-up')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async stepUp(@CurrentUser('id') userId: string, @Body() dto: StepUpRequestDto) {
+    return this.authService.createStepUpToken(userId, dto.action, dto.token);
   }
 }

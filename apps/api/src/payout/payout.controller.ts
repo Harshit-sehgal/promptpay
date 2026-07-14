@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
+import { ActionStepUp, ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -28,7 +29,8 @@ export class PayoutController {
 
   @ApiOperation({ summary: 'Add payout method' })
   @Post('method')
-  @UseGuards(RejectApiKeyGuard)
+  @UseGuards(RejectApiKeyGuard, ActionStepUpGuard)
+  @ActionStepUp('payout:method')
   @Roles('developer')
   @RequiredScopes('payout:write')
   addPayoutMethod(@CurrentUser('id') userId: string, @Body() dto: AddPayoutMethodDto) {
@@ -48,7 +50,8 @@ export class PayoutController {
   @Post('request')
   @Audit('request_payout', 'payout')
   @UseInterceptors(AuditInterceptor)
-  @UseGuards(RejectApiKeyGuard)
+  @UseGuards(RejectApiKeyGuard, ActionStepUpGuard)
+  @ActionStepUp('payout:request')
   @Roles('developer')
   @RequiredScopes('payout:write')
   requestPayout(@CurrentUser('id') userId: string, @Body() dto: RequestPayoutDto) {

@@ -13,6 +13,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
+import { ActionStepUp, ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { ApiKeyService } from './api-key.service';
@@ -27,6 +28,8 @@ export class ApiKeyController {
 
   @ApiOperation({ summary: 'Generate API key' })
   @Post()
+  @UseGuards(ActionStepUpGuard)
+  @ActionStepUp('api_key:create')
   generateApiKey(@CurrentUser('id') userId: string, @Body() dto: CreateApiKeyDto) {
     return this.service.generateApiKey(userId, dto.scopes, dto.advertiserId, dto.expiresAt);
   }

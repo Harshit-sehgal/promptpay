@@ -13,6 +13,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
+import { ActionStepUp, ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -72,6 +73,8 @@ export class DeveloperController {
   @HttpCode(HttpStatus.OK)
   @Audit('delete_account', 'user')
   @UseInterceptors(AuditInterceptor)
+  @UseGuards(ActionStepUpGuard)
+  @ActionStepUp('account:delete')
   deleteAccount(@CurrentUser('id') userId: string, @Body() dto: DeleteAccountDto) {
     return this.service.deleteAccount(userId, {
       confirmation: dto.confirmation,
