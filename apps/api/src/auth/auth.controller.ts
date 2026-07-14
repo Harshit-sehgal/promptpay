@@ -385,7 +385,21 @@ export class AuthController {
   @Post('step-up')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async stepUp(@CurrentUser('id') userId: string, @Body() dto: StepUpRequestDto) {
-    return this.authService.createStepUpToken(userId, dto.action, dto.token);
+  async stepUp(
+    @CurrentUser('id') userId: string,
+    @Body() dto: StepUpRequestDto,
+    @Req() req: Request,
+  ) {
+    try {
+      await BruteForceGuard.assertCanAttempt(req, userId);
+      const result = await this.authService.createStepUpToken(userId, dto.action, dto.token);
+      await BruteForceGuard.resetOnSuccess(req, userId);
+      return result;
+    } catch (err: unknown) {
+      if (isCredentialFailure(err)) {
+        await BruteForceGuard.recordFailure(req, userId);
+      }
+      throw err;
+    }
   }
 }

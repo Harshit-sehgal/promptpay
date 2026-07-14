@@ -4,6 +4,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ConfigService } from '@nestjs/config';
 
+import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { StripeProvider } from '../payout/providers';
 import { AdvertiserController } from './advertiser.controller';
@@ -17,12 +18,23 @@ function makeController() {
     deleteAccount: vi.fn(),
   };
 
+  const runtimeConfig = {
+    isDepositsEnabled: vi.fn().mockResolvedValue(true),
+    isCurrencyAllowed: vi.fn().mockResolvedValue(true),
+  } as unknown as import('../runtime-config/runtime-config.service').RuntimeConfigService;
+
+  const config = {
+    get: vi.fn((key: string) => (key === 'WEB_BASE_URL' ? 'http://localhost:3000' : undefined)),
+  } as unknown as ConfigService;
+
   return {
     service,
+    runtimeConfig,
     controller: new AdvertiserController(
       service as unknown as AdvertiserService,
       {} as StripeProvider,
-      {} as ConfigService,
+      config,
+      runtimeConfig,
     ),
   };
 }
@@ -108,6 +120,10 @@ describe('AdvertiserController export/delete API-key boundary (A-044)', () => {
     expect(guardsFor(AdvertiserController.prototype.deleteAccount)).toContain(RejectApiKeyGuard);
   });
 
+  it('requires action step-up for delete-account', () => {
+    expect(guardsFor(AdvertiserController.prototype.deleteAccount)).toContain(ActionStepUpGuard);
+  });
+
   it('rejects an API-key request to the export/delete routes', () => {
     const guard = new RejectApiKeyGuard();
     const req = {
@@ -142,5 +158,33 @@ describe('AdvertiserController export/delete API-key boundary (A-044)', () => {
       currentPassword: undefined,
       googleIdToken: undefined,
     });
+  });
+
+  it('passes idempotencyKey through to the Stripe deposit session', async () => {
+    const { controller, service } = makeController();
+    service.getOrCreateProfile = vi.fn().mockResolvedValue({ id: 'adv-1' });
+    const createDepositSession = vi.fn().mockResolvedValue({
+      sessionId: 'cs_test_123',
+      url: 'https://checkout.stripe.com/test',
+    });
+    (
+      controller as unknown as { stripe: { createDepositSession: typeof createDepositSession } }
+    ).stripe = {
+      createDepositSession,
+    };
+
+    const result = await controller.createDepositSession(
+      { user: { sub: 'user-1' } } as unknown as Request,
+      {
+        amountMinor: 10000n,
+        currency: 'usd',
+        idempotencyKey: 'idem-deposit-1',
+      },
+    );
+
+    expect(result).toEqual({ sessionId: 'cs_test_123', url: 'https://checkout.stripe.com/test' });
+    expect(createDepositSession).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'idem-deposit-1' }),
+    );
   });
 });

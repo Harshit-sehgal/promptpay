@@ -39,6 +39,7 @@ import {
 } from './extension.constants';
 import type { ExtensionService } from './extension.service';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
+import { MINIMUM_WAIT_CONFIDENCE } from './extension-wait.trait';
 import { isUnderFrequencyCap } from './frequency-cap';
 import { formatHHMMInZone, isTimeInRange } from './quiet-hours';
 
@@ -114,6 +115,16 @@ export class ExtensionAdTrait {
     });
     if (!waitStart) {
       throw new BadRequestException('No matching active wait state start');
+    }
+    // Do not bill inactivity-only events. Wait states must have sufficient
+    // confidence (from AI tools, active tasks, commands, lifecycle events)
+    // and not be flagged as a false positive by the user.
+    if (
+      waitStart.confidence === null ||
+      waitStart.confidence < MINIMUM_WAIT_CONFIDENCE ||
+      waitStart.isFalsePositive
+    ) {
+      return { ad: null, reason: 'low_confidence_wait' };
     }
     const waitEnd = await this.prisma.waitStateEvent.findFirst({
       where: {

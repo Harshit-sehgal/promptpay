@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ForbiddenException } from '@nestjs/common';
 
+import { Prisma } from '@waitlayer/db';
+
 import { AuditService } from '../audit/audit.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
@@ -482,6 +484,227 @@ describe('PayoutService.processPayout partial approvals', () => {
         status: 'processing',
       }),
     });
+  });
+});
+
+// ── Idempotency-key tests for requestPayout ──
+
+describe('PayoutService.requestPayout idempotency', () => {
+  const verifiedAccount = {
+    id: 'acc1',
+    userId: 'u1',
+    isActive: true,
+    isVerified: true,
+    currency: 'USD',
+    createdAt: new Date(),
+  };
+
+  function makeIdempotentService(overrides: Record<string, unknown> = {}) {
+    return makePayoutService({
+      payoutAccount: { findUnique: vi.fn().mockResolvedValue(verifiedAccount) },
+      earningsLedger: {
+        aggregate: vi.fn((args: { where?: { entryType?: string } }) => {
+          if (args?.where?.entryType === 'debit') {
+            return Promise.resolve({ _sum: { amountMinor: 0n } });
+          }
+          return Promise.resolve({ _sum: { amountMinor: 10_00n } });
+        }),
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi.fn().mockResolvedValue({ id: 'earn-new' }),
+      },
+      payoutAllocation: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
+        create: vi.fn().mockResolvedValue({ id: 'alloc-new' }),
+      },
+      payoutRequest: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+      },
+      ...overrides,
+    });
+  }
+
+  it('returns an existing payout on replay without creating a duplicate', async () => {
+    const existing = {
+      id: 'pr-existing',
+      userId: 'u1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'key-1',
+      allocations: [],
+    };
+    const { prisma, service } = makeIdempotentService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue(existing),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'key-1',
+    });
+
+    expect(result).toEqual(existing);
+    expect(prisma.payoutRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('returns the winner when a race causes P2002 on create', async () => {
+    const winner = {
+      id: 'pr-winner',
+      userId: 'u1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'race-key',
+      allocations: [],
+    };
+    const { prisma, service } = makeIdempotentService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(winner),
+        create: vi.fn().mockImplementation(() => {
+          throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+            clientVersion: '0.0.0',
+            code: 'P2002',
+            meta: { target: ['user_id', 'idempotency_key'] },
+          });
+        }),
+      },
+    });
+
+    const result = await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'race-key',
+    });
+
+    expect(result).toEqual(winner);
+    expect(prisma.payoutRequest.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('trims the idempotency key so whitespace does not create a duplicate', async () => {
+    const existing = {
+      id: 'pr-trim',
+      userId: 'u1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'key-1',
+      allocations: [],
+    };
+    const { prisma, service } = makeIdempotentService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue(existing),
+        create: vi.fn(),
+      },
+    });
+
+    const result = await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: '  key-1  ',
+    });
+
+    expect(result).toEqual(existing);
+    expect(prisma.payoutRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a new payout when a different idempotency key is supplied', async () => {
+    const created = {
+      id: 'pr-new',
+      userId: 'u1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'key-2',
+      allocations: [],
+    };
+    const { prisma, service } = makeIdempotentService({
+      payoutRequest: {
+        findUnique: vi.fn().mockImplementation((args: { where: Record<string, unknown> }) => {
+          if ('userId_idempotencyKey' in args.where) return Promise.resolve(null);
+          return Promise.resolve(created);
+        }),
+        create: vi.fn().mockResolvedValue(created),
+      },
+    });
+
+    // The service will attempt allocation after create; provide an eligible
+    // earnings entry so the request completes end-to-end.
+    prisma.earningsLedger.findMany.mockResolvedValue([
+      {
+        id: 'earn-1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        entryType: 'credit',
+        status: 'confirmed',
+      },
+    ]);
+
+    const result = await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'key-2',
+    });
+
+    expect(result).toEqual(created);
+    expect(prisma.payoutRequest.create).toHaveBeenCalledTimes(1);
+    expect(prisma.payoutRequest.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ idempotencyKey: 'key-2' }),
+      }),
+    );
+  });
+
+  it('creates a payout when no idempotency key is supplied', async () => {
+    const created = {
+      id: 'pr-no-key',
+      userId: 'u1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: null,
+      allocations: [],
+    };
+    const { prisma, service } = makeIdempotentService({
+      payoutRequest: {
+        findUnique: vi.fn().mockImplementation((args: { where: Record<string, unknown> }) => {
+          if ('userId_idempotencyKey' in args.where) return Promise.resolve(null);
+          return Promise.resolve(created);
+        }),
+        create: vi.fn().mockResolvedValue(created),
+      },
+    });
+    prisma.earningsLedger.findMany.mockResolvedValue([
+      {
+        id: 'earn-1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        entryType: 'credit',
+        status: 'confirmed',
+      },
+    ]);
+
+    const result = await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+    });
+
+    expect(result).toEqual(created);
+    expect(prisma.payoutRequest.create).toHaveBeenCalledTimes(1);
+    expect(prisma.payoutRequest.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ idempotencyKey: undefined }),
+      }),
+    );
   });
 });
 

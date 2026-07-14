@@ -7,6 +7,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BidType, signPayload, UserRole } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
+import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
@@ -46,6 +47,8 @@ describe('Runtime Kill Switches', () => {
       .overrideGuard(BruteForceGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(ThrottleByRouteGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(ActionStepUpGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -230,6 +233,7 @@ describe('Runtime Kill Switches', () => {
         waitStateId: 'kill-ws',
         toolType: 'vscode',
         idempotencyKey: 'kill-wait-start',
+        signals: [{ type: 'ai_generation' }],
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -381,6 +385,7 @@ describe('Runtime Kill Switches', () => {
         waitStateId: 'country-ws',
         toolType: 'vscode',
         idempotencyKey: 'country-wait-start',
+        signals: [{ type: 'ai_generation' }],
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')

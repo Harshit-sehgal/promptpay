@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
@@ -42,6 +42,13 @@ export class ExtensionController {
   @HttpCode(HttpStatus.OK)
   recordWaitStateEnd(@CurrentUser('id') userId: string, @Body() dto: WaitStateEndDto) {
     return this.service.recordWaitStateEnd(userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Flag a wait state as a false positive' })
+  @Post('wait-state/:waitStateId/false-positive')
+  @HttpCode(HttpStatus.OK)
+  flagFalsePositive(@CurrentUser('id') userId: string, @Param('waitStateId') waitStateId: string) {
+    return this.service.flagFalsePositive(userId, waitStateId);
   }
 
   @ApiOperation({ summary: 'Request ad' })

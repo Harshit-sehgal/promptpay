@@ -426,3 +426,11 @@ export class PayoutAccountVerifyDto {
   @MaxLength(500)
   reason?: string;
 }
+
+export class PayoutAccountFreezeDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}

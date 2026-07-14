@@ -1,6 +1,11 @@
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 
-import { ToolTypeEnum } from '@waitlayer/db';
+import { Prisma, ToolTypeEnum } from '@waitlayer/db';
 
 import { PrismaService } from '../config/prisma.service';
 import {
@@ -8,6 +13,44 @@ import {
   WAIT_STATE_MAX_DURATION_SECONDS,
 } from './extension.constants';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
+
+// Weighted confidence scoring for wait-state signals. The strongest
+// positive signal dominates (max-weight) rather than summing, so a single
+// high-confidence signal (e.g. an active AI generation) is not diluted by
+// incidental inactivity telemetry.
+export const SIGNAL_WEIGHTS: Record<string, number> = {
+  ai_generation: 0.95,
+  active_task: 0.85,
+  command_execution: 0.7,
+  lifecycle_event: 0.6,
+  inactivity: 0.05,
+};
+
+export const MINIMUM_WAIT_CONFIDENCE = 0.5;
+
+export interface WaitSignal {
+  type: keyof typeof SIGNAL_WEIGHTS;
+  details?: string;
+}
+
+export function computeWaitConfidence(signals: WaitSignal[]): {
+  confidence: number;
+  reason: string;
+} {
+  if (!signals || signals.length === 0) {
+    return { confidence: 0, reason: 'no_signals' };
+  }
+  let best = signals[0];
+  let bestWeight = SIGNAL_WEIGHTS[best.type] ?? 0;
+  for (const signal of signals) {
+    const weight = SIGNAL_WEIGHTS[signal.type] ?? 0;
+    if (weight > bestWeight) {
+      best = signal;
+      bestWeight = weight;
+    }
+  }
+  return { confidence: bestWeight, reason: best.type };
+}
 
 export class ExtensionWaitTrait {
   declare prisma: PrismaService;
@@ -21,6 +64,8 @@ export class ExtensionWaitTrait {
       toolType: string;
       waitStateId: string;
       idempotencyKey: string;
+      signals?: WaitSignal[];
+      detectorVersion?: string;
       signature: string;
     },
   ) {
@@ -50,6 +95,10 @@ export class ExtensionWaitTrait {
       }
       return existing;
     }
+    const { confidence, reason } = computeWaitConfidence(dto.signals ?? []);
+    // Persist only the signal categories, never the optional human-readable
+    // details, so user code/PII never reaches the database.
+    const sanitizedSignals = (dto.signals ?? []).map(({ type }) => ({ type }));
     return this.prisma.waitStateEvent.create({
       data: {
         userId,
@@ -60,6 +109,10 @@ export class ExtensionWaitTrait {
         toolType: dto.toolType as ToolTypeEnum,
         signature: dto.signature,
         idempotencyKey: dto.idempotencyKey,
+        signals: sanitizedSignals as unknown as Prisma.InputJsonValue,
+        confidence,
+        reason,
+        detectorVersion: dto.detectorVersion,
       },
     });
   }
@@ -137,7 +190,32 @@ export class ExtensionWaitTrait {
         duration,
         signature: dto.signature,
         idempotencyKey: dto.idempotencyKey,
+        // Mirror detection metadata from the start event so analytics and
+        // billing guards can inspect the end event without joining the start.
+        confidence: start.confidence,
+        reason: start.reason,
+        detectorVersion: start.detectorVersion,
       },
+    });
+  }
+
+  /**
+   * Flag a wait state as a false positive. Used by developers (or an admin
+   * on their behalf) to improve the detector. The flag is stored on the
+   * start event and is used by analytics/evaluation to compute precision.
+   */
+  async flagFalsePositive(userId: string, waitStateId: string) {
+    const start = await this.prisma.waitStateEvent.findFirst({
+      where: { userId, waitStateId, eventType: 'wait_state_start' },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!start) throw new NotFoundException('Wait state not found');
+    if (start.userId !== userId) {
+      throw new ForbiddenException('You do not own this wait state');
+    }
+    return this.prisma.waitStateEvent.update({
+      where: { id: start.id },
+      data: { isFalsePositive: true },
     });
   }
 }

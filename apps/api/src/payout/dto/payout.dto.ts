@@ -68,6 +68,14 @@ export class RequestPayoutDto {
   @IsArray()
   @IsString({ each: true })
   earningsEntryIds?: string[];
+
+  /** Optional client-supplied idempotency key. Replaying a request with the
+   *  same key returns the original payout instead of creating a duplicate. */
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  idempotencyKey?: string;
 }
 
 export class PayoutHistoryQueryDto {

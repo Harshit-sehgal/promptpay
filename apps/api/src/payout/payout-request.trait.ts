@@ -214,6 +214,7 @@ export class PayoutRequestTrait {
       amountMinor: bigint;
       currency: string;
       earningsEntryIds?: string[];
+      idempotencyKey?: string;
     },
   ) {
     if (!(await this.runtimeConfig.isPayoutRequestsEnabled())) {
@@ -295,6 +296,13 @@ export class PayoutRequestTrait {
     if (!account.isActive) {
       throw new ForbiddenException('Payout destination is inactive');
     }
+    // Emergency freeze: an operator can freeze a destination (compromised
+    // account, provider outage, sanctions-screening hit, etc.) without
+    // deleting the account or toggling isActive. Frozen accounts are blocked
+    // from payouts regardless of verification status.
+    if (account.isFrozen) {
+      throw new ForbiddenException('Payout destination is frozen by operator');
+    }
     // Payout destination verification is a money-movement safety gate: funds
     // must only leave to a destination an operator (or the provider) has
     // verified (ownership challenge, provider verification, etc.). An
@@ -338,16 +346,51 @@ export class PayoutRequestTrait {
     // allocated-entry exclusions bound to RESERVED_PAYOUT_STATUSES), so two
     // concurrent payouts cannot double-allocate the same entry. The unique
     // index on `payout_allocations.earningsEntryId` is the DB floor.
+    const idempotencyKey = dto.idempotencyKey?.trim();
     return this.prisma.$transaction(async (tx) => {
-      const payoutRequest = await tx.payoutRequest.create({
-        data: {
-          userId,
-          payoutAccountId: dto.payoutAccountId,
-          status: 'requested',
-          requestedAmountMinor: dto.amountMinor,
-          currency,
-        },
-      });
+      // Idempotency: a replayed request with the same user-scoped key returns
+      // the existing payout instead of creating a duplicate. The unique index
+      // on (userId, idempotencyKey) is the authoritative floor; this pre-check
+      // is the fast path for replays.
+      if (idempotencyKey) {
+        const existing = await tx.payoutRequest.findUnique({
+          where: { userId_idempotencyKey: { userId, idempotencyKey } },
+          include: { allocations: true },
+        });
+        if (existing) {
+          return existing;
+        }
+      }
+
+      let payoutRequest: Prisma.PayoutRequestGetPayload<{ include: { allocations: true } }>;
+      try {
+        payoutRequest = await tx.payoutRequest.create({
+          data: {
+            userId,
+            payoutAccountId: dto.payoutAccountId,
+            status: 'requested',
+            requestedAmountMinor: dto.amountMinor,
+            currency,
+            idempotencyKey,
+          },
+          include: { allocations: true },
+        });
+      } catch (err: unknown) {
+        // Race: another request with the same idempotency key committed
+        // between the pre-check and the create. Return the winner.
+        if (
+          idempotencyKey &&
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
+          const winner = await tx.payoutRequest.findUnique({
+            where: { userId_idempotencyKey: { userId, idempotencyKey } },
+            include: { allocations: true },
+          });
+          if (winner) return winner;
+        }
+        throw err;
+      }
       await this.allocatePayoutEarnings(
         tx,
         payoutRequest.id,

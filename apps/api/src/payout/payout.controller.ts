@@ -60,6 +60,7 @@ export class PayoutController {
       amountMinor: dto.amountMinor,
       currency: dto.currency,
       earningsEntryIds: dto.earningsEntryIds,
+      idempotencyKey: dto.idempotencyKey,
     });
   }
 

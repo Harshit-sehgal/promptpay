@@ -33,6 +33,7 @@ import {
 } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
+import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
@@ -78,6 +79,8 @@ describe('API Contract Tests', () => {
       .overrideGuard(BruteForceGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(ThrottleByRouteGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(ActionStepUpGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -330,6 +333,7 @@ describe('API Contract Tests', () => {
         toolType: 'vscode',
         waitStateId: 'contract-ws',
         idempotencyKey: 'contract-ws-start',
+        signals: [{ type: 'ai_generation' }],
       };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
@@ -338,6 +342,40 @@ describe('API Contract Tests', () => {
         .send({ ...payload, signature: sig })
         .expect(200);
       expect(() => WaitStateStartResponse.parse(res.body)).not.toThrow();
+    });
+
+    it('POST /extension/ad-request rejects low-confidence wait states', async () => {
+      const wsId = 'low-confidence-ws';
+      const wsPayload = {
+        deviceId,
+        sessionId: 'contract-session',
+        toolType: 'vscode',
+        waitStateId: wsId,
+        idempotencyKey: 'low-confidence-ws-start',
+        // Inactivity-only signal produces confidence below the billing threshold.
+        signals: [{ type: 'inactivity' }],
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/start')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...wsPayload, signature: signPayload(wsPayload, deviceEventSecret) })
+        .expect(200);
+
+      const adReqPayload = {
+        deviceId,
+        sessionId: 'contract-session',
+        waitStateId: wsId,
+        toolType: 'vscode',
+        idempotencyKey: 'low-confidence-ad-req',
+      };
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/extension/ad-request')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...adReqPayload, signature: signPayload(adReqPayload, deviceEventSecret) })
+        .expect(200);
+
+      expect(res.body.ad).toBeNull();
+      expect(res.body.reason).toBe('low_confidence_wait');
     });
 
     it('POST /extension/wait-state/end → matches WaitStateEndResponse schema', async () => {
@@ -367,6 +405,7 @@ describe('API Contract Tests', () => {
         toolType: 'vscode',
         waitStateId: 'contract-ad-ws',
         idempotencyKey: 'contract-ad-ws-start',
+        signals: [{ type: 'ai_generation' }],
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -477,6 +516,7 @@ describe('API Contract Tests', () => {
         toolType: 'vscode',
         waitStateId: 'concurrent-ws',
         idempotencyKey: 'concurrent-ws-start',
+        signals: [{ type: 'ai_generation' }],
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -608,9 +648,11 @@ describe('API Contract Tests', () => {
       // Set up a verified payout account for the dev and seed a confirmed
       // earnings row directly in the DB so the request passes the
       // available-balance gate.
-      const userId = (await prisma.user.findUniqueOrThrow({
-        where: { email: 'contract-dev@test.com' },
-      })).id;
+      const userId = (
+        await prisma.user.findUniqueOrThrow({
+          where: { email: 'contract-dev@test.com' },
+        })
+      ).id;
       // Ensure emailVerified is true so the requestPayout guard passes.
       await prisma.user.updateMany({
         where: { id: userId },

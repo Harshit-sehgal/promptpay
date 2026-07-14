@@ -50,38 +50,42 @@ export class StripeProvider {
     successUrl: string;
     cancelUrl: string;
     metadata?: Record<string, string>;
+    idempotencyKey?: string;
   }): Promise<{ sessionId: string; url: string }> {
     if (!this.stripe) throw new Error('Stripe is not configured');
 
-    const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: params.currency.toLowerCase(),
-            product_data: {
-              name: 'WaitLayer Ad Credit Deposit',
-              description: `Deposit for advertiser ${params.advertiserId}`,
-            },
-            unit_amount: Number(
-              requireProviderSafeMinorAmount(
-                params.amountMinor,
-                'Stripe Checkout',
-                STRIPE_MAX_MINOR_AMOUNT,
+    const session = await this.stripe.checkout.sessions.create(
+      {
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: params.currency.toLowerCase(),
+              product_data: {
+                name: 'WaitLayer Ad Credit Deposit',
+                description: `Deposit for advertiser ${params.advertiserId}`,
+              },
+              unit_amount: Number(
+                requireProviderSafeMinorAmount(
+                  params.amountMinor,
+                  'Stripe Checkout',
+                  STRIPE_MAX_MINOR_AMOUNT,
+                ),
               ),
-            ),
+            },
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+        metadata: {
+          advertiserId: params.advertiserId,
+          ...params.metadata,
         },
-      ],
-      success_url: params.successUrl,
-      cancel_url: params.cancelUrl,
-      metadata: {
-        advertiserId: params.advertiserId,
-        ...params.metadata,
       },
-    });
+      params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : undefined,
+    );
 
     return { sessionId: session.id, url: session.url! };
   }

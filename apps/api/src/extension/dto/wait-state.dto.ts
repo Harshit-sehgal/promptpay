@@ -1,7 +1,33 @@
-import { IsEnum, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 import { ToolType } from '@waitlayer/shared';
+
+export class WaitSignalDto {
+  @ApiProperty({
+    description: 'Signal category. Must not contain user code or PII.',
+    enum: ['ai_generation', 'command_execution', 'active_task', 'lifecycle_event', 'inactivity'],
+  })
+  @IsEnum(['ai_generation', 'command_execution', 'active_task', 'lifecycle_event', 'inactivity'])
+  type!: 'ai_generation' | 'command_execution' | 'active_task' | 'lifecycle_event' | 'inactivity';
+
+  @ApiPropertyOptional({ description: 'Optional human-readable context (no code/PII).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  details?: string;
+}
 
 export class WaitStateStartDto {
   @ApiProperty()
@@ -29,6 +55,19 @@ export class WaitStateStartDto {
   @MinLength(1)
   @MaxLength(128)
   idempotencyKey!: string;
+
+  @ApiPropertyOptional({ description: 'Categorized signals used to score this wait state.' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WaitSignalDto)
+  signals?: WaitSignalDto[];
+
+  @ApiPropertyOptional({ description: 'Version of the detector that produced the signals.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  detectorVersion?: string;
 
   @ApiProperty()
   @IsString()

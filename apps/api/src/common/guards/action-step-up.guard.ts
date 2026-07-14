@@ -1,12 +1,10 @@
 import { Request } from 'express';
 import {
   CanActivate,
-  createParamDecorator,
   ExecutionContext,
   ForbiddenException,
   Injectable,
   SetMetadata,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -23,11 +21,6 @@ export interface StepUpTokenPayload {
 }
 
 export const ActionStepUp = (action: string) => SetMetadata(STEP_UP_ACTION_KEY, action);
-
-export const StepUpToken = createParamDecorator((_: unknown, ctx: ExecutionContext) => {
-  const req = ctx.switchToHttp().getRequest<Request>();
-  return req.headers['x-step-up-token'] as string | undefined;
-});
 
 interface StepUpRequest extends Request {
   user?: { id?: string; role?: string };
@@ -75,21 +68,22 @@ export class ActionStepUpGuard implements CanActivate {
       return true;
     }
 
-    const token = req.headers['x-step-up-token'] as string | undefined;
+    const token =
+      (req.headers?.['x-step-up-token'] as string | undefined) ?? req.get?.('x-step-up-token');
     if (!token) {
       throw new ForbiddenException('Step-up authentication is required for this action');
     }
 
     let payload: StepUpTokenPayload;
     try {
-      payload = this.jwt.verify<StepUpTokenPayload>(token, {
-        secret: this.publicKey,
-        algorithms: ['RS256'],
-        issuer: this.issuer,
-        audience: this.audience,
-      }) as StepUpTokenPayload;
+      payload = this.jwt.verify<StepUpTokenPayload>(token);
     } catch {
       throw new ForbiddenException('Invalid or expired step-up token');
+    }
+
+    const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!tokenAud.includes('step-up')) {
+      throw new ForbiddenException('Invalid step-up token');
     }
 
     if (payload.sub !== req.user?.id) {

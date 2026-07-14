@@ -23,6 +23,7 @@ import { depositMinimumMinor } from '@waitlayer/shared';
 
 import { CurrentUser, Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
+import { ActionStepUp, ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -332,6 +333,7 @@ export class AdvertiserController {
       currency,
       successUrl: `${webBaseUrl}/advertiser?deposit=success`,
       cancelUrl: `${webBaseUrl}/advertiser?deposit=cancelled`,
+      idempotencyKey: dto.idempotencyKey,
     });
   }
 
@@ -353,7 +355,8 @@ export class AdvertiserController {
   @HttpCode(HttpStatus.OK)
   @Audit('delete_account', 'user')
   @UseInterceptors(AuditInterceptor)
-  @UseGuards(RejectApiKeyGuard)
+  @UseGuards(RejectApiKeyGuard, ActionStepUpGuard)
+  @ActionStepUp('account:delete')
   @RequiredScopes('advertiser:write')
   deleteAccount(@CurrentUser('id') userId: string, @Body() dto: DeleteAccountDto) {
     if (dto.confirmation !== 'DELETE_MY_ACCOUNT') {

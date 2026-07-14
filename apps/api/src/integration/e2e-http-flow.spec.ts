@@ -8,6 +8,7 @@ import { BidType, PayoutProvider, UserRole } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
+import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
@@ -50,6 +51,8 @@ describe('End-to-End HTTP Integration Flow', () => {
       .overrideGuard(BruteForceGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(ThrottleByRouteGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(ActionStepUpGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -630,6 +633,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         toolType: 'vscode',
         waitStateId,
         idempotencyKey: `start-${waitStateId}`,
+        signals: [{ type: 'ai_generation' }],
       };
       const signature = signPayload(startPayload, deviceEventSecret);
 
@@ -761,6 +765,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         toolType: 'vscode',
         waitStateId: cpcWaitStateId,
         idempotencyKey: `start-${cpcWaitStateId}`,
+        signals: [{ type: 'ai_generation' }],
       };
       const signature = signPayload(startPayload, deviceEventSecret);
 
@@ -960,6 +965,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId: 'dev2-wait',
         toolType: 'vscode',
         idempotencyKey: 'dev2-wait-start',
+        signals: [{ type: 'ai_generation' }],
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -1042,6 +1048,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId: wsId,
         toolType: 'vscode',
         idempotencyKey: `start-${wsId}`,
+        signals: [{ type: 'ai_generation' }],
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')

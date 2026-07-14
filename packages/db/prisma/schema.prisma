@@ -372,6 +372,10 @@ model PayoutAccount {
   currency    String         @default("USD")
   isVerified  Boolean        @default(false)
   isActive    Boolean        @default(true)
+  // Emergency freeze: operator-initiated block on a verified payout
+  // destination. A frozen account cannot be used for payouts until an
+  // admin explicitly unfreezes it, even if it remains verified and active.
+  isFrozen    Boolean        @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -562,6 +566,14 @@ model WaitStateEvent {
   ipHash         String?
   signature      String
   idempotencyKey String       @unique
+  // Confidence-based wait-detection metadata (P0). Signals are categorized
+  // telemetry (no user code) used to score whether this wait state is a real
+  // productive wait vs. idle inactivity.
+  confidence      Float?
+  detectorVersion String?      @map("detector_version")
+  reason          String?
+  signals         Json?        @default("[]")
+  isFalsePositive Boolean      @default(false) @map("is_false_positive")
 
   createdAt DateTime @default(now())
 
@@ -808,6 +820,10 @@ model PayoutRequest {
   requestedAmountMinor BigInt
   approvedAmountMinor  BigInt?
   currency             String        @default("USD")
+  // Client-supplied idempotency key. Scoped to the user so different users'
+  // keys cannot collide, and so a replayed request returns the original
+  // payout instead of creating a duplicate.
+  idempotencyKey       String?       @map("idempotency_key")
   reviewerId           String?
   reviewNote           String?
   processedAt          DateTime?
@@ -826,6 +842,7 @@ model PayoutRequest {
   // to pick one and heap-filter the other.
   @@index([userId, status])
   @@index([payoutAccountId])
+  @@unique([userId, idempotencyKey])
   @@map("payout_requests")
 }
 
