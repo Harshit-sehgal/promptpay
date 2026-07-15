@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
@@ -225,7 +225,7 @@ export class AdminPayoutsTrait {
       where: { id: payoutAccountId },
       include: { user: { select: { id: true, email: true } } },
     });
-    if (!account) throw new BadRequestException('Payout account not found');
+    if (!account) throw new NotFoundException('Payout account not found');
     const updated = await this.prisma.payoutAccount.update({
       where: { id: payoutAccountId },
       data: { isVerified: verified },
@@ -239,6 +239,81 @@ export class AdminPayoutsTrait {
       beforeSnap: { isVerified: account.isVerified },
       afterSnap: {
         isVerified: verified,
+        provider: account.provider,
+        destination: account.destination,
+        userEmail: account.user?.email,
+        reason: reason ?? null,
+      },
+    });
+    return updated;
+  }
+
+  /**
+   * Emergency-freeze a payout destination. Frozen accounts remain verified and
+   * active but cannot be used for payouts until an admin explicitly unfreezes
+   * them. This is the operator-level kill switch for a single destination.
+   */
+  async freezePayoutAccount(
+    reviewerId: string,
+    reviewerRole: string,
+    payoutAccountId: string,
+    reason?: string,
+  ) {
+    const account = await this.prisma.payoutAccount.findUnique({
+      where: { id: payoutAccountId },
+      include: { user: { select: { id: true, email: true } } },
+    });
+    if (!account) throw new NotFoundException('Payout account not found');
+    const updated = await this.prisma.payoutAccount.update({
+      where: { id: payoutAccountId },
+      data: { isFrozen: true },
+    });
+    await this.audit.log({
+      actorId: reviewerId,
+      actorRole: reviewerRole,
+      action: 'payout_account_frozen',
+      targetType: 'payout_account',
+      targetId: payoutAccountId,
+      beforeSnap: { isFrozen: account.isFrozen },
+      afterSnap: {
+        isFrozen: true,
+        provider: account.provider,
+        destination: account.destination,
+        userEmail: account.user?.email,
+        reason: reason ?? null,
+      },
+    });
+    return updated;
+  }
+
+  /**
+   * Remove the emergency freeze from a payout destination. The account must
+   * still be verified and active to be used for payouts.
+   */
+  async unfreezePayoutAccount(
+    reviewerId: string,
+    reviewerRole: string,
+    payoutAccountId: string,
+    reason?: string,
+  ) {
+    const account = await this.prisma.payoutAccount.findUnique({
+      where: { id: payoutAccountId },
+      include: { user: { select: { id: true, email: true } } },
+    });
+    if (!account) throw new NotFoundException('Payout account not found');
+    const updated = await this.prisma.payoutAccount.update({
+      where: { id: payoutAccountId },
+      data: { isFrozen: false },
+    });
+    await this.audit.log({
+      actorId: reviewerId,
+      actorRole: reviewerRole,
+      action: 'payout_account_unfrozen',
+      targetType: 'payout_account',
+      targetId: payoutAccountId,
+      beforeSnap: { isFrozen: account.isFrozen },
+      afterSnap: {
+        isFrozen: false,
         provider: account.provider,
         destination: account.destination,
         userEmail: account.user?.email,

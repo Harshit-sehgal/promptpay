@@ -9,6 +9,7 @@ export {
   IssueDeviceRecoveryTokenDto,
   MarkPayoutPaidDto,
   OpenRecoveryDebtCaseDto,
+  PayoutAccountFreezeDto,
   PayoutAccountVerifyDto,
   RecoveryDebtCasesQueryDto,
   RejectCampaignDto,

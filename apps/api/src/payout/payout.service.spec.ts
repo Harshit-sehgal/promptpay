@@ -1140,3 +1140,65 @@ describe('markPayoutFailed terminal state transition', () => {
     expect(deleteMany).toHaveBeenCalledWith({ where: { payoutRequestId: 'payout-1' } });
   });
 });
+
+// ── Round 28: payout account freeze gate (A-085) ──
+
+describe('PayoutService.requestPayout payout-account freeze gate', () => {
+  it('rejects a payout to a frozen destination even if verified', async () => {
+    const { prisma, service } = makePayoutService();
+    prisma.payoutAccount.findUnique.mockResolvedValue({
+      id: 'acc1',
+      userId: 'u1',
+      isActive: true,
+      isVerified: true,
+      isFrozen: true,
+      currency: 'USD',
+      createdAt: new Date(),
+    });
+
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+      }),
+    ).rejects.toThrow(/frozen by operator/i);
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('allows a payout to a verified, non-frozen destination (regression lock)', async () => {
+    const { prisma, service } = makePayoutService();
+    prisma.payoutAccount.findUnique.mockResolvedValue({
+      id: 'acc1',
+      userId: 'u1',
+      isActive: true,
+      isVerified: true,
+      isFrozen: false,
+      currency: 'USD',
+      createdAt: new Date(),
+    });
+    prisma.payoutRequest = { create: vi.fn().mockResolvedValue({ id: 'pr1' }) };
+
+    // We only assert it does NOT throw the frozen-gate error.
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+      }),
+    ).rejects.not.toThrow(/frozen by operator/i);
+  });
+});

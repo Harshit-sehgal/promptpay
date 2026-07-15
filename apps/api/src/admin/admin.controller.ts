@@ -30,6 +30,7 @@ import {
   IssueDeviceRecoveryTokenDto,
   MarkPayoutPaidDto,
   OpenRecoveryDebtCaseDto,
+  PayoutAccountFreezeDto,
   PayoutAccountVerifyDto,
   RecoveryDebtCasesQueryDto,
   RejectCampaignDto,
@@ -330,6 +331,30 @@ export class AdminController {
       dto.verified,
       dto.reason,
     );
+  }
+
+  @ApiOperation({ summary: 'Freeze payout account' })
+  @Post('payout-accounts/:id/freeze')
+  @Roles('admin', 'support', 'super_admin')
+  freezePayoutAccount(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: PayoutAccountFreezeDto,
+  ) {
+    return this.service.freezePayoutAccount(reviewerId, reviewerRole, id, dto.reason);
+  }
+
+  @ApiOperation({ summary: 'Unfreeze payout account' })
+  @Post('payout-accounts/:id/unfreeze')
+  @Roles('admin', 'support', 'super_admin')
+  unfreezePayoutAccount(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: PayoutAccountFreezeDto,
+  ) {
+    return this.service.unfreezePayoutAccount(reviewerId, reviewerRole, id, dto.reason);
   }
 
   // ── Archive Refunds ──

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { AdminService } from './admin.service';
 
@@ -37,6 +37,10 @@ const mockPrisma: any = {
   payoutRequest: {
     findUnique: vi.fn(),
     updateMany: vi.fn(),
+  },
+  payoutAccount: {
+    findUnique: vi.fn(),
+    update: vi.fn(),
   },
   fraudFlag: {
     groupBy: vi.fn(),
@@ -112,17 +116,15 @@ describe('AdminService', () => {
       // $queryRaw call order in getMoneyIntegrityReport:
       //   1. campaign discrepancies (WITH debits join) -> empty
       //   2. negative developer balances (WITH balances join) -> dev-1
-      mockPrisma.$queryRaw
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          {
-            userId: 'dev-1',
-            email: 'dev@example.com',
-            balanceMinor: -50n,
-            currency: 'EUR',
-            total: 1n,
-          },
-        ]);
+      mockPrisma.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          userId: 'dev-1',
+          email: 'dev@example.com',
+          balanceMinor: -50n,
+          currency: 'EUR',
+          total: 1n,
+        },
+      ]);
 
       const report = await service.getMoneyIntegrityReport();
 
@@ -559,6 +561,126 @@ describe('AdminService', () => {
 
       await expect(service.recomputeTrustScore('user-1')).resolves.toBe(82);
       expect(mockFraud.computeTrustScore).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  describe('payout account verification and freeze', () => {
+    it('verifies a payout account and audits the action', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        isVerified: false,
+        provider: 'wise',
+        destination: 'wise-dest',
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+      mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isVerified: true });
+
+      const result = await service.setPayoutAccountVerified(
+        'admin-1',
+        'admin',
+        'pa-1',
+        true,
+        'ownership confirmed',
+      );
+
+      expect(result.isVerified).toBe(true);
+      expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
+        where: { id: 'pa-1' },
+        data: { isVerified: true },
+      });
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'payout_account_verified',
+          targetId: 'pa-1',
+          afterSnap: expect.objectContaining({ reason: 'ownership confirmed' }),
+        }),
+      );
+    });
+
+    it('rejects a payout account verification for a missing account', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.setPayoutAccountVerified('admin-1', 'admin', 'ghost', true),
+      ).rejects.toThrow('Payout account not found');
+    });
+
+    it('throws NotFoundException (404) for a missing payout account', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(null);
+      await expect(
+        service.setPayoutAccountVerified('admin-1', 'admin', 'ghost', true),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws NotFoundException (404) when freezing a missing account', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(null);
+      await expect(
+        service.freezePayoutAccount('admin-1', 'admin', 'ghost', 'reason'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws NotFoundException (404) when unfreezing a missing account', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(null);
+      await expect(
+        service.unfreezePayoutAccount('admin-1', 'admin', 'ghost', 'reason'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('freezes a payout account and blocks its use', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        isFrozen: false,
+        provider: 'wise',
+        destination: 'wise-dest',
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+      mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isFrozen: true });
+
+      const result = await service.freezePayoutAccount(
+        'admin-1',
+        'admin',
+        'pa-1',
+        'suspected takeover',
+      );
+
+      expect(result.isFrozen).toBe(true);
+      expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
+        where: { id: 'pa-1' },
+        data: { isFrozen: true },
+      });
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'payout_account_frozen',
+          targetId: 'pa-1',
+          afterSnap: expect.objectContaining({ reason: 'suspected takeover' }),
+        }),
+      );
+    });
+
+    it('unfreezes a payout account so it can be used again', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        isFrozen: true,
+        provider: 'wise',
+        destination: 'wise-dest',
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+      mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isFrozen: false });
+
+      const result = await service.unfreezePayoutAccount('admin-1', 'admin', 'pa-1', 'cleared');
+
+      expect(result.isFrozen).toBe(false);
+      expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
+        where: { id: 'pa-1' },
+        data: { isFrozen: false },
+      });
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'payout_account_unfrozen',
+          targetId: 'pa-1',
+          afterSnap: expect.objectContaining({ reason: 'cleared' }),
+        }),
+      );
     });
   });
 });
