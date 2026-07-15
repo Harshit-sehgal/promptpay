@@ -60,12 +60,12 @@ Build and push to container registry:
 docker compose build
 
 # Tag with version
-docker tag promptpay-api:latest registry.example.com/promptpay-api:v1.0.0
-docker tag promptpay-web:latest registry.example.com/promptpay-web:v1.0.0
+docker tag waitlayer-api:latest registry.example.com/waitlayer-api:v1.0.0
+docker tag waitlayer-web:latest registry.example.com/waitlayer-web:v1.0.0
 
 # Push
-docker push registry.example.com/promptpay-api:v1.0.0
-docker push registry.example.com/promptpay-web:v1.0.0
+docker push registry.example.com/waitlayer-api:v1.0.0
+docker push registry.example.com/waitlayer-web:v1.0.0
 ```
 
 ---
@@ -113,10 +113,10 @@ For risky changes:
 
 ```bash
 # Step 1: Revert API to previous version
-docker compose up -d --no-deps api=registry.example.com/promptpay-api:v1.0.0
+docker compose up -d --no-deps api=registry.example.com/waitlayer-api:v1.0.0
 
 # Step 2: Revert Web
-docker compose up -d --no-deps web=registry.example.com/promptpay-web:v1.0.0
+docker compose up -d --no-deps web=registry.example.com/waitlayer-web:v1.0.0
 
 # Step 3: Verify rollback
  curl -f http://localhost:4002/api/v1/health/ready

@@ -11,7 +11,9 @@
     "start": "next start",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.65.0",
@@ -39,7 +41,8 @@
     "autoprefixer": "^10.4.0",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.19",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "typescript": "^5.9.2",
+    "vitest": "^4.1.10",
+    "@playwright/test": "^1.51.1"
   }
 }

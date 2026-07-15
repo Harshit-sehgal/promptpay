@@ -1,5 +1,60 @@
 import * as crypto from 'crypto';
 
+// ── Wait-detection confidence scoring ──
+//
+// These constants and the computeWaitConfidence function live here (rather
+// than in extension-wait.trait.ts) so that modules outside the extension
+// subsystem (e.g. the health controller's monitoring metrics) can import
+// MINIMUM_WAIT_CONFIDENCE without pulling in the trait class and its
+// transitive NestJS/Prisma dependencies. The trait file re-exports them
+// for backward compatibility with existing import sites.
+
+/**
+ * Weighted confidence scoring for wait-state signals. The strongest
+ * positive signal dominates (max-weight) rather than summing, so a single
+ * high-confidence signal (e.g. an active AI generation) is not diluted by
+ * incidental inactivity telemetry.
+ */
+export const SIGNAL_WEIGHTS: Record<string, number> = {
+  ai_generation: 0.95,
+  active_task: 0.85,
+  command_execution: 0.7,
+  lifecycle_event: 0.6,
+  inactivity: 0.05,
+};
+
+/** Minimum confidence for a wait state to be eligible for billing. */
+export const MINIMUM_WAIT_CONFIDENCE = 0.5;
+
+export interface WaitSignal {
+  type: keyof typeof SIGNAL_WEIGHTS;
+  details?: string;
+}
+
+/**
+ * Compute the wait-confidence from a set of signals. Returns the max-weight
+ * signal's weight as the confidence and the signal type as the reason.
+ * An empty signal set returns confidence 0 (no_signals).
+ */
+export function computeWaitConfidence(signals: WaitSignal[]): {
+  confidence: number;
+  reason: string;
+} {
+  if (!signals || signals.length === 0) {
+    return { confidence: 0, reason: 'no_signals' };
+  }
+  let best = signals[0];
+  let bestWeight = SIGNAL_WEIGHTS[best.type] ?? 0;
+  for (const signal of signals) {
+    const weight = SIGNAL_WEIGHTS[signal.type] ?? 0;
+    if (weight > bestWeight) {
+      best = signal;
+      bestWeight = weight;
+    }
+  }
+  return { confidence: bestWeight, reason: best.type };
+}
+
 export class BudgetExhaustedError extends Error {
   constructor() {
     super('Campaign budget exhausted or campaign inactive');

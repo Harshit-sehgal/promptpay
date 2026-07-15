@@ -43,6 +43,12 @@ export class AuthPasswordTrait {
       return generic;
     }
     const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
+    // Use RS256 asymmetric signing (not HS256 symmetric) so the reset token
+    // is signed with the private key and verifiable with the public key.
+    // This closes a security gap where a JWT_SECRET compromise (used for
+    // HMAC across multiple services) could forge password-reset tokens.
+    // The private key lives only in the API; the web middleware holds only
+    // the public key for verification.
     const token = await this.jwt.signAsync(
       {
         sub: user.id,
@@ -51,7 +57,10 @@ export class AuthPasswordTrait {
         iss: issuer,
         aud: 'password-reset',
       },
-      { secret: this.jwtSecret, algorithm: 'HS256', expiresIn: '1h' },
+      {
+        algorithm: 'RS256',
+        expiresIn: '1h',
+      },
     );
     await this.email.sendPasswordReset(user.email, token);
     // Fail-closed: expose the raw token only when explicitly in dev/test.
@@ -69,9 +78,9 @@ export class AuthPasswordTrait {
   async resetPassword(token: string, newPassword: string) {
     let payload: PasswordResetPayload;
     try {
+      // Verify with RS256 using the public key (asymmetric verification).
       payload = await this.jwt.verifyAsync<PasswordResetPayload>(token, {
-        secret: this.jwtSecret,
-        algorithms: ['HS256'],
+        algorithms: ['RS256'],
         issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
         audience: 'password-reset',
       });

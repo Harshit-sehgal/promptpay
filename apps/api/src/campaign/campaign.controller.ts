@@ -177,9 +177,14 @@ export class CampaignController {
     @Param('id', ParseUUIDPipe) campaignId: string,
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Body() targets: CreateCountryTargetingDto[],
+    @Body() body: CreateCountryTargetingDto[] | CreateCountryTargetingDto,
     @Req() req: CampaignRequest,
   ) {
+    // The endpoint accepts either an array of targeting entries or a single
+    // entry object. Normalize to an array so callers cannot crash the server
+    // by sending `{ countryCode, include }` instead of `[{ ... }]`.
+    const targets = Array.isArray(body) ? body : [body];
+
     // Admins manage targeting on any campaign; non-admins must own it.
     const actor = resolveCampaignActor(req, userId, role);
     if (!actor.advertiserId && !isAdminRole(role)) {

@@ -61,8 +61,8 @@ describe('resolved provider lists honour operator overrides at module load', () 
       'paypal_email',
     ]);
     expect(COMING_SOON_PAYOUT_PROVIDERS.map((p) => p.provider).sort()).toEqual([
-      'paypal_payouts',
       'payoneer',
+      'paypal_payouts',
       'razorpay',
       'stripe_connect',
       'wise',

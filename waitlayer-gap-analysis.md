@@ -1,4 +1,4 @@
-# WaitLayer (PromptPay) — Comprehensive Gap Analysis
+# WaitLayer — Comprehensive Gap Analysis
 
 **Generated:** July 8, 2026  
 **Total Gaps:** 158  

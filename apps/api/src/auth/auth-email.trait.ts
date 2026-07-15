@@ -88,6 +88,10 @@ export class AuthEmailTrait {
       throw new BadRequestException('Email is already verified');
     }
     // Stateless token: contains userId, email, and action. Valid for 24 hours.
+    // Use RS256 asymmetric signing so the verification token is signed with
+    // the private key and verifiable with the public key. This closes the
+    // security gap where a shared JWT_SECRET compromise could forge email-
+    // verification tokens.
     const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
     const token = await this.jwt.signAsync(
       {
@@ -97,7 +101,10 @@ export class AuthEmailTrait {
         iss: issuer,
         aud: 'email-verification',
       },
-      { secret: this.jwtSecret, algorithm: 'HS256', expiresIn: '24h' },
+      {
+        algorithm: 'RS256',
+        expiresIn: '24h',
+      },
     );
     const result = await this.email.sendEmailVerification(user.email, token);
     if (!result.delivered) {
@@ -120,9 +127,9 @@ export class AuthEmailTrait {
   async confirmEmailVerification(token: string) {
     let payload: EmailVerificationPayload;
     try {
+      // Verify with RS256 using the public key (asymmetric verification).
       payload = await this.jwt.verifyAsync(token, {
-        secret: this.jwtSecret,
-        algorithms: ['HS256'],
+        algorithms: ['RS256'],
         issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
         audience: 'email-verification',
       });

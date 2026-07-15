@@ -17,7 +17,7 @@
     "@types/react": "^19.1.0",
     "react": "^19.1.0",
     "@waitlayer/eslint-config": "workspace:*",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.2"
   },
   "peerDependencies": {
     "react": "^19.1.0"

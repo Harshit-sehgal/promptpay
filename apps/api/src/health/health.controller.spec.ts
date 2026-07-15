@@ -36,6 +36,86 @@ describe('HealthController route security', () => {
   });
 });
 
+describe('HealthController metrics endpoint', () => {
+  function metricsPrisma() {
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(0),
+      $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
+    };
+    const prisma = {
+      tx,
+      $transaction: vi.fn((cb: (client: typeof tx) => unknown) => cb(tx)),
+      payoutRequest: { count: vi.fn().mockResolvedValue(3) },
+      fraudFlag: { count: vi.fn().mockResolvedValue(1) },
+      user: { count: vi.fn().mockResolvedValue(42) },
+      emailQueue: { count: vi.fn().mockResolvedValue(5) },
+      webhookEvent: {
+        count: vi.fn().mockResolvedValue(2),
+        findFirst: vi.fn().mockResolvedValue({
+          createdAt: new Date(Date.now() - 120_000), // 2 minutes ago
+        }),
+      },
+      adImpression: { count: vi.fn().mockResolvedValue(7) },
+      waitStateEvent: { count: vi.fn().mockResolvedValue(100) },
+    };
+    return prisma;
+  }
+
+  it('returns email queue depth, webhook lag, overspend attempts, and wait-detection quality', async () => {
+    const prisma = metricsPrisma();
+    // Mock wait-detection counts: 100 total, 5 flagged, 10 low-confidence
+    prisma.waitStateEvent.count = vi
+      .fn()
+      .mockResolvedValueOnce(100) // totalWaitStates
+      .mockResolvedValueOnce(5) // flaggedFalsePositives
+      .mockResolvedValueOnce(10); // lowConfidenceBlocked
+    const redis = { check: vi.fn().mockResolvedValue({ status: 'connected' }) };
+    const controller = new HealthController(prisma as never, redis as never);
+
+    const res = await controller.metrics();
+
+    expect(res.queues).toBeDefined();
+    expect((res.queues as Record<string, unknown>).emailQueueDepth).toBe(5);
+    expect((res.queues as Record<string, unknown>).webhookStalled).toBe(2);
+    expect((res.queues as Record<string, unknown>).webhookLagSeconds).toBeGreaterThanOrEqual(119);
+
+    expect(res.financial).toBeDefined();
+    expect((res.financial as Record<string, unknown>).overspendAttempts).toBe(7);
+
+    expect(res.waitDetection).toBeDefined();
+    const wait = res.waitDetection as Record<string, number>;
+    // highConfidenceTotal = 100 - 10 = 90
+    // highConfidenceTruePositives = 90 - 5 = 85
+    // precision = 85 / 90 ≈ 0.944...
+    expect(wait.precision).toBeGreaterThanOrEqual(0.9);
+    // falsePositiveRate = 5 / 100 = 0.05
+    expect(wait.falsePositiveRate).toBeLessThanOrEqual(0.05);
+    expect(wait.totalWaitStates).toBe(100);
+    expect(wait.flaggedFalsePositives).toBe(5);
+    expect(wait.lowConfidenceBlocked).toBe(10);
+  });
+
+  it('returns zero webhook lag when no pending events exist', async () => {
+    const prisma = metricsPrisma();
+    prisma.webhookEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.count = vi
+      .fn()
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+    const redis = { check: vi.fn().mockResolvedValue({ status: 'connected' }) };
+    const controller = new HealthController(prisma as never, redis as never);
+
+    const res = await controller.metrics();
+
+    expect((res.queues as Record<string, unknown>).webhookLagSeconds).toBe(0);
+    const wait = res.waitDetection as Record<string, number>;
+    // No wait states → precision defaults to 1, falsePositiveRate to 0
+    expect(wait.precision).toBe(1);
+    expect(wait.falsePositiveRate).toBe(0);
+  });
+});
+
 describe('HealthController readiness (A-042)', () => {
   it('returns ok when DB and Redis are healthy', async () => {
     const prisma = databaseProbePrisma('ok');

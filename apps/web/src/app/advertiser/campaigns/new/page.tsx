@@ -204,8 +204,15 @@ export default function NewCampaignPage() {
           <h2 className="text-white font-semibold mb-4">Campaign details</h2>
           <div className="space-y-4">
             <div>
-              <label className="text-ink-200 text-sm font-medium mb-1.5 block">Campaign name</label>
+              <label
+                htmlFor="campaign-name"
+                className="text-ink-200 text-sm font-medium mb-1.5 block"
+              >
+                Campaign name
+              </label>
               <input
+                id="campaign-name"
+                data-testid="campaign-name-input"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -216,10 +223,15 @@ export default function NewCampaignPage() {
               />
             </div>
             <div>
-              <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+              <label
+                htmlFor="campaign-currency"
+                className="text-ink-200 text-sm font-medium mb-1.5 block"
+              >
                 Campaign currency
               </label>
               <select
+                id="campaign-currency"
+                data-testid="campaign-currency-select"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
                 className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white"
@@ -237,8 +249,15 @@ export default function NewCampaignPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">Bid type</label>
+                <label
+                  htmlFor="campaign-bid-type"
+                  className="text-ink-200 text-sm font-medium mb-1.5 block"
+                >
+                  Bid type
+                </label>
                 <select
+                  id="campaign-bid-type"
+                  data-testid="campaign-bid-type-select"
                   value={bidType}
                   onChange={(e) => setBidType(e.target.value)}
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white"
@@ -251,10 +270,15 @@ export default function NewCampaignPage() {
                 </select>
               </div>
               <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                <label
+                  htmlFor="campaign-bid-amount"
+                  className="text-ink-200 text-sm font-medium mb-1.5 block"
+                >
                   Bid amount ({currency})
                 </label>
                 <input
+                  id="campaign-bid-amount"
+                  data-testid="campaign-bid-amount-input"
                   type="number"
                   step="0.01"
                   min="0.50"
@@ -269,10 +293,15 @@ export default function NewCampaignPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+                <label
+                  htmlFor="campaign-budget"
+                  className="text-ink-200 text-sm font-medium mb-1.5 block"
+                >
                   Total budget ({currency})
                 </label>
                 <input
+                  id="campaign-budget"
+                  data-testid="campaign-budget-input"
                   type="number"
                   step="1.00"
                   min="50.00"
@@ -285,8 +314,15 @@ export default function NewCampaignPage() {
                 <p className="text-ink-500 text-xs mt-1">Minimum $50.00</p>
               </div>
               <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">Category</label>
+                <label
+                  htmlFor="campaign-category"
+                  className="text-ink-200 text-sm font-medium mb-1.5 block"
+                >
+                  Category
+                </label>
                 <select
+                  id="campaign-category"
+                  data-testid="campaign-category-select"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white"
@@ -301,8 +337,15 @@ export default function NewCampaignPage() {
             </div>
 
             <div>
-              <label className="text-ink-200 text-sm font-medium mb-1.5 block">Landing URL</label>
+              <label
+                htmlFor="campaign-landing-url"
+                className="text-ink-200 text-sm font-medium mb-1.5 block"
+              >
+                Landing URL
+              </label>
               <input
+                id="campaign-landing-url"
+                data-testid="campaign-landing-url-input"
                 type="url"
                 value={landingUrl}
                 onChange={(e) => setLandingUrl(e.target.value)}
@@ -321,8 +364,15 @@ export default function NewCampaignPage() {
           <h2 className="text-white font-semibold mb-4">Ad creative</h2>
           <div className="space-y-4">
             <div>
-              <label className="text-ink-200 text-sm font-medium mb-1.5 block">Headline</label>
+              <label
+                htmlFor="campaign-headline"
+                className="text-ink-200 text-sm font-medium mb-1.5 block"
+              >
+                Headline
+              </label>
               <input
+                id="campaign-headline"
+                data-testid="campaign-headline-input"
                 type="text"
                 value={headline}
                 onChange={(e) => setHeadline(e.target.value)}
@@ -335,8 +385,15 @@ export default function NewCampaignPage() {
             </div>
 
             <div>
-              <label className="text-ink-200 text-sm font-medium mb-1.5 block">Message</label>
+              <label
+                htmlFor="campaign-message"
+                className="text-ink-200 text-sm font-medium mb-1.5 block"
+              >
+                Message
+              </label>
               <textarea
+                id="campaign-message"
+                data-testid="campaign-message-input"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 required
@@ -350,8 +407,15 @@ export default function NewCampaignPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">CTA text</label>
+                <label
+                  htmlFor="campaign-cta-text"
+                  className="text-ink-200 text-sm font-medium mb-1.5 block"
+                >
+                  CTA text
+                </label>
                 <input
+                  id="campaign-cta-text"
+                  data-testid="campaign-cta-text-input"
                   type="text"
                   value={ctaText}
                   onChange={(e) => setCtaText(e.target.value)}
@@ -362,8 +426,15 @@ export default function NewCampaignPage() {
                 />
               </div>
               <div>
-                <label className="text-ink-200 text-sm font-medium mb-1.5 block">CTA URL</label>
+                <label
+                  htmlFor="campaign-cta-url"
+                  className="text-ink-200 text-sm font-medium mb-1.5 block"
+                >
+                  CTA URL
+                </label>
                 <input
+                  id="campaign-cta-url"
+                  data-testid="campaign-cta-url-input"
                   type="url"
                   value={ctaUrl}
                   onChange={(e) => setCtaUrl(e.target.value)}
@@ -393,10 +464,15 @@ export default function NewCampaignPage() {
         <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
           <h2 className="text-white font-semibold mb-4">Targeting</h2>
           <div>
-            <label className="text-ink-200 text-sm font-medium mb-1.5 block">
+            <label
+              htmlFor="campaign-target-countries"
+              className="text-ink-200 text-sm font-medium mb-1.5 block"
+            >
               Country targeting (comma-separated ISO codes)
             </label>
             <input
+              id="campaign-target-countries"
+              data-testid="campaign-target-countries-input"
               type="text"
               value={targetCountries}
               onChange={(e) => setTargetCountries(e.target.value)}

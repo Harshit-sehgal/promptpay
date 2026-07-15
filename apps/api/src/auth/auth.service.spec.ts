@@ -695,13 +695,14 @@ describe('AuthService', () => {
 
     it('should throw BadRequestException if token is expired (A-015)', async () => {
       const { service, jwt } = makeService();
+      // Sign with RS256 (matching the module config) so the token is a valid
+      // RS256 token that has already expired — exercising the expiry check.
       const expired = await jwt.signAsync(
         { sub: 'u-verify', email: 'test@verify.com', action: 'email-verification' },
         {
-          secret: 'test-secret-at-least-32-characters-long',
-          algorithm: 'HS256',
+          algorithm: 'RS256',
           expiresIn: '-1h',
-        } as any,
+        },
       );
       await expect(service.confirmEmailVerification(expired)).rejects.toThrow(BadRequestException);
     });
@@ -811,6 +812,8 @@ describe('AuthService', () => {
         BadRequestException,
       );
 
+      // Sign with RS256 (matching the module config) so the token passes
+      // verification but has the wrong action — exercising the action check.
       const wrongAction = await jwt.signAsync(
         {
           sub: 'u-reset',
@@ -820,10 +823,9 @@ describe('AuthService', () => {
           aud: 'password-reset',
         },
         {
-          secret: 'test-secret-at-least-32-characters-long',
-          algorithm: 'HS256',
+          algorithm: 'RS256',
           expiresIn: '1h',
-        } as any,
+        },
       );
       await expect(service.resetPassword(wrongAction, 'new-password-123')).rejects.toThrow(
         'Invalid token action',

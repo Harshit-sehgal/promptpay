@@ -77,6 +77,61 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # ── Playwright browser E2E tests (mandatory priority) ──
+      # Build and boot the web + API, then run Playwright smoke tests
+      # against the live servers. This catches hydration errors, layout
+      # regressions, and missing content that only surface in a real DOM.
+      - name: Install Playwright browsers
+        run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+      - name: Boot API for E2E
+        run: |
+          # Generate ephemeral RS256 key pair for E2E (no secrets needed).
+          # The API requires JWT_PRIVATE_KEY and JWT_PUBLIC_KEY for RS256 signing.
+          PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
+          PUBLIC_KEY=$(echo "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          export JWT_PRIVATE_KEY="$PRIVATE_KEY"
+          export JWT_PUBLIC_KEY="$PUBLIC_KEY"
+          pnpm --filter waitlayer-api build
+          node apps/api/dist/apps/api/src/main.js &
+          API_PID=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:4002/api/v1/health/ready; then break; fi
+            if [ "$i" -eq 30 ]; then echo "API not ready"; kill $API_PID 2>/dev/null; exit 1; fi
+            sleep 2
+          done
+          echo "API_PID=$API_PID" >> /tmp/e2e_pids
+        env:
+          DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
+          REDIS_URL: redis://localhost:6379
+      - name: Build and boot web for E2E
+        run: |
+          pnpm --filter waitlayer-web build
+          pnpm --filter waitlayer-web start &
+          WEB_PID=$!
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000; then break; fi
+            if [ "$i" -eq 30 ]; then echo "Web not ready"; kill $WEB_PID 2>/dev/null; exit 1; fi
+            sleep 2
+          done
+          echo "WEB_PID=$WEB_PID" >> /tmp/e2e_pids
+        env:
+          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
+          NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
+          NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
+      - name: Run Playwright E2E tests
+        run: pnpm --filter waitlayer-web e2e
+        env:
+          E2E_BASE_URL: http://localhost:3000
+      - name: Cleanup E2E servers
+        if: always()
+        run: |
+          if [ -f /tmp/e2e_pids ]; then
+            source /tmp/e2e_pids
+            kill $API_PID $WEB_PID 2>/dev/null || true
+            rm -f /tmp/e2e_pids
+          fi
+
       - name: Verify CLI bin artifacts exist
         run: pnpm --filter waitlayer-cli pack:check
 

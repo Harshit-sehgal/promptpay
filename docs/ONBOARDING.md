@@ -15,7 +15,7 @@ developer attention. This gets you from clone to a running local stack.
 ## 1. Clone & install
 
 ```sh
-git clone <repo> && cd promptpay
+git clone <repo> && cd waitlayer
 pnpm install            # also sets up Husky pre-commit via the `prepare` script
 cp .env.example .env    # then fill JWT_SECRET etc. (see below)
 ```

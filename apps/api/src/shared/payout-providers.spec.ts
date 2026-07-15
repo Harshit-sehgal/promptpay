@@ -33,9 +33,11 @@ describe('payout provider launch gate (A-030)', () => {
   });
 
   it('applyPayoutProviderOverrides flips only the named provider', () => {
-    const resolved = applyPayoutProviderOverrides(base, JSON.stringify({ wise: 'coming_soon' }));
-    expect(resolved.find((p) => p.provider === 'wise')!.status).toBe('coming_soon');
-    expect(resolved.find((p) => p.provider === 'stripe_connect')!.status).toBe('available');
+    // Override wise from its base coming_soon → available to genuinely test a
+    // flip, while stripe_connect (also coming_soon) stays untouched.
+    const resolved = applyPayoutProviderOverrides(base, JSON.stringify({ wise: 'available' }));
+    expect(resolved.find((p) => p.provider === 'wise')!.status).toBe('available');
+    expect(resolved.find((p) => p.provider === 'stripe_connect')!.status).toBe('coming_soon');
   });
 
   it('ignores unknown providers and invalid statuses (keeps base catalogue)', () => {
@@ -49,6 +51,8 @@ describe('payout provider launch gate (A-030)', () => {
       JSON.stringify({ bogus: 'coming_soon', wise: 'nope' }),
     );
     expect(resolved.find((p) => p.provider === 'wise')!.status).toBe('coming_soon');
-    expect(resolved.find((p) => p.provider === 'stripe_connect')!.status).toBe('available');
+    // stripe_connect stays at its safe-seed base status (coming_soon) — the
+    // bogus key and invalid status are both ignored, so nothing is promoted.
+    expect(resolved.find((p) => p.provider === 'stripe_connect')!.status).toBe('coming_soon');
   });
 });

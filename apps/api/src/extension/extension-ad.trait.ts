@@ -218,11 +218,30 @@ export class ExtensionAdTrait {
       }
       campaignDayCounts.set(imp.campaignId, (campaignDayCounts.get(imp.campaignId) ?? 0) + 1);
     }
+    // Build the where clause with as many filters as possible BEFORE the
+    // candidate limit so eligible campaigns are not excluded by an arbitrary
+    // take cap. Category filtering, frequency-de-dup, and the active-status
+    // gate all go into the query. Budget, country targeting, and per-campaign
+    // frequency caps are applied post-query (they require campaign-specific
+    // values not available in the where clause without complex raw SQL).
+    const campaignWhere: Prisma.CampaignWhereInput = {
+      status: 'active',
+      // Frequency cap: don't show same campaign within the hour
+      id: { notIn: recentBillableCampaignIds },
+    };
+    // Category filter: exclude blocked categories in the DB query itself
+    if (effectiveBlocked.length > 0) {
+      campaignWhere.category = { notIn: effectiveBlocked };
+    }
+    // If the client supplied an allow-list, restrict to those categories
+    if (dto.allowedCategories?.length) {
+      campaignWhere.category = {
+        ...(campaignWhere.category as Prisma.StringFilter | undefined),
+        in: dto.allowedCategories,
+      };
+    }
     const campaigns = await this.prisma.campaign.findMany({
-      where: {
-        status: 'active',
-        id: { notIn: recentBillableCampaignIds }, // Frequency cap: don't show same campaign within the hour
-      },
+      where: campaignWhere,
       // Use a single select so we can fetch budgetReservedMinor alongside
       // relations. Prisma forbids mixing top-level include and select.
       select: {
@@ -245,7 +264,11 @@ export class ExtensionAdTrait {
         countryTargeting: true,
       },
       orderBy: { bidAmountMinor: 'desc' },
-      take: 50,
+      // Safety cap (not a selection limit): prevents unbounded scans on a
+      // platform with many active campaigns. Category and frequency-de-dup
+      // filters are already applied in the where clause; post-query filters
+      // (budget, country targeting, per-campaign caps) narrow further.
+      take: 200,
     });
     // Filter by budget, category preferences, and URL safety. The write path
     // validates new creatives, but this keeps older approved DB rows from

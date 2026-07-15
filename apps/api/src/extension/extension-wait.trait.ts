@@ -9,48 +9,22 @@ import { Prisma, ToolTypeEnum } from '@waitlayer/db';
 
 import { PrismaService } from '../config/prisma.service';
 import {
+  computeWaitConfidence,
+  MINIMUM_WAIT_CONFIDENCE,
+  SIGNAL_WEIGHTS,
   WAIT_STATE_DURATION_TOLERANCE_SECONDS,
   WAIT_STATE_MAX_DURATION_SECONDS,
+  WaitSignal,
 } from './extension.constants';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 
-// Weighted confidence scoring for wait-state signals. The strongest
-// positive signal dominates (max-weight) rather than summing, so a single
-// high-confidence signal (e.g. an active AI generation) is not diluted by
-// incidental inactivity telemetry.
-export const SIGNAL_WEIGHTS: Record<string, number> = {
-  ai_generation: 0.95,
-  active_task: 0.85,
-  command_execution: 0.7,
-  lifecycle_event: 0.6,
-  inactivity: 0.05,
-};
-
-export const MINIMUM_WAIT_CONFIDENCE = 0.5;
-
-export interface WaitSignal {
-  type: keyof typeof SIGNAL_WEIGHTS;
-  details?: string;
-}
-
-export function computeWaitConfidence(signals: WaitSignal[]): {
-  confidence: number;
-  reason: string;
-} {
-  if (!signals || signals.length === 0) {
-    return { confidence: 0, reason: 'no_signals' };
-  }
-  let best = signals[0];
-  let bestWeight = SIGNAL_WEIGHTS[best.type] ?? 0;
-  for (const signal of signals) {
-    const weight = SIGNAL_WEIGHTS[signal.type] ?? 0;
-    if (weight > bestWeight) {
-      best = signal;
-      bestWeight = weight;
-    }
-  }
-  return { confidence: bestWeight, reason: best.type };
-}
+// Re-export for backward compatibility — existing import sites that reference
+// these from extension-wait.trait.ts continue to work. The canonical home is
+// now extension.constants.ts, which has no class/trait dependencies, so
+// modules like the health controller can import MINIMUM_WAIT_CONFIDENCE
+// without pulling in the trait class and its transitive NestJS/Prisma deps.
+export { computeWaitConfidence, MINIMUM_WAIT_CONFIDENCE, SIGNAL_WEIGHTS };
+export type { WaitSignal };
 
 export class ExtensionWaitTrait {
   declare prisma: PrismaService;
