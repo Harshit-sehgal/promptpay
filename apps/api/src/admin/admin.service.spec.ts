@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 import { AdminService } from './admin.service';
 
@@ -681,6 +681,43 @@ describe('AdminService', () => {
           afterSnap: expect.objectContaining({ reason: 'cleared' }),
         }),
       );
+    });
+
+    it('rejects re-freeze of an already-frozen account with ConflictException (409)', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        isFrozen: true,
+        isVerified: true,
+        provider: 'wise',
+        destination: 'wise-dest',
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+
+      await expect(
+        service.freezePayoutAccount('admin-1', 'admin', 'pa-1', 'duplicate'),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      // No update or audit emission on the conflict path.
+      expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalled();
+      expect(mockAudit.log).not.toHaveBeenCalled();
+    });
+
+    it('rejects unfreeze of a non-frozen account with ConflictException (409)', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        isFrozen: false,
+        isVerified: true,
+        provider: 'wise',
+        destination: 'wise-dest',
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+
+      await expect(
+        service.unfreezePayoutAccount('admin-1', 'admin', 'pa-1', 'duplicate'),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalled();
+      expect(mockAudit.log).not.toHaveBeenCalled();
     });
   });
 });

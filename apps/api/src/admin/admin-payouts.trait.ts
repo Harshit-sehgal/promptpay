@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
@@ -264,6 +264,11 @@ export class AdminPayoutsTrait {
       include: { user: { select: { id: true, email: true } } },
     });
     if (!account) throw new NotFoundException('Payout account not found');
+    // Idempotency guard: reject re-freeze with 409 Conflict. The admin UI is
+    // double-clickable; surfacing the duplicate state is better than a silent
+    // no-op (which leaves operators unsure if the action took effect) and
+    // matches the strict state-machine guards in approvePayout/rejectPayout.
+    if (account.isFrozen) throw new ConflictException('Payout account is already frozen');
     const updated = await this.prisma.payoutAccount.update({
       where: { id: payoutAccountId },
       data: { isFrozen: true },
@@ -274,7 +279,13 @@ export class AdminPayoutsTrait {
       action: 'payout_account_frozen',
       targetType: 'payout_account',
       targetId: payoutAccountId,
-      beforeSnap: { isFrozen: account.isFrozen },
+      beforeSnap: {
+        isFrozen: account.isFrozen,
+        isVerified: account.isVerified,
+        provider: account.provider,
+        destination: account.destination,
+        userEmail: account.user?.email,
+      },
       afterSnap: {
         isFrozen: true,
         provider: account.provider,
@@ -301,6 +312,8 @@ export class AdminPayoutsTrait {
       include: { user: { select: { id: true, email: true } } },
     });
     if (!account) throw new NotFoundException('Payout account not found');
+    // Idempotency guard: reject un-unfreeze with 409 Conflict (see freezePayoutAccount).
+    if (!account.isFrozen) throw new ConflictException('Payout account is not frozen');
     const updated = await this.prisma.payoutAccount.update({
       where: { id: payoutAccountId },
       data: { isFrozen: false },
@@ -311,7 +324,13 @@ export class AdminPayoutsTrait {
       action: 'payout_account_unfrozen',
       targetType: 'payout_account',
       targetId: payoutAccountId,
-      beforeSnap: { isFrozen: account.isFrozen },
+      beforeSnap: {
+        isFrozen: account.isFrozen,
+        isVerified: account.isVerified,
+        provider: account.provider,
+        destination: account.destination,
+        userEmail: account.user?.email,
+      },
       afterSnap: {
         isFrozen: false,
         provider: account.provider,

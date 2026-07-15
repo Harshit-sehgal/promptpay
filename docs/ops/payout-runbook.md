@@ -33,15 +33,15 @@ auto-completes `paid` or `failed`. Manual PayPal payouts require admin action.
 
 For each payout request, verify:
 
-| Check | What to Look For | Action if Failed |
-|-------|------------------|------------------|
-| **User status** | Not restricted or banned | Reject |
-| **Trust score** | Not `low_trust` or `new` with excessive velocity | Flag for fraud review |
-| **Fraud flags** | No unresolved HIGH/CRITICAL flags | Hold payout |
-| **Payout method** | Active and verified | Ask user to add method |
-| **Amount** | Above $10 minimum threshold | Reject (below minimum) |
-| **Ledger** | Available balance ≥ requested amount | Investigate ledger discrepancy |
-| **Duplicate destination** | No other users sharing this PayPal email | Flag for fraud review |
+| Check                     | What to Look For                                 | Action if Failed               |
+| ------------------------- | ------------------------------------------------ | ------------------------------ |
+| **User status**           | Not restricted or banned                         | Reject                         |
+| **Trust score**           | Not `low_trust` or `new` with excessive velocity | Flag for fraud review          |
+| **Fraud flags**           | No unresolved HIGH/CRITICAL flags                | Hold payout                    |
+| **Payout method**         | Active and verified                              | Ask user to add method         |
+| **Amount**                | Above $10 minimum threshold                      | Reject (below minimum)         |
+| **Ledger**                | Available balance ≥ requested amount             | Investigate ledger discrepancy |
+| **Duplicate destination** | No other users sharing this PayPal email         | Flag for fraud review          |
 
 ### 2.3 Approve or Reject
 
@@ -92,13 +92,13 @@ When `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are configured:
 
 ## 4. Troubleshooting
 
-| Symptom | Likely Cause | Resolution |
-|---------|-------------|------------|
-| Payout stuck in `processing` > 30 min | Provider API timeout or error | Check PayoutCronService logs; manually check provider dashboard |
-| PayoutCronService error | DB connection lost or provider config missing | Check `SENTRY_DSN` for error logs; verify provider env vars |
-| Ledger not updating after mark-paid | Race condition or unique constraint | Check `payoutTransaction` table for duplicate; retry |
-| Referral reward not processing | Missing referral link | Check `ReferralReward` table for the payout |
-| PayPal email invalid | User entered wrong email | Reject payout; ask user to update method |
+| Symptom                               | Likely Cause                                  | Resolution                                                      |
+| ------------------------------------- | --------------------------------------------- | --------------------------------------------------------------- |
+| Payout stuck in `processing` > 30 min | Provider API timeout or error                 | Check PayoutCronService logs; manually check provider dashboard |
+| PayoutCronService error               | DB connection lost or provider config missing | Check `SENTRY_DSN` for error logs; verify provider env vars     |
+| Ledger not updating after mark-paid   | Race condition or unique constraint           | Check `payoutTransaction` table for duplicate; retry            |
+| Referral reward not processing        | Missing referral link                         | Check `ReferralReward` table for the payout                     |
+| PayPal email invalid                  | User entered wrong email                      | Reject payout; ask user to update method                        |
 
 ---
 
@@ -119,3 +119,26 @@ At least weekly during beta:
 - **Large payout (>$500):** Require second admin approval
 - **Suspicious pattern:** Flag user for fraud review; hold all pending payouts
 - **Payment sent but not reflected:** Contact developer and admin; manual ledger correction
+
+---
+
+## 7. Emergency Freeze (Kill Switch)
+
+Use when a payout destination is confirmed or highly suspected to be compromised, linked to fraud, or subject to compliance blocks. The kill switch halts all outbound flow for the account without deleting it.
+
+### 7.1 Trigger Freeze
+
+1. Retrieve the developer's payout account ID from the admin UI (or `payoutAccount.id` in the database for the user in question).
+2. `POST /api/v1/admin/payout-accounts/{id}/freeze` with body `{ "reason": "<operator note for the audit trail>" }`. Requires admin / support / super_admin role.
+3. The system writes an `audit_logs` row (`action: payout_account_frozen`, `beforeSnap` includes `isFrozen`, `isVerified`, `provider`, `destination`, `userEmail` for the full pre-state forensic trail; `afterSnap.isFrozen = true`).
+4. **Developer-visible effect:** any future `POST /payout/request` using this account immediately fails with `403 Forbidden ("Payout destination is frozen by operator")`. Enforced server-side in `apps/api/src/payout/payout-request.trait.ts:301` regardless of the destination's `isVerified` / `isActive` status.
+5. **No automated email notification is currently sent to the developer** (known followup) — `apps/api/src/email/email-queue.service.ts` does not yet expose a freeze alert. If the developer needs to know their account is frozen, contact them manually via support with the `userEmail` recorded in the `audit_logs` `beforeSnap` / `afterSnap` row.
+
+### 7.2 Lift Freeze
+
+1. After verifying the situation (cleared compliance check, user identified via support, etc.), unfreeze via `POST /api/v1/admin/payout-accounts/{id}/unfreeze` with body `{ "reason": "<note>" }`.
+2. The system writes `payout_account_unfrozen` to `audit_logs` and flips `isFrozen = false`. The developer can immediately resume requesting payouts.
+
+### 7.3 Idempotency
+
+Both endpoints are **non-idempotent by design** — re-freezing an already-frozen account (or unfreezing a non-frozen one) returns `409 Conflict` so admins see the duplicate state. This matches the strict state-machine guards on `approvePayout` / `rejectPayout` and prevents silent double-actions. There is no `freeze_noop` audit entry; the conflict path is `audit.log`-free because no state changed.
