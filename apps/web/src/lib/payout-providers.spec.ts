@@ -24,18 +24,17 @@ describe('applyPayoutProviderOverrides (A-030)', () => {
   it('overrides a known provider status', () => {
     const resolved = applyPayoutProviderOverrides(
       PAYOUT_PROVIDERS,
-      JSON.stringify({ stripe_connect: 'coming_soon' }),
+      JSON.stringify({ paypal_payouts: 'available' }),
     );
-    const stripeConnect = resolved.find((p) => p.provider === 'stripe_connect');
-    expect(stripeConnect?.status).toBe('coming_soon');
-    // Other providers are untouched.
+    const paypalPayouts = resolved.find((p) => p.provider === 'paypal_payouts');
+    expect(paypalPayouts?.status).toBe('available');
     expect(resolved.find((p) => p.provider === 'paypal_email')?.status).toBe('available');
   });
 
   it('ignores unknown provider keys', () => {
     const resolved = applyPayoutProviderOverrides(
       PAYOUT_PROVIDERS,
-      JSON.stringify({ does_not_exist: 'coming_soon' }),
+      JSON.stringify({ does_not_exist: 'available' }),
     );
     expect(resolved).toEqual(PAYOUT_PROVIDERS);
   });
@@ -56,24 +55,16 @@ describe('applyPayoutProviderOverrides (A-030)', () => {
 });
 
 describe('resolved provider lists honour operator overrides at module load', () => {
-  it('default (no env) gates the coming-soon providers and exposes the available ones', () => {
-    // The test process does not set NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS.
-    // The base catalogue (single source of truth in @waitlayer/shared) lists
-    // four providers available at launch (paypal_email, manual, paypal_payouts,
-    // stripe_connect) and three coming-soon (wise — corridor must be verified
-    // by the operator; payoneer + razorpay — integrations not yet built). The
-    // coming-soon entries exist so operators can promote them via the env-var
-    // override at deploy time without a code edit; the API layer still
-    // fail-closes registration for unsupported providers.
+  it('exposes only admin-processed providers without an explicit deploy override', () => {
     expect(AVAILABLE_PAYOUT_PROVIDERS.map((p) => p.provider).sort()).toEqual([
       'manual',
       'paypal_email',
-      'paypal_payouts',
-      'stripe_connect',
     ]);
     expect(COMING_SOON_PAYOUT_PROVIDERS.map((p) => p.provider).sort()).toEqual([
+      'paypal_payouts',
       'payoneer',
       'razorpay',
+      'stripe_connect',
       'wise',
     ]);
   });

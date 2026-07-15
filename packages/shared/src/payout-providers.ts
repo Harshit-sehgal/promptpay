@@ -1,7 +1,8 @@
-// PayPal Payouts and Stripe Connect have executable automated integrations;
-// paypal_email and manual are admin-processed. Wise stays coming_soon by
-// default because its email-recipient corridor is account/country dependent
-// and must be verified by the operator before it is exposed.
+// Manual payouts are the only launch-safe defaults because they do not depend
+// on external PSP credentials or account-level feature approval. Automated
+// providers stay coming_soon until an operator has configured credentials,
+// completed a sandbox transfer, and explicitly promotes the provider through
+// the deploy-time override.
 //
 // To let operators gate a provider on/off at deploy time WITHOUT a code edit,
 // the static statuses can be overridden per-environment via a JSON map of
@@ -42,14 +43,14 @@ export const PAYOUT_PROVIDERS: PayoutProviderInfo[] = [
   {
     provider: 'paypal_payouts',
     label: 'PayPal Payouts (automated)',
-    status: 'available',
-    note: 'Available — automated at launch',
+    status: 'coming_soon',
+    note: 'Coming soon — enable only after credentials and sandbox verification',
   },
   {
     provider: 'stripe_connect',
     label: 'Stripe Connect',
-    status: 'available',
-    note: 'Available — automated at launch',
+    status: 'coming_soon',
+    note: 'Coming soon — requires an approved Connect platform and tested onboarding',
   },
   {
     provider: 'wise',
