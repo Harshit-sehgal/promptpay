@@ -142,6 +142,29 @@ export class EmailQueueService {
     return this.enqueueOrSend(this.email.buildAccountDeleted(to));
   }
 
+  async sendPayoutAccountFrozenAlert(
+    to: string,
+    metadata: {
+      provider: string;
+      destination: string;
+      currency: string;
+      actorRole: string;
+      reason?: string | null;
+      time: string;
+    },
+  ): Promise<EmailQueueSendResult> {
+    return this.enqueueOrSend(
+      this.email.buildPayoutAccountFrozenAlert(to, {
+        provider: metadata.provider,
+        destination: metadata.destination,
+        currency: metadata.currency,
+        actorRole: metadata.actorRole,
+        reason: metadata.reason ?? null,
+        time: metadata.time,
+      }),
+    );
+  }
+
   /** SHA-256 of the normalized message content for deduplication. */
   private hashContent(msg: EmailMessage): string {
     const payload = `${msg.to.toLowerCase()}|${msg.subject}|${msg.html}|${msg.text ?? ''}`;

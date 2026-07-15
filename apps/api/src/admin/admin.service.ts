@@ -5,6 +5,7 @@ import { UserStatus } from '@waitlayer/db';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { DeveloperService } from '../developer/developer.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { FraudService } from '../fraud/fraud.service';
 import { PayoutService } from '../payout/payout.service';
 import { AdminCampaignsTrait } from './admin-campaigns.trait';
@@ -23,6 +24,7 @@ export class AdminService {
     public payoutService: PayoutService,
     public fraudService: FraudService,
     public developerService: DeveloperService,
+    public emailQueueService: EmailQueueService,
   ) {}
   static readonly ALLOWED_ADMIN_STATUSES: UserStatus[] = ['active', 'restricted', 'banned'];
 }

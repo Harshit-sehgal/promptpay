@@ -224,6 +224,101 @@ export class EmailService {
     return this.send(this.buildAccountDeleted(to));
   }
 
+  /** Build an operator-freeze-of-payout-account alert (no token) without sending.
+   *
+   * Mirrors the security-alert pattern (no reset link, no token, just informative
+   * copy). The EmailMessage is renderer-agnostic — same path is used for the
+   * "console" driver in dev and the Resend driver in prod. The `time` is
+   * included so the recipient can cross-check against their own login/2FA log.
+   */
+  buildPayoutAccountFrozenAlert(
+    to: string,
+    metadata: {
+      provider: string;
+      destination: string;
+      currency: string;
+      actorRole: string;
+      reason?: string | null;
+      time: string;
+    },
+  ): EmailMessage {
+    // Truncate the destination for privacy — a PayPal/Wise recipient email
+    // is PII and may include the user's name. Stripe `acct_*` IDs are not PII
+    // (operator-known, no recipient info) so show those in full. Manual
+    // destinations (operator-set reference) are also shown in full.
+    const isStripeConnect = metadata.provider === 'stripe_connect';
+    const isEmailDestination =
+      !isStripeConnect &&
+      (metadata.provider === 'paypal_email' ||
+        metadata.provider === 'paypal_payouts' ||
+        metadata.provider === 'wise');
+    const displayedDestination = isEmailDestination
+      ? `${metadata.destination.slice(0, 3)}***@${metadata.destination.split('@')[1] ?? ''}`
+      : metadata.destination;
+    return {
+      to,
+      subject: 'Your WaitLayer payout account was frozen by an operator',
+      text:
+        `Your WaitLayer payout account was frozen by an operator (${metadata.actorRole}).
+
+` +
+        `Provider: ${metadata.provider}
+` +
+        `Destination: ${displayedDestination}
+` +
+        `Currency: ${metadata.currency}
+` +
+        (metadata.reason
+          ? `Reason: ${metadata.reason}
+`
+          : '') +
+        `Time: ${metadata.time}
+
+` +
+        'Any future payout requests using this account will fail until an operator unfreezes it. ' +
+        'If this was not authorized, contact support immediately.',
+      ttlMs: 24 * 60 * 60 * 1000,
+      html: this.layout(
+        'Payout account frozen',
+        `<p>Your WaitLayer payout account was frozen by an operator (<strong>${metadata.actorRole}</strong>) on <strong>${metadata.time}</strong>.</p>` +
+          `<ul>` +
+          `<li><strong>Provider:</strong> ${metadata.provider}</li>` +
+          `<li><strong>Destination:</strong> ${displayedDestination}</li>` +
+          `<li><strong>Currency:</strong> ${metadata.currency}</li>` +
+          (metadata.reason ? `<li><strong>Reason:</strong> ${metadata.reason}</li>` : '') +
+          `</ul>` +
+          `<p>Any future payout requests using this account will fail with HTTP 403 ("frozen by operator") until an admin unfreezes it.</p>`,
+        null,
+        null,
+        'If this was not authorized, contact support immediately.',
+      ),
+    };
+  }
+
+  /** Security alert sent when an admin freezes the recipient's payout account. */
+  async sendPayoutAccountFrozenAlert(
+    to: string,
+    metadata: {
+      provider: string;
+      destination: string;
+      currency: string;
+      actorRole: string;
+      reason?: string | null;
+      time: string;
+    },
+  ): Promise<EmailSendResult> {
+    return this.send(
+      this.buildPayoutAccountFrozenAlert(to, {
+        provider: metadata.provider,
+        destination: metadata.destination,
+        currency: metadata.currency,
+        actorRole: metadata.actorRole,
+        reason: metadata.reason ?? null,
+        time: metadata.time,
+      }),
+    );
+  }
+
   // ── Private ──
 
   private async sendViaResend(msg: EmailMessage): Promise<EmailSendResult> {

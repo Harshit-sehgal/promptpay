@@ -48,6 +48,13 @@ describe('EmailQueueService', () => {
       text: 'deleted',
       ttlMs: 24 * 60 * 60 * 1000,
     }),
+    buildPayoutAccountFrozenAlert: vi.fn().mockReturnValue({
+      to: 'a@b.com',
+      subject: 'Payout account frozen',
+      html: '<p>account frozen</p>',
+      text: 'account frozen',
+      ttlMs: 24 * 60 * 60 * 1000,
+    }),
   } as unknown as EmailService;
 
   let service: EmailQueueService;
@@ -160,6 +167,23 @@ describe('EmailQueueService', () => {
   it('delegates sendAccountDeleted to enqueueOrSend', async () => {
     await service.sendAccountDeleted('a@b.com');
     expect(mockEmail.buildAccountDeleted).toHaveBeenCalledWith('a@b.com');
+    expect(mockEmail.send).toHaveBeenCalled();
+  });
+
+  it('delegates sendPayoutAccountFrozenAlert to enqueueOrSend', async () => {
+    const metadata = {
+      provider: 'wise',
+      destination: 'wise-dest',
+      currency: 'USD',
+      actorRole: 'admin',
+      reason: 'suspected takeover',
+      time: '2026-07-15T00:00:00.000Z',
+    };
+    await service.sendPayoutAccountFrozenAlert('a@b.com', metadata);
+    expect(mockEmail.buildPayoutAccountFrozenAlert).toHaveBeenCalledWith(
+      'a@b.com',
+      expect.objectContaining({ provider: 'wise', actorRole: 'admin' }),
+    );
     expect(mockEmail.send).toHaveBeenCalled();
   });
 });

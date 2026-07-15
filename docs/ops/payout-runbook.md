@@ -132,7 +132,7 @@ Use when a payout destination is confirmed or highly suspected to be compromised
 2. `POST /api/v1/admin/payout-accounts/{id}/freeze` with body `{ "reason": "<operator note for the audit trail>" }`. Requires admin / support / super_admin role.
 3. The system writes an `audit_logs` row (`action: payout_account_frozen`, `beforeSnap` includes `isFrozen`, `isVerified`, `provider`, `destination`, `userEmail` for the full pre-state forensic trail; `afterSnap.isFrozen = true`).
 4. **Developer-visible effect:** any future `POST /payout/request` using this account immediately fails with `403 Forbidden ("Payout destination is frozen by operator")`. Enforced server-side in `apps/api/src/payout/payout-request.trait.ts:301` regardless of the destination's `isVerified` / `isActive` status.
-5. **No automated email notification is currently sent to the developer** (known followup) — `apps/api/src/email/email-queue.service.ts` does not yet expose a freeze alert. If the developer needs to know their account is frozen, contact them manually via support with the `userEmail` recorded in the `audit_logs` `beforeSnap` / `afterSnap` row.
+5. **The developer IS notified by email** — `admin-payouts.trait.ts` fires `EmailQueueService.sendPayoutAccountFrozenAlert` (best-effort, with retry-queue on transient failure) right after the audit log. The email includes provider, destination (email destinations are masked to first-3 + `***@domain`; Stripe `acct_*` and manual references are shown in full), currency, actorRole, optional `reason`, and the freeze timestamp. Failures are tolerated — see `emailQueueService.sendPayoutAccountFrozenAlert(...)` for the console-user behaviour in dev (the email body is logged at INFO).
 
 ### 7.2 Lift Freeze
 

@@ -52,6 +52,9 @@ describe('AdminService', () => {
   let service: AdminService;
   const mockAudit = { log: vi.fn().mockResolvedValue(undefined) };
   const mockFraud = { computeTrustScore: vi.fn() };
+  const mockEmail = {
+    sendPayoutAccountFrozenAlert: vi.fn().mockResolvedValue({ delivered: true, driver: 'console' }),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,6 +64,7 @@ describe('AdminService', () => {
       {} as any,
       mockFraud as any,
       {} as any,
+      mockEmail as any,
     );
   });
 
@@ -718,6 +722,73 @@ describe('AdminService', () => {
 
       expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalled();
       expect(mockAudit.log).not.toHaveBeenCalled();
+    });
+
+    it('fires a payout-account-frozen alert email after freezing (A-086)', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        isFrozen: false,
+        isVerified: true,
+        provider: 'wise',
+        destination: 'wise-dest',
+        currency: 'USD',
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+      mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isFrozen: true });
+
+      await service.freezePayoutAccount('admin-1', 'admin', 'pa-1', 'suspected takeover');
+
+      // Drain microtasks so the fire-and-forget .catch chain settles before
+      // asserting the mock was called. vi.fn() is sync, so one tick suffices.
+      await new Promise((r) => process.nextTick(r));
+      expect(mockEmail.sendPayoutAccountFrozenAlert).toHaveBeenCalledTimes(1);
+      expect(mockEmail.sendPayoutAccountFrozenAlert).toHaveBeenCalledWith(
+        'dev@example.com',
+        expect.objectContaining({
+          provider: 'wise',
+          destination: 'wise-dest',
+          currency: 'USD',
+          actorRole: 'admin',
+          reason: 'suspected takeover',
+          time: expect.any(String),
+        }),
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'payout_account_frozen' }),
+      );
+    });
+
+    it('still completes freeze when email.send rejects (best-effort)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+          id: 'pa-1',
+          isFrozen: false,
+          isVerified: true,
+          provider: 'wise',
+          destination: 'wise-dest',
+          currency: 'USD',
+          user: { id: 'u1', email: 'dev@example.com' },
+        });
+        mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isFrozen: true });
+        mockEmail.sendPayoutAccountFrozenAlert.mockRejectedValueOnce(new Error('resend down'));
+
+        await expect(
+          service.freezePayoutAccount('admin-1', 'admin', 'pa-1', 'incidents'),
+        ).resolves.toMatchObject({ id: 'pa-1' });
+        expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
+          where: { id: 'pa-1' },
+          data: { isFrozen: true },
+        });
+        expect(mockAudit.log).toHaveBeenCalled();
+        // Drain microtasks so the .catch(console.warn) runs before the spy check.
+        await new Promise((r) => process.nextTick(r));
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('payout-account-frozen email delivery failed'),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });

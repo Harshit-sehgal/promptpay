@@ -2,11 +2,13 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { PayoutService } from '../payout/payout.service';
 
 export class AdminPayoutsTrait {
   declare prisma: PrismaService;
   declare audit: AuditService;
+  declare emailQueueService: EmailQueueService;
   declare payoutService: PayoutService;
 
   async getPendingPayouts() {
@@ -294,6 +296,26 @@ export class AdminPayoutsTrait {
         reason: reason ?? null,
       },
     });
+    // Best-effort developer notification. The audit row is the canonical
+    // forensic trail; the email is an out-of-band UX hint so the developer
+    // isn't surprised when their next payout silently 403s. Failures here
+    // must never block freezing — a Resend outage should not freeze an
+    // account unconfirmed — so we fire-and-forget with .catch.
+    if (account.user?.email) {
+      void this.emailQueueService
+        .sendPayoutAccountFrozenAlert(account.user.email, {
+          provider: account.provider,
+          destination: account.destination,
+          currency: account.currency ?? 'USD',
+          actorRole: reviewerRole,
+          reason: reason ?? null,
+          time: new Date().toISOString(),
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[AdminPayoutsTrait] payout-account-frozen email delivery failed: ${msg}`);
+        });
+    }
     return updated;
   }
 
