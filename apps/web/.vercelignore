@@ -1,0 +1,18 @@
+# Exclude non-web parts of the monorepo from Vercel uploads.
+# Vercel's Root Directory is apps/web, but it uploads the parent
+# workspace for the build. These exclusions cut ~150MB of irrelevant
+# API dist, Prisma engines, fonts, and dev tooling from the upload.
+../apps/api/dist
+../apps/cli/dist
+../apps/vscode-extension/dist
+../dist
+../node_modules/.cache
+../.turbo
+../.aider*
+../.e2e
+../tmp-api-log-snippet.log
+../coverage
+../apps/api/coverage
+../.certs
+../docs
+*.log
