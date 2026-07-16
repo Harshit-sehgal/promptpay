@@ -57,3 +57,4 @@ credentials-snapshot.json
 # Extension build
 apps/vscode-extension/*.vsix
 .aider*
+.vercel
