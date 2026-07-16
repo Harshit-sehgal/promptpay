@@ -144,4 +144,49 @@ describe('eraseAccountIdentity', () => {
     // Advisory lock + device pseudonymization + consent metadata minimization.
     expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
   });
+
+  it('forfeits sub-threshold earnings when forfeitBalance=true', async () => {
+    const { prisma, tx } = makePrisma();
+    // Simulate 500 minor units of confirmed earnings (below the 1000 forfeit threshold)
+    tx.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 500n } });
+    tx.earningsLedger.updateMany.mockResolvedValue({ count: 3 });
+
+    await expect(eraseAccountIdentity(prisma, 'user-1', { forfeitBalance: true })).resolves.toEqual(
+      { deleted: true, priorEmail: 'person@example.com' },
+    );
+
+    // The earnings should have been reversed (status -> 'reversed')
+    expect(tx.earningsLedger.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        entryType: 'credit',
+        status: { in: ['estimated', 'pending', 'confirmed', 'held'] },
+      },
+      data: { status: 'reversed' },
+    });
+    // And the user should have been anonymized (deletion proceeded)
+    expect(tx.user.update).toHaveBeenCalled();
+  });
+
+  it('rejects forfeit when earnings exceed the forfeit threshold', async () => {
+    const { prisma, tx } = makePrisma();
+    // 2000 minor units exceeds the 1000 forfeit threshold
+    tx.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 2000n } });
+
+    await expect(eraseAccountIdentity(prisma, 'user-1', { forfeitBalance: true })).rejects.toThrow(
+      /Cannot forfeit balance.*exceed the forfeit threshold/,
+    );
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.earningsLedger.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion with earnings when forfeitBalance is not set', async () => {
+    const { prisma, tx } = makePrisma();
+    tx.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 500n } });
+
+    await expect(eraseAccountIdentity(prisma, 'user-1')).rejects.toThrow(
+      /blocked while.*earnings remain.*forfeitBalance=true/,
+    );
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
 });
