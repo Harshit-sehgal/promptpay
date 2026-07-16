@@ -17,7 +17,8 @@ const API_HOSTNAME = (() => {
     return '';
   }
 })();
-const IS_LOOPBACK = API_HOSTNAME === 'localhost' || API_HOSTNAME === '127.0.0.1' || API_HOSTNAME === '::1';
+const IS_LOOPBACK =
+  API_HOSTNAME === 'localhost' || API_HOSTNAME === '127.0.0.1' || API_HOSTNAME === '::1';
 if (IS_LOOPBACK) {
   console.warn(
     '[WaitLayer] CLI is pointed at a local dev API (' +
@@ -42,8 +43,7 @@ program
 program
   .command('status')
   .description('Show current earnings and wait state stats')
-  .option('--period <period>', 'Period: 1d | 7d | 30d', '7d')
-  .action((opts) => runStatus(opts));
+  .action(() => runStatus());
 
 program
   .command('watch')

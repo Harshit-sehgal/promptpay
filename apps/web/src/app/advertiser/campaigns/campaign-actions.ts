@@ -3,9 +3,9 @@ export interface CampaignActionState {
   name: string;
   status: string;
   bidType: string;
-  bidAmountMinor: number;
-  budgetTotalMinor: number;
-  budgetSpentMinor: number;
+  bidAmountMinor: bigint;
+  budgetTotalMinor: bigint;
+  budgetSpentMinor: bigint;
   currency: string;
   impressions: number;
   clicks: number;
@@ -19,6 +19,11 @@ export interface CampaignActions {
   canResume: boolean;
   canEdit: boolean;
   canArchive: boolean;
+}
+
+export function clampCampaignPage(page: number, total: number, limit: number): number {
+  const lastPage = Math.max(1, Math.ceil(total / Math.max(1, limit)));
+  return Math.min(Math.max(1, page), lastPage);
 }
 
 export function getCampaignActions(campaign: CampaignActionState): CampaignActions {

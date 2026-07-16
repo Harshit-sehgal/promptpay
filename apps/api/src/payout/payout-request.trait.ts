@@ -1,12 +1,17 @@
-import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { EarningsLedger, Prisma } from '@waitlayer/db';
 import { payoutMinimumMinor, payoutProviderLaunchStatus, PayoutStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
-import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
+import {
+  CircuitBreakerOpenError,
+  providerBreaker,
+  withTimeout,
+} from '../common/utils/provider-resilience';
 import { PrismaService } from '../config/prisma.service';
+import { ACTIVE_FRAUD_FLAG_STATUSES, payoutFraudLockKey } from '../fraud/fraud.constants';
 import { ReferralService } from '../referral/referral.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import {
@@ -16,6 +21,16 @@ import {
 } from './payout.constants';
 import { PayoutMethodTrait } from './payout-method.trait';
 import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
+
+const DEFAULT_PROVIDER_CALL_TIMEOUT_MS = 15_000;
+function providerCallTimeoutMs(config: ConfigService): number {
+  const configured = Number(
+    config.get<number | string>('PROVIDER_CALL_TIMEOUT_MS') ?? DEFAULT_PROVIDER_CALL_TIMEOUT_MS,
+  );
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_PROVIDER_CALL_TIMEOUT_MS;
+}
 
 export class PayoutRequestTrait {
   declare prisma: PrismaService;
@@ -271,7 +286,11 @@ export class PayoutRequestTrait {
           _sum: { amountMinor: true },
         }),
         this.prisma.fraudFlag.count({
-          where: { userId, status: 'open', severity: { in: ['high', 'critical'] } },
+          where: {
+            userId,
+            status: { in: ACTIVE_FRAUD_FLAG_STATUSES },
+            severity: { in: ['high', 'critical'] },
+          },
         }),
         this.prisma.payoutAccount.findUnique({
           where: { id: dto.payoutAccountId },
@@ -362,6 +381,23 @@ export class PayoutRequestTrait {
         }
       }
 
+      // Re-check fraud state inside the authoritative allocation transaction.
+      // An escalated flag is still under review and must remain payout-blocking;
+      // escalation cannot become a way to bypass the outer pre-check. Share the
+      // user's advisory lock with fraud creation so this predicate and creation
+      // of the reserved payout cannot pass one another unobserved.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${payoutFraudLockKey(userId)}))`;
+      const activeFraudFlags = await tx.fraudFlag.count({
+        where: {
+          userId,
+          status: { in: ACTIVE_FRAUD_FLAG_STATUSES },
+          severity: { in: ['high', 'critical'] },
+        },
+      });
+      if (activeFraudFlags > 0) {
+        throw new ForbiddenException('Payout blocked due to pending fraud review');
+      }
+
       let payoutRequest: Prisma.PayoutRequestGetPayload<{ include: { allocations: true } }>;
       try {
         payoutRequest = await tx.payoutRequest.create({
@@ -435,27 +471,26 @@ export class PayoutRequestTrait {
    *  a real-money double-pay.
    */
   async processPayout(payoutId: string) {
+    const providerTimeoutMs = providerCallTimeoutMs(this.config);
     const preflight = await this.prisma.payoutRequest.findUnique({
       where: { id: payoutId },
       include: { payoutAccount: true },
     });
     if (!preflight) throw new BadRequestException('Payout request not found');
-    if (preflight.status === 'approved') {
-      const preflightProvider = this.providers[preflight.payoutAccount.provider];
-      if (!preflightProvider) {
-        throw new BadRequestException(
-          `Payout provider "${preflight.payoutAccount.provider}" not implemented`,
-        );
-      }
-      if (!(await this.runtimeConfig.isProviderEnabled(preflight.payoutAccount.provider))) {
-        throw new BadRequestException(
-          `Payout provider "${preflight.payoutAccount.provider}" is currently disabled`,
-        );
-      }
-      const readiness = preflightProvider.readiness?.();
-      if (readiness && !readiness.ok) {
-        throw new BadRequestException(readiness.reason);
-      }
+    const provider = this.providers[preflight.payoutAccount.provider];
+    if (!provider) {
+      throw new BadRequestException(
+        `Payout provider "${preflight.payoutAccount.provider}" not implemented`,
+      );
+    }
+    if (!(await this.runtimeConfig.isProviderEnabled(preflight.payoutAccount.provider))) {
+      throw new BadRequestException(
+        `Payout provider "${preflight.payoutAccount.provider}" is currently disabled`,
+      );
+    }
+    const readiness = provider.readiness?.();
+    if (readiness && !readiness.ok) {
+      throw new BadRequestException(readiness.reason);
     }
     // Atomic claim + reconciliation inside a single transaction.
     // The claim flip (`approved -> processing`) is the first write inside the
@@ -504,6 +539,29 @@ export class PayoutRequestTrait {
       }
       if (!pkt.payoutAccount.isActive || !pkt.payoutAccount.isVerified) {
         throw new ForbiddenException('Payout destination is no longer active and verified');
+      }
+      // This is the authoritative destination check: a freeze may land after
+      // request/approval, so processPayout must re-check inside the same
+      // transaction that claims approved -> processing. Throwing here rolls
+      // the claim back and prevents creation of the provider placeholder.
+      if (pkt.payoutAccount.isFrozen) {
+        throw new ForbiddenException('Payout destination is frozen by operator');
+      }
+      // This lock and the durable processing claim/account fence commit as one
+      // authorization point. A flag that commits first is observed below; a
+      // flag that starts later waits until the initiation intent is durable.
+      // The external provider call deliberately happens after this transaction
+      // commits, so fraud creation never waits on provider latency.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${payoutFraudLockKey(pkt.userId)}))`;
+      const activeFraudFlags = await tx.fraudFlag.count({
+        where: {
+          userId: pkt.userId,
+          status: { in: ACTIVE_FRAUD_FLAG_STATUSES },
+          severity: { in: ['high', 'critical'] },
+        },
+      });
+      if (activeFraudFlags > 0) {
+        throw new ForbiddenException('Payout blocked due to pending fraud review');
       }
       const launchOverrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
       if (
@@ -643,6 +701,44 @@ export class PayoutRequestTrait {
           );
         }
       }
+      // Atomically serialize provider initiation against the operator freeze.
+      // The payout id is a durable fence, not an expiring lease: if this worker
+      // crashes after the claim commits, neither another payout nor a freeze can
+      // overtake an initiation whose remote outcome may be unknown. Marking this
+      // payout paid/failed (or the normal finally block) clears the fence after
+      // reconciliation.
+      const fence = await tx.payoutAccount.updateMany({
+        where: {
+          id: pkt.payoutAccount.id,
+          isFrozen: false,
+          isActive: true,
+          isVerified: true,
+          initiationPayoutId: null,
+        },
+        data: {
+          initiationPayoutId: payoutId,
+        },
+      });
+      if (fence.count === 0) {
+        const accountState = await tx.payoutAccount.findUnique({
+          where: { id: pkt.payoutAccount.id },
+          select: {
+            isFrozen: true,
+            isActive: true,
+            isVerified: true,
+            initiationPayoutId: true,
+          },
+        });
+        if (accountState?.isFrozen) {
+          throw new ForbiddenException('Payout destination is frozen by operator');
+        }
+        if (accountState && (!accountState.isActive || !accountState.isVerified)) {
+          throw new ForbiddenException('Payout destination is no longer active and verified');
+        }
+        throw new ConflictException(
+          'Another payout initiation is active for this destination; retry after it completes',
+        );
+      }
       const placeholder = await tx.payoutTransaction.create({
         data: {
           payoutRequestId: pkt.id,
@@ -651,109 +747,144 @@ export class PayoutRequestTrait {
           status: PayoutStatus.PROCESSING,
         },
       });
-      return { ...pkt, placeholderTransactionId: placeholder.id };
+      return {
+        ...pkt,
+        placeholderTransactionId: placeholder.id,
+      };
     });
-    const provider = this.providers[payout.payoutAccount.provider];
-    if (!provider) {
-      throw new BadRequestException(
-        `Payout provider "${payout.payoutAccount.provider}" not implemented`,
-      );
-    }
-    if (!(await this.runtimeConfig.isProviderEnabled(payout.payoutAccount.provider))) {
-      throw new BadRequestException(
-        `Payout provider "${payout.payoutAccount.provider}" is currently disabled`,
-      );
-    }
-    const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
-    let result: {
-      providerTxId: string;
-      status: string;
-    };
+    let retainFenceForReconciliation = false;
     try {
-      // Wrap the external PSP initiation in a timeout + circuit breaker.
-      result = await providerBreaker.call(`initiate:${payout.payoutAccount.provider}`, () =>
-        withTimeout(
-          () =>
-            provider.initiate({
-              payoutRequestId: payout.id,
-              destination: payout.payoutAccount.destination,
-              amountMinor: expectedAmount,
-              currency: payout.currency,
-            }),
-          `provider initiate ${payout.payoutAccount.provider}`,
-        ),
-      );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      await this.prisma.payoutTransaction.updateMany({
-        where: { id: payout.placeholderTransactionId, status: PayoutStatus.PROCESSING },
-        data: {
-          failureReason:
-            'Provider initiation threw or timed out; remote outcome requires reconciliation before allocations can be released',
-        },
-      });
-      this.logger.error(`Ambiguous provider initiation for payout ${payout.id}: ${message}`);
-      throw new BadRequestException(
-        err instanceof PayoutProviderUnsafeFailure
-          ? err.message
-          : 'Payout provider outcome is unknown; allocations remain reserved for reconciliation',
-      );
-    }
-    const recorded = await this.prisma.$transaction(async (tx) => {
-      const providerTxUpdate = await tx.payoutTransaction.updateMany({
-        where: {
-          id: payout.placeholderTransactionId,
-          providerTxId: `initiate_pending_${payout.id}`,
-          status: PayoutStatus.PROCESSING,
-        },
-        data: { providerTxId: result.providerTxId, failureReason: null },
-      });
-      if (providerTxUpdate.count !== 1) {
-        throw new Error(
-          `Could not bind provider transaction ${result.providerTxId} to payout ${payout.id}`,
+      const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
+      let result: { providerTxId: string; status: string };
+      try {
+        result = await providerBreaker.call(`initiate:${payout.payoutAccount.provider}`, () =>
+          withTimeout(
+            () =>
+              provider.initiate({
+                payoutRequestId: payout.id,
+                destination: payout.payoutAccount.destination,
+                amountMinor: expectedAmount,
+                currency: payout.currency,
+              }),
+            `provider initiate ${payout.payoutAccount.provider}`,
+            providerTimeoutMs,
+          ),
+        );
+        const recorded = await this.prisma.$transaction(async (tx) => {
+          const providerTxUpdate = await tx.payoutTransaction.updateMany({
+            where: {
+              id: payout.placeholderTransactionId,
+              providerTxId: `initiate_pending_${payout.id}`,
+              status: PayoutStatus.PROCESSING,
+            },
+            data: { providerTxId: result.providerTxId, failureReason: null },
+          });
+          if (providerTxUpdate.count !== 1) {
+            throw new Error(
+              `Could not bind provider transaction ${result.providerTxId} to payout ${payout.id}`,
+            );
+          }
+          if (payout.payoutAccount.provider === 'stripe_connect') {
+            await tx.platformLedger.upsert({
+              where: { idempotencyKey: `developer_payout_cash_${payout.id}` },
+              create: {
+                entryType: 'reversal',
+                status: 'confirmed',
+                amountMinor: expectedAmount,
+                currency: payout.currency,
+                bucket: 'cash',
+                referenceId: payout.id,
+                idempotencyKey: `developer_payout_cash_${payout.id}`,
+                description: `Developer payout cash initiated - payout ${payout.id}`,
+              },
+              update: {},
+            });
+          }
+          return providerTxUpdate;
+        });
+        if (recorded.count !== 1) {
+          throw new Error(
+            `Provider payout ${result.providerTxId} was not recorded for payout ${payout.id}`,
+          );
+        }
+      } catch (err: unknown) {
+        if (err instanceof CircuitBreakerOpenError) {
+          // The breaker rejected before invoking the provider callback, so the
+          // remote outcome is known: no transfer was attempted. Close the local
+          // claim as failed and release allocations/fence instead of creating a
+          // permanent ambiguous-initiation incident.
+          await this.markPayoutFailed(payout.id, {
+            provider: payout.payoutAccount.provider,
+            providerTxId: `initiate_pending_${payout.id}`,
+            failureReason: err.message,
+          });
+          throw new BadRequestException(err.message);
+        }
+        retainFenceForReconciliation = true;
+        const message = err instanceof Error ? err.message : String(err);
+        await this.prisma.payoutTransaction.updateMany({
+          where: { id: payout.placeholderTransactionId, status: PayoutStatus.PROCESSING },
+          data: {
+            failureReason:
+              'Provider initiation threw or timed out; remote outcome requires reconciliation before allocations can be released',
+          },
+        });
+        this.logger.error(`Ambiguous provider initiation for payout ${payout.id}: ${message}`);
+        throw new BadRequestException(
+          err instanceof PayoutProviderUnsafeFailure
+            ? err.message
+            : 'Payout provider outcome is unknown; allocations remain reserved for reconciliation',
         );
       }
-      // Stripe Connect transfers platform cash to the connected account before
-      // its bank payout reaches `paid`; account for the outflow immediately.
-      if (payout.payoutAccount.provider === 'stripe_connect') {
-        await tx.platformLedger.upsert({
-          where: { idempotencyKey: `developer_payout_cash_${payout.id}` },
-          create: {
-            entryType: 'reversal',
-            status: 'confirmed',
-            amountMinor: expectedAmount,
-            currency: payout.currency,
-            bucket: 'cash',
-            referenceId: payout.id,
-            idempotencyKey: `developer_payout_cash_${payout.id}`,
-            description: `Developer payout cash initiated — payout ${payout.id}`,
-          },
-          update: {},
-        });
+      if (result.status === PayoutStatus.FAILED) {
+        try {
+          await this.markPayoutFailed(payout.id, {
+            provider: payout.payoutAccount.provider,
+            providerTxId: result.providerTxId,
+            failureReason: 'Provider initiate returned failed',
+          });
+        } catch (err) {
+          retainFenceForReconciliation = true;
+          throw err;
+        }
+        return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.FAILED };
       }
-      return providerTxUpdate;
-    });
-    if (recorded.count !== 1) {
-      throw new BadRequestException(
-        'Provider payout was initiated but local reconciliation failed; allocations remain reserved',
-      );
+      if (result.status === PayoutStatus.PAID) {
+        try {
+          await this.markPayoutPaid(payout.id, {
+            providerTxId: result.providerTxId,
+            paidAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          retainFenceForReconciliation = true;
+          throw err;
+        }
+        return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.PAID };
+      }
+      return { payoutId, providerTxId: result.providerTxId, status: 'processing' };
+    } finally {
+      // Release only this payout's durable initiation fence. A transient DB
+      // failure deliberately leaves it in place for explicit reconciliation;
+      // silently expiring an ambiguous money-movement claim is unsafe.
+      if (!retainFenceForReconciliation) {
+        try {
+          await this.prisma.payoutAccount.updateMany({
+            where: {
+              id: payout.payoutAccount.id,
+              initiationPayoutId: payout.id,
+            },
+            data: {
+              initiationPayoutId: null,
+            },
+          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.error(
+            `Failed to release payout initiation fence for account ${payout.payoutAccount.id}: ${message}`,
+          );
+        }
+      }
     }
-    if (result.status === PayoutStatus.FAILED) {
-      await this.markPayoutFailed(payout.id, {
-        provider: payout.payoutAccount.provider,
-        providerTxId: result.providerTxId,
-        failureReason: 'Provider initiate returned failed',
-      });
-      return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.FAILED };
-    }
-    if (result.status === PayoutStatus.PAID) {
-      await this.markPayoutPaid(payout.id, {
-        providerTxId: result.providerTxId,
-        paidAt: new Date().toISOString(),
-      });
-      return { payoutId, providerTxId: result.providerTxId, status: PayoutStatus.PAID };
-    }
-    return { payoutId, providerTxId: result.providerTxId, status: 'processing' };
   }
 
   /** Mark a payout as paid (called by admin or webhook).
@@ -822,6 +953,10 @@ export class PayoutRequestTrait {
     // prior call may have committed the paid state before referral processing
     // failed, and legacy paid payouts may predate cash-ledger accounting.
     if (payout.status === 'paid') {
+      await this.prisma.payoutAccount.updateMany({
+        where: { initiationPayoutId: payoutId },
+        data: { initiationPayoutId: null },
+      });
       await this.prisma.platformLedger.upsert({
         where: { idempotencyKey: `developer_payout_cash_${payoutId}` },
         create: {
@@ -851,19 +986,16 @@ export class PayoutRequestTrait {
       );
     }
     const paidAtDate = new Date(data.paidAt);
-    // Collect ALL earnings entry IDs from allocations. The inner tx
-    // updateMany is CAS-gated on `status: 'confirmed'` (only flips entries
-    // still in that state). The post-check `paidCount === earningsIds.length`
-    // then actually fails when a concurrent `holdEarnings` flipped any
-    // allocated entry to `held` — because the snapshot included it but the
-    // CAS didn't flip it. Previously we filtered to only `confirmed` here,
-    // making the post-check a tautology (earningsIds already matched what
-    // the updateMany could flip, so paidCount always equaled
-    // earningsIds.length). See the comment at line ~761 for the full
-    // explanation of why this guard must be real.
+    // Collect every allocated earnings entry. A `processing` payout crossed
+    // processPayout's fraud lock + confirmed-entry check before provider I/O,
+    // so a later critical flag may hold those rows but cannot revoke an already
+    // initiated transfer. An `approved` payout has not crossed that boundary
+    // and therefore remains limited to confirmed rows.
     const earningsIds = payout.allocations.map(
       (a: { earningsEntryId: string }) => a.earningsEntryId,
     );
+    const payableEarningsStatuses =
+      payout.status === 'processing' ? (['confirmed', 'held'] as const) : (['confirmed'] as const);
     // Single atomic transaction with an authoritative TOCTOU guard.
     // The payout-row conditional `update where status in ('approved','processing')`
     // ensures that at most one caller flips the state from a legal pre-state;
@@ -885,6 +1017,10 @@ export class PayoutRequestTrait {
           include: { allocations: true },
         });
         if (current?.status === 'paid') {
+          await tx.payoutAccount.updateMany({
+            where: { initiationPayoutId: payoutId },
+            data: { initiationPayoutId: null },
+          });
           return current;
         }
         throw new BadRequestException(
@@ -938,28 +1074,18 @@ export class PayoutRequestTrait {
           });
         }
       }
-      // 3. Mark only the allocated / confirmed earnings as paid.
-      // `updateMany where status: 'confirmed'` is the per-row TOCTOU guard:
-      // an entry that was already paid by a concurrent caller won't match.
+      // 3. Retire the allocated earnings. For already-processing payouts, a
+      // post-authorization fraud hold is settled as paid and its flag stamp is
+      // cleared so a later flag release cannot resurrect withdrawable funds.
+      // Approved payouts still require confirmed entries only.
       if (earningsIds.length > 0) {
         await tx.earningsLedger.updateMany({
-          where: { id: { in: earningsIds }, status: 'confirmed' },
-          data: { status: 'paid' },
+          where: { id: { in: earningsIds }, status: { in: [...payableEarningsStatuses] } },
+          data: { status: 'paid', heldByFlagId: null },
         });
-        // Authoritative post-check: a concurrent fraud `holdEarnings` could have
-        // flipped one or more allocated entries from `confirmed` → `held`
-        // between the snapshot read and the CAS above. We now snapshot ALL
-        // allocation IDs (not just confirmed) so that the conditional
-        // `updateMany` silently SKIPS any held-out entries (no matching
-        // `confirmed` row) and the `paidCount !== earningsIds.length` guard
-        // actually detects it. Without this guard the payout would be marked
-        // `paid` while the held entries stay `held` — money left the platform
-        // but the developer's earnings entry is orphaned in `held`. When the
-        // flag later resolves as a false positive, `releaseEarnings` flips the
-        // held entry back to `confirmed` and the developer can withdraw it
-        // AGAIN (double-spend). Refuse the paid transition when any allocated
-        // entry was held out — the admin re-runs `markPayoutPaid` after the
-        // hold clears, or cancels the payout.
+        // Authoritative post-check: any row outside the statuses authorized
+        // above (for example reversed, or held before an approved payout) keeps
+        // the whole terminal transition from committing.
         const paidCount = await tx.earningsLedger.aggregate({
           where: { id: { in: earningsIds }, status: 'paid' },
           _count: { _all: true },
@@ -969,7 +1095,7 @@ export class PayoutRequestTrait {
           // flip AND the payoutTransaction row. The payout stays in its prior
           // state ('approved'/'processing') so the operation can be retried.
           throw new BadRequestException(
-            `Payout ${payoutId} cannot be marked paid: ${earningsIds.length - paidCount._count._all} allocated earnings entry/entries are no longer in 'confirmed' status (likely held by a fraud investigation). Resolve the fraud flag and retry.`,
+            `Payout ${payoutId} cannot be marked paid: ${earningsIds.length - paidCount._count._all} allocated earnings entry/entries are no longer in an authorized payable status`,
           );
         }
       }
@@ -986,6 +1112,10 @@ export class PayoutRequestTrait {
           description: `Developer payout cash settled — payout ${payoutId}`,
         },
         update: {},
+      });
+      await tx.payoutAccount.updateMany({
+        where: { initiationPayoutId: payoutId },
+        data: { initiationPayoutId: null },
       });
       return tx.payoutRequest.findUnique({
         where: { id: payoutId },
@@ -1038,7 +1168,13 @@ export class PayoutRequestTrait {
           where: { id: payoutId },
           include: { allocations: true },
         });
-        if (current?.status === PayoutStatus.FAILED) return current;
+        if (current?.status === PayoutStatus.FAILED) {
+          await tx.payoutAccount.updateMany({
+            where: { initiationPayoutId: payoutId },
+            data: { initiationPayoutId: null },
+          });
+          return current;
+        }
         throw new BadRequestException(
           current
             ? `Payout cannot be marked failed from status '${current.status}'`
@@ -1086,6 +1222,10 @@ export class PayoutRequestTrait {
         }
       }
       await tx.payoutAllocation.deleteMany({ where: { payoutRequestId: payoutId } });
+      await tx.payoutAccount.updateMany({
+        where: { initiationPayoutId: payoutId },
+        data: { initiationPayoutId: null },
+      });
       return tx.payoutRequest.findUnique({
         where: { id: payoutId },
         include: { allocations: true },

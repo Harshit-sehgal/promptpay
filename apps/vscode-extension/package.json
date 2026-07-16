@@ -3,6 +3,11 @@
   "displayName": "WaitLayer",
   "version": "0.0.1",
   "publisher": "waitlayer",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Harshit-sehgal/promptpay.git"
+  },
   "engines": {
     "node": ">=22.0.0",
     "vscode": "^1.90.0"
@@ -89,24 +94,25 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run compile",
+    "vscode:prepublish": "pnpm run bundle",
+    "bundle": "pnpm --filter @waitlayer/shared build && node ./scripts/build.mjs && node ./scripts/verify-bundle.cjs",
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
     "lint": "eslint src/ test/",
     "typecheck": "tsc --noEmit",
-    "build": "pnpm run compile",
+    "build": "pnpm run bundle",
     "test": "vitest run",
     "package:vsix": "vsce package --no-dependencies",
     "publish:vsix": "vsce publish --no-dependencies"
   },
   "main": "./out/extension.js",
-  "dependencies": {
-    "@waitlayer/shared": "workspace:*"
-  },
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
     "@waitlayer/eslint-config": "workspace:*",
+    "@waitlayer/shared": "workspace:*",
+    "esbuild": "^0.28.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
   }

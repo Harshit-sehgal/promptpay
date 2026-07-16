@@ -105,7 +105,7 @@ export const advertiserApi = {
   getCampaign: (id: string) => api.get(`/advertiser/campaigns/${id}`),
   getReports: (params?: Record<string, unknown>) => api.get('/advertiser/reports', { params }),
   createDepositSession: (amountMinor: bigint | number, currency?: string) =>
-    api.post('/advertiser/deposit-session', { amountMinor: Number(amountMinor), currency }),
+    api.post('/advertiser/deposit-session', { amountMinor, currency }),
   createApiKey: (scopes: string[]) => api.post('/advertiser/api-keys', { scopes }),
 };
 
@@ -124,17 +124,14 @@ export const adminApi = {
   approvePayout: (id: string, note?: string, approvedAmountMinor?: bigint | number) =>
     api.post(`/admin/payouts/${id}/approve`, {
       note,
-      ...(approvedAmountMinor !== undefined
-        ? { approvedAmountMinor: Number(approvedAmountMinor) }
-        : {}),
+      ...(approvedAmountMinor !== undefined ? { approvedAmountMinor } : {}),
     }),
   rejectPayout: (id: string, reason: string) => api.post(`/admin/payouts/${id}/reject`, { reason }),
   processPayout: (id: string) => api.post(`/admin/payouts/${id}/process`),
   markPayoutPaid: (
     id: string,
     data: { providerTxId: string; paidAt: string; amountMinor: bigint | number; currency: string },
-  ) =>
-    api.post(`/admin/payouts/${id}/mark-paid`, { ...data, amountMinor: Number(data.amountMinor) }),
+  ) => api.post(`/admin/payouts/${id}/mark-paid`, data),
   getMoneyIntegrity: () => api.get('/admin/money-integrity'),
   getFraudFlags: (params?: Record<string, unknown>) => api.get('/admin/fraud', { params }),
   getFraudStats: () => api.get('/admin/fraud/stats'),
@@ -184,6 +181,10 @@ export const adminApi = {
   ) => api.post(`/admin/devices/${deviceId}/recovery-token`, data),
   verifyPayoutAccount: (id: string, verified: boolean, reason?: string) =>
     api.post(`/admin/payout-accounts/${id}/verify`, { verified, reason }),
+  freezePayoutAccount: (id: string, reason?: string) =>
+    api.post(`/admin/payout-accounts/${id}/freeze`, { reason }),
+  unfreezePayoutAccount: (id: string, reason?: string) =>
+    api.post(`/admin/payout-accounts/${id}/unfreeze`, { reason }),
 };
 
 export const payoutApi = {

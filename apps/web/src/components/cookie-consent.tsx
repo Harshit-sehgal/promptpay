@@ -1,28 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/api/client';
 import { useAuth } from '@/lib/auth-context';
+import { readStoredCookieConsent, writeStoredCookieConsent } from '@/lib/consent-preferences';
 
 import { useToast } from '@waitlayer/ui';
 
-const STORAGE_KEY = 'wl_cookie_consent';
 const VISITOR_ID_KEY = 'wl_visitor_id';
 const OPEN_EVENT = 'wl:open-cookie-settings';
 
 type Choice = 'accepted' | 'declined';
-
-function readStored(): Choice | null {
-  if (typeof window === 'undefined') return null;
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-  try {
-    return (JSON.parse(raw).choice as Choice) ?? null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Returns a stable, per-browser pseudonymous visitor id used to anchor
@@ -43,33 +32,44 @@ export default function CookieConsent() {
   const { isAuthenticated } = useAuth();
   const [visible, setVisible] = useState(false);
   const [marketingVersion, setMarketingVersion] = useState<string | null>(null);
+  const [versionLoading, setVersionLoading] = useState(true);
   const [syncError, setSyncError] = useState<string | null>(null);
   const { success } = useToast();
 
-  useEffect(() => {
-    if (!readStored()) setVisible(true);
-
-    const reopen = () => setVisible(true);
-    window.addEventListener(OPEN_EVENT, reopen);
-
+  const loadRequiredVersion = useCallback(async () => {
+    setVersionLoading(true);
+    setSyncError(null);
     // Resolve the server-required marketing_cookies version so the recorded
     // consent matches the current policy version (rather than a hard-coded
     // constant that drifts from the backend).
-    api
-      .get<Record<string, string>>('/consent/required-versions')
-      .then((res) => {
-        if (res.data?.marketing_cookies) setMarketingVersion(res.data.marketing_cookies);
-      })
-      .catch(() => undefined);
-
-    return () => window.removeEventListener(OPEN_EVENT, reopen);
+    try {
+      const res = await api.get<Record<string, string>>('/consent/required-versions');
+      const version = res.data?.marketing_cookies;
+      if (!version) throw new Error('Missing marketing cookie consent version');
+      setMarketingVersion(version);
+      const stored = readStoredCookieConsent();
+      setVisible(stored?.version !== version);
+    } catch {
+      setMarketingVersion(null);
+      setSyncError('Cookie preferences are temporarily unavailable.');
+      setVisible(true);
+    } finally {
+      setVersionLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    const reopen = () => setVisible(true);
+    window.addEventListener(OPEN_EVENT, reopen);
+
+    void loadRequiredVersion();
+
+    return () => window.removeEventListener(OPEN_EVENT, reopen);
+  }, [loadRequiredVersion]);
+
   const persist = (choice: Choice) => {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ choice, at: new Date().toISOString(), version: marketingVersion }),
-    );
+    if (!marketingVersion) return;
+    writeStoredCookieConsent(choice, marketingVersion);
     setVisible(false);
   };
 
@@ -105,6 +105,10 @@ export default function CookieConsent() {
 
   const choose = async (choice: Choice) => {
     setSyncError(null);
+    if (!marketingVersion) {
+      setSyncError('Cookie preferences are temporarily unavailable. Please try again.');
+      return;
+    }
     if (isAuthenticated) {
       try {
         await recordConsent(choice === 'accepted');
@@ -143,11 +147,26 @@ export default function CookieConsent() {
           </Link>{' '}
           for details.
         </p>
-        {syncError && <p className="text-red-600 text-[12px]">{syncError}</p>}
+        {versionLoading && <p className="text-surface-500 text-[12px]">Loading preferences...</p>}
+        {syncError && !versionLoading && (
+          <div className="flex items-center gap-2" role="alert">
+            <p className="text-red-600 text-[12px]">{syncError}</p>
+            {!marketingVersion && (
+              <button
+                type="button"
+                onClick={() => void loadRequiredVersion()}
+                className="text-brand-600 hover:text-brand-700 text-[12px] font-semibold underline underline-offset-2"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={decline}
+            disabled={!marketingVersion || versionLoading}
             className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-surface-600 hover:bg-surface-100 transition-colors"
           >
             Decline
@@ -155,6 +174,7 @@ export default function CookieConsent() {
           <button
             type="button"
             onClick={accept}
+            disabled={!marketingVersion || versionLoading}
             className="px-4 py-2.5 rounded-xl text-[13px] font-medium bg-brand-500 hover:bg-brand-600 text-white transition-colors"
           >
             Accept

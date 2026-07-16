@@ -1,6 +1,7 @@
 import { FraudFlagStatus, FraudSeverity, Prisma } from '@waitlayer/db';
 
 import { PrismaService } from '../config/prisma.service';
+import { ACTIVE_FRAUD_FLAG_STATUSES } from '../fraud/fraud.constants';
 import { FraudService } from '../fraud/fraud.service';
 
 export class AdminFraudTrait {
@@ -88,14 +89,14 @@ export class AdminFraudTrait {
       Promise.all(
         (['critical', 'high', 'medium', 'low'] as FraudSeverity[]).map((severity) =>
           this.prisma.fraudFlag.count({
-            where: { severity, status: { in: ['open', 'reviewing'] as FraudFlagStatus[] } },
+            where: { severity, status: { in: ACTIVE_FRAUD_FLAG_STATUSES } },
           }),
         ),
       ),
       this.prisma.fraudFlag.groupBy({
         by: ['flagType'],
         _count: { _all: true },
-        where: { status: { in: ['open', 'reviewing'] as FraudFlagStatus[] } },
+        where: { status: { in: ACTIVE_FRAUD_FLAG_STATUSES } },
       }),
       this.prisma.fraudFlag.count(),
       this.prisma.fraudFlag.count({

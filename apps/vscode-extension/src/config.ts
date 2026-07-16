@@ -90,7 +90,7 @@ export class ConfigurationManager {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
-      /* storage not available */
+      throw e;
     }
   }
 
@@ -100,7 +100,7 @@ export class ConfigurationManager {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
-      /* storage not available */
+      throw e;
     }
   }
 
@@ -173,24 +173,29 @@ export class ConfigurationManager {
   }
 
   async clearDeviceRegistration(): Promise<void> {
+    let firstFailure: unknown;
     try {
       await this.secrets.delete(this.deviceUuidKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[WaitLayer] SecretStorage failure (clear UUID): ${msg}`);
+      firstFailure = e;
     }
     try {
       await this.secrets.delete(this.deviceEventSecretKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[WaitLayer] SecretStorage failure (clear event secret): ${msg}`);
+      firstFailure ??= e;
     }
     try {
       await this.secrets.delete(this.deviceUserIdKey);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[WaitLayer] SecretStorage failure (clear device userId): ${msg}`);
+      firstFailure ??= e;
     }
+    if (firstFailure !== undefined) throw firstFailure;
   }
 
   /** Store the userId associated with the current device registration so

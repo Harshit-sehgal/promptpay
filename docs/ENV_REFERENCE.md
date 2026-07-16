@@ -42,26 +42,34 @@ Default shown where one exists.
 
 ## Web
 
-| Variable                       | Req | Default | Purpose                               |
-| ------------------------------ | --- | ------- | ------------------------------------- |
-| `WEB_PORT`                     | opt | `3000`  | Next.js port.                         |
-| `NEXT_PUBLIC_API_URL`          | opt | —       | Browser-exposed API URL (web only).   |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | opt | —       | Google OAuth client id (browser).     |
-| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`  | opt | —       | Shows mock-auth UI in web (dev only). |
+| Variable                                       | Req | Default | Purpose                                                        |
+| ---------------------------------------------- | --- | ------- | -------------------------------------------------------------- |
+| `WEB_PORT`                                     | opt | `3000`  | Next.js port.                                                  |
+| `NEXT_PUBLIC_API_URL`                          | opt | —       | Public API URL; required by the Vercel deployment preflight.   |
+| `API_INTERNAL_URL`                             | opt | —       | Server-only API URL preferred by BFF handlers.                 |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`                 | opt | —       | Google OAuth client id; required by Vercel preflight.          |
+| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`                  | opt | —       | Shows mock-auth UI in local development only.                  |
+| `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` | opt | —       | JSON provider launch-status map baked into the web build.      |
+| `BFF_TRUST_PROXY_HOPS`                         | opt | `1`     | Trusted forwarding hops for BFF network identity (1-3).        |
+| `COOKIE_SECURE`                                | opt | —       | Explicit secure-cookie override; production HTTPS is inferred. |
 
 ## Auth
 
-| Variable                     | Req | Default | Purpose                                                                                                                                  |
-| ---------------------------- | --- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `JWT_PRIVATE_KEY`            | req | —       | PEM-encoded RSA private key for RS256 access/refresh tokens.                                                                             |
-| `JWT_PUBLIC_KEY`             | req | —       | PEM-encoded RSA public key for RS256 verification. Shared with the web middleware.                                                       |
-| `JWT_SECRET`                 | req | —       | Symmetric secret, **min 32 chars**. Used for refresh-token HMAC integrity and BFF rate-limit identity signing. NOT used for JWT signing. |
-| `JWT_ACCESS_TTL`             | opt | `15m`   | Access token lifetime.                                                                                                                   |
-| `JWT_REFRESH_TTL`            | opt | `30d`   | Refresh token lifetime.                                                                                                                  |
-| `TOTP_SECRET_ENCRYPTION_KEY` | opt | —       | App-level key for encrypted server-stored TOTP seeds. **Required in production** for MFA.                                                |
-| `GOOGLE_CLIENT_ID`           | opt | —       | Google OAuth client id (server-side verification).                                                                                       |
-| `MOCK_GOOGLE_ENABLED`        | opt | —       | `1` enables mock Google verifier (ignored in production).                                                                                |
-| `ALLOW_MOCK_GOOGLE`          | opt | —       | `true` legacy alias for `MOCK_GOOGLE_ENABLED` (ignored in prod).                                                                         |
+| Variable                            | Req | Default            | Purpose                                                                                                                                  |
+| ----------------------------------- | --- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_PRIVATE_KEY`                   | req | —                  | PEM-encoded RSA private key for RS256 access/refresh tokens.                                                                             |
+| `JWT_PUBLIC_KEY`                    | req | —                  | Current RSA public key. Required by the API and web build.                                                                               |
+| `JWT_PUBLIC_KEYS`                   | opt | —                  | Additional public PEM keys. Keep old keys through `JWT_REFRESH_TTL` and pass the set to the web build.                                   |
+| `JWT_ISSUER`                        | opt | `waitlayer`        | Expected JWT issuer. Custom values must match the web build.                                                                             |
+| `JWT_AUDIENCE`                      | opt | `waitlayer-client` | Base JWT audience. Custom values must match the web build.                                                                               |
+| `JWT_SECRET`                        | req | —                  | Symmetric secret, **min 32 chars**. Used for refresh-token HMAC integrity and BFF rate-limit identity signing. NOT used for JWT signing. |
+| `JWT_ACCESS_TTL`                    | opt | `15m`              | Access token lifetime.                                                                                                                   |
+| `JWT_REFRESH_TTL`                   | opt | `30d`              | Refresh token lifetime.                                                                                                                  |
+| `TOTP_SECRET_ENCRYPTION_KEY`        | opt | —                  | App-level key for encrypted server-stored TOTP seeds. **Required in production** for MFA.                                                |
+| `ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS` | opt | `900`              | Maximum age of an admin step-up token (60-3600 seconds).                                                                                 |
+| `GOOGLE_CLIENT_ID`                  | opt | —                  | Google OAuth client id (server-side verification).                                                                                       |
+| `MOCK_GOOGLE_ENABLED`               | opt | —                  | `1` enables mock Google verifier (ignored in production).                                                                                |
+| `ALLOW_MOCK_GOOGLE`                 | opt | —                  | `true` legacy alias for `MOCK_GOOGLE_ENABLED` (ignored in prod).                                                                         |
 
 ## Stripe (advertiser deposits)
 
@@ -74,11 +82,14 @@ Default shown where one exists.
 
 ## Email
 
-| Variable         | Req | Default                   | Purpose                                      |
-| ---------------- | --- | ------------------------- | -------------------------------------------- |
-| `EMAIL_DRIVER`   | opt | `console`                 | `console` \| `resend`.                       |
-| `EMAIL_FROM`     | opt | `noreply@waitlayer.local` | From address.                                |
-| `RESEND_API_KEY` | opt | —                         | Resend API key (when `EMAIL_DRIVER=resend`). |
+| Variable                    | Req  | Default                   | Purpose                                                               |
+| --------------------------- | ---- | ------------------------- | --------------------------------------------------------------------- |
+| `EMAIL_DRIVER`              | opt  | `console`                 | `console` \| `resend`; production requires `resend`.                  |
+| `EMAIL_FROM`                | opt  | `noreply@waitlayer.local` | From address; production requires a non-development sender.           |
+| `RESEND_API_KEY`            | opt  | —                         | Resend API key; required by the production email policy.              |
+| `EMAIL_QUEUE_SECRET`        | opt* | —                         | 32+ character queued-payload encryption key; required in production.  |
+| `EMAIL_PROVIDER_TIMEOUT_MS` | opt  | `10000`                   | Transactional email provider timeout (1000-30000).                    |
+| `OPS_ALERT_EMAIL`           | opt* | —                         | Monitored financial/security alert recipient; required in production. |
 
 ## Sentry (error monitoring)
 
@@ -93,34 +104,51 @@ Default shown where one exists.
 | ----------------------------------- | --- | ------- | -------------------------------------------------------------------------------- |
 | `PAYOUT_REQUIRE_2FA`                | opt | —       | `true` requires MFA-enrolled account to request payouts.                         |
 | `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —       | If > 0, newly-added/changed payout destinations require MFA for that many hours. |
+| `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —       | Strict JSON provider -> `available`/`coming_soon` API gate.                      |
 
 ## Payout providers (payouts — later / dev stubs)
 
-| Variable               | Req | Default   | Purpose                          |
-| ---------------------- | --- | --------- | -------------------------------- |
-| `PAYPAL_CLIENT_ID`     | opt | —         | PayPal client id.                |
-| `PAYPAL_CLIENT_SECRET` | opt | —         | PayPal secret.                   |
-| `PAYPAL_MODE`          | opt | `sandbox` | `sandbox` \| `live`.             |
-| `WISE_API_TOKEN`       | opt | —         | Wise API token.                  |
-| `WISE_API_VERSION`     | opt | `3.0`     | Wise API version.                |
-| `WISE_PROFILE_ID`      | opt | —         | Wise business profile id (live). |
-| `WISE_MODE`            | opt | `sandbox` | `sandbox` \| `live`.             |
+| Variable                         | Req | Default   | Purpose                                                     |
+| -------------------------------- | --- | --------- | ----------------------------------------------------------- |
+| `PAYPAL_CLIENT_ID`               | opt | —         | PayPal client id.                                           |
+| `PAYPAL_CLIENT_SECRET`           | opt | —         | PayPal secret.                                              |
+| `PAYPAL_MODE`                    | opt | `sandbox` | `sandbox` \| `live`.                                        |
+| `WISE_API_TOKEN`                 | opt | —         | Wise API token.                                             |
+| `WISE_API_VERSION`               | opt | `3.0`     | Wise API version.                                           |
+| `WISE_PROFILE_ID`                | opt | —         | Wise business profile id (live).                            |
+| `WISE_MODE`                      | opt | `sandbox` | `sandbox` \| `live`.                                        |
+| `WISE_EMAIL_RECIPIENTS_VERIFIED` | opt | `false`   | Fail-closed confirmation for Wise email-recipient corridor. |
 
 ## Feature / behaviour toggles
 
-| Variable                   | Req | Default | Purpose                                               |
-| -------------------------- | --- | ------- | ----------------------------------------------------- |
-| `LAUNCH_SPLIT_ENABLED`     | opt | `false` | Use 80/10/10 (dev/platform/reserve) earnings split.   |
-| `WEBHOOK_ASYNC_PROCESSING` | opt | `false` | Process Stripe webhooks off-thread via the event bus. |
+| Variable                   | Req | Default | Purpose                                              |
+| -------------------------- | --- | ------- | ---------------------------------------------------- |
+| `LAUNCH_SPLIT_ENABLED`     | opt | `false` | Use 80/10/10 (dev/platform/reserve) earnings split.  |
+| `WEBHOOK_ASYNC_PROCESSING` | opt | `false` | Legacy compatibility flag; only `false` is accepted. |
+| `SWAGGER_ENABLED`          | opt | `false` | Expose Swagger/OpenAPI documentation.                |
 
 ## Cron intervals (ms)
 
-| Variable                        | Req | Default    | Purpose                                   |
-| ------------------------------- | --- | ---------- | ----------------------------------------- |
-| `PAYOUT_POLL_INTERVAL_MS`       | opt | `600000`   | Payout provider poll loop (min 60000).    |
-| `RETENTION_CRON_INTERVAL_MS`    | opt | `86400000` | Data-retention sweep (min 3600000).       |
-| `LEDGER_MATURATION_INTERVAL_MS` | opt | `600000`   | Ledger maturation job (min 60000).        |
-| `PROVIDER_CALL_TIMEOUT_MS`      | opt | `15000`    | Per-call external PSP timeout (min 1000). |
+| Variable                           | Req | Default    | Purpose                                   |
+| ---------------------------------- | --- | ---------- | ----------------------------------------- |
+| `PAYOUT_POLL_INTERVAL_MS`          | opt | `600000`   | Payout provider poll loop (min 60000).    |
+| `PAYOUT_POLL_BATCH_SIZE`           | opt | `100`      | Payouts processed per poll (1-500).       |
+| `RETENTION_CRON_INTERVAL_MS`       | opt | `86400000` | Data-retention sweep (min 3600000).       |
+| `LEDGER_MATURATION_INTERVAL_MS`    | opt | `600000`   | Ledger maturation job (min 60000).        |
+| `LEDGER_MATURATION_BATCH_SIZE`     | opt | `500`      | Entries processed per maturation batch.   |
+| `LEDGER_MATURATION_RUN_CAP`        | opt | `5000`     | Maximum entries processed per run.        |
+| `WEBHOOK_RECLAIM_CRON`             | opt | —          | May not be `false` in production.         |
+| `WEBHOOK_RECLAIM_CRON_INTERVAL_MS` | opt | `300000`   | Stale webhook reclaim interval.           |
+| `WEBHOOK_RECLAIM_CRON_AGE_MS`      | opt | `2100000`  | Minimum webhook age before reclaim.       |
+| `WEBHOOK_RECLAIM_CRON_BATCH_SIZE`  | opt | `100`      | Webhooks reclaimed per batch.             |
+| `PROVIDER_CALL_TIMEOUT_MS`         | opt | `15000`    | Per-call external PSP timeout (min 1000). |
+
+## Privacy and OAuth verification
+
+| Variable                      | Req  | Default | Purpose                                                     |
+| ----------------------------- | ---- | ------- | ----------------------------------------------------------- |
+| `PRIVACY_HASH_KEY`            | opt* | —       | 32+ character keyed pseudonymization secret; prod required. |
+| `GOOGLE_TOKENINFO_TIMEOUT_MS` | opt  | `5000`  | Google token-info request timeout (1000-30000).             |
 
 ## Notes
 

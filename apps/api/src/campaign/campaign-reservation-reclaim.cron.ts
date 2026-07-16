@@ -74,15 +74,16 @@ export class CampaignReservationReclaimCron implements OnApplicationBootstrap, O
 
       const cutoff = new Date(Date.now() - this.STALE_THRESHOLD_MS);
 
-      // Find CPM impressions that were served but never qualified. We only
-      // need campaigns that are still active or paused (reservations on
-      // archived campaigns are still worth reclaiming).
+      // Find CPM impressions that were served but never qualified. Archive is
+      // terminal and archiveCampaign already zeroes its reservation total;
+      // excluding archived rows prevents their now-unreleasable impressions
+      // from filling every bounded batch and starving live campaigns.
       const staleImpressions = await this.prisma.adImpression.findMany({
         where: {
           qualifiedAt: null,
           invalidatedAt: null,
           createdAt: { lt: cutoff },
-          campaign: { bidType: 'cpm' },
+          campaign: { bidType: 'cpm', status: { in: ['active', 'paused'] } },
         },
         select: {
           id: true,
@@ -94,6 +95,7 @@ export class CampaignReservationReclaimCron implements OnApplicationBootstrap, O
             },
           },
         },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: 500,
       });
 
@@ -104,33 +106,37 @@ export class CampaignReservationReclaimCron implements OnApplicationBootstrap, O
 
         try {
           const didReclaim = await this.prisma.$transaction(async (tx) => {
-            // Re-validate the impression is still unqualified and uninvalidated
-            // inside the transaction to avoid double-reclaim races.
-            const current = await tx.adImpression.findUnique({
-              where: { id: impression.id },
-              select: { qualifiedAt: true, invalidatedAt: true },
-            });
-            if (!current || current.qualifiedAt || current.invalidatedAt) {
-              return false;
-            }
-
-            // Release the reservation. The WHERE guard prevents the reserved
-            // budget from going negative if another path already released it.
-            await tx.$executeRaw`
-              UPDATE "campaigns"
-              SET "budgetReservedMinor" = "budgetReservedMinor" - ${bid}
-              WHERE "id" = ${impression.campaignId}
-                AND "budgetReservedMinor" >= ${bid}
-            `;
-
-            await tx.adImpression.update({
-              where: { id: impression.id },
+            // Claim invalidation atomically. recordQualifiedImpression uses the
+            // inverse CAS over the same fields, so exactly one path can win.
+            const claim = await tx.adImpression.updateMany({
+              where: {
+                id: impression.id,
+                qualifiedAt: null,
+                invalidatedAt: null,
+              },
               data: {
                 invalidatedAt: new Date(),
                 invalidationReason: 'stale_reservation',
                 isBillable: false,
               },
             });
+            if (claim.count === 0) {
+              return false;
+            }
+
+            // Release the reservation. The WHERE guard prevents the reserved
+            // budget from going negative if another path already released it.
+            const released: number = await tx.$executeRaw`
+              UPDATE "campaigns"
+              SET "budget_reserved_minor" = "budget_reserved_minor" - ${bid}
+              WHERE "id" = ${impression.campaignId}
+                AND "budget_reserved_minor" >= ${bid}
+            `;
+            // The impression claim already excludes a concurrent qualifier. If
+            // the reservation is gone (for example, the campaign was archived
+            // after this batch was read), keep the invalidation committed so an
+            // inconsistent row cannot occupy every future bounded batch.
+            if (released === 0) return false;
             return true;
           });
           if (didReclaim) reclaimed++;

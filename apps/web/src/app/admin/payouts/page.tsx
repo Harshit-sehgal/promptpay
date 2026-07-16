@@ -6,7 +6,11 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
-import { authoritativePayoutAmountMinor, majorToMinor, minorToMajorInputValue } from './amounts';
+import {
+  authoritativePayoutAmountMinor,
+  majorInputToMinor,
+  minorToMajorInputValue,
+} from './amounts';
 
 interface PendingPayout {
   id: string;
@@ -16,12 +20,23 @@ interface PendingPayout {
   requestedAmountMinor: bigint;
   approvedAmountMinor?: bigint | null;
   currency: string;
-  payoutAccount: { id: string; provider: string; destination: string; isVerified?: boolean };
+  payoutAccount: {
+    id: string;
+    provider: string;
+    destination: string;
+    isVerified?: boolean;
+    isFrozen?: boolean;
+  };
   transactions?: Array<{ providerTxId?: string | null; status: string }>;
   createdAt: string;
 }
 
 type PendingPayoutsResponse = PendingPayout[] | { payouts?: PendingPayout[] };
+
+type PayoutAccountAction = {
+  payout: PendingPayout;
+  mode: 'freeze' | 'unfreeze';
+};
 
 function normalizePayouts(data: PendingPayoutsResponse): PendingPayout[] {
   return Array.isArray(data) ? data : data.payouts || [];
@@ -43,8 +58,12 @@ export default function AdminPayoutsPage() {
   const [reconcileAmount, setReconcileAmount] = useState('');
   const [reconcilePaidAt, setReconcilePaidAt] = useState('');
 
+  const [accountAction, setAccountAction] = useState<PayoutAccountAction | null>(null);
+  const [accountActionReason, setAccountActionReason] = useState('');
+
   const fetchPayouts = useCallback(() => {
     setLoading(true);
+    setError(null);
     adminApi
       .getPendingPayouts()
       .then((res: { data: PendingPayoutsResponse }) => setPayouts(normalizePayouts(res.data)))
@@ -66,12 +85,12 @@ export default function AdminPayoutsPage() {
     const trimmed = approveAmount.trim();
     let amountMinor: bigint | undefined;
     if (trimmed !== '') {
-      const major = parseFloat(trimmed);
-      if (isNaN(major) || major <= 0) {
+      const parsedAmountMinor = majorInputToMinor(trimmed, approveModalFor.currency);
+      if (parsedAmountMinor === null || parsedAmountMinor <= 0n) {
         setError('Enter a valid approval amount');
         return;
       }
-      amountMinor = majorToMinor(major, approveModalFor.currency);
+      amountMinor = parsedAmountMinor;
       if (amountMinor > approveModalFor.requestedAmountMinor) {
         setError('Approved amount cannot exceed the requested amount');
         return;
@@ -103,8 +122,8 @@ export default function AdminPayoutsPage() {
       setError('Provider transaction id is required for manual reconciliation');
       return;
     }
-    const major = parseFloat(reconcileAmount);
-    if (isNaN(major) || major <= 0) {
+    const amountMinor = majorInputToMinor(reconcileAmount, reconcileModalFor.currency);
+    if (amountMinor === null || amountMinor <= 0n) {
       setError('Enter a valid paid amount');
       return;
     }
@@ -113,7 +132,7 @@ export default function AdminPayoutsPage() {
       await adminApi.markPayoutPaid(reconcileModalFor.id, {
         providerTxId: reconcileProviderTxId.trim(),
         paidAt: new Date(reconcilePaidAt || Date.now()).toISOString(),
-        amountMinor: majorToMinor(major, reconcileModalFor.currency),
+        amountMinor,
         currency: reconcileModalFor.currency,
       });
       setReconcileModalFor(null);
@@ -171,6 +190,41 @@ export default function AdminPayoutsPage() {
       fetchPayouts();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Verification failed'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const openAccountAction = (payout: PendingPayout) => {
+    setAccountAction({
+      payout,
+      mode: payout.payoutAccount.isFrozen ? 'unfreeze' : 'freeze',
+    });
+    setAccountActionReason('');
+  };
+
+  const closeAccountAction = () => {
+    setAccountAction(null);
+    setAccountActionReason('');
+  };
+
+  const handleAccountAction = async () => {
+    if (!accountAction || !accountActionReason.trim()) return;
+
+    const { payout, mode } = accountAction;
+    setProcessing(payout.id);
+    setError(null);
+    try {
+      const reason = accountActionReason.trim();
+      if (mode === 'freeze') {
+        await adminApi.freezePayoutAccount(payout.payoutAccount.id, reason);
+      } else {
+        await adminApi.unfreezePayoutAccount(payout.payoutAccount.id, reason);
+      }
+      closeAccountAction();
+      fetchPayouts();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, `Failed to ${mode} payout account`));
     } finally {
       setProcessing(null);
     }
@@ -246,12 +300,35 @@ export default function AdminPayoutsPage() {
                     {p.payoutAccount.isVerified === false && (
                       <span className="ml-2 text-amber-400">· unverified</span>
                     )}
+                    {p.payoutAccount.isFrozen && (
+                      <span className="ml-2 text-red-300 font-semibold">· frozen</span>
+                    )}
+                  </p>
+                  <p className="text-ink-500 text-xs mt-1 font-mono">
+                    Account {p.payoutAccount.id}
                   </p>
                   <p className="text-ink-500 text-xs mt-1 uppercase tracking-wider">
                     {p.status.replace('_', ' ')}
                   </p>
+                  {p.payoutAccount.isFrozen && (
+                    <p className="text-red-300 text-xs mt-2">
+                      Outbound processing is blocked until this payout account is unfrozen.
+                    </p>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openAccountAction(p)}
+                    disabled={processing === p.id}
+                    className={
+                      p.payoutAccount.isFrozen
+                        ? 'bg-amber-500/15 hover:bg-amber-500/25 disabled:opacity-50 text-amber-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors'
+                        : 'bg-red-500/15 hover:bg-red-500/25 disabled:opacity-50 text-red-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors'
+                    }
+                  >
+                    {p.payoutAccount.isFrozen ? 'Unfreeze account' : 'Freeze account'}
+                  </button>
                   {p.status !== 'processing' && (
                     <button
                       onClick={() => setRejectModalFor(p)}
@@ -282,7 +359,12 @@ export default function AdminPayoutsPage() {
                   {p.status === 'approved' && (
                     <button
                       onClick={() => handleProcess(p.id)}
-                      disabled={processing === p.id}
+                      disabled={processing === p.id || p.payoutAccount.isFrozen}
+                      title={
+                        p.payoutAccount.isFrozen
+                          ? 'Unfreeze this payout account before processing'
+                          : undefined
+                      }
                       className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
                     >
                       {processing === p.id ? 'Working...' : 'Process'}
@@ -325,6 +407,74 @@ export default function AdminPayoutsPage() {
               </p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Payout-account emergency freeze / unfreeze modal */}
+      {accountAction && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payout-account-action-title"
+            className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full"
+          >
+            <h3 id="payout-account-action-title" className="text-white font-semibold mb-2">
+              {accountAction.mode === 'freeze'
+                ? 'Freeze payout account'
+                : 'Unfreeze payout account'}
+            </h3>
+            <p className="text-ink-400 text-sm mb-1">
+              {accountAction.payout.payoutAccount.provider} —{' '}
+              {accountAction.payout.payoutAccount.destination}
+            </p>
+            <p className="text-ink-500 text-xs font-mono mb-4">
+              {accountAction.payout.payoutAccount.id}
+            </p>
+            <label
+              htmlFor="payout-account-action-reason"
+              className="text-ink-300 text-xs block mb-1"
+            >
+              Operator reason
+            </label>
+            <textarea
+              id="payout-account-action-reason"
+              value={accountActionReason}
+              onChange={(e) => setAccountActionReason(e.target.value)}
+              placeholder="Reason for the audit trail"
+              rows={3}
+              maxLength={500}
+              required
+              autoFocus
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+            />
+            <div className="flex items-center gap-3 justify-end">
+              <button
+                type="button"
+                onClick={closeAccountAction}
+                disabled={processing === accountAction.payout.id}
+                className="bg-ink-700 hover:bg-ink-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAccountAction}
+                disabled={!accountActionReason.trim() || processing === accountAction.payout.id}
+                className={
+                  accountAction.mode === 'freeze'
+                    ? 'bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-sm'
+                    : 'bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-ink-950 font-medium px-4 py-2 rounded-lg text-sm'
+                }
+              >
+                {processing === accountAction.payout.id
+                  ? 'Working...'
+                  : accountAction.mode === 'freeze'
+                    ? 'Confirm freeze'
+                    : 'Confirm unfreeze'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -388,9 +538,12 @@ export default function AdminPayoutsPage() {
             </label>
             <input
               type="number"
-              step="0.01"
-              min={0}
-              max={minorToMajorInputValue(approveModalFor.requestedAmountMinor)}
+              step={minorToMajorInputValue(1n, approveModalFor.currency)}
+              min={minorToMajorInputValue(1n, approveModalFor.currency)}
+              max={minorToMajorInputValue(
+                approveModalFor.requestedAmountMinor,
+                approveModalFor.currency,
+              )}
               value={approveAmount}
               onChange={(e) => setApproveAmount(e.target.value)}
               className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
@@ -445,8 +598,12 @@ export default function AdminPayoutsPage() {
                 </label>
                 <input
                   type="number"
-                  step="0.01"
-                  min={0}
+                  step={minorToMajorInputValue(1n, reconcileModalFor.currency)}
+                  min={minorToMajorInputValue(1n, reconcileModalFor.currency)}
+                  max={minorToMajorInputValue(
+                    authoritativePayoutAmountMinor(reconcileModalFor),
+                    reconcileModalFor.currency,
+                  )}
                   value={reconcileAmount}
                   onChange={(e) => setReconcileAmount(e.target.value)}
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"

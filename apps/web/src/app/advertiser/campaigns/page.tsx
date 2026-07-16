@@ -5,9 +5,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
-import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
+import {
+  bigintRatioPercent,
+  formatCurrency,
+  formatCurrencyBreakdown,
+  formatRelativeTime,
+} from '@/lib/format';
 
-import { getCampaignActions, getCampaignRejectionMessage } from './campaign-actions';
+import {
+  clampCampaignPage,
+  getCampaignActions,
+  getCampaignRejectionMessage,
+} from './campaign-actions';
 
 interface CreativeSummary {
   status: string;
@@ -19,9 +28,9 @@ interface Campaign {
   name: string;
   status: string;
   bidType: string;
-  bidAmountMinor: number;
-  budgetTotalMinor: number;
-  budgetSpentMinor: number;
+  bidAmountMinor: bigint;
+  budgetTotalMinor: bigint;
+  budgetSpentMinor: bigint;
   currency: string;
   impressions: number;
   clicks: number;
@@ -62,7 +71,10 @@ export default function AdvertiserCampaignsPage() {
         limit,
         status: statusFilter || undefined,
       });
-      setData({ campaigns: res.data.campaigns || [], total: res.data.total ?? 0 });
+      const total = res.data.total ?? 0;
+      setData({ campaigns: res.data.campaigns || [], total });
+      const validPage = clampCampaignPage(page, total, limit);
+      if (validPage !== page) setPage(validPage);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to load campaigns'));
     } finally {
@@ -99,18 +111,9 @@ export default function AdvertiserCampaignsPage() {
   };
 
   const handleArchive = async (campaign: Campaign) => {
-    const unspentMinor = Math.max(0, campaign.budgetTotalMinor - campaign.budgetSpentMinor);
-    const refundText =
-      unspentMinor > 0
-        ? ` This records ${formatCurrency(
-            unspentMinor,
-            campaign.currency,
-          )} of unspent budget as a pending refund obligation for admin reconciliation.`
-        : '';
-
     if (
       !window.confirm(
-        `Archive "${campaign.name}"? This permanently stops the campaign.${refundText}`,
+        `Archive "${campaign.name}"? This permanently stops the campaign. Unspent funds remain in your advertiser balance.`,
       )
     ) {
       return;
@@ -128,19 +131,19 @@ export default function AdvertiserCampaignsPage() {
   };
 
   const totalBudgetByCurrency =
-    data?.campaigns.reduce<Record<string, number>>((totals, campaign) => {
-      totals[campaign.currency] = (totals[campaign.currency] ?? 0) + campaign.budgetTotalMinor;
+    data?.campaigns.reduce<Record<string, bigint>>((totals, campaign) => {
+      totals[campaign.currency] = (totals[campaign.currency] ?? 0n) + campaign.budgetTotalMinor;
       return totals;
     }, {}) || {};
   const totalSpentByCurrency =
-    data?.campaigns.reduce<Record<string, number>>((totals, campaign) => {
-      totals[campaign.currency] = (totals[campaign.currency] ?? 0) + campaign.budgetSpentMinor;
+    data?.campaigns.reduce<Record<string, bigint>>((totals, campaign) => {
+      totals[campaign.currency] = (totals[campaign.currency] ?? 0n) + campaign.budgetSpentMinor;
       return totals;
     }, {}) || {};
   const campaignCurrencies = Object.keys(totalBudgetByCurrency);
   const singleCurrency = campaignCurrencies.length === 1 ? campaignCurrencies[0] : null;
-  const totalBudget = singleCurrency ? totalBudgetByCurrency[singleCurrency] : 0;
-  const totalSpent = singleCurrency ? (totalSpentByCurrency[singleCurrency] ?? 0) : 0;
+  const totalBudget = singleCurrency ? totalBudgetByCurrency[singleCurrency] : 0n;
+  const totalSpent = singleCurrency ? (totalSpentByCurrency[singleCurrency] ?? 0n) : 0n;
 
   return (
     <>
@@ -174,8 +177,8 @@ export default function AdvertiserCampaignsPage() {
               value={formatCurrencyBreakdown(totalSpentByCurrency)}
               valueColor="text-brand-500"
               subtitle={
-                singleCurrency && totalBudget > 0
-                  ? `${((totalSpent / totalBudget) * 100).toFixed(1)}% used`
+                singleCurrency && totalBudget > 0n
+                  ? `${bigintRatioPercent(totalSpent, totalBudget, 1).toFixed(1)}% used`
                   : undefined
               }
             />
@@ -309,8 +312,15 @@ export default function AdvertiserCampaignsPage() {
                           className="h-full bg-brand-500 transition-all"
                           style={{
                             width:
-                              campaign.budgetTotalMinor > 0
-                                ? `${(campaign.budgetSpentMinor / campaign.budgetTotalMinor) * 100}%`
+                              campaign.budgetTotalMinor > 0n
+                                ? `${Math.min(
+                                    100,
+                                    bigintRatioPercent(
+                                      campaign.budgetSpentMinor,
+                                      campaign.budgetTotalMinor,
+                                      2,
+                                    ),
+                                  )}%`
                                 : '0%',
                           }}
                         />

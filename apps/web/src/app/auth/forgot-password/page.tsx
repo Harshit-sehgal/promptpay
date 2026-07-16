@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent,useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi } from '@/lib/api/services';
 
@@ -26,23 +26,35 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-50 px-6">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen flex items-center justify-center bg-surface-50 px-6"
+    >
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2.5 mb-10 justify-center">
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">WaitLayer</span>
+          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
+            WaitLayer
+          </span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
-          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">Reset your password</h1>
+          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
+            Reset your password
+          </h1>
           <p className="text-surface-500 text-[14px] mb-8">
             Enter your account email and we&apos;ll send you a reset link.
           </p>
 
           {error && (
-            <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5" role="alert" aria-live="polite">
+            <div
+              className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5"
+              role="alert"
+              aria-live="polite"
+            >
               <p className="text-red-600 text-[14px]">{error}</p>
             </div>
           )}
@@ -50,15 +62,26 @@ export default function ForgotPasswordPage() {
           {sent ? (
             <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
               <p className="text-emerald-700 text-[14px]">
-                If an account exists for <span className="font-medium">{email}</span>, a password reset link has
-                been sent. The link is valid for 1 hour.
+                If an account exists for <span className="font-medium">{email}</span>, a password
+                reset link has been sent. The link is valid for 1 hour.
               </p>
             </div>
           ) : (
-            <form className="space-y-5" onSubmit={handleSubmit} role="form" aria-label="Forgot password form">
+            <form
+              className="space-y-5"
+              onSubmit={handleSubmit}
+              role="form"
+              aria-label="Forgot password form"
+            >
               <div>
-                <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">Email</label>
+                <label
+                  htmlFor="forgot-password-email"
+                  className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                >
+                  Email
+                </label>
                 <input
+                  id="forgot-password-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -82,12 +105,15 @@ export default function ForgotPasswordPage() {
 
           <p className="text-surface-500 text-[14px] text-center mt-7">
             Remembered it?{' '}
-            <Link href="/auth/login" className="text-brand-500 hover:text-brand-600 font-medium transition-colors">
+            <Link
+              href="/auth/login"
+              className="text-brand-500 hover:text-brand-600 font-medium transition-colors"
+            >
               Back to sign in
             </Link>
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

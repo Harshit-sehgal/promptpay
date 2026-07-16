@@ -73,6 +73,7 @@ describe('StatusBar — state updates', () => {
     bar.showAdServing();
     bar.showIdle();
     expect(mock.item.text).toBe('$(zap) WaitLayer: idle');
+    expect(mock.item.command).toBe('waitlayer.showEarnings');
   });
 
   it('formats earnings as a dollar amount and updates the tooltip', () => {
@@ -82,6 +83,7 @@ describe('StatusBar — state updates', () => {
     bar.setEarnings(1250, 'USD');
     expect(mock.item.text).toBe('$(zap) WaitLayer: $12.50');
     expect(mock.item.tooltip).toBe('Click for balance details');
+    expect(mock.item.command).toBe('waitlayer.showEarnings');
   });
 
   it('shows the logged-out state and switches the command to login', () => {
@@ -90,7 +92,20 @@ describe('StatusBar — state updates', () => {
 
     bar.setLoggedOut();
     expect(mock.item.text).toBe('$(zap) WaitLayer: logged out');
+    expect(mock.item.tooltip).toBe('Log in to WaitLayer');
     expect(mock.item.command).toBe('waitlayer.login');
+  });
+
+  it('restores the authenticated command immediately after login', () => {
+    const bar = new StatusBar();
+    bar.register(makeContext());
+    bar.setLoggedOut();
+
+    bar.setLoggedIn();
+
+    expect(mock.item.text).toBe('$(zap) WaitLayer: idle');
+    expect(mock.item.tooltip).toBe('WaitLayer click to view earnings');
+    expect(mock.item.command).toBe('waitlayer.showEarnings');
   });
 
   it('is a no-op before registration (no created item)', () => {

@@ -25,7 +25,12 @@ export function coerceBigInts(obj: unknown): unknown {
     } else if (key.endsWith('ByCurrency') && typeof value === 'object' && value !== null) {
       const coerced: Record<string, unknown> = {};
       for (const [currency, val] of Object.entries(value)) {
-        coerced[currency] = typeof val === 'string' && /^-?\d+$/.test(val) ? BigInt(val) : val;
+        coerced[currency] =
+          typeof val === 'string' && /^-?\d+$/.test(val)
+            ? BigInt(val)
+            : typeof val === 'object' && val !== null
+              ? coerceBigInts(val)
+              : val;
       }
       result[key] = coerced;
     } else if (typeof value === 'object') {
@@ -55,6 +60,11 @@ export function serializeBigInts(obj: unknown): unknown {
   return result;
 }
 
+/** Serialize API-shaped data for downloads/logging without losing money precision. */
+export function stringifyApiData(obj: unknown, space?: number): string {
+  return JSON.stringify(serializeBigInts(obj), null, space);
+}
+
 /**
  * Axios instance for same-origin API calls via Next.js Route Handlers.
  *
@@ -74,6 +84,17 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true,
+});
+
+// Preserve 64-bit monetary values on writes. Axios eventually JSON-stringifies
+// request bodies, and native bigint values would otherwise throw before the
+// request reaches the BFF. Decimal strings are accepted by the API's bigint
+// DTO transforms and do not lose precision above Number.MAX_SAFE_INTEGER.
+api.interceptors.request.use((config) => {
+  if (config.data !== undefined) {
+    config.data = serializeBigInts(config.data);
+  }
+  return config;
 });
 
 // ── Token refresh interceptor ──

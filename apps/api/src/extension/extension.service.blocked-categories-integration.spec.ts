@@ -35,8 +35,10 @@ const financeCampaign = {
   id: 'camp-finance',
   advertiserId: 'adv-1',
   currency: 'USD',
+  bidType: 'cpm' as const,
   bidAmountMinor: 100n,
   budgetSpentMinor: 0n,
+  budgetReservedMinor: 0n,
   budgetTotalMinor: 1000n,
   frequencyCapPerHour: 0,
   frequencyCapPerDay: 0,
@@ -49,8 +51,10 @@ const gamingCampaign = {
   id: 'camp-gaming',
   advertiserId: 'adv-1',
   currency: 'USD',
+  bidType: 'cpm' as const,
   bidAmountMinor: 100n,
   budgetSpentMinor: 0n,
+  budgetReservedMinor: 0n,
   budgetTotalMinor: 1000n,
   frequencyCapPerHour: 0,
   frequencyCapPerDay: 0,
@@ -217,5 +221,49 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
 
     expect(claimSpy).not.toHaveBeenCalled();
     expect(res).toEqual({ ad: null, reason: 'no_eligible_campaign' });
+  });
+
+  it('returns no eligible campaign when the in-transaction budget reservation loses', async () => {
+    const prisma = {
+      device: {
+        findUnique: vi.fn(async () => ({
+          id: 'dev-1',
+          userId: 'user-1',
+          user: { status: 'active' },
+          eventSecret: 'secret',
+        })),
+      },
+      waitStateEvent: {
+        findFirst: vi.fn(async (args: any) =>
+          args.where.eventType === 'wait_state_start'
+            ? { id: 'ws-evt', createdAt: new Date() }
+            : null,
+        ),
+      },
+      userSettings: {
+        findUnique: vi.fn(async () => ({
+          blockedCategories: [],
+          adsEnabled: true,
+          quietMode: false,
+          timezone: 'UTC',
+        })),
+      },
+      user: { findUnique: vi.fn(async () => ({ country: null })) },
+      adImpression: { findMany: vi.fn(async () => []) },
+      campaign: { findMany: vi.fn(async () => [gamingCampaign]) },
+    } as any;
+    const { service, claimSpy } = buildService(prisma);
+    claimSpy.mockResolvedValueOnce({ status: 'budget_unavailable' });
+
+    const result = await service.requestAd('user-1', baseDto);
+
+    expect(result).toEqual({ ad: null, reason: 'no_eligible_campaign' });
+    expect(claimSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        campaignId: 'camp-gaming',
+        bidType: 'cpm',
+        bidAmountMinor: 100n,
+      }),
+    );
   });
 });

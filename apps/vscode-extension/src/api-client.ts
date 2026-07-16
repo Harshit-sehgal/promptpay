@@ -109,20 +109,23 @@ export class ApiClient {
 
     this._refreshInProgress = (async () => {
       try {
+        const refreshToken = this.currentTokens!.refreshToken!;
         // Backend returns flat { accessToken, refreshToken } — no data wrapper
         const tokens = await this.post<{ accessToken: string; refreshToken: string }>(
           '/auth/refresh',
-          { refreshToken: this.currentTokens!.refreshToken },
+          { refreshToken },
           true, // skipAuth: don't attach Authorization header for refresh itself
         );
-        // Update in-memory and persist
+        // Persist before exposing the rotated pair to requests. Otherwise a
+        // retry can succeed with the new refresh token while SecretStorage
+        // still contains the now-revoked token if the host exits immediately.
+        await this.config.storeTokens(tokens);
         this.currentTokens = tokens;
-        void this.config.storeTokens(tokens);
         return tokens;
       } catch {
         // Refresh failed — clear tokens
         this.currentTokens = null;
-        void this.config.clearTokens();
+        await this.config.clearTokens();
         return null;
       } finally {
         this._refreshInProgress = null;
@@ -330,14 +333,14 @@ export class ApiClient {
     };
   }
 
-  async promptLogin(): Promise<void> {
+  async promptLogin(): Promise<boolean> {
     const email = await vscode.window.showInputBox({ prompt: 'Email' });
-    if (!email) return;
+    if (!email) return false;
     const password = await vscode.window.showInputBox({
       prompt: 'Password',
       password: true,
     });
-    if (!password) return;
+    if (!password) return false;
 
     try {
       // First attempt: try normal login without TOTP
@@ -350,6 +353,7 @@ export class ApiClient {
         password,
       });
       await this.handleLoginSuccess(res);
+      return true;
     } catch (err) {
       // The backend emits a structured 2FA challenge ({ twoFactorRequired: true })
       // when a TOTP-protected account logs in without a code, and a generic
@@ -368,7 +372,7 @@ export class ApiClient {
         });
         if (!twoFactorToken) {
           vscode.window.showWarningMessage('WaitLayer: login cancelled — 2FA code required');
-          return;
+          return false;
         }
         try {
           const res = await this.post<{
@@ -377,13 +381,16 @@ export class ApiClient {
             user: { id: string };
           }>('/auth/login', { email, password, twoFactorToken });
           await this.handleLoginSuccess(res);
+          return true;
         } catch (err2: unknown) {
           vscode.window.showErrorMessage(
             `WaitLayer: login failed — ${getRequestErrorMessage(err2)}`,
           );
+          return false;
         }
       } else {
         vscode.window.showErrorMessage(`WaitLayer: login failed — ${getRequestErrorMessage(err)}`);
+        return false;
       }
     }
   }
@@ -393,8 +400,8 @@ export class ApiClient {
     refreshToken: string;
     user?: { id?: string };
   }): Promise<void> {
+    await this._initialized;
     const tokens = { accessToken: res.accessToken, refreshToken: res.refreshToken };
-    this.currentTokens = tokens;
 
     // ── Device registration handling across login/logout cycles ──
     // The device is bound to (userId + machine fingerprint). When the
@@ -405,35 +412,23 @@ export class ApiClient {
     // we clear the previous user's device registration so the new user
     // gets a fresh device row + event secret.
     const newUserId = res.user?.id;
+    let storedDeviceUserId: string | null = null;
     try {
-      const storedDeviceUserId = await this.config.getDeviceUserId();
-      if (newUserId && storedDeviceUserId === newUserId) {
-        // Same user → keep existing device secrets for proof-of-possession.
-      } else {
-        // Different user (or no stored userId) → clear stale device data.
-        this.deviceUUID = null;
-        this.deviceEventSecret = null;
-        this.config.clearDeviceRegistration().catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : String(e);
-          console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
-        });
-      }
+      storedDeviceUserId = await this.config.getDeviceUserId();
     } catch {
-      // SecretStorage read failed — conservative: clear device data so
-      // registration re-runs and gets a fresh secret.
+      // A failed ownership read is treated as an account switch below.
+    }
+    if (!(newUserId && storedDeviceUserId === newUserId)) {
+      // Different user, missing ownership, or a failed ownership read: clear
+      // stale device data before the new credentials become request-visible.
       this.deviceUUID = null;
       this.deviceEventSecret = null;
-      this.config.clearDeviceRegistration().catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[WaitLayer] Failed to clear device registration: ${msg}`);
-      });
+      await this.config.clearDeviceRegistration();
     }
 
-    // Persist tokens so they survive extension restarts
-    this.config.storeTokens(tokens).catch((e: unknown) => {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`[WaitLayer] Failed to persist tokens after login: ${msg}`);
-    });
+    // Persist before making the new credentials available to request callers.
+    await this.config.storeTokens(tokens);
+    this.currentTokens = tokens;
     vscode.window.showInformationMessage('WaitLayer: logged in');
   }
 
@@ -449,7 +444,7 @@ export class ApiClient {
       // provides proof-of-possession, avoiding the support-token recovery
       // wall. On a DIFFERENT-user login, handleLoginSuccess detects the
       // userId mismatch and clears the stale registration then.
-      void this.config.clearTokens();
+      await this.config.clearTokens();
     }
     vscode.window.showInformationMessage('WaitLayer: logged out');
   }

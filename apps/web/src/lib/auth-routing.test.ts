@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getDashboardPath, resolveSignupIntent } from './auth-routing';
+import { getDashboardPath, resolvePostLoginPath, resolveSignupIntent } from './auth-routing';
 
 describe('auth routing helpers', () => {
   it('resolves explicit developer signup URLs', () => {
@@ -37,5 +37,17 @@ describe('auth routing helpers', () => {
     expect(getDashboardPath('super_admin')).toBe('/admin');
     expect(getDashboardPath('developer')).toBe('/developer');
     expect(getDashboardPath(undefined)).toBe('/developer');
+  });
+
+  it('preserves only same-role, same-origin post-login destinations', () => {
+    expect(resolvePostLoginPath('developer', '/developer/earnings?page=2')).toBe(
+      '/developer/earnings?page=2',
+    );
+    expect(resolvePostLoginPath('advertiser', '/advertiser/campaigns/c-1/edit')).toBe(
+      '/advertiser/campaigns/c-1/edit',
+    );
+    expect(resolvePostLoginPath('developer', '/admin')).toBe('/developer');
+    expect(resolvePostLoginPath('developer', 'https://evil.example/')).toBe('/developer');
+    expect(resolvePostLoginPath('developer', '//evil.example/')).toBe('/developer');
   });
 });

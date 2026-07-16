@@ -11,34 +11,35 @@
 # or delete this file to fall back to the production images defined in
 # docker-compose.yml. See docs/ONBOARDING.md for details.
 #
-# Requires no extra config — just run:  docker compose up
+# Requires no persisted keys. Run `pnpm dev:docker` so one ephemeral RS256
+# pair is shared by the API and web containers for the lifetime of the command.
 
 services:
   api:
     build:
       context: .
       target: build
-    command: ["sh", "-c", "pnpm --filter waitlayer-api run dev"]
+    command: ['sh', '-c', 'pnpm --filter waitlayer-api run dev']
     environment:
       NODE_ENV: development
-      ALLOW_MOCK_GOOGLE: "true"
-      MOCK_GOOGLE_ENABLED: "1"
+      ALLOW_MOCK_GOOGLE: 'true'
+      MOCK_GOOGLE_ENABLED: '1'
     volumes:
       - ./apps/api/src:/app/apps/api/src
       - ./packages:/app/packages
     ports:
-      - "4002:4002"
+      - '4002:4002'
 
   web:
     build:
       context: .
       target: build
-    command: ["sh", "-c", "pnpm --filter waitlayer-web run dev"]
+    command: ['sh', '-c', 'pnpm --filter waitlayer-web run dev']
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_ALLOW_MOCK_AUTH: "true"
+      NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages:/app/packages
     ports:
-      - "3000:3000"
+      - '3000:3000'

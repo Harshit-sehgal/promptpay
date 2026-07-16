@@ -195,11 +195,31 @@ export function isProviderSupportedForCurrency(
  */
 export function formatMinorUnits(minorUnits: bigint, currency = 'USD'): string {
   const exponent = minorUnitExponent(currency);
-  const major = Number(minorUnits) / 10 ** exponent;
-  return new Intl.NumberFormat('en-US', {
+  const negative = minorUnits < 0n;
+  const absolute = negative ? -minorUnits : minorUnits;
+  const factor = 10n ** BigInt(exponent);
+  const whole = absolute / factor;
+  const fraction = (absolute % factor).toString().padStart(exponent, '0');
+  const groupedWhole = new Intl.NumberFormat('en-US', {
+    useGrouping: true,
+    maximumFractionDigits: 0,
+  }).format(whole);
+  const exactNumber = `${groupedWhole}${exponent > 0 ? `.${fraction}` : ''}`;
+  const parts = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: exponent,
     maximumFractionDigits: exponent,
-  }).format(major);
+  }).formatToParts(negative ? -1 : 1);
+  const numericParts = new Set(['integer', 'group', 'decimal', 'fraction']);
+  let insertedNumber = false;
+
+  return parts
+    .map((part) => {
+      if (!numericParts.has(part.type)) return part.value;
+      if (insertedNumber) return '';
+      insertedNumber = true;
+      return exactNumber;
+    })
+    .join('');
 }

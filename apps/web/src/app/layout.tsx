@@ -4,6 +4,7 @@ import './globals.css';
 import ConsentRePrompt from '@/components/consent-reprompt';
 import CookieConsent from '@/components/cookie-consent';
 import SiteFooter from '@/components/site-footer';
+import { SkipLink } from '@/components/skip-link';
 
 import { Providers } from './providers';
 
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
+        <SkipLink />
         <Providers>
           {children}
           <SiteFooter />

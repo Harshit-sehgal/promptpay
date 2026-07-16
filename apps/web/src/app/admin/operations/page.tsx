@@ -10,33 +10,36 @@ interface MoneyIntegrityReport {
   timestamp: string;
   status: 'healthy' | 'unhealthy';
   globalReconciliation: {
-    netAdvertiserSpendMinor: number;
-    netDeveloperEarningsMinor: number;
-    netPlatformFeeMinor: number;
-    netReserveMinor: number;
-    splitSumMinor: number;
-    discrepancyMinor: number;
+    netAdvertiserSpendMinor: bigint;
+    netDeveloperEarningsMinor: bigint;
+    netPlatformFeeMinor: bigint;
+    netReserveMinor: bigint;
+    splitSumMinor: bigint;
+    discrepancyMinor: bigint;
   };
-  globalReconciliationByCurrency?: Record<string, {
-    netAdvertiserSpendMinor: number;
-    netDeveloperEarningsMinor: number;
-    netPlatformFeeMinor: number;
-    netReserveMinor: number;
-    splitSumMinor: number;
-    discrepancyMinor: number;
-  }>;
+  globalReconciliationByCurrency?: Record<
+    string,
+    {
+      netAdvertiserSpendMinor: bigint;
+      netDeveloperEarningsMinor: bigint;
+      netPlatformFeeMinor: bigint;
+      netReserveMinor: bigint;
+      splitSumMinor: bigint;
+      discrepancyMinor: bigint;
+    }
+  >;
   campaignDiscrepancies: Array<{
     campaignId: string;
     campaignName: string;
-    budgetSpentMinor: number;
-    ledgerDebits: number;
-    diff: number;
+    budgetSpentMinor: bigint;
+    ledgerDebits: bigint;
+    diff: bigint;
     currency: string;
   }>;
   negativeDeveloperBalances: Array<{
     userId: string;
     email: string;
-    balanceMinor: number;
+    balanceMinor: bigint;
     currency?: string;
   }>;
 }
@@ -74,7 +77,7 @@ interface ArchiveRefundObligation {
   advertiserId: string;
   campaignId?: string | null;
   stripePaymentIntentId?: string | null;
-  amountMinor: number;
+  amountMinor: bigint;
   currency: string;
   status: string;
   description?: string | null;
@@ -93,7 +96,8 @@ interface ArchiveRefundObligation {
 }
 
 function statusClass(status: string): string {
-  if (status === 'healthy' || status === 'processed' || status === 'active') return 'text-emerald-400';
+  if (status === 'healthy' || status === 'processed' || status === 'active')
+    return 'text-emerald-400';
   if (status === 'pending' || status === 'processing') return 'text-amber-400';
   return 'text-red-400';
 }
@@ -103,13 +107,11 @@ export default function AdminOperationsPage() {
   const [tools, setTools] = useState<ToolIntegration[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookEventsResponse | null>(null);
   const [refunds, setRefunds] = useState<ArchiveRefundObligation[]>([]);
-  const [refundInputs, setRefundInputs] = useState<Record<string, string>>({});
   const [webhookStatus, setWebhookStatus] = useState('');
   const [webhookProvider, setWebhookProvider] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyTool, setBusyTool] = useState<string | null>(null);
-  const [busyRefund, setBusyRefund] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -125,17 +127,19 @@ export default function AdminOperationsPage() {
       }),
       adminApi.getPendingArchiveRefunds({ page: 1, limit: 100 }),
     ])
-      .then(([integrityRes, toolsRes, webhookRes, refundsRes]: [
-        { data: MoneyIntegrityReport },
-        { data: ToolIntegration[] },
-        { data: WebhookEventsResponse },
-        { data: { items: ArchiveRefundObligation[] } },
-      ]) => {
-        setIntegrity(integrityRes.data);
-        setTools(toolsRes.data);
-        setWebhooks(webhookRes.data);
-        setRefunds(refundsRes.data.items);
-      })
+      .then(
+        ([integrityRes, toolsRes, webhookRes, refundsRes]: [
+          { data: MoneyIntegrityReport },
+          { data: ToolIntegration[] },
+          { data: WebhookEventsResponse },
+          { data: { items: ArchiveRefundObligation[] } },
+        ]) => {
+          setIntegrity(integrityRes.data);
+          setTools(toolsRes.data);
+          setWebhooks(webhookRes.data);
+          setRefunds(refundsRes.data.items);
+        },
+      )
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load operations data')))
       .finally(() => setLoading(false));
   }, [webhookProvider, webhookStatus]);
@@ -149,39 +153,13 @@ export default function AdminOperationsPage() {
     setError(null);
     try {
       await adminApi.toggleToolIntegration(tool.slug, !tool.isActive);
-      await adminApi.getToolIntegrations().then((res: { data: ToolIntegration[] }) => setTools(res.data));
+      await adminApi
+        .getToolIntegrations()
+        .then((res: { data: ToolIntegration[] }) => setTools(res.data));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Tool toggle failed'));
     } finally {
       setBusyTool(null);
-    }
-  };
-
-  const confirmRefund = async (refund: ArchiveRefundObligation) => {
-    const stripeRef = (refundInputs[refund.id] ?? '').trim();
-    if (!stripeRef) {
-      setError('Stripe refund payment_intent id is required');
-      return;
-    }
-
-    setBusyRefund(refund.id);
-    setError(null);
-    try {
-      await adminApi.confirmArchiveRefund(refund.id, stripeRef);
-      setRefundInputs((current) => {
-        const next = { ...current };
-        delete next[refund.id];
-        return next;
-      });
-      await adminApi
-        .getPendingArchiveRefunds({ page: 1, limit: 100 })
-        .then((res: { data: { items: ArchiveRefundObligation[] } }) =>
-          setRefunds(res.data.items),
-        );
-    } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Archive refund confirmation failed'));
-    } finally {
-      setBusyRefund(null);
     }
   };
 
@@ -201,7 +179,9 @@ export default function AdminOperationsPage() {
       <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">Operations</h1>
-          <p className="text-ink-300 text-sm">Money integrity, integrations, and webhook processing</p>
+          <p className="text-ink-300 text-sm">
+            Money integrity, integrations, and webhook processing
+          </p>
         </div>
         <button
           onClick={load}
@@ -232,7 +212,9 @@ export default function AdminOperationsPage() {
               label="Global discrepancy"
               value={formatCurrencyBreakdown(globalDiscrepancyByCurrency)}
               valueColor={
-                Object.values(globalDiscrepancyByCurrency).every((amountMinor) => amountMinor === 0)
+                Object.values(globalDiscrepancyByCurrency).every(
+                  (amountMinor) => amountMinor === 0n,
+                )
                   ? 'text-emerald-400'
                   : 'text-red-400'
               }
@@ -248,10 +230,10 @@ export default function AdminOperationsPage() {
               valueColor={negativeBalances.length === 0 ? 'text-emerald-400' : 'text-red-400'}
             />
             <StatCard
-              label="Archive refunds"
+              label="Legacy refund rows"
               value={String(refunds.length)}
               valueColor={refunds.length === 0 ? 'text-emerald-400' : 'text-amber-400'}
-              subtitle="Pending confirmation"
+              subtitle="Reconciliation required"
             />
           </div>
 
@@ -262,7 +244,11 @@ export default function AdminOperationsPage() {
                 {campaignDiscrepancies.map((d) => (
                   <div key={d.campaignId} className="text-sm text-ink-200">
                     <span className="text-white">{d.campaignName}</span>
-                    <span className="text-ink-400"> · budget spent {formatCurrency(d.budgetSpentMinor, d.currency)} · ledger {formatCurrency(d.ledgerDebits, d.currency)} · diff </span>
+                    <span className="text-ink-400">
+                      {' '}
+                      · budget spent {formatCurrency(d.budgetSpentMinor, d.currency)} · ledger{' '}
+                      {formatCurrency(d.ledgerDebits, d.currency)} · diff{' '}
+                    </span>
                     <span className="text-red-300">{formatCurrency(d.diff, d.currency)}</span>
                   </div>
                 ))}
@@ -270,7 +256,9 @@ export default function AdminOperationsPage() {
                   <div key={b.userId} className="text-sm text-ink-200">
                     <span className="text-white">{b.email}</span>
                     <span className="text-ink-400"> · negative confirmed balance </span>
-                    <span className="text-red-300">{formatCurrency(b.balanceMinor, b.currency || 'USD')}</span>
+                    <span className="text-red-300">
+                      {formatCurrency(b.balanceMinor, b.currency || 'USD')}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -282,14 +270,16 @@ export default function AdminOperationsPage() {
       <section className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-white font-semibold">Archive refunds</h2>
-            <p className="text-ink-400 text-xs">Manual Stripe refund obligations from archived campaigns</p>
+            <h2 className="text-white font-semibold">Legacy archive refund rows</h2>
+            <p className="text-ink-400 text-xs">
+              Read-only anomalies; reconcile against Stripe and webhook ledgers
+            </p>
           </div>
           <span className="text-ink-400 text-xs">{refunds.length} pending</span>
         </div>
 
         {refunds.length === 0 ? (
-          <p className="text-ink-400 text-sm">No archive refund obligations are pending.</p>
+          <p className="text-ink-400 text-sm">No legacy archive refund rows require review.</p>
         ) : (
           <div className="space-y-3">
             {refunds.map((refund) => (
@@ -306,34 +296,25 @@ export default function AdminOperationsPage() {
                     </div>
                     <p className="text-ink-400 text-xs mt-1 truncate">
                       {refund.advertiser?.companyName || refund.advertiserId}
-                      {refund.advertiser?.billingEmail ? ` · ${refund.advertiser.billingEmail}` : ''}
+                      {refund.advertiser?.billingEmail
+                        ? ` · ${refund.advertiser.billingEmail}`
+                        : ''}
                     </p>
                     <p className="text-ink-500 text-xs mt-1">
                       Created {formatRelativeTime(refund.createdAt)}
-                      {refund.campaign?.archivedAt ? ` · archived ${formatRelativeTime(refund.campaign.archivedAt)}` : ''}
+                      {refund.campaign?.archivedAt
+                        ? ` · archived ${formatRelativeTime(refund.campaign.archivedAt)}`
+                        : ''}
                     </p>
                     {refund.description && (
                       <p className="text-ink-400 text-xs mt-2 line-clamp-2">{refund.description}</p>
                     )}
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2 xl:w-[28rem]">
-                    <input
-                      value={refundInputs[refund.id] ?? ''}
-                      onChange={(event) =>
-                        setRefundInputs((current) => ({ ...current, [refund.id]: event.target.value }))
-                      }
-                      placeholder="Stripe refund payment_intent"
-                      className="min-w-0 flex-1 bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-xs text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
-                    />
-                    <button
-                      onClick={() => confirmRefund(refund)}
-                      disabled={busyRefund === refund.id}
-                      className="bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg"
-                    >
-                      {busyRefund === refund.id ? 'Confirming...' : 'Confirm'}
-                    </button>
-                  </div>
+                  <p className="max-w-md text-xs text-amber-300">
+                    Do not post this row. Verify the real Stripe refund and its signed webhook
+                    ledger entries before manual reconciliation.
+                  </p>
                 </div>
               </div>
             ))}
@@ -352,9 +333,14 @@ export default function AdminOperationsPage() {
           ) : (
             <div className="space-y-3">
               {tools.map((tool) => (
-                <div key={tool.id} className="flex items-center justify-between gap-4 border border-ink-700 rounded-lg p-3">
+                <div
+                  key={tool.id}
+                  className="flex items-center justify-between gap-4 border border-ink-700 rounded-lg p-3"
+                >
                   <div className="min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{tool.name || tool.slug}</p>
+                    <p className="text-white text-sm font-medium truncate">
+                      {tool.name || tool.slug}
+                    </p>
                     <p className="text-ink-400 text-xs truncate">{tool.type || tool.slug}</p>
                   </div>
                   <button
@@ -409,16 +395,22 @@ export default function AdminOperationsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-white text-sm font-medium truncate">{event.eventType}</p>
-                      <p className="text-ink-400 text-xs truncate">{event.provider} · {event.eventId}</p>
+                      <p className="text-ink-400 text-xs truncate">
+                        {event.provider} · {event.eventId}
+                      </p>
                     </div>
                     <span className={`text-xs font-medium ${statusClass(event.processingStatus)}`}>
                       {event.processingStatus}
                     </span>
                   </div>
-                  {event.error && <p className="text-red-300 text-xs mt-2 line-clamp-2">{event.error}</p>}
+                  {event.error && (
+                    <p className="text-red-300 text-xs mt-2 line-clamp-2">{event.error}</p>
+                  )}
                   <p className="text-ink-500 text-xs mt-2">
                     Received {formatRelativeTime(event.createdAt)}
-                    {event.processedAt ? ` · processed ${formatRelativeTime(event.processedAt)}` : ''}
+                    {event.processedAt
+                      ? ` · processed ${formatRelativeTime(event.processedAt)}`
+                      : ''}
                   </p>
                 </div>
               ))}

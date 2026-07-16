@@ -40,6 +40,7 @@ const mockPrisma: any = {
   },
   payoutAccount: {
     findUnique: vi.fn(),
+    updateMany: vi.fn(),
     update: vi.fn(),
   },
   fraudFlag: {
@@ -206,61 +207,17 @@ describe('AdminService', () => {
   });
 
   describe('confirmArchiveRefund', () => {
-    it('trims the Stripe reference before writing advertiser and platform ledger rows', async () => {
-      const pendingEntry = {
-        id: 'refund-entry-1',
-        amountMinor: 1250,
-        currency: 'USD',
-        idempotencyKey: 'archive_refund_campaign-1',
-        status: 'pending',
-      };
-      const confirmedEntry = {
-        ...pendingEntry,
-        status: 'confirmed',
-        stripePaymentIntentId: 'pi_refund_123',
-      };
-      mockPrisma.advertiserLedger.findUnique
-        .mockResolvedValueOnce(pendingEntry)
-        .mockResolvedValueOnce(confirmedEntry);
-      mockPrisma.advertiserLedger.updateMany.mockResolvedValue({ count: 1 });
-      mockPrisma.platformLedger.create.mockResolvedValue({ id: 'platform-ledger-1' });
-
-      const result = await service.confirmArchiveRefund({
-        entryId: 'refund-entry-1',
-        stripeRefundPaymentIntentId: '  pi_refund_123  ',
-      });
-
-      expect(mockPrisma.advertiserLedger.updateMany).toHaveBeenCalledWith({
-        where: { id: 'refund-entry-1', status: 'pending' },
-        data: {
-          status: 'confirmed',
-          stripePaymentIntentId: 'pi_refund_123',
-        },
-      });
-      expect(mockPrisma.platformLedger.create).toHaveBeenCalledWith({
-        data: {
-          entryType: 'refund',
-          status: 'confirmed',
-          amountMinor: 1250,
-          currency: 'USD',
-          bucket: 'cash',
-          referenceId: 'pi_refund_123',
-          idempotencyKey: 'archive_refund_plat_refund-entry-1',
-          description: expect.stringContaining('pi_refund_123'),
-        },
-      });
-      expect(result).toEqual({ entry: confirmedEntry, confirmed: true });
-    });
-
-    it('rejects a blank Stripe reference before touching the ledger', async () => {
+    it('rejects legacy archive obligations without posting duplicate refund ledgers', async () => {
       await expect(
         service.confirmArchiveRefund({
           entryId: 'refund-entry-1',
-          stripeRefundPaymentIntentId: '   ',
+          stripeRefundPaymentIntentId: 'pi_refund_123',
         }),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(/campaign budgets are not escrowed/i);
 
       expect(mockPrisma.advertiserLedger.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.advertiserLedger.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.platformLedger.create).not.toHaveBeenCalled();
     });
   });
 
@@ -631,14 +588,17 @@ describe('AdminService', () => {
     });
 
     it('freezes a payout account and blocks its use', async () => {
-      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+      const account = {
         id: 'pa-1',
         isFrozen: false,
         provider: 'wise',
         destination: 'wise-dest',
         user: { id: 'u1', email: 'dev@example.com' },
-      });
-      mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isFrozen: true });
+      };
+      mockPrisma.payoutAccount.findUnique
+        .mockResolvedValueOnce(account)
+        .mockResolvedValueOnce({ ...account, isFrozen: true });
+      mockPrisma.payoutAccount.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.freezePayoutAccount(
         'admin-1',
@@ -648,9 +608,15 @@ describe('AdminService', () => {
       );
 
       expect(result.isFrozen).toBe(true);
-      expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
-        where: { id: 'pa-1' },
-        data: { isFrozen: true },
+      expect(mockPrisma.payoutAccount.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'pa-1',
+          isFrozen: false,
+          initiationPayoutId: null,
+        },
+        data: {
+          isFrozen: true,
+        },
       });
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -659,6 +625,38 @@ describe('AdminService', () => {
           afterSnap: expect.objectContaining({ reason: 'suspected takeover' }),
         }),
       );
+    });
+
+    it('returns a conflict when provider initiation holds the durable fence', async () => {
+      const activeFence = {
+        id: 'pa-1',
+        isFrozen: false,
+        initiationPayoutId: '11111111-1111-4111-8111-111111111111',
+        provider: 'wise',
+        destination: 'wise-dest',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      mockPrisma.payoutAccount.findUnique
+        .mockResolvedValueOnce(activeFence)
+        .mockResolvedValueOnce(activeFence);
+      mockPrisma.payoutAccount.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.freezePayoutAccount('admin-1', 'admin', 'pa-1', 'suspected takeover'),
+      ).rejects.toThrow('has an active or ambiguous provider initiation');
+
+      expect(mockPrisma.payoutAccount.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'pa-1',
+          isFrozen: false,
+          initiationPayoutId: null,
+        },
+        data: {
+          isFrozen: true,
+        },
+      });
+      expect(mockAudit.log).not.toHaveBeenCalled();
+      expect(mockEmail.sendPayoutAccountFrozenAlert).not.toHaveBeenCalled();
     });
 
     it('unfreezes a payout account so it can be used again', async () => {
@@ -702,6 +700,7 @@ describe('AdminService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
 
       // No update or audit emission on the conflict path.
+      expect(mockPrisma.payoutAccount.updateMany).not.toHaveBeenCalled();
       expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalled();
       expect(mockAudit.log).not.toHaveBeenCalled();
     });
@@ -725,7 +724,7 @@ describe('AdminService', () => {
     });
 
     it('fires a payout-account-frozen alert email after freezing (A-086)', async () => {
-      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+      const account = {
         id: 'pa-1',
         isFrozen: false,
         isVerified: true,
@@ -733,8 +732,11 @@ describe('AdminService', () => {
         destination: 'wise-dest',
         currency: 'USD',
         user: { id: 'u1', email: 'dev@example.com' },
-      });
-      mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isFrozen: true });
+      };
+      mockPrisma.payoutAccount.findUnique
+        .mockResolvedValueOnce(account)
+        .mockResolvedValueOnce({ ...account, isFrozen: true });
+      mockPrisma.payoutAccount.updateMany.mockResolvedValue({ count: 1 });
 
       await service.freezePayoutAccount('admin-1', 'admin', 'pa-1', 'suspected takeover');
 
@@ -761,7 +763,7 @@ describe('AdminService', () => {
     it('still completes freeze when email.send rejects (best-effort)', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       try {
-        mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        const account = {
           id: 'pa-1',
           isFrozen: false,
           isVerified: true,
@@ -769,16 +771,24 @@ describe('AdminService', () => {
           destination: 'wise-dest',
           currency: 'USD',
           user: { id: 'u1', email: 'dev@example.com' },
-        });
-        mockPrisma.payoutAccount.update.mockResolvedValue({ id: 'pa-1', isFrozen: true });
+        };
+        mockPrisma.payoutAccount.findUnique
+          .mockResolvedValueOnce(account)
+          .mockResolvedValueOnce({ ...account, isFrozen: true });
+        mockPrisma.payoutAccount.updateMany.mockResolvedValue({ count: 1 });
         mockEmail.sendPayoutAccountFrozenAlert.mockRejectedValueOnce(new Error('resend down'));
 
         await expect(
           service.freezePayoutAccount('admin-1', 'admin', 'pa-1', 'incidents'),
         ).resolves.toMatchObject({ id: 'pa-1' });
-        expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
-          where: { id: 'pa-1' },
-          data: { isFrozen: true },
+        expect(mockPrisma.payoutAccount.updateMany).toHaveBeenCalledWith({
+          where: expect.objectContaining({
+            id: 'pa-1',
+            isFrozen: false,
+          }),
+          data: {
+            isFrozen: true,
+          },
         });
         expect(mockAudit.log).toHaveBeenCalled();
         // Drain microtasks so the .catch(console.warn) runs before the spy check.

@@ -224,166 +224,175 @@ export default function ComparisonPage() {
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="pt-36 pb-16 px-6">
-        <div className="mx-auto max-w-3xl text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-            Tool & platform comparison
-          </h1>
-          <p className="text-surface-500 text-lg max-w-xl mx-auto">
-            See which tools WaitLayer supports and how we compare to other ad platforms.
-          </p>
-        </div>
-      </section>
-
-      {/* Supported tools */}
-      <section className="px-6 pb-20">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-bold text-surface-900 tracking-tight mb-3">
-            Supported tools
-          </h2>
-          <p className="text-surface-500 text-[15px] mb-8">
-            WaitLayer integrates directly into popular AI coding tools as a VS Code extension or
-            terminal CLI.
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {TOOLS.map((tool) => (
-              <div
-                key={tool.slug}
-                className="bg-white border border-surface-200/80 rounded-xl p-5 hover:shadow-sm transition-shadow"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-surface-900 font-semibold text-[15px]">{tool.name}</p>
-                  <span
-                    className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
-                      tool.status === 'live'
-                        ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
-                        : 'text-amber-600 bg-amber-50 border-amber-200'
-                    }`}
-                  >
-                    {tool.badge}
-                  </span>
-                </div>
-              </div>
-            ))}
+      <main id="main-content" tabIndex={-1}>
+        {/* Hero */}
+        <section className="pt-36 pb-16 px-6">
+          <div className="mx-auto max-w-3xl text-center">
+            <h1 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
+              Tool & platform comparison
+            </h1>
+            <p className="text-surface-500 text-lg max-w-xl mx-auto">
+              See which tools WaitLayer supports and how we compare to other ad platforms.
+            </p>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Feature matrix by tool */}
-      <section className="py-20 px-6 bg-surface-50/60">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-bold text-surface-900 tracking-tight mb-3">
-            Features by tool
-          </h2>
-          <p className="text-surface-500 text-[15px] mb-8">
-            Not all tools support every feature. Here's what's available for each integration.
-          </p>
-          <div className="overflow-hidden rounded-2xl border border-surface-200/80">
-            <table className="w-full text-[14px]">
-              <thead className="bg-surface-100">
-                <tr>
-                  <th className="text-left px-5 py-4 text-surface-600 font-medium">Feature</th>
-                  <th className="text-center px-3 py-4 text-surface-600 font-medium">VS Code</th>
-                  <th className="text-center px-3 py-4 text-surface-600 font-medium">Cursor</th>
-                  <th className="text-center px-3 py-4 text-surface-600 font-medium">Windsurf</th>
-                  <th className="text-center px-3 py-4 text-surface-600 font-medium">Cline</th>
-                  <th className="text-center px-3 py-4 text-surface-600 font-medium">
-                    Claude Code
-                  </th>
-                  <th className="text-center px-3 py-4 text-surface-600 font-medium">Terminal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-100">
-                {TOOL_FEATURES.map((f) => (
-                  <tr key={f.label} className="hover:bg-surface-50/50 transition-colors">
-                    <td className="px-5 py-4 text-surface-700">{f.label}</td>
-                    {[f.vscode, f.cursor, f.windsurf, f.cline, f.claude, f.terminal].map(
-                      (supported, i) => (
+        {/* Supported tools */}
+        <section className="px-6 pb-20">
+          <div className="mx-auto max-w-5xl">
+            <h2 className="text-2xl font-bold text-surface-900 tracking-tight mb-3">
+              Supported tools
+            </h2>
+            <p className="text-surface-500 text-[15px] mb-8">
+              WaitLayer integrates directly into popular AI coding tools as a VS Code extension or
+              terminal CLI.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {TOOLS.map((tool) => (
+                <div
+                  key={tool.slug}
+                  className="bg-white border border-surface-200/80 rounded-xl p-5 hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-surface-900 font-semibold text-[15px]">{tool.name}</p>
+                    <span
+                      className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                        tool.status === 'live'
+                          ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                          : 'text-amber-600 bg-amber-50 border-amber-200'
+                      }`}
+                    >
+                      {tool.badge}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Feature matrix by tool */}
+        <section className="py-20 px-6 bg-surface-50/60">
+          <div className="mx-auto max-w-5xl">
+            <h2 className="text-2xl font-bold text-surface-900 tracking-tight mb-3">
+              Features by tool
+            </h2>
+            <p className="text-surface-500 text-[15px] mb-8">
+              Not all tools support every feature. Here's what's available for each integration.
+            </p>
+            <div className="overflow-hidden rounded-2xl border border-surface-200/80">
+              <table className="w-full text-[14px]">
+                <thead className="bg-surface-100">
+                  <tr>
+                    <th className="text-left px-5 py-4 text-surface-600 font-medium">Feature</th>
+                    <th className="text-center px-3 py-4 text-surface-600 font-medium">VS Code</th>
+                    <th className="text-center px-3 py-4 text-surface-600 font-medium">Cursor</th>
+                    <th className="text-center px-3 py-4 text-surface-600 font-medium">Windsurf</th>
+                    <th className="text-center px-3 py-4 text-surface-600 font-medium">Cline</th>
+                    <th className="text-center px-3 py-4 text-surface-600 font-medium">
+                      Claude Code
+                    </th>
+                    <th className="text-center px-3 py-4 text-surface-600 font-medium">Terminal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-100">
+                  {TOOL_FEATURES.map((f) => (
+                    <tr key={f.label} className="hover:bg-surface-50/50 transition-colors">
+                      <td className="px-5 py-4 text-surface-700">{f.label}</td>
+                      {[f.vscode, f.cursor, f.windsurf, f.cline, f.claude, f.terminal].map(
+                        (supported, i) => (
+                          <td key={i} className="text-center px-3 py-4">
+                            <span className={supported ? 'text-emerald-500' : 'text-surface-300'}>
+                              {supported ? <IconCheck /> : <IconMinus />}
+                            </span>
+                          </td>
+                        ),
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        {/* Platform comparison */}
+        <section className="py-20 px-6">
+          <div className="mx-auto max-w-5xl">
+            <h2 className="text-2xl font-bold text-surface-900 tracking-tight mb-3">
+              How we compare
+            </h2>
+            <p className="text-surface-500 text-[15px] mb-8">
+              WaitLayer vs other ad platforms. We focus on privacy, developer trust, and AI-native
+              integrations.
+            </p>
+            <div className="overflow-hidden rounded-2xl border border-surface-200/80">
+              <table className="w-full text-[14px]">
+                <thead className="bg-surface-100">
+                  <tr>
+                    <th className="text-left px-5 py-4 text-surface-600 font-medium w-1/3">
+                      Feature
+                    </th>
+                    <th className="text-center px-3 py-4 text-brand-600 font-semibold">
+                      WaitLayer
+                    </th>
+                    <th className="text-center px-3 py-4 text-surface-400 font-medium">
+                      Carbon Ads
+                    </th>
+                    <th className="text-center px-3 py-4 text-surface-400 font-medium">Braze</th>
+                    <th className="text-center px-3 py-4 text-surface-400 font-medium">
+                      Google Ads
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-100">
+                  {PLATFORM_COMPARE.map((row) => (
+                    <tr key={row.feature} className="hover:bg-surface-50/50 transition-colors">
+                      <td className="px-5 py-4 text-surface-700">{row.feature}</td>
+                      {[row.waitlayer, row.carbon, row.braze, row.google].map((supported, i) => (
                         <td key={i} className="text-center px-3 py-4">
                           <span className={supported ? 'text-emerald-500' : 'text-surface-300'}>
                             {supported ? <IconCheck /> : <IconMinus />}
                           </span>
                         </td>
-                      ),
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Platform comparison */}
-      <section className="py-20 px-6">
-        <div className="mx-auto max-w-5xl">
-          <h2 className="text-2xl font-bold text-surface-900 tracking-tight mb-3">
-            How we compare
-          </h2>
-          <p className="text-surface-500 text-[15px] mb-8">
-            WaitLayer vs other ad platforms. We focus on privacy, developer trust, and AI-native
-            integrations.
-          </p>
-          <div className="overflow-hidden rounded-2xl border border-surface-200/80">
-            <table className="w-full text-[14px]">
-              <thead className="bg-surface-100">
-                <tr>
-                  <th className="text-left px-5 py-4 text-surface-600 font-medium w-1/3">
-                    Feature
-                  </th>
-                  <th className="text-center px-3 py-4 text-brand-600 font-semibold">WaitLayer</th>
-                  <th className="text-center px-3 py-4 text-surface-400 font-medium">Carbon Ads</th>
-                  <th className="text-center px-3 py-4 text-surface-400 font-medium">Braze</th>
-                  <th className="text-center px-3 py-4 text-surface-400 font-medium">Google Ads</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-100">
-                {PLATFORM_COMPARE.map((row) => (
-                  <tr key={row.feature} className="hover:bg-surface-50/50 transition-colors">
-                    <td className="px-5 py-4 text-surface-700">{row.feature}</td>
-                    {[row.waitlayer, row.carbon, row.braze, row.google].map((supported, i) => (
-                      <td key={i} className="text-center px-3 py-4">
-                        <span className={supported ? 'text-emerald-500' : 'text-surface-300'}>
-                          {supported ? <IconCheck /> : <IconMinus />}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* CTA */}
+        <section className="py-24 px-6 bg-brand-500">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold text-white tracking-tight mb-4">
+              Start earning with WaitLayer
+            </h2>
+            <p className="text-white/80 text-[15px] mb-8 max-w-sm mx-auto">
+              Install the extension or CLI in under 2 minutes. No credit card required.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Link
+                href="/auth/signup?role=developer"
+                className="bg-white hover:bg-surface-50 text-surface-900 font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm"
+              >
+                Sign up free →
+              </Link>
+              <Link
+                href="/pricing"
+                className="text-white/90 hover:text-white font-medium px-5 py-3 text-[15px] transition-colors"
+              >
+                View pricing
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA */}
-      <section className="py-24 px-6 bg-brand-500">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold text-white tracking-tight mb-4">
-            Start earning with WaitLayer
-          </h2>
-          <p className="text-white/80 text-[15px] mb-8 max-w-sm mx-auto">
-            Install the extension or CLI in under 2 minutes. No credit card required.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link
-              href="/auth/signup?role=developer"
-              className="bg-white hover:bg-surface-50 text-surface-900 font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm"
-            >
-              Sign up free →
-            </Link>
-            <Link
-              href="/pricing"
-              className="text-white/90 hover:text-white font-medium px-5 py-3 text-[15px] transition-colors"
-            >
-              View pricing
-            </Link>
-          </div>
-        </div>
-      </section>
+        {/* Footer */}
+      </main>
 
-      {/* Footer */}
       <footer className="py-16 px-6 border-t border-surface-200/60">
         <div className="mx-auto max-w-6xl">
           <div className="flex flex-col md:flex-row items-start justify-between gap-10">

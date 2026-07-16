@@ -26,11 +26,32 @@ export function activate(context: vscode.ExtensionContext) {
   let adTimestamps: number[] = [];
   const sessionId = crypto.randomUUID();
   let activeWaitStateId: string | null = null;
+  const waitStartPromises = new Map<string, Promise<string | null>>();
 
   // Register all commands
   const commands: vscode.Disposable[] = [
-    vscode.commands.registerCommand('waitlayer.login', () => api.promptLogin()),
-    vscode.commands.registerCommand('waitlayer.logout', () => api.logout()),
+    vscode.commands.registerCommand('waitlayer.login', async () => {
+      if (!(await api.promptLogin())) return;
+
+      // Reflect the authenticated state immediately; the balance request may
+      // still be slow or unavailable, but the command target must no longer be
+      // Login after credentials have been persisted.
+      status.setLoggedIn();
+      try {
+        const bal = await api.getBalance();
+        status.setEarnings(bal.available.amountMinor, bal.available.currency);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`WaitLayer: post-login balance refresh failed — ${msg}`);
+      }
+    }),
+    vscode.commands.registerCommand('waitlayer.logout', async () => {
+      try {
+        await api.logout();
+      } finally {
+        status.setLoggedOut();
+      }
+    }),
     vscode.commands.registerCommand('waitlayer.showEarnings', async () => {
       try {
         const bal = await api.getBalance();
@@ -58,34 +79,51 @@ export function activate(context: vscode.ExtensionContext) {
       const event = signal.event;
       activeWaitStateId = event.waitStateId;
 
-      let deviceId: string;
-      try {
-        // 1. Get or register device (obtains UUID)
-        deviceId = await api.getOrRegisterDevice();
-        const idempotencyKey = `ws-start-${event.waitStateId}`;
+      const startPromise = (async (): Promise<string | null> => {
+        try {
+          // 1. Get or register device (obtains UUID)
+          const deviceId = await api.getOrRegisterDevice();
+          const idempotencyKey = `ws-start-${event.waitStateId}`;
 
-        // 2. Register wait state start with API
-        await api.waitStateStart({
-          deviceId,
-          sessionId,
-          waitStateId: event.waitStateId,
-          toolType: 'vscode',
-          idempotencyKey,
-        });
-      } catch (err: unknown) {
-        activeWaitStateId = null;
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: failed to record wait state start — ${msg}`);
-        return; // If we can't record the start, we can't do anything else.
+          // 2. Register wait state start with API
+          await api.waitStateStart({
+            deviceId,
+            sessionId,
+            waitStateId: event.waitStateId,
+            toolType: 'vscode',
+            idempotencyKey,
+          });
+          return deviceId;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`WaitLayer: failed to record wait state start — ${msg}`);
+          return null;
+        }
+      })();
+      waitStartPromises.set(event.waitStateId, startPromise);
+
+      const deviceId = await startPromise;
+      if (waitStartPromises.get(event.waitStateId) === startPromise) {
+        waitStartPromises.delete(event.waitStateId);
       }
+      if (!deviceId) {
+        if (activeWaitStateId === event.waitStateId) activeWaitStateId = null;
+        return;
+      }
+
+      // A matching end may arrive while device registration or the start POST
+      // is in flight. The end handler waits for this promise; do not continue
+      // into ad work once that wait has already finished.
+      if (activeWaitStateId !== event.waitStateId) return;
 
       // Decouple ad request and display from wait start recording
       try {
-        if (!(await config.adsEnabled())) return;
-        if (await config.inQuietHours()) return;
+        if (!(await config.adsEnabled()) || activeWaitStateId !== event.waitStateId) return;
+        if ((await config.inQuietHours()) || activeWaitStateId !== event.waitStateId) return;
 
         // Enforce frequency cap
         const maxAdsPerHour = await config.getMaxAdsPerHour();
+        if (activeWaitStateId !== event.waitStateId) return;
         const now = Date.now();
         adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
         if (adTimestamps.length >= maxAdsPerHour) {
@@ -102,7 +140,7 @@ export function activate(context: vscode.ExtensionContext) {
           idempotencyKey: `ad-req-${event.waitStateId}`,
         });
 
-        if (ad) {
+        if (ad && activeWaitStateId === event.waitStateId) {
           adTimestamps.push(now);
           status.showAdServing();
 
@@ -112,6 +150,7 @@ export function activate(context: vscode.ExtensionContext) {
             renderedAt: new Date().toISOString(),
             idempotencyKey: `render-${ad.impressionToken}`,
           });
+          if (activeWaitStateId !== event.waitStateId) return;
 
           // 5. Show ad in panel. Track when the impression became visible
           const impressionShownAt = Date.now();
@@ -150,6 +189,15 @@ export function activate(context: vscode.ExtensionContext) {
       const event = signal.event;
       if (activeWaitStateId === event.waitStateId) {
         activeWaitStateId = null;
+        const startPromise = waitStartPromises.get(event.waitStateId);
+        const startRecorded = startPromise ? (await startPromise) !== null : true;
+        if (!startRecorded) {
+          if (activeWaitStateId === null) {
+            panel.hide();
+            status.showIdle();
+          }
+          return;
+        }
         try {
           await api.waitStateEnd({
             waitStateId: event.waitStateId,
@@ -160,8 +208,13 @@ export function activate(context: vscode.ExtensionContext) {
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`WaitLayer: failed to record wait state end — ${msg}`);
         } finally {
-          panel.hide();
-          status.showIdle();
+          // A newer wait can start while this end POST is in flight. Do not
+          // hide that wait's panel or overwrite its status when the older end
+          // request eventually settles.
+          if (activeWaitStateId === null) {
+            panel.hide();
+            status.showIdle();
+          }
         }
       }
     }

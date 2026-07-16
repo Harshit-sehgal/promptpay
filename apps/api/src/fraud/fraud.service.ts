@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import {
   FraudFlagStatus as DbFraudFlagStatus,
@@ -11,6 +16,11 @@ import { FraudFlagType, FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@waitlay
 
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { ACTIVE_FRAUD_FLAG_STATUSES, payoutFraudLockKey } from './fraud.constants';
+
+function fraudSeverityRank(severity: string): number {
+  return { low: 0, medium: 1, high: 2, critical: 3 }[severity] ?? -1;
+}
 
 @Injectable()
 export class FraudService {
@@ -443,7 +453,7 @@ export class FraudService {
     const user = await tx.user.findUnique({
       where: { id: userId },
       include: {
-        fraudFlags: { where: { status: { in: ['open', 'reviewing'] } } },
+        fraudFlags: { where: { status: { in: ACTIVE_FRAUD_FLAG_STATUSES } } },
       },
     });
     if (!user) return TRUST_SCORE.INITIAL;
@@ -584,6 +594,11 @@ export class FraudService {
     // both insert duplicate open flags.)
     const flag = await this.prisma.$transaction(async (tx) => {
       if (params.userId) {
+        // Serialize active-flag creation with payout reservation and the final
+        // pre-provider processing claim. processPayout commits its durable
+        // initiation intent before external I/O, so this lock is held only for
+        // database work and cannot inherit provider latency.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${payoutFraudLockKey(params.userId)}))`;
         // The transaction alone does not serialize a find-then-create at the
         // default isolation level. Lock the logical (user,type) key so two
         // concurrent detections cannot both observe no open flag and insert a
@@ -592,14 +607,37 @@ export class FraudService {
         const existing = await tx.fraudFlag.findFirst({
           where: {
             userId: params.userId,
-            status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] },
+            status: { in: ACTIVE_FRAUD_FLAG_STATUSES },
             flagType: params.flagType as DbFraudFlagType,
           },
         });
-        if (existing) return existing;
+        if (existing) {
+          const effectiveFlag =
+            fraudSeverityRank(params.severity) > fraudSeverityRank(existing.severity)
+              ? await tx.fraudFlag.update({
+                  where: { id: existing.id },
+                  data: { severity: params.severity as DbFraudSeverity },
+                })
+              : existing;
+          if (params.severity === FraudSeverity.CRITICAL) {
+            await tx.earningsLedger.updateMany({
+              where: {
+                userId: params.userId,
+                status: { in: ['estimated', 'pending', 'confirmed'] },
+                heldByFlagId: null,
+              },
+              data: {
+                status: 'held',
+                description: `Held: Critical fraud flag: ${params.flagType}`,
+                heldByFlagId: effectiveFlag.id,
+              },
+            });
+          }
+          return effectiveFlag;
+        }
       }
 
-      return tx.fraudFlag.create({
+      const created = await tx.fraudFlag.create({
         data: {
           userId: params.userId || undefined,
           deviceId: params.deviceId || undefined,
@@ -612,19 +650,25 @@ export class FraudService {
           scoreDelta: params.scoreDelta ?? 0,
         },
       });
+      if (params.severity === FraudSeverity.CRITICAL && params.userId) {
+        // Hold in the same transaction and under the same user advisory lock
+        // as flag creation. A resolver can therefore never release/reverse the
+        // flag and then lose a race to a late hold for that resolved flag.
+        await tx.earningsLedger.updateMany({
+          where: {
+            userId: params.userId,
+            status: { in: ['estimated', 'pending', 'confirmed'] },
+            heldByFlagId: null,
+          },
+          data: {
+            status: 'held',
+            description: `Held: Critical fraud flag: ${params.flagType}`,
+            heldByFlagId: created.id,
+          },
+        });
+      }
+      return created;
     });
-
-    // Auto-escalate: critical flags hold earnings immediately
-    if (params.severity === FraudSeverity.CRITICAL && params.userId) {
-      // Stamp heldByFlagId so the later false-positive release scopes to
-      // THIS flag only — releasing F1 must not undo holds from a still-open
-      // F2 (cross-flag money leak).
-      await this.ledger.holdEarnings(
-        params.userId,
-        `Critical fraud flag: ${params.flagType}`,
-        flag.id,
-      );
-    }
 
     // Recompute trust score on any new flag
     if (params.userId) {
@@ -635,93 +679,90 @@ export class FraudService {
   }
 
   async resolveFlag(flagId: string, reviewerId: string, isValid: boolean, reviewNote?: string) {
-    // First read to verify the flag exists and capture its identity fields
-    // (userId, impressionId, flagType) so they survive a concurrent overwrite.
-    const flag = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
-    if (!flag) throw new NotFoundException('Fraud flag not found');
-
-    // Re-resolution guard: only open/reviewing flags may be resolved.
-    // A concurrent admin resolving the same flag sees count === 0 (already
-    // resolved) and throws. This prevents:
-    //  1. reviewerId/reviewNote overwrite (audit attribution stolen)
-    //  2. Double releaseEarnings() — bulk release of *all* the user's held
-    //     earnings, potentially including NEW holds created under different
-    //     flags between the two resolution attempts.
-    // The authoritative state guard is the conditional updateMany.
+    // Read the owner first so resolution can acquire the same user-scoped lock
+    // as createFlag and payout authorization. Identity fields are re-read after
+    // the lock is held; this outer snapshot is used only to select the lock.
+    const snapshot = await this.prisma.fraudFlag.findUnique({ where: { id: flagId } });
+    if (!snapshot) throw new NotFoundException('Fraud flag not found');
     const newStatus = isValid
       ? DbFraudFlagStatus.resolved_valid
       : DbFraudFlagStatus.resolved_invalid;
+    const flag = await this.prisma.$transaction(
+      async (tx) => {
+        if (snapshot.userId) {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${payoutFraudLockKey(snapshot.userId)}))`;
+        }
+        const current = await tx.fraudFlag.findUnique({ where: { id: flagId } });
+        if (!current) throw new NotFoundException('Fraud flag not found');
 
-    let claimed = false;
-    if (flag.status === DbFraudFlagStatus.open || flag.status === DbFraudFlagStatus.reviewing) {
-      const result = await this.prisma.fraudFlag.updateMany({
-        where: {
-          id: flagId,
-          status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] },
-        },
-        data: {
-          status: newStatus,
-          reviewerId,
-          reviewNote,
-          resolvedAt: new Date(),
-        },
-      });
-      claimed = result.count === 1;
-    }
+        // A payout that already crossed processPayout's lock may have an
+        // irreversible provider outcome in flight. Keep the flag active until
+        // paid/failed so reversal can choose paid recovery debt vs. an unpaid
+        // ledger reversal without guessing at the remote outcome.
+        if (isValid && (current.clickId || current.impressionId)) {
+          const inFlightAllocations = await tx.payoutAllocation.count({
+            where: {
+              payoutRequest: { status: 'processing' },
+              earningsEntry: current.clickId
+                ? { clickId: current.clickId }
+                : { impressionId: current.impressionId },
+            },
+          });
+          if (inFlightAllocations > 0) {
+            throw new ConflictException(
+              'Fraud confirmation is waiting for an in-flight payout to settle; reconcile the payout and retry',
+            );
+          }
+        }
 
-    if (!claimed && flag.status !== newStatus) {
-      const existing = await this.prisma.fraudFlag.findUnique({
-        where: { id: flagId },
-        select: { status: true },
-      });
-      // A concurrent resolver may have completed the same decision after our
-      // snapshot. Treat that as a retryable replay; opposite decisions remain
-      // rejected and never run money compensation.
-      if (existing?.status === newStatus) {
-        claimed = false;
-      } else {
-        throw new BadRequestException(
-          existing
-            ? `Fraud flag cannot be resolved from status '${existing.status}'`
-            : 'Fraud flag not found',
-        );
-      }
-    }
+        let claimed = false;
+        if (ACTIVE_FRAUD_FLAG_STATUSES.includes(current.status)) {
+          const result = await tx.fraudFlag.updateMany({
+            where: { id: flagId, status: { in: ACTIVE_FRAUD_FLAG_STATUSES } },
+            data: { status: newStatus, reviewerId, reviewNote, resolvedAt: new Date() },
+          });
+          claimed = result.count === 1;
+        }
+        if (!claimed && current.status !== newStatus) {
+          const existing = await tx.fraudFlag.findUnique({
+            where: { id: flagId },
+            select: { status: true },
+          });
+          if (existing?.status !== newStatus) {
+            throw new BadRequestException(
+              existing
+                ? `Fraud flag cannot be resolved from status '${existing.status}'`
+                : 'Fraud flag not found',
+            );
+          }
+        }
 
-    // If flag was valid (fraud confirmed) and user has held earnings,
-    // reverse the matching earnings entries — at the impressionId scope,
-    // the clickId scope, or the user-scope (flag-level fraud without a
-    // specific entity reference). clickId wins over impressionId when
-    // both are populated because click-level money is the finer-grained
-    // movement; the impression's earnings flip still happens because the
-    // click row itself carries the impression FK.
-    if (isValid && flag.userId) {
-      if (flag.clickId || flag.impressionId) {
-        await this.ledger.reverseEarnings(
-          { impressionId: flag.impressionId ?? undefined, clickId: flag.clickId ?? undefined },
-          `Fraud confirmed: ${flag.flagType}`,
-        );
-      }
-      // NOTE: a user-level flag (neither impressionId nor clickId) is a
-      // bulk-pattern detection (e.g. SUSPICIOUS_CTR across many
-      // impressions). The matching earnings are held at flag time and
-      // *released* on the !isValid branch below; reversing individual
-      // entries without per-entity context is out of scope and would
-      // require per-impression/click forensic-level resolution. Ops
-      // should treat such flags as "soft fraud" — the user is held but
-      // no specific entry is unwound unless flagged at entity resolution.
-    } else if (!isValid && flag.userId) {
-      // False positive — release the holds scoped to THIS flag. Scope by
-      // impression when the flag links to a specific impression; otherwise
-      // by flagId (matches the `heldByFlagId` stamp set in holdEarnings).
-      // NEVER bulk-release every held entry across the user's flags — that
-      // would undo holds from a still-open, unrelated concurrent flag
-      // (cross-flag money leak).
-      await this.ledger.releaseEarnings(flag.userId, {
-        impressionId: flag.impressionId ?? undefined,
-        flagId: flag.id,
-      });
-    }
+        // Keep the user lock until ledger side effects finish. createFlag's
+        // hold is in its matching locked transaction, so a resolved flag can
+        // never receive a late hold after its release/reversal completes.
+        if (isValid && current.userId && (current.clickId || current.impressionId)) {
+          await this.ledger.reverseEarnings(
+            {
+              impressionId: current.impressionId ?? undefined,
+              clickId: current.clickId ?? undefined,
+            },
+            `Fraud confirmed: ${current.flagType}`,
+            tx,
+          );
+        } else if (!isValid && current.userId) {
+          await this.ledger.releaseEarnings(
+            current.userId,
+            {
+              impressionId: current.impressionId ?? undefined,
+              flagId: current.id,
+            },
+            tx,
+          );
+        }
+        return current;
+      },
+      { timeout: 30_000 },
+    );
 
     // Recompute trust score after resolution
     if (flag.userId) {
@@ -782,7 +823,7 @@ export class FraudService {
 
   async getOpenFlags(page = 1, limit = 20, severity?: string) {
     const where: Prisma.FraudFlagWhereInput = {
-      status: { in: [DbFraudFlagStatus.open, DbFraudFlagStatus.reviewing] },
+      status: { in: ACTIVE_FRAUD_FLAG_STATUSES },
     };
     if (severity) where.severity = severity as DbFraudSeverity;
 

@@ -66,7 +66,10 @@ const prismaRef = mockPrisma as any;
 // $transaction. The real AuditService queues/buffers on failure; in these
 // unit tests we only need the call to not throw and not block. `log` resolves
 // undefined so any accidental `await` of the voided promise still behaves.
-const mockAudit = { log: vi.fn().mockResolvedValue(undefined) } as any;
+const mockAudit = {
+  log: vi.fn().mockResolvedValue(undefined),
+  logStrict: vi.fn().mockResolvedValue(undefined),
+} as any;
 
 describe('LedgerService', () => {
   let service: LedgerService;
@@ -96,6 +99,42 @@ describe('LedgerService', () => {
       const result = service.calculateSplit(100n, false);
       // 100 cents: user=60, platform=30, reserve=10
       expect(result.userShare + result.platformShare + result.reserveShare).toBe(100n);
+    });
+  });
+
+  describe('releaseEarnings', () => {
+    it('releases every row stamped by the resolved flag and leaves other flags held', async () => {
+      const rows = [
+        { id: 'earn-1', userId: 'u-1', impressionId: 'imp-1', status: 'held', heldByFlagId: 'F1' },
+        { id: 'earn-2', userId: 'u-1', impressionId: 'imp-2', status: 'held', heldByFlagId: 'F1' },
+        { id: 'earn-3', userId: 'u-1', impressionId: 'imp-1', status: 'held', heldByFlagId: 'F2' },
+      ];
+      mockPrisma.earningsLedger.updateMany.mockImplementation(async ({ where, data }) => {
+        let count = 0;
+        for (const row of rows) {
+          if (
+            row.userId === where.userId &&
+            row.status === where.status &&
+            row.heldByFlagId === where.heldByFlagId
+          ) {
+            Object.assign(row, data);
+            count += 1;
+          }
+        }
+        return { count };
+      });
+
+      await service.releaseEarnings('u-1', { impressionId: 'imp-1', flagId: 'F1' });
+
+      expect(rows).toEqual([
+        expect.objectContaining({ id: 'earn-1', status: 'confirmed', heldByFlagId: null }),
+        expect.objectContaining({ id: 'earn-2', status: 'confirmed', heldByFlagId: null }),
+        expect.objectContaining({ id: 'earn-3', status: 'held', heldByFlagId: 'F2' }),
+      ]);
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u-1', heldByFlagId: 'F1', status: 'held' },
+        data: { status: 'confirmed', heldByFlagId: null },
+      });
     });
   });
 
@@ -482,7 +521,7 @@ describe('LedgerService', () => {
         currency: 'USD',
         idempotencyKey: `imp-${impressionId}-res`,
       });
-      mockPrisma.earningsLedger.count.mockResolvedValueOnce(0);
+      mockPrisma.earningsLedger.findMany.mockResolvedValueOnce([]);
       // Inside the transaction: 1 earnings row flipped.
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 1 });
       // All three upserts are new (no prior replay).
@@ -513,10 +552,11 @@ describe('LedgerService', () => {
       expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
         where: {
           impressionId,
-          status: { in: ['estimated', 'pending', 'confirmed'] },
+          status: { in: ['estimated', 'pending', 'confirmed', 'held'] },
         },
         data: expect.objectContaining({
           status: 'reversed',
+          heldByFlagId: null,
           description: 'Reversed: click_abuse',
         }),
       });
@@ -578,7 +618,7 @@ describe('LedgerService', () => {
       });
       mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null); // no plt row
       mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null); // no res row
-      mockPrisma.earningsLedger.count.mockResolvedValueOnce(0);
+      mockPrisma.earningsLedger.findMany.mockResolvedValueOnce([]);
       // Replay: earnings already reversed, no rows match the status filter.
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
@@ -608,8 +648,8 @@ describe('LedgerService', () => {
       });
       mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null);
       mockPrisma.platformLedger.findUnique.mockResolvedValueOnce(null);
-      // 2 rows already in `paid` — can't be reversed by this method.
-      mockPrisma.earningsLedger.count.mockResolvedValueOnce(2);
+      // 2 rows already in `paid` — can't be reversed by this method. The
+      // service discovers them inside the same transaction as the reversal.
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.earningsLedger.findMany.mockResolvedValueOnce([
         {
@@ -637,6 +677,7 @@ describe('LedgerService', () => {
       const result = await service.reverseEarnings({ impressionId });
 
       expect(result.paidSkipped).toBe(2);
+      expect(mockPrisma.earningsLedger.count).not.toHaveBeenCalled();
       expect(mockPrisma.earningsLedger.upsert).toHaveBeenCalledTimes(2);
       expect(mockPrisma.earningsLedger.upsert).toHaveBeenCalledWith({
         where: { idempotencyKey: `imp-${impressionId}-paid-debt-earn-paid-1` },
@@ -691,7 +732,7 @@ describe('LedgerService', () => {
         currency: 'USD',
         idempotencyKey: `clk-${clickId}-res`,
       });
-      mockPrisma.earningsLedger.count.mockResolvedValueOnce(0);
+      mockPrisma.earningsLedger.findMany.mockResolvedValueOnce([]);
       // Earnings row flipped by clickId, not impressionId.
       mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.advertiserLedger.upsert.mockResolvedValue({});
@@ -717,7 +758,7 @@ describe('LedgerService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             clickId,
-            status: { in: ['estimated', 'pending', 'confirmed'] },
+            status: { in: ['estimated', 'pending', 'confirmed', 'held'] },
           }),
         }),
       );

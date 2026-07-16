@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   type CampaignActionState,
+  clampCampaignPage,
   getCampaignActions,
   getCampaignRejectionMessage,
 } from './campaign-actions';
+
+describe('campaign pagination', () => {
+  it('clamps a filtered page after a mutation removes its last row', () => {
+    expect(clampCampaignPage(2, 20, 20)).toBe(1);
+    expect(clampCampaignPage(2, 21, 20)).toBe(2);
+  });
+});
 
 // A-020: Advertiser campaign Pause/Resume/Edit actions must be shown only for
 // the matching status. The visibility logic lives in the pure `getCampaignActions`
@@ -21,9 +29,9 @@ function campaign(
     name: 'Campaign',
     status,
     bidType: 'cpm',
-    bidAmountMinor: 0,
-    budgetTotalMinor: 0,
-    budgetSpentMinor: 0,
+    bidAmountMinor: 0n,
+    budgetTotalMinor: 0n,
+    budgetSpentMinor: 0n,
     currency: 'USD',
     impressions: 0,
     clicks: 0,

@@ -271,10 +271,43 @@ export class AdminPayoutsTrait {
     // no-op (which leaves operators unsure if the action took effect) and
     // matches the strict state-machine guards in approvePayout/rejectPayout.
     if (account.isFrozen) throw new ConflictException('Payout account is already frozen');
-    const updated = await this.prisma.payoutAccount.update({
-      where: { id: payoutAccountId },
-      data: { isFrozen: true },
+    // Race the provider-initiation path with one conditional update on the same
+    // account row. A durable payout-id fence represents an initiation that must
+    // be reconciled before the destination can be frozen; it never expires
+    // underneath a paused worker.
+    const freeze = await this.prisma.payoutAccount.updateMany({
+      where: {
+        id: payoutAccountId,
+        isFrozen: false,
+        initiationPayoutId: null,
+      },
+      data: {
+        isFrozen: true,
+      },
     });
+    if (freeze.count === 0) {
+      const current = await this.prisma.payoutAccount.findUnique({
+        where: { id: payoutAccountId },
+        select: {
+          isFrozen: true,
+          initiationPayoutId: true,
+        },
+      });
+      if (!current) throw new NotFoundException('Payout account not found');
+      if (current.isFrozen) {
+        throw new ConflictException('Payout account is already frozen');
+      }
+      if (current.initiationPayoutId) {
+        throw new ConflictException(
+          `Payout ${current.initiationPayoutId} has an active or ambiguous provider initiation; reconcile it before freezing this destination`,
+        );
+      }
+      throw new ConflictException('Payout account changed concurrently; retry the freeze');
+    }
+    const updated = await this.prisma.payoutAccount.findUnique({
+      where: { id: payoutAccountId },
+    });
+    if (!updated) throw new NotFoundException('Payout account not found');
     await this.audit.log({
       actorId: reviewerId,
       actorRole: reviewerRole,

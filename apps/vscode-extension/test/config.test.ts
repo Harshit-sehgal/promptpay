@@ -147,6 +147,24 @@ describe('ConfigurationManager — token storage', () => {
     await mgr.clearTokens();
     expect(await mgr.getTokens()).toBeNull();
   });
+
+  it('propagates token persistence failures to the auth caller', async () => {
+    const failure = new Error('secret store unavailable');
+    const secrets = makeSecrets();
+    vi.mocked(secrets.store).mockRejectedValueOnce(failure);
+    const mgr = new ConfigurationManager(secrets);
+
+    await expect(mgr.storeTokens({ accessToken: 'a', refreshToken: 'r' })).rejects.toBe(failure);
+  });
+
+  it('propagates token deletion failures to the logout caller', async () => {
+    const failure = new Error('secret delete unavailable');
+    const secrets = makeSecrets();
+    vi.mocked(secrets.delete).mockRejectedValueOnce(failure);
+    const mgr = new ConfigurationManager(secrets);
+
+    await expect(mgr.clearTokens()).rejects.toBe(failure);
+  });
 });
 
 describe('ConfigurationManager — device fingerprint', () => {
@@ -160,5 +178,17 @@ describe('ConfigurationManager — device fingerprint', () => {
     const second = await mgr.getDeviceFingerprint();
     expect(second).toBe(first);
     expect(mock.secrets['waitlayer.deviceFingerprint']).toBe(first);
+  });
+});
+
+describe('ConfigurationManager — device registration storage', () => {
+  it('attempts every cleanup key and then propagates a deletion failure', async () => {
+    const failure = new Error('secret delete unavailable');
+    const secrets = makeSecrets();
+    vi.mocked(secrets.delete).mockRejectedValueOnce(failure);
+    const mgr = new ConfigurationManager(secrets);
+
+    await expect(mgr.clearDeviceRegistration()).rejects.toBe(failure);
+    expect(secrets.delete).toHaveBeenCalledTimes(3);
   });
 });

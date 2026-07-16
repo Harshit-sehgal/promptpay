@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
-import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
+import { bigintRatioPercent, formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 
 import { CURRENCY_POLICY } from '@waitlayer/shared';
 
@@ -18,10 +18,10 @@ interface DailyPoint {
   signups: number;
   developerSignups: number;
   advertiserSignups: number;
-  estimatedRevenueMinor: number;
-  confirmedRevenueMinor: number;
-  paidRevenueMinor: number;
-  advertiserSpendMinor: number;
+  estimatedRevenueMinor: bigint;
+  confirmedRevenueMinor: bigint;
+  paidRevenueMinor: bigint;
+  advertiserSpendMinor: bigint;
 }
 
 interface MetricsData {
@@ -32,10 +32,10 @@ interface MetricsData {
     impressions: number;
     billableImpressions: number;
     signups: number;
-    estimatedRevenueMinor: number;
-    confirmedRevenueMinor: number;
-    paidRevenueMinor: number;
-    advertiserSpendMinor: number;
+    estimatedRevenueMinor: bigint;
+    confirmedRevenueMinor: bigint;
+    paidRevenueMinor: bigint;
+    advertiserSpendMinor: bigint;
   };
   vsPreviousPeriod: {
     impressionsChangePct: number | null;
@@ -44,8 +44,8 @@ interface MetricsData {
   };
   activeUsers: { developers: number; advertisers: number; admins: number; total: number };
   campaigns: { byStatus: { status: string; count: number }[]; total: number };
-  payouts: { total: number; pending: number; totalPaidMinor: number };
-  platformRevenue: { platformFeeMinor: number; fraudReserveMinor: number; totalMinor: number };
+  payouts: { total: number; pending: number; totalPaidMinor: bigint };
+  platformRevenue: { platformFeeMinor: bigint; fraudReserveMinor: bigint; totalMinor: bigint };
 }
 
 // ── Date helpers ──
@@ -68,18 +68,21 @@ function MiniBar({
   maxValue,
   color,
 }: {
-  values: number[];
-  maxValue: number;
+  values: Array<bigint | number>;
+  maxValue: bigint | number;
   color: string;
 }) {
-  const max = Math.max(maxValue, 1);
+  const max = BigInt(maxValue) > 0n ? BigInt(maxValue) : 1n;
   return (
     <div className="flex items-end gap-[2px] h-8">
       {values.map((v, i) => (
         <div
           key={i}
           className={`w-[6px] rounded-t-sm transition-all duration-200 ${color}`}
-          style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? '2px' : '0' }}
+          style={{
+            height: `${Math.min(100, bigintRatioPercent(v, max, 2))}%`,
+            minHeight: BigInt(v) > 0n ? '2px' : '0',
+          }}
         />
       ))}
     </div>
@@ -119,11 +122,21 @@ export default function AdminMetricsPage() {
     [data],
   );
   const maxRevenue = useMemo(
-    () => Math.max(...(data?.daily.map((d) => d.estimatedRevenueMinor) ?? [1]), 1),
+    () =>
+      data?.daily.reduce(
+        (maximum, point) =>
+          point.estimatedRevenueMinor > maximum ? point.estimatedRevenueMinor : maximum,
+        1n,
+      ) ?? 1n,
     [data],
   );
   const maxSpend = useMemo(
-    () => Math.max(...(data?.daily.map((d) => d.advertiserSpendMinor) ?? [1]), 1),
+    () =>
+      data?.daily.reduce(
+        (maximum, point) =>
+          point.advertiserSpendMinor > maximum ? point.advertiserSpendMinor : maximum,
+        1n,
+      ) ?? 1n,
     [data],
   );
 

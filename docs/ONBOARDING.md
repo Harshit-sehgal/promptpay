@@ -29,16 +29,20 @@ openssl rand -base64 48   # use for JWT_SECRET (>= 32 chars)
 ## 2. Start infrastructure
 
 ```sh
-docker compose up -d      # postgres (:5432) + redis (:6379) + api (:4002) + web (:3000)
+docker compose up -d postgres redis  # Postgres (:5432) + Redis (:6379)
 ```
 
-This builds the production images. For **hot reload** (mounts source, runs dev
-scripts, enables mock Google sign-in), the repo ships `docker-compose.override.yml`
-which Compose loads automatically:
+For the complete **hot-reload** stack (source mounts, dev scripts, and mock
+Google sign-in), use the wrapper. It generates one ephemeral RS256 pair in
+memory and shares it with the API and web containers; no private key is written
+to the repository:
 
 ```sh
-docker compose up         # override is auto-applied -> source-mounted dev servers
+pnpm dev:docker
 ```
+
+Direct production-image builds intentionally require `JWT_PUBLIC_KEY` and must
+exclude the local override: `docker compose -f docker-compose.yml build`.
 
 See `docs/ENV_REFERENCE.md` for every variable and `.env.example` for defaults.
 

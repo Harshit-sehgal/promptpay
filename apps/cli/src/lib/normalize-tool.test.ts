@@ -61,4 +61,8 @@ describe('formatCurrency', () => {
   it('formats with explicit currency symbol (e.g. EUR)', () => {
     expect(formatCurrency(1250, 'EUR')).toBe('€12.50');
   });
+
+  it('formats exact decimal strings above Number.MAX_SAFE_INTEGER', () => {
+    expect(formatCurrency('9007199254740993', 'USD')).toBe('$90,071,992,547,409.93');
+  });
 });

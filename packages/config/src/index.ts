@@ -88,7 +88,8 @@ const envSchema = z
     // Tokens carry a `kid` header; verification selects the matching key from
     // this set (plus JWT_PUBLIC_KEY). During rotation, set JWT_PRIVATE_KEY/
     // JWT_PUBLIC_KEY to the new pair and list the previous public key here so
-    // pre-rotation access tokens keep verifying until they expire (~15m).
+    // pre-rotation access and refresh tokens keep verifying until the longest
+    // token lifetime has elapsed (JWT_REFRESH_TTL by default).
     JWT_PUBLIC_KEYS: z.string().optional(),
     // Standard JWT issuer/audience. Defaults keep dev/test simple while
     // allowing production to pin tokens to a concrete deployment.
@@ -140,7 +141,7 @@ const envSchema = z
     // Operator alert recipient for system-generated security/financial alerts
     // (money-integrity drift, payout-account freeze, etc.). If unset, alerts
     // are only logged (dev); production must set this to a monitored mailbox.
-    OPS_ALERT_EMAIL: z.string().optional(),
+    OPS_ALERT_EMAIL: z.email().optional(),
     RESEND_API_KEY: z.string().optional(),
     EMAIL_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(10_000),
 
@@ -270,6 +271,14 @@ const envSchema = z
   .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.PRIVACY_HASH_KEY), {
     message: 'PRIVACY_HASH_KEY is required in production and must be at least 32 characters.',
     path: ['PRIVACY_HASH_KEY'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.EMAIL_QUEUE_SECRET), {
+    message: 'EMAIL_QUEUE_SECRET is required in production and must be at least 32 characters.',
+    path: ['EMAIL_QUEUE_SECRET'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.OPS_ALERT_EMAIL), {
+    message: 'OPS_ALERT_EMAIL is required in production for financial and security alerts.',
+    path: ['OPS_ALERT_EMAIL'],
   })
   .refine(
     (env) =>

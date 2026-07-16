@@ -174,7 +174,7 @@ export default function AdminFraudPage() {
     setError(null);
 
     const params: Record<string, unknown> = { page, limit: 25 };
-    if (tab === 'open') params.status = 'open,reviewing';
+    if (tab === 'open') params.status = 'open,reviewing,escalated';
     if (tab === 'resolved') params.status = 'resolved_valid,resolved_invalid';
     if (severityFilter) params.severity = severityFilter;
     if (flagTypeFilter) params.flagType = flagTypeFilter;
@@ -269,7 +269,9 @@ export default function AdminFraudPage() {
     return { byStatus, bySeverity, escalationRate, avgResolutionMinutes, resolvedLast7d };
   }, [stats]);
 
-  const openCount = stats?.byStatus.open ?? 0;
+  const activeCount = stats
+    ? stats.byStatus.open + stats.byStatus.reviewing + stats.byStatus.escalated
+    : 0;
 
   // ── Render ──
 
@@ -400,7 +402,7 @@ export default function AdminFraudPage() {
               tab === 'open' ? 'bg-brand-500 text-white' : 'text-ink-300 hover:text-white'
             }`}
           >
-            Open flags {openCount > 0 && `(${openCount})`}
+            Active flags {activeCount > 0 && `(${activeCount})`}
           </button>
           <button
             onClick={() => setTab('resolved')}
@@ -485,7 +487,7 @@ export default function AdminFraudPage() {
         <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
           <p className="text-ink-400 text-sm">
             {tab === 'open'
-              ? 'No open fraud flags. The queue is clean.'
+              ? 'No active fraud flags. The queue is clean.'
               : 'No resolved flags found matching your filters.'}
           </p>
         </div>
@@ -494,14 +496,17 @@ export default function AdminFraudPage() {
           {/* Flag list */}
           <div className="space-y-3">
             {flags.map((flag) => {
-              const isOpen = flag.status === 'open' || flag.status === 'reviewing';
+              const isActive =
+                flag.status === 'open' ||
+                flag.status === 'reviewing' ||
+                flag.status === 'escalated';
               const isExpanded = expandedFlag === flag.id;
 
               return (
                 <div
                   key={flag.id}
                   className={`bg-ink-800 border rounded-xl transition-all ${
-                    isOpen ? severityColor(flag.severity) : 'border-ink-600/30 opacity-80'
+                    isActive ? severityColor(flag.severity) : 'border-ink-600/30 opacity-80'
                   }`}
                 >
                   {/* Flag header */}
@@ -610,7 +615,7 @@ export default function AdminFraudPage() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-2 pt-1">
-                        {isOpen && (
+                        {isActive && (
                           <>
                             <button
                               onClick={() => setNoteModal({ id: flag.id, decision: 'invalid' })}
@@ -619,13 +624,15 @@ export default function AdminFraudPage() {
                             >
                               Mark invalid
                             </button>
-                            <button
-                              onClick={() => handleEscalate(flag.id)}
-                              disabled={resolving === flag.id}
-                              className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
-                            >
-                              {resolving === flag.id ? 'Escalating...' : 'Escalate'}
-                            </button>
+                            {flag.status !== 'escalated' && (
+                              <button
+                                onClick={() => handleEscalate(flag.id)}
+                                disabled={resolving === flag.id}
+                                className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                              >
+                                {resolving === flag.id ? 'Escalating...' : 'Escalate'}
+                              </button>
+                            )}
                             <button
                               onClick={() => handleResolve(flag.id, 'confirmed')}
                               disabled={resolving === flag.id}

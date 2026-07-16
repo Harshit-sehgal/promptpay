@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
@@ -11,6 +11,8 @@ import { AdvertiserProfileTrait } from './advertiser-profile.trait';
 
 @Injectable()
 export class AdvertiserService {
+  readonly logger = new Logger(AdvertiserService.name);
+
   constructor(
     public prisma: PrismaService,
     public campaignService: CampaignService,

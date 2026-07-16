@@ -1,7 +1,6 @@
 import { errors, importSPKI, jwtVerify } from 'jose';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { validateWebEnv } from '@/lib/web-env';
 
 const PROTECTED_PREFIXES = ['/developer', '/advertiser', '/admin'];
 
@@ -46,50 +45,79 @@ const STATIC_CACHEABLE_PATHS = [
  */
 
 /**
- * Resolve the JWT signing secret for Edge middleware.
+ * Resolve the JWT verification keys for Edge middleware.
  *
  * Unlike the NestJS API (Node runtime, reads env at process start), Next.js
- * Edge middleware inlines `process.env` values at *build* time. A secret that
+ * Edge middleware inlines `process.env` values at *build* time. A value that
  * is only injected at container/serverless *runtime* therefore appears as
- * `undefined` here. We require a non-trivial secret and return `null` when it
- * is missing/unsafe so callers fail closed (redirect to login) instead of
- * verifying tokens against a bogus `"undefined"` key.
+ * `undefined` here. `JWT_PUBLIC_KEY` is the current signing key and
+ * `JWT_PUBLIC_KEYS` carries additional accepted keys during rotation. Both must
+ * be build inputs so old and new sessions overlap for the longest token TTL.
  */
-let cachedRawKey: string | undefined;
-let cachedPublicKeyPromise: Promise<CryptoKey | null> | undefined;
+let cachedRawKeySet: string | undefined;
+let cachedPublicKeysPromise: Promise<CryptoKey[]> | undefined;
 
-async function getJwtPublicKey(): Promise<CryptoKey | null> {
-  const raw = process.env.JWT_PUBLIC_KEY;
-  if (!raw) {
+function splitPublicKeys(raw: string): string[] {
+  const normalized = raw.replace(/\\n/g, '\n').trim();
+  if (!normalized) return [];
+  const blocks = normalized.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g);
+  return (blocks ?? [normalized]).map((pem) => pem.trim());
+}
+
+async function getJwtPublicKeys(): Promise<CryptoKey[]> {
+  const primary = process.env.JWT_PUBLIC_KEY ?? '';
+  const additional = process.env.JWT_PUBLIC_KEYS ?? '';
+  const rawKeySet = `${primary}\u0000${additional}`;
+  const pems = [...new Set([...splitPublicKeys(primary), ...splitPublicKeys(additional)])];
+
+  if (pems.length === 0) {
     if (process.env.NODE_ENV === 'production') {
       console.error(
-        '[waitlayer] JWT_PUBLIC_KEY is missing in the web middleware. ' +
-          'It must be present at build time (Edge runtime inlines env vars). ' +
+        '[waitlayer] JWT_PUBLIC_KEY/JWT_PUBLIC_KEYS are missing in the web middleware. ' +
+          'Verification keys must be present at build time (Edge runtime inlines env vars). ' +
           'All protected routes will fail closed.',
       );
     }
-    return null;
+    return [];
   }
-  // Cache the imported key across requests in the same Edge runtime invocation.
-  // The env var is inlined at build time, so the cached key remains valid.
-  // If the raw key ever changes (e.g., in tests), invalidate the cache.
-  if (!cachedPublicKeyPromise || cachedRawKey !== raw) {
-    cachedRawKey = raw;
-    cachedPublicKeyPromise = importSPKI(raw.replace(/\\n/g, '\n'), 'RS256').catch((err) => {
-      console.error('[waitlayer] JWT_PUBLIC_KEY is invalid SPKI/PEM:', err);
-      return null;
-    });
+
+  if (!cachedPublicKeysPromise || cachedRawKeySet !== rawKeySet) {
+    cachedRawKeySet = rawKeySet;
+    cachedPublicKeysPromise = Promise.all(
+      pems.map(async (pem) => {
+        try {
+          return await importSPKI(pem, 'RS256');
+        } catch (err) {
+          console.error('[waitlayer] JWT verification key is invalid SPKI/PEM:', err);
+          return null;
+        }
+      }),
+    ).then((keys) => keys.filter((key): key is CryptoKey => key !== null));
   }
-  return cachedPublicKeyPromise;
+  return cachedPublicKeysPromise;
+}
+
+async function verifyJwtWithConfiguredKeys(
+  token: string,
+  options: Parameters<typeof jwtVerify>[2],
+) {
+  const publicKeys = await getJwtPublicKeys();
+  let lastError: unknown = new Error('No valid JWT verification key is configured');
+
+  for (const publicKey of publicKeys) {
+    try {
+      return await jwtVerify(token, publicKey, options);
+    } catch (err) {
+      // An expired token had a valid signature. Preserve that signal so the
+      // access-token path can fall back to a valid refresh cookie.
+      if (err instanceof errors.JWTExpired) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError;
 }
 
 export async function proxy(request: NextRequest) {
-  // Fail fast in production if the web env (in particular JWT_SECRET, which
-  // must match the API's) is missing/unsafe. In dev/test this is a no-op
-  // (A-016). Throwing here surfaces the misconfiguration instead of silently
-  // bouncing every logged-in user to /login.
-  validateWebEnv();
-
   const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED_PREFIXES.some(
@@ -126,14 +154,8 @@ export async function proxy(request: NextRequest) {
   // Anything else (bad signature, malformed) is treated as absent.
   const hasValidRefresh = async (): Promise<boolean> => {
     if (!refreshCookie?.value) return false;
-    // Edge middleware inlines `process.env.JWT_PUBLIC_KEY` at *build* time. If the
-    // public key is only injected at container/serverless runtime, this is
-    // `undefined` and verification is impossible — fail closed rather than
-    // verifying against a bogus key.
-    const publicKey = await getJwtPublicKey();
-    if (!publicKey) return false;
     try {
-      const { payload, protectedHeader } = await jwtVerify(refreshCookie.value, publicKey, {
+      const { payload, protectedHeader } = await verifyJwtWithConfiguredKeys(refreshCookie.value, {
         algorithms: ['RS256'],
         issuer: process.env.JWT_ISSUER || 'waitlayer',
         audience: process.env.JWT_AUDIENCE || 'waitlayer-client',
@@ -163,15 +185,10 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    // Verify the JWT access token with the public key that matches the API's
-    // private key (configured via JWT_PUBLIC_KEY, inlined at build time for
-    // the Edge runtime). Tolerate a small clock skew so a brief token-expiry
-    // boundary doesn't bounce users. If the public key is unavailable, fail closed.
-    const publicKey = await getJwtPublicKey();
-    if (!publicKey) {
-      return redirectToLogin(pathname, request);
-    }
-    const { payload, protectedHeader } = await jwtVerify(token, publicKey, {
+    // Verify against the current + rotation public-key set inlined at build
+    // time. Tolerate a small clock skew so a brief token-expiry boundary does
+    // not bounce users. If no configured key verifies, fail closed.
+    const { payload, protectedHeader } = await verifyJwtWithConfiguredKeys(token, {
       algorithms: ['RS256'],
       issuer: process.env.JWT_ISSUER || 'waitlayer',
       audience: process.env.JWT_AUDIENCE || 'waitlayer-client',
@@ -198,8 +215,9 @@ export async function proxy(request: NextRequest) {
   }
 }
 
-function redirectToLogin(_pathname: string, request: NextRequest): NextResponse {
+function redirectToLogin(pathname: string, request: NextRequest): NextResponse {
   const loginUrl = new URL('/auth/login', request.url);
+  loginUrl.searchParams.set('returnTo', `${pathname}${request.nextUrl.search}`);
   return NextResponse.redirect(loginUrl);
 }
 

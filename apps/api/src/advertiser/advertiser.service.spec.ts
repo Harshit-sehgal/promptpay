@@ -38,7 +38,13 @@ function makePrisma() {
       groupBy: vi.fn(),
       updateMany: vi.fn(),
     },
-    advertiserLedger: { groupBy: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
+    advertiserLedger: {
+      groupBy: vi.fn(),
+      findMany: vi.fn(),
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+    },
     earningsLedger: { aggregate: vi.fn(), findFirst: vi.fn() },
     recoveryDebtCase: { findFirst: vi.fn() },
     payoutRequest: { findFirst: vi.fn() },
@@ -646,5 +652,49 @@ describe('AdvertiserService.updateCampaign currency (A-081)', () => {
       status: 'active',
     });
     await expect(service.updateCampaign('c1', 'adv-1', { currency: 'EUR' })).rejects.toThrow();
+  });
+
+  it('renders the campaign floor in the selected currency', async () => {
+    await expect(
+      service.updateCampaign('c1', 'adv-1', {
+        currency: 'JPY',
+        budgetTotalMinor: 4_999n,
+      }),
+    ).rejects.toThrow('¥5,000');
+  });
+});
+
+describe('AdvertiserService.archiveCampaign reservation settlement', () => {
+  it('releases in-flight reservations without inventing a campaign-level cash refund', async () => {
+    const prisma = makePrisma();
+    const service = makeService(prisma);
+    const campaign = {
+      id: 'c1',
+      advertiserId: 'adv-1',
+      status: 'active',
+      budgetTotalMinor: 1_000n,
+      budgetSpentMinor: 300n,
+      budgetReservedMinor: 200n,
+      currency: 'USD',
+    };
+    prisma.campaign.findUnique.mockResolvedValueOnce(campaign).mockResolvedValueOnce({
+      ...campaign,
+      status: 'archived',
+      budgetReservedMinor: 0n,
+    });
+    prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await service.archiveCampaign('c1', 'adv-1');
+
+    expect(prisma.campaign.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c1', status: { not: 'archived' } },
+      data: {
+        status: 'archived',
+        archivedAt: expect.any(Date),
+        budgetReservedMinor: 0n,
+      },
+    });
+    expect(prisma.advertiserLedger.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ archived: true, refundEntry: null });
   });
 });

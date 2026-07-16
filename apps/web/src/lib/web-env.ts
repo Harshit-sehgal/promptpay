@@ -4,17 +4,16 @@ import { z } from 'zod';
  * Web (Next.js) environment validation (A-016).
  *
  * The API validates its env via `@waitlayer/config`. The web app reads a
- * smaller, security-relevant subset (JWT_SECRET for middleware JWT
- * verification, the API base URL, cookie security). We validate the same
- * subset here so a bad web deploy fails fast instead of silently breaking
- * auth at runtime.
+ * smaller, security-relevant subset (the JWT public-key set and claims policy
+ * for middleware verification, JWT_SECRET for BFF identity signing, the API
+ * base URL, and cookie security). We validate the same subset here so a bad
+ * web deploy fails fast instead of silently breaking auth at runtime.
  *
- * `JWT_SECRET` MUST match the API's `JWT_SECRET` — the middleware verifies the
- * auth cookie with it. If they diverge, protected routes will reject every
- * valid token and bounce logged-in users to /login. In production we therefore
- * require it to be present and >= 32 chars. In dev/test we are lenient so
- * local runs without the var still work (the middleware simply can't verify
- * and redirects to login, which is the safe default).
+ * `JWT_SECRET` MUST match the API's `JWT_SECRET` because BFF identity headers
+ * are HMAC-signed with it. `JWT_PUBLIC_KEY`, optional `JWT_PUBLIC_KEYS`, issuer,
+ * and audience must match the API so protected routes accept API-issued
+ * cookies. In dev/test we remain lenient so public pages can run without a
+ * complete auth environment.
  */
 const PUBLIC_JWT_SECRETS = new Set([
   'dev-only-docker-compose-jwt-secret-at-least-32-char',
@@ -39,18 +38,15 @@ const webEnvSchema = z
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     JWT_SECRET: z.string().min(32).optional(),
     JWT_PUBLIC_KEY: z.string().optional(),
+    JWT_PUBLIC_KEYS: z.string().optional(),
+    JWT_ISSUER: z.string().min(1).optional(),
+    JWT_AUDIENCE: z.string().min(1).optional(),
     NEXT_PUBLIC_API_URL: z.string().optional(),
     API_INTERNAL_URL: z.string().optional(),
     BFF_TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(3).default(1),
     COOKIE_SECURE: z.string().optional(),
   })
   .superRefine((env, ctx) => {
-    if (
-      env.NODE_ENV === 'production' &&
-      (!env.JWT_SECRET || PUBLIC_JWT_SECRETS.has(env.JWT_SECRET))
-    ) {
-      ctx.addIssue({ code: 'custom', path: ['JWT_SECRET'], message: 'production secret required' });
-    }
     if (env.NODE_ENV === 'production' && !env.JWT_PUBLIC_KEY) {
       ctx.addIssue({
         code: 'custom',
@@ -88,6 +84,9 @@ export interface WebEnv {
   NODE_ENV: 'development' | 'production' | 'test';
   JWT_SECRET?: string;
   JWT_PUBLIC_KEY?: string;
+  JWT_PUBLIC_KEYS?: string;
+  JWT_ISSUER?: string;
+  JWT_AUDIENCE?: string;
   NEXT_PUBLIC_API_URL?: string;
   API_INTERNAL_URL?: string;
   BFF_TRUST_PROXY_HOPS?: number;
@@ -111,6 +110,9 @@ export function validateWebEnv(source: NodeJS.ProcessEnv = process.env): WebEnv 
       NODE_ENV: (source.NODE_ENV as WebEnv['NODE_ENV']) ?? 'development',
       JWT_SECRET: source.JWT_SECRET,
       JWT_PUBLIC_KEY: source.JWT_PUBLIC_KEY,
+      JWT_PUBLIC_KEYS: source.JWT_PUBLIC_KEYS,
+      JWT_ISSUER: source.JWT_ISSUER,
+      JWT_AUDIENCE: source.JWT_AUDIENCE,
       NEXT_PUBLIC_API_URL: source.NEXT_PUBLIC_API_URL,
       API_INTERNAL_URL: source.API_INTERNAL_URL,
       BFF_TRUST_PROXY_HOPS: source.BFF_TRUST_PROXY_HOPS

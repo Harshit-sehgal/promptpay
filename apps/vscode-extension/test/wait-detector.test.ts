@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mock = vi.hoisted(() => ({
+  taskStart: undefined as ((event: unknown) => void) | undefined,
+  taskEnd: undefined as ((event: unknown) => void) | undefined,
+}));
+
 vi.mock('vscode', () => ({
   workspace: { onDidChangeTextDocument: vi.fn(() => ({ dispose: vi.fn() })) },
   window: {
@@ -11,8 +16,14 @@ vi.mock('vscode', () => ({
     activeTextEditor: undefined,
   },
   tasks: {
-    onDidStartTask: vi.fn(() => ({ dispose: vi.fn() })),
-    onDidEndTask: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidStartTask: vi.fn((listener: (event: unknown) => void) => {
+      mock.taskStart = listener;
+      return { dispose: vi.fn() };
+    }),
+    onDidEndTask: vi.fn((listener: (event: unknown) => void) => {
+      mock.taskEnd = listener;
+      return { dispose: vi.fn() };
+    }),
   },
 }));
 
@@ -22,6 +33,8 @@ describe('WaitStateDetector', () => {
   let detector: WaitStateDetector;
 
   beforeEach(() => {
+    mock.taskStart = undefined;
+    mock.taskEnd = undefined;
     detector = new WaitStateDetector({ getInactivityTimeoutMs: () => 15_000 });
   });
 
@@ -74,5 +87,28 @@ describe('WaitStateDetector', () => {
 
     expect(id1).toBe(id2);
     expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends a task wait shorter than two seconds and accepts the next wait', () => {
+    const starts = vi.fn();
+    const ends = vi.fn();
+    const context = { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
+    detector.onWaitStateStart(starts);
+    detector.onSignal((signal) => {
+      if (signal.type === 'wait_end') ends(signal.event);
+    });
+    detector.start(context);
+
+    mock.taskStart?.({});
+    mock.taskEnd?.({});
+
+    expect(starts).toHaveBeenCalledTimes(1);
+    expect(ends).toHaveBeenCalledTimes(1);
+    expect(ends.mock.calls[0][0].durationMs).toBeLessThan(2_000);
+
+    detector.triggerManualWait('manual-after-short-task');
+    expect(starts).toHaveBeenCalledTimes(2);
+
+    for (const disposable of context.subscriptions) disposable.dispose();
   });
 });

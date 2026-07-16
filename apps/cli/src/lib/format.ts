@@ -1,24 +1,27 @@
 /**
  * Parse a monetary minor-unit value returned by the API. The API serializes
  * BigInt monetary columns as strings (e.g. "1234") to preserve precision;
- * clients that perform arithmetic need a numeric value.
+ * clients that perform arithmetic need an integer value.
  *
  * Handles the union types that an API response body can produce after JSON
  * serialise/deserialize:
  *   - `null` / `undefined` → 0
- *   - `bigint` (direct value, e.g. test fixture) → Number
- *   - `number` (already a safe integer) → pass through
- *   - `string` (BigInt-to-JSON serialization) → Number, with NaN → 0 guard
- *
- * Mirrors `parseMinor` in @waitlayer/shared/src/parse.ts; duplicated here
- * because the CLI does not depend on the shared package.
+ *   - `bigint` (direct value, e.g. test fixture) → pass through
+ *   - `number` (only a safe integer) → BigInt
+ *   - `string` (BigInt-to-JSON serialization) → BigInt, with invalid → 0 guard
  */
-export function parseMinor(value: string | number | bigint | null | undefined): number {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === 'bigint') return Number(value);
-  if (typeof value === 'number') return value;
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
+export function parseMinor(value: string | number | bigint | null | undefined): bigint {
+  if (value === null || value === undefined) return 0n;
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value)) {
+      throw new RangeError(
+        'Minor-unit numbers must be safe integers; pass an exact decimal string',
+      );
+    }
+    return BigInt(value);
+  }
+  return /^-?\d+$/.test(value) ? BigInt(value) : 0n;
 }
 
 /**
@@ -60,9 +63,32 @@ export function minorUnitExponent(currency: string): number {
  * currency symbol entirely (always showed USD $). */
 export function formatCurrency(minorUnits: number | string | bigint, currency = 'USD'): string {
   const exp = minorUnitExponent(currency);
-  return new Intl.NumberFormat('en-US', {
+  const amountMinor = parseMinor(minorUnits);
+  const negative = amountMinor < 0n;
+  const absolute = negative ? -amountMinor : amountMinor;
+  const factor = 10n ** BigInt(exp);
+  const whole = absolute / factor;
+  const fraction = (absolute % factor).toString().padStart(exp, '0');
+  const groupedWhole = new Intl.NumberFormat('en-US', {
+    useGrouping: true,
+    maximumFractionDigits: 0,
+  }).format(whole);
+  const exactNumber = `${groupedWhole}${exp > 0 ? `.${fraction}` : ''}`;
+  const parts = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     minimumFractionDigits: exp,
-  }).format(parseMinor(minorUnits) / 10 ** exp);
+    maximumFractionDigits: exp,
+  }).formatToParts(negative ? -1 : 1);
+  const numericParts = new Set(['integer', 'group', 'decimal', 'fraction']);
+  let insertedNumber = false;
+
+  return parts
+    .map((part) => {
+      if (!numericParts.has(part.type)) return part.value;
+      if (insertedNumber) return '';
+      insertedNumber = true;
+      return exactNumber;
+    })
+    .join('');
 }

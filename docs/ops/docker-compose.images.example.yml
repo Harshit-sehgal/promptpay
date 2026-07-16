@@ -1,0 +1,80 @@
+# Standalone single-host production example. It intentionally does not extend
+# the repository's development Compose file, so mock authentication, local
+# database credentials, source builds, and development NODE_ENV values cannot
+# leak into a release. Postgres and Redis are expected to be managed services.
+name: waitlayer-production
+
+services:
+  api:
+    image: ${WAITLAYER_API_IMAGE:?Set WAITLAYER_API_IMAGE to an immutable registry tag}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - '${WAITLAYER_API_BIND_ADDRESS:-127.0.0.1}:${WAITLAYER_API_PORT:-4002}:4002'
+    environment:
+      NODE_ENV: production
+      API_PORT: '4002'
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:?Set REDIS_URL}
+      API_BASE_URL: ${API_BASE_URL:?Set API_BASE_URL to the public HTTPS origin}
+      WEB_BASE_URL: ${WEB_BASE_URL:?Set WEB_BASE_URL to the public HTTPS origin}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?Set JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY}
+      JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
+      JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      TOTP_SECRET_ENCRYPTION_KEY: ${TOTP_SECRET_ENCRYPTION_KEY:?Set TOTP_SECRET_ENCRYPTION_KEY}
+      PRIVACY_HASH_KEY: ${PRIVACY_HASH_KEY:?Set PRIVACY_HASH_KEY}
+      EMAIL_DRIVER: resend
+      EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM to a production sender}
+      EMAIL_QUEUE_SECRET: ${EMAIL_QUEUE_SECRET:?Set EMAIL_QUEUE_SECRET}
+      EMAIL_PROVIDER_TIMEOUT_MS: ${EMAIL_PROVIDER_TIMEOUT_MS:-10000}
+      OPS_ALERT_EMAIL: ${OPS_ALERT_EMAIL:?Set OPS_ALERT_EMAIL}
+      RESEND_API_KEY: ${RESEND_API_KEY:?Set RESEND_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID}
+      GOOGLE_TOKENINFO_TIMEOUT_MS: ${GOOGLE_TOKENINFO_TIMEOUT_MS:-5000}
+      PAYOUT_REQUIRE_2FA: 'true'
+      PAYOUT_DESTINATION_COOLDOWN_HOURS: ${PAYOUT_DESTINATION_COOLDOWN_HOURS:-24}
+      WAITLAYER_PAYOUT_PROVIDER_STATUS: ${WAITLAYER_PAYOUT_PROVIDER_STATUS:-{}}
+      WEBHOOK_RECLAIM_CRON: 'true'
+      WEBHOOK_ASYNC_PROCESSING: 'false'
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+      PAYPAL_MODE: ${PAYPAL_MODE:-sandbox}
+      WISE_API_TOKEN: ${WISE_API_TOKEN:-}
+      WISE_PROFILE_ID: ${WISE_PROFILE_ID:-}
+      WISE_MODE: ${WISE_MODE:-sandbox}
+      WISE_EMAIL_RECIPIENTS_VERIFIED: ${WISE_EMAIL_RECIPIENTS_VERIFIED:-false}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+
+  web:
+    image: ${WAITLAYER_WEB_IMAGE:?Set WAITLAYER_WEB_IMAGE to an immutable registry tag}
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - '${WAITLAYER_WEB_BIND_ADDRESS:-127.0.0.1}:${WAITLAYER_WEB_PORT:-3000}:3000'
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4002/api/v1}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY}
+      JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
+      JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+      BFF_TRUST_PROXY_HOPS: ${BFF_TRUST_PROXY_HOPS:-1}
+      COOKIE_SECURE: 'true'
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+    depends_on:
+      api:
+        condition: service_healthy

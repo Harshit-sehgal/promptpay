@@ -3,27 +3,46 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Terms of Service — WaitLayer',
-  description: 'WaitLayer terms of service — developer and advertiser obligations, fraud policy, and payout terms.',
+  description:
+    'WaitLayer terms of service — developer and advertiser obligations, fraud policy, and payout terms.',
 };
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-white px-6 py-20">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-white px-6 py-20">
       <div className="max-w-3xl mx-auto">
-        <Link href="/" className="inline-flex items-center gap-2 text-surface-500 hover:text-surface-700 text-[14px] font-medium mb-8 transition-colors">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-surface-500 hover:text-surface-700 text-[14px] font-medium mb-8 transition-colors"
+        >
           ← Back to home
         </Link>
-        <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-10">Terms of Service</h1>
+        <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-10">
+          Terms of Service
+        </h1>
         <div className="text-surface-600 text-[15px] leading-relaxed space-y-6">
-          <p><strong className="text-surface-900">Last updated:</strong> July 2026</p>
+          <p>
+            <strong className="text-surface-900">Last updated:</strong> July 2026
+          </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">1. Acceptance</h2>
-          <p>By using WaitLayer, you agree to these terms. If you disagree, please do not use the service.</p>
+          <p>
+            By using WaitLayer, you agree to these terms. If you disagree, please do not use the
+            service.
+          </p>
 
-          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">2. Service description</h2>
-          <p>WaitLayer is a privacy-first reward marketplace that connects AI tool wait time with developer attention. Developers earn from validated ad impressions; advertisers reach a high-intent developer audience.</p>
+          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">
+            2. Service description
+          </h2>
+          <p>
+            WaitLayer is a privacy-first reward marketplace that connects AI tool wait time with
+            developer attention. Developers earn from validated ad impressions; advertisers reach a
+            high-intent developer audience.
+          </p>
 
-          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">3. Developer obligations</h2>
+          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">
+            3. Developer obligations
+          </h2>
           <ul className="list-disc pl-6 space-y-1">
             <li>Do not artificially inflate impressions or clicks</li>
             <li>Do not use automated tools, bots, or scripts to simulate ad interactions</li>
@@ -31,7 +50,9 @@ export default function TermsPage() {
             <li>Report suspicious activity through the extension</li>
           </ul>
 
-          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">4. Advertiser obligations</h2>
+          <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">
+            4. Advertiser obligations
+          </h2>
           <ul className="list-disc pl-6 space-y-1">
             <li>Ads must not contain malware, phishing, or deceptive content</li>
             <li>Destination URLs must match the displayed domain</li>
@@ -39,18 +60,31 @@ export default function TermsPage() {
           </ul>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">5. Fraud policy</h2>
-          <p>Fraudulent activity will result in earnings reversal, account restriction, and potential legal action. We use automated detection and manual review to protect platform integrity.</p>
+          <p>
+            Fraudulent activity will result in earnings reversal, account restriction, and potential
+            legal action. We use automated detection and manual review to protect platform
+            integrity.
+          </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">6. Revenue sharing</h2>
-          <p>Developers receive 60% of ad revenue (80% during launch incentive period). The platform retains 30% (10% during launch) with 10% allocated to fraud and payment reserves.</p>
+          <p>
+            Developers receive 60% of ad revenue (80% during launch incentive period). The platform
+            retains 30% (10% during launch) with 10% allocated to fraud and payment reserves.
+          </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">7. Payout terms</h2>
-          <p>Earnings must reach the minimum threshold to be eligible for payout. New accounts are subject to a 30-day hold period. Payout processing times vary by provider.</p>
+          <p>
+            Earnings must reach the minimum threshold to be eligible for payout. New accounts are
+            subject to a 30-day hold period. Payout processing times vary by provider.
+          </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">8. Disclaimer</h2>
-          <p>WaitLayer is provided "as is" without warranty. We are not liable for any losses from service interruptions, fraud, or payment processing delays.</p>
+          <p>
+            WaitLayer is provided "as is" without warranty. We are not liable for any losses from
+            service interruptions, fraud, or payment processing delays.
+          </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

@@ -22,7 +22,11 @@ export default function AdvertiserLayout({ children }: { children: React.ReactNo
           brandColor="bg-brand-500"
           navItems={ADVERTISER_NAV}
         />
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-auto">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-auto"
+        >
           {children}
         </main>
       </div>

@@ -50,6 +50,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Generate ephemeral RS256 keys
+        run: |
+          PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
+          PUBLIC_KEY=$(printf '%s\n' "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          {
+            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            printf '%s\n' "$PRIVATE_KEY"
+            echo 'WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            printf '%s\n' "$PUBLIC_KEY"
+            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+          } >> "$GITHUB_ENV"
+
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
 
@@ -96,12 +109,6 @@ jobs:
         run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
       - name: Boot API for E2E
         run: |
-          # Generate ephemeral RS256 key pair for E2E (no secrets needed).
-          # The API requires JWT_PRIVATE_KEY and JWT_PUBLIC_KEY for RS256 signing.
-          PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
-          PUBLIC_KEY=$(echo "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
-          export JWT_PRIVATE_KEY="$PRIVATE_KEY"
-          export JWT_PUBLIC_KEY="$PUBLIC_KEY"
           pnpm --filter waitlayer-api build
           node apps/api/dist/apps/api/src/main.js &
           API_PID=$!
@@ -111,13 +118,6 @@ jobs:
             sleep 2
           done
           echo "API_PID=$API_PID" >> /tmp/e2e_pids
-          # Persist the ephemeral RS256 key so the health-metrics enforcement
-          # step can mint an admin JWT against the running API.
-          {
-            echo "JWT_PRIVATE_KEY<<EOF"
-            echo "$PRIVATE_KEY"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
         env:
           DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
@@ -184,7 +184,7 @@ jobs:
       - name: Pack CLI artifact
         run: |
           mkdir -p artifacts/cli
-          pnpm --filter waitlayer-cli pack --pack-destination ../../artifacts/cli
+          pnpm --filter waitlayer-cli pack --pack-destination "$GITHUB_WORKSPACE/artifacts/cli"
       - name: Smoke install packaged CLI
         run: |
           npm install --global ./artifacts/cli/*.tgz
@@ -194,9 +194,9 @@ jobs:
         run: pnpm --filter waitlayer-vscode build
       - name: Package VS Code extension (no publish)
         run: |
-          mkdir -p ../../artifacts/vscode
-          pnpm exec vsce package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
-        working-directory: apps/vscode-extension
+          mkdir -p artifacts/vscode
+          pnpm --filter waitlayer-vscode package:vsix -- \
+            --out "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
       - name: Smoke test VSIX metadata
         run: |
           test -s artifacts/vscode/waitlayer-vscode.vsix
@@ -225,6 +225,22 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+
+      - name: Generate ephemeral RS256 keys
+        run: |
+          PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
+          PUBLIC_KEY=$(printf '%s\n' "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          {
+            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            printf '%s\n' "$PRIVATE_KEY"
+            echo 'WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            printf '%s\n' "$PUBLIC_KEY"
+            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+          } >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
@@ -238,11 +254,10 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
-      # Web reads JWT_SECRET + NEXT_PUBLIC_* at *build* time (Edge middleware
-      # inlines env). Passing them as build args proves the image bakes them
-      # in; a missing arg would fail the deploy (A-083), not silently break auth.
+      # Web reads JWT_PUBLIC_KEY + NEXT_PUBLIC_* at build time (Edge middleware
+      # inlines them). JWT_SECRET remains runtime-only for BFF HMAC signing.
       - name: Build web image (verifies build-time secret wiring)
-        run: docker compose build web
+        run: docker compose -f docker-compose.yml build web
         env:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
           NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
@@ -253,7 +268,7 @@ jobs:
       # that the in-process suite could never catch).
       - name: Build + boot API and verify it serves over TCP
         run: |
-          docker compose up -d api postgres redis
+          docker compose -f docker-compose.yml up -d api postgres redis
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:4002/api/v1/health/ready; then
               echo "API healthy over TCP"; break
@@ -270,7 +285,7 @@ jobs:
             -H 'Content-Type: application/json' -d '{}')
           if [ "$STATUS" != "400" ]; then echo "Unexpected login validation status: $STATUS (expected 400)"; exit 1; fi
           echo "Controller route resolved over TCP with expected validation status 400"
-          docker compose down -v
+          docker compose -f docker-compose.yml down -v
         env:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
 
@@ -280,7 +295,7 @@ jobs:
       # or static-generation issues).
       - name: Build + boot web and verify it serves over TCP
         run: |
-          docker compose up -d web
+          docker compose -f docker-compose.yml up -d web
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:3000; then
               echo "Web healthy over TCP"; break
@@ -319,7 +334,7 @@ jobs:
             echo "Protected web route rejected API-issued cookie (status $PROTECTED_STATUS)"; exit 1
           fi
           echo "Web BFF sign-in and protected-route JWT verification succeeded"
-          docker compose down -v
+          docker compose -f docker-compose.yml down -v
         env:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
 
@@ -357,8 +372,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+      - name: Build database package
+        run: pnpm --filter @waitlayer/db build
       - name: Apply migrations to source DB
         run: pnpm --filter @waitlayer/db migrate:deploy
         env:

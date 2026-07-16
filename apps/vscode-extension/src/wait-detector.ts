@@ -137,11 +137,11 @@ export class WaitStateDetector {
     const taskEndListener = vscode.tasks.onDidEndTask((_e) => {
       this.activeTaskCount = Math.max(0, this.activeTaskCount - 1);
       if (this.activeTaskCount === 0 && this.inWait && this.taskWaitStart > 0) {
-        const duration = Date.now() - this.taskWaitStart;
         this.taskWaitStart = 0;
-        if (duration >= 2_000) {
-          this.endWait();
-        }
+        // A task start always enters a wait, so its matching task end must
+        // always leave it. Filtering short waits here left `inWait` stuck and
+        // prevented every later task/manual wait from starting.
+        this.endWait();
       }
     });
     this.disposables.push(taskStartListener, taskEndListener);
@@ -281,8 +281,7 @@ export class WaitStateDetector {
     // and no server-computed duration — a steadily-growing analytics gap. The
     // server applies its own WAIT_STATE_DURATION_TOLERANCE_SECONDS /
     // WAIT_STATE_MAX_DURATION_SECONDS validation on the end event, so a
-    // legitimately short wait still records cleanly (duration 0 is refused by
-    // the server, but sub-2s waits are ≥1s here after the enterWait guard).
+    // legitimately short wait still records cleanly, including duration 0.
     const event: WaitStateEvent = {
       startTime: this.waitStart,
       durationMs,

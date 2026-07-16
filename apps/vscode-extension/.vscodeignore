@@ -3,6 +3,7 @@
 .turbo/**
 src/**
 test/**
+scripts/**
 **/*.ts
 **/*.map
 **/*.tsbuildinfo

@@ -12,8 +12,8 @@ interface ReferralData {
   referralCode: string | null;
   referralCount: number;
   referralLink: string | null;
-  rewardsEarnedMinor: number;
-  rewardsEarnedByCurrency?: Record<string, number>;
+  rewardsEarnedMinor: bigint;
+  rewardsEarnedByCurrency?: Record<string, bigint>;
   referrals: ReferralInfo[];
 }
 
@@ -23,7 +23,7 @@ interface ReferralInfo {
   referredName: string | null;
   status: string;
   createdAt: string;
-  rewards: { amountMinor: number; currency: string; status: string }[];
+  rewards: { amountMinor: bigint; currency: string; status: string }[];
 }
 
 export default function ReferralPage() {
@@ -34,7 +34,8 @@ export default function ReferralPage() {
   const { info } = useToast();
 
   useEffect(() => {
-    referralApi.getInfo()
+    referralApi
+      .getInfo()
       .then((res) => setData(res.data))
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load referral data')))
       .finally(() => setLoading(false));
@@ -53,7 +54,9 @@ export default function ReferralPage() {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Referrals</h1>
-        <p className="text-surface-500 text-[15px] font-normal">Invite developers and earn rewards when they get their first payout</p>
+        <p className="text-surface-500 text-[15px] font-normal">
+          Invite developers and earn rewards when they get their first payout
+        </p>
       </div>
 
       {loading && (
@@ -75,7 +78,9 @@ export default function ReferralPage() {
             <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
               <p className="text-surface-500 text-sm mb-1.5 font-medium">Your referral code</p>
               {data.referralCode ? (
-                <p className="text-2xl font-mono font-semibold text-brand-500 tracking-widest">{data.referralCode}</p>
+                <p className="text-2xl font-mono font-semibold text-brand-500 tracking-widest">
+                  {data.referralCode}
+                </p>
               ) : (
                 <p className="text-surface-400 text-sm font-normal">No code generated yet</p>
               )}
@@ -87,7 +92,9 @@ export default function ReferralPage() {
             <div className="bg-white border border-surface-200/80 rounded-2xl p-6 shadow-sm">
               <p className="text-surface-500 text-sm mb-1.5 font-medium">Rewards earned</p>
               <p className="text-3xl font-semibold text-emerald-600 font-mono">
-                {formatCurrencyBreakdown(data.rewardsEarnedByCurrency ?? { USD: data.rewardsEarnedMinor })}
+                {formatCurrencyBreakdown(
+                  data.rewardsEarnedByCurrency ?? { USD: data.rewardsEarnedMinor },
+                )}
               </p>
             </div>
           </div>
@@ -108,7 +115,8 @@ export default function ReferralPage() {
                 </button>
               </div>
               <p className="text-surface-500 text-[13px] mt-3 font-normal leading-relaxed">
-                Share this link — when someone signs up and gets their first payout ($10+), you earn <span className="text-emerald-600 font-medium">$5</span>.
+                Share this link — when someone signs up and gets their first payout ($10+), you earn{' '}
+                <span className="text-emerald-600 font-medium">$5</span>.
               </p>
             </div>
           )}
@@ -117,7 +125,9 @@ export default function ReferralPage() {
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm overflow-hidden">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Referral history</h2>
             {data.referrals.length === 0 ? (
-              <p className="text-surface-400 text-sm py-8 text-center font-normal">No referrals yet. Share your link to start earning.</p>
+              <p className="text-surface-400 text-sm py-8 text-center font-normal">
+                No referrals yet. Share your link to start earning.
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -133,18 +143,25 @@ export default function ReferralPage() {
                     {data.referrals.map((r) => (
                       <tr key={r.id} className="hover:bg-surface-50/30 transition-colors">
                         <td className="px-5 py-3.5 font-normal text-surface-900">
-                          <p className="font-medium text-surface-900">{r.referredName || r.referredEmail}</p>
-                          <p className="text-surface-400 text-xs font-mono mt-0.5">{r.referredEmail}</p>
+                          <p className="font-medium text-surface-900">
+                            {r.referredName || r.referredEmail}
+                          </p>
+                          <p className="text-surface-400 text-xs font-mono mt-0.5">
+                            {r.referredEmail}
+                          </p>
                         </td>
                         <td className="px-5 py-3.5">
                           <StatusBadge status={r.status} />
                         </td>
-                        <td className="px-5 py-3.5 text-surface-500 font-normal">{formatDate(r.createdAt)}</td>
+                        <td className="px-5 py-3.5 text-surface-500 font-normal">
+                          {formatDate(r.createdAt)}
+                        </td>
                         <td className="px-5 py-3.5 text-right text-emerald-600 font-mono font-semibold">
                           {r.rewards.length > 0
                             ? formatCurrencyBreakdown(
-                                r.rewards.reduce<Record<string, number>>((totals, reward) => {
-                                  totals[reward.currency] = (totals[reward.currency] ?? 0) + reward.amountMinor;
+                                r.rewards.reduce<Record<string, bigint>>((totals, reward) => {
+                                  totals[reward.currency] =
+                                    (totals[reward.currency] ?? 0n) + reward.amountMinor;
                                   return totals;
                                 }, {}),
                               )

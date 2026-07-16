@@ -43,7 +43,7 @@ export default function FeedbackPage() {
   };
 
   return (
-    <main className="min-h-screen bg-surface-50">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-surface-50">
       <div className="mx-auto max-w-2xl px-6 py-16">
         <Link href="/" className="text-brand-500 hover:text-brand-600 text-[13px] font-medium">
           ← Back

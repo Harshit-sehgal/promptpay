@@ -7,7 +7,11 @@ import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
-import { majorToMinor } from '@waitlayer/shared';
+import {
+  campaignMoneyInputPolicy,
+  MIN_CAMPAIGN_BUDGET_MINOR,
+  parseCampaignAmountMinor,
+} from '../campaign-money';
 
 const BID_TYPES = ['cpm', 'cpc'] as const;
 const CATEGORIES = [
@@ -72,6 +76,7 @@ export default function NewCampaignPage() {
   const [message, setMessage] = useState('');
   const [ctaText, setCtaText] = useState('Learn more');
   const [ctaUrl, setCtaUrl] = useState('');
+  const moneyPolicy = campaignMoneyInputPolicy(currency);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -79,18 +84,15 @@ export default function NewCampaignPage() {
     setDraftRecoveryId(null);
     setSubmitting(true);
 
-    const bidAmountMajor = parseFloat(bidAmount);
-    const budgetTotalMajor = parseFloat(budgetTotal);
-    const bidAmountMinor = majorToMinor(bidAmountMajor, currency);
-    const budgetTotalMinor = majorToMinor(budgetTotalMajor, currency);
-
-    if (isNaN(bidAmountMajor) || bidAmountMinor <= 0n) {
+    const bidAmountMinor = parseCampaignAmountMinor(bidAmount, currency);
+    const budgetTotalMinor = parseCampaignAmountMinor(budgetTotal, currency);
+    if (bidAmountMinor === null || bidAmountMinor <= 0n) {
       setError('Enter a valid bid amount');
       setSubmitting(false);
       return;
     }
-    if (isNaN(budgetTotalMajor) || budgetTotalMinor < 5000n) {
-      setError('Minimum budget is $50.00');
+    if (budgetTotalMinor === null || budgetTotalMinor < MIN_CAMPAIGN_BUDGET_MINOR) {
+      setError(`Minimum budget is ${moneyPolicy.minimumBudgetLabel}`);
       setSubmitting(false);
       return;
     }
@@ -283,8 +285,8 @@ export default function NewCampaignPage() {
                   data-testid="campaign-bid-amount-input"
                   aria-label={`Bid amount (${currency})`}
                   type="number"
-                  step="0.01"
-                  min="0.50"
+                  step={moneyPolicy.minorUnitStep}
+                  min={moneyPolicy.minimumBid}
                   value={bidAmount}
                   onChange={(e) => setBidAmount(e.target.value)}
                   required
@@ -307,15 +309,17 @@ export default function NewCampaignPage() {
                   data-testid="campaign-budget-input"
                   aria-label={`Total budget (${currency})`}
                   type="number"
-                  step="1.00"
-                  min="50.00"
+                  step={moneyPolicy.minorUnitStep}
+                  min={moneyPolicy.minimumBudget}
                   value={budgetTotal}
                   onChange={(e) => setBudgetTotal(e.target.value)}
                   required
-                  inputMode="numeric"
+                  inputMode="decimal"
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
                 />
-                <p className="text-ink-500 text-xs mt-1">Minimum $50.00</p>
+                <p className="text-ink-500 text-xs mt-1">
+                  Minimum {moneyPolicy.minimumBudgetLabel}
+                </p>
               </div>
               <div>
                 <label

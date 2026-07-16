@@ -13,8 +13,7 @@ describe('CampaignReservationReclaimCron', () => {
     prisma = {
       adImpression: {
         findMany: vi.fn(),
-        findUnique: vi.fn(),
-        update: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       $executeRaw: vi.fn().mockResolvedValue(1),
       $transaction: vi.fn(async (cb: any) => cb(prisma)),
@@ -34,20 +33,23 @@ describe('CampaignReservationReclaimCron', () => {
         campaign: { bidAmountMinor: 100n, budgetReservedMinor: 100n },
       },
     ]);
-    prisma.adImpression.findUnique.mockResolvedValue({
-      id: 'imp-1',
-      qualifiedAt: null,
-      invalidatedAt: null,
-    });
-
     const result = await cron.tick();
 
     expect(result.reclaimed).toBe(1);
     expect(result.scanned).toBe(1);
-    expect(prisma.$executeRaw).toHaveBeenCalled();
-    expect(prisma.adImpression.update).toHaveBeenCalledWith(
+    expect(prisma.adImpression.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'imp-1' },
+        where: expect.objectContaining({
+          campaign: { bidType: 'cpm', status: { in: ['active', 'paused'] } },
+        }),
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: 500,
+      }),
+    );
+    expect(prisma.$executeRaw).toHaveBeenCalled();
+    expect(prisma.adImpression.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'imp-1', qualifiedAt: null, invalidatedAt: null },
         data: expect.objectContaining({
           invalidationReason: 'stale_reservation',
           isBillable: false,
@@ -64,16 +66,28 @@ describe('CampaignReservationReclaimCron', () => {
         campaign: { bidAmountMinor: 100n, budgetReservedMinor: 100n },
       },
     ]);
-    prisma.adImpression.findUnique.mockResolvedValue({
-      id: 'imp-1',
-      qualifiedAt: new Date(),
-      invalidatedAt: null,
-    });
+    prisma.adImpression.updateMany.mockResolvedValue({ count: 0 });
 
     const result = await cron.tick();
 
     expect(result.reclaimed).toBe(0);
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('commits invalidation when the reservation was already released', async () => {
+    prisma.adImpression.findMany.mockResolvedValue([
+      {
+        id: 'imp-1',
+        campaignId: 'camp-1',
+        campaign: { bidAmountMinor: 100n, budgetReservedMinor: 100n },
+      },
+    ]);
+    prisma.$executeRaw.mockResolvedValue(0);
+
+    const result = await cron.tick();
+
+    expect(result.reclaimed).toBe(0);
+    expect(prisma.adImpression.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it('skips when it cannot acquire the cron lease', async () => {

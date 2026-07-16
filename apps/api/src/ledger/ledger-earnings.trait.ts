@@ -325,17 +325,11 @@ export class LedgerEarningsTrait {
 
   /** Release held earnings after a fraud-flag review clears.
    *
-   *  Two scopes are supported:
-   *  - Per-impression (preferred when the flag links to a specific
-   *    impression): only held earnings tied to that impression are
-   *    flipped to `confirmed`. This avoids leaking legitimate holds
-   *    from concurrent unrelated flags.
-   *  - Per-flag fallback: used when the flag has no impressionId
-   *    (e.g. click-pattern fraud without a specific impression). Released
-   *    entries are scoped to `heldByFlagId = flagId` so the release can
-   *    NEVER undo holds from a still-open concurrent flag — the previous
-   *    bulk `WHERE userId AND status='held'` released every held entry
-   *    across all of the user's flags (cross-flag money leak).
+   *  `flagId` is authoritative because critical flag creation stamps every
+   *  row it actually held, potentially across several impressions. Releasing
+   *  only the flag's linked impression would strand its other stamped rows.
+   *  Impression scope remains a legacy fallback for old holds without a flag
+   *  stamp. Neither path can release rows owned by another active flag.
    *
    *  Either way the operation is idempotent (no-op when nothing matches).
    */
@@ -345,28 +339,28 @@ export class LedgerEarningsTrait {
       impressionId?: string;
       flagId?: string;
     },
+    transactionClient?: Prisma.TransactionClient,
   ) {
-    if (opts?.impressionId) {
-      return this.prisma.earningsLedger.updateMany({
-        where: { userId, impressionId: opts.impressionId, status: 'held' },
+    const client = transactionClient ?? this.prisma;
+    if (opts?.flagId) {
+      return client.earningsLedger.updateMany({
+        where: { userId, heldByFlagId: opts.flagId, status: 'held' },
         data: { status: 'confirmed', heldByFlagId: null },
       });
     }
-    // Bulk user-level path is intentionally GONE. Releasing every held
-    // entry across all flags was the cross-flag money leak. Without a
-    // flagId OR impressionId we cannot scope safely — fail closed
-    // (release nothing) rather than release unrelated holds. Admins can
-    // still release a specific hold by resolving its flag (which carries
-    // a flagId).
-    if (!opts?.flagId) {
-      return { count: 0 } satisfies {
-        count: number;
-      };
+    if (opts?.impressionId) {
+      return client.earningsLedger.updateMany({
+        where: {
+          userId,
+          impressionId: opts.impressionId,
+          status: 'held',
+          heldByFlagId: null,
+        },
+        data: { status: 'confirmed', heldByFlagId: null },
+      });
     }
-    return this.prisma.earningsLedger.updateMany({
-      where: { userId, heldByFlagId: opts.flagId, status: 'held' },
-      data: { status: 'confirmed', heldByFlagId: null },
-    });
+    // Without either scope, fail closed rather than release unrelated holds.
+    return { count: 0 } satisfies { count: number };
   }
 
   /**
@@ -418,6 +412,7 @@ export class LedgerEarningsTrait {
       clickId?: string;
     },
     reason?: string,
+    transactionClient?: Prisma.TransactionClient,
   ): Promise<{
     reversed: number;
     /** Entries left in 'paid' status — money already left, can't be clawed back by this method. */
@@ -432,10 +427,6 @@ export class LedgerEarningsTrait {
     const prefix = isClick ? 'clk' : 'imp';
     // The earnings_ledger column to key the developer-row flip on.
     const entityCol = isClick ? ('clickId' as const) : ('impressionId' as const);
-    // Pre-flight: read the entity's advertiser-debit / platform-credit
-    // rows so we know the exact amounts and advertiserId for the
-    // compensation writes. The idempotency-key prefix mirrors the
-    // forward `recordImpressionEarnings` / `recordClickEarnings` writes.
     const advBase = `${prefix}-${entityId}-adv`;
     const pltBase = `${prefix}-${entityId}-plt`;
     const resBase = `${prefix}-${entityId}-res`;
@@ -444,24 +435,27 @@ export class LedgerEarningsTrait {
       status: 'paid',
       entryType: 'credit',
     };
-    const [advDebit, pltCredit, resCredit, paidCount] = await Promise.all([
-      this.prisma.advertiserLedger.findUnique({ where: { idempotencyKey: advBase } }),
-      this.prisma.platformLedger.findUnique({ where: { idempotencyKey: pltBase } }),
-      this.prisma.platformLedger.findUnique({ where: { idempotencyKey: resBase } }),
-      this.prisma.earningsLedger.count({ where: paidWhere }),
-    ]);
     const entityLabel = prefix === 'clk' ? 'click' : 'impression';
-    const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const execute = async (tx: Prisma.TransactionClient) => {
+      // Read the forward ledger rows inside the same transaction as every
+      // compensation. Callers such as fraud resolution may supply an existing
+      // transaction so the flag status, money effects, and audit commit once.
+      const [advDebit, pltCredit, resCredit] = await Promise.all([
+        tx.advertiserLedger.findUnique({ where: { idempotencyKey: advBase } }),
+        tx.platformLedger.findUnique({ where: { idempotencyKey: pltBase } }),
+        tx.platformLedger.findUnique({ where: { idempotencyKey: resBase } }),
+      ]);
       // 1. Flip the developer's earnings rows to `reversed` — intrinsically
       //    idempotent: rows already `reversed` simply don't match the
       //    `status in (...)` filter.
       const reversed = await tx.earningsLedger.updateMany({
         where: {
           [entityCol]: entityId,
-          status: { in: ['estimated', 'pending', 'confirmed'] },
+          status: { in: ['estimated', 'pending', 'confirmed', 'held'] },
         },
         data: {
           status: 'reversed',
+          heldByFlagId: null,
           description: reason ? `Reversed: ${reason}` : undefined,
         },
       });
@@ -541,41 +535,46 @@ export class LedgerEarningsTrait {
       // 5. Paid-entry recovery debt. We do not mutate the original `paid`
       //    credit row, but we do create an idempotent debit row so future
       //    payout availability nets against money already paid for fraud.
-      if (paidCount > 0) {
-        const paidEntries = await tx.earningsLedger.findMany({
-          where: paidWhere,
-          select: {
-            id: true,
-            userId: true,
-            campaignId: true,
-            impressionId: true,
-            clickId: true,
-            amountMinor: true,
-            currency: true,
+      // Read paid rows after the reversal update has taken its row locks. A
+      // payout that wins immediately before this transaction is visible here
+      // and receives recovery debt; a payout that loses cannot pay a reversed
+      // row after this transaction commits.
+      const paidEntries = await tx.earningsLedger.findMany({
+        where: paidWhere,
+        select: {
+          id: true,
+          userId: true,
+          campaignId: true,
+          impressionId: true,
+          clickId: true,
+          amountMinor: true,
+          currency: true,
+        },
+      });
+      for (const entry of paidEntries) {
+        await tx.earningsLedger.upsert({
+          where: { idempotencyKey: `${prefix}-${entityId}-paid-debt-${entry.id}` },
+          create: {
+            userId: entry.userId,
+            campaignId: entry.campaignId,
+            impressionId: entry.impressionId,
+            clickId: entry.clickId,
+            entryType: 'debit',
+            status: 'confirmed',
+            amountMinor: entry.amountMinor,
+            currency: entry.currency,
+            availableAt: null,
+            idempotencyKey: `${prefix}-${entityId}-paid-debt-${entry.id}`,
+            description: `Recovery debt for paid ${entityLabel} ${entityId}${reason ? `: ${reason}` : ''}`,
           },
+          update: {},
         });
-        for (const entry of paidEntries) {
-          await tx.earningsLedger.upsert({
-            where: { idempotencyKey: `${prefix}-${entityId}-paid-debt-${entry.id}` },
-            create: {
-              userId: entry.userId,
-              campaignId: entry.campaignId,
-              impressionId: entry.impressionId,
-              clickId: entry.clickId,
-              entryType: 'debit',
-              status: 'confirmed',
-              amountMinor: entry.amountMinor,
-              currency: entry.currency,
-              availableAt: null,
-              idempotencyKey: `${prefix}-${entityId}-paid-debt-${entry.id}`,
-              description: `Recovery debt for paid ${entityLabel} ${entityId}${reason ? `: ${reason}` : ''}`,
-            },
-            update: {},
-          });
-        }
       }
-      return { reversed: reversed.count, paidSkipped: paidCount };
-    });
+      return { reversed: reversed.count, paidSkipped: paidEntries.length };
+    };
+    const result = transactionClient
+      ? await execute(transactionClient)
+      : await this.prisma.$transaction(execute);
     // Audit: reverseEarnings is the highest-stakes fraud-mutation path — it
     // reflows money across four ledgers (developer earnings flip, advertiser
     // refund, platform-fee reversal, fraud-reserve release) and writes
@@ -587,7 +586,7 @@ export class LedgerEarningsTrait {
     // produced. `actorRole: 'system'` mirrors the stripe-webhook convention;
     // callers that want a richer actor (e.g. the resolving admin) can be
     // threaded through a future opts.actorId once the call sites carry one.
-    void this.audit.log({
+    const auditEntry = {
       actorId: 'ledger_service',
       actorRole: 'system',
       action: 'reverse_earnings',
@@ -598,7 +597,12 @@ export class LedgerEarningsTrait {
         paidSkipped: result.paidSkipped,
         reason: reason ?? null,
       },
-    });
+    };
+    if (transactionClient) {
+      await this.audit.logStrict(auditEntry, transactionClient);
+    } else {
+      void this.audit.log(auditEntry);
+    }
     return result;
   }
 }

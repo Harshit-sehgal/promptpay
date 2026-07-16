@@ -52,6 +52,9 @@ const mockPrisma = {
   payoutRequest: {
     count: vi.fn(),
   },
+  payoutAllocation: {
+    count: vi.fn(),
+  },
   campaign: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
@@ -61,6 +64,7 @@ const mockPrisma = {
   },
   earningsLedger: {
     aggregate: vi.fn(),
+    updateMany: vi.fn(),
   },
   $executeRaw: vi.fn().mockResolvedValue(1),
   $queryRaw: vi.fn().mockResolvedValue([{ count: 0 }]),
@@ -96,6 +100,8 @@ describe('FraudService', () => {
     vi.clearAllMocks();
     mockPrisma.$executeRaw.mockResolvedValue(1);
     mockPrisma.$queryRaw.mockResolvedValue([{ count: 0 }]);
+    mockPrisma.payoutAllocation.count.mockResolvedValue(0);
+    mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
     service = new FraudService(prismaRef, mockLedger);
   });
 
@@ -261,6 +267,51 @@ describe('FraudService', () => {
       expect(mockPrisma.fraudFlag.create).toHaveBeenCalled();
       expect(mockPrisma.trustScore.upsert).toHaveBeenCalled();
     });
+
+    it('upgrades a deduplicated flag to critical and holds earnings in the same transaction', async () => {
+      const existing = {
+        id: 'flag-existing',
+        userId: 'u-1',
+        flagType: 'suspicious_ctr',
+        severity: 'medium',
+        status: 'open',
+      };
+      const upgraded = { ...existing, severity: 'critical' };
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(existing);
+      mockPrisma.fraudFlag.update.mockResolvedValue(upgraded);
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.waitStateEvent.groupBy.mockResolvedValue([]);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await expect(
+        service.createFlag({
+          userId: 'u-1',
+          flagType: 'suspicious_ctr' as any,
+          severity: 'critical',
+          evidence: { source: 'new-detection' },
+        }),
+      ).resolves.toEqual(upgraded);
+
+      expect(mockPrisma.fraudFlag.update).toHaveBeenCalledWith({
+        where: { id: 'flag-existing' },
+        data: { severity: 'critical' },
+      });
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'u-1',
+          status: { in: ['estimated', 'pending', 'confirmed'] },
+          heldByFlagId: null,
+        },
+        data: {
+          status: 'held',
+          description: 'Held: Critical fraud flag: suspicious_ctr',
+          heldByFlagId: 'flag-existing',
+        },
+      });
+      expect(mockLedger.holdEarnings).not.toHaveBeenCalled();
+    });
   });
 
   describe('resolveFlag', () => {
@@ -292,7 +343,70 @@ describe('FraudService', () => {
       expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalled();
     });
 
-    it('retries idempotent ledger reconciliation after the flag status already committed', async () => {
+    it('defers a valid entity reversal while its earnings are in an in-flight payout', async () => {
+      mockPrisma.fraudFlag.findUnique.mockResolvedValue({
+        id: 'flag-in-flight',
+        userId: 'u-1',
+        impressionId: 'imp-1',
+        clickId: null,
+        severity: 'critical',
+        status: 'open',
+      });
+      mockPrisma.payoutAllocation.count.mockResolvedValue(1);
+
+      await expect(
+        service.resolveFlag('flag-in-flight', 'rev-adm', true, 'Confirmed fraud'),
+      ).rejects.toThrow(/in-flight payout/i);
+
+      expect(mockPrisma.payoutAllocation.count).toHaveBeenCalledWith({
+        where: {
+          payoutRequest: { status: 'processing' },
+          earningsEntry: { impressionId: 'imp-1' },
+        },
+      });
+      expect(mockPrisma.fraudFlag.updateMany).not.toHaveBeenCalled();
+      expect(mockLedger.reverseEarnings).not.toHaveBeenCalled();
+    });
+
+    it('allows a senior reviewer to resolve an escalated flag', async () => {
+      mockPrisma.fraudFlag.findUnique.mockResolvedValue({
+        id: 'flag-escalated',
+        userId: 'u-1',
+        impressionId: null,
+        clickId: null,
+        severity: 'critical',
+        status: 'escalated',
+      });
+      mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+      mockLedger.releaseEarnings.mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.resolveFlag('flag-escalated', 'senior-admin', false, 'Cleared by senior review'),
+      ).resolves.toMatchObject({ status: 'resolved_invalid', isValid: false });
+
+      expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'flag-escalated',
+            status: { in: expect.arrayContaining(['open', 'reviewing', 'escalated']) },
+          }),
+        }),
+      );
+      expect(mockLedger.releaseEarnings).toHaveBeenCalledWith(
+        'u-1',
+        {
+          impressionId: undefined,
+          flagId: 'flag-escalated',
+        },
+        expect.any(Object),
+      );
+    });
+
+    it('retries idempotent ledger reconciliation after an atomic resolution rolls back', async () => {
       const baseFlag = {
         id: 'flag-retry',
         userId: 'u-1',
@@ -301,10 +415,8 @@ describe('FraudService', () => {
         flagType: 'invalid_impression',
         severity: 'high',
       };
-      mockPrisma.fraudFlag.findUnique
-        .mockResolvedValueOnce({ ...baseFlag, status: 'open' })
-        .mockResolvedValueOnce({ ...baseFlag, status: 'resolved_valid' });
-      mockPrisma.fraudFlag.updateMany.mockResolvedValueOnce({ count: 1 });
+      mockPrisma.fraudFlag.findUnique.mockResolvedValue({ ...baseFlag, status: 'open' });
+      mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 1 });
       mockLedger.reverseEarnings
         .mockRejectedValueOnce(new Error('ledger unavailable after flag commit'))
         .mockResolvedValueOnce({ reversed: 1, paidSkipped: 0 });
@@ -320,7 +432,7 @@ describe('FraudService', () => {
         service.resolveFlag('flag-retry', 'reviewer-1', true, 'confirmed'),
       ).resolves.toMatchObject({ status: 'resolved_valid', isValid: true });
 
-      expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalledTimes(2);
       expect(mockLedger.reverseEarnings).toHaveBeenCalledTimes(2);
     });
   });
@@ -362,6 +474,23 @@ describe('FraudService', () => {
 
       const result = await service.escalateFlag('flag-race', 'rev-adm');
       expect(result.status).toBe('escalated');
+    });
+  });
+
+  describe('getOpenFlags', () => {
+    it('keeps escalated flags in the active review queue', async () => {
+      mockPrisma.fraudFlag.findMany.mockResolvedValue([]);
+      mockPrisma.fraudFlag.count.mockResolvedValue(0);
+
+      await service.getOpenFlags();
+
+      expect(mockPrisma.fraudFlag.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: { in: expect.arrayContaining(['open', 'reviewing', 'escalated']) },
+          },
+        }),
+      );
     });
   });
 

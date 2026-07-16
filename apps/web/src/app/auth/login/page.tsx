@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
-import { getDashboardPath } from '@/lib/auth-routing';
+import { resolvePostLoginPath } from '@/lib/auth-routing';
 
 interface GoogleCredentialResponse {
   credential: string;
@@ -22,10 +22,22 @@ interface AuthenticatedUser {
 function GoogleG({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+      <path
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        fill="#34A853"
+      />
+      <path
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+        fill="#EA4335"
+      />
     </svg>
   );
 }
@@ -57,6 +69,11 @@ export default function LoginPage() {
   const googleInitialized = useRef(false);
   const twoFactorTokenRef = useRef('');
 
+  const postLoginPath = (role: string | null | undefined) => {
+    const returnTo = new URLSearchParams(window.location.search).get('returnTo');
+    return resolvePostLoginPath(role, returnTo);
+  };
+
   useEffect(() => {
     twoFactorTokenRef.current = twoFactorToken;
   }, [twoFactorToken]);
@@ -66,7 +83,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const user = await googleLogin('mock-google-token-developer', undefined, twoFactorToken);
-      router.push(getDashboardPath(user.role));
+      router.push(postLoginPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Mock Google login failed'));
     } finally {
@@ -91,7 +108,10 @@ export default function LoginPage() {
         }
       } catch (err: unknown) {
         // Silently degrade — Google sign-in button will show as disabled.
-        console.error('Auth config fetch failed (login):', err instanceof Error ? err.message : String(err));
+        console.error(
+          'Auth config fetch failed (login):',
+          err instanceof Error ? err.message : String(err),
+        );
       }
     };
     fetchConfig();
@@ -113,15 +133,14 @@ export default function LoginPage() {
           callback: async (response: GoogleCredentialResponse) => {
             setError('');
             setLoading(true);
-            const errorMsg = await handleGoogleCredential(
-              response.credential,
-              (idToken) => googleLogin(idToken, undefined, twoFactorTokenRef.current),
+            const errorMsg = await handleGoogleCredential(response.credential, (idToken) =>
+              googleLogin(idToken, undefined, twoFactorTokenRef.current),
             );
             setLoading(false);
             if (errorMsg.error) {
               setError(errorMsg.error);
             } else {
-              router.push(getDashboardPath(errorMsg.user?.role));
+              router.push(postLoginPath(errorMsg.user?.role));
             }
           },
           auto_select: false,
@@ -160,7 +179,7 @@ export default function LoginPage() {
 
     try {
       const user = await login(email, password, twoFactorToken);
-      router.push(getDashboardPath(user.role));
+      router.push(postLoginPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Login failed'));
     } finally {
@@ -169,28 +188,47 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-50 px-6">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen flex items-center justify-center bg-surface-50 px-6"
+    >
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2.5 mb-10 justify-center">
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">WaitLayer</span>
+          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
+            WaitLayer
+          </span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
-          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">Welcome back</h1>
+          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
+            Welcome back
+          </h1>
           <p className="text-surface-500 text-[14px] mb-8">Sign in to your account</p>
 
           {error && (
-            <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5" role="alert" aria-live="polite">
+            <div
+              className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5"
+              role="alert"
+              aria-live="polite"
+            >
               <p className="text-red-600 text-[14px]">{error}</p>
             </div>
           )}
 
           <form className="space-y-5" onSubmit={handleSubmit} role="form" aria-label="Sign in form">
             <div>
-              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">Email</label>                <input
+              <label
+                htmlFor="login-email"
+                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+              >
+                Email
+              </label>
+              <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -203,7 +241,12 @@ export default function LoginPage() {
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-surface-700 text-[14px] font-medium block">Password</label>
+                <label
+                  htmlFor="login-password"
+                  className="text-surface-700 text-[14px] font-medium block"
+                >
+                  Password
+                </label>
                 <Link
                   href="/auth/forgot-password"
                   className="text-brand-500 hover:text-brand-600 text-[13px] font-medium transition-colors"
@@ -212,6 +255,7 @@ export default function LoginPage() {
                 </Link>
               </div>
               <input
+                id="login-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -222,10 +266,14 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+              <label
+                htmlFor="login-two-factor"
+                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+              >
                 2FA code
               </label>
               <input
+                id="login-two-factor"
                 type="text"
                 value={twoFactorToken}
                 onChange={(e) => setTwoFactorToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -249,7 +297,9 @@ export default function LoginPage() {
 
           <div className="flex items-center gap-3 my-6">
             <div className="flex-1 h-px bg-surface-200" />
-            <span className="text-surface-400 text-[11px] font-semibold uppercase tracking-wider">or</span>
+            <span className="text-surface-400 text-[11px] font-semibold uppercase tracking-wider">
+              or
+            </span>
             <div className="flex-1 h-px bg-surface-200" />
           </div>
 
@@ -268,12 +318,13 @@ export default function LoginPage() {
             >
               <GoogleG size={18} />
               <span>Continue with Google</span>
-              <span className="text-[10px] text-surface-300 font-normal">(disabled: client ID missing)</span>
+              <span className="text-[10px] text-surface-300 font-normal">
+                (disabled: client ID missing)
+              </span>
             </button>
           )}
 
           {process.env.NODE_ENV === 'development' && (
-
             <button
               onClick={handleMockGoogleLogin}
               type="button"
@@ -286,13 +337,16 @@ export default function LoginPage() {
 
           <p className="text-surface-500 text-[14px] text-center mt-7">
             Don't have an account?{' '}
-            <Link href="/auth/signup" className="text-brand-500 hover:text-brand-600 font-medium transition-colors">
+            <Link
+              href="/auth/signup"
+              className="text-brand-500 hover:text-brand-600 font-medium transition-colors"
+            >
               Sign up
             </Link>
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 

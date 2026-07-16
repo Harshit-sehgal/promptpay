@@ -201,8 +201,8 @@ model User {
   // `twoFactorEnabled`). Rotation requires disabling with a current code before
   // setting up a replacement secret. Values are encrypted by the API before
   // storage; legacy plaintext values are only tolerated for read compatibility.
-  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
-  twoFactorSecret  String? @map("two_factor_secret")
+  twoFactorEnabled          Boolean  @default(false) @map("two_factor_enabled")
+  twoFactorSecret           String?  @map("two_factor_secret")
   // One-time recovery codes are stored as keyed HMACs, never plaintext.
   twoFactorBackupCodeHashes String[] @default([]) @map("two_factor_backup_code_hashes")
 
@@ -220,7 +220,7 @@ model User {
   payoutRequests             PayoutRequest[]
   // Approvals this admin issued as a campaign reviewer (nullable FK on
   // CampaignApproval.reviewerId with ON DELETE SET NULL — see there).
-  campaignApprovals          CampaignApproval[] @relation("CampaignReviewer")
+  campaignApprovals          CampaignApproval[]    @relation("CampaignReviewer")
   trustScore                 TrustScore?
   fraudFlags                 FraudFlag[]
   adReports                  AdReport[]
@@ -238,10 +238,10 @@ model User {
   apiKeys                    ApiKey[]
   consents                   Consent[]
 
+  @@unique([githubId])
   // The `email` @unique (above) already serves equality/like scans on
   // email; a separate @@index duplicates storage and write cost.
   @@index([role, status])
-  @@unique([githubId])
   @@map("users")
 }
 
@@ -339,15 +339,15 @@ model DeviceRecoveryToken {
 // ══════════════════════════════════════════════════════════
 
 model UserSettings {
-  id             String  @id @default(uuid())
-  userId         String  @unique
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  adsEnabled     Boolean @default(false)
-  quietMode      Boolean @default(false)
-  quietModeStart String  @default("22:00")
-  quietModeEnd   String  @default("08:00")
-  maxAdsPerHour  Int     @default(6)
-  timezone       String?
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adsEnabled        Boolean  @default(false)
+  quietMode         Boolean  @default(false)
+  quietModeStart    String   @default("22:00")
+  quietModeEnd      String   @default("08:00")
+  maxAdsPerHour     Int      @default(6)
+  timezone          String?
   // A-057: per-developer persisted blocked category slugs. The API loads
   // these during ad selection and merges them with any per-request client-
   // supplied arrays, guaranteeing enforcement even when the client omits them.
@@ -364,18 +364,22 @@ model UserSettings {
 // ══════════════════════════════════════════════════════════
 
 model PayoutAccount {
-  id          String         @id @default(uuid())
-  userId      String
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider    PayoutProvider
-  destination String
-  currency    String         @default("USD")
-  isVerified  Boolean        @default(false)
-  isActive    Boolean        @default(true)
+  id                       String         @id @default(uuid())
+  userId                   String
+  user                     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider                 PayoutProvider
+  destination              String
+  currency                 String         @default("USD")
+  isVerified               Boolean        @default(false)
+  isActive                 Boolean        @default(true)
   // Emergency freeze: operator-initiated block on a verified payout
   // destination. A frozen account cannot be used for payouts until an
   // admin explicitly unfreezes it, even if it remains verified and active.
-  isFrozen    Boolean        @default(false)
+  isFrozen                 Boolean        @default(false) @map("is_frozen")
+  // Durable fence for an outbound provider call. It is cleared only after the
+  // referenced payout reaches a reconciled outcome; there is intentionally no
+  // automatic expiry for ambiguous money movement.
+  initiationPayoutId String? @map("initiation_payout_id")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -383,6 +387,7 @@ model PayoutAccount {
   payoutRequests PayoutRequest[]
 
   @@index([userId, provider, isActive])
+  @@index([initiationPayoutId], map: "payout_accounts_initiation_payout_id_idx")
   @@map("payout_accounts")
 }
 
@@ -432,7 +437,7 @@ model Campaign {
   // qualified/billed. budgetSpentMinor + budgetReservedMinor must never
   // exceed budgetTotalMinor. Reserved amounts are released if the impression
   // fails to qualify (fraud, timeout, budget exhaustion, etc.).
-  budgetReservedMinor BigInt         @default(0)
+  budgetReservedMinor BigInt         @default(0) @map("budget_reserved_minor")
   currency            String         @default("USD")
   frequencyCapPerHour Int            @default(2)
   frequencyCapPerDay  Int            @default(6)
@@ -459,6 +464,7 @@ model Campaign {
   @@index([advertiserId])
   @@index([status])
   @@index([status, category])
+  @@index([status, budgetReservedMinor], map: "campaigns_status_budget_reserved_idx")
   @@map("campaigns")
 }
 
@@ -470,7 +476,7 @@ model AdCreative {
   sponsoredMessage String
   destinationUrl   String
   displayDomain    String
-  ctaText          String?       @map("cta_text")
+  ctaText          String?        @map("cta_text")
   status           CreativeStatus @default(draft)
   rejectionReason  String?
 
@@ -515,8 +521,8 @@ model BlockedCategory {
 
   createdAt DateTime @default(now())
 
-  @@map("blocked_categories")
   @@index([categoryId])
+  @@map("blocked_categories")
 }
 
 model CountryTargeting {
@@ -553,19 +559,19 @@ model ToolIntegration {
 // ══════════════════════════════════════════════════════════
 
 model WaitStateEvent {
-  id             String       @id @default(uuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceId       String
-  device         Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  sessionId      String
-  eventType      EventType
-  waitStateId    String
-  toolType       ToolTypeEnum
-  duration       Int?
-  ipHash         String?
-  signature      String
-  idempotencyKey String       @unique
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId        String
+  device          Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessionId       String
+  eventType       EventType
+  waitStateId     String
+  toolType        ToolTypeEnum
+  duration        Int?
+  ipHash          String?
+  signature       String
+  idempotencyKey  String       @unique
   // Confidence-based wait-detection metadata (P0). Signals are categorized
   // telemetry (no user code) used to score whether this wait state is a real
   // productive wait vs. idle inactivity.
@@ -580,6 +586,8 @@ model WaitStateEvent {
   @@index([userId, createdAt])
   @@index([deviceId, createdAt])
   @@index([waitStateId, eventType])
+  @@index([confidence], map: "wait_state_events_confidence_idx")
+  @@index([isFalsePositive], map: "wait_state_events_false_positive_idx")
   @@map("wait_state_events")
 }
 
@@ -835,6 +843,7 @@ model PayoutRequest {
   transactions PayoutTransaction[]
   allocations  PayoutAllocation[]
 
+  @@unique([userId, idempotencyKey], map: "payout_requests_user_id_idempotency_key_key")
   @@index([userId])
   @@index([status])
   // Hot path: "my payouts in a given status" — dashboard list queries filter
@@ -842,7 +851,7 @@ model PayoutRequest {
   // to pick one and heap-filter the other.
   @@index([userId, status])
   @@index([payoutAccountId])
-  @@unique([userId, idempotencyKey])
+  @@index([idempotencyKey], map: "payout_requests_idempotency_key_idx")
   @@map("payout_requests")
 }
 
@@ -918,28 +927,28 @@ model RecoveryDebtCase {
 // ══════════════════════════════════════════════════════════
 
 model FraudFlag {
-  id           String          @id @default(uuid())
-  userId       String?
-  user         User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  deviceId     String?
-  device       Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
-  campaignId   String?
-  campaign     Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  impressionId String?
-  impression   AdImpression?   @relation(fields: [impressionId], references: [id], onDelete: SetNull)
-  clickId      String?
-  click        AdClick?        @relation(fields: [clickId], references: [id], onDelete: SetNull)
+  id              String          @id @default(uuid())
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  deviceId        String?
+  device          Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  campaignId      String?
+  campaign        Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  impressionId    String?
+  impression      AdImpression?   @relation(fields: [impressionId], references: [id], onDelete: SetNull)
+  clickId         String?
+  click           AdClick?        @relation(fields: [clickId], references: [id], onDelete: SetNull)
   // First-class idempotency key for Stripe dispute flags. Kept outside JSON
   // evidence so Prisma drift checks and the database can enforce uniqueness.
-  stripeDisputeId String?       @unique
-  flagType     FraudFlagType
-  severity     FraudSeverity   @default(medium)
-  status       FraudFlagStatus @default(open)
-  scoreDelta   Int             @default(0)
-  evidence     Json
-  reviewNote   String?
-  reviewerId   String?
-  resolvedAt   DateTime?              @db.Timestamptz
+  stripeDisputeId String?         @unique
+  flagType        FraudFlagType
+  severity        FraudSeverity   @default(medium)
+  status          FraudFlagStatus @default(open)
+  scoreDelta      Int             @default(0)
+  evidence        Json
+  reviewNote      String?
+  reviewerId      String?
+  resolvedAt      DateTime?       @db.Timestamptz
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1089,7 +1098,7 @@ model CronLease {
   key       String   @id
   ownerId   String
   expiresAt DateTime @db.Timestamptz
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([expiresAt])
   @@map("cron_leases")
@@ -1100,7 +1109,7 @@ model CronLease {
 // ══════════════════════════════════════════════════════════
 
 model Referral {
-  id         String @id @default(uuid())
+  id         String         @id @default(uuid())
   // Referrer side: implicit RESTRICT by design. Referrals are the source of
   // truth for accrued referral rewards (ReferralReward.userId CASCADEs from
   // the referrer's own User row, but only if the referrer can be deleted —
@@ -1108,7 +1117,7 @@ model Referral {
   // them, preserving the earning history). The referrer is never silently
   // cascade-deleted; an admin must clear their referrals first.
   referrerId String
-  referrer   User   @relation("Referrer", fields: [referrerId], references: [id], onDelete: Restrict)
+  referrer   User           @relation("Referrer", fields: [referrerId], references: [id], onDelete: Restrict)
   // Referred side: CASCADE. A referral ceases to be meaningful once the
   // referred account is gone; cascade-deleting the referral row also
   // CASCADEs its ReferralReward rows (referral_rewards.referralId) cleanly.
@@ -1116,8 +1125,8 @@ model Referral {
   // which needlessly blocked User hard-delete when the only blocker was a
   // referral row — inconsistent with the Session/Device/... cascade policy.
   referredId String
-  referred   User   @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
-  code       String @unique
+  referred   User           @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+  code       String         @unique
   status     ReferralStatus @default(pending)
 
   createdAt DateTime @default(now())
@@ -1165,18 +1174,18 @@ model ReferralReward {
 // terms acceptance). Consent is append-only — withdrawing creates a new row with
 // `granted = false` rather than mutating history, so the audit trail is intact.
 model Consent {
-  id          String   @id @default(uuid())
+  id            String  @id @default(uuid())
   // Nullable to support privacy-minimized ANONYMOUS (logged-out) consent where
   // no authenticated user exists. Authenticated consent always sets `userId`.
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
   // e.g. "privacy_policy", "marketing_cookies", "terms_of_service"
-  purpose     String
+  purpose       String
   // Version of the policy/terms the consent applies to (e.g. "2026-07-01").
-  version     String
-  granted     Boolean  @default(true)
+  version       String
+  granted       Boolean @default(true)
   // Optional free-text or structured context (method of capture).
-  metadata    Json?
+  metadata      Json?
   // sha256 of a client-generated pseudonymous visitor id for anonymous,
   // logged-out consent. Never stores the raw id, IP, or other PII (A-009).
   visitorIdHash String?
@@ -1193,13 +1202,13 @@ model Consent {
 // (keyed by `category`) drives the retention cron so thresholds are config, not
 // code. Categories: "webhook_events", "audit_logs", "sessions", "export_cache".
 model DataRetentionConfig {
-  id        String @id @default(uuid())
-  category  String @unique
+  id         String   @id @default(uuid())
+  category   String   @unique
   // Number of days to retain before the retention cron purges. NULL = retain
   // indefinitely (never purge this category).
   retainDays Int?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("data_retention_config")
 }
@@ -1216,12 +1225,12 @@ model DataRetentionConfig {
 // the database on every request.
 model SystemSetting {
   id        String   @id @default(uuid())
-  scope     String   // e.g. 'ads', 'deposits', 'payouts', 'provider', 'tool', 'country', 'currency', 'extension'
-  target    String   // e.g. 'global', 'stripe', 'US', 'USD', '1.2.3'
-  value     Json     // { enabled: boolean } or future structured config
+  scope     String // e.g. 'ads', 'deposits', 'payouts', 'provider', 'tool', 'country', 'currency', 'extension'
+  target    String // e.g. 'global', 'stripe', 'US', 'USD', '1.2.3'
+  value     Json // { enabled: boolean } or future structured config
   reason    String?
   updatedBy String?  @map("updated_by")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([scope, target])
   @@index([scope])
@@ -1245,8 +1254,8 @@ model EmailQueue {
   text        String?
   contentHash String   @unique @map("content_hash")
   retryCount  Int      @default(0) @map("retry_count")
-  nextRetryAt DateTime @db.Timestamptz @map("next_retry_at")
-  expiresAt   DateTime @db.Timestamptz @map("expires_at")
+  nextRetryAt DateTime @map("next_retry_at") @db.Timestamptz
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz
   lastError   String?  @map("last_error")
 
   createdAt DateTime @default(now()) @map("created_at")

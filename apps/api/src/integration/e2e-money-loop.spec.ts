@@ -1346,11 +1346,16 @@ describe('E2E Money Loop', () => {
       expect(recordedLedgerEntries.advertiser).toHaveLength(0);
       expect(recordedLedgerEntries.earnings).toHaveLength(0);
       expect(recordedLedgerEntries.platform).toHaveLength(0);
-      expect(mockPrisma.adImpression.update).toHaveBeenCalledWith({
-        where: { id: IMPRESSION_ID },
+      expect(mockPrisma.adImpression.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: IMPRESSION_ID,
+          qualifiedAt: null,
+          invalidatedAt: null,
+        },
         data: expect.objectContaining({
           isBillable: false,
           invalidationReason: 'account_not_active',
+          invalidatedAt: expect.any(Date),
         }),
       });
     });
@@ -1464,6 +1469,10 @@ describe('E2E Money Loop', () => {
           data: expect.objectContaining({ targetUrl: 'https://click.example.com/offer' }),
         }),
       );
+      const campaignSpendSql = mockPrisma.$executeRaw.mock.calls
+        .map(([template]) => (Array.isArray(template) ? template.join('') : String(template)))
+        .find((sql) => sql.includes('UPDATE "campaigns"'));
+      expect(campaignSpendSql).toContain('AND "status" <> \'archived\'');
 
       // CPC campaigns generate advertiser debit + developer credit + platform fee + reserve
       const advDebit = recordedLedgerEntries.advertiser.find((e: any) => e.entryType === 'debit');

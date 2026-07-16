@@ -16,6 +16,7 @@ import { eraseAccountIdentity } from '../common/utils/account-erasure';
 import { buildCappedExportMeta, splitCappedRows } from '../common/utils/export-metadata';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
+import { ACTIVE_FRAUD_FLAG_STATUSES } from '../fraud/fraud.constants';
 import { FraudService } from '../fraud/fraud.service';
 
 interface DeveloperSettingsUpdate {
@@ -272,12 +273,12 @@ export class DeveloperService {
     const [trustScore, openFlags, recentPenalties] = await Promise.all([
       this.prisma.trustScore.findUnique({ where: { userId } }),
       this.prisma.fraudFlag.findMany({
-        where: { userId, status: { in: ['open', 'reviewing'] } },
+        where: { userId, status: { in: ACTIVE_FRAUD_FLAG_STATUSES } },
         orderBy: { createdAt: 'desc' },
         take: 20,
       }),
       this.prisma.fraudFlag.findMany({
-        where: { userId, status: { in: ['resolved_valid', 'escalated'] } },
+        where: { userId, status: 'resolved_valid' },
         orderBy: { updatedAt: 'desc' },
         take: 10,
       }),

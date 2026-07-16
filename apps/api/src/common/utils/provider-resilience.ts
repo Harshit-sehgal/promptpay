@@ -30,6 +30,14 @@ interface BreakerState {
   openedAt: number | null;
 }
 
+/** The breaker rejected before invoking the provider callback. */
+export class CircuitBreakerOpenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CircuitBreakerOpenError';
+  }
+}
+
 /**
  * Minimal per-key circuit breaker for external provider calls.
  *
@@ -51,7 +59,9 @@ export class CircuitBreaker {
     if (state.openedAt !== null) {
       const elapsed = Date.now() - state.openedAt;
       if (elapsed < this.COOLDOWN_MS) {
-        throw new Error(`Circuit breaker for "${key}" is open (cooldown ${Math.ceil((this.COOLDOWN_MS - elapsed) / 1000)}s remaining)`);
+        throw new CircuitBreakerOpenError(
+          `Circuit breaker for "${key}" is open (cooldown ${Math.ceil((this.COOLDOWN_MS - elapsed) / 1000)}s remaining)`,
+        );
       }
       // Half-open: allow one trial.
       state.openedAt = null;

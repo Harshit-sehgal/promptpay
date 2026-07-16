@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { stringifyApiData } from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
@@ -32,7 +33,7 @@ export default function AdvertiserSettingsPage() {
     try {
       const res = await advertiserApi.exportData();
       const exportData = res.data as SelfServiceExportPayload;
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const blob = new Blob([stringifyApiData(exportData, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

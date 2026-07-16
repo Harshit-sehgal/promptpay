@@ -12,6 +12,11 @@ const mock = vi.hoisted(() => ({
   config: {} as Record<string, unknown>,
   secrets: {} as Record<string, string>,
   captured: [] as Array<Record<string, unknown>>,
+  deleted: [] as string[],
+  inputs: [] as Array<string | undefined>,
+  responses: [] as Array<{ status: number; body: string }>,
+  storeHook: undefined as ((key: string, value: string) => Promise<void>) | undefined,
+  deleteHook: undefined as ((key: string) => Promise<void>) | undefined,
   used: '' as string,
   nextBody: JSON.stringify({
     available: { amountMinor: '0', currency: 'USD' },
@@ -35,7 +40,7 @@ vi.mock('vscode', () => ({
   },
   env: { machineId: 'test-machine-id' },
   window: {
-    showInputBox: vi.fn(() => Promise.resolve(undefined)),
+    showInputBox: vi.fn(() => Promise.resolve(mock.inputs.shift())),
     showInformationMessage: vi.fn(),
     showWarningMessage: vi.fn(),
     showErrorMessage: vi.fn(),
@@ -49,10 +54,14 @@ function fakeRequest(
   return (options, callback) => {
     mock.used = protocol;
     mock.captured.push(options);
+    const response = mock.responses.shift() ?? {
+      status: mock.nextStatus,
+      body: mock.nextBody,
+    };
 
     const handlers: Record<string, Array<(...args: unknown[]) => void>> = {};
     const res = {
-      statusCode: mock.nextStatus,
+      statusCode: response.status,
       on(event: string, cb: (...args: unknown[]) => void) {
         (handlers[event] ||= []).push(cb);
         return res;
@@ -62,7 +71,7 @@ function fakeRequest(
     // Attach listeners first (inside the real callback), then stream the body.
     callback(res);
     queueMicrotask(() => {
-      (handlers['data'] || []).forEach((h) => h(mock.nextBody));
+      (handlers['data'] || []).forEach((h) => h(response.body));
       (handlers['end'] || []).forEach((h) => h());
     });
 
@@ -85,9 +94,12 @@ function makeSecrets(): vscode.SecretStorage {
   return {
     get: vi.fn(async (key: string) => mock.secrets[key] ?? null),
     store: vi.fn(async (key: string, value: string) => {
+      await mock.storeHook?.(key, value);
       mock.secrets[key] = value;
     }),
     delete: vi.fn(async (key: string) => {
+      mock.deleted.push(key);
+      await mock.deleteHook?.(key);
       delete mock.secrets[key];
     }),
   } as unknown as vscode.SecretStorage;
@@ -101,6 +113,11 @@ beforeEach(() => {
   mock.config = {};
   mock.secrets = {};
   mock.captured = [];
+  mock.deleted = [];
+  mock.inputs = [];
+  mock.responses = [];
+  mock.storeHook = undefined;
+  mock.deleteHook = undefined;
   mock.used = '';
   mock.nextBody = JSON.stringify({
     available: { amountMinor: '0', currency: 'USD' },
@@ -205,5 +222,192 @@ describe('ApiClient — header shaping', () => {
     expect(opts.headers['Authorization']).toBe('Bearer tok-123');
     expect(opts.headers['X-Extension-Version']).toBe('0.0.1');
     expect(opts.headers['X-Tool-Type']).toBe('vscode');
+  });
+});
+
+describe('ApiClient — auth state ordering', () => {
+  it('persists a rotated refresh token before retrying the original request', async () => {
+    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+      accessToken: 'old-access',
+      refreshToken: 'old-refresh',
+    });
+    mock.responses = [
+      { status: 401, body: JSON.stringify({ message: 'expired' }) },
+      {
+        status: 200,
+        body: JSON.stringify({ accessToken: 'new-access', refreshToken: 'new-refresh' }),
+      },
+      {
+        status: 200,
+        body: JSON.stringify({
+          available: { amountMinor: '1250', currency: 'USD' },
+          pending: { amountMinor: '0', currency: 'USD' },
+          total: { amountMinor: '1250', currency: 'USD' },
+          paidOut: { amountMinor: '0', currency: 'USD' },
+        }),
+      },
+    ];
+    const gate = Promise.withResolvers<void>();
+    let tokenStoreStarted = false;
+    mock.storeHook = async (key) => {
+      if (key !== 'waitlayer.authTokens') return;
+      tokenStoreStarted = true;
+      await gate.promise;
+    };
+    const client = makeClient();
+
+    const balancePromise = client.getBalance();
+    const settled = vi.fn();
+    void balancePromise.then(settled);
+    await vi.waitFor(() => expect(tokenStoreStarted).toBe(true));
+
+    expect(settled).not.toHaveBeenCalled();
+    expect(mock.captured).toHaveLength(2);
+    expect(JSON.parse(mock.secrets['waitlayer.authTokens'])).toEqual({
+      accessToken: 'old-access',
+      refreshToken: 'old-refresh',
+    });
+
+    gate.resolve();
+    await expect(balancePromise).resolves.toMatchObject({
+      available: { amountMinor: 1250, currency: 'USD' },
+    });
+    expect(mock.captured).toHaveLength(3);
+    expect(JSON.parse(mock.secrets['waitlayer.authTokens'])).toEqual({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+    });
+    const retry = mock.captured[2] as { headers: Record<string, string> };
+    expect(retry.headers['Authorization']).toBe('Bearer new-access');
+  });
+
+  it('does not retry with rotated tokens when SecretStorage persistence fails', async () => {
+    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+      accessToken: 'old-access',
+      refreshToken: 'old-refresh',
+    });
+    mock.responses = [
+      { status: 401, body: JSON.stringify({ message: 'expired' }) },
+      {
+        status: 200,
+        body: JSON.stringify({ accessToken: 'new-access', refreshToken: 'new-refresh' }),
+      },
+    ];
+    mock.storeHook = async (key) => {
+      if (key === 'waitlayer.authTokens') throw new Error('secret store unavailable');
+    };
+    const client = makeClient();
+
+    await expect(client.getBalance()).rejects.toMatchObject({ statusCode: 401 });
+    expect(mock.captured).toHaveLength(2);
+    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+  });
+
+  it('does not report login success when token persistence fails', async () => {
+    mock.inputs = ['dev@example.com', 'password'];
+    mock.responses = [
+      {
+        status: 200,
+        body: JSON.stringify({
+          accessToken: 'new-access',
+          refreshToken: 'new-refresh',
+          user: { id: 'new-user' },
+        }),
+      },
+    ];
+    mock.storeHook = async (key) => {
+      if (key === 'waitlayer.authTokens') throw new Error('secret store unavailable');
+    };
+    const client = makeClient();
+
+    await expect(client.promptLogin()).resolves.toBe(false);
+    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+  });
+
+  it('awaits different-user device cleanup before completing login', async () => {
+    mock.secrets['waitlayer.deviceUUID'] = 'old-device';
+    mock.secrets['waitlayer.deviceEventSecret'] = 'old-secret';
+    mock.secrets['waitlayer.deviceUserId'] = 'old-user';
+    mock.inputs = ['new@example.com', 'password'];
+    mock.responses = [
+      {
+        status: 200,
+        body: JSON.stringify({
+          accessToken: 'new-access',
+          refreshToken: 'new-refresh',
+          user: { id: 'new-user' },
+        }),
+      },
+    ];
+    const gate = Promise.withResolvers<void>();
+    let cleanupStarted = false;
+    mock.deleteHook = async (key) => {
+      if (key !== 'waitlayer.deviceUUID') return;
+      cleanupStarted = true;
+      await gate.promise;
+    };
+    const client = makeClient();
+
+    const loginPromise = client.promptLogin();
+    const settled = vi.fn();
+    void loginPromise.then(settled);
+    await vi.waitFor(() => expect(cleanupStarted).toBe(true));
+
+    expect(settled).not.toHaveBeenCalled();
+    expect(mock.secrets['waitlayer.deviceUUID']).toBe('old-device');
+    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+
+    gate.resolve();
+    await expect(loginPromise).resolves.toBe(true);
+    expect(mock.secrets['waitlayer.deviceUUID']).toBeUndefined();
+    expect(mock.secrets['waitlayer.deviceEventSecret']).toBeUndefined();
+    expect(mock.secrets['waitlayer.deviceUserId']).toBeUndefined();
+    expect(JSON.parse(mock.secrets['waitlayer.authTokens'])).toEqual({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+    });
+  });
+
+  it('does not complete logout until persisted tokens are cleared', async () => {
+    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+    });
+    mock.responses = [{ status: 200, body: '{}' }];
+    const gate = Promise.withResolvers<void>();
+    let clearStarted = false;
+    mock.deleteHook = async (key) => {
+      if (key !== 'waitlayer.authTokens') return;
+      clearStarted = true;
+      await gate.promise;
+    };
+    const client = makeClient();
+
+    const logoutPromise = client.logout();
+    const settled = vi.fn();
+    void logoutPromise.then(settled);
+    await vi.waitFor(() => expect(clearStarted).toBe(true));
+
+    expect(settled).not.toHaveBeenCalled();
+    expect(mock.secrets['waitlayer.authTokens']).toBeDefined();
+
+    gate.resolve();
+    await logoutPromise;
+    expect(mock.secrets['waitlayer.authTokens']).toBeUndefined();
+  });
+
+  it('propagates logout failure when persisted tokens cannot be cleared', async () => {
+    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+    });
+    mock.responses = [{ status: 200, body: '{}' }];
+    mock.deleteHook = async (key) => {
+      if (key === 'waitlayer.authTokens') throw new Error('secret delete unavailable');
+    };
+    const client = makeClient();
+
+    await expect(client.logout()).rejects.toThrow('secret delete unavailable');
+    expect(mock.secrets['waitlayer.authTokens']).toBeDefined();
   });
 });

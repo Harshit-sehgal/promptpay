@@ -43,7 +43,10 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}) {
       aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
     },
     fraudFlag: { count: vi.fn().mockResolvedValue(0) },
-    payoutAccount: { findUnique: vi.fn() },
+    payoutAccount: {
+      findUnique: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn((cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
     ...prismaOverrides,
@@ -106,6 +109,7 @@ describe('Payout status state-machine transitions', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           findFirst: vi.fn(),
@@ -180,6 +184,7 @@ describe('Payout status state-machine transitions', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           findFirst: vi.fn(),
@@ -242,6 +247,7 @@ describe('Payout status state-machine transitions', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           findFirst: vi.fn(),
@@ -299,6 +305,7 @@ describe('Payout status state-machine transitions', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn(),
           findFirst: vi.fn(),
@@ -345,6 +352,7 @@ describe('Payout status state-machine transitions', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn(),
           findFirst: vi.fn(),
@@ -402,6 +410,7 @@ describe('Payout status state-machine transitions', () => {
           findFirst: vi.fn(),
           create: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutAllocation: { deleteMany, updateMany: vi.fn() },
         earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
         platformLedger: { upsert: vi.fn() },
@@ -478,14 +487,16 @@ describe('PayoutService.processPayout provider-failure recovery', () => {
 
     // processPayout first does a preflight check (status === 'approved' +
     // provider readiness), then CAS-claims approved→processing inside a
-    // transaction. The provider initiate happens OUTSIDE the tx; if it
-    // throws, the payout is already committed as 'processing' but the
+    // transaction. A second transaction holds the fraud/initiation advisory
+    // lock through the bounded provider call; if it throws, the payout is
+    // already committed as 'processing' but the
     // provider outcome is unknown. The error handler updates the
     // placeholder transaction with a failure reason and rethrows — the
     // payout stays recoverable (the cron will poll its status, or the
     // admin can mark it failed to release allocations for retry).
     const claimUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const txUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const fenceUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const { service } = makePayoutService({
       payoutRequest: {
         findUnique: vi.fn().mockResolvedValueOnce({
@@ -516,6 +527,7 @@ describe('PayoutService.processPayout provider-failure recovery', () => {
         // Simulate the tx-level CAS claim + allocation reconciliation.
         // The provider initiate happens OUTSIDE the tx in the real code.
         return cb({
+          $executeRaw: vi.fn().mockResolvedValue(1),
           payoutRequest: {
             updateMany: claimUpdateMany,
             findUnique: vi.fn().mockResolvedValue({
@@ -542,7 +554,13 @@ describe('PayoutService.processPayout provider-failure recovery', () => {
           },
           payoutTransaction: {
             create: vi.fn().mockResolvedValue({ id: 'ptx-1' }),
+            updateMany: txUpdateMany,
           },
+          payoutAccount: {
+            findUnique: vi.fn(),
+            updateMany: fenceUpdateMany,
+          },
+          fraudFlag: { count: vi.fn().mockResolvedValue(0) },
         });
       }),
     });
@@ -586,6 +604,17 @@ describe('PayoutService.processPayout provider-failure recovery', () => {
         }),
       }),
     );
+    expect(fenceUpdateMany).toHaveBeenCalledTimes(1);
+    expect(fenceUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'acc1',
+        isFrozen: false,
+        isActive: true,
+        isVerified: true,
+        initiationPayoutId: null,
+      },
+      data: { initiationPayoutId: 'payout-1' },
+    });
   });
 });
 
@@ -613,6 +642,7 @@ describe('Duplicate-webhook replay idempotency (unit level)', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           findFirst: vi.fn(),
@@ -671,6 +701,7 @@ describe('Duplicate-webhook replay idempotency (unit level)', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn(),
           findFirst: vi.fn(),

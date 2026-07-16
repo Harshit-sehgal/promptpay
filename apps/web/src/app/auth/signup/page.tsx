@@ -272,7 +272,11 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-50 px-6 py-12">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen flex items-center justify-center bg-surface-50 px-6 py-12"
+    >
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2.5 mb-10 justify-center">
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
@@ -290,34 +294,45 @@ export default function SignupPage() {
           <p className="text-surface-500 text-[14px] mb-8">Start earning from AI wait time</p>
 
           {/* Role toggle — Notion-style segmented control */}
-          <div className="grid grid-cols-2 gap-0.5 bg-surface-100 p-1 rounded-xl mb-7">
-            <button
-              type="button"
-              onClick={() => setRole('developer')}
-              role="tab"
-              aria-selected={role === 'developer'}
-              className={`py-2.5 px-4 rounded-lg text-[14px] font-medium transition-all ${
+          <fieldset
+            className="grid grid-cols-2 gap-0.5 bg-surface-100 p-1 rounded-xl mb-7"
+            aria-label="Account type"
+          >
+            <label
+              className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-[14px] font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
                 role === 'developer'
                   ? 'bg-white text-surface-900 shadow-sm'
                   : 'text-surface-500 hover:text-surface-700'
               }`}
             >
+              <input
+                type="radio"
+                name="account-type"
+                value="developer"
+                checked={role === 'developer'}
+                onChange={() => setRole('developer')}
+                className="sr-only"
+              />
               Developer
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole('advertiser')}
-              role="tab"
-              aria-selected={role === 'advertiser'}
-              className={`py-2.5 px-4 rounded-lg text-[14px] font-medium transition-all ${
+            </label>
+            <label
+              className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-[14px] font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
                 role === 'advertiser'
                   ? 'bg-white text-surface-900 shadow-sm'
                   : 'text-surface-500 hover:text-surface-700'
               }`}
             >
+              <input
+                type="radio"
+                name="account-type"
+                value="advertiser"
+                checked={role === 'advertiser'}
+                onChange={() => setRole('advertiser')}
+                className="sr-only"
+              />
               Advertiser
-            </button>
-          </div>
+            </label>
+          </fieldset>
 
           {error && (
             <div
@@ -332,10 +347,14 @@ export default function SignupPage() {
           <form className="space-y-5" onSubmit={handleSubmit} role="form" aria-label="Sign up form">
             {role === 'advertiser' && (
               <div>
-                <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                <label
+                  htmlFor="signup-company-name"
+                  className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                >
                   Company name
                 </label>
                 <input
+                  id="signup-company-name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -346,8 +365,14 @@ export default function SignupPage() {
               </div>
             )}
             <div>
-              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">Email</label>
+              <label
+                htmlFor="signup-email"
+                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+              >
+                Email
+              </label>
               <input
+                id="signup-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -359,10 +384,14 @@ export default function SignupPage() {
               />
             </div>
             <div>
-              <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+              <label
+                htmlFor="signup-password"
+                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+              >
                 Password
               </label>
               <input
+                id="signup-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -375,10 +404,14 @@ export default function SignupPage() {
             </div>
             {role === 'developer' && (
               <div>
-                <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                <label
+                  htmlFor="signup-referral-code"
+                  className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                >
                   Referral code <span className="text-surface-400 font-normal">(optional)</span>
                 </label>
                 <input
+                  id="signup-referral-code"
                   type="text"
                   value={referrerCode}
                   onChange={(e) => setReferrerCode(e.target.value)}
@@ -388,8 +421,12 @@ export default function SignupPage() {
                 />
               </div>
             )}
-            <label className="flex items-start gap-2.5 text-surface-600 text-[13px] leading-relaxed cursor-pointer">
+            <label
+              htmlFor="signup-age-confirmation"
+              className="flex items-start gap-2.5 text-surface-600 text-[13px] leading-relaxed cursor-pointer"
+            >
               <input
+                id="signup-age-confirmation"
                 type="checkbox"
                 checked={ageConfirmed}
                 onChange={(e) => setAgeConfirmed(e.target.checked)}
@@ -511,7 +548,7 @@ export default function SignupPage() {
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 

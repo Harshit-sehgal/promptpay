@@ -11,24 +11,29 @@ interface FAQItem {
 const FAQS: FAQItem[] = [
   {
     question: 'How do I start earning with WaitLayer?',
-    answer: 'Simply sign up as a developer, install our VS Code extension or lightweight CLI, and authenticate. Once active, sponsored messages will appear during the short compilation, test execution, or deployment wait states in your editor or terminal.'
+    answer:
+      'Simply sign up as a developer, install our VS Code extension or lightweight CLI, and authenticate. Once active, sponsored messages will appear during the short compilation, test execution, or deployment wait states in your editor or terminal.',
   },
   {
     question: 'What payout methods are supported?',
-    answer: 'WaitLayer currently supports PayPal-first payouts. We are actively building integrations for Stripe, Wise, and other global payout methods to accommodate developers around the world.'
+    answer:
+      'WaitLayer currently supports PayPal-first payouts. We are actively building integrations for Stripe, Wise, and other global payout methods to accommodate developers around the world.',
   },
   {
     question: 'How does the revenue split work?',
-    answer: 'By default, the revenue split is 60% to the developer, 30% to the platform, and 10% held in a fraud and payment reserve. During special early-adopter launch phases, campaigns configured with the launch incentive yield an 80% user, 10% platform, 10% reserve split.'
+    answer:
+      'By default, the revenue split is 60% to the developer, 30% to the platform, and 10% held in a fraud and payment reserve. During special early-adopter launch phases, campaigns configured with the launch incentive yield an 80% user, 10% platform, 10% reserve split.',
   },
   {
     question: 'Will WaitLayer collect my code or private information?',
-    answer: 'No. WaitLayer is privacy-first by design. We only track visible sponsored message duration and interactions to calculate rewards. We never read, transmit, or store your code, prompts, completions, or file names.'
+    answer:
+      'No. WaitLayer is privacy-first by design. We only track visible sponsored message duration and interactions to calculate rewards. We never read, transmit, or store your code, prompts, completions, or file names.',
   },
   {
     question: 'Can I choose what ads are shown to me?',
-    answer: 'Yes! You can choose display frequencies, set daily/hourly caps, configure quiet hours, and block specific advertiser categories directly from your settings dashboard.'
-  }
+    answer:
+      'Yes! You can choose display frequencies, set daily/hourly caps, configure quiet hours, and block specific advertiser categories directly from your settings dashboard.',
+  },
 ];
 
 export default function FAQPage() {
@@ -47,18 +52,25 @@ export default function FAQPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
+              WaitLayer
+            </span>
           </Link>
-          <Link href="/" className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors">
+          <Link
+            href="/"
+            className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
+          >
             ← Back to Home
           </Link>
         </div>
       </nav>
 
       {/* Main content */}
-      <main className="pt-32 pb-24 px-6 mx-auto max-w-3xl">
+      <main id="main-content" tabIndex={-1} className="pt-32 pb-24 px-6 mx-auto max-w-3xl">
         <div className="text-center mb-16">
-          <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">Frequently Asked Questions</h1>
+          <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">
+            Frequently Asked Questions
+          </h1>
           <p className="text-surface-500 text-sm">
             Everything you need to know about earning from AI wait time.
           </p>

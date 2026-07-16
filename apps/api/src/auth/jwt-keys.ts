@@ -9,13 +9,14 @@ import { deriveKeyId } from './jwt-key-id';
  * Signing always emits a `kid` header derived from the signing public key
  * (see auth.module.ts). Verification resolves the token's `kid` against the set
  * of accepted public keys, so a freshly rotated key pair can be deployed while
- * the previous key remains in the set — pre-rotation access tokens continue to
- * verify until they naturally expire (~15m), then the old key is retired.
+ * the previous key remains in the set — pre-rotation access and refresh tokens
+ * continue to verify until the longest token lifetime has elapsed, then the old
+ * key is retired.
  *
  * Operationally an operator rotates by:
  *   1. deploying with `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` = new pair AND
  *      `JWT_PUBLIC_KEYS` = "<new pub>\n<old pub>";
- *   2. waiting one access-token TTL (default 15m);
+ *   2. waiting one refresh-token TTL (default 30d);
  *   3. deploying again with only the new pair (dropping `JWT_PUBLIC_KEYS`).
  *
  * This file deliberately knows nothing about the signing private key.

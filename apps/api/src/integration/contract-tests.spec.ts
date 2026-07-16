@@ -272,6 +272,31 @@ describe('API Contract Tests', () => {
       campaignId = res.body.id;
     });
 
+    it('round-trips reserved budget and rejects spent + reserved above total', async () => {
+      const campaign = await prisma.campaign.findUniqueOrThrow({ where: { id: campaignId } });
+
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: { budgetReservedMinor: campaign.budgetTotalMinor },
+      });
+      const fullyReserved = await prisma.campaign.findUniqueOrThrow({ where: { id: campaignId } });
+      expect(fullyReserved.budgetReservedMinor).toBe(campaign.budgetTotalMinor);
+
+      try {
+        await expect(
+          prisma.campaign.update({
+            where: { id: campaignId },
+            data: { budgetSpentMinor: 1n },
+          }),
+        ).rejects.toThrow();
+      } finally {
+        await prisma.campaign.update({
+          where: { id: campaignId },
+          data: { budgetReservedMinor: 0n, budgetSpentMinor: 0n },
+        });
+      }
+    });
+
     it('POST /campaigns/:id/creatives → matches CreativeResponse schema', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/campaigns/${campaignId}/creatives`)

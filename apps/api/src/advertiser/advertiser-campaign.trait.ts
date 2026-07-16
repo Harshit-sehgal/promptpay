@@ -1,11 +1,10 @@
 import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 
 import { BidType, Prisma } from '@waitlayer/db';
-import { AD_SERVING, CampaignStatus } from '@waitlayer/shared';
+import { AD_SERVING, CampaignStatus, formatMinorUnits } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
-import { getErrorCode } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { CAMPAIGN_TRANSITIONS } from './advertiser.constants';
@@ -32,15 +31,16 @@ export class AdvertiserCampaignTrait {
       frequencyCapPerDay?: number;
     },
   ) {
+    const currency = dto.currency?.trim().toUpperCase() || 'USD';
     // Validate budget
     if (dto.budgetTotalMinor < AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR) {
       throw new BadRequestException(
-        `Minimum budget is $${AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100}`,
+        `Minimum budget is ${formatMinorUnits(BigInt(AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR), currency)}`,
       );
     }
     if (dto.budgetTotalMinor > AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR) {
       throw new BadRequestException(
-        `Maximum budget is $${AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100}`,
+        `Maximum budget is ${formatMinorUnits(BigInt(AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR), currency)}`,
       );
     }
     if (dto.bidAmountMinor <= 0) {
@@ -48,7 +48,6 @@ export class AdvertiserCampaignTrait {
     }
     // Validate campaign category (blocks prohibited categories)
     await this.campaignService.validateCampaignCategory(dto.category);
-    const currency = dto.currency?.trim().toUpperCase() || 'USD';
     if (!(await this.runtimeConfig.isCurrencyAllowed(currency))) {
       throw new BadRequestException(`Currency "${currency}" is currently blocked`);
     }
@@ -229,30 +228,11 @@ export class AdvertiserCampaignTrait {
   }
 
   /**
-   * Archive a campaign — permanent close that stops all future ad spend and
-   * records the unspent-budget refund obligation.
-   *
-   * Which states can transition to `archived`:
-   *   - `draft` / `submitted` / `approved` (never served) — full budget refundable.
-   *   - `paused` / `active` (partially served) — unspent balance refundable.
-   *   - `rejected` — refundable per above.
-   *   - already `archived` — idempotent return.
-   *
-   * Refund model: an `advertiserLedger` `credit` row tagged with `campaignId`,
-   * status `pending`, amount = `budgetTotalMinor - budgetSpentMinor`. We use
-   * `pending` (not `confirmed`) because the actual Stripe refund has to be
-   * initiated by an admin in the Stripe dashboard — the platform's obligation
-   * to refund is recorded here, the cash movement is completed offline. The
-   * row's `idempotencyKey` is keyed by the campaign id so a re-invoked
-   * archive is a clean P2002 no-op (and an idempotent return for the
-   * already-archived campaign row).
-   *
-   * We do NOT auto-refund via Stripe in this MVP — there's no reliable way to
-   * select which deposit PI to refund against (a campaign's spend isn't 1:1
-   * linked to a specific deposit), and auto-issuing a Stripe refund that the
-   * advertiser didn't request would be a surprising money movement. The
-   * admin reconciles the pending row against the Stripe dashboard and issues
-   * the refund, then flips the row to `confirmed` (a future admin endpoint).
+   * Permanently archive a campaign and release its in-flight serving capacity.
+   * Campaign budgets are serving caps, not escrow: deposits belong to the
+   * advertiser and can fund multiple campaigns. Archiving therefore never
+   * manufactures a cash-refund obligation from `budgetTotal - budgetSpent`;
+   * real unspent cash remains in the advertiser's shared ledger balance.
    */
   async archiveCampaign(campaignId: string, advertiserId: string) {
     // Pre-ownership + existence check (without holding any row locks).
@@ -260,10 +240,7 @@ export class AdvertiserCampaignTrait {
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
     // Idempotent: already archived → return as-is.
     if (campaign.status === 'archived') {
-      const existingRefund = await this.prisma.advertiserLedger.findUnique({
-        where: { idempotencyKey: `archive_refund_${campaignId}` },
-      });
-      return { campaign, refundEntry: existingRefund ?? null, archived: false };
+      return { campaign, refundEntry: null, archived: false };
     }
     // Allow archiving from any non-terminal state. `archived` is the only
     // state we explicitly reject above (idempotent). The CAMPAIGN_TRANSITIONS
@@ -271,99 +248,27 @@ export class AdvertiserCampaignTrait {
     // validateTransition here — archive is a deliberate "close forever"
     // action available from every live state.
     //
-    // The `unspentMinor` snapshot is read INSIDE the transaction (not from
-    // the outer `campaign` row) so a concurrent impression that increments
-    // `budgetSpentMinor` either commits before us (we see the new value) or
-    // blocks on the row lock we hold until we commit (it then sees
-    // `status='archived'` and refuses to bill — see the status guard in
-    // recordImpressionEarnings / recordClickEarnings). Either way the refund
-    // amount matches the actual unspent balance at archive time. The
-    // single plain `campaign.updateMany` below functions as the row write
-    // that establishes the lock; the read that determines `unspentMinor`
-    // happens after that write under the same tx so it observes a locked
-    // snapshot of the row.
     const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // CAS flip: only if not already archived (re-invocation guard). This
       // UPDATE acquires the row lock; concurrent impression writes to
       // `budgetSpentMinor` block until we commit.
       const claimed = await tx.campaign.updateMany({
         where: { id: campaignId, status: { not: 'archived' } },
-        data: { status: 'archived', archivedAt: new Date() },
+        // Archive is terminal. Releasing reservations in the same row-locking
+        // write ensures the refund cannot include budget that a later
+        // qualification still converts to spend.
+        data: { status: 'archived', archivedAt: new Date(), budgetReservedMinor: 0n },
       });
       if (claimed.count === 0) {
-        // Lost race to another archiver — already archived.
-        return {
-          archived: false as const,
-          refundEntry: null as {
-            id: string;
-            amountMinor: bigint;
-          } | null,
-        };
+        return { archived: false as const };
       }
-      // Re-read the now-archived row inside the tx to get the authoritative
-      // `budgetSpentMinor` (the outer snapshot may be stale). The row is
-      // already locked by the UPDATE above so this read is consistent with
-      // the status flip and any concurrent impression has been blocked.
-      const locked = await tx.campaign.findUnique({
-        where: { id: campaignId },
-        select: { budgetTotalMinor: true, budgetSpentMinor: true, currency: true },
-      });
-      const unspentMinor = (locked?.budgetTotalMinor ?? 0n) - (locked?.budgetSpentMinor ?? 0n);
-      // Record the refund obligation row. Use `entryType: 'refund'` (NOT
-      // 'credit') + `status: 'pending'` so the row is doubly excluded from
-      // any "advertiser available balance" computation: a generic
-      // `entryType:'credit'` sum (which would otherwise absorb a pending
-      // credit into spendable balance) never sees it, and the `pending`
-      // status excludes it from confirmed-balance sums too. The row
-      // represents a platform obligation to the advertiser — the cash
-      // hasn't moved yet. An admin flips it to `confirmed` after manually
-      // issuing the Stripe refund (separate admin endpoint).
-      let refundEntry: {
-        id: string;
-        amountMinor: bigint;
-      } | null = null;
-      if (unspentMinor > 0n) {
-        try {
-          refundEntry = await tx.advertiserLedger.create({
-            data: {
-              advertiserId,
-              campaignId,
-              entryType: 'refund',
-              status: 'pending',
-              amountMinor: unspentMinor,
-              currency: locked?.currency ?? campaign.currency,
-              idempotencyKey: `archive_refund_${campaignId}`,
-              description: `Unspent-budget refund obligation — campaign ${campaignId} archived (${unspentMinor} ${locked?.currency ?? campaign.currency})`,
-            },
-          });
-        } catch (err: unknown) {
-          // P2002 here means a prior archive invocation wrote the row before
-          // the status CAS caught it — shouldn't be reachable given the
-          // outer fast-path, but tolerate it rather than aborting the tx.
-          if (getErrorCode(err) !== 'P2002') throw err;
-          refundEntry = await tx.advertiserLedger.findUnique({
-            where: { idempotencyKey: `archive_refund_${campaignId}` },
-          });
-        }
-      }
-      return {
-        archived: true as const,
-        refundEntry,
-        unspentMinor,
-        currency: locked?.currency ?? campaign.currency,
-      };
+      return { archived: true as const };
     });
     if (!result.archived) {
-      // Mirror the idempotent already-archived return shape.
-      const existingRefund = await this.prisma.advertiserLedger.findUnique({
-        where: { idempotencyKey: `archive_refund_${campaignId}` },
-      });
-      return { campaign, refundEntry: existingRefund ?? null, archived: false };
+      return { campaign, refundEntry: null, archived: false };
     }
     const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
-    this.logger.log(
-      `Archived campaign ${campaignId}: unspent refund obligation = ${result.unspentMinor} ${result.currency}`,
-    );
+    this.logger.log(`Archived campaign ${campaignId}; advertiser funds remain in shared balance`);
     void this.audit.log({
       actorId: advertiserId,
       actorRole: 'advertiser',
@@ -372,11 +277,11 @@ export class AdvertiserCampaignTrait {
       targetId: campaignId,
       beforeSnap: {
         oldStatus: campaign.status,
-        refundObligationMinor: String(result.unspentMinor),
-        currency: result.currency,
+        releasedReservationMinor: String(campaign.budgetReservedMinor ?? 0n),
+        currency: campaign.currency,
       },
     });
-    return { campaign: updated, refundEntry: result.refundEntry ?? null, archived: true };
+    return { campaign: updated, refundEntry: null, archived: true };
   }
 
   /** Update campaign details (only in DRAFT status) */
@@ -408,14 +313,21 @@ export class AdvertiserCampaignTrait {
     // Re-validate inputs — the createCampaign path enforces bounds, but
     // an update can be used to bypass them. Mirror the same checks.
     if (dto.budgetTotalMinor !== undefined) {
+      const validationCurrency = dto.currency ?? campaign.currency;
       if (dto.budgetTotalMinor < AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR) {
         throw new BadRequestException(
-          `Minimum budget is $${AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR / 100}`,
+          `Minimum budget is ${formatMinorUnits(
+            BigInt(AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR),
+            validationCurrency,
+          )}`,
         );
       }
       if (dto.budgetTotalMinor > AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR) {
         throw new BadRequestException(
-          `Maximum budget is $${AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR / 100}`,
+          `Maximum budget is ${formatMinorUnits(
+            BigInt(AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR),
+            validationCurrency,
+          )}`,
         );
       }
     }

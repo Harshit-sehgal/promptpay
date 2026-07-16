@@ -33,7 +33,11 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}, requir
       aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
     },
     fraudFlag: { count: vi.fn().mockResolvedValue(0) },
-    payoutAccount: { findUnique: vi.fn() },
+    payoutAccount: {
+      findUnique: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    $executeRaw: vi.fn().mockResolvedValue(1),
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn((cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
     ...prismaOverrides,
@@ -125,6 +129,63 @@ describe('PayoutService.requestPayout payout-account verification', () => {
         currency: 'USD',
       }),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('PayoutService.requestPayout active fraud reviews', () => {
+  const verifiedAccount = {
+    id: 'acc1',
+    userId: 'u1',
+    isActive: true,
+    isVerified: true,
+    isFrozen: false,
+    currency: 'USD',
+    createdAt: new Date(),
+  };
+
+  it('treats escalated high-risk flags as payout-blocking', async () => {
+    const fraudCount = vi.fn().mockResolvedValue(1);
+    const { service } = makePayoutService({
+      fraudFlag: { count: fraudCount },
+      payoutAccount: { findUnique: vi.fn().mockResolvedValue(verifiedAccount) },
+    });
+
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+      }),
+    ).rejects.toThrow('Payout blocked due to pending fraud review');
+
+    expect(fraudCount).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        status: { in: expect.arrayContaining(['open', 'reviewing', 'escalated']) },
+        severity: { in: ['high', 'critical'] },
+      },
+    });
+  });
+
+  it('re-checks active fraud inside the allocation transaction', async () => {
+    const fraudCount = vi.fn().mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    const payoutCreate = vi.fn();
+    const { service } = makePayoutService({
+      fraudFlag: { count: fraudCount },
+      payoutAccount: { findUnique: vi.fn().mockResolvedValue(verifiedAccount) },
+      payoutRequest: { findUnique: vi.fn(), create: payoutCreate },
+    });
+
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+      }),
+    ).rejects.toThrow('Payout blocked due to pending fraud review');
+
+    expect(fraudCount).toHaveBeenCalledTimes(2);
+    expect(payoutCreate).not.toHaveBeenCalled();
   });
 });
 
@@ -377,6 +438,263 @@ describe('PayoutService.allocatePayoutEarnings bounded auto-selection (A-071)', 
 });
 
 describe('PayoutService.processPayout partial approvals', () => {
+  it('rolls an approved payout back and never calls the provider when its account is frozen', async () => {
+    const payoutAccount = {
+      id: 'acc-frozen',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+      isFrozen: true,
+    };
+    const payoutForProcessing = {
+      id: 'payout-frozen',
+      userId: 'u1',
+      user: { status: 'active' },
+      payoutAccount,
+      status: 'processing',
+      requestedAmountMinor: 1000n,
+      approvedAmountMinor: 1000n,
+      currency: 'USD',
+      allocations: [],
+    };
+    let persistedStatus = 'approved';
+    const placeholderCreate = vi.fn();
+    const providerInitiate = vi.fn();
+
+    const { service } = makePayoutService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...payoutForProcessing,
+          status: 'approved',
+        }),
+      },
+      $transaction: vi.fn(async (cb: (tx: Record<string, unknown>) => Promise<unknown>) => {
+        const statusBeforeTransaction = persistedStatus;
+        const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          payoutRequest: {
+            updateMany: vi.fn().mockImplementation(() => {
+              persistedStatus = 'processing';
+              return Promise.resolve({ count: 1 });
+            }),
+            findUnique: vi.fn().mockResolvedValue(payoutForProcessing),
+          },
+          payoutTransaction: { create: placeholderCreate },
+          fraudFlag: { count: vi.fn().mockResolvedValue(0) },
+        };
+        try {
+          return await cb(tx);
+        } catch (err) {
+          // Model the rollback guarantee of Prisma's interactive transaction.
+          persistedStatus = statusBeforeTransaction;
+          throw err;
+        }
+      }),
+    });
+    (service as unknown as { providers: Record<string, unknown> }).providers = {
+      manual: {
+        readiness: () => ({ ok: true }),
+        initiate: providerInitiate,
+        checkStatus: vi.fn(),
+      },
+    };
+
+    await expect(service.processPayout('payout-frozen')).rejects.toThrow(
+      'Payout destination is frozen by operator',
+    );
+
+    expect(persistedStatus).toBe('approved');
+    expect(placeholderCreate).not.toHaveBeenCalled();
+    expect(providerInitiate).not.toHaveBeenCalled();
+  });
+
+  it('rolls an approved payout back when an escalated high-risk fraud review is active', async () => {
+    const payoutAccount = {
+      id: 'acc-fraud',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+      isFrozen: false,
+    };
+    const payoutForProcessing = {
+      id: 'payout-fraud',
+      userId: 'u1',
+      user: { status: 'active' },
+      payoutAccount,
+      status: 'processing',
+      requestedAmountMinor: 1000n,
+      approvedAmountMinor: 1000n,
+      currency: 'USD',
+      allocations: [],
+    };
+    let persistedStatus = 'approved';
+    const placeholderCreate = vi.fn();
+    const providerInitiate = vi.fn();
+    const fraudCount = vi.fn().mockResolvedValue(1);
+    const fraudLock = vi.fn().mockResolvedValue(1);
+
+    const { service } = makePayoutService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...payoutForProcessing,
+          status: 'approved',
+        }),
+      },
+      $transaction: vi.fn(async (cb: (tx: Record<string, unknown>) => Promise<unknown>) => {
+        const statusBeforeTransaction = persistedStatus;
+        const tx = {
+          $executeRaw: fraudLock,
+          payoutRequest: {
+            updateMany: vi.fn().mockImplementation(() => {
+              persistedStatus = 'processing';
+              return Promise.resolve({ count: 1 });
+            }),
+            findUnique: vi.fn().mockResolvedValue(payoutForProcessing),
+          },
+          payoutTransaction: { create: placeholderCreate },
+          fraudFlag: { count: fraudCount },
+        };
+        try {
+          return await cb(tx);
+        } catch (err) {
+          persistedStatus = statusBeforeTransaction;
+          throw err;
+        }
+      }),
+    });
+    (service as unknown as { providers: Record<string, unknown> }).providers = {
+      manual: {
+        readiness: () => ({ ok: true }),
+        initiate: providerInitiate,
+        checkStatus: vi.fn(),
+      },
+    };
+
+    await expect(service.processPayout('payout-fraud')).rejects.toThrow(
+      'Payout blocked due to pending fraud review',
+    );
+
+    expect(fraudCount).toHaveBeenCalledWith({
+      where: {
+        userId: 'u1',
+        status: { in: expect.arrayContaining(['open', 'reviewing', 'escalated']) },
+        severity: { in: ['high', 'critical'] },
+      },
+    });
+    expect(fraudLock).toHaveBeenCalledOnce();
+    expect(persistedStatus).toBe('approved');
+    expect(placeholderCreate).not.toHaveBeenCalled();
+    expect(providerInitiate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: 'the operator freeze wins the account-row race',
+      accountState: {
+        isFrozen: true,
+        isActive: true,
+        isVerified: true,
+        initiationPayoutId: null,
+      },
+      error: 'Payout destination is frozen by operator',
+    },
+    {
+      label: 'another payout holds the durable initiation fence',
+      accountState: {
+        isFrozen: false,
+        isActive: true,
+        isVerified: true,
+        initiationPayoutId: '11111111-1111-4111-8111-111111111111',
+      },
+      error: 'Another payout initiation is active',
+    },
+  ])('rolls the claim back before provider I/O when $label', async ({ accountState, error }) => {
+    const payoutAccount = {
+      id: 'acc-race',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+      isFrozen: false,
+    };
+    const payoutForProcessing = {
+      id: 'payout-race',
+      userId: 'u1',
+      user: { status: 'active' },
+      payoutAccount,
+      status: 'processing',
+      requestedAmountMinor: 0n,
+      approvedAmountMinor: 0n,
+      currency: 'USD',
+      allocations: [],
+    };
+    let persistedStatus = 'approved';
+    const placeholderCreate = vi.fn();
+    const providerInitiate = vi.fn();
+    const leaseUpdate = vi.fn().mockResolvedValue({ count: 0 });
+
+    const { service } = makePayoutService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...payoutForProcessing,
+          status: 'approved',
+        }),
+      },
+      $transaction: vi.fn(async (cb: (tx: Record<string, unknown>) => Promise<unknown>) => {
+        const statusBeforeTransaction = persistedStatus;
+        const tx = {
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          payoutRequest: {
+            updateMany: vi.fn().mockImplementation(() => {
+              persistedStatus = 'processing';
+              return Promise.resolve({ count: 1 });
+            }),
+            findUnique: vi.fn().mockResolvedValue(payoutForProcessing),
+          },
+          payoutAccount: {
+            updateMany: leaseUpdate,
+            findUnique: vi.fn().mockResolvedValue(accountState),
+          },
+          payoutTransaction: { create: placeholderCreate },
+          fraudFlag: { count: vi.fn().mockResolvedValue(0) },
+        };
+        try {
+          return await cb(tx);
+        } catch (err) {
+          persistedStatus = statusBeforeTransaction;
+          throw err;
+        }
+      }),
+    });
+    (service as unknown as { providers: Record<string, unknown> }).providers = {
+      manual: {
+        readiness: () => ({ ok: true }),
+        initiate: providerInitiate,
+        checkStatus: vi.fn(),
+      },
+    };
+
+    await expect(service.processPayout('payout-race')).rejects.toThrow(error);
+
+    expect(leaseUpdate).toHaveBeenCalledWith({
+      where: {
+        id: 'acc-race',
+        isFrozen: false,
+        isActive: true,
+        isVerified: true,
+        initiationPayoutId: null,
+      },
+      data: {
+        initiationPayoutId: 'payout-race',
+      },
+    });
+    expect(persistedStatus).toBe('approved');
+    expect(placeholderCreate).not.toHaveBeenCalled();
+    expect(providerInitiate).not.toHaveBeenCalled();
+  });
+
   it('splits an over-allocated earnings row so only the approved amount can be marked paid', async () => {
     const payoutAccount = {
       id: 'acc1',
@@ -483,6 +801,27 @@ describe('PayoutService.processPayout partial approvals', () => {
         providerTxId: 'initiate_pending_payout-1',
         status: 'processing',
       }),
+    });
+    expect(prisma.payoutAccount.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        id: 'acc1',
+        isFrozen: false,
+        isActive: true,
+        isVerified: true,
+        initiationPayoutId: null,
+      },
+      data: {
+        initiationPayoutId: 'payout-1',
+      },
+    });
+    expect(prisma.payoutAccount.updateMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        id: 'acc1',
+        initiationPayoutId: 'payout-1',
+      },
+      data: {
+        initiationPayoutId: null,
+      },
     });
   });
 });
@@ -726,6 +1065,7 @@ describe('markPayoutPaid terminal state transition', () => {
       allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }],
     };
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const clearFence = vi.fn().mockResolvedValue({ count: 1 });
     const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
       cb({
         payoutRequest: {
@@ -744,6 +1084,7 @@ describe('markPayoutPaid terminal state transition', () => {
           aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
         },
         platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAccount: { updateMany: clearFence },
         payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
       }),
     );
@@ -780,6 +1121,10 @@ describe('markPayoutPaid terminal state transition', () => {
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 'payout-1', status: { in: ['approved', 'processing'] } },
       data: expect.objectContaining({ status: 'paid' }),
+    });
+    expect(clearFence).toHaveBeenCalledWith({
+      where: { initiationPayoutId: 'payout-1' },
+      data: { initiationPayoutId: null },
     });
   });
 
@@ -870,7 +1215,60 @@ describe('markPayoutPaid terminal state transition', () => {
         providerTxId: 'pp_tx_1',
         paidAt: new Date().toISOString(),
       }),
-    ).rejects.toThrow(/no longer in 'confirmed' status/i);
+    ).rejects.toThrow(/authorized payable status/i);
+  });
+
+  it('settles a post-authorization fraud hold for a processing payout without resurrecting it', async () => {
+    const processingPayout = {
+      id: 'payout-processing',
+      userId: 'u1',
+      status: 'processing',
+      approvedAmountMinor: 1000n,
+      requestedAmountMinor: 1000n,
+      currency: 'usd',
+      payoutAccount: { id: 'pa-1', provider: 'manual', isActive: true, isVerified: true },
+      allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-held' }],
+    };
+    const earningsUpdate = vi.fn().mockResolvedValue({ count: 1 });
+    const paidPayout = { ...processingPayout, status: 'paid' };
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValue(paidPayout),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+        payoutTransaction: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          create: vi.fn(),
+        },
+        earningsLedger: {
+          updateMany: earningsUpdate,
+          aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
+        },
+        platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      }),
+    );
+    const { service } = makePayoutService({
+      payoutRequest: { findUnique: vi.fn().mockResolvedValue(processingPayout) },
+      $transaction: $tx,
+    });
+
+    await expect(
+      service.markPayoutPaid('payout-processing', {
+        providerTxId: 'provider-paid',
+        paidAt: new Date().toISOString(),
+      }),
+    ).resolves.toMatchObject({ status: 'paid' });
+
+    expect(earningsUpdate).toHaveBeenCalledWith({
+      where: {
+        id: { in: ['earn-held'] },
+        status: { in: ['confirmed', 'held'] },
+      },
+      data: { status: 'paid', heldByFlagId: null },
+    });
   });
 
   it('returns the payout idempotently when already paid with PayoutTransaction already in paid status', async () => {
@@ -895,6 +1293,7 @@ describe('markPayoutPaid terminal state transition', () => {
         payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
         earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
         platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
       }),
     );
@@ -958,6 +1357,7 @@ describe('markPayoutPaid terminal state transition', () => {
           aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
         },
         platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
       }),
     );
@@ -1002,6 +1402,7 @@ describe('markPayoutFailed terminal state transition', () => {
       allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }],
     };
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const clearFence = vi.fn().mockResolvedValue({ count: 1 });
     const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
       cb({
         payoutRequest: {
@@ -1015,6 +1416,7 @@ describe('markPayoutFailed terminal state transition', () => {
           findFirst: vi.fn(),
           create: vi.fn(),
         },
+        payoutAccount: { updateMany: clearFence },
         payoutAllocation: {
           deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
           updateMany: vi.fn(),
@@ -1045,6 +1447,10 @@ describe('markPayoutFailed terminal state transition', () => {
       where: { id: 'payout-1', status: { in: ['approved', 'processing'] } },
       data: expect.objectContaining({ status: 'failed' }),
     });
+    expect(clearFence).toHaveBeenCalledWith({
+      where: { initiationPayoutId: 'payout-1' },
+      data: { initiationPayoutId: null },
+    });
   });
 
   it('returns idempotently when payout is already failed', async () => {
@@ -1063,6 +1469,7 @@ describe('markPayoutFailed terminal state transition', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: { updateMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
         payoutAllocation: { deleteMany: vi.fn(), updateMany: vi.fn() },
         earningsLedger: { updateMany: vi.fn(), aggregate: vi.fn() },
@@ -1110,6 +1517,7 @@ describe('markPayoutFailed terminal state transition', () => {
           findFirst: vi.fn(),
           update: vi.fn(),
         },
+        payoutAccount: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
         payoutTransaction: {
           updateMany: vi.fn().mockResolvedValue({ count: 1 }),
           findFirst: vi.fn(),

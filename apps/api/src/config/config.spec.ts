@@ -35,6 +35,8 @@ function baseProdEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv 
     JWT_PUBLIC_KEY: TEST_JWT_PUBLIC_KEY,
     REDIS_URL: 'redis://localhost:6379',
     TOTP_SECRET_ENCRYPTION_KEY: 'production-totp-encryption-key-32plus!!!',
+    EMAIL_QUEUE_SECRET: 'production-email-queue-key-at-least-32-characters',
+    OPS_ALERT_EMAIL: 'ops@waitlayer.com',
     PRIVACY_HASH_KEY: 'production-privacy-hmac-key-at-least-32-characters',
     API_BASE_URL: 'https://api.waitlayer.com',
     WEB_BASE_URL: 'https://app.waitlayer.com',
@@ -64,6 +66,18 @@ describe('env validation (config module)', () => {
     void TOTP_SECRET_ENCRYPTION_KEY;
     const result = envSchema.safeParse(env);
     expect(result.success).toBe(false);
+  });
+
+  it('rejects NODE_ENV=production without encrypted email queue configuration', () => {
+    const { EMAIL_QUEUE_SECRET, ...env } = baseProdEnv();
+    void EMAIL_QUEUE_SECRET;
+    expect(envSchema.safeParse(env).success).toBe(false);
+  });
+
+  it('rejects NODE_ENV=production without an operator alert recipient', () => {
+    const { OPS_ALERT_EMAIL, ...env } = baseProdEnv();
+    void OPS_ALERT_EMAIL;
+    expect(envSchema.safeParse(env).success).toBe(false);
   });
 
   it('rejects NODE_ENV=production with wildcard WEB_BASE_URL', () => {

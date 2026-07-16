@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, Suspense,useState } from 'react';
+import { FormEvent, Suspense, useState } from 'react';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi } from '@/lib/api/services';
 
@@ -69,15 +69,30 @@ function ResetPasswordForm() {
   return (
     <>
       {error && (
-        <div className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5" role="alert" aria-live="polite">
+        <div
+          className="bg-red-50 border border-red-200/60 rounded-xl p-3.5 mb-5"
+          role="alert"
+          aria-live="polite"
+        >
           <p className="text-red-600 text-[14px]">{error}</p>
         </div>
       )}
 
-      <form className="space-y-5" onSubmit={handleSubmit} role="form" aria-label="Reset password form">
+      <form
+        className="space-y-5"
+        onSubmit={handleSubmit}
+        role="form"
+        aria-label="Reset password form"
+      >
         <div>
-          <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">New password</label>
+          <label
+            htmlFor="reset-password-new"
+            className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+          >
+            New password
+          </label>
           <input
+            id="reset-password-new"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -89,8 +104,14 @@ function ResetPasswordForm() {
           />
         </div>
         <div>
-          <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">Confirm new password</label>
+          <label
+            htmlFor="reset-password-confirm"
+            className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+          >
+            Confirm new password
+          </label>
           <input
+            id="reset-password-confirm"
             type="password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
@@ -116,17 +137,25 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-50 px-6">
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="min-h-screen flex items-center justify-center bg-surface-50 px-6"
+    >
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2.5 mb-10 justify-center">
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">WaitLayer</span>
+          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
+            WaitLayer
+          </span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
-          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">Choose a new password</h1>
+          <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
+            Choose a new password
+          </h1>
           <p className="text-surface-500 text-[14px] mb-8">Minimum 8 characters.</p>
 
           <Suspense fallback={<p className="text-surface-500 text-[14px]">Loading...</p>}>
@@ -134,12 +163,15 @@ export default function ResetPasswordPage() {
           </Suspense>
 
           <p className="text-surface-500 text-[14px] text-center mt-7">
-            <Link href="/auth/login" className="text-brand-500 hover:text-brand-600 font-medium transition-colors">
+            <Link
+              href="/auth/login"
+              className="text-brand-500 hover:text-brand-600 font-medium transition-colors"
+            >
               Back to sign in
             </Link>
           </p>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

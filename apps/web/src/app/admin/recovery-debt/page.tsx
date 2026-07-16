@@ -12,7 +12,7 @@ interface RecoveryDebtCase {
   id: string;
   userId: string;
   status: RecoveryDebtCaseStatus;
-  amountMinor: number;
+  amountMinor: bigint;
   currency: string;
   externalReference?: string | null;
   note?: string | null;
@@ -22,9 +22,9 @@ interface RecoveryDebtCase {
 interface RecoveryDebtRow {
   userId: string;
   currency: string;
-  confirmedDebitMinor: number;
-  confirmedCreditMinor: number;
-  outstandingDebtMinor: number;
+  confirmedDebitMinor: bigint;
+  confirmedCreditMinor: bigint;
+  outstandingDebtMinor: bigint;
   recoveryDebitEntryCount: number;
   user?: {
     email?: string | null;
@@ -44,7 +44,12 @@ interface RecoveryDebtResponse {
 
 type ActionState =
   | { mode: 'open'; row: RecoveryDebtRow; status: 'open' | 'in_collections' }
-  | { mode: 'resolve'; row: RecoveryDebtRow; caseId: string; status: 'recovered' | 'written_off' | 'closed' };
+  | {
+      mode: 'resolve';
+      row: RecoveryDebtRow;
+      caseId: string;
+      status: 'recovered' | 'written_off' | 'closed';
+    };
 
 const ACTIVE_CASE_STATUSES = new Set<RecoveryDebtCaseStatus>(['open', 'in_collections']);
 
@@ -81,17 +86,21 @@ export default function AdminRecoveryDebtPage() {
   const [note, setNote] = useState('');
   const [processing, setProcessing] = useState(false);
 
-  const params = useMemo(() => ({
-    page,
-    limit: 25,
-    minAmountMinor: Number(minAmountMinor) || 1,
-    currency: currency.trim() || undefined,
-  }), [currency, minAmountMinor, page]);
+  const params = useMemo(
+    () => ({
+      page,
+      limit: 25,
+      minAmountMinor: Number(minAmountMinor) || 1,
+      currency: currency.trim() || undefined,
+    }),
+    [currency, minAmountMinor, page],
+  );
 
   const fetchDebt = useCallback(() => {
     setLoading(true);
     setError(null);
-    adminApi.getRecoveryDebtCases(params)
+    adminApi
+      .getRecoveryDebtCases(params)
       .then((res: { data: RecoveryDebtResponse }) => setData(res.data))
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load recovery debt')))
       .finally(() => setLoading(false));
@@ -138,8 +147,8 @@ export default function AdminRecoveryDebtPage() {
   };
 
   const items = data?.items || [];
-  const outstandingByCurrency = items.reduce<Record<string, number>>((totals, row) => {
-    totals[row.currency] = (totals[row.currency] ?? 0) + row.outstandingDebtMinor;
+  const outstandingByCurrency = items.reduce<Record<string, bigint>>((totals, row) => {
+    totals[row.currency] = (totals[row.currency] ?? 0n) + row.outstandingDebtMinor;
     return totals;
   }, {});
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
@@ -208,7 +217,9 @@ export default function AdminRecoveryDebtPage() {
 
       {!loading && items.length === 0 ? (
         <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-400 text-sm">No outstanding recovery debt matches these filters.</p>
+          <p className="text-ink-400 text-sm">
+            No outstanding recovery debt matches these filters.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -216,14 +227,19 @@ export default function AdminRecoveryDebtPage() {
             const latestCase = row.latestCase;
             const activeCase = latestCase && ACTIVE_CASE_STATUSES.has(latestCase.status);
             return (
-              <div key={`${row.userId}:${row.currency}`} className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
+              <div
+                key={`${row.userId}:${row.currency}`}
+                className="bg-ink-800 border border-ink-600/30 rounded-xl p-5"
+              >
                 <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <p className="text-white font-medium truncate">
                         {row.user?.email || row.userId}
                       </p>
-                      <span className={`border rounded-full px-2 py-0.5 text-xs capitalize ${caseBadgeClass(latestCase?.status)}`}>
+                      <span
+                        className={`border rounded-full px-2 py-0.5 text-xs capitalize ${caseBadgeClass(latestCase?.status)}`}
+                      >
                         {formatStatus(latestCase?.status)}
                       </span>
                       <span className="text-ink-400 text-xs uppercase">{row.currency}</span>
@@ -238,7 +254,9 @@ export default function AdminRecoveryDebtPage() {
                     {latestCase && (
                       <p className="text-ink-500 text-xs mt-1">
                         Case {latestCase.id}
-                        {latestCase.updatedAt ? ` · updated ${formatRelativeTime(latestCase.updatedAt)}` : ''}
+                        {latestCase.updatedAt
+                          ? ` · updated ${formatRelativeTime(latestCase.updatedAt)}`
+                          : ''}
                         {latestCase.externalReference ? ` · ${latestCase.externalReference}` : ''}
                       </p>
                     )}
@@ -247,21 +265,35 @@ export default function AdminRecoveryDebtPage() {
                   <div className="grid grid-cols-3 gap-4 min-w-[320px]">
                     <div>
                       <p className="text-ink-500 text-xs uppercase tracking-wider">Debits</p>
-                      <p className="text-white font-mono">{formatCurrency(row.confirmedDebitMinor, row.currency)}</p>
+                      <p className="text-white font-mono">
+                        {formatCurrency(row.confirmedDebitMinor, row.currency)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-ink-500 text-xs uppercase tracking-wider">Credits</p>
-                      <p className="text-white font-mono">{formatCurrency(row.confirmedCreditMinor, row.currency)}</p>
+                      <p className="text-white font-mono">
+                        {formatCurrency(row.confirmedCreditMinor, row.currency)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-ink-500 text-xs uppercase tracking-wider">Outstanding</p>
-                      <p className="text-red-300 font-mono font-semibold">{formatCurrency(row.outstandingDebtMinor, row.currency)}</p>
+                      <p className="text-red-300 font-mono font-semibold">
+                        {formatCurrency(row.outstandingDebtMinor, row.currency)}
+                      </p>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                     <button
-                      onClick={() => openAction({ mode: 'open', row, status: activeCase ? latestCase.status as 'open' | 'in_collections' : 'open' })}
+                      onClick={() =>
+                        openAction({
+                          mode: 'open',
+                          row,
+                          status: activeCase
+                            ? (latestCase.status as 'open' | 'in_collections')
+                            : 'open',
+                        })
+                      }
                       className="bg-ink-700 hover:bg-ink-600 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
                     >
                       {activeCase ? 'Update case' : 'Open case'}
@@ -275,13 +307,27 @@ export default function AdminRecoveryDebtPage() {
                     {activeCase && (
                       <>
                         <button
-                          onClick={() => openAction({ mode: 'resolve', row, caseId: latestCase.id, status: 'recovered' })}
+                          onClick={() =>
+                            openAction({
+                              mode: 'resolve',
+                              row,
+                              caseId: latestCase.id,
+                              status: 'recovered',
+                            })
+                          }
                           className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
                         >
                           Recovered
                         </button>
                         <button
-                          onClick={() => openAction({ mode: 'resolve', row, caseId: latestCase.id, status: 'written_off' })}
+                          onClick={() =>
+                            openAction({
+                              mode: 'resolve',
+                              row,
+                              caseId: latestCase.id,
+                              status: 'written_off',
+                            })
+                          }
                           className="bg-ink-700 hover:bg-ink-600 text-zinc-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors"
                         >
                           Write off
@@ -305,7 +351,9 @@ export default function AdminRecoveryDebtPage() {
           >
             Previous
           </button>
-          <p className="text-ink-400 text-sm">Page {page} of {totalPages}</p>
+          <p className="text-ink-400 text-sm">
+            Page {page} of {totalPages}
+          </p>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
@@ -320,13 +368,18 @@ export default function AdminRecoveryDebtPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
           <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-lg w-full">
             <h3 className="text-white font-semibold mb-2 capitalize">
-              {action.mode === 'open' ? `${formatStatus(action.status)} case` : `${formatStatus(action.status)} case`}
+              {action.mode === 'open'
+                ? `${formatStatus(action.status)} case`
+                : `${formatStatus(action.status)} case`}
             </h3>
             <p className="text-ink-400 text-sm mb-4">
-              {action.row.user?.email || action.row.userId} · {formatCurrency(action.row.outstandingDebtMinor, action.row.currency)} outstanding
+              {action.row.user?.email || action.row.userId} ·{' '}
+              {formatCurrency(action.row.outstandingDebtMinor, action.row.currency)} outstanding
             </p>
             <label className="block mb-3">
-              <span className="text-ink-400 text-xs uppercase tracking-wider">External reference</span>
+              <span className="text-ink-400 text-xs uppercase tracking-wider">
+                External reference
+              </span>
               <input
                 value={externalReference}
                 onChange={(e) => setExternalReference(e.target.value)}

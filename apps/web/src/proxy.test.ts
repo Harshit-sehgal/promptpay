@@ -66,13 +66,17 @@ function makeReq(token?: string): NextRequest {
   return req;
 }
 
-async function makeToken(aud: string = 'access'): Promise<string> {
+async function makeToken(
+  aud: string = 'access',
+  issuer: string = 'waitlayer',
+  baseAudience: string = 'waitlayer-client',
+): Promise<string> {
   const privateKey = await importPKCS8(TEST_JWT_PRIVATE_KEY.replace(/\\n/g, '\n'), 'RS256');
   return new SignJWT({ sub: 'u1', role: 'developer' })
     .setProtectedHeader({ alg: 'RS256', typ: 'JWT', kid: 'test-kid-1' })
     .setSubject('u1')
-    .setIssuer('waitlayer')
-    .setAudience(['waitlayer-client', aud])
+    .setIssuer(issuer)
+    .setAudience([baseAudience, aud])
     .setJti('jti-test-1')
     .sign(privateKey);
 }
@@ -83,13 +87,22 @@ function isRedirect(res: Response): boolean {
 
 describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
   const originalPublicKey = process.env.JWT_PUBLIC_KEY;
+  const originalPublicKeys = process.env.JWT_PUBLIC_KEYS;
   const originalSecret = process.env.JWT_SECRET;
+  const originalIssuer = process.env.JWT_ISSUER;
+  const originalAudience = process.env.JWT_AUDIENCE;
 
   afterEach(() => {
     if (originalPublicKey === undefined) delete process.env.JWT_PUBLIC_KEY;
     else process.env.JWT_PUBLIC_KEY = originalPublicKey;
+    if (originalPublicKeys === undefined) delete process.env.JWT_PUBLIC_KEYS;
+    else process.env.JWT_PUBLIC_KEYS = originalPublicKeys;
     if (originalSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = originalSecret;
+    if (originalIssuer === undefined) delete process.env.JWT_ISSUER;
+    else process.env.JWT_ISSUER = originalIssuer;
+    if (originalAudience === undefined) delete process.env.JWT_AUDIENCE;
+    else process.env.JWT_AUDIENCE = originalAudience;
   });
 
   it('allows a valid token signed with the configured private key', async () => {
@@ -108,12 +121,58 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     expect(isRedirect(res)).toBe(true);
   });
 
+  it('accepts an access token signed by an additional rotation key', async () => {
+    process.env.JWT_PUBLIC_KEY = OTHER_JWT_PUBLIC_KEY;
+    process.env.JWT_PUBLIC_KEYS = TEST_JWT_PUBLIC_KEY.replace(/\n/g, '\\n');
+    const token = await makeToken();
+
+    const res = await proxy(makeReq(token));
+
+    expect(isRedirect(res)).toBe(false);
+  });
+
+  it('accepts a refresh token signed by an additional rotation key', async () => {
+    process.env.JWT_PUBLIC_KEY = OTHER_JWT_PUBLIC_KEY;
+    process.env.JWT_PUBLIC_KEYS = `${OTHER_JWT_PUBLIC_KEY}\n${TEST_JWT_PUBLIC_KEY}`;
+    const req = makeReq();
+    req.cookies.set('__Host-refresh_token', await makeToken('refresh'));
+
+    const res = await proxy(req);
+
+    expect(isRedirect(res)).toBe(false);
+  });
+
+  it('honours a custom issuer and audience', async () => {
+    process.env.JWT_PUBLIC_KEY = TEST_JWT_PUBLIC_KEY;
+    process.env.JWT_ISSUER = 'https://auth.example.com';
+    process.env.JWT_AUDIENCE = 'waitlayer-production';
+    const token = await makeToken('access', process.env.JWT_ISSUER, process.env.JWT_AUDIENCE);
+
+    const res = await proxy(makeReq(token));
+
+    expect(isRedirect(res)).toBe(false);
+  });
+
   it('redirects when JWT_PUBLIC_KEY is missing', async () => {
     delete process.env.JWT_PUBLIC_KEY;
     process.env.JWT_SECRET = TEST_JWT_SECRET;
     const token = await makeToken();
     const res = await proxy(makeReq(token));
     expect(isRedirect(res)).toBe(true);
+  });
+
+  it('preserves the protected path and query in a returnTo parameter', async () => {
+    delete process.env.JWT_PUBLIC_KEY;
+    const req = new NextRequest(
+      new URL('https://app.example/developer/earnings?status=confirmed&page=2'),
+    );
+    const res = await proxy(req);
+    const location = new URL(res.headers.get('location') ?? 'https://app.example/auth/login');
+
+    expect(location.pathname).toBe('/auth/login');
+    expect(location.searchParams.get('returnTo')).toBe(
+      '/developer/earnings?status=confirmed&page=2',
+    );
   });
 
   it('redirects a forged refresh cookie with no access token (bypass closed)', async () => {

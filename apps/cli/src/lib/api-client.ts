@@ -33,6 +33,17 @@ export function resolveApiBaseUrl(env: NodeJS.ProcessEnv = process.env): string 
 
 const API_URL = resolveApiBaseUrl();
 
+type RawCurrencyTotals = Record<string, number | string>;
+
+function parseCurrencyTotals(
+  totals: RawCurrencyTotals | undefined,
+): Record<string, bigint> | undefined {
+  if (!totals) return undefined;
+  return Object.fromEntries(
+    Object.entries(totals).map(([currency, amountMinor]) => [currency, parseMinor(amountMinor)]),
+  );
+}
+
 /**
  * Detect a loopback/localhost API origin. A packaged CLI should point at the
  * production SaaS origin; reaching loopback means the user is either doing
@@ -217,21 +228,35 @@ export class ApiClient {
 
   async getBalance() {
     // Backend returns { available: { amountMinor, currency }, pending: {...}, total: {...}, paidOut: {...} }
-    // Monetary BigInt values are serialized as strings; parse them back to numbers for the UI.
+    // Monetary BigInt values are serialized as strings; retain them as bigint
+    // so status output stays exact above Number.MAX_SAFE_INTEGER.
     const res = await this.raw<{
-      available: { amountMinor: number | string; currency: string };
-      pending: { amountMinor: number | string; currency: string };
-      total: { amountMinor: number | string; currency: string };
-      paidOut: { amountMinor: number | string; currency: string };
+      available: { amountMinor: number | string; currency: string; byCurrency?: RawCurrencyTotals };
+      pending: { amountMinor: number | string; currency: string; byCurrency?: RawCurrencyTotals };
+      total: { amountMinor: number | string; currency: string; byCurrency?: RawCurrencyTotals };
+      paidOut: { amountMinor: number | string; currency: string; byCurrency?: RawCurrencyTotals };
     }>('GET', '/ledger/balance', undefined);
     return {
       available: {
         amountMinor: parseMinor(res.available.amountMinor),
         currency: res.available.currency,
+        byCurrency: parseCurrencyTotals(res.available.byCurrency),
       },
-      pending: { amountMinor: parseMinor(res.pending.amountMinor), currency: res.pending.currency },
-      total: { amountMinor: parseMinor(res.total.amountMinor), currency: res.total.currency },
-      paidOut: { amountMinor: parseMinor(res.paidOut.amountMinor), currency: res.paidOut.currency },
+      pending: {
+        amountMinor: parseMinor(res.pending.amountMinor),
+        currency: res.pending.currency,
+        byCurrency: parseCurrencyTotals(res.pending.byCurrency),
+      },
+      total: {
+        amountMinor: parseMinor(res.total.amountMinor),
+        currency: res.total.currency,
+        byCurrency: parseCurrencyTotals(res.total.byCurrency),
+      },
+      paidOut: {
+        amountMinor: parseMinor(res.paidOut.amountMinor),
+        currency: res.paidOut.currency,
+        byCurrency: parseCurrencyTotals(res.paidOut.byCurrency),
+      },
     };
   }
 
@@ -241,7 +266,8 @@ export class ApiClient {
 
   async getOverview() {
     // Backend returns full dashboard: { estimatedEarnings, confirmedEarnings, pendingEarnings, heldEarnings, availableForPayout, lifetimeEarnings, trustLevel, trustScore, settings }
-    // Monetary BigInt values are serialized as strings; parse them back to numbers for the UI.
+    // Monetary BigInt values are serialized as strings; retain them as bigint
+    // so status output stays exact above Number.MAX_SAFE_INTEGER.
     const res = await this.raw<{
       estimatedEarnings: number | string;
       confirmedEarnings: number | string;
@@ -249,6 +275,12 @@ export class ApiClient {
       heldEarnings: number | string;
       availableForPayout: number | string;
       lifetimeEarnings: number | string;
+      estimatedEarningsByCurrency?: RawCurrencyTotals;
+      confirmedEarningsByCurrency?: RawCurrencyTotals;
+      pendingEarningsByCurrency?: RawCurrencyTotals;
+      heldEarningsByCurrency?: RawCurrencyTotals;
+      availableForPayoutByCurrency?: RawCurrencyTotals;
+      lifetimeEarningsByCurrency?: RawCurrencyTotals;
       trustLevel: string;
       trustScore?: number;
     }>('GET', '/developer/dashboard', undefined);
@@ -259,6 +291,12 @@ export class ApiClient {
       heldEarnings: parseMinor(res.heldEarnings),
       availableForPayout: parseMinor(res.availableForPayout),
       lifetimeEarnings: parseMinor(res.lifetimeEarnings),
+      estimatedEarningsByCurrency: parseCurrencyTotals(res.estimatedEarningsByCurrency),
+      confirmedEarningsByCurrency: parseCurrencyTotals(res.confirmedEarningsByCurrency),
+      pendingEarningsByCurrency: parseCurrencyTotals(res.pendingEarningsByCurrency),
+      heldEarningsByCurrency: parseCurrencyTotals(res.heldEarningsByCurrency),
+      availableForPayoutByCurrency: parseCurrencyTotals(res.availableForPayoutByCurrency),
+      lifetimeEarningsByCurrency: parseCurrencyTotals(res.lifetimeEarningsByCurrency),
       trustLevel: res.trustLevel,
       trustScore: res.trustScore,
     };

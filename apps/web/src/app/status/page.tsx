@@ -23,7 +23,8 @@ export default function StatusPage() {
 
   const fetchHealth = () => {
     setLoading(true);
-    systemApi.getHealth()
+    systemApi
+      .getHealth()
       .then((res) => {
         setData(res.data);
         setError(null);
@@ -55,16 +56,21 @@ export default function StatusPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
+              WaitLayer
+            </span>
           </Link>
-          <Link href="/" className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors">
+          <Link
+            href="/"
+            className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
+          >
             ← Back to Home
           </Link>
         </div>
       </nav>
 
       {/* Main content */}
-      <main className="pt-32 pb-24 px-6 mx-auto max-w-3xl">
+      <main id="main-content" tabIndex={-1} className="pt-32 pb-24 px-6 mx-auto max-w-3xl">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">System Status</h1>
           <p className="text-surface-500 text-sm">
@@ -90,14 +96,18 @@ export default function StatusPage() {
         ) : (
           <div className="space-y-6">
             {/* Overall status banner */}
-            <div className={`p-6 rounded-2xl border transition-all duration-300 flex items-center gap-4 ${
-              overallHealthy
-                ? 'bg-emerald-50/50 border-emerald-200/60 text-emerald-800'
-                : 'bg-rose-50/50 border-rose-200/60 text-rose-800'
-            }`}>
-              <div className={`w-3.5 h-3.5 rounded-full shrink-0 ${
-                overallHealthy ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
-              }`} />
+            <div
+              className={`p-6 rounded-2xl border transition-all duration-300 flex items-center gap-4 ${
+                overallHealthy
+                  ? 'bg-emerald-50/50 border-emerald-200/60 text-emerald-800'
+                  : 'bg-rose-50/50 border-rose-200/60 text-rose-800'
+              }`}
+            >
+              <div
+                className={`w-3.5 h-3.5 rounded-full shrink-0 ${
+                  overallHealthy ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                }`}
+              />
               <div>
                 <p className="font-bold text-sm">
                   {overallHealthy ? 'All Systems Operational' : 'Degraded Performance'}
@@ -113,10 +123,16 @@ export default function StatusPage() {
               {/* Database Status */}
               <div className="bg-white border border-surface-200 rounded-2xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-surface-900 font-semibold text-[14px]">Primary Database</span>
-                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                    dbConnected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50' : 'bg-rose-50 text-rose-700 border border-rose-200/50'
-                  }`}>
+                  <span className="text-surface-900 font-semibold text-[14px]">
+                    Primary Database
+                  </span>
+                  <span
+                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                      dbConnected
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200/50'
+                    }`}
+                  >
                     {dbConnected ? 'Online' : 'Offline'}
                   </span>
                 </div>
@@ -128,15 +144,22 @@ export default function StatusPage() {
               {/* Redis Cache & Rate Limiting Status */}
               <div className="bg-white border border-surface-200 rounded-2xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-surface-900 font-semibold text-[14px]">Redis Cache & Rate Limiter</span>
-                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                    redisConnected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50' : 'bg-rose-50 text-rose-700 border border-rose-200/50'
-                  }`}>
+                  <span className="text-surface-900 font-semibold text-[14px]">
+                    Redis Cache & Rate Limiter
+                  </span>
+                  <span
+                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                      redisConnected
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200/50'
+                    }`}
+                  >
                     {redisConnected ? 'Online' : 'Offline'}
                   </span>
                 </div>
                 <p className="text-surface-500 text-xs leading-relaxed">
-                  Memory backing store for brute-force tracking, request throttling, and session tokens.
+                  Memory backing store for brute-force tracking, request throttling, and session
+                  tokens.
                   {data?.redis?.latencyMs !== undefined && ` Latency: ${data.redis.latencyMs}ms`}
                 </p>
               </div>
@@ -144,12 +167,16 @@ export default function StatusPage() {
 
             {/* Infrastructure specifications */}
             <div className="bg-surface-50/50 border border-surface-200/60 rounded-2xl p-6 space-y-4">
-              <h3 className="text-surface-950 font-bold text-xs uppercase tracking-wider">Metrics</h3>
+              <h3 className="text-surface-950 font-bold text-xs uppercase tracking-wider">
+                Metrics
+              </h3>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
                   <p className="text-surface-400">Uptime</p>
                   <p className="text-surface-800 font-medium mt-0.5">
-                    {data ? `${Math.floor(data.uptimeSeconds / 3600)}h ${Math.floor((data.uptimeSeconds % 3600) / 60)}m` : 'Unknown'}
+                    {data
+                      ? `${Math.floor(data.uptimeSeconds / 3600)}h ${Math.floor((data.uptimeSeconds % 3600) / 60)}m`
+                      : 'Unknown'}
                   </p>
                 </div>
                 <div>

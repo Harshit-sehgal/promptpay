@@ -5,6 +5,7 @@ import type { AxiosResponse } from 'axios';
 import QRCode from 'qrcode';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { stringifyApiData } from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, developerApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
@@ -253,7 +254,7 @@ export default function DevSettingsPage() {
     try {
       const res = await developerApi.exportData();
       const exportData = res.data as SelfServiceExportPayload;
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const blob = new Blob([stringifyApiData(exportData, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -698,14 +699,21 @@ export default function DevSettingsPage() {
                       </div>
 
                       <div className="max-w-xs space-y-3">
-                        <label className="text-surface-700 text-sm font-medium block">
+                        <label
+                          htmlFor="two-factor-enable-code"
+                          className="text-surface-700 text-sm font-medium block"
+                        >
                           Verification code
                         </label>
                         <div className="flex gap-2">
                           <input
+                            id="two-factor-enable-code"
                             type="text"
                             placeholder="000000"
                             maxLength={6}
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            pattern="[0-9]{6}"
                             value={verificationCode}
                             onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                             className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:border-brand-400"
@@ -729,11 +737,21 @@ export default function DevSettingsPage() {
                       <p className="text-surface-500 text-xs">
                         Enter the current code from your authenticator app to disable 2FA.
                       </p>
+                      <label
+                        htmlFor="two-factor-disable-code"
+                        className="text-surface-700 text-sm font-medium block"
+                      >
+                        Verification code
+                      </label>
                       <div className="flex gap-2">
                         <input
+                          id="two-factor-disable-code"
                           type="text"
                           placeholder="000000"
                           maxLength={6}
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          pattern="[0-9]{6}"
                           value={verificationCode}
                           onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                           className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:border-brand-400"

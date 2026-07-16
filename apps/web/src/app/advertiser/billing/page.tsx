@@ -6,7 +6,12 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
 
-import { CURRENCY_POLICY, depositMinimumMinor } from '@waitlayer/shared';
+import {
+  CURRENCY_POLICY,
+  depositMinimumMinor,
+  majorToMinor,
+  minorToMajorInputValue,
+} from '@waitlayer/shared';
 
 interface LedgerEntry {
   id: string;
@@ -60,8 +65,21 @@ export function depositPresetMinorUnits(currency: string): bigint[] {
   return [min, min * 50n, min * 100n, min * 250n, min * 500n];
 }
 
-// Per-currency floor comes from the shared policy; USD is the baseline.
-const MIN_DEPOSIT_MINOR = depositMinimumMinor('USD');
+export function depositAmountInputPolicy(currency: string) {
+  const minimumMinor = depositMinimumMinor(currency);
+  return {
+    minimumMinor,
+    minimumMajor: minorToMajorInputValue(minimumMinor, currency),
+    minorUnitStep: minorToMajorInputValue(1n, currency),
+  };
+}
+
+export function parseDepositAmountMinor(value: string, currency: string): bigint | null {
+  if (!value.trim()) return null;
+  const majorAmount = Number(value);
+  if (!Number.isFinite(majorAmount) || majorAmount <= 0) return null;
+  return majorToMinor(majorAmount, currency);
+}
 
 export default function AdvertiserBillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
@@ -76,6 +94,8 @@ export default function AdvertiserBillingPage() {
     useState<(typeof DEPOSIT_CURRENCIES)[number]['code']>('usd');
   const [depositing, setDepositing] = useState(false);
   const [depositError, setDepositError] = useState<string | null>(null);
+  const displayDepositCurrency = depositCurrency.toUpperCase();
+  const depositInputPolicy = depositAmountInputPolicy(displayDepositCurrency);
 
   useEffect(() => {
     setLoading(true);
@@ -91,16 +111,14 @@ export default function AdvertiserBillingPage() {
 
   const getDepositAmount = (): bigint | null => {
     if (showCustom) {
-      const parsed = parseInt(customAmount, 10);
-      if (isNaN(parsed) || parsed < 1) return null;
-      return BigInt(parsed) * 100n; // Convert dollars to minor units
+      return parseDepositAmountMinor(customAmount, displayDepositCurrency);
     }
     return selectedMinor;
   };
 
   const handleDeposit = async () => {
     const amountMinor = getDepositAmount();
-    if (!amountMinor || amountMinor < MIN_DEPOSIT_MINOR) return;
+    if (!amountMinor || amountMinor < depositInputPolicy.minimumMinor) return;
 
     setDepositing(true);
     setDepositError(null);
@@ -109,7 +127,7 @@ export default function AdvertiserBillingPage() {
       const res = await advertiserApi.createDepositSession(amountMinor, depositCurrency);
       const { url } = res.data as { sessionId: string; url: string };
       // Redirect to Stripe Checkout
-      window.location.href = url;
+      window.location.assign(url);
     } catch (err: unknown) {
       setDepositError(getErrorMessage(err, 'Failed to create deposit session'));
       setDepositing(false);
@@ -117,8 +135,8 @@ export default function AdvertiserBillingPage() {
   };
 
   const validAmount = getDepositAmount();
-  const canDeposit = validAmount !== null && validAmount >= MIN_DEPOSIT_MINOR && !depositing;
-  const displayDepositCurrency = depositCurrency.toUpperCase();
+  const canDeposit =
+    validAmount !== null && validAmount >= depositInputPolicy.minimumMinor && !depositing;
 
   return (
     <>
@@ -199,6 +217,8 @@ export default function AdvertiserBillingPage() {
                   setDepositCurrency(
                     event.target.value as (typeof DEPOSIT_CURRENCIES)[number]['code'],
                   );
+                  setSelectedMinor(null);
+                  setCustomAmount('');
                   setDepositError(null);
                 }}
                 className="bg-ink-700 border border-ink-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500"
@@ -256,8 +276,8 @@ export default function AdvertiserBillingPage() {
                   </span>
                   <input
                     type="number"
-                    min="1"
-                    step="1"
+                    min={depositInputPolicy.minimumMajor}
+                    step={depositInputPolicy.minorUnitStep}
                     placeholder="Amount"
                     value={customAmount}
                     onChange={(e) => {
@@ -269,12 +289,13 @@ export default function AdvertiserBillingPage() {
                     }}
                     className="w-full bg-ink-700 border border-ink-600 rounded-lg pl-14 pr-3 py-2.5 text-white text-sm placeholder-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all"
                     aria-label={`Custom deposit amount in ${displayDepositCurrency}`}
-                    inputMode="numeric"
+                    inputMode="decimal"
                     autoComplete="off"
                   />
                 </div>
                 <p className="text-ink-400 text-xs mt-1.5">
-                  Minimum deposit: {formatCurrency(MIN_DEPOSIT_MINOR, displayDepositCurrency)}
+                  Minimum deposit:{' '}
+                  {formatCurrency(depositInputPolicy.minimumMinor, displayDepositCurrency)}
                 </p>
               </div>
             )}
