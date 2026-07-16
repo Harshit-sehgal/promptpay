@@ -1,6 +1,4 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "project": "waitlayer",
   "framework": "nextjs",
   "git": {
     "deploymentEnabled": {
