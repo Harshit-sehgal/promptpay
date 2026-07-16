@@ -149,4 +149,8 @@ export class AdminFraudTrait {
     const isValid = decision === 'confirmed';
     return this.fraudService.resolveFlag(flagId, reviewerId, isValid, note);
   }
+
+  async escalateFraudFlag(flagId: string, reviewerId: string, note?: string) {
+    return this.fraudService.escalateFlag(flagId, reviewerId, note);
+  }
 }

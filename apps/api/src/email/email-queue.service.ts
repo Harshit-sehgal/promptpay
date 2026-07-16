@@ -165,6 +165,23 @@ export class EmailQueueService {
     );
   }
 
+  /**
+   * Operator alert for money-integrity reconciliation drift. Best-effort
+   * (fire-and-forget by callers) so a Resend outage never blocks the cron.
+   */
+  async sendMoneyIntegrityAlert(
+    to: string,
+    metadata: {
+      severity: 'high' | 'medium';
+      time: string;
+      globalDiscrepancyByCurrency: Record<string, string>;
+      campaignDiscrepancyCount: number;
+      negativeDeveloperBalanceCount: number;
+    },
+  ): Promise<EmailQueueSendResult> {
+    return this.enqueueOrSend(this.email.buildMoneyIntegrityAlert(to, metadata));
+  }
+
   /** SHA-256 of the normalized message content for deduplication. */
   private hashContent(msg: EmailMessage): string {
     const payload = `${msg.to.toLowerCase()}|${msg.subject}|${msg.html}|${msg.text ?? ''}`;

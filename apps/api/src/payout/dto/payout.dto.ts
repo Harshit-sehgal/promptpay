@@ -5,6 +5,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   IsUUID,
   Length,
   Matches,
@@ -93,4 +94,23 @@ export class PayoutHistoryQueryDto {
   @Max(100)
   @Type(() => Number)
   limit?: number;
+}
+
+export class StripeConnectOnboardingDto {
+  @ApiProperty()
+  @IsUrl({ require_tld: false })
+  @MaxLength(2048)
+  refreshUrl!: string;
+
+  @ApiProperty()
+  @IsUrl({ require_tld: false })
+  @MaxLength(2048)
+  returnUrl!: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @Length(3, 3)
+  @Matches(/^[A-Z]{3}$/, { message: 'currency must be an uppercase ISO 4217 code' })
+  currency?: string;
 }

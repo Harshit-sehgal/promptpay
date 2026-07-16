@@ -83,6 +83,13 @@ const envSchema = z
     // BFF rate-limit identity signing. It is NOT used for JWT signing.
     JWT_PRIVATE_KEY: z.string().optional(),
     JWT_PUBLIC_KEY: z.string().optional(),
+    // JWT_PUBLIC_KEYS: optional newline-separated list of *additional* (or the
+    // full set of) accepted RS256 public keys for zero-downtime key rotation.
+    // Tokens carry a `kid` header; verification selects the matching key from
+    // this set (plus JWT_PUBLIC_KEY). During rotation, set JWT_PRIVATE_KEY/
+    // JWT_PUBLIC_KEY to the new pair and list the previous public key here so
+    // pre-rotation access tokens keep verifying until they expire (~15m).
+    JWT_PUBLIC_KEYS: z.string().optional(),
     // Standard JWT issuer/audience. Defaults keep dev/test simple while
     // allowing production to pin tokens to a concrete deployment.
     JWT_ISSUER: z.string().default('waitlayer'),
@@ -130,6 +137,10 @@ const envSchema = z
     // Email
     EMAIL_DRIVER: z.enum(['console', 'resend']).default('console'),
     EMAIL_FROM: z.email().default('noreply@waitlayer.local'),
+    // Operator alert recipient for system-generated security/financial alerts
+    // (money-integrity drift, payout-account freeze, etc.). If unset, alerts
+    // are only logged (dev); production must set this to a monitored mailbox.
+    OPS_ALERT_EMAIL: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
     EMAIL_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(10_000),
 

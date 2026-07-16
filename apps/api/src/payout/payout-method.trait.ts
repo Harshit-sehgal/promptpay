@@ -11,9 +11,11 @@ import {
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
+import { FraudService } from '../fraud/fraud.service';
 import { RUNTIME_CONFIG_KEYS } from '../runtime-config/runtime-config.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { PayoutProviderHandler, StubPayoutProvider } from './payout.constants';
+import { StripeConnectPayoutProvider } from './providers';
 
 export class PayoutMethodTrait {
   declare prisma: PrismaService;
@@ -21,6 +23,7 @@ export class PayoutMethodTrait {
   declare config: ConfigService;
   declare runtimeConfig: RuntimeConfigService;
   declare providers: Record<string, PayoutProviderHandler>;
+  declare fraudService?: FraudService;
 
   toDbPayoutProvider(provider: string): DbPayoutProvider {
     if ((Object.values(DbPayoutProvider) as string[]).includes(provider)) {
@@ -66,6 +69,10 @@ export class PayoutMethodTrait {
       targetId: method.id,
       beforeSnap: { provider, currency },
     });
+    // Non-blocking fraud signal: shared payout destination across users
+    void this.fraudService
+      ?.checkSharedPayoutDestination(userId, destination)
+      .catch(() => undefined);
     return method;
   }
 
@@ -142,6 +149,109 @@ export class PayoutMethodTrait {
   /** Expose the provider map so the payout cron can check status on processing payouts */
   getProvider(providerName: string): PayoutProviderHandler | undefined {
     return this.providers[providerName];
+  }
+
+  /**
+   * Create a Stripe Connect Express account for the developer and return an
+   * onboarding URL. The payout account is persisted in a pending state; it is
+   * activated/verified after the developer completes onboarding and Stripe
+   * sends an account.updated webhook (or the return redirect is validated).
+   */
+  private validateReturnUrl(url: string): void {
+    const allowed = this.config.get<string>('WAITLAYER_STRIPE_CONNECT_RETURN_DOMAINS');
+    if (!allowed) return;
+    const allowedHosts = allowed.split(',').map((h) => h.trim().toLowerCase());
+    if (allowedHosts.length === 0) return;
+    const host = new URL(url).hostname.toLowerCase();
+    if (!allowedHosts.includes(host)) {
+      throw new BadRequestException('Return/refresh URL host is not allowed');
+    }
+  }
+
+  async createStripeConnectOnboarding(
+    userId: string,
+    email: string,
+    dto: { refreshUrl: string; returnUrl: string; currency?: string },
+  ): Promise<{ accountId: string; onboardingUrl: string }> {
+    const currency = dto.currency?.trim().toUpperCase() || 'USD';
+
+    // Enforce the same runtime provider gates used when adding a payout method.
+    if (!(await this.runtimeConfig.isProviderEnabled('stripe_connect'))) {
+      throw new BadRequestException('Payout provider "stripe_connect" is currently disabled');
+    }
+    const launchOverrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+    if (payoutProviderLaunchStatus('stripe_connect', launchOverrides) === 'coming_soon') {
+      throw new BadRequestException(
+        'Payout provider "stripe_connect" is not available for registration (launch status: coming_soon).',
+      );
+    }
+
+    const stripeConnect = this.providers['stripe_connect'];
+    if (!stripeConnect) {
+      throw new BadRequestException('Stripe Connect provider is not available');
+    }
+    const readiness = stripeConnect.readiness?.();
+    if (readiness && !readiness.ok) {
+      throw new BadRequestException(readiness.reason);
+    }
+
+    if (!isProviderSupportedForCurrency('stripe_connect' as PayoutProvider, currency)) {
+      throw new BadRequestException(
+        `Payout provider "stripe_connect" cannot settle payouts in ${currency}`,
+      );
+    }
+
+    this.validateReturnUrl(dto.refreshUrl);
+    this.validateReturnUrl(dto.returnUrl);
+
+    let accountId: string;
+    let onboardingUrl: string;
+    try {
+      ({ accountId } = await (stripeConnect as StripeConnectPayoutProvider).createConnectAccount({
+        userId,
+        email,
+      }));
+      ({ url: onboardingUrl } = await (
+        stripeConnect as StripeConnectPayoutProvider
+      ).createOnboardingLink({
+        accountId,
+        refreshUrl: dto.refreshUrl,
+        returnUrl: dto.returnUrl,
+      }));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Stripe Connect onboarding failed';
+      throw new BadRequestException(message);
+    }
+
+    // Persist the pending payout account. It is not verified until Stripe
+    // confirms onboarding completion.
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.payoutAccount.updateMany({
+        where: { userId, provider: 'stripe_connect', isActive: true },
+        data: { isActive: false },
+      });
+      return tx.payoutAccount.create({
+        data: {
+          userId,
+          provider: 'stripe_connect',
+          destination: accountId,
+          currency,
+          isVerified: false,
+        },
+      });
+    });
+
+    // Audit: a new payout destination was created.
+    void this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'add_payout_method',
+      targetType: 'payout_account',
+      targetId: accountId,
+      beforeSnap: { provider: 'stripe_connect', currency, pending: true },
+    });
+
+    return { accountId, onboardingUrl };
   }
 
   async getPayoutProviderAvailability() {

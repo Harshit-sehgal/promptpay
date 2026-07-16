@@ -1,9 +1,11 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 import { AuditService } from '../audit/audit.service';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
+import { EmailQueueService } from '../email/email-queue.service';
 import { AdminService } from './admin.service';
 
 /**
@@ -42,6 +44,8 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
     private admin: AdminService,
     private audit: AuditService,
     private prisma: PrismaService,
+    private emailQueue: EmailQueueService,
+    private config: ConfigService,
   ) {}
 
   onApplicationBootstrap() {
@@ -127,6 +131,36 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
           })),
         },
       });
+
+      // Out-of-band operator alert: surface drift to a monitored mailbox so an
+      // operator who is not tailing logs is still paged. Best-effort
+      // (fire-and-forget) so a Resend outage never blocks the reconciliation
+      // cron — the audit row above is the durable record.
+      const opsAlertEmail = this.config.get<string>('OPS_ALERT_EMAIL');
+      if (opsAlertEmail) {
+        void this.emailQueue
+          .sendMoneyIntegrityAlert(opsAlertEmail, {
+            severity,
+            time: new Date().toISOString(),
+            globalDiscrepancyByCurrency: Object.fromEntries(
+              Object.entries(globalDiscrepancies).map(([currency, diff]) => [
+                currency,
+                String(diff),
+              ]),
+            ),
+            campaignDiscrepancyCount: report.campaignDiscrepancies.length,
+            negativeDeveloperBalanceCount: report.negativeDeveloperBalances.length,
+          })
+          .catch((err) =>
+            this.logger.warn(
+              `Money-integrity alert email failed (audit row still written): ${err instanceof Error ? err.message : err}`,
+            ),
+          );
+      } else {
+        this.logger.warn(
+          'OPS_ALERT_EMAIL is not set — money-integrity discrepancy was logged + audited but no operator email was sent.',
+        );
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`[MONEY INTEGRITY] reconciliation scan failed: ${msg}`);

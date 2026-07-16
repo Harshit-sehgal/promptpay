@@ -134,11 +134,11 @@ describe('wait-detection evaluation fixtures', () => {
       isWait: true,
     },
     {
-      name: 'Lifecycle event is a borderline wait signal',
+      name: 'Lifecycle event alone is below billing threshold (ambiguous)',
       signals: [{ type: 'lifecycle_event' }],
       expectedConfidence: SIGNAL_WEIGHTS.lifecycle_event,
       expectedReason: 'lifecycle_event',
-      isWait: true,
+      isWait: false,
     },
     {
       name: 'Inactivity alone is not a wait signal',

@@ -26,6 +26,7 @@ import {
   ApprovePayoutDto,
   ArchiveRefundQueueQueryDto,
   AuditLogQueryDto,
+  EscalateFraudFlagDto,
   FraudFlagsQueryDto,
   IssueDeviceRecoveryTokenDto,
   MarkPayoutPaidDto,
@@ -183,6 +184,16 @@ export class AdminController {
     @Body() dto: ResolveFraudFlagDto,
   ) {
     return this.service.resolveFraudFlag(id, userId, dto.decision, dto.note);
+  }
+
+  @ApiOperation({ summary: 'Escalate fraud flag for senior review' })
+  @Post('fraud/:id/escalate')
+  escalateFraudFlag(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: EscalateFraudFlagDto,
+  ) {
+    return this.service.escalateFraudFlag(id, userId, dto.note);
   }
 
   @ApiOperation({ summary: 'Compute trust score' })

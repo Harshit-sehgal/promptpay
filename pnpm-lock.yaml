@@ -262,6 +262,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@axe-core/playwright':
+        specifier: ^4.12.1
+        version: 4.12.1(playwright-core@1.61.1)
       '@next/eslint-plugin-next':
         specifier: ^16.2.10
         version: 16.2.10
@@ -530,6 +533,14 @@ packages:
       {
         integrity: sha512-n8GuYSrI9bF7FFZ/SjhwevlHc8xaVlb/7HmHelnc/PZXBD2ZR49NnN9sMMuDdEGPeeRQ5d0hqlSlEpgCX3Wl0Q==,
       }
+
+  '@axe-core/playwright@4.12.1':
+    resolution:
+      {
+        integrity: sha512-rMd7xriptqKpP+w5265i4Hdkv2X5kbu6uiBi/B2I7uf3hieRBM3qDCfaKPtxfiYb2mKXfF+yLODJwIx+Jv1GDw==,
+      }
+    peerDependencies:
+      playwright-core: '>= 1.0.0'
 
   '@babel/code-frame@7.29.7':
     resolution:
@@ -3996,6 +4007,13 @@ packages:
         integrity: sha512-NZKeq9AfyQvEeNlN0zSYAaWrmBffJh3IELMZfRpJVWgrpEbtEpnjvzqBPf+mxoI287JohRDoa+/nsfqqiZmF6g==,
       }
     engines: { node: '>= 6.0.0' }
+
+  axe-core@4.12.1:
+    resolution:
+      {
+        integrity: sha512-s7iGf5GaVMxEG0ENN9x+xTr7GFZCb1ZP/1uATUpCEK2X78nDB3RwbtFCo9pGAf9ru+VwoQ464DkaLEeRM08wJA==,
+      }
+    engines: { node: '>=4' }
 
   axios@1.18.1:
     resolution:
@@ -8240,6 +8258,11 @@ snapshots:
 
   '@asamuzakjp/nwsapi@2.3.9': {}
 
+  '@axe-core/playwright@4.12.1(playwright-core@1.61.1)':
+    dependencies:
+      axe-core: 4.12.1
+      playwright-core: 1.61.1
+
   '@babel/code-frame@7.29.7':
     dependencies:
       '@babel/helper-validator-identifier': 7.29.7
@@ -10300,6 +10323,8 @@ snapshots:
       postcss-value-parser: 4.2.0
 
   aws-ssl-profiles@1.1.2: {}
+
+  axe-core@4.12.1: {}
 
   axios@1.18.1:
     dependencies:

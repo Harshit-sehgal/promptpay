@@ -319,6 +319,55 @@ export class EmailService {
     );
   }
 
+  /**
+   * Operator alert sent when the continuous money-integrity monitor detects a
+   * ledger reconciliation discrepancy. This is the out-of-band channel that
+   * surfaces drift to an operator who is not tailing server logs — the
+   * difference between "we can manually check the books" and "the system
+   * pages us when the books don't balance."
+   */
+  buildMoneyIntegrityAlert(
+    to: string,
+    metadata: {
+      severity: 'high' | 'medium';
+      time: string;
+      globalDiscrepancyByCurrency: Record<string, string>;
+      campaignDiscrepancyCount: number;
+      negativeDeveloperBalanceCount: number;
+    },
+  ): EmailMessage {
+    const currencyLines = Object.entries(metadata.globalDiscrepancyByCurrency)
+      .map(([c, diff]) => `${c}: ${diff}`)
+      .join('\n');
+    return {
+      to,
+      subject: `[${metadata.severity.toUpperCase()}] WaitLayer money-integrity discrepancy detected`,
+      text:
+        `The money-integrity monitor detected a ledger reconciliation discrepancy at ${metadata.time}.\n\n` +
+        `Severity: ${metadata.severity}\n` +
+        `Campaign discrepancies: ${metadata.campaignDiscrepancyCount}\n` +
+        `Negative developer balances: ${metadata.negativeDeveloperBalanceCount}\n\n` +
+        `Global discrepancy by currency (minor units):\n${currencyLines}\n\n` +
+        `Investigate immediately via the admin /operations page. Do NOT auto-correct — the report is read-only by design.`,
+      ttlMs: 24 * 60 * 60 * 1000,
+      html: this.layout(
+        'Money-integrity discrepancy detected',
+        `<p>The money-integrity monitor detected a ledger reconciliation discrepancy at <strong>${metadata.time}</strong>.</p>` +
+          `<ul>` +
+          `<li><strong>Severity:</strong> ${metadata.severity}</li>` +
+          `<li><strong>Campaign discrepancies:</strong> ${metadata.campaignDiscrepancyCount}</li>` +
+          `<li><strong>Negative developer balances:</strong> ${metadata.negativeDeveloperBalanceCount}</li>` +
+          `</ul>` +
+          `<p><strong>Global discrepancy by currency (minor units):</strong></p>` +
+          `<pre>${currencyLines}</pre>` +
+          `<p>Investigate immediately via the admin /operations page. Do NOT auto-correct — the report is read-only by design.</p>`,
+        null,
+        null,
+        'This is an automated alert from the WaitLayer money-integrity monitor.',
+      ),
+    };
+  }
+
   // ── Private ──
 
   private async sendViaResend(msg: EmailMessage): Promise<EmailSendResult> {

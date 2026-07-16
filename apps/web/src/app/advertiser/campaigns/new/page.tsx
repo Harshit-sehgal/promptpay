@@ -213,6 +213,7 @@ export default function NewCampaignPage() {
               <input
                 id="campaign-name"
                 data-testid="campaign-name-input"
+                aria-label="Campaign name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -258,6 +259,7 @@ export default function NewCampaignPage() {
                 <select
                   id="campaign-bid-type"
                   data-testid="campaign-bid-type-select"
+                  aria-label="Bid type"
                   value={bidType}
                   onChange={(e) => setBidType(e.target.value)}
                   className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white"
@@ -279,6 +281,7 @@ export default function NewCampaignPage() {
                 <input
                   id="campaign-bid-amount"
                   data-testid="campaign-bid-amount-input"
+                  aria-label={`Bid amount (${currency})`}
                   type="number"
                   step="0.01"
                   min="0.50"
@@ -302,6 +305,7 @@ export default function NewCampaignPage() {
                 <input
                   id="campaign-budget"
                   data-testid="campaign-budget-input"
+                  aria-label={`Total budget (${currency})`}
                   type="number"
                   step="1.00"
                   min="50.00"
@@ -369,10 +373,11 @@ export default function NewCampaignPage() {
                 className="text-ink-200 text-sm font-medium mb-1.5 block"
               >
                 Headline
-              </label>
+              </label>{' '}
               <input
                 id="campaign-headline"
                 data-testid="campaign-headline-input"
+                aria-label="Headline"
                 type="text"
                 value={headline}
                 onChange={(e) => setHeadline(e.target.value)}
@@ -390,10 +395,11 @@ export default function NewCampaignPage() {
                 className="text-ink-200 text-sm font-medium mb-1.5 block"
               >
                 Message
-              </label>
+              </label>{' '}
               <textarea
                 id="campaign-message"
                 data-testid="campaign-message-input"
+                aria-label="Message"
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 required
@@ -473,6 +479,7 @@ export default function NewCampaignPage() {
             <input
               id="campaign-target-countries"
               data-testid="campaign-target-countries-input"
+              aria-label="Country targeting (comma-separated ISO codes)"
               type="text"
               value={targetCountries}
               onChange={(e) => setTargetCountries(e.target.value)}

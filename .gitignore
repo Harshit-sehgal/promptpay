@@ -34,6 +34,8 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+apps/web/test-results/
+apps/web/playwright-report/
 
 # Prisma — generated client is rebuilt via `pnpm db:generate`; do not commit it.
 # Schema migrations ARE committed so DB history is tracked.

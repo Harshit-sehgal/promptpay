@@ -14,14 +14,28 @@ const NONTERMINAL_PAYOUT_STATUSES = [
 ] as const;
 const CAMPAIGN_OBLIGATION_STATUSES = ['submitted', 'approved', 'active', 'paused'] as const;
 
+/** Maximum total earnings (per currency, in minor units) that can be forfeited
+ *  during account deletion. Matches the payout minimum — if the user can't
+ *  withdraw it, they should be able to forfeit it for GDPR erasure. */
+const FORFEIT_THRESHOLD_MINOR = 1000;
+
+export interface EraseAccountOptions {
+  forfeitBalance?: boolean;
+}
+
 /**
  * Erase direct account identifiers without silently forfeiting or stranding
  * money. The user row is retained as a pseudonymous FK anchor for financial,
  * fraud, consent, and audit records required for reconciliation/legal proof.
+ *
+ * When `forfeitBalance` is true, remaining earnings below the forfeit threshold
+ * (payout minimum) are reversed as 'forfeited_on_account_deletion' before the
+ * preflight check, enabling GDPR erasure for users with sub-threshold balance.
  */
 export async function eraseAccountIdentity(
   prisma: PrismaService,
   userId: string,
+  options: EraseAccountOptions = {},
 ): Promise<{ deleted: true; priorEmail: string }> {
   return prisma.$transaction(
     async (tx) => {
@@ -38,7 +52,7 @@ export async function eraseAccountIdentity(
       if (!user) throw new NotFoundException('User not found');
       if (user.status === 'deleted') return { deleted: true as const, priorEmail: user.email };
 
-      await assertNoFinancialErasureObligations(tx, userId);
+      await assertNoFinancialErasureObligations(tx, userId, options);
 
       const advertiser = await tx.advertiser.findUnique({
         where: { userId },
@@ -169,6 +183,7 @@ export async function eraseAccountIdentity(
 async function assertNoFinancialErasureObligations(
   tx: Prisma.TransactionClient,
   userId: string,
+  options: EraseAccountOptions = {},
 ): Promise<void> {
   const [earnings, recoveryDebit, recoveryCase, payout, advertiser] = await Promise.all([
     tx.earningsLedger.aggregate({
@@ -199,10 +214,35 @@ async function assertNoFinancialErasureObligations(
     tx.advertiser.findUnique({ where: { userId }, select: { id: true } }),
   ]);
 
-  if (BigInt(earnings._sum.amountMinor ?? 0) > 0n) {
-    throw new ConflictException(
-      'Account deletion is blocked while estimated, pending, confirmed, or held earnings remain. Withdraw available funds and resolve pending or held earnings first.',
-    );
+  const totalEarnings = BigInt(earnings._sum.amountMinor ?? 0n);
+
+  if (totalEarnings > 0n) {
+    if (options.forfeitBalance) {
+      // Only allow forfeiting when the total is below the payout minimum —
+      // if the user can withdraw it, they should, not forfeit it.
+      if (totalEarnings > FORFEIT_THRESHOLD_MINOR) {
+        throw new ConflictException(
+          `Cannot forfeit balance: total earnings (${totalEarnings} minor units) exceed the forfeit threshold (${FORFEIT_THRESHOLD_MINOR}). Withdraw available funds first.`,
+        );
+      }
+      // Reverse all remaining credit earnings as forfeited. This zeroes the
+      // balance so the preflight passes. The reversed entries remain in the
+      // ledger as an audit trail — money is conserved.
+      await tx.earningsLedger.updateMany({
+        where: {
+          userId,
+          entryType: 'credit',
+          status: { in: [...EARNINGS_OBLIGATION_STATUSES] },
+        },
+        data: {
+          status: 'reversed',
+        },
+      });
+    } else {
+      throw new ConflictException(
+        'Account deletion is blocked while estimated, pending, confirmed, or held earnings remain. Withdraw available funds and resolve pending or held earnings first, or set forfeitBalance=true to forfeit sub-threshold earnings below the payout minimum.',
+      );
+    }
   }
   if (recoveryDebit || recoveryCase) {
     throw new ConflictException(

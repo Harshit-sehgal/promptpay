@@ -105,6 +105,14 @@ export class ResolveFraudFlagDto {
   note?: string;
 }
 
+export class EscalateFraudFlagDto {
+  @ApiProperty({ required: false, description: 'Reason for escalation' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
 export class FraudFlagsQueryDto {
   /**
    * Comma-separated list of statuses to filter by (e.g. "open,reviewing"

@@ -47,6 +47,7 @@ const mockPrisma = {
   },
   payoutAccount: {
     findMany: vi.fn(),
+    count: vi.fn(),
   },
   payoutRequest: {
     count: vi.fn(),
@@ -57,6 +58,9 @@ const mockPrisma = {
   },
   waitStateEvent: {
     groupBy: vi.fn(),
+  },
+  earningsLedger: {
+    aggregate: vi.fn(),
   },
   $executeRaw: vi.fn().mockResolvedValue(1),
   $queryRaw: vi.fn().mockResolvedValue([{ count: 0 }]),
@@ -318,6 +322,298 @@ describe('FraudService', () => {
 
       expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalledTimes(1);
       expect(mockLedger.reverseEarnings).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('escalateFlag', () => {
+    it('escalates an open flag to the escalated state', async () => {
+      mockPrisma.fraudFlag.findUnique.mockResolvedValue({
+        id: 'flag-esc',
+        userId: 'u-1',
+        status: 'open',
+      });
+      mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.escalateFlag('flag-esc', 'rev-adm', 'Needs senior review');
+      expect(result.status).toBe('escalated');
+      expect(mockPrisma.fraudFlag.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'escalated', reviewerId: 'rev-adm' }),
+        }),
+      );
+    });
+
+    it('rejects escalation of an already-resolved flag', async () => {
+      mockPrisma.fraudFlag.findUnique
+        .mockResolvedValueOnce({ id: 'flag-done', status: 'resolved_valid' })
+        .mockResolvedValueOnce({ id: 'flag-done', status: 'resolved_valid' });
+      mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.escalateFlag('flag-done', 'rev-adm')).rejects.toThrow(
+        /cannot be escalated from status/,
+      );
+    });
+
+    it('is idempotent when a concurrent reviewer already escalated', async () => {
+      mockPrisma.fraudFlag.findUnique
+        .mockResolvedValueOnce({ id: 'flag-race', status: 'open' })
+        .mockResolvedValueOnce({ id: 'flag-race', status: 'escalated' });
+      mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 0 });
+
+      const result = await service.escalateFlag('flag-race', 'rev-adm');
+      expect(result.status).toBe('escalated');
+    });
+  });
+
+  // ── Extended Fraud Detection tests ──
+
+  describe('checkSharedPayoutDestination', () => {
+    it('flags when the same destination is used by another user', async () => {
+      mockPrisma.payoutAccount.count.mockResolvedValue(1);
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-spd' });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkSharedPayoutDestination('u-1', 'shared@email.com');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'shared_payout_destination',
+            severity: 'critical',
+          }),
+        }),
+      );
+    });
+
+    it('does not flag when the destination is unique to the user', async () => {
+      mockPrisma.payoutAccount.count.mockResolvedValue(0);
+      await service.checkSharedPayoutDestination('u-1', 'unique@email.com');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkImpossibleVolume', () => {
+    it('flags when impression count exceeds the physical threshold', async () => {
+      mockPrisma.adImpression.count.mockResolvedValue(25);
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-iv' });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkImpossibleVolume('u-1');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'impossible_volume',
+            severity: 'critical',
+          }),
+        }),
+      );
+    });
+
+    it('does not flag when impression count is within normal range', async () => {
+      mockPrisma.adImpression.count.mockResolvedValue(5);
+      await service.checkImpossibleVolume('u-1');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkRepeatedClickAbuse', () => {
+    it('flags when 5+ clicks on the same campaign within an hour', async () => {
+      mockPrisma.adClick.count.mockResolvedValue(7);
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-rca' });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkRepeatedClickAbuse('u-1', 'camp-1');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'repeated_click_abuse',
+            severity: 'high',
+          }),
+        }),
+      );
+    });
+
+    it('does not flag for low click counts', async () => {
+      mockPrisma.adClick.count.mockResolvedValue(2);
+      await service.checkRepeatedClickAbuse('u-1', 'camp-1');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkAutomatedPattern', () => {
+    it('flags when inter-arrival intervals have very low variance', async () => {
+      // 12 impressions at exactly 10-second intervals (CV = 0)
+      const base = Date.now();
+      const impressions = Array.from({ length: 12 }, (_, i) => ({
+        createdAt: new Date(base + i * 10000),
+      }));
+      mockPrisma.adImpression.findMany.mockResolvedValue(impressions);
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-ap' });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkAutomatedPattern('u-1');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'automated_pattern',
+            severity: 'high',
+          }),
+        }),
+      );
+    });
+
+    it('does not flag for human-like irregular intervals', async () => {
+      const base = Date.now();
+      const impressions = [
+        { createdAt: new Date(base) },
+        { createdAt: new Date(base + 3000) },
+        { createdAt: new Date(base + 45000) },
+        { createdAt: new Date(base + 120000) },
+        { createdAt: new Date(base + 95000) },
+        { createdAt: new Date(base + 300000) },
+        { createdAt: new Date(base + 12000) },
+        { createdAt: new Date(base + 78000) },
+        { createdAt: new Date(base + 200000) },
+        { createdAt: new Date(base + 5000) },
+      ];
+      mockPrisma.adImpression.findMany.mockResolvedValue(impressions);
+      await service.checkAutomatedPattern('u-1');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+
+    it('does not flag when fewer than 10 impressions', async () => {
+      mockPrisma.adImpression.findMany.mockResolvedValue([
+        { createdAt: new Date() },
+        { createdAt: new Date() },
+      ]);
+      await service.checkAutomatedPattern('u-1');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkVpnProxyPattern', () => {
+    it('flags known headless/automation platforms', async () => {
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-vpn' });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkVpnProxyPattern('u-1', 'dev-1', 'HeadlessChrome');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'vpn_proxy_pattern',
+            severity: 'high',
+          }),
+        }),
+      );
+    });
+
+    it('does not flag normal platforms', async () => {
+      await service.checkVpnProxyPattern('u-1', 'dev-1', 'macOS');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkEmulatorVmPattern', () => {
+    it('flags known emulator platforms', async () => {
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-vm' });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkEmulatorVmPattern('u-1', 'dev-1', 'x86 emulator');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'emulator_vm_pattern',
+            severity: 'medium',
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('checkDuplicateAccount', () => {
+    it('flags when a new account shares a device fingerprint with another user', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        createdAt: new Date(),
+        email: 'new@test.com',
+      });
+      mockPrisma.device.findMany.mockResolvedValueOnce([{ fingerprintHash: 'fp-1' }]);
+      mockPrisma.device.findMany.mockResolvedValueOnce([{ userId: 'existing-user' }]);
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-da' });
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkDuplicateAccount('u-new');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'duplicate_account',
+            severity: 'high',
+          }),
+        }),
+      );
+    });
+
+    it('does not flag accounts older than 24 hours', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        email: 'old@test.com',
+      });
+      await service.checkDuplicateAccount('u-old');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkCountryDeviceChange', () => {
+    it('flags when profile country differs from request country', async () => {
+      mockPrisma.user.findUnique
+        .mockResolvedValueOnce({ country: 'US' })
+        .mockResolvedValueOnce(mockUserWithFlags());
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-cdc' });
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+
+      await service.checkCountryDeviceChange('u-1', 'dev-1', 'RU');
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'country_device_change',
+            severity: 'medium',
+          }),
+        }),
+      );
+    });
+
+    it('does not flag when countries match', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ country: 'US' });
+      await service.checkCountryDeviceChange('u-1', 'dev-1', 'US');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
     });
   });
 });

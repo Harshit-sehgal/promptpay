@@ -367,6 +367,7 @@ export class AdvertiserController {
     return this.service.deleteAccount(userId, {
       currentPassword: dto.currentPassword,
       googleIdToken: dto.googleIdToken,
+      forfeitBalance: dto.forfeitBalance,
     });
   }
 }

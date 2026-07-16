@@ -16,6 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
 import { PrismaService } from '../config/prisma.service';
+import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { hashDeviceRecoveryToken, hasMatchingSecret } from './extension.constants';
@@ -23,6 +24,7 @@ import { hashDeviceRecoveryToken, hasMatchingSecret } from './extension.constant
 export class ExtensionDeviceReportTrait {
   declare prisma: PrismaService;
   declare audit: AuditService;
+  declare fraud: FraudService;
   declare ledger: LedgerService;
   declare googleVerifier: GoogleTokenVerifier;
   declare runtimeConfig: RuntimeConfigService;
@@ -161,38 +163,31 @@ export class ExtensionDeviceReportTrait {
     } catch (err: unknown) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
         // Look up the existing owner of this fingerprint to record fraud.
-        const otherDevice = await this.prisma.device.findFirst({
-          where: { fingerprintHash: dto.fingerprintHash },
+        // Use the FraudService.createFlag path so the flag gets dedup locking,
+        // critical-severity earnings hold, and trust recompute.
+        await this.fraud.checkDuplicateDevice(dto.fingerprintHash, userId);
+        this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'duplicate_device_rejected',
+          targetType: 'device',
+          targetId: dto.fingerprintHash,
+          afterSnap: { fingerprintHash: dto.fingerprintHash },
         });
-        if (otherDevice) {
-          await this.prisma.fraudFlag.create({
-            data: {
-              userId,
-              deviceId: otherDevice.id,
-              flagType: 'duplicate_device',
-              severity: 'medium',
-              evidence: {
-                fingerprintHash: dto.fingerprintHash,
-                otherUserId: otherDevice.userId,
-                otherDeviceId: otherDevice.id,
-              },
-            },
-          });
-          this.audit.log({
-            actorId: userId,
-            actorRole: 'developer',
-            action: 'duplicate_device_rejected',
-            targetType: 'device',
-            targetId: otherDevice.id,
-            afterSnap: { otherUserId: otherDevice.userId, fingerprintHash: dto.fingerprintHash },
-          });
-        }
         throw new ForbiddenException(
           'This device fingerprint is already registered to another account. Each device may only be linked to one WaitLayer account.',
         );
       }
       throw err;
     }
+    // Non-blocking fraud signals on successful device registration
+    void this.fraud
+      .checkVpnProxyPattern(userId, device.id, dto.platform ?? null)
+      .catch(() => undefined);
+    void this.fraud
+      .checkEmulatorVmPattern(userId, device.id, dto.platform ?? null)
+      .catch(() => undefined);
+    void this.fraud.checkDuplicateAccount(userId).catch(() => undefined);
     return { ...device, eventSecret };
   }
 

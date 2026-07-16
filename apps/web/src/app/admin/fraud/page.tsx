@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner, StatusBadge } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
-import { formatNumber,formatRelativeTime } from '@/lib/format';
+import { formatNumber, formatRelativeTime } from '@/lib/format';
 
 // ── Types ──
 
@@ -92,32 +92,48 @@ function flagTypeLabel(type: string): string {
 
 function severityColor(s: string): string {
   switch (s) {
-    case 'critical': return 'border-red-500/50 bg-red-500/5';
-    case 'high': return 'border-amber-500/40 bg-amber-500/5';
-    case 'medium': return 'border-yellow-500/30 bg-yellow-500/5';
-    default: return 'border-ink-600/30';
+    case 'critical':
+      return 'border-red-500/50 bg-red-500/5';
+    case 'high':
+      return 'border-amber-500/40 bg-amber-500/5';
+    case 'medium':
+      return 'border-yellow-500/30 bg-yellow-500/5';
+    default:
+      return 'border-ink-600/30';
   }
 }
 
 function severityDot(s: string): string {
   switch (s) {
-    case 'critical': return 'bg-red-500';
-    case 'high': return 'bg-amber-500';
-    case 'medium': return 'bg-yellow-500';
-    case 'low': return 'bg-blue-500';
-    default: return 'bg-ink-500';
+    case 'critical':
+      return 'bg-red-500';
+    case 'high':
+      return 'bg-amber-500';
+    case 'medium':
+      return 'bg-yellow-500';
+    case 'low':
+      return 'bg-blue-500';
+    default:
+      return 'bg-ink-500';
   }
 }
 
 function trustLevelColor(level: string | null): string {
   switch (level) {
-    case 'high_trust': return 'text-emerald-400';
-    case 'normal': return 'text-blue-400';
-    case 'low_trust': return 'text-amber-400';
-    case 'new': return 'text-ink-400';
-    case 'restricted': return 'text-red-400';
-    case 'banned': return 'text-red-600';
-    default: return 'text-ink-400';
+    case 'high_trust':
+      return 'text-emerald-400';
+    case 'normal':
+      return 'text-blue-400';
+    case 'low_trust':
+      return 'text-amber-400';
+    case 'new':
+      return 'text-ink-400';
+    case 'restricted':
+      return 'text-red-400';
+    case 'banned':
+      return 'text-red-600';
+    default:
+      return 'text-ink-400';
   }
 }
 
@@ -145,7 +161,10 @@ export default function AdminFraudPage() {
   const [resolving, setResolving] = useState<string | null>(null);
   const [recomputeUserId, setRecomputeUserId] = useState<string | null>(null);
   const [expandedFlag, setExpandedFlag] = useState<string | null>(null);
-  const [noteModal, setNoteModal] = useState<{ id: string; decision: 'confirmed' | 'invalid' } | null>(null);
+  const [noteModal, setNoteModal] = useState<{
+    id: string;
+    decision: 'confirmed' | 'invalid';
+  } | null>(null);
   const [noteText, setNoteText] = useState('');
 
   // ── Data Fetching ──
@@ -161,10 +180,7 @@ export default function AdminFraudPage() {
     if (flagTypeFilter) params.flagType = flagTypeFilter;
     if (searchQuery.trim()) params.search = searchQuery.trim();
 
-    Promise.all([
-      adminApi.getFraudFlags(params),
-      adminApi.getFraudStats(),
-    ])
+    Promise.all([adminApi.getFraudFlags(params), adminApi.getFraudStats()])
       .then(([flagsRes, statsRes]) => {
         const flagsData = flagsRes.data as FraudFlagsResponse;
         setFlags(flagsData.flags || []);
@@ -190,10 +206,26 @@ export default function AdminFraudPage() {
   const handleResolve = async (id: string, decision: 'confirmed' | 'invalid') => {
     setResolving(id);
     try {
-      await adminApi.resolveFraudFlag(id, decision, decision === 'confirmed' ? 'Confirmed via admin review' : 'False positive — released');
+      await adminApi.resolveFraudFlag(
+        id,
+        decision,
+        decision === 'confirmed' ? 'Confirmed via admin review' : 'False positive — released',
+      );
       fetchData();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Resolve failed'));
+    } finally {
+      setResolving(null);
+    }
+  };
+
+  const handleEscalate = async (id: string) => {
+    setResolving(id);
+    try {
+      await adminApi.escalateFraudFlag(id, 'Escalated for senior review');
+      fetchData();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Escalate failed'));
     } finally {
       setResolving(null);
     }
@@ -246,7 +278,9 @@ export default function AdminFraudPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white mb-1">Fraud review dashboard</h1>
-        <p className="text-ink-300 text-sm">Investigate flagged activity, resolve cases, and monitor trust scores</p>
+        <p className="text-ink-300 text-sm">
+          Investigate flagged activity, resolve cases, and monitor trust scores
+        </p>
       </div>
 
       {/* Stats overview */}
@@ -256,19 +290,27 @@ export default function AdminFraudPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
               <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Open</p>
-              <p className="text-2xl font-bold text-white">{formatNumber(statsSummary.byStatus.open)}</p>
+              <p className="text-2xl font-bold text-white">
+                {formatNumber(statsSummary.byStatus.open)}
+              </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
               <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Reviewing</p>
-              <p className="text-2xl font-bold text-amber-400">{formatNumber(statsSummary.byStatus.reviewing)}</p>
+              <p className="text-2xl font-bold text-amber-400">
+                {formatNumber(statsSummary.byStatus.reviewing)}
+              </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
               <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Escalated</p>
-              <p className="text-2xl font-bold text-red-400">{formatNumber(statsSummary.byStatus.escalated)}</p>
+              <p className="text-2xl font-bold text-red-400">
+                {formatNumber(statsSummary.byStatus.escalated)}
+              </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
               <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Resolved (7d)</p>
-              <p className="text-2xl font-bold text-emerald-400">{formatNumber(statsSummary.resolvedLast7d)}</p>
+              <p className="text-2xl font-bold text-emerald-400">
+                {formatNumber(statsSummary.resolvedLast7d)}
+              </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
               <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Escalation rate</p>
@@ -326,14 +368,18 @@ export default function AdminFraudPage() {
                       const pct = (t.count / maxFt) * 100;
                       return (
                         <div key={t.type} className="flex items-center gap-2">
-                          <span className="text-ink-300 text-xs flex-1 truncate">{flagTypeLabel(t.type)}</span>
+                          <span className="text-ink-300 text-xs flex-1 truncate">
+                            {flagTypeLabel(t.type)}
+                          </span>
                           <div className="w-24 bg-ink-700 rounded-full h-2 overflow-hidden">
                             <div
                               className="h-full rounded-full bg-brand-500"
                               style={{ width: `${pct}%` }}
                             />
                           </div>
-                          <span className="text-white text-xs font-mono w-6 text-right">{t.count}</span>
+                          <span className="text-white text-xs font-mono w-6 text-right">
+                            {t.count}
+                          </span>
                         </div>
                       );
                     })}
@@ -351,9 +397,7 @@ export default function AdminFraudPage() {
           <button
             onClick={() => setTab('open')}
             className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              tab === 'open'
-                ? 'bg-brand-500 text-white'
-                : 'text-ink-300 hover:text-white'
+              tab === 'open' ? 'bg-brand-500 text-white' : 'text-ink-300 hover:text-white'
             }`}
           >
             Open flags {openCount > 0 && `(${openCount})`}
@@ -361,9 +405,7 @@ export default function AdminFraudPage() {
           <button
             onClick={() => setTab('resolved')}
             className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              tab === 'resolved'
-                ? 'bg-brand-500 text-white'
-                : 'text-ink-300 hover:text-white'
+              tab === 'resolved' ? 'bg-brand-500 text-white' : 'text-ink-300 hover:text-white'
             }`}
           >
             Resolved history
@@ -398,7 +440,9 @@ export default function AdminFraudPage() {
           >
             <option value="">All types</option>
             {FLAG_TYPES.map((ft) => (
-              <option key={ft} value={ft}>{flagTypeLabel(ft)}</option>
+              <option key={ft} value={ft}>
+                {flagTypeLabel(ft)}
+              </option>
             ))}
           </select>
 
@@ -430,7 +474,9 @@ export default function AdminFraudPage() {
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
           <div className="flex items-center justify-between">
             <p className="text-red-400 text-sm">{error}</p>
-            <button onClick={() => setError(null)} className="text-red-300 text-xs underline ml-4">Dismiss</button>
+            <button onClick={() => setError(null)} className="text-red-300 text-xs underline ml-4">
+              Dismiss
+            </button>
           </div>
         </div>
       )}
@@ -465,7 +511,9 @@ export default function AdminFraudPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${severityDot(flag.severity)}`} />
+                        <div
+                          className={`w-2 h-2 rounded-full shrink-0 ${severityDot(flag.severity)}`}
+                        />
                         <StatusBadge status={flag.severity} />
                         <span className="text-ink-300 text-xs capitalize truncate">
                           {flagTypeLabel(flag.flagType)}
@@ -498,7 +546,9 @@ export default function AdminFraudPage() {
                         </a>
                       </div>
                       {flag.user?.trustLevel && (
-                        <span className={`text-xs font-medium ${trustLevelColor(flag.user.trustLevel)}`}>
+                        <span
+                          className={`text-xs font-medium ${trustLevelColor(flag.user.trustLevel)}`}
+                        >
                           {flag.user.trustLevel.replace(/_/g, ' ')}
                         </span>
                       )}
@@ -522,20 +572,28 @@ export default function AdminFraudPage() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                         <div>
                           <p className="text-ink-500">Flag ID</p>
-                          <p className="text-ink-300 font-mono truncate">{flag.id.slice(0, 12)}...</p>
+                          <p className="text-ink-300 font-mono truncate">
+                            {flag.id.slice(0, 12)}...
+                          </p>
                         </div>
                         <div>
                           <p className="text-ink-500">User ID</p>
-                          <p className="text-ink-300 font-mono truncate">{flag.userId.slice(0, 12)}...</p>
+                          <p className="text-ink-300 font-mono truncate">
+                            {flag.userId.slice(0, 12)}...
+                          </p>
                         </div>
                         <div>
                           <p className="text-ink-500">Created</p>
-                          <p className="text-ink-300">{new Date(flag.createdAt).toLocaleString()}</p>
+                          <p className="text-ink-300">
+                            {new Date(flag.createdAt).toLocaleString()}
+                          </p>
                         </div>
                         {flag.resolvedAt && (
                           <div>
                             <p className="text-ink-500">Resolved</p>
-                            <p className="text-ink-300">{new Date(flag.resolvedAt).toLocaleString()}</p>
+                            <p className="text-ink-300">
+                              {new Date(flag.resolvedAt).toLocaleString()}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -544,7 +602,9 @@ export default function AdminFraudPage() {
                       {flag.reviewNote && (
                         <div>
                           <p className="text-ink-400 text-xs font-medium mb-1">Review note</p>
-                          <p className="text-ink-300 text-xs bg-ink-700/50 rounded-lg p-2">{flag.reviewNote}</p>
+                          <p className="text-ink-300 text-xs bg-ink-700/50 rounded-lg p-2">
+                            {flag.reviewNote}
+                          </p>
                         </div>
                       )}
 
@@ -558,6 +618,13 @@ export default function AdminFraudPage() {
                               className="bg-ink-700 hover:bg-ink-600 text-emerald-400 text-xs font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
                             >
                               Mark invalid
+                            </button>
+                            <button
+                              onClick={() => handleEscalate(flag.id)}
+                              disabled={resolving === flag.id}
+                              className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
+                            >
+                              {resolving === flag.id ? 'Escalating...' : 'Escalate'}
                             </button>
                             <button
                               onClick={() => handleResolve(flag.id, 'confirmed')}
@@ -637,8 +704,8 @@ export default function AdminFraudPage() {
             </h3>
             <p className="text-ink-400 text-sm mb-4">
               {noteModal.decision === 'confirmed'
-                ? 'This will reverse the associated earnings and penalize the user\'s trust score.'
-                : 'This will release any held earnings and restore the user\'s trust score.'}
+                ? "This will reverse the associated earnings and penalize the user's trust score."
+                : "This will release any held earnings and restore the user's trust score."}
             </p>
             <textarea
               value={noteText}
@@ -650,7 +717,10 @@ export default function AdminFraudPage() {
             />
             <div className="flex items-center gap-3 justify-end">
               <button
-                onClick={() => { setNoteModal(null); setNoteText(''); }}
+                onClick={() => {
+                  setNoteModal(null);
+                  setNoteText('');
+                }}
                 className="bg-ink-700 hover:bg-ink-600 text-white font-medium px-4 py-2 rounded-lg text-sm"
               >
                 Cancel

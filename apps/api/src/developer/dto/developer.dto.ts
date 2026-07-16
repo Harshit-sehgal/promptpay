@@ -136,4 +136,13 @@ export class DeleteAccountDto {
   @IsString()
   @MaxLength(4096)
   googleIdToken?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'When true, forfeit any remaining sub-threshold earnings (below payout minimum) to enable deletion. Required for GDPR erasure when balance is below the withdrawable minimum.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  forfeitBalance?: boolean;
 }

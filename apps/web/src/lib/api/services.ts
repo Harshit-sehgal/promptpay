@@ -6,6 +6,7 @@ import {
   PayoutAvailableResponse,
   PayoutMethodResponse,
   PayoutRequestResponse,
+  StripeConnectOnboardingResponse,
 } from '@waitlayer/shared';
 
 import api from './client';
@@ -139,6 +140,8 @@ export const adminApi = {
   getFraudStats: () => api.get('/admin/fraud/stats'),
   resolveFraudFlag: (id: string, decision: 'confirmed' | 'invalid', note?: string) =>
     api.post(`/admin/fraud/${id}/resolve`, { decision, note }),
+  escalateFraudFlag: (id: string, note?: string) =>
+    api.post(`/admin/fraud/${id}/escalate`, { note }),
   getRecoveryDebtCases: (params?: Record<string, unknown>) =>
     api.get('/admin/recovery-debt', { params }),
   openRecoveryDebtCase: (
@@ -186,6 +189,14 @@ export const adminApi = {
 export const payoutApi = {
   addMethod: (data: Record<string, unknown>) =>
     api.post('/payout/method', data).then((r) => ok(PayoutMethodResponse.parse(r.data))),
+  createStripeConnectOnboarding: (data: {
+    refreshUrl: string;
+    returnUrl: string;
+    currency?: string;
+  }) =>
+    api
+      .post('/payout/stripe-connect/onboarding', data)
+      .then((r) => ok(StripeConnectOnboardingResponse.parse(r.data))),
   getInfo: () => api.get('/payout/info'),
   requestPayout: (data: Record<string, unknown>) =>
     api.post('/payout/request', data).then((r) => ok(PayoutRequestResponse.parse(r.data))),

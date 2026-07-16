@@ -242,6 +242,12 @@ export const PayoutRequestResponse = z.object({
   allocations: z.array(PayoutAllocationResponse).optional(),
 });
 
+/** POST /api/v1/payout/stripe-connect/onboarding response */
+export const StripeConnectOnboardingResponse = z.object({
+  accountId: z.string().min(1),
+  onboardingUrl: z.string().url(),
+});
+
 /** GET /api/v1/payout/available response */
 export const PayoutAvailableResponse = z.object({
   entries: z

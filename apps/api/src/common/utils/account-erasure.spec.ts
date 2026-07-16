@@ -17,6 +17,7 @@ function makePrisma() {
     earningsLedger: {
       aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
       findFirst: vi.fn().mockResolvedValue(null),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     recoveryDebtCase: { findFirst: vi.fn().mockResolvedValue(null) },
     payoutRequest: { findFirst: vi.fn().mockResolvedValue(null) },

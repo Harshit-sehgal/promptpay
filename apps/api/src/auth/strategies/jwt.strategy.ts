@@ -7,6 +7,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { isActiveAccountStatus } from '../../common/utils/account-status';
 import { PrismaService } from '../../config/prisma.service';
 import { audienceIncludes } from '../auth.constants';
+import { loadVerificationKeySet, selectVerificationKey, VerificationKeySet } from '../jwt-keys';
 
 /**
  * Dual-source JWT extraction: Authorization header OR httpOnly `access_token`
@@ -34,20 +35,49 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     config: ConfigService,
     private prisma: PrismaService,
   ) {
-    const publicKey = config.get<string>('JWT_PUBLIC_KEY');
-    if (!publicKey) {
+    // Build the accepted verification key set. This honours the token's `kid`
+    // header so a rotated key pair can be deployed while the previous public
+    // key remains accepted (zero-downtime rotation). `JWT_PUBLIC_KEY` is the
+    // current key; `JWT_PUBLIC_KEYS` may additionally list previous keys that
+    // are still trusted during the rotation grace window.
+    const keySet = loadVerificationKeySet(config);
+    if (keySet.keys.size === 0) {
       throw new Error(
-        'JWT_PUBLIC_KEY must be defined for RS256 token verification. Set the public key in your environment.',
+        'JWT_PUBLIC_KEY (or JWT_PUBLIC_KEYS) must be defined for RS256 token verification. Set the public key in your environment.',
       );
     }
     super({
       jwtFromRequest: extractJwtFromRequest as JwtFromRequestFunction,
       ignoreExpiration: false,
-      secretOrKey: publicKey,
+      // Select the verification key per-request from the token `kid` so that
+      // tokens signed by a previous (still-trusted) key verify during rotation.
+      secretOrKeyProvider: (_req, token, done) => {
+        try {
+          done(null, this.resolveVerificationKey(token));
+        } catch (err) {
+          done(err as Error);
+        }
+      },
       algorithms: ['RS256'],
       issuer: config.get<string>('JWT_ISSUER', 'waitlayer'),
       audience: config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
     });
+    // Assigned after super() (this is unavailable before super() in a derived
+    // class). The secretOrKeyProvider closure above only runs during request
+    // authentication, by which point keySet is set.
+    this.keySet = keySet;
+  }
+
+  /** Accepted verification keys (kid -> PEM), exposed for operational tests. */
+  readonly keySet: VerificationKeySet;
+
+  /**
+   * Resolve the verification PEM for a raw JWT, honouring its `kid` header so
+   * pre-rotation tokens verify during a rotation grace window. Throws
+   * UnauthorizedException for a missing or unknown kid.
+   */
+  resolveVerificationKey(rawToken: string): string {
+    return selectVerificationKey(rawToken, this.keySet);
   }
 
   async validate(payload: {

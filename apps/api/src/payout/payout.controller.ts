@@ -8,7 +8,12 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
-import { AddPayoutMethodDto, PayoutHistoryQueryDto, RequestPayoutDto } from './dto';
+import {
+  AddPayoutMethodDto,
+  PayoutHistoryQueryDto,
+  RequestPayoutDto,
+  StripeConnectOnboardingDto,
+} from './dto';
 import { PayoutService } from './payout.service';
 
 @ApiTags('Payout')
@@ -82,5 +87,23 @@ export class PayoutController {
   @RequiredScopes('ledger:read')
   getPayoutHistory(@CurrentUser('id') userId: string, @Query() query: PayoutHistoryQueryDto) {
     return this.service.getPayoutHistory(userId, query.page ?? 1, query.limit ?? 20);
+  }
+
+  @ApiOperation({ summary: 'Create a Stripe Connect account and onboarding URL' })
+  @Post('stripe-connect/onboarding')
+  @UseGuards(RejectApiKeyGuard, ActionStepUpGuard)
+  @ActionStepUp('payout:method')
+  @Roles('developer')
+  @RequiredScopes('payout:write')
+  createStripeConnectOnboarding(
+    @CurrentUser('id') userId: string,
+    @CurrentUser('email') email: string,
+    @Body() dto: StripeConnectOnboardingDto,
+  ) {
+    return this.service.createStripeConnectOnboarding(userId, email, {
+      refreshUrl: dto.refreshUrl,
+      returnUrl: dto.returnUrl,
+      currency: dto.currency,
+    });
   }
 }

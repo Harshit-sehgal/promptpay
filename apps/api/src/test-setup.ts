@@ -1,5 +1,13 @@
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from './auth/__fixtures__/test-keys';
 
+// Tests must never run under NODE_ENV=production: the config validator's
+// production rules (PRIVACY_HASH_KEY, Resend credentials, HTTPS origins) and
+// the privacy-hash / payout-provider production guards would reject the dev
+// environment and crash suites that boot the full Nest app. Force a test
+// environment so the suite is deterministic regardless of the parent shell
+// (which may export NODE_ENV=production from a prior `next build`).
+process.env.NODE_ENV = 'test';
+
 // BigInt values cannot be serialized by JSON.stringify by default. Every
 // monetary column in the schema is stored as BigInt, so without this polyfill
 // any response containing an amount would throw at runtime during tests.

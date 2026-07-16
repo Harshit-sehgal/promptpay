@@ -43,6 +43,17 @@ import { MINIMUM_WAIT_CONFIDENCE } from './extension-wait.trait';
 import { isUnderFrequencyCap } from './frequency-cap';
 import { formatHHMMInZone, isTimeInRange } from './quiet-hours';
 
+/**
+ * Run a best-effort, non-blocking async task without letting a missing method
+ * or a rejected promise escape into the ad-serving critical path. These signals
+ * are advisory (they create flags for review); a transient failure or an
+ * incompletely-mocked collaborator must never prevent serving an ad or
+ * recording an impression.
+ */
+function nonBlocking(task: Promise<unknown> | undefined): void {
+  if (task) void task.catch(() => undefined);
+}
+
 export class ExtensionAdTrait {
   declare prisma: PrismaService;
   declare audit: AuditService;
@@ -183,6 +194,8 @@ export class ExtensionAdTrait {
     if (!(await this.runtimeConfig.isCountryAllowed(userCountry))) {
       return { ad: null, reason: 'country_blocked' };
     }
+    // Non-blocking fraud signal: country-device mismatch detection
+    nonBlocking(this.fraud.checkCountryDeviceChange?.(userId, dto.deviceId, userCountry ?? null));
     // Idempotency: return same ad if we already served one for this
     // user/device/waitStateId. Keys are NAMESPACED by userId + deviceId so two
     // different users who collide on a client-generated waitStateId or
@@ -741,6 +754,13 @@ export class ExtensionAdTrait {
       impression.userId,
       impression.deviceId,
     );
+    // Non-blocking extended fraud signals: these create flags for review but
+    // do not block the current impression (the rate-limit gate above is the
+    // blocking check). Fire-and-forget so the ad-serving critical path is not
+    // slowed by multi-query pattern analysis.
+    nonBlocking(this.fraud.checkImpossibleVolume?.(impression.userId));
+    nonBlocking(this.fraud.checkAutomatedPattern?.(impression.userId));
+    nonBlocking(this.fraud.checkRapidEarningSpike?.(impression.userId));
     const isBillable = rateCheck.allowed;
     if (!isBillable) {
       // Record the impression as qualified but not billable — fraud was flagged
@@ -1023,6 +1043,10 @@ export class ExtensionAdTrait {
     if (!selfClick.allowed) {
       return { clicked: false, reason: selfClick.reason || 'self_click' };
     }
+    // Non-blocking extended click-abuse signal
+    void this.fraud
+      .checkRepeatedClickAbuse(impression.userId, impression.campaignId)
+      .catch(() => undefined);
     // One click per impression
     const existingClick = await this.prisma.adClick.findFirst({
       where: { impressionId: impression.id },

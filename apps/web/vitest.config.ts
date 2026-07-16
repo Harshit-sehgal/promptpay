@@ -8,7 +8,20 @@ export default defineConfig({
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
     environment: 'node',
+    setupFiles: ['./vitest.setup.ts'],
     include: ['src/**/*.spec.ts', 'src/**/*.test.ts', 'src/**/*.spec.tsx', 'src/**/*.test.tsx'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      exclude: ['**/*.dto.ts', '**/*.module.ts', 'src/app/layout.tsx', 'src/app/page.tsx'],
+      thresholds: {
+        lines: 15,
+        functions: 10,
+        branches: 16,
+        statements: 15,
+      },
+    },
   },
   resolve: {
     alias: {

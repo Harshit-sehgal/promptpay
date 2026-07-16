@@ -56,7 +56,23 @@ describe('HealthController metrics endpoint', () => {
         }),
       },
       adImpression: { count: vi.fn().mockResolvedValue(7) },
-      waitStateEvent: { count: vi.fn().mockResolvedValue(100) },
+      waitStateEvent: {
+        count: vi.fn().mockResolvedValue(100),
+        groupBy: vi.fn().mockResolvedValue([]),
+      },
+      payoutTransaction: {
+        groupBy: vi.fn().mockResolvedValue([{ provider: 'manual', _count: { id: 2 } }]),
+      },
+      $queryRaw: vi.fn().mockResolvedValue([
+        {
+          currency: 'USD',
+          netAdvertiserSpendMinor: 1000n,
+          netEarningsMinor: 600n,
+          netPlatformFeeMinor: 300n,
+          netReserveMinor: 100n,
+          discrepancyMinor: 0n,
+        },
+      ]),
     };
     return prisma;
   }
@@ -93,6 +109,19 @@ describe('HealthController metrics endpoint', () => {
     expect(wait.totalWaitStates).toBe(100);
     expect(wait.flaggedFalsePositives).toBe(5);
     expect(wait.lowConfidenceBlocked).toBe(10);
+
+    expect(res.ledgerDiscrepancies).toBeDefined();
+    const ledgerDiscrepancies = res.ledgerDiscrepancies as {
+      discrepancies: Array<Record<string, unknown>>;
+      hasDiscrepancy: boolean;
+    };
+    expect(ledgerDiscrepancies.discrepancies).toHaveLength(1);
+    expect(ledgerDiscrepancies.discrepancies[0].currency).toBe('USD');
+    expect(ledgerDiscrepancies.discrepancies[0].discrepancyMinor).toBe('0');
+    expect(ledgerDiscrepancies.hasDiscrepancy).toBe(false);
+
+    expect(res.providerFailures).toBeDefined();
+    expect(res.providerFailures).toEqual({ byProvider: { manual: 2 }, total: 2 });
   });
 
   it('returns zero webhook lag when no pending events exist', async () => {
@@ -113,6 +142,42 @@ describe('HealthController metrics endpoint', () => {
     // No wait states → precision defaults to 1, falsePositiveRate to 0
     expect(wait.precision).toBe(1);
     expect(wait.falsePositiveRate).toBe(0);
+  });
+
+  it('returns a structured error when ledger discrepancy computation fails', async () => {
+    const prisma = metricsPrisma();
+    prisma.$queryRaw.mockRejectedValue(new Error('ledger query failed'));
+    // Wait-detection counts: 0 total, 0 flagged, 0 low-confidence
+    prisma.waitStateEvent.count = vi
+      .fn()
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+    const redis = { check: vi.fn().mockResolvedValue({ status: 'connected' }) };
+    const controller = new HealthController(prisma as never, redis as never);
+
+    const res = await controller.metrics();
+
+    expect(res.ledgerDiscrepancies).toEqual({ error: 'computation_failed' });
+    expect(res.providerFailures).toEqual({ byProvider: { manual: 2 }, total: 2 });
+  });
+
+  it('returns a structured error when provider failure computation fails', async () => {
+    const prisma = metricsPrisma();
+    prisma.payoutTransaction.groupBy.mockRejectedValue(new Error('provider query failed'));
+    // Wait-detection counts: 0 total, 0 flagged, 0 low-confidence
+    prisma.waitStateEvent.count = vi
+      .fn()
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(0);
+    const redis = { check: vi.fn().mockResolvedValue({ status: 'connected' }) };
+    const controller = new HealthController(prisma as never, redis as never);
+
+    const res = await controller.metrics();
+
+    expect(res.providerFailures).toEqual({ error: 'computation_failed' });
+    expect(res.ledgerDiscrepancies).toBeDefined();
   });
 });
 

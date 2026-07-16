@@ -80,6 +80,7 @@ export class DeveloperController {
       confirmation: dto.confirmation,
       currentPassword: dto.currentPassword,
       googleIdToken: dto.googleIdToken,
+      forfeitBalance: dto.forfeitBalance,
     });
   }
 }

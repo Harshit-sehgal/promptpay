@@ -174,11 +174,11 @@ test.describe('Advertiser campaign creation (authenticated)', () => {
   test('renders the new campaign form with all required fields', async ({ page }) => {
     await page.goto('/advertiser/campaigns/new');
     await expect(page.locator('h1').first()).toHaveText('Create campaign');
-    // Labels are now associated via htmlFor; inputs have stable data-testid attrs
+    // Prefer getByLabel to verify the visible label is programmatically associated.
     await expect(page.getByLabel('Campaign name')).toBeVisible();
     await expect(page.getByLabel('Bid type')).toBeVisible();
-    await expect(page.getByTestId('campaign-bid-amount-input')).toBeVisible();
-    await expect(page.getByTestId('campaign-budget-input')).toBeVisible();
+    await expect(page.getByLabel('Bid amount (USD)')).toBeVisible();
+    await expect(page.getByLabel('Total budget (USD)')).toBeVisible();
   });
 
   test('shows ad creative section with headline and message inputs', async ({ page }) => {

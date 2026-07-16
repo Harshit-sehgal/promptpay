@@ -152,6 +152,7 @@ export class AdvertiserProfileTrait {
     options: {
       currentPassword?: string;
       googleIdToken?: string;
+      forfeitBalance?: boolean;
     } = {},
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -185,7 +186,9 @@ export class AdvertiserProfileTrait {
       // but fail closed rather than allow unauthenticated erasure.
       throw new UnauthorizedException('Unable to verify account ownership for deletion');
     }
-    await eraseAccountIdentity(this.prisma, userId);
+    await eraseAccountIdentity(this.prisma, userId, {
+      forfeitBalance: options.forfeitBalance ?? false,
+    });
     void this.audit.log({
       actorId: userId,
       actorRole: 'advertiser',

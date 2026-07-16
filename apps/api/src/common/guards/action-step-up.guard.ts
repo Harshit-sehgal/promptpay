@@ -9,6 +9,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
+import {
+  loadVerificationKeySet,
+  selectVerificationKey,
+  VerificationKeySet,
+} from '../../auth/jwt-keys';
+
 export const STEP_UP_ACTION_KEY = 'stepUpAction';
 
 export interface StepUpTokenPayload {
@@ -40,18 +46,21 @@ export class ActionStepUpGuard implements CanActivate {
   private readonly jwt: JwtService;
   private readonly issuer: string;
   private readonly audience: string;
-  private readonly publicKey: string;
+  private readonly keySet: VerificationKeySet;
 
   constructor(config: ConfigService) {
     this.issuer = config.get<string>('JWT_ISSUER', 'waitlayer');
     this.audience = config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
-    const publicKey = config.get<string>('JWT_PUBLIC_KEY');
-    if (!publicKey) {
-      throw new Error('JWT_PUBLIC_KEY must be defined to verify step-up tokens');
+    // Honour the token `kid` so step-up tokens issued just before a key
+    // rotation keep verifying during the grace window (consistent with the
+    // access-token JwtStrategy).
+    this.keySet = loadVerificationKeySet(config);
+    if (this.keySet.keys.size === 0) {
+      throw new Error(
+        'JWT_PUBLIC_KEY (or JWT_PUBLIC_KEYS) must be defined to verify step-up tokens',
+      );
     }
-    this.publicKey = publicKey;
     this.jwt = new JwtService({
-      publicKey,
       verifyOptions: {
         algorithms: ['RS256'],
         issuer: this.issuer,
@@ -76,8 +85,12 @@ export class ActionStepUpGuard implements CanActivate {
 
     let payload: StepUpTokenPayload;
     try {
-      payload = this.jwt.verify<StepUpTokenPayload>(token);
-    } catch {
+      // Select the verification key from the token `kid` so tokens signed by
+      // a still-trusted previous key verify during a rotation grace window.
+      const publicKey = selectVerificationKey(token, this.keySet);
+      payload = this.jwt.verify<StepUpTokenPayload>(token, { publicKey });
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
       throw new ForbiddenException('Invalid or expired step-up token');
     }
 

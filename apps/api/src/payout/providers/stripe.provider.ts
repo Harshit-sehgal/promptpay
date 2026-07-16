@@ -240,6 +240,63 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
     return { ok: true };
   }
 
+  /**
+   * Create a Stripe Connect Express account for a developer.
+   * Returns the connected account id (acct_...).
+   */
+  async createConnectAccount(params: {
+    userId: string;
+    email: string;
+  }): Promise<{ accountId: string }> {
+    if (!this.stripe) {
+      throw new Error(
+        'Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).',
+      );
+    }
+
+    const account = await this.stripe.accounts.create({
+      type: 'express',
+      email: params.email,
+      metadata: {
+        waitlayerUserId: params.userId,
+      },
+    });
+
+    this.logger.log(`Stripe Connect account created: user=${params.userId}, account=${account.id}`);
+
+    return { accountId: account.id };
+  }
+
+  /**
+   * Create a Stripe Connect account onboarding link for a connected account.
+   * Returns the URL the developer should be redirected to.
+   */
+  async createOnboardingLink(params: {
+    accountId: string;
+    refreshUrl: string;
+    returnUrl: string;
+  }): Promise<{ url: string }> {
+    if (!this.stripe) {
+      throw new Error(
+        'Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).',
+      );
+    }
+
+    const link = await this.stripe.accountLinks.create({
+      account: params.accountId,
+      refresh_url: params.refreshUrl,
+      return_url: params.returnUrl,
+      type: 'account_onboarding',
+    });
+
+    this.logger.log(`Stripe Connect onboarding link created: account=${params.accountId}`);
+
+    if (!link.url) {
+      throw new Error('Stripe did not return an onboarding URL');
+    }
+    return { url: link.url };
+  }
+
   async initiate(params: {
     payoutRequestId: string;
     destination: string;

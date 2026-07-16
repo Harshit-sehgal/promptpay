@@ -39,6 +39,7 @@ interface DeleteAccountOptions {
   confirmation?: string;
   currentPassword?: string;
   googleIdToken?: string;
+  forfeitBalance?: boolean;
   auditActor?: DeleteAccountAuditActor;
 }
 
@@ -463,7 +464,9 @@ export class DeveloperService {
       await this.verifySelfDeleteStepUp(userId, options);
     }
 
-    const result = await eraseAccountIdentity(this.prisma, userId);
+    const result = await eraseAccountIdentity(this.prisma, userId, {
+      forfeitBalance: options.forfeitBalance ?? false,
+    });
     const priorEmail = result.priorEmail;
     // Audit: account self-deletion is an irreversible destructive action.
     // Record it so a malicious deletion (compromised token) leaves a

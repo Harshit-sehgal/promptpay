@@ -86,6 +86,7 @@ export default function DevPayoutsPage() {
   const [destination, setDestination] = useState('');
   const [methodCurrency, setMethodCurrency] = useState('USD');
   const [submitting, setSubmitting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Request payout form
   const [amount, setAmount] = useState('');
@@ -138,6 +139,20 @@ export default function DevPayoutsPage() {
     fetchData();
   }, []);
 
+  // Detect return from Stripe Connect onboarding and surface feedback.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const stripeStatus = params.get('stripe_status');
+    if (!stripeStatus) return;
+    if (stripeStatus === 'success') {
+      setSuccessMsg('Stripe account connected. Your payout method will be verified shortly.');
+    } else if (stripeStatus === 'refresh') {
+      setError('Stripe connection was interrupted. Please try again.');
+    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }, []);
+
   // A-015: payouts are blocked until the email is verified. Surface the block
   // and a self-service resend action inline so developers are never stuck.
   const handleRequestVerification = async () => {
@@ -156,6 +171,25 @@ export default function DevPayoutsPage() {
   const handleAddMethod = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    // Stripe Connect uses hosted onboarding instead of a raw destination input.
+    if (provider === 'stripe_connect') {
+      try {
+        const baseUrl = window.location.origin + window.location.pathname;
+        const res = await payoutApi.createStripeConnectOnboarding({
+          refreshUrl: `${baseUrl}?stripe_status=refresh`,
+          returnUrl: `${baseUrl}?stripe_status=success`,
+          currency: methodCurrency.trim().toUpperCase() || 'USD',
+        });
+        window.location.href = res.data.onboardingUrl;
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, 'Failed to start Stripe onboarding'));
+        setSubmitting(false);
+      }
+      return;
+    }
 
     // Client-side validation for PayPal email format
     if (provider === 'paypal_email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)) {
@@ -287,6 +321,12 @@ export default function DevPayoutsPage() {
         </div>
       )}
 
+      {successMsg && (
+        <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4 mb-6">
+          <p className="text-emerald-700 text-sm font-normal">{successMsg}</p>
+        </div>
+      )}
+
       {info && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -387,9 +427,12 @@ export default function DevPayoutsPage() {
           {/* Payout methods */}
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-surface-900 font-bold text-[16px]">Payout methods</h2>
+              <h2 className="text-surface-900 font-bold text-[16px]">Payout methods</h2>{' '}
               <button
-                onClick={() => setShowMethodForm(!showMethodForm)}
+                onClick={() => {
+                  setShowMethodForm(!showMethodForm);
+                  setSuccessMsg(null);
+                }}
                 className="text-brand-600 hover:text-brand-700 text-sm font-semibold transition-colors"
               >
                 {showMethodForm ? 'Cancel' : '+ Add method'}
@@ -402,13 +445,16 @@ export default function DevPayoutsPage() {
                 className="space-y-4 mb-6 p-5 bg-slate-50/50 border border-slate-100/85 rounded-xl"
               >
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
+                  <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
                       Provider
                     </label>
                     <select
                       value={provider}
-                      onChange={(e) => setProvider(e.target.value)}
+                      onChange={(e) => {
+                        setProvider(e.target.value);
+                        setSuccessMsg(null);
+                      }}
                       className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] font-normal"
                     >
                       <option value="">Select provider...</option>
@@ -437,22 +483,24 @@ export default function DevPayoutsPage() {
                         : 'Add a payout method to start receiving earnings.'}
                     </p>
                   </div>
-                  <div className="md:col-span-2">
-                    <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
-                      {provider === 'paypal_email' ? 'PayPal email' : 'Account details'}
-                    </label>
-                    <input
-                      type="text"
-                      value={destination}
-                      onChange={(e) => setDestination(e.target.value)}
-                      required
-                      placeholder={provider === 'paypal_email' ? 'you@example.com' : 'Account ID'}
-                      autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
-                      inputMode={provider === 'paypal_email' ? 'email' : 'text'}
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
-                    />
-                  </div>
-                  <div>
+                  {provider !== 'stripe_connect' && (
+                    <div className="md:col-span-2">
+                      <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                        {provider === 'paypal_email' ? 'PayPal email' : 'Account details'}
+                      </label>
+                      <input
+                        type="text"
+                        value={destination}
+                        onChange={(e) => setDestination(e.target.value)}
+                        required
+                        placeholder={provider === 'paypal_email' ? 'you@example.com' : 'Account ID'}
+                        autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
+                        inputMode={provider === 'paypal_email' ? 'email' : 'text'}
+                        className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
+                      />
+                    </div>
+                  )}
+                  <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
                     <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
                       Currency
                     </label>
@@ -474,7 +522,13 @@ export default function DevPayoutsPage() {
                   disabled={submitting}
                   className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-all"
                 >
-                  {submitting ? 'Adding...' : 'Add method'}
+                  {submitting
+                    ? provider === 'stripe_connect'
+                      ? 'Connecting...'
+                      : 'Adding...'
+                    : provider === 'stripe_connect'
+                      ? 'Connect with Stripe'
+                      : 'Add method'}
                 </button>
               </form>
             )}

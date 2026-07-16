@@ -1,8 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ConflictException, ForbiddenException } from '@nestjs/common';
-
-import { Prisma } from '@waitlayer/db';
-import { PayoutStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { LedgerService } from '../ledger/ledger.service';
@@ -490,7 +486,7 @@ describe('PayoutService.processPayout provider-failure recovery', () => {
     // admin can mark it failed to release allocations for retry).
     const claimUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const txUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const { prisma, service } = makePayoutService({
+    const { service } = makePayoutService({
       payoutRequest: {
         findUnique: vi.fn().mockResolvedValueOnce({
           ...payoutForProcessing,

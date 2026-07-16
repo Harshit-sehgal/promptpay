@@ -23,7 +23,8 @@ export default defineConfig({
     testTimeout: 60_000,
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
+      reporter: ['text', 'html', 'json-summary'],
+      reportsDirectory: './coverage',
       include: ['src/**/*.ts'],
       exclude: ['**/*.dto.ts', '**/*.module.ts', 'main.ts'],
       thresholds: {

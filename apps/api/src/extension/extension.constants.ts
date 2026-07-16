@@ -14,12 +14,18 @@ import * as crypto from 'crypto';
  * positive signal dominates (max-weight) rather than summing, so a single
  * high-confidence signal (e.g. an active AI generation) is not diluted by
  * incidental inactivity telemetry.
+ *
+ * `lifecycle_event` is weighted BELOW the billing threshold (0.45 < 0.5)
+ * because lifecycle events are ambiguous: a build completion IS a wait, but
+ * a window focus change or tab switch is NOT. A single lifecycle event
+ * alone cannot trigger billing; it must be accompanied by another signal
+ * (e.g. command_execution for a build, active_task for a running process).
  */
 export const SIGNAL_WEIGHTS: Record<string, number> = {
   ai_generation: 0.95,
   active_task: 0.85,
   command_execution: 0.7,
-  lifecycle_event: 0.6,
+  lifecycle_event: 0.45,
   inactivity: 0.05,
 };
 

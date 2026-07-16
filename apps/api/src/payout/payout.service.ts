@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
+import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
@@ -34,6 +35,7 @@ export class PayoutService {
     public stripeConnect: StripeConnectPayoutProvider,
     public wise: WisePayoutProvider,
     public runtimeConfig: RuntimeConfigService,
+    public fraudService: FraudService,
   ) {
     this.providers = {
       manual: new ManualPayoutProvider(),

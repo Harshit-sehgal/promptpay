@@ -5,6 +5,7 @@ export {
   ApprovePayoutDto,
   ArchiveRefundQueueQueryDto,
   AuditLogQueryDto,
+  EscalateFraudFlagDto,
   FraudFlagsQueryDto,
   IssueDeviceRecoveryTokenDto,
   MarkPayoutPaidDto,
