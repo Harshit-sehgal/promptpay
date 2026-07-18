@@ -4,6 +4,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 
+import { AuthenticatedPrincipal } from '../../common/auth/principal';
 import { isActiveAccountStatus } from '../../common/utils/account-status';
 import { PrismaService } from '../../config/prisma.service';
 import { audienceIncludes } from '../auth.constants';
@@ -116,6 +117,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user || !isActiveAccountStatus(user.status)) {
       throw new UnauthorizedException('User is not active');
     }
-    return { ...user, jti: payload.jti, mfaAt: payload.mfaAt };
+    return {
+      ...user,
+      jti: payload.jti,
+      mfaAt: payload.mfaAt,
+      authMethod: 'jwt' as const,
+      sub: user.id,
+    } as AuthenticatedPrincipal & {
+      email: string;
+      status: string;
+      trustLevel: string;
+      twoFactorEnabled: boolean;
+    };
   }
 }

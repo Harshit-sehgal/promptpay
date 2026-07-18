@@ -10,7 +10,10 @@ function guard(requiredRoles?: string[]) {
   } as unknown as Reflector);
 }
 
-function context(request: { user?: { role?: string }; apiKey?: { scopes: string[] } }): ExecutionContext {
+function context(request: {
+  user?: { role?: string };
+  apiKey?: { scopes: string[] };
+}): ExecutionContext {
   return {
     getHandler: () => ({}),
     getClass: () => ({}),
@@ -30,13 +33,25 @@ describe('RolesGuard', () => {
     expect(guard(['advertiser']).canActivate(context({ user: { role: 'developer' } }))).toBe(false);
   });
 
-  it('uses API-key authorization before synthesized req.user roles', () => {
+  it('rejects an API key whose owner role does not satisfy the route role, even with scopes', () => {
+    // A developer-owned key must not access an advertiser-only route.
     expect(
       guard(['advertiser']).canActivate(
-        context({
-          apiKey: { scopes: ['campaigns:write'] },
-          user: { role: 'developer' },
-        }),
+        context({ apiKey: { scopes: ['campaigns:write'] }, user: { role: 'developer' } }),
+      ),
+    ).toBe(false);
+    // An advertiser-owned key must not access a developer-only route.
+    expect(
+      guard(['developer']).canActivate(
+        context({ apiKey: { scopes: ['ledger:read'] }, user: { role: 'advertiser' } }),
+      ),
+    ).toBe(false);
+  });
+
+  it('allows an API key whose owner role matches the route role and carries a scope', () => {
+    expect(
+      guard(['advertiser']).canActivate(
+        context({ apiKey: { scopes: ['advertiser:read'] }, user: { role: 'advertiser' } }),
       ),
     ).toBe(true);
   });

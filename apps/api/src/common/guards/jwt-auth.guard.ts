@@ -1,6 +1,8 @@
 import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 
+import { AuthenticatedPrincipal } from '../auth/principal';
+
 /**
  * Extracts a raw Bearer token from the Authorization header (no signature
  * verification). Used only to detect whether a usable JWT credential is
@@ -89,14 +91,21 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (!jwtUser) return jwtUser; // 401
     const req = context.switchToHttp().getRequest<{
       apiKey?: { ownerId?: string | null };
-      user?: Record<string, unknown>;
+      user?: AuthenticatedPrincipal;
     }>();
     if (!req.apiKey) return jwtUser; // normal JWT path, no reconciliation needed
     const apiKeyOwnerId = req.apiKey.ownerId;
-    // If the API key was synthesized onto req.user before the JWT validation
-    // ran, reconcile. The JWT-validated identity must be the key owner.
-    const jwtUserId = (jwtUser as Record<string, unknown>).sub;
-    if (apiKeyOwnerId && jwtUserId && String(apiKeyOwnerId) !== String(jwtUserId)) {
+    // Reconcile on the canonical principal identity. The JWT-validated user
+    // always carries `.id`; the legacy `.sub` field is NOT present on a
+    // JWT-validated principal and must never be used for reconciliation
+    // (doing so let a JWT for user A piggyback an API key for user B).
+    const jwtUserId = (jwtUser as AuthenticatedPrincipal).id;
+    if (apiKeyOwnerId == null || jwtUserId == null) {
+      throw new UnauthorizedException(
+        'Missing canonical principal identity for dual-credential request',
+      );
+    }
+    if (String(apiKeyOwnerId) !== String(jwtUserId)) {
       throw new UnauthorizedException(
         'JWT identity does not match API key owner — dual-credential requests must carry a JWT for the same principal',
       );

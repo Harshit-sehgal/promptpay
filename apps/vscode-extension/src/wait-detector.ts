@@ -6,11 +6,26 @@ export interface WaitStateDetectorOptions {
   getInactivityTimeoutMs: () => number;
 }
 
+export type WaitSignal =
+  | { type: 'ai_generation'; details?: string }
+  | { type: 'command_execution'; details?: string }
+  | { type: 'active_task'; details?: string }
+  | { type: 'lifecycle_event'; details?: string }
+  | { type: 'inactivity'; details?: string };
+
+/** Version of the detector, sent with each wait_state_start so the server can
+ *  attribute confidence computation to a known detector build. */
+export const DETECTOR_VERSION = '1.0.0';
+
 export interface WaitStateEvent {
   startTime: number;
   durationMs: number;
   tool: string;
   waitStateId: string;
+  /** Categorized signals describing the cause of the wait. */
+  signals: WaitSignal[];
+  /** Version of the detector that produced these signals. */
+  detectorVersion: string;
 }
 
 /**
@@ -52,6 +67,8 @@ export class WaitStateDetector {
   private inWait = false;
   private waitStart = 0;
   private waitStateId = '';
+  /** The tool/cause that triggered the current wait; retained for endWait. */
+  private waitTool = '';
   private windowFocused = true;
   /** Tracks consecutive "human-like" edit count during a wait — a single
    *  programmatic insertion (AI inline completion) does NOT terminate the
@@ -254,12 +271,15 @@ export class WaitStateDetector {
     this.inWait = true;
     this.waitStart = Date.now();
     this.waitStateId = generateWaitStateId();
+    this.waitTool = tool;
 
     const event: WaitStateEvent = {
       startTime: this.waitStart,
       durationMs: 0, // updated at end
       tool,
       waitStateId: this.waitStateId,
+      signals: mapToolToSignals(tool),
+      detectorVersion: DETECTOR_VERSION,
     };
 
     // Emit signal for external listeners (extension.ts uses onWaitStateStart)
@@ -287,6 +307,8 @@ export class WaitStateDetector {
       durationMs,
       tool: 'vscode',
       waitStateId: this.waitStateId,
+      signals: mapToolToSignals(this.waitTool),
+      detectorVersion: DETECTOR_VERSION,
     };
 
     this.emitSignal({ type: 'wait_end', event });
@@ -314,10 +336,42 @@ export class WaitStateDetector {
         l(event);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
+
         console.warn(`[WaitLayer] Detector listener error: ${msg}`);
         /* never let a listener disrupt detector */
       }
     }
+  }
+}
+
+/**
+ * Maps a wait "tool"/cause to its canonical detector signal(s).
+ *
+ * Known structural causes map to dedicated signal types. AI-assistant and
+ * manual AI-tool waits map to `ai_generation`. Unknown or empty causes fall
+ * back to `inactivity` — inactivity is NEVER mapped to `ai_generation`, so a
+ * misclassified wait cannot inflate the server's wait confidence.
+ */
+const AI_TOOL_VALUES = ['codex', 'cline', 'aider', 'claude', 'cursor'];
+
+export function mapToolToSignals(tool: string): WaitSignal[] {
+  switch (tool) {
+    case 'task':
+      return [{ type: 'active_task' }];
+    case 'terminal':
+      return [{ type: 'lifecycle_event' }];
+    case 'inactivity':
+      return [{ type: 'inactivity' }];
+    case 'ai':
+    case 'manual':
+      // 'ai'/'manual' triggered by an AI-tool command.
+      return [{ type: 'ai_generation' }];
+    default:
+      if (AI_TOOL_VALUES.includes(tool)) {
+        return [{ type: 'ai_generation' }];
+      }
+      // Unknown/empty tool -> inactivity signal, never ai_generation.
+      return [{ type: 'inactivity' }];
   }
 }
 

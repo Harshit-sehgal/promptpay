@@ -1,8 +1,11 @@
 import { Request } from 'express';
-import { CanActivate, ExecutionContext, ForbiddenException,Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
+import { UserRole } from '@waitlayer/db';
+
 import { ApiKeyService } from '../../developer/api-key.service';
+import { AuthenticatedPrincipal } from '../auth/principal';
 import { ALLOW_API_KEY, REQUIRED_API_KEY_SCOPES } from '../decorators/allow-api-key.decorator';
 
 interface RequestWithOptionalUser extends Request {
@@ -32,15 +35,19 @@ interface RequestWithOptionalUser extends Request {
  * `req.apiKey` for routes that need the key's *scoped* advertiser rather than
  * the owner's own profile (advertiser controller).
  */
-function stampUserFromApiKey(req: RequestWithOptionalUser, apiKey: {
-  ownerId: string;
-  owner: { role: string };
-}): void {
+function stampUserFromApiKey(
+  req: RequestWithOptionalUser,
+  apiKey: {
+    ownerId: string;
+    owner: { role: string };
+  },
+): void {
   req.user = {
     id: apiKey.ownerId,
     sub: apiKey.ownerId,
-    role: apiKey.owner.role,
-  };
+    role: apiKey.owner.role as UserRole,
+    authMethod: 'api_key' as const,
+  } as Record<string, unknown>;
 }
 
 /**
@@ -86,8 +93,7 @@ export class ApiKeyGuard implements CanActivate {
     // route and getting denied (which leaks the route-existence signal).
     const handler = context.getHandler();
     const cls = context.getClass();
-    const allowApiKey =
-      this.reflector.getAllAndOverride<boolean>(ALLOW_API_KEY, [handler, cls]);
+    const allowApiKey = this.reflector.getAllAndOverride<boolean>(ALLOW_API_KEY, [handler, cls]);
     if (!allowApiKey) {
       return true;
     }
@@ -134,9 +140,7 @@ export class ApiKeyGuard implements CanActivate {
       const have = new Set(apiKey.scopes);
       const missing = requiredScopes.filter((s) => !have.has(s));
       if (missing.length > 0) {
-        throw new ForbiddenException(
-          `API key missing required scope(s): ${missing.join(', ')}`,
-        );
+        throw new ForbiddenException(`API key missing required scope(s): ${missing.join(', ')}`);
       }
     }
 

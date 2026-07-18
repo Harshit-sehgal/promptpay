@@ -280,12 +280,6 @@ export class ExtensionAdTrait {
         },
         countryTargeting: true,
       },
-      orderBy: { bidAmountMinor: 'desc' },
-      // Safety cap (not a selection limit): prevents unbounded scans on a
-      // platform with many active campaigns. Category and frequency-de-dup
-      // filters are already applied in the where clause; post-query filters
-      // (budget, country targeting, per-campaign caps) narrow further.
-      take: 200,
     });
     // Filter by budget, category preferences, and URL safety. The write path
     // validates new creatives, but this keeps older approved DB rows from

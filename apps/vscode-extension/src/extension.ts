@@ -92,6 +92,8 @@ export function activate(context: vscode.ExtensionContext) {
             waitStateId: event.waitStateId,
             toolType: 'vscode',
             idempotencyKey,
+            signals: event.signals,
+            detectorVersion: event.detectorVersion,
           });
           return deviceId;
         } catch (err: unknown) {

@@ -7,6 +7,7 @@ import { parseMinor, signPayload } from '@waitlayer/shared';
 
 import { ConfigurationManager } from './config';
 import { requestHostnameForUrl, resolveCredentialSafeUrl } from './transport-policy';
+import type { WaitSignal } from './wait-detector';
 
 export interface Ad {
   impressionToken: string;
@@ -216,6 +217,8 @@ export class ApiClient {
     waitStateId: string;
     toolType: string;
     idempotencyKey: string;
+    signals: WaitSignal[];
+    detectorVersion: string;
   }): Promise<void> {
     const payload = {
       deviceId: input.deviceId,
@@ -223,6 +226,8 @@ export class ApiClient {
       toolType: input.toolType,
       waitStateId: input.waitStateId,
       idempotencyKey: input.idempotencyKey,
+      signals: input.signals,
+      detectorVersion: input.detectorVersion,
     };
     await this.post('/extension/wait-state/start', {
       ...payload,

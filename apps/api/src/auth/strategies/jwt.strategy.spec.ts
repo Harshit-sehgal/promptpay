@@ -46,7 +46,7 @@ describe('JwtStrategy', () => {
 
     await expect(
       strategy.validate({ sub: 'u-active', role: 'developer', jti: 'sess-active', aud: 'access' }),
-    ).resolves.toEqual({ ...user, jti: 'sess-active' });
+    ).resolves.toMatchObject({ ...user, jti: 'sess-active', authMethod: 'jwt' });
   });
 
   it('rejects restricted users even when the session is unrevoked', async () => {
