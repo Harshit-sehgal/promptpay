@@ -3,6 +3,40 @@ import { ConfigService } from '@nestjs/config';
 
 import { privacyPseudonym } from '../common/utils/privacy-hash';
 
+/** Round 34: HTML-escape dynamic values interpolated into transactional email
+ * bodies so admin-set reason strings and operator-supplied metadata cannot
+ * inject script or markup into emails. Escapes the standard five XML entities
+ * plus the single-quote character (ASCII apostrophe) for attribute-safe use. */
+function htmlEscape(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Minimal RFC-5321 recipient guard: rejects CR/LF (header smuggling for any
+ * provider with an SMTP bridge), commas (multi-recipient disguise), and
+ * requires exactly one `@` with non-empty local-part and dotted host. This
+ * is a defensive backstop, not a full RFC parser — user-facing signup/login
+ * `to` values are already validated by class-validator `@IsEmail()` at the
+ * DTO boundary. Several internal paths (OPS_ALERT_EMAIL config, admin-emailed
+ * payout notices) reach `send()` without DTO validation.
+ */
+function isValidEmailRecipient(value: string): boolean {
+  if (!value || value.length > 254) return false;
+  if (/[\r\n,]/.test(value)) return false;
+  const atIndex = value.indexOf('@');
+  if (atIndex < 1 || atIndex === value.length - 1) return false;
+  if (value.indexOf('@', atIndex + 1) !== -1) return false; // exactly one '@'
+  const host = value.slice(atIndex + 1);
+  if (!host || !host.includes('.')) return false;
+  if (host.startsWith('.') || host.endsWith('.')) return false;
+  return true;
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
@@ -99,6 +133,22 @@ export class EmailService {
       0,
       16,
     );
+    // Defensive recipient validation. User-facing `to` values (signup,
+    // password-reset) are already gated by class-validator @IsEmail() at the
+    // DTO boundary, but several internal paths (OPS_ALERT_EMAIL config,
+    // admin-emailed account user.email payout notices) reach this method
+    // without DTO validation. Reject anything that isn't a single RFC-5321
+    // atom — no CR/LF (header smuggling for providers with legacy SMTP
+    // bridges), no commas (multi-recipient disguise), exactly one '@', and
+    // a local-part/host that aren't empty. Returning delivered=false (rather
+    // than throwing) preserves the non-throwing contract documented above.
+    const trimmedTo = msg.to.trim();
+    if (!isValidEmailRecipient(trimmedTo)) {
+      this.logger.error(
+        `Refusing to send email with invalid recipient recipientRef=${recipientRef} (validation failed)`,
+      );
+      return { delivered: false, driver: this.driver };
+    }
     // Final defensive check — even if a future misconfiguration slipped past
     // the constructor (e.g. ENV toggled at runtime via a test), never log a
     // production email body. Use delivered=false so callers can react.
@@ -280,12 +330,20 @@ export class EmailService {
       ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Payout account frozen',
-        `<p>Your WaitLayer payout account was frozen by an operator (<strong>${metadata.actorRole}</strong>) on <strong>${metadata.time}</strong>.</p>` +
+        // Round 34: HTML-escape admin-supplied metadata (actorRole, reason,
+        // provider, currency, destination, time) before interpolating into
+        // the email body. `reason` is the highest-risk field (free-form
+        // admin input), but all named fields get escaped as a defence-in-
+        // depth measure — a future caller that passes a user-supplied value
+        // into a field currently set from enums won't silently re-open this.
+        `<p>Your WaitLayer payout account was frozen by an operator (<strong>${htmlEscape(metadata.actorRole)}</strong>) on <strong>${htmlEscape(metadata.time)}</strong>.</p>` +
           `<ul>` +
-          `<li><strong>Provider:</strong> ${metadata.provider}</li>` +
-          `<li><strong>Destination:</strong> ${displayedDestination}</li>` +
-          `<li><strong>Currency:</strong> ${metadata.currency}</li>` +
-          (metadata.reason ? `<li><strong>Reason:</strong> ${metadata.reason}</li>` : '') +
+          `<li><strong>Provider:</strong> ${htmlEscape(metadata.provider)}</li>` +
+          `<li><strong>Destination:</strong> ${htmlEscape(displayedDestination)}</li>` +
+          `<li><strong>Currency:</strong> ${htmlEscape(metadata.currency)}</li>` +
+          (metadata.reason
+            ? `<li><strong>Reason:</strong> ${htmlEscape(metadata.reason)}</li>`
+            : '') +
           `</ul>` +
           `<p>Any future payout requests using this account will fail with HTTP 403 ("frozen by operator") until an admin unfreezes it.</p>`,
         null,
@@ -352,14 +410,14 @@ export class EmailService {
       ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Money-integrity discrepancy detected',
-        `<p>The money-integrity monitor detected a ledger reconciliation discrepancy at <strong>${metadata.time}</strong>.</p>` +
+        `<p>The money-integrity monitor detected a ledger reconciliation discrepancy at <strong>${htmlEscape(metadata.time)}</strong>.</p>` +
           `<ul>` +
-          `<li><strong>Severity:</strong> ${metadata.severity}</li>` +
-          `<li><strong>Campaign discrepancies:</strong> ${metadata.campaignDiscrepancyCount}</li>` +
-          `<li><strong>Negative developer balances:</strong> ${metadata.negativeDeveloperBalanceCount}</li>` +
+          `<li><strong>Severity:</strong> ${htmlEscape(metadata.severity)}</li>` +
+          `<li><strong>Campaign discrepancies:</strong> ${String(metadata.campaignDiscrepancyCount)}</li>` +
+          `<li><strong>Negative developer balances:</strong> ${String(metadata.negativeDeveloperBalanceCount)}</li>` +
           `</ul>` +
           `<p><strong>Global discrepancy by currency (minor units):</strong></p>` +
-          `<pre>${currencyLines}</pre>` +
+          `<pre>${htmlEscape(currencyLines)}</pre>` +
           `<p>Investigate immediately via the admin /operations page. Do NOT auto-correct — the report is read-only by design.</p>`,
         null,
         null,
@@ -397,7 +455,17 @@ export class EmailService {
     return { delivered: true, driver: 'resend' };
   }
 
-  /** Minimal, client-safe HTML layout shared by all transactional emails */
+  /** Minimal, client-safe HTML layout shared by all transactional emails.
+   *
+   * Round 34: `title` and `footer` are HTML-escaped here — most call sites pass
+   * controlled string literals for these, but the gate here is the single-source
+   * safety net. Dynamic values that go into `bodyHtml` MUST be escaped by each
+   * builder BEFORE interpolating into the HTML string (see
+   * `buildPayoutAccountFrozenAlert` for the pattern). `ctaUrl` is a pre-built
+   * link from a controlled origin — it is NOT escaped (it's inside a `href`
+   * attribute, and the link builder `buildEmailVerification` already applies
+   * `encodeURIComponent`). `ctaLabel` is always a fixed literal.
+   */
   private layout(
     title: string,
     bodyHtml: string,
@@ -405,10 +473,14 @@ export class EmailService {
     ctaLabel: string | null,
     footer: string,
   ): string {
+    const escapedTitle = htmlEscape(title);
+    const escapedFooter = htmlEscape(footer);
+    const escapedCtaLabel = ctaLabel ? htmlEscape(ctaLabel) : null;
+
     const button =
-      ctaUrl && ctaLabel
+      ctaUrl && escapedCtaLabel
         ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;"><tr><td style="border-radius:10px;background:#4f46e5;">
-             <a href="${ctaUrl}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;font-family:Arial,Helvetica,sans-serif;">${ctaLabel}</a>
+             <a href="${ctaUrl}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;font-family:Arial,Helvetica,sans-serif;">${escapedCtaLabel}</a>
            </td></tr></table>
            <p style="font-size:12px;color:#6b7280;word-break:break-all;">Or copy this link: ${ctaUrl}</p>`
         : '';
@@ -421,11 +493,11 @@ export class EmailService {
         <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:32px;font-family:Arial,Helvetica,sans-serif;color:#111827;">
           <tr><td>
             <p style="font-weight:700;font-size:15px;margin:0 0 24px;">WaitLayer</p>
-            <h1 style="font-size:20px;margin:0 0 12px;">${title}</h1>
+            <h1 style="font-size:20px;margin:0 0 12px;">${escapedTitle}</h1>
             <div style="font-size:14px;line-height:1.6;color:#374151;">${bodyHtml}</div>
             ${button}
             <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
-            <p style="font-size:12px;color:#9ca3af;margin:0;">${footer}</p>
+            <p style="font-size:12px;color:#9ca3af;margin:0;">${escapedFooter}</p>
           </td></tr>
         </table>
       </td></tr>

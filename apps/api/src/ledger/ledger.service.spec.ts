@@ -195,20 +195,41 @@ describe('LedgerService', () => {
 
       const result = await service.getAvailableBalance('u-1');
 
-      expect(result.amountMinor).toBe(210_00n);
+      // The authoritative representation is byCurrency. The scalar uses the
+      // deterministic primaryCurrency contract (first positive-balance currency
+      // in ascending ISO-4217 code order), so EUR (90_00n) is the primary
+      // currency — not a magnitude comparison across currencies.
+      expect(result.currency).toBe('EUR');
+      expect(result.amountMinor).toBe(90_00n);
       expect(result.byCurrency).toEqual({ USD: 210_00n, EUR: 90_00n });
     });
   });
 
   describe('getPendingBalance', () => {
-    it('returns sum of pending and estimated earnings', async () => {
-      mockPrisma.earningsLedger.groupBy.mockResolvedValue([
-        { currency: 'USD', _sum: { amountMinor: 50_00n } },
-      ]);
+    it('returns sum of pending and estimated earnings, net of confirmed recovery debits', async () => {
+      // Round 33 Gap D: getPendingBalance now subtracts confirmed `debit`
+      // rows (recovery debt) the same way getAvailableBalance does. The first
+      // groupBy call returns the credits (estimated + pending); the second
+      // returns the confirmed recovery debits.
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 50_00n } }])
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 15_00n } }]);
 
       const result = await service.getPendingBalance('u-1');
-      expect(result.amountMinor).toBe(50_00n);
-      expect(result.byCurrency).toEqual({ USD: 50_00n });
+      // 50_00 credits − 15_00 recovery debit = 35_00 net pending.
+      expect(result.amountMinor).toBe(35_00n);
+      expect(result.byCurrency).toEqual({ USD: 35_00n });
+    });
+
+    it('skips a currency whose recovery debit exceeds its pending credit (no negatives)', async () => {
+      mockPrisma.earningsLedger.groupBy
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 10_00n } }])
+        .mockResolvedValueOnce([{ currency: 'USD', _sum: { amountMinor: 25_00n } }]);
+
+      const result = await service.getPendingBalance('u-1');
+      // USD would go negative; nonNegativeCurrencyTotals clamps to 0n.
+      expect(result.byCurrency).toEqual({ USD: 0n });
+      expect(result.amountMinor).toBe(0n);
     });
   });
 

@@ -111,6 +111,29 @@ export class StripeProvider {
   }
 
   /**
+   * Retrieve a Stripe Connect account's verification state.
+   * Used by the `account.updated` webhook handler to auto-verify a
+   * developer's payout account once Stripe confirms onboarding completion
+   * (charges_enabled + payouts_enabled + details_submitted).
+   */
+  async retrieveConnectAccountVerification(accountId: string): Promise<{
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+    detailsSubmitted: boolean;
+  } | null> {
+    if (!this.stripe) throw new Error('Stripe is not configured');
+    if (!accountId || !accountId.startsWith('acct_')) {
+      throw new Error('Invalid Stripe Connect account id (must be acct_...)');
+    }
+    const account = await this.stripe.accounts.retrieve(accountId);
+    return {
+      chargesEnabled: Boolean(account.charges_enabled),
+      payoutsEnabled: Boolean(account.payouts_enabled),
+      detailsSubmitted: Boolean(account.details_submitted),
+    };
+  }
+
+  /**
    * Process a completed or async-payment-succeeded checkout session.
    * Returns payment details including the Stripe customer ID for wiring.
    */

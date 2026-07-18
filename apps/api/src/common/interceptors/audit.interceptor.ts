@@ -319,11 +319,16 @@ function parseAdminUrl(
 
 /**
  * One-way hash of IP for audit storage — no raw IPs persisted.
+ *
+ * Round 35: uses ONLY req.ip (the Express trust-proxy-resolved client IP).
+ * The x-forwarded-for header is client-controlled; reading it directly
+ * enables IP spoofing that defeats audit pseudonymization. Other guards
+ * (brute-force, throttle-by-route) explicitly document this as a security
+ * hazard. req.connection.remoteAddress is the fallback when no proxy
+ * resolution is configured.
  */
 function hashIp(req: AuditedRequest): string | undefined {
-  const forwarded = req.headers?.['x-forwarded-for'];
-  const forwardedIp = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  const ip = req.ip ?? forwardedIp?.split(',')[0]?.trim() ?? req.connection?.remoteAddress;
+  const ip = req.ip ?? req.connection?.remoteAddress;
   if (!ip || ip === 'unknown') return undefined;
 
   return privacyPseudonym(ip, 'audit-ip');
@@ -346,11 +351,7 @@ export function scrubBody(
     if (isSensitiveAuditField(k)) {
       out[k] = '[redacted]';
     } else if (Array.isArray(v)) {
-      out[k] = v.map((item) =>
-        item && typeof item === 'object' && !Array.isArray(item)
-          ? scrubBody(item as Record<string, unknown>)
-          : item,
-      );
+      out[k] = scrubArray(v);
     } else if (v && typeof v === 'object') {
       out[k] = scrubBody(v as Record<string, unknown>);
     } else {
@@ -371,4 +372,16 @@ function isSensitiveAuditField(field: string): boolean {
     normalized === 'apikey' ||
     normalized === 'authorization'
   );
+}
+
+function scrubArray(arr: unknown[]): unknown[] {
+  return arr.map((item) => {
+    if (item && typeof item === 'object') {
+      if (Array.isArray(item)) {
+        return scrubArray(item);
+      }
+      return scrubBody(item as Record<string, unknown>);
+    }
+    return item;
+  });
 }

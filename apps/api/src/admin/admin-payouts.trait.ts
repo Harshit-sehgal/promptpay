@@ -4,6 +4,8 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
 import { PayoutService } from '../payout/payout.service';
+import { ReleasePayoutFenceOptions } from './dto/admin.dto';
+export type { ReleasePayoutFenceOptions };
 
 export class AdminPayoutsTrait {
   declare prisma: PrismaService;
@@ -80,49 +82,50 @@ export class AdminPayoutsTrait {
       // briefly between two writes.
       resolvedApprovedAmount = target.requestedAmountMinor;
     }
-    const result = await this.prisma.payoutRequest.updateMany({
-      where: { id: payoutId, status: { in: ['requested', 'under_review'] } },
-      data: {
-        status: 'approved',
-        reviewerId,
-        reviewNote: note,
-        processedAt: new Date(),
-        approvedAmountMinor: resolvedApprovedAmount,
-      },
-    });
-    if (result.count === 0) {
-      const existing = await this.prisma.payoutRequest.findUnique({
-        where: { id: payoutId },
-        select: { status: true },
-      });
-      throw new BadRequestException(
-        existing
-          ? `Payout cannot be approved from status '${existing.status}'`
-          : 'Payout not found',
-      );
-    }
-    const updated = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
-
-    // Audit: admin payout approval — financial admin operation involving real
-    // money movement. Forensic trail must identify the approving admin and
-    // the authorised amount.
-    void this.audit
-      .log({
-        actorId: reviewerId,
-        actorRole: 'admin',
-        action: 'approve_payout',
-        targetType: 'payout_request',
-        targetId: payoutId,
-        beforeSnap: {
-          approvedAmountMinor: resolvedApprovedAmount.toString(),
-          note,
-          partial: approvedAmountMinor !== undefined,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.payoutRequest.updateMany({
+        where: { id: payoutId, status: { in: ['requested', 'under_review'] } },
+        data: {
+          status: 'approved',
+          reviewerId,
+          reviewNote: note,
+          processedAt: new Date(),
+          approvedAmountMinor: resolvedApprovedAmount,
         },
-      })
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[AdminPayoutsTrait] audit log failure (approve_payout): ${msg}`);
       });
+      if (result.count === 0) {
+        const existing = await tx.payoutRequest.findUnique({
+          where: { id: payoutId },
+          select: { status: true },
+        });
+        throw new BadRequestException(
+          existing
+            ? `Payout cannot be approved from status '${existing.status}'`
+            : 'Payout not found',
+        );
+      }
+      const row = await tx.payoutRequest.findUnique({ where: { id: payoutId } });
+      // Audit: admin payout approval — financial admin operation involving real
+      // money movement. Forensic trail must identify the approving admin and
+      // the authorised amount. Written inside the transaction so a rolled-back
+      // approval never leaves an success audit record.
+      await this.audit.logStrict(
+        {
+          actorId: reviewerId,
+          actorRole: 'admin',
+          action: 'approve_payout',
+          targetType: 'payout_request',
+          targetId: payoutId,
+          beforeSnap: {
+            approvedAmountMinor: resolvedApprovedAmount.toString(),
+            note,
+            partial: approvedAmountMinor !== undefined,
+          },
+        },
+        tx,
+      );
+      return row;
+    });
 
     return updated;
   }
@@ -139,45 +142,43 @@ export class AdminPayoutsTrait {
     // earnings (they'd hit the unique-key error in `requestPayout`). Delete
     // the rejected request's allocations in the SAME transaction so the
     // earnings entries become re-available for a fresh payout attempt.
-    const result = await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const flip = await tx.payoutRequest.updateMany({
         where: { id: payoutId, status: { in: ['requested', 'under_review', 'approved'] } },
         data: { status: 'rejected', reviewerId, reviewNote: reason },
       });
-      if (flip.count === 0) return { flipped: false as const };
+      if (flip.count === 0) {
+        const existing = await tx.payoutRequest.findUnique({
+          where: { id: payoutId },
+          select: { status: true },
+        });
+        throw new BadRequestException(
+          existing
+            ? `Payout cannot be rejected from status '${existing.status}'`
+            : 'Payout not found',
+        );
+      }
       await tx.payoutAllocation.deleteMany({
         where: { payoutRequestId: payoutId },
       });
-      return { flipped: true as const };
-    });
-    if (!result.flipped) {
-      const existing = await this.prisma.payoutRequest.findUnique({
-        where: { id: payoutId },
-        select: { status: true },
-      });
-      throw new BadRequestException(
-        existing
-          ? `Payout cannot be rejected from status '${existing.status}'`
-          : 'Payout not found',
+      const row = await tx.payoutRequest.findUnique({ where: { id: payoutId } });
+      // Audit: admin payout rejection — releases held earnings. Forensic trail
+      // must identify the rejecting admin and the rejection reason. Written
+      // inside the transaction so a rolled-back rejection never leaves an
+      // audit record.
+      await this.audit.logStrict(
+        {
+          actorId: reviewerId,
+          actorRole: 'admin',
+          action: 'reject_payout',
+          targetType: 'payout_request',
+          targetId: payoutId,
+          beforeSnap: { reason },
+        },
+        tx,
       );
-    }
-    const updated = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
-
-    // Audit: admin payout rejection — releases held earnings. Forensic trail
-    // must identify the rejecting admin and the rejection reason.
-    void this.audit
-      .log({
-        actorId: reviewerId,
-        actorRole: 'admin',
-        action: 'reject_payout',
-        targetType: 'payout_request',
-        targetId: payoutId,
-        beforeSnap: { reason },
-      })
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[AdminPayoutsTrait] audit log failure (reject_payout): ${msg}`);
-      });
+      return row;
+    });
 
     return updated;
   }
@@ -228,24 +229,30 @@ export class AdminPayoutsTrait {
       include: { user: { select: { id: true, email: true } } },
     });
     if (!account) throw new NotFoundException('Payout account not found');
-    const updated = await this.prisma.payoutAccount.update({
-      where: { id: payoutAccountId },
-      data: { isVerified: verified },
-    });
-    await this.audit.log({
-      actorId: reviewerId,
-      actorRole: reviewerRole,
-      action: verified ? 'payout_account_verified' : 'payout_account_rejected',
-      targetType: 'payout_account',
-      targetId: payoutAccountId,
-      beforeSnap: { isVerified: account.isVerified },
-      afterSnap: {
-        isVerified: verified,
-        provider: account.provider,
-        destination: account.destination,
-        userEmail: account.user?.email,
-        reason: reason ?? null,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.payoutAccount.update({
+        where: { id: payoutAccountId },
+        data: { isVerified: verified },
+      });
+      await this.audit.logStrict(
+        {
+          actorId: reviewerId,
+          actorRole: reviewerRole,
+          action: verified ? 'payout_account_verified' : 'payout_account_rejected',
+          targetType: 'payout_account',
+          targetId: payoutAccountId,
+          beforeSnap: { isVerified: account.isVerified },
+          afterSnap: {
+            isVerified: verified,
+            provider: account.provider,
+            destination: account.destination,
+            userEmail: account.user?.email ?? null,
+            reason: reason ?? null,
+          },
+        },
+        tx,
+      );
+      return row;
     });
     return updated;
   }
@@ -275,59 +282,65 @@ export class AdminPayoutsTrait {
     // account row. A durable payout-id fence represents an initiation that must
     // be reconciled before the destination can be frozen; it never expires
     // underneath a paused worker.
-    const freeze = await this.prisma.payoutAccount.updateMany({
-      where: {
-        id: payoutAccountId,
-        isFrozen: false,
-        initiationPayoutId: null,
-      },
-      data: {
-        isFrozen: true,
-      },
-    });
-    if (freeze.count === 0) {
-      const current = await this.prisma.payoutAccount.findUnique({
-        where: { id: payoutAccountId },
-        select: {
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const freeze = await tx.payoutAccount.updateMany({
+        where: {
+          id: payoutAccountId,
+          isFrozen: false,
+          initiationPayoutId: null,
+        },
+        data: {
           isFrozen: true,
-          initiationPayoutId: true,
         },
       });
-      if (!current) throw new NotFoundException('Payout account not found');
-      if (current.isFrozen) {
-        throw new ConflictException('Payout account is already frozen');
+      if (freeze.count === 0) {
+        const current = await tx.payoutAccount.findUnique({
+          where: { id: payoutAccountId },
+          select: {
+            isFrozen: true,
+            initiationPayoutId: true,
+          },
+        });
+        if (!current) throw new NotFoundException('Payout account not found');
+        if (current.isFrozen) {
+          throw new ConflictException('Payout account is already frozen');
+        }
+        if (current.initiationPayoutId) {
+          throw new ConflictException(
+            `Payout ${current.initiationPayoutId} has an active or ambiguous provider initiation; reconcile it before freezing this destination`,
+          );
+        }
+        throw new ConflictException('Payout account changed concurrently; retry the freeze');
       }
-      if (current.initiationPayoutId) {
-        throw new ConflictException(
-          `Payout ${current.initiationPayoutId} has an active or ambiguous provider initiation; reconcile it before freezing this destination`,
-        );
-      }
-      throw new ConflictException('Payout account changed concurrently; retry the freeze');
-    }
-    const updated = await this.prisma.payoutAccount.findUnique({
-      where: { id: payoutAccountId },
-    });
-    if (!updated) throw new NotFoundException('Payout account not found');
-    await this.audit.log({
-      actorId: reviewerId,
-      actorRole: reviewerRole,
-      action: 'payout_account_frozen',
-      targetType: 'payout_account',
-      targetId: payoutAccountId,
-      beforeSnap: {
-        isFrozen: account.isFrozen,
-        isVerified: account.isVerified,
-        provider: account.provider,
-        destination: account.destination,
-        userEmail: account.user?.email,
-      },
-      afterSnap: {
-        isFrozen: true,
-        provider: account.provider,
-        destination: account.destination,
-        userEmail: account.user?.email,
-        reason: reason ?? null,
-      },
+      const row = await tx.payoutAccount.findUnique({
+        where: { id: payoutAccountId },
+      });
+      if (!row) throw new NotFoundException('Payout account not found');
+      await this.audit.logStrict(
+        {
+          actorId: reviewerId,
+          actorRole: reviewerRole,
+          action: 'payout_account_frozen',
+          targetType: 'payout_account',
+          targetId: payoutAccountId,
+          beforeSnap: {
+            isFrozen: account.isFrozen,
+            isVerified: account.isVerified,
+            provider: account.provider,
+            destination: account.destination,
+            userEmail: account.user?.email ?? null,
+          },
+          afterSnap: {
+            isFrozen: true,
+            provider: account.provider,
+            destination: account.destination,
+            userEmail: account.user?.email ?? null,
+            reason: reason ?? null,
+          },
+        },
+        tx,
+      );
+      return row;
     });
     // Best-effort developer notification. The audit row is the canonical
     // forensic trail; the email is an out-of-band UX hint so the developer
@@ -338,10 +351,10 @@ export class AdminPayoutsTrait {
       void this.emailQueueService
         .sendPayoutAccountFrozenAlert(account.user.email, {
           provider: account.provider,
-          destination: account.destination,
+          destination: account.destination ?? undefined,
           currency: account.currency ?? 'USD',
           actorRole: reviewerRole,
-          reason: reason ?? null,
+          reason: reason ?? undefined,
           time: new Date().toISOString(),
         })
         .catch((err: unknown) => {
@@ -349,6 +362,110 @@ export class AdminPayoutsTrait {
           console.warn(`[AdminPayoutsTrait] payout-account-frozen email delivery failed: ${msg}`);
         });
     }
+    return updated;
+  }
+
+  /**
+   * List payout accounts that currently hold a durable provider-initiation
+   * fence (`initiationPayoutId` is not null). These accounts are blocked
+   * from new payouts and from being frozen until the fence is cleared.
+   * Operators use this for operational monitoring and reconciliation.
+   */
+  async getFencedAccounts(params?: { page?: number; limit?: number }) {
+    const page = Math.max(1, params?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params?.limit ?? 50));
+    const skip = (page - 1) * limit;
+    const [items, total] = await Promise.all([
+      this.prisma.payoutAccount.findMany({
+        where: { initiationPayoutId: { not: null } },
+        include: { user: { select: { id: true, email: true } } },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.payoutAccount.count({
+        where: { initiationPayoutId: { not: null } },
+      }),
+    ]);
+    return { items, total, page, limit };
+  }
+
+  /**
+   * Explicitly release a payout account's durable initiation fence. This is an
+   * operator escape hatch for the rare case where the automatic fence-clearing
+   * in `markPayoutPaid`/`markPayoutFailed` could not run (e.g. a transient DB
+   * failure or a crashed worker). It must only be used after the operator has
+   * confirmed the provider outcome for the referenced payout.
+   */
+  async releasePayoutFence(options: ReleasePayoutFenceOptions) {
+    const { payoutAccountId, reviewerId, reviewerRole, reason, providerTxId, resolution } = options;
+    const account = await this.prisma.payoutAccount.findUnique({
+      where: { id: payoutAccountId },
+      include: { user: { select: { id: true, email: true } } },
+    });
+    if (!account) throw new NotFoundException('Payout account not found');
+    if (!account.initiationPayoutId) {
+      throw new BadRequestException('Payout account does not have an active initiation fence');
+    }
+    // Narrow the nullable column now that we have verified it is set. The
+    // value is captured in a local const so TypeScript treats it as a
+    // non-null string inside the transaction (and so the Prisma `where`
+    // clause receives `string` rather than `string | null`).
+    const initiationPayoutId = account.initiationPayoutId;
+    const updated = await this.prisma.$transaction(async (tx) => {
+      // Safety guard (inside the tx to avoid a status race): the fence
+      // references a payout whose provider outcome must be known before the
+      // account can be unblocked. Only terminal/reconcilable states are
+      // allowed; a non-terminal payout may still be in flight and releasing
+      // its fence could allow a second concurrent initiation.
+      const fencedPayout = await tx.payoutRequest.findUnique({
+        where: { id: initiationPayoutId },
+        select: { status: true },
+      });
+      if (!fencedPayout) {
+        throw new BadRequestException(
+          `Referenced payout ${account.initiationPayoutId} no longer exists; use the normal freeze/unfreeze flow`,
+        );
+      }
+      const allowedStatuses = new Set(['paid', 'failed', 'rejected', 'cancelled']);
+      if (!allowedStatuses.has(fencedPayout.status)) {
+        throw new BadRequestException(
+          `Payout ${account.initiationPayoutId} is in status '${fencedPayout.status}'; confirm the provider outcome before releasing the fence`,
+        );
+      }
+      const row = await tx.payoutAccount.update({
+        where: { id: payoutAccountId },
+        data: { initiationPayoutId: null },
+      });
+      await this.audit.logStrict(
+        {
+          actorId: reviewerId,
+          actorRole: reviewerRole,
+          action: 'release_payout_fence',
+          targetType: 'payout_account',
+          targetId: payoutAccountId,
+          beforeSnap: {
+            initiationPayoutId: account.initiationPayoutId,
+            provider: account.provider,
+            destination: account.destination,
+            userEmail: account.user?.email ?? null,
+            reason: reason ?? null,
+          },
+          afterSnap: {
+            initiationPayoutId: null,
+            provider: account.provider,
+            destination: account.destination,
+            userEmail: account.user?.email ?? null,
+            reason: reason ?? null,
+            observedPayoutStatus: fencedPayout.status,
+            providerTxId: providerTxId ?? null,
+            resolution: resolution ?? null,
+          },
+        },
+        tx,
+      );
+      return row;
+    });
     return updated;
   }
 
@@ -369,30 +486,36 @@ export class AdminPayoutsTrait {
     if (!account) throw new NotFoundException('Payout account not found');
     // Idempotency guard: reject un-unfreeze with 409 Conflict (see freezePayoutAccount).
     if (!account.isFrozen) throw new ConflictException('Payout account is not frozen');
-    const updated = await this.prisma.payoutAccount.update({
-      where: { id: payoutAccountId },
-      data: { isFrozen: false },
-    });
-    await this.audit.log({
-      actorId: reviewerId,
-      actorRole: reviewerRole,
-      action: 'payout_account_unfrozen',
-      targetType: 'payout_account',
-      targetId: payoutAccountId,
-      beforeSnap: {
-        isFrozen: account.isFrozen,
-        isVerified: account.isVerified,
-        provider: account.provider,
-        destination: account.destination,
-        userEmail: account.user?.email,
-      },
-      afterSnap: {
-        isFrozen: false,
-        provider: account.provider,
-        destination: account.destination,
-        userEmail: account.user?.email,
-        reason: reason ?? null,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.payoutAccount.update({
+        where: { id: payoutAccountId },
+        data: { isFrozen: false },
+      });
+      await this.audit.logStrict(
+        {
+          actorId: reviewerId,
+          actorRole: reviewerRole,
+          action: 'payout_account_unfrozen',
+          targetType: 'payout_account',
+          targetId: payoutAccountId,
+          beforeSnap: {
+            isFrozen: account.isFrozen,
+            isVerified: account.isVerified,
+            provider: account.provider,
+            destination: account.destination,
+            userEmail: account.user?.email ?? null,
+          },
+          afterSnap: {
+            isFrozen: false,
+            provider: account.provider,
+            destination: account.destination,
+            userEmail: account.user?.email ?? null,
+            reason: reason ?? null,
+          },
+        },
+        tx,
+      );
+      return row;
     });
     return updated;
   }

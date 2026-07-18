@@ -46,7 +46,10 @@ function makeTrait(
     ),
   };
 
-  const audit = { log: vi.fn().mockResolvedValue(undefined) };
+  const audit = {
+    log: vi.fn().mockResolvedValue(undefined),
+    logStrict: vi.fn().mockResolvedValue(undefined),
+  };
   const config = {
     get: vi.fn((key: string) => {
       if (key === 'WAITLAYER_STRIPE_CONNECT_RETURN_DOMAINS')

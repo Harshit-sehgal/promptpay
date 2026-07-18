@@ -94,6 +94,8 @@ export class AdminOverviewTrait {
       totalReserveReversal,
       totalCashCredit,
       totalCashOutflow,
+      totalReferralBonusCredit,
+      totalReferralBonusReversal,
     ] = await Promise.all([
       this.prisma.earningsLedger.groupBy({
         by: ['currency'],
@@ -170,6 +172,28 @@ export class AdminOverviewTrait {
           status: 'confirmed',
         },
       }),
+      // Round 36: referral_bonus bucket — platform-funded referral rewards.
+      // These are credits to the platform ledger that fund developer earnings;
+      // the netReferralBonus term absorbs the earnings-side increase so the
+      // split-sum invariant stays balanced after every referral reward.
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: {
+          entryType: 'credit',
+          bucket: PLATFORM_BUCKETS.REFERRAL_BONUS,
+          status: 'confirmed',
+        },
+      }),
+      this.prisma.platformLedger.groupBy({
+        by: ['currency'],
+        _sum: { amountMinor: true },
+        where: {
+          entryType: 'reversal',
+          bucket: PLATFORM_BUCKETS.REFERRAL_BONUS,
+          status: 'confirmed',
+        },
+      }),
     ]);
     const netEarningsByCurrency = netCurrencyAmounts(totalEarningsCredit, totalEarningsDebit);
     const netAdvertiserByCurrency = netCurrencyAmounts(totalAdvertiserDebit, totalAdvertiserRefund);
@@ -181,12 +205,17 @@ export class AdminOverviewTrait {
     const netPlatformByCurrency = netCurrencyAmounts(totalPlatformCredit, totalPlatformReversal);
     const netReserveByCurrency = netCurrencyAmounts(totalReserveCredit, totalReserveReversal);
     const netCashByCurrency = netCurrencyAmounts(totalCashCredit, totalCashOutflow);
+    const netReferralBonusByCurrency = netCurrencyAmounts(
+      totalReferralBonusCredit,
+      totalReferralBonusReversal,
+    );
     const currencies = new Set([
       ...Object.keys(netEarningsByCurrency),
       ...Object.keys(netAdvertiserByCurrency),
       ...Object.keys(netPlatformByCurrency),
       ...Object.keys(netReserveByCurrency),
       ...Object.keys(netCashByCurrency),
+      ...Object.keys(netReferralBonusByCurrency),
     ]);
     const globalReconciliationByCurrency = Object.fromEntries(
       Array.from(currencies)
@@ -198,7 +227,22 @@ export class AdminOverviewTrait {
           const netReserve = netReserveByCurrency[currency] ?? 0n;
           const netCash = netCashByCurrency[currency] ?? 0n;
           const netAdvertiserPosition = netAdvertiserPositionByCurrency[currency] ?? 0n;
-          const splitSum = netEarnings + netPlatform + netReserve;
+          const netReferralBonus = netReferralBonusByCurrency[currency] ?? 0n;
+          // Round 35: include netCash in the split-sum equation.
+          // Round 36: include netReferralBonus as a negative term. Referral
+          //   bonuses are a platform-funded outflow: a platformLedger credit in
+          //   bucket `referral_bonus` is written alongside each earningsLedger
+          //   credit for the referrer. The bonus increases netEarnings (the
+          //   referrer's payoutable balance grows) but no advertiser debited it,
+          //   no platform-fee covered it, and no cash bucket absorbed it. To
+          //   preserve `advertiser_spend = earnings + fee + reserve + cash -
+          //   referral_bonus`, we subtract the net referral_bonus position
+          //   (which stays positive as long as outstanding bonuses haven't been
+          //   reversed). Reversed bonuses (fraud/ban clawback) zero out the
+          //   credit via a reversal entry, bringing the bucket net near zero and
+          //   restoring alignment naturally.
+          //   advertiser spend = netEarnings + netPlatform + netReserve + netCash - netReferralBonus
+          const splitSum = netEarnings + netPlatform + netReserve + netCash - netReferralBonus;
           return [
             currency,
             {
@@ -208,6 +252,7 @@ export class AdminOverviewTrait {
               netPlatformFeeMinor: netPlatform,
               netReserveMinor: netReserve,
               netCashMinor: netCash,
+              netReferralBonusMinor: netReferralBonus,
               splitSumMinor: splitSum,
               discrepancyMinor: netAdvertiser - splitSum,
             },
@@ -221,6 +266,7 @@ export class AdminOverviewTrait {
       netPlatformFeeMinor: 0n,
       netReserveMinor: 0n,
       netCashMinor: 0n,
+      netReferralBonusMinor: 0n,
       splitSumMinor: 0n,
       discrepancyMinor: 0n,
     };

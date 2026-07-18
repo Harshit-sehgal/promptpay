@@ -217,6 +217,7 @@ export default function DevPayoutsPage() {
   const handleRequestPayout = async (e: FormEvent) => {
     e.preventDefault();
     setRequestError('');
+    if (submitting) return;
     if (!selectedAccountId) {
       setRequestError('Please select a payout method');
       return;
@@ -225,9 +226,14 @@ export default function DevPayoutsPage() {
       setRequestError('Enable two-factor authentication before requesting a payout.');
       return;
     }
-    const amountMajor = parseFloat(amount);
-    const amountMinor = majorToMinor(amountMajor, selectedCurrency);
-    if (isNaN(amountMajor) || amountMinor <= 0n) {
+    const amountMinor = (() => {
+      try {
+        return majorToMinor(amount, selectedCurrency);
+      } catch {
+        return null;
+      }
+    })();
+    if (amountMinor === null || amountMinor <= 0n) {
       setRequestError('Enter a valid amount');
       return;
     }
@@ -248,6 +254,7 @@ export default function DevPayoutsPage() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await payoutApi.requestPayout({
         payoutAccountId: selectedAccountId,
@@ -258,6 +265,8 @@ export default function DevPayoutsPage() {
       fetchData();
     } catch (err: unknown) {
       setRequestError(getErrorMessage(err, 'Payout request failed'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -416,9 +425,10 @@ export default function DevPayoutsPage() {
                 {requestError && <p className="text-red-600 text-sm font-normal">{requestError}</p>}
                 <button
                   type="submit"
-                  className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-all"
+                  disabled={submitting}
+                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-all"
                 >
-                  Request payout
+                  {submitting ? 'Requesting…' : 'Request payout'}
                 </button>
               </form>
             )}

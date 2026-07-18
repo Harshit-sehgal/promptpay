@@ -749,6 +749,29 @@ export class FraudService {
             `Fraud confirmed: ${current.flagType}`,
             tx,
           );
+        } else if (isValid && current.userId) {
+          // Round 36: behavioral critical flags (SHARED_PAYOUT_DESTINATION,
+          // IMPOSSIBLE_VOLUME, SELF_CLICKING without a click/impression) have no
+          // single entity whose earnings can be reversed. The hold at createFlag
+          // spans every confirmed/pending/estimated row for the user, but the
+          // resolution must also release those rows to prevent a permanent
+          // balance freeze (the developer can never withdraw held earnings, and
+          // no other admin action could release them). We forfeit the developer
+          // share WITHOUT writing compensating advertiser/platform reversals
+          // because (a) the impressions were legitimately served and the
+          // advertiser paid for them, (b) the platform fee is correctly collected,
+          // and (c) fraud_reserve already acts as the platform-side safety valve.
+          // The developer forfeits held funds on their side; platform cash stays.
+          // count===0 is idempotent: the hold grabbed nothing (account was empty
+          // at flag time) or a prior resolution already settled these rows.
+          await tx.earningsLedger.updateMany({
+            where: { userId: current.userId, heldByFlagId: current.id, status: 'held' },
+            data: {
+              status: 'reversed',
+              heldByFlagId: null,
+              description: `Forfeited: confirmed behavioral fraud ${current.flagType} (${current.id})`,
+            },
+          });
         } else if (!isValid && current.userId) {
           await this.ledger.releaseEarnings(
             current.userId,

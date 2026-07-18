@@ -123,7 +123,16 @@ describe('StripeWebhookController money reconciliation', () => {
           currency: 'USD',
         },
       ])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'deposit-1',
+          advertiserId: 'adv-1',
+          campaignId: null,
+          amountMinor: 1000n,
+          currency: 'USD',
+        },
+      ]);
 
     await controller.handleRefund({
       id: 'evt_refund',
@@ -153,7 +162,16 @@ describe('StripeWebhookController money reconciliation', () => {
           currency: 'USD',
         },
       ])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'deposit-1',
+          advertiserId: 'adv-1',
+          campaignId: null,
+          amountMinor: 1000n,
+          currency: 'USD',
+        },
+      ]);
 
     await expect(
       controller.handleRefund({ id: 'evt_audit_fail', data: { object: { id: 're_audit' } } }),

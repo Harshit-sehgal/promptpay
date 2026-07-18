@@ -13,6 +13,7 @@ describe('EmailQueueService', () => {
   const mockPrisma = {
     emailQueue: {
       findUnique: vi.fn().mockResolvedValue(null),
+      findUniqueOrThrow: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'q-1' }),
       update: vi.fn().mockResolvedValue({ id: 'q-1' }),
     },
@@ -121,9 +122,12 @@ describe('EmailQueueService', () => {
     expect(service.decrypt('<p>plain</p>')).toBe('<p>plain</p>');
   });
 
-  it('updates an existing row without resetting retry count', async () => {
+  it('updates an existing row without resetting retry count (P2002 race recovery)', async () => {
     mockEmail.send.mockResolvedValueOnce({ delivered: false, driver: 'resend' });
-    mockPrisma.emailQueue.findUnique.mockResolvedValueOnce({
+    // Round 35: enqueueOrSend now tries create first; on P2002 (contentHash
+    // @unique race) it falls through to findUniqueOrThrow + update.
+    mockPrisma.emailQueue.create.mockRejectedValueOnce({ code: 'P2002' });
+    mockPrisma.emailQueue.findUniqueOrThrow.mockResolvedValueOnce({
       id: 'q-existing',
       contentHash: 'hash',
       retryCount: 3,
@@ -138,6 +142,7 @@ describe('EmailQueueService', () => {
       text: 'hi',
     });
 
+    expect(mockPrisma.emailQueue.create).toHaveBeenCalledTimes(1);
     expect(mockPrisma.emailQueue.update).toHaveBeenCalledTimes(1);
     const args = mockPrisma.emailQueue.update.mock.calls[0][0];
     expect(args.where.id).toBe('q-existing');

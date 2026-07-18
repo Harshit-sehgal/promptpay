@@ -2,6 +2,7 @@ import {
   // Response schemas (runtime + type source)
   CreateCampaignResponse,
   CreativeResponse,
+  DeveloperDashboardResponse,
   LedgerBalanceResponse,
   PayoutAvailableResponse,
   PayoutMethodResponse,
@@ -63,7 +64,8 @@ export const authApi = {
 };
 
 export const developerApi = {
-  getDashboard: () => api.get('/developer/dashboard'),
+  getDashboard: () =>
+    api.get('/developer/dashboard').then((r) => ok(DeveloperDashboardResponse.parse(r.data))),
   getEarnings: (params?: Record<string, unknown>) => api.get('/developer/earnings', { params }),
   getSettings: () => api.get('/developer/settings'),
   getTrust: () => api.get('/developer/trust'),

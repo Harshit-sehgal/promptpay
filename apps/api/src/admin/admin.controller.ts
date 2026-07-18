@@ -36,6 +36,7 @@ import {
   RecoveryDebtCasesQueryDto,
   RejectCampaignDto,
   RejectPayoutDto,
+  ReleasePayoutFenceDto,
   ResolveFraudFlagDto,
   ResolveRecoveryDebtCaseDto,
   ToggleRuntimeConfigDto,
@@ -366,6 +367,35 @@ export class AdminController {
     @Body() dto: PayoutAccountFreezeDto,
   ) {
     return this.service.unfreezePayoutAccount(reviewerId, reviewerRole, id, dto.reason);
+  }
+
+  @ApiOperation({ summary: 'List payout accounts with an active provider-initiation fence' })
+  @Get('payout-accounts/fenced')
+  @Roles('admin', 'support', 'super_admin')
+  getFencedAccounts(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.service.getFencedAccounts({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @ApiOperation({ summary: 'Release a payout account provider-initiation fence' })
+  @Post('payout-accounts/:id/release-fence')
+  @Roles('admin', 'support', 'super_admin')
+  releasePayoutFence(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: ReleasePayoutFenceDto,
+  ) {
+    return this.service.releasePayoutFence({
+      payoutAccountId: id,
+      reviewerId,
+      reviewerRole,
+      reason: dto.reason,
+      providerTxId: dto.providerTxId,
+      resolution: dto.resolution,
+    });
   }
 
   // ── Archive Refunds ──

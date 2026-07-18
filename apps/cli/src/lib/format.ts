@@ -21,7 +21,16 @@ export function parseMinor(value: string | number | bigint | null | undefined): 
     }
     return BigInt(value);
   }
-  return /^-?\d+$/.test(value) ? BigInt(value) : 0n;
+  // Round 35: align with shared parseMinor (packages/shared/src/parse.ts).
+  // Trim whitespace, accept '+-' signs, and throw on invalid — the prior
+  // `0n` silent fallback meant a server-side formatting anomaly (e.g.
+  // leading whitespace, "+" prefix) silently zeroed the user's balance
+  // display rather than surfacing the error.
+  const trimmed = value.trim();
+  if (!/^[+-]?\d+$/.test(trimmed)) {
+    throw new Error(`parseMinor: invalid minor-unit string: ${JSON.stringify(value)}`);
+  }
+  return BigInt(trimmed);
 }
 
 /**

@@ -1,8 +1,17 @@
+// Load .env before any other test code runs so both tests that boot the full
+// Nest app (via ConfigModule→dotenv) AND tests that directly construct
+// PrismaService / ConfigService bypassing the app module see the same
+// environment. This mirrors production: main.ts imports ./instrument which
+// does the same `import 'dotenv/config'`. Without this, direct-PrismaService
+// specs that don't boot AppModule (e.g. audit-rollback.spec.ts) fail when run
+// in isolation or first in file order because DATABASE_URL is not set.
+import 'dotenv/config';
+
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from './auth/__fixtures__/test-keys';
 
 // Tests must never run under NODE_ENV=production: the config validator's
 // production rules (PRIVACY_HASH_KEY, Resend credentials, HTTPS origins) and
-// the privacy-hash / payout-provider production guards would reject the dev
+// the privacy-hash / Stack provider production guards would reject the dev
 // environment and crash suites that boot the full Nest app. Force a test
 // environment so the suite is deterministic regardless of the parent shell
 // (which may export NODE_ENV=production from a prior `next build`).

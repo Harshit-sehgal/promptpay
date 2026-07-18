@@ -19,7 +19,7 @@ const SECURITY_HEADERS = [
   {
     key: 'Content-Security-Policy',
     value:
-      "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests;",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/client; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.sentry.io; frame-src 'self' https://accounts.google.com; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests;",
   },
   {
     key: 'X-Content-Type-Options',
@@ -37,6 +37,10 @@ const SECURITY_HEADERS = [
     key: 'Strict-Transport-Security',
     value: 'max-age=63072000; includeSubDomains',
   },
+  {
+    key: 'X-Frame-Options',
+    value: 'DENY',
+  },
 ];
 
 const nextConfig = {
@@ -52,6 +56,16 @@ const nextConfig = {
       {
         source: '/((?!_next).*)',
         headers: SECURITY_HEADERS,
+      },
+    ];
+  },
+
+  async redirects() {
+    return [
+      {
+        source: '/apply',
+        destination: '/auth/signup?role=developer',
+        permanent: false,
       },
     ];
   },

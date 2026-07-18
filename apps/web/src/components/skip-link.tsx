@@ -1,8 +1,17 @@
+'use client';
+
 export function SkipLink() {
   return (
     <a
       href="#main-content"
-      className="fixed left-4 top-4 z-[100] -translate-y-20 rounded-md bg-white px-4 py-2 text-sm font-semibold text-surface-900 shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+      className={[
+        // Visually hidden by default (screen-reader only)
+        'absolute -m-px h-px w-px -translate-y-full overflow-hidden whitespace-nowrap border-0 p-0',
+        // Become visible on focus, sliding down from the top of the viewport
+        'focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:h-auto focus:w-auto focus:translate-y-0',
+        'focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-surface-950',
+        'focus:shadow-lg focus:outline focus:outline-2 focus:outline-brand-600',
+      ].join(' ')}
     >
       Skip to main content
     </a>

@@ -9,7 +9,7 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 
-import { getErrorMessage } from '../utils/errors';
+import { redactUrl } from '../utils/sentry-scrubber';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -52,6 +52,9 @@ export class LoggingInterceptor implements NestInterceptor {
         const status = (err as { status?: unknown }).status;
         const statusCode = typeof status === 'number' ? status : HttpStatus.INTERNAL_SERVER_ERROR;
         const durationMs = Date.now() - now;
+        // Access logs must not carry raw error messages: Prisma/Axios errors
+        // can echo query parameters, headers, or request bodies. The dedicated
+        // exception filters log sanitized diagnostics under the same requestId.
         if (isJson) {
           this.logger.error(
             JSON.stringify({
@@ -61,12 +64,11 @@ export class LoggingInterceptor implements NestInterceptor {
               statusCode,
               durationMs,
               requestId,
-              message: getErrorMessage(err),
             }),
           );
         } else {
           this.logger.error(
-            `${method} ${url} ${statusCode} - ${durationMs}ms - requestId=${requestId} - ${getErrorMessage(err)}`,
+            `${method} ${url} ${statusCode} - ${durationMs}ms - requestId=${requestId}`,
           );
         }
         return throwError(() => err);
@@ -75,28 +77,4 @@ export class LoggingInterceptor implements NestInterceptor {
   }
 }
 
-/**
- * Redact every query-parameter value before logging.
- *
- * An allowlist of secret-looking names is not sufficient here: ordinary
- * parameters such as `email`, `search`, `destination`, and `reason` routinely
- * contain PII or user-provided text. Keep parameter names for route-level
- * diagnostics while removing all values and fragments. Works on both full
- * URLs and path+query strings. On parse failure, scrub the entire query.
- */
-export function redactUrl(raw: string): string {
-  try {
-    const parsed = new URL(raw, 'http://localhost');
-    parsed.searchParams.forEach((_value, key) => {
-      parsed.searchParams.set(key, '[redacted]');
-    });
-    // For absolute URLs, preserve the origin; for path-only strings, drop it.
-    const isAbsolute = /^https?:\/\//i.test(raw);
-    const origin = isAbsolute ? `${parsed.origin}` : '';
-    return `${origin}${parsed.pathname}${parsed.search}`;
-  } catch {
-    // Fallback: if the URL is malformed, scrub the query string entirely
-    // rather than risk logging sensitive params.
-    return raw.includes('?') ? raw.replace(/\?.*$/, '?[redacted]') : raw;
-  }
-}
+export { redactUrl } from '../utils/sentry-scrubber';

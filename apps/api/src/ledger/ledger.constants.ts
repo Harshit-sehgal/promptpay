@@ -36,4 +36,12 @@ export const PLATFORM_BUCKETS = {
   // cash position is invisible in the ledger and reconciliations against
   // Stripe balance can't be performed.
   CASH: 'cash',
+  // Referral bonuses are platform-funded developer earnings credits. Every
+  // processReferralRewards call writes a platformLedger credit in this bucket
+  // paired with an earningsLedger credit for the referrer. The global
+  // money-integrity invariant must account for this bucket so that a referral
+  // payout (which increases netEarnings without touching advertiser/platform
+  // fee/fraud-reserve/cash) doesn't create a permanent reconciliation
+  // discrepancy.
+  REFERRAL_BONUS: 'referral_bonus',
 } as const;

@@ -1,3 +1,4 @@
+import * as dns from 'dns';
 import * as http from 'http';
 import * as https from 'https';
 import * as vscode from 'vscode';
@@ -32,7 +33,10 @@ function detectCountryCode(env: NodeJS.ProcessEnv = process.env): string | undef
 }
 
 interface AmountEntry {
-  amountMinor: number;
+  // Money is kept as an exact bigint; the API serializes BigInt columns as
+  // decimal strings and parseMinor converts them back to bigint without the
+  // precision loss that `Number()` introduces above 2^53.
+  amountMinor: bigint;
   currency: string;
 }
 
@@ -115,6 +119,7 @@ export class ApiClient {
           '/auth/refresh',
           { refreshToken },
           true, // skipAuth: don't attach Authorization header for refresh itself
+          { skipRetry: true }, // never transient-retry a refresh: stale token → family revoke
         );
         // Persist before exposing the rotated pair to requests. Otherwise a
         // retry can succeed with the new refresh token while SecretStorage
@@ -451,14 +456,26 @@ export class ApiClient {
 
   // ── HTTP ──
 
-  private async post<T>(path: string, body: Record<string, unknown>, skipAuth = false): Promise<T> {
+  private async post<T>(
+    path: string,
+    body: Record<string, unknown>,
+    skipAuth = false,
+    options?: { skipRetry?: boolean },
+  ): Promise<T> {
     const bodyStr = JSON.stringify(body);
 
-    return this.request<T>('POST', path, headers(path, bodyStr), bodyStr, skipAuth);
+    return this.request<T>(
+      'POST',
+      path,
+      headers(path, bodyStr),
+      bodyStr,
+      skipAuth,
+      options?.skipRetry,
+    );
   }
 
   private async get<T>(path: string): Promise<T> {
-    return this.request<T>('GET', path, { 'Content-Type': 'application/json' }, '');
+    return this.request<T>('GET', path, { 'Content-Type': 'application/json' }, '', false, false);
   }
 
   private async request<T>(
@@ -467,12 +484,13 @@ export class ApiClient {
     reqHeaders: Record<string, string>,
     body: string,
     skipAuth = false,
+    skipRetry = false,
   ): Promise<T> {
     // Ensure tokens are loaded before first request
     await this._initialized;
 
-    // Network-resilient retry (mirrors the CLI api-client `raw` wrapper, gap
-    // #31). The detector loop fires ad-request / recordAdRendered /
+    // Network-resilient retry (mirrors the gateway api-client `raw` wrapper, gap
+    // #31). The detector loop fires every ad-request / adRendered /
     // recordImpressionEnd / recordClick synchronously inside the panel's
     // close/click callbacks — those billing events MUST survive a transient
     // blip (socket error, timeout, 429, 5xx) or the developer permanently
@@ -480,10 +498,14 @@ export class ApiClient {
     // there is no second attempt at the call site. All event/recording
     // endpoints carry idempotency keys (server-side CAS), so re-sending is
     // safe — a duplicate delivery no-ops rather than double-charging. The
-    // per-call 401 refresh-retry logic inside _doRequest is a SEPARATE layer
+    // per-call 401 refresh-retry path inside _handleRetry is a SEPARATE layer
     // and intentionally excluded from this retry set (a 401 is an application
     // error, not a transient failure). Application 4xx are not retried.
-    const MAX_ATTEMPTS = 3;
+    // Skipping transient-retry for auth-refresh: the server rotates the token
+    // family on the first success (CAS revoke of the old jti). A lost ACK
+    // followed by a re-send of the same pre-rotation refresh token triggers
+    // server-side full-family revocation.
+    const MAX_ATTEMPTS = skipRetry ? 1 : 3;
     for (let attempt = 1; ; attempt++) {
       // Rebuild the auth header on each attempt — the access token may have
       // been refreshed by a 401 retry on a PRIOR attempt in this loop, and we
@@ -533,12 +555,41 @@ export class ApiClient {
     }
     const requestHostname = requestHostnameForUrl(url);
     const transport = url.protocol === 'https:' ? https : http;
+    // Round 36: bound DNS resolution explicitly. `req.setTimeout` covers the
+    // established-connection wall clock but NOT the DNS lookup phase. A hung
+    // resolver (misconfigured /etc/resolv.conf, unreachable DNS server, captive
+    // portal) would block every extension API call indefinitely — and because
+    // ad-panel lifecycle callbacks fire these synchronously, a single hung
+    // socket freezes the entire ad-serving pipeline until VS Code is restarted.
+    // This mirrors the CLI `lookupWithTimeout` fix (Round 30 / 36).
+    const lookupWithTimeout = (
+      hostname: string,
+      _options: dns.LookupOptions,
+      cb: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+    ) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const err: NodeJS.ErrnoException = new Error(`DNS resolution timed out for ${hostname}`);
+        err.code = 'DNSLOOKUP_TIMEOUT';
+        cb(err, '', 4);
+      }, 5_000);
+      dns.lookup(hostname, _options, (err, address, family) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        const addr = typeof address === 'string' ? address : (address[0]?.address ?? '');
+        cb(err as NodeJS.ErrnoException | null, addr, family);
+      });
+    };
     const req = transport.request(
       {
         method,
         hostname: requestHostname,
         port: url.port || (url.protocol === 'https:' ? 443 : 80),
         path: url.pathname + url.search,
+        lookup: lookupWithTimeout,
         headers: {
           ...headers,
           'X-Extension-Version': '0.0.1',

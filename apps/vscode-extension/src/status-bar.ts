@@ -34,9 +34,9 @@ export class StatusBar {
    * the per-currency exponent (e.g. /100 for USD, /1 for JPY, /1000 for BHD)
    * so zero-decimal and 3-decimal currencies render correctly.
    */
-  setEarnings(amountMinor: number, currency: string) {
+  setEarnings(amountMinor: bigint, currency: string) {
     if (this.bar) {
-      this.bar.text = `$(zap) WaitLayer: ${formatMinorUnits(BigInt(amountMinor), currency)}`;
+      this.bar.text = `$(zap) WaitLayer: ${formatMinorUnits(amountMinor, currency)}`;
       this.bar.tooltip = `Click for balance details`;
       this.bar.command = 'waitlayer.showEarnings';
     }

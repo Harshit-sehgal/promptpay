@@ -270,7 +270,7 @@ describe('ApiClient — auth state ordering', () => {
 
     gate.resolve();
     await expect(balancePromise).resolves.toMatchObject({
-      available: { amountMinor: 1250, currency: 'USD' },
+      available: { amountMinor: 1250n, currency: 'USD' },
     });
     expect(mock.captured).toHaveLength(3);
     expect(JSON.parse(mock.secrets['waitlayer.authTokens'])).toEqual({

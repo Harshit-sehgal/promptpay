@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypt
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { getErrorCode } from '../common/utils/errors';
 import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
 import { EmailMessage, EmailService } from './email.service';
@@ -70,18 +71,40 @@ export class EmailQueueService {
     const expiresAt = new Date(now + ttlMs);
 
     try {
-      const existing = await this.prisma.emailQueue.findUnique({
-        where: { contentHash },
-      });
-
       // Encrypt sensitive payloads at rest so a database-only leak does not
       // expose password-reset or email-verify tokens.
       const encryptedHtml = this.encrypt(msg.html);
       const encryptedText = msg.text ? this.encrypt(msg.text) : null;
 
-      if (existing) {
-        // Preserve the existing retry count so repeated duplicates cannot
-        // reset the backoff clock and keep a failing message alive forever.
+      // Round 35: try create-first, catch P2002 on the contentHash @unique
+      // constraint, and fall through to an update that preserves the existing
+      // retry-count (backoff clock) + timestamps (expiresAt). The prior
+      // findUnique-then-create was a classic TOCTOU: two concurrent
+      // enqueueOrSend calls for the same content both saw `null` from
+      // findUnique, both attempted create, one hit P2002, and the loser
+      // returned a spurious `{ delivered: false }` even though the winner DID
+      // queue the message. This creates/catches/re-updates in an atomic flow
+      // that always surfaces the fact that the message is durably queued.
+      try {
+        await this.prisma.emailQueue.create({
+          data: {
+            to: msg.to,
+            subject: msg.subject,
+            html: encryptedHtml,
+            text: encryptedText,
+            contentHash,
+            nextRetryAt,
+            expiresAt,
+          },
+        });
+      } catch (err) {
+        if (getErrorCode(err) !== 'P2002') throw err;
+        // Lost the create race — another caller inserted the same contentHash
+        // first. Update that row preserving retry count (the loser knows the
+        // message IS queued, so no { delivered: false }).
+        const existing = await this.prisma.emailQueue.findUniqueOrThrow({
+          where: { contentHash },
+        });
         const retryDelayMs = this.baseDelayMs(existing.retryCount);
         await this.prisma.emailQueue.update({
           where: { id: existing.id },
@@ -94,18 +117,6 @@ export class EmailQueueService {
                 : new Date(now + retryDelayMs),
             expiresAt: existing.expiresAt > expiresAt ? existing.expiresAt : expiresAt,
             lastError: null,
-          },
-        });
-      } else {
-        await this.prisma.emailQueue.create({
-          data: {
-            to: msg.to,
-            subject: msg.subject,
-            html: encryptedHtml,
-            text: encryptedText,
-            contentHash,
-            nextRetryAt,
-            expiresAt,
           },
         });
       }

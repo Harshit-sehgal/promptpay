@@ -160,6 +160,8 @@ const mockPrisma = {
   },
   // ── AdReport ──
   adReport: {
+    findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
     create: vi.fn(),
   },
   // ── WaitStateEvent ──
@@ -436,6 +438,11 @@ describe('E2E Money Loop', () => {
     recordedLedgerEntries.platform = [];
     svc = makeServices();
     installLedgerCapture();
+    // recordWaitStateStart checks for an existing wait_state_start row via
+    // findFirst. Tests that do not explicitly mock this should see no
+    // duplicate, otherwise a stale implementation from an earlier test leaks
+    // into the duplicate check and throws ConflictException.
+    mockPrisma.waitStateEvent.findFirst.mockResolvedValue(null);
 
     // Default mock for advertiser balance to prevent requestAd / billing checks failing.
     // The balance helper (getAdvertiserBalancesByCurrency / getAdvertiserBalance) groups
@@ -454,6 +461,9 @@ describe('E2E Money Loop', () => {
       }));
     });
     mockPrisma.consent.findFirst.mockResolvedValue(null);
+    // Default: no duplicate wait_state_start. Tests that need a start row
+    // present for requestAd resolution set their own findFirst mock.
+    mockPrisma.waitStateEvent.findFirst.mockResolvedValue(null);
     // Default: no minimum extension version requirement so device
     // registration tests don't need to opt in individually.
     mockPrisma.toolIntegration.findUnique.mockResolvedValue(null);
@@ -1824,6 +1834,12 @@ describe('E2E Money Loop', () => {
         eventSecret: DEVICE_EVENT_SECRET,
         user: { status: 'active' },
       });
+      // Round 39: recordWaitStateStart now has a duplicate-waitState-check
+      // (findFirst waitStateId+eventType) that must see no prior start for the
+      // test to succeed. That duplicate check already ran (against the default
+      // findFirst→null from beforeEach) before this mockImplementation is
+      // installed. From here on, requestAd (above) and recordWaitStateEnd
+      // (below) need to see the start row we recorded.
       mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
         if (where.eventType === 'wait_state_start') {
           return Promise.resolve({

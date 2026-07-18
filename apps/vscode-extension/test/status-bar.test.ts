@@ -80,7 +80,7 @@ describe('StatusBar — state updates', () => {
     const bar = new StatusBar();
     bar.register(makeContext());
 
-    bar.setEarnings(1250, 'USD');
+    bar.setEarnings(1250n, 'USD');
     expect(mock.item.text).toBe('$(zap) WaitLayer: $12.50');
     expect(mock.item.tooltip).toBe('Click for balance details');
     expect(mock.item.command).toBe('waitlayer.showEarnings');
@@ -112,7 +112,7 @@ describe('StatusBar — state updates', () => {
     const bar = new StatusBar();
 
     expect(() => bar.showIdle()).not.toThrow();
-    expect(() => bar.setEarnings(1)).not.toThrow();
+    expect(() => bar.setEarnings(1n)).not.toThrow();
     expect(mock.created).toHaveLength(0);
   });
 });

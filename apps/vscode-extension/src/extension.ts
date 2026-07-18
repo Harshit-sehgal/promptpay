@@ -56,7 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
       try {
         const bal = await api.getBalance();
         vscode.window.showInformationMessage(
-          `WaitLayer: ${formatMinorUnits(BigInt(bal.available.amountMinor), bal.available.currency)} available (pending ${formatMinorUnits(BigInt(bal.pending.amountMinor), bal.pending.currency)})`,
+          `WaitLayer: ${formatMinorUnits(bal.available.amountMinor, bal.available.currency)} available (pending ${formatMinorUnits(bal.pending.amountMinor, bal.pending.currency)})`,
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);

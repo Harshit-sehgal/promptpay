@@ -7,11 +7,9 @@ import { LoadingSpinner } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi, campaignApi } from '@/lib/api/services';
 
-import {
-  campaignMoneyInputPolicy,
-  MIN_CAMPAIGN_BUDGET_MINOR,
-  parseCampaignAmountMinor,
-} from '../campaign-money';
+import { campaignMinimumBudgetMinor } from '@waitlayer/shared';
+
+import { campaignMoneyInputPolicy, parseCampaignAmountMinor } from '../campaign-money';
 
 const BID_TYPES = ['cpm', 'cpc'] as const;
 const CATEGORIES = [
@@ -91,7 +89,7 @@ export default function NewCampaignPage() {
       setSubmitting(false);
       return;
     }
-    if (budgetTotalMinor === null || budgetTotalMinor < MIN_CAMPAIGN_BUDGET_MINOR) {
+    if (budgetTotalMinor === null || budgetTotalMinor < campaignMinimumBudgetMinor(currency)) {
       setError(`Minimum budget is ${moneyPolicy.minimumBudgetLabel}`);
       setSubmitting(false);
       return;

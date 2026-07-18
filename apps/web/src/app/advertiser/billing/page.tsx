@@ -76,9 +76,12 @@ export function depositAmountInputPolicy(currency: string) {
 
 export function parseDepositAmountMinor(value: string, currency: string): bigint | null {
   if (!value.trim()) return null;
-  const majorAmount = Number(value);
-  if (!Number.isFinite(majorAmount) || majorAmount <= 0) return null;
-  return majorToMinor(majorAmount, currency);
+  try {
+    const minor = majorToMinor(value, currency);
+    return minor <= 0n ? null : minor;
+  } catch {
+    return null;
+  }
 }
 
 export default function AdvertiserBillingPage() {

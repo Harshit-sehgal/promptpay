@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
-import { LedgerStatus, primaryCurrency } from '@waitlayer/shared';
+import { LedgerStatus, PayoutStatus, primaryCurrency } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
@@ -98,8 +98,8 @@ export class DeveloperService {
       pendingEarnings: 0n,
       heldEarnings: 0n,
       reversedEarnings: 0n,
-      recoveryDebt: 0n,
-      availableForPayout: 0n,
+      recoveryDebtMinor: 0n,
+      availableForPayoutMinor: 0n,
       lifetimeEarnings: 0n,
       estimatedEarningsByCurrency: {} as Record<string, bigint>,
       confirmedEarningsByCurrency: {} as Record<string, bigint>,
@@ -143,7 +143,53 @@ export class DeveloperService {
     summary.confirmedEarningsByCurrency = nonNegativeCurrencyTotals(
       summary.confirmedEarningsByCurrency,
     );
+    // Seed availableForPayoutByCurrency from confirmedEarningsByCurrency
+    // before subtracting in-flight allocations (Round 37).
     summary.availableForPayoutByCurrency = { ...summary.confirmedEarningsByCurrency };
+    // Round 37: Subtract in-flight payout allocations from availableForPayout.
+    // Without this correction, the developer dashboard mirrors confirmed earnings
+    // as "available for payout" while a pending/processing payout already
+    // reserves some of those same earnings entries — the developer sees a
+    // withdrawable figure that the requestPayout path would reject as
+    // "Insufficient available earnings". The authoritative getAvailableForPayout
+    // (payout-summary.trait.ts) correctly excludes allocated entries; the
+    // dashboard must do the same to avoid misleading the user.
+    // Gate on confirmedEarningsByCurrency (a per-currency map) rather than
+    // the scalar `confirmedEarnings`, which is computed further down. If any
+    // currency has a confirmed-positive balance, query the allocations to
+    // subtract any reserved entries from that currency's available headroom.
+    if (Object.values(summary.confirmedEarningsByCurrency).some((v) => v > 0n)) {
+      const RESERVED_PAYOUT_STATUSES = [
+        PayoutStatus.REQUESTED,
+        PayoutStatus.UNDER_REVIEW,
+        PayoutStatus.APPROVED,
+        PayoutStatus.PROCESSING,
+      ];
+      const allocatedRows = await this.prisma.earningsLedger.groupBy({
+        by: ['currency'],
+        where: {
+          userId,
+          entryType: 'credit',
+          status: 'confirmed',
+          payoutAllocations: {
+            some: {
+              payoutRequest: { status: { in: RESERVED_PAYOUT_STATUSES } },
+            },
+          },
+        },
+        _sum: { amountMinor: true },
+      });
+      const allocatedRowObj: Record<string, bigint> = {};
+      for (const row of allocatedRows) {
+        addCurrencyAmount(allocatedRowObj, row.currency, row._sum.amountMinor ?? 0n);
+      }
+      for (const [currency, allocated] of Object.entries(allocatedRowObj)) {
+        addCurrencyAmount(summary.availableForPayoutByCurrency, currency, -allocated);
+      }
+      summary.availableForPayoutByCurrency = nonNegativeCurrencyTotals(
+        summary.availableForPayoutByCurrency,
+      );
+    }
     summary.lifetimeEarningsByCurrency = nonNegativeCurrencyTotals(
       summary.lifetimeEarningsByCurrency,
     );
@@ -160,9 +206,9 @@ export class DeveloperService {
       summary.pendingEarningsByCurrency[primaryCurrency(summary.pendingEarningsByCurrency)] ?? 0n;
     summary.heldEarnings =
       summary.heldEarningsByCurrency[primaryCurrency(summary.heldEarningsByCurrency)] ?? 0n;
-    summary.recoveryDebt =
+    summary.recoveryDebtMinor =
       summary.recoveryDebtByCurrency[primaryCurrency(summary.recoveryDebtByCurrency)] ?? 0n;
-    summary.availableForPayout =
+    summary.availableForPayoutMinor =
       summary.availableForPayoutByCurrency[primaryCurrency(summary.availableForPayoutByCurrency)] ??
       0n;
     summary.lifetimeEarnings =
@@ -465,20 +511,20 @@ export class DeveloperService {
       await this.verifySelfDeleteStepUp(userId, options);
     }
 
-    const result = await eraseAccountIdentity(this.prisma, userId, {
-      forfeitBalance: options.forfeitBalance ?? false,
-    });
+    const result = await eraseAccountIdentity(
+      this.prisma,
+      userId,
+      {
+        forfeitBalance: options.forfeitBalance ?? false,
+      },
+      this.audit,
+      {
+        actorId: auditActor?.actorId ?? userId,
+        actorRole: auditActor?.actorRole ?? 'developer',
+        action: auditActor?.action ?? 'delete_account',
+      },
+    );
     const priorEmail = result.priorEmail;
-    // Audit: account self-deletion is an irreversible destructive action.
-    // Record it so a malicious deletion (compromised token) leaves a
-    // forensic trail separate from the (now-anonymized) row itself.
-    void this.audit.log({
-      actorId: auditActor?.actorId ?? userId,
-      actorRole: auditActor?.actorRole ?? 'developer',
-      action: auditActor?.action ?? 'delete_account',
-      targetType: 'user',
-      targetId: userId,
-    });
 
     // Send a deletion confirmation email (non-blocking; silent email
     // failures must never fail the deletion itself).

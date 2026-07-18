@@ -13,6 +13,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { Roles } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { verifyMigrationsApplied } from '../config/migration-check';
 import { PrismaService } from '../config/prisma.service';
 import { MINIMUM_WAIT_CONFIDENCE, SIGNAL_WEIGHTS } from '../extension/extension.constants';
 import { RedisHealthService } from './redis-health.service';
@@ -64,6 +65,23 @@ export class HealthController {
    * unavailable. This prevents routing traffic to an API that cannot safely
    * serve it (A-042).
    */
+  /**
+   * Migration status endpoint — exposes whether the database has pending
+   * migrations. This is useful for deployment validation and ops dashboards
+   * (P1 #13). It does not fail; callers inspect `pending` and `upToDate`.
+   */
+  @ApiOperation({ summary: 'Migration status' })
+  @Get('migrations')
+  @HttpCode(HttpStatus.OK)
+  async migrations() {
+    const pending = await verifyMigrationsApplied(this.prisma);
+    return {
+      upToDate: pending.length === 0,
+      pendingCount: pending.length,
+      pending,
+    };
+  }
+
   @ApiOperation({ summary: 'Readiness check' })
   @Get('ready')
   @HttpCode(HttpStatus.OK)

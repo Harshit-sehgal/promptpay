@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 
-import { CampaignStatus, Prisma } from '@waitlayer/db';
+import { CampaignStatus } from '@waitlayer/db';
 
 import { AuditService } from '../audit/audit.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
@@ -48,16 +48,16 @@ export class AdminCampaignsTrait {
     // balance floor, so approval must not label an unfunded campaign active.
     const hasApprovedCreative = campaign.creatives.some((c) => c.status === 'approved');
     const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
-    const advertiserBalance = await getAdvertiserBalance(
-      this.prisma,
-      campaign.advertiserId,
-      campaign.currency,
-    );
-    const hasFundedBalance = advertiserBalance > 0;
-    const canActivate = hasApprovedCreative && hasBudget && hasFundedBalance;
-    // Set status: 'approved' if no approved creatives yet or no budget, 'active' if ready to serve
-    const newStatus = canActivate ? 'active' : 'approved';
-    // Build human-readable blockers list for the UI
+    // Round 36: pre-compute the static creatives/budget predicates outside the
+    // transaction (they don't drift on advertiser ledger), but defer the funded-
+    // balance read to INSIDE the transaction. Reading it here on `this.prisma`
+    // was a TOCTOU: a concurrent Stripe refund/dispute could drain the balance
+    // to zero between this read and the CAS flip, flipping a campaign to
+    // `active` on a stale funded-balance snapshot. The serving path's per-
+    // impression debit guard still prevents overspend, but the campaign would be
+    // briefly mislabelled activatable. Now the balance is re-evaluated under the
+    // same row-locked transaction as the status flip.
+    // Build human-readable blockers list for the UI (static portion)
     const blockers: string[] = [];
     if (!hasApprovedCreative) {
       const pendingCount = campaign.creatives.filter((c) => c.status === 'pending_review').length;
@@ -69,9 +69,6 @@ export class AdminCampaignsTrait {
     if (!hasBudget) {
       blockers.push('Campaign budget is fully spent. Add more budget to activate.');
     }
-    if (!hasFundedBalance) {
-      blockers.push('Advertiser has no funded balance. Deposit funds before activation.');
-    }
     // CAS-gated status flip: `updateMany` where `{ id, status: 'submitted' }`
     // returns count===0 when the campaign was concurrently approved/rejected.
     // Without this gate, two concurrent admin approvals would both insert
@@ -79,6 +76,19 @@ export class AdminCampaignsTrait {
     // timestamps, and the result would depend on commit order — neither
     // "always safe", both wrong in a different way.
     const result = await this.prisma.$transaction(async (tx) => {
+      // Re-read the advertiser balance inside the transaction so the funded-
+      // balance decision is consistent with the status flip under the same lock.
+      const advertiserBalance = await getAdvertiserBalance(
+        tx,
+        campaign.advertiserId,
+        campaign.currency,
+      );
+      const hasFundedBalance = advertiserBalance > 0;
+      const canActivate = hasApprovedCreative && hasBudget && hasFundedBalance;
+      const newStatus = canActivate ? 'active' : 'approved';
+      if (!hasFundedBalance) {
+        blockers.push('Advertiser has no funded balance. Deposit funds before activation.');
+      }
       const flip = await tx.campaign.updateMany({
         where: { id: campaignId, status: 'submitted' },
         data: {
@@ -99,7 +109,7 @@ export class AdminCampaignsTrait {
         where: { id: campaignId },
         include: { creatives: true },
       });
-      return { campaign: freshCampaign };
+      return { campaign: freshCampaign, activated: canActivate, status: newStatus };
     });
     // Audit: admin campaign approval — high-stakes lifecycle decision.
     void this.audit
@@ -109,7 +119,11 @@ export class AdminCampaignsTrait {
         action: 'approve_campaign',
         targetType: 'campaign',
         targetId: campaignId,
-        beforeSnap: { oldStatus: 'submitted', newStatus, activated: canActivate },
+        beforeSnap: {
+          oldStatus: 'submitted',
+          newStatus: result.status,
+          activated: result.activated,
+        },
       })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
@@ -118,8 +132,8 @@ export class AdminCampaignsTrait {
 
     return {
       campaign: result.campaign,
-      activated: canActivate,
-      status: newStatus,
+      activated: result.activated,
+      status: result.status,
       blockers,
     };
   }

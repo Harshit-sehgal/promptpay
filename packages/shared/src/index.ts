@@ -1,3 +1,4 @@
+export * from './auction';
 export * from './constants';
 export * from './contracts';
 export * from './currency';

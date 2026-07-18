@@ -21,7 +21,14 @@ describe('ExtensionDeviceReportTrait.reportAd retry safety', () => {
         update: vi.fn().mockResolvedValue({ ...impression, isBillable: false }),
       },
       adReport: {
-        findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(report),
+        // Round 40: compound-key findUnique replaces findFirst for
+        // @@unique([impressionId, userId]); under the Prisma compound-key
+        // API, the mock property is `findUnique`, not a compound-key
+        // accessor. The trait code calls
+        //   adReport.findUnique({ where: { ad_reports_impression_id_user_id_key: {...} } })
+        // which Vitest routes to this mock fn regardless of the where shape.
+        findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(report),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(report),
         create: vi.fn().mockResolvedValue(report),
       },
       $transaction: vi.fn(async (operations: Array<Promise<unknown>>) => Promise.all(operations)),

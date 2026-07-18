@@ -139,6 +139,22 @@ export class ApiClient {
   /** Event payloads are signed in-body; no separate header signature is sent. */
 
   async getOrRegisterDevice(): Promise<string> {
+    // Round 36: eagerly load the persisted event secret BEFORE the short-circuit
+    // check. On a fresh CLI install the constructor only seeds `deviceUUID`
+    // (from creds.deviceUUID); `deviceEventSecret` is loaded lazily in
+    // signEventPayload(). If `createWatch` calls getOrRegisterDevice() BEFORE
+    // any signEventPayload(), the short-circuit below would see
+    // `deviceEventSecret === null` and re-register without `existingEventSecret`
+    // — triggering the support-token recovery wall for a same-machine re-register
+    // and overwriting the old signing key. Loading here first lets a pre-existing
+    // device skip straight to returning its UUID.
+    if (this.deviceUUID && !this.deviceEventSecret) {
+      try {
+        this.deviceEventSecret = await getDeviceEventSecret();
+      } catch {
+        // No persisted secret yet — proceed to fresh registration below.
+      }
+    }
     if (this.deviceUUID && this.deviceEventSecret) return this.deviceUUID;
 
     const hostname = os.hostname();
@@ -273,7 +289,8 @@ export class ApiClient {
       confirmedEarnings: number | string;
       pendingEarnings: number | string;
       heldEarnings: number | string;
-      availableForPayout: number | string;
+      availableForPayoutMinor: number | string;
+      recoveryDebtMinor: number | string;
       lifetimeEarnings: number | string;
       estimatedEarningsByCurrency?: RawCurrencyTotals;
       confirmedEarningsByCurrency?: RawCurrencyTotals;
@@ -289,7 +306,8 @@ export class ApiClient {
       confirmedEarnings: parseMinor(res.confirmedEarnings),
       pendingEarnings: parseMinor(res.pendingEarnings),
       heldEarnings: parseMinor(res.heldEarnings),
-      availableForPayout: parseMinor(res.availableForPayout),
+      availableForPayout: parseMinor(res.availableForPayoutMinor),
+      recoveryDebt: parseMinor(res.recoveryDebtMinor ?? '0'),
       lifetimeEarnings: parseMinor(res.lifetimeEarnings),
       estimatedEarningsByCurrency: parseCurrencyTotals(res.estimatedEarningsByCurrency),
       confirmedEarningsByCurrency: parseCurrencyTotals(res.confirmedEarningsByCurrency),
@@ -507,7 +525,14 @@ export class ApiClient {
     // Network-resilient retry (gap #31): transient failures — socket errors,
     // timeouts, 429/5xx — are retried with capped exponential backoff.
     // Application 4xx (except 429) are not retried to avoid double-writes.
-    const MAX_ATTEMPTS = 3;
+    // Refresh attempts are exempt from transient-retry: the server rotates the
+    // token family on the first successful refresh (CAS revoke of the old jti).
+    // If that ACK is lost to a transient error and the client resends the
+    // same pre-rotation refresh token, the server detects reuse (the jti is
+    // already revoked → count===0) and revokes the entire family, force-logging
+    // the user out everywhere. A failed refresh is terminal — clear tokens and
+    // let the user re-authenticate; do not re-send a consumed refresh token.
+    const MAX_ATTEMPTS = _isRefreshAttempt ? 1 : 3;
     let attempt = 0;
     for (;;) {
       attempt++;

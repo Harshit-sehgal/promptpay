@@ -9,7 +9,11 @@ import {
 } from '@nestjs/common';
 
 import { BidType, Prisma } from '@waitlayer/db';
-import { MINIMUM_VISIBLE_DURATION_MS } from '@waitlayer/shared';
+import {
+  MINIMUM_VISIBLE_DURATION_MS,
+  nextBillableCharge,
+  selectCampaignIndex,
+} from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
@@ -302,10 +306,16 @@ export class ExtensionAdTrait {
     }));
     const initialEligible = campaignsWithSafeCreatives.filter((c) => {
       if (c.creatives.length === 0) return false;
-      // Account for both committed spend and in-flight reservations so a
-      // campaign with no real budget remaining is not selected.
+      // Account for both committed spend and in-flight reservations. A campaign
+      // that has *some* remaining budget but NOT enough to cover its exact next
+      // billable charge must NOT win the auction (issue #2): otherwise it would
+      // win, fail the guarded reservation, and cause the API to return no ad
+      // without trying another eligible campaign. The next possible charge is
+      // the per-event bid for both CPM (reserved at impression) and CPC (spent
+      // at click) — see `nextBillableCharge`. Enforce spent + reserved + charge <= total.
+      const charge = nextBillableCharge(BigInt(c.bidAmountMinor));
       if (
-        BigInt(c.budgetSpentMinor) + BigInt(c.budgetReservedMinor ?? 0n) >=
+        BigInt(c.budgetSpentMinor) + BigInt(c.budgetReservedMinor ?? 0n) + charge >
         BigInt(c.budgetTotalMinor)
       )
         return false;
@@ -342,116 +352,126 @@ export class ExtensionAdTrait {
     if (!eligible.length) {
       return { ad: null, reason: 'no_eligible_campaign' };
     }
-    // Weighted selection by bid. If every eligible campaign has bid 0 the
-    // weighted RNG collapses to "always pick the first" — which is OK as
-    // long as eligible is non-empty, but falls through here only when
-    // totalBid happens to round to zero. In that case pick uniformly to
-    // avoid deterministic over-serving of the first campaign encountered.
-    const totalBid = eligible.reduce((sum, c) => sum + BigInt(c.bidAmountMinor), 0n);
-    let selected: (typeof eligible)[number];
-    if (totalBid === 0n) {
-      selected = eligible[Math.floor(Math.random() * eligible.length)];
-    } else {
-      let random = BigInt(Math.floor(Math.random() * Number(totalBid)));
-      selected = eligible[0];
-      for (const c of eligible) {
-        random -= BigInt(c.bidAmountMinor);
-        if (random <= 0n) {
-          selected = c;
+    // ── Currency-safe, bigint-safe selection + retry-on-reservation-loss ──
+    // OLD behaviour: a single weighted pass across ALL eligible campaigns using
+    // `Number(totalBid)` for the random draw, ordering by raw `bidAmountMinor`.
+    // Both are invalid: raw minor units are not comparable across currencies,
+    // and `Number(totalBid)` loses precision past 2^53. If the winner then lost
+    // the guarded CPM reservation (a concurrent request spent the last budget),
+    // the API returned `no_eligible_campaign` without trying another candidate.
+    //
+    // NEW behaviour: `selectCampaignIndex` runs an independent weighted auction
+    // per currency (no cross-currency bid comparison) and draws the random index
+    // with bigint-safe rejection sampling. When the chosen campaign loses the
+    // in-transaction reservation race, we remove it from the candidate set and
+    // retry selection — bounded by the number of eligible candidates so we
+    // never loop. `no_eligible_campaign` is returned only after every viable
+    // candidate has been exhausted.
+    const excludedIds = new Set<string>();
+    const MAX_CANDIDATE_ATTEMPTS = eligible.length;
+    for (let attempt = 0; attempt < MAX_CANDIDATE_ATTEMPTS; attempt++) {
+      const pool = eligible.filter((c) => !excludedIds.has(c.id));
+      if (pool.length === 0) break;
+      const poolIndex = selectCampaignIndex(
+        pool.map((c) => ({
+          id: c.id,
+          currency: c.currency,
+          bidAmountMinor: BigInt(c.bidAmountMinor),
+        })),
+      );
+      const selected = pool[poolIndex];
+      const creative = selected.creatives[0];
+      const impressionToken = crypto.randomUUID();
+      const impressionTokenHash = crypto.createHash('sha256').update(impressionToken).digest('hex');
+      const ad = {
+        impressionToken,
+        campaignId: selected.id,
+        creativeId: creative.id,
+        title: creative.title,
+        message: creative.sponsoredMessage,
+        label: 'Sponsored',
+        displayDomain: creative.displayDomain,
+        destinationUrl: creative.destinationUrl,
+        ctaText: creative.ctaText ?? null,
+      };
+      // ── Atomic claim ──
+      // The cap-check + impression insert must be atomic against concurrent
+      // ad-requests on the same user. Without a transaction, two in-flight
+      // requests both count "5 so far" and both insert → 7 impressions for a
+      // cap of 6. We use a serializable transaction guarded by a per-user
+      // Postgres advisory lock; the lock short-circuits serialization conflicts
+      // because only one transaction per user runs the critical section at a
+      // time. On a P2034/serialization failure we retry the whole claim.
+      let claim: Awaited<ReturnType<ExtensionService['claimImpression']>>;
+      let serRetries = 0;
+      for (;;) {
+        try {
+          claim = await this.claimImpression({
+            userId,
+            deviceId: dto.deviceId,
+            sessionId: dto.sessionId,
+            waitStateId: dto.waitStateId,
+            idempotencyKey: dto.idempotencyKey,
+            campaignId: selected.id,
+            creativeId: creative.id,
+            impressionTokenHash,
+            bidType: selected.bidType,
+            bidAmountMinor: BigInt(selected.bidAmountMinor),
+            maxPerHour,
+            oneHourAgo,
+          });
           break;
+        } catch (err) {
+          if (isSerializationError(err) && ++serRetries < FREQUENCY_CAP_TXN_MAX_RETRIES) {
+            continue;
+          }
+          throw err;
         }
       }
-      // Defensive fallback: float-rounding drift in the loop above can
-      // leave `random` slightly above zero for the highest-bid campaign.
-      // Pick it explicitly so we never serve an undefined ad.
-      selected = selected ?? eligible[eligible.length - 1];
-    }
-    const creative = selected.creatives[0];
-    const impressionToken = crypto.randomUUID();
-    const impressionTokenHash = crypto.createHash('sha256').update(impressionToken).digest('hex');
-
-    const ad = {
-      impressionToken,
-      campaignId: selected.id,
-      creativeId: creative.id,
-      title: creative.title,
-      message: creative.sponsoredMessage,
-      label: 'Sponsored',
-      displayDomain: creative.displayDomain,
-      destinationUrl: creative.destinationUrl,
-      ctaText: creative.ctaText ?? null,
-    };
-    // ── Atomic claim ──
-    // The cap-check + impression insert must be atomic against concurrent
-    // ad-requests on the same user. Without a transaction, two in-flight
-    // requests both count "5 so far" and both insert → 7 impressions for a
-    // cap of 6. We use a serializable transaction guarded by a per-user
-    // Postgres advisory lock; the lock short-circuits serialization conflicts
-    // because only one transaction per user runs the critical section at a
-    // time. On a P2034/serialization failure we retry the whole claim.
-    let claim: Awaited<ReturnType<ExtensionService['claimImpression']>>;
-    let attempt = 0;
-    for (;;) {
-      try {
-        claim = await this.claimImpression({
-          userId,
-          deviceId: dto.deviceId,
-          sessionId: dto.sessionId,
-          waitStateId: dto.waitStateId,
-          idempotencyKey: dto.idempotencyKey,
-          campaignId: selected.id,
-          creativeId: creative.id,
-          impressionTokenHash,
-          bidType: selected.bidType,
-          bidAmountMinor: BigInt(selected.bidAmountMinor),
-          maxPerHour,
-          oneHourAgo,
+      if (claim.status === 'duplicate') {
+        throw new ConflictException('Ad already requested for this wait state');
+      }
+      if (claim.status === 'cap_reached') {
+        return { ad: null, reason: 'user_hourly_cap_reached' };
+      }
+      // The guard `budgetSpentMinor + budget_reserved_minor + charge <= budgetTotalMinor`
+      // failed inside the transaction: a concurrent request took the last budget
+      // (or the advertiser balance moved). Remove THIS campaign and try another
+      // candidate rather than returning no ad (issue #2).
+      if (claim.status === 'budget_unavailable') {
+        excludedIds.add(selected.id);
+        continue;
+      }
+      // Save to LRU cache for immediate retries. Both keys map to the same ad
+      // so a retry on either lookup hits the bounded cache. LRU's TTL evicts
+      // these after 60s — older than that there's no valid request anymore.
+      // Keys are namespaced by userId + deviceId (issue A-038).
+      this.adCache.set(adIdempotencyCacheKey(userId, dto.deviceId, dto.idempotencyKey), { ad });
+      this.adCache.set(adCacheKey(userId, dto.deviceId, dto.waitStateId), { ad });
+      // Audit log on every billable ad served. This is the platform's most
+      // sensitive money-flow and forensics here directly supports fraud
+      // detection (burst-detection on a single device/user) plus dispute
+      // resolution. claim.impressionId is the FK into ad_impression, the
+      // authoritative record linking the served ad to a downstream click /
+      // impression-qualified outcome. Fire-and-forget via audit.log().
+      if (claim.status === 'claimed' && claim.impressionId) {
+        void this.audit.log({
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'ad_served',
+          targetType: 'impression',
+          targetId: claim.impressionId,
+          afterSnap: {
+            campaignId: selected.id,
+            creativeId: creative.id,
+            deviceId: dto.deviceId,
+            waitStateId: dto.waitStateId,
+          },
         });
-        break;
-      } catch (err) {
-        if (isSerializationError(err) && ++attempt < FREQUENCY_CAP_TXN_MAX_RETRIES) {
-          continue;
-        }
-        throw err;
       }
+      return { ad };
     }
-    if (claim.status === 'duplicate') {
-      throw new ConflictException('Ad already requested for this wait state');
-    }
-    if (claim.status === 'cap_reached') {
-      return { ad: null, reason: 'user_hourly_cap_reached' };
-    }
-    if (claim.status === 'budget_unavailable') {
-      return { ad: null, reason: 'no_eligible_campaign' };
-    }
-    // Save to LRU cache for immediate retries. Both keys map to the same ad
-    // so a retry on either lookup hits the bounded cache. LRU's TTL evicts
-    // these after 60s — older than that there's no valid request anymore.
-    // Keys are namespaced by userId + deviceId (issue A-038).
-    this.adCache.set(adIdempotencyCacheKey(userId, dto.deviceId, dto.idempotencyKey), { ad });
-    this.adCache.set(adCacheKey(userId, dto.deviceId, dto.waitStateId), { ad });
-    // Audit log on every billable ad served. This is the platform's most
-    // sensitive money-flow and forensics here directly supports fraud
-    // detection (burst-detection on a single device/user) plus dispute
-    // resolution. claim.impressionId is the FK into ad_impression, the
-    // authoritative record linking the served ad to a downstream click /
-    // impression-qualified outcome. Fire-and-forget via audit.log().
-    if (claim.status === 'claimed' && claim.impressionId) {
-      void this.audit.log({
-        actorId: userId,
-        actorRole: 'developer',
-        action: 'ad_served',
-        targetType: 'impression',
-        targetId: claim.impressionId,
-        afterSnap: {
-          campaignId: selected.id,
-          creativeId: creative.id,
-          deviceId: dto.deviceId,
-          waitStateId: dto.waitStateId,
-        },
-      });
-    }
-    return { ad };
+    return { ad: null, reason: 'no_eligible_campaign' };
   }
 
   /**
@@ -1052,11 +1072,13 @@ export class ExtensionAdTrait {
     void this.fraud
       .checkRepeatedClickAbuse(impression.userId, impression.campaignId)
       .catch(() => undefined);
-    // One click per impression
-    const existingClick = await this.prisma.adClick.findFirst({
-      where: { impressionId: impression.id },
-    });
-    if (existingClick) return { clicked: false, reason: 'duplicate_click' };
+    // Round 40: removed redundant existingClick findFirst (non-locked read).
+    // @unique(impressionId) on AdClick + P2002 catch below are the real floor
+    // — the findFirst misled readers into thinking JS was load-bearing when
+    // the DB unique constraint already guarantees exactly one click per
+    // impression. Concurrent recordClick calls race past the findFirst, both
+    // attempt create, and the P2002 loser returns duplicate_click. The
+    // outcome is identical without this redundant read.
     // Find appropriate click bid (use campaign.cpcBid or default to campaign bid; CPC is the click-specific bid)
     // For CPC campaigns, the campaign.bidAmountMinor is the per-click bid.
     // For CPM campaigns, clicks don't earn — skip the ledger write.

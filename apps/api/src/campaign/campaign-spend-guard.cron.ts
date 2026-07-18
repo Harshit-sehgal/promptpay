@@ -168,30 +168,42 @@ export class CampaignSpendGuardCron implements OnApplicationBootstrap, OnModuleD
     reason: 'budget_exhausted' | 'advertiser_balance_depleted',
   ): Promise<boolean> {
     try {
-      const result = await this.prisma.campaign.updateMany({
-        where: { id: campaign.id, status: 'active' },
-        data: { status: 'paused', pausedAt: new Date() },
+      const didPause = await this.prisma.$transaction(async (tx) => {
+        const result = await tx.campaign.updateMany({
+          where: { id: campaign.id, status: 'active' },
+          data: { status: 'paused', pausedAt: new Date() },
+        });
+        if (result.count === 0) {
+          // Another replica already paused it; no-op.
+          return false;
+        }
+        // Auto-pause is a money-relevant state change; the audit must be part
+        // of the same transaction so a rolled-back pause never leaves a success
+        // record, and a failed audit write fails the pause.
+        await this.audit.logStrict(
+          {
+            actorId: 'system',
+            actorRole: 'system',
+            action: 'auto_pause_campaign',
+            targetType: 'campaign',
+            targetId: campaign.id,
+            afterSnap: {
+              reason,
+              budgetTotalMinor: String(campaign.budgetTotalMinor),
+              budgetSpentMinor: String(campaign.budgetSpentMinor),
+              currency: campaign.currency,
+            },
+          },
+          tx,
+        );
+        return true;
       });
-      if (result.count === 0) {
-        return false;
+      if (didPause) {
+        this.logger.log(
+          `Paused campaign ${campaign.id} (${campaign.name}): ${reason}. Spent ${campaign.budgetSpentMinor}/${campaign.budgetTotalMinor} ${campaign.currency}.`,
+        );
       }
-      this.logger.log(
-        `Paused campaign ${campaign.id} (${campaign.name}): ${reason}. Spent ${campaign.budgetSpentMinor}/${campaign.budgetTotalMinor} ${campaign.currency}.`,
-      );
-      void this.audit.log({
-        actorId: 'system',
-        actorRole: 'system',
-        action: 'auto_pause_campaign',
-        targetType: 'campaign',
-        targetId: campaign.id,
-        afterSnap: {
-          reason,
-          budgetTotalMinor: String(campaign.budgetTotalMinor),
-          budgetSpentMinor: String(campaign.budgetSpentMinor),
-          currency: campaign.currency,
-        },
-      });
-      return true;
+      return didPause;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Failed to auto-pause campaign ${campaign.id}: ${msg}`);

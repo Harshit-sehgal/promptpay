@@ -29,12 +29,16 @@ describe('CampaignSpendGuardCron', () => {
 
   beforeEach(() => {
     vi.spyOn(cronLease, 'acquireCronLease').mockResolvedValue(true);
-    audit = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
+    audit = {
+      log: vi.fn().mockResolvedValue(undefined),
+      logStrict: vi.fn().mockResolvedValue(undefined),
+    } as unknown as AuditService;
     prisma = {
       campaign: { findMany: vi.fn(), updateMany: vi.fn() },
       // Default: every advertiser is funded (5000 minor units). Tests that
       // exercise the unfunded branch override this mock per-test.
       advertiserLedger: { groupBy: vi.fn().mockResolvedValue(FUNDED_BALANCE_ROWS) },
+      $transaction: vi.fn((cb: (tx: any) => unknown) => cb(prisma)),
     };
     cron = new CampaignSpendGuardCron(prisma as unknown as PrismaService, audit);
   });
@@ -65,7 +69,10 @@ describe('CampaignSpendGuardCron', () => {
       where: { id: 'camp-1', status: 'active' },
       data: { status: 'paused', pausedAt: expect.any(Date) },
     });
-    expect(audit.log).toHaveBeenCalled();
+    expect(audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auto_pause_campaign', targetId: 'camp-1' }),
+      expect.anything(),
+    );
   });
 
   it('pauses campaigns whose advertiser has no funded balance', async () => {

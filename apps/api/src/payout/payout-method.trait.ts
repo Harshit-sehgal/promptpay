@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
@@ -14,7 +14,11 @@ import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { RUNTIME_CONFIG_KEYS } from '../runtime-config/runtime-config.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
-import { PayoutProviderHandler, StubPayoutProvider } from './payout.constants';
+import {
+  PayoutProviderHandler,
+  RESERVED_PAYOUT_STATUSES,
+  StubPayoutProvider,
+} from './payout.constants';
 import { StripeConnectPayoutProvider } from './providers';
 
 export class PayoutMethodTrait {
@@ -43,6 +47,25 @@ export class PayoutMethodTrait {
   ) {
     const { provider, destination, currency } = await this.normalizePayoutMethod(dto);
     const method = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Round 40: guard against deactivating a payout account that has
+      // in-flight payout requests (requested / under_review / approved /
+      // processing). Deactivating such an account permanently wedges those
+      // requests — processPayout will see isActive:false and refuse, but the
+      // allocations stay reserved and the developer has no API surface to
+      // restore the old account. Reject the swap and tell them which payouts
+      // to cancel first.
+      const inFlightCount = await tx.payoutRequest.count({
+        where: {
+          userId,
+          payoutAccount: { provider, isActive: true },
+          status: { in: RESERVED_PAYOUT_STATUSES },
+        },
+      });
+      if (inFlightCount > 0) {
+        throw new ConflictException(
+          `Cannot replace payout method: ${inFlightCount} active payout(s) still in progress for ${provider}. Wait for them to settle, or ask an admin to reject them first.`,
+        );
+      }
       // Deactivate the current active method and create the replacement atomically.
       // The DB enforces at most one active account per user/provider with a
       // partial unique index, while retaining any number of inactive historical
@@ -51,7 +74,7 @@ export class PayoutMethodTrait {
         where: { userId, provider, isActive: true },
         data: { isActive: false },
       });
-      return tx.payoutAccount.create({
+      const created = await tx.payoutAccount.create({
         data: {
           userId,
           provider,
@@ -59,15 +82,22 @@ export class PayoutMethodTrait {
           currency,
         },
       });
-    });
-    // Audit: payout method added (destination-change is security-relevant)
-    void this.audit.log({
-      actorId: userId,
-      actorRole: 'developer',
-      action: 'add_payout_method',
-      targetType: 'payout_account',
-      targetId: method.id,
-      beforeSnap: { provider, currency },
+      // Audit INSIDE the transaction: a payout destination change is a
+      // security-relevant money-flow gate. If the audit cannot be written the
+      // change must not commit, and if the transaction rolls back no audit
+      // row is left behind.
+      await this.audit.logStrict(
+        {
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'add_payout_method',
+          targetType: 'payout_account',
+          targetId: created.id,
+          beforeSnap: { provider, currency },
+        },
+        tx,
+      );
+      return created;
     });
     // Non-blocking fraud signal: shared payout destination across users
     void this.fraudService
@@ -138,9 +168,15 @@ export class PayoutMethodTrait {
       }
       return { provider, destination: destination.toLowerCase(), currency };
     }
-    if (provider === PayoutProvider.STRIPE_CONNECT && !/^acct_[A-Za-z0-9]+$/.test(destination)) {
+    if (provider === PayoutProvider.STRIPE_CONNECT) {
+      // Stripe Connect accounts must be created server-side via the onboarding
+      // flow (`createStripeConnectOnboarding`) to guarantee Stripe account
+      // ownership. Accepting an arbitrary `acct_*` string here would let any
+      // developer register someone else's Stripe Connected account as their
+      // payout destination — a direct money-steal vector once an admin later
+      // verifies it. (Round 37 provenance fix.)
       throw new BadRequestException(
-        'Stripe Connect payout destination must be a connected account id (acct_...)',
+        'Stripe Connect accounts must be added via the onboarding flow, not manually.',
       );
     }
     return { provider, destination, currency };
@@ -230,7 +266,7 @@ export class PayoutMethodTrait {
         where: { userId, provider: 'stripe_connect', isActive: true },
         data: { isActive: false },
       });
-      return tx.payoutAccount.create({
+      const created = await tx.payoutAccount.create({
         data: {
           userId,
           provider: 'stripe_connect',
@@ -239,16 +275,20 @@ export class PayoutMethodTrait {
           isVerified: false,
         },
       });
-    });
-
-    // Audit: a new payout destination was created.
-    void this.audit.log({
-      actorId: userId,
-      actorRole: 'developer',
-      action: 'add_payout_method',
-      targetType: 'payout_account',
-      targetId: accountId,
-      beforeSnap: { provider: 'stripe_connect', currency, pending: true },
+      // Audit INSIDE the transaction so a Stripe Connect onboarding record is
+      // only persisted together with its audit trail.
+      await this.audit.logStrict(
+        {
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'add_payout_method',
+          targetType: 'payout_account',
+          targetId: accountId,
+          beforeSnap: { provider: 'stripe_connect', currency, pending: true },
+        },
+        tx,
+      );
+      return created;
     });
 
     return { accountId, onboardingUrl };

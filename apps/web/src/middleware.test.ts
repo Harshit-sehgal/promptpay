@@ -2,7 +2,7 @@ import { importPKCS8, SignJWT } from 'jose';
 import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { proxy } from './proxy';
+import { middleware } from './middleware';
 
 // Test RSA key pair for RS256. These are low-security test keys only.
 const TEST_JWT_PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
@@ -85,7 +85,7 @@ function isRedirect(res: Response): boolean {
   return res.status === 307 || res.headers.get('location') !== null;
 }
 
-describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
+describe('protected-route middleware JWT_PUBLIC_KEY (A-016)', () => {
   const originalPublicKey = process.env.JWT_PUBLIC_KEY;
   const originalPublicKeys = process.env.JWT_PUBLIC_KEYS;
   const originalSecret = process.env.JWT_SECRET;
@@ -109,7 +109,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     process.env.JWT_PUBLIC_KEY = TEST_JWT_PUBLIC_KEY;
     process.env.JWT_SECRET = TEST_JWT_SECRET;
     const token = await makeToken();
-    const res = await proxy(makeReq(token));
+    const res = await middleware(makeReq(token));
     expect(isRedirect(res)).toBe(false);
   });
 
@@ -117,7 +117,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     process.env.JWT_PUBLIC_KEY = OTHER_JWT_PUBLIC_KEY;
     process.env.JWT_SECRET = TEST_JWT_SECRET;
     const token = await makeToken();
-    const res = await proxy(makeReq(token));
+    const res = await middleware(makeReq(token));
     expect(isRedirect(res)).toBe(true);
   });
 
@@ -126,7 +126,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     process.env.JWT_PUBLIC_KEYS = TEST_JWT_PUBLIC_KEY.replace(/\n/g, '\\n');
     const token = await makeToken();
 
-    const res = await proxy(makeReq(token));
+    const res = await middleware(makeReq(token));
 
     expect(isRedirect(res)).toBe(false);
   });
@@ -137,7 +137,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     const req = makeReq();
     req.cookies.set('__Host-refresh_token', await makeToken('refresh'));
 
-    const res = await proxy(req);
+    const res = await middleware(req);
 
     expect(isRedirect(res)).toBe(false);
   });
@@ -148,7 +148,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     process.env.JWT_AUDIENCE = 'waitlayer-production';
     const token = await makeToken('access', process.env.JWT_ISSUER, process.env.JWT_AUDIENCE);
 
-    const res = await proxy(makeReq(token));
+    const res = await middleware(makeReq(token));
 
     expect(isRedirect(res)).toBe(false);
   });
@@ -157,7 +157,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     delete process.env.JWT_PUBLIC_KEY;
     process.env.JWT_SECRET = TEST_JWT_SECRET;
     const token = await makeToken();
-    const res = await proxy(makeReq(token));
+    const res = await middleware(makeReq(token));
     expect(isRedirect(res)).toBe(true);
   });
 
@@ -166,7 +166,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     const req = new NextRequest(
       new URL('https://app.example/developer/earnings?status=confirmed&page=2'),
     );
-    const res = await proxy(req);
+    const res = await middleware(req);
     const location = new URL(res.headers.get('location') ?? 'https://app.example/auth/login');
 
     expect(location.pathname).toBe('/auth/login');
@@ -181,7 +181,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     const req = makeReq();
     // Attacker tries to satisfy the old "any refresh value passes" branch.
     req.cookies.set('__Host-refresh_token', 'forged-value');
-    const res = await proxy(req);
+    const res = await middleware(req);
     expect(isRedirect(res)).toBe(true);
   });
 
@@ -191,7 +191,7 @@ describe('protected-route proxy JWT_PUBLIC_KEY (A-016)', () => {
     const refresh = await makeToken('refresh'); // refresh-typed JWT works as refresh
     const req = makeReq();
     req.cookies.set('__Host-refresh_token', refresh);
-    const res = await proxy(req);
+    const res = await middleware(req);
     expect(isRedirect(res)).toBe(false);
   });
 });

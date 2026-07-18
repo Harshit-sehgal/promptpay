@@ -189,7 +189,7 @@ export const AdClickResponse = z.discriminatedUnion('clicked', [
 // Payout API Contracts
 // ══════════════════════════════════════════════════════════
 
-/** POST /api/v1/payout/method response */
+/** POST /api/v1/payout/method response — full PayoutAccount row shape */
 export const PayoutMethodResponse = z.object({
   id: z.string(),
   userId: z.string(),
@@ -198,6 +198,16 @@ export const PayoutMethodResponse = z.object({
   currency: z.string(),
   isVerified: z.boolean(),
   isActive: z.boolean(),
+  // Round 33 drift fix: PayoutAccount also carries a `isFrozen` /
+  // `initiationPayoutId` fence pair used by the payout-request lock (see
+  // `payout-request.trait.ts`). When a request is `processing`, the chosen
+  // account is fenced (`isFrozen=true`, `initiationPayoutId=request.id`) so
+  // a second concurrent request can't double-spend on the same destination.
+  // Expose them so the web payouts screen can render a "locked" badge and
+  // disable the form. Both are part of the persisted row from POST /method
+  // and GET /info, so the contract now matches what callers actually see.
+  isFrozen: z.boolean().optional(),
+  initiationPayoutId: z.string().nullable().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -229,6 +239,10 @@ export const PayoutRequestResponse = z.object({
   currency: z.string(),
   reviewerId: z.string().nullable().optional(),
   reviewNote: z.string().nullable().optional(),
+  // PayoutRequest carries an `idempotencyKey` added by migration
+  // 20260714030000 — surfaced in the full row returned by requestPayout and
+  // list payouts so the web client can check it for replay UX.
+  idempotencyKey: z.string().nullable().optional(),
   processedAt: z.string().nullable().optional(),
   paidAt: z.string().nullable().optional(),
   // NOTE: `providerTxId` and `failureReason` were previously listed here but
@@ -266,6 +280,14 @@ export const PayoutAvailableResponse = z.object({
   totalMinor: z.coerce.bigint().nonnegative(),
   currency: z.string(),
   count: z.number().nonnegative(),
+  // Round 33 drift fix: the payout summary returns `page`, `limit`, and
+  // `hasMore` (see `payout-summary.trait.ts getAvailableForPayout`) so the
+  // client can paginate without re-fetching the count. These were missing
+  // from the Zod contract — typed consumers silently lost the pagination
+  // boundary. Now declared explicitly.
+  page: z.number().int().positive().optional(),
+  limit: z.number().int().positive().optional(),
+  hasMore: z.boolean().optional(),
   totalsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
 });
 
@@ -295,6 +317,58 @@ export const LedgerBalanceResponse = z.object({
     currency: z.string(),
     byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
+});
+
+/** GET /api/v1/developer/dashboard response
+ *
+ * Round 33 drift fix: the developer dashboard shape was previously
+ * hand-rolled in two places (web `DashboardData` interface and CLI
+ * `getOverview` raw type), with no canonical Zod contract bridging
+ * server and client. Field renames (e.g. Round 32's
+ * `availableForPayout` → `availableForPayoutMinor`,
+ * `recoveryDebt` → `recoveryDebtMinor`) drifted silently — the web
+ * consumer had to be edited separately from the API service. This
+ * contract pins the full server-returned shape (see
+ * `apps/api/src/developer/developer.service.ts getDashboard`) so a
+ * server field rename breaks the contract test rather than corrupting
+ * the web stats page.
+ */
+export const DeveloperDashboardResponse = z.object({
+  // Per-currency scalars — the primary-currency scalar for each metric.
+  // Renames here must be reflected in the consumer's `coerceBigInts`
+  // suffix rule (`Minor` suffix auto-coerces from decimal strings).
+  estimatedEarnings: z.coerce.bigint().nonnegative(),
+  confirmedEarnings: z.coerce.bigint().nonnegative(),
+  pendingEarnings: z.coerce.bigint().nonnegative(),
+  heldEarnings: z.coerce.bigint().nonnegative(),
+  reversedEarnings: z.coerce.bigint().nonnegative(),
+  recoveryDebtMinor: z.coerce.bigint().nonnegative(),
+  availableForPayoutMinor: z.coerce.bigint().nonnegative(),
+  lifetimeEarnings: z.coerce.bigint().nonnegative(),
+  // Per-currency maps — `Record<currency, bigint>` for every dimension.
+  estimatedEarningsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  confirmedEarningsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  pendingEarningsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  heldEarningsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  reversedEarningsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  recoveryDebtByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  availableForPayoutByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  lifetimeEarningsByCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
+  // Trust + payout status block.
+  trustLevel: TrustLevelSchema,
+  payoutHoldStatus: z.object({
+    isHeld: z.boolean(),
+    reason: z.string().optional(),
+  }),
+  // User settings snapshot (ads enable flag, quiet mode, hourly cap).
+  settings: z.object({
+    adsEnabled: z.boolean(),
+    quietMode: z.boolean(),
+    quietModeStart: z.string().nullable().optional(),
+    quietModeEnd: z.string().nullable().optional(),
+    maxAdsPerHour: z.number().int().nonnegative(),
+  }),
+  trustScore: z.number().int().min(0).max(100),
 });
 
 // ══════════════════════════════════════════════════════════

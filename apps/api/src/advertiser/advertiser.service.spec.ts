@@ -24,6 +24,7 @@ function makePrisma() {
       findMany: vi.fn(),
       updateMany: vi.fn(),
       update: vi.fn(),
+      create: vi.fn(),
       count: vi.fn(),
     },
     adImpression: {
@@ -87,8 +88,13 @@ function prepareErasureMocks(prisma: ReturnType<typeof makePrisma>) {
 }
 
 function makeService(prisma: ReturnType<typeof makePrisma>) {
-  const audit = { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService;
-  const campaignService = {} as unknown as CampaignService;
+  const audit = {
+    log: vi.fn().mockResolvedValue(undefined),
+    logStrict: vi.fn().mockResolvedValue(undefined),
+  } as unknown as AuditService;
+  const campaignService = {
+    validateCampaignCategory: vi.fn().mockResolvedValue(undefined),
+  } as unknown as CampaignService;
   const googleVerifier = { verify: vi.fn() } as unknown as GoogleTokenVerifier;
   const runtimeConfig = createMockRuntimeConfig();
   return new AdvertiserService(
@@ -403,6 +409,42 @@ describe('AdvertiserService.getReports pagination + range bounds (A-032)', () =>
   });
 });
 
+describe('AdvertiserService.createCampaign audit emission', () => {
+  it('creates a campaign and emits the audit inside the same transaction', async () => {
+    const prisma = makePrisma();
+    const service = makeService(prisma);
+    prisma.campaign.create.mockResolvedValue({
+      id: 'c-new',
+      advertiserId: 'adv-1',
+      name: 'New Campaign',
+      category: 'tech',
+      bidType: 'cpm',
+      bidAmountMinor: 200n,
+      budgetTotalMinor: 10_000n,
+      currency: 'USD',
+    });
+
+    const result = await service.createCampaign('adv-1', {
+      name: 'New Campaign',
+      category: 'tech',
+      bidType: 'cpm',
+      bidAmountMinor: 200n,
+      budgetTotalMinor: 10_000n,
+      currency: 'USD',
+    });
+
+    expect(result.id).toBe('c-new');
+    expect(service.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'create_campaign',
+        targetId: 'c-new',
+        targetType: 'campaign',
+      }),
+      expect.anything(),
+    );
+  });
+});
+
 describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
   let prisma: ReturnType<typeof makePrisma>;
   let service: AdvertiserService;
@@ -422,7 +464,7 @@ describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
     expect(prisma.campaign.updateMany).not.toHaveBeenCalled();
   });
 
-  it('pauseCampaign transitions ACTIVE -> PAUSED', async () => {
+  it('pauseCampaign transitions ACTIVE -> PAUSED and emits audit inside transaction', async () => {
     prisma.campaign.findUnique.mockResolvedValue({
       id: 'c1',
       advertiserId: 'adv-1',
@@ -434,6 +476,10 @@ describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
       .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'paused' });
     const res = await service.pauseCampaign('c1', 'adv-1');
     expect(res.status).toBe('paused');
+    expect(service.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'pause_campaign', targetId: 'c1' }),
+      expect.anything(),
+    );
   });
 
   it('resumeCampaign only accepts PAUSED (rejects ACTIVE)', async () => {
@@ -447,7 +493,7 @@ describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
     await expect(service.resumeCampaign('c1', 'adv-1')).rejects.toThrow(BadRequestException);
   });
 
-  it('resumeCampaign transitions PAUSED -> ACTIVE with approved creative + funded balance', async () => {
+  it('resumeCampaign transitions PAUSED -> ACTIVE with approved creative + funded balance and emits audit inside transaction', async () => {
     prisma.campaign.findUnique.mockResolvedValue({
       id: 'c1',
       advertiserId: 'adv-1',
@@ -471,23 +517,32 @@ describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
       .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'active' });
     const res = await service.resumeCampaign('c1', 'adv-1');
     expect(res.status).toBe('active');
+    expect(service.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'resume_campaign', targetId: 'c1' }),
+      expect.anything(),
+    );
   });
 
-  it('updateCampaign edits a DRAFT campaign (A-021)', async () => {
+  it('updateCampaign edits a DRAFT campaign and emits audit inside transaction (A-021)', async () => {
     prisma.campaign.findUnique.mockResolvedValue({
       id: 'c1',
       advertiserId: 'adv-1',
       status: 'draft',
+      currency: 'USD',
     });
     prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
     prisma.campaign.findUnique
-      .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'draft' })
-      .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'draft' });
+      .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'draft', currency: 'USD' })
+      .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'draft', currency: 'USD' });
     await service.updateCampaign('c1', 'adv-1', { name: 'edited' });
     expect(prisma.campaign.updateMany).toHaveBeenCalled();
+    expect(service.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'update_campaign', targetId: 'c1' }),
+      expect.anything(),
+    );
   });
 
-  it('submitCampaign transitions DRAFT -> SUBMITTED (A-021)', async () => {
+  it('submitCampaign transitions DRAFT -> SUBMITTED and emits audit inside transaction (A-021)', async () => {
     prisma.campaign.findUnique
       .mockResolvedValueOnce({
         id: 'c1',
@@ -500,15 +555,23 @@ describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
     prisma.adCreative.updateMany.mockResolvedValue({ count: 1 });
     const submitted = await service.submitCampaign('c1', 'adv-1');
     expect(submitted.status).toBe('submitted');
+    expect(service.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'submit_campaign', targetId: 'c1' }),
+      expect.anything(),
+    );
   });
 
-  it('resetCampaignToDraft transitions REJECTED -> DRAFT (A-021)', async () => {
+  it('resetCampaignToDraft transitions REJECTED -> DRAFT and emits audit inside transaction (A-021)', async () => {
     prisma.campaign.findUnique
       .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'rejected' })
       .mockResolvedValueOnce({ id: 'c1', advertiserId: 'adv-1', status: 'draft' });
     prisma.campaign.updateMany.mockResolvedValue({ count: 1 });
     const reset = await service.resetCampaignToDraft('c1', 'adv-1');
     expect(reset.status).toBe('draft');
+    expect(service.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'reset_campaign_to_draft', targetId: 'c1' }),
+      expect.anything(),
+    );
   });
 
   it('resubmit after reset: submitCampaign on a DRAFT created by reset (A-021)', async () => {
@@ -660,12 +723,12 @@ describe('AdvertiserService.updateCampaign currency (A-081)', () => {
         currency: 'JPY',
         budgetTotalMinor: 4_999n,
       }),
-    ).rejects.toThrow('¥5,000');
+    ).rejects.toThrow('¥7,500');
   });
 });
 
 describe('AdvertiserService.archiveCampaign reservation settlement', () => {
-  it('releases in-flight reservations without inventing a campaign-level cash refund', async () => {
+  it('releases in-flight reservations without inventing a campaign-level cash refund and emits audit inside transaction', async () => {
     const prisma = makePrisma();
     const service = makeService(prisma);
     const campaign = {
@@ -696,5 +759,9 @@ describe('AdvertiserService.archiveCampaign reservation settlement', () => {
     });
     expect(prisma.advertiserLedger.create).not.toHaveBeenCalled();
     expect(result).toMatchObject({ archived: true, refundEntry: null });
+    expect(service.audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'archive_campaign', targetId: 'c1' }),
+      expect.anything(),
+    );
   });
 });

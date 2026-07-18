@@ -368,6 +368,55 @@ describe('FraudService', () => {
       expect(mockLedger.reverseEarnings).not.toHaveBeenCalled();
     });
 
+    it('Round 36: forfeits all held earnings for a confirmed behavioral critical flag (no impressionId/clickId)', async () => {
+      // SHARED_PAYOUT_DESTINATION / IMPOSSIBLE_VOLUME / SELF_CLICKING have no
+      // single entity reference. Before Round 36, resolving these isValid=true
+      // hit neither the reverseEarnings branch (needs clickId/impressionId) nor
+      // the releaseEarnings branch (needs !isValid) → held rows stranded forever.
+      // Now they flip to `reversed` under the per-hold-by-flagId scope.
+      mockPrisma.fraudFlag.findUnique.mockResolvedValue({
+        id: 'flag-behavioral',
+        userId: 'u-1',
+        clickId: null,
+        impressionId: null,
+        flagType: 'SHARED_PAYOUT_DESTINATION',
+        severity: 'critical',
+        status: 'open',
+      });
+      mockPrisma.fraudFlag.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.user.findUnique.mockResolvedValue(
+        mockUserWithFlags({
+          emailVerified: true,
+          createdAt: new Date(Date.now() - 90 * 24 * 3600_000),
+        }),
+      );
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 50 });
+
+      const result = await service.resolveFlag(
+        'flag-behavioral',
+        'rev-adm',
+        true,
+        'Confirmed behavioral fraud',
+      );
+      expect(result.isValid).toBe(true);
+
+      // The held-by-this-flag earnings rows must be flipped to `reversed` so
+      // they leave the held limbo (otherwise the developer's payout balance is
+      // permanently frozen with no admin recovery path).
+      expect(mockPrisma.earningsLedger.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u-1', heldByFlagId: 'flag-behavioral', status: 'held' },
+        data: expect.objectContaining({
+          status: 'reversed',
+          heldByFlagId: null,
+        }),
+      });
+      // reverseEarnings must NOT be called — there is no entity reference.
+      expect(mockLedger.reverseEarnings).not.toHaveBeenCalled();
+      // releaseEarnings is for the !isValid (cleared) branch, not used here.
+      expect(mockLedger.releaseEarnings).not.toHaveBeenCalled();
+    });
+
     it('allows a senior reviewer to resolve an escalated flag', async () => {
       mockPrisma.fraudFlag.findUnique.mockResolvedValue({
         id: 'flag-escalated',

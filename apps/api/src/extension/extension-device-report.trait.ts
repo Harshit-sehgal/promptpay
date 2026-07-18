@@ -434,31 +434,48 @@ export class ExtensionDeviceReportTrait {
     // retried even after isBillable was already flipped false. The old guard on
     // the snapshot value permanently skipped compensation when the first
     // reversal attempt failed after the report transaction committed.
-    const existingReport = await this.prisma.adReport.findFirst({
-      where: { impressionId: impression.id, userId },
-      orderBy: { createdAt: 'asc' },
+    // Round 40: AdReport now has @@unique([impressionId, userId]). The
+    // old findFirst + conditional create raced on concurrent reportAd →
+    // both inserts succeeded (no unique guard), creating duplicate rows.
+    // Now wrap in try/catch for P2002: the DB unique is the floor.
+    // ReverseEarnings is already idempotent (deterministic reversal-key
+    // upsert), so money is safe regardless.
+    let report = await this.prisma.adReport.findUnique({
+      where: { impressionId_userId: { impressionId: impression.id, userId } },
     });
-    let report = existingReport;
     if (!report) {
-      [report] = await this.prisma.$transaction([
-        this.prisma.adReport.create({
-          data: {
-            impressionId: impression.id,
-            creativeId: impression.creativeId,
-            userId,
-            reason: dto.reason,
-            details: dto.details,
-          },
-        }),
-        this.prisma.adImpression.update({
-          where: { id: impression.id },
-          data: {
-            isBillable: false,
-            invalidationReason: `user_reported:${dto.reason}`,
-            invalidatedAt: new Date(),
-          },
-        }),
-      ]);
+      try {
+        [report] = await this.prisma.$transaction([
+          this.prisma.adReport.create({
+            data: {
+              impressionId: impression.id,
+              creativeId: impression.creativeId,
+              userId,
+              reason: dto.reason,
+              details: dto.details,
+            },
+          }),
+          this.prisma.adImpression.update({
+            where: { id: impression.id },
+            data: {
+              isBillable: false,
+              invalidationReason: `user_reported:${dto.reason}`,
+              invalidatedAt: new Date(),
+            },
+          }),
+        ]);
+      } catch (err: unknown) {
+        // P2002: concurrent round(40) — reportAd already created a row for
+        // this (impressionId, userId) — re-read the winner and proceed
+        // with the reversal (idempotent).
+        if (err && typeof err === 'object' && (err as { code?: string }).code === 'P2002') {
+          report = await this.prisma.adReport.findUniqueOrThrow({
+            where: { impressionId_userId: { impressionId: impression.id, userId } },
+          });
+        } else {
+          throw err;
+        }
+      }
     }
     // Always attempt the deterministic reversal. A reported-but-never-billed
     // impression has no forward ledger rows, making this a safe no-op. Paid

@@ -60,14 +60,14 @@ export class ComplianceService {
         throw new BadRequestException('Consent metadata is not a valid JSON value');
       }
     }
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user-consent:${userId}:${purpose}`}))`;
       const existing = await tx.consent.findFirst({
         where: { userId, purpose },
         orderBy: { createdAt: 'desc' },
       });
       if (existing && existing.granted === granted && existing.version === version) {
-        return { row: existing, changed: false as const };
+        return existing;
       }
       const count = await tx.consent.count({ where: { userId, purpose } });
       if (count >= MAX_CONSENT_EVENTS_PER_PURPOSE) {
@@ -78,18 +78,20 @@ export class ComplianceService {
       const row = await tx.consent.create({
         data: { userId, purpose, version, granted, metadata: metadata as object | undefined },
       });
-      return { row, changed: true as const };
+      // Consent rows are legal evidence; the audit must be part of the same
+      // transaction so a rolled-back consent never leaves a success record.
+      await this.audit.logStrict(
+        {
+          actorId: userId,
+          actorRole,
+          action: granted ? 'consent_granted' : 'consent_revoked',
+          targetType: 'consent',
+          targetId: row.id,
+        },
+        tx,
+      );
+      return row;
     });
-    if (result.changed) {
-      void this.audit.log({
-        actorId: userId,
-        actorRole,
-        action: granted ? 'consent_granted' : 'consent_revoked',
-        targetType: 'consent',
-        targetId: result.row.id,
-      });
-    }
-    return result.row;
   }
 
   /**
@@ -124,7 +126,7 @@ export class ComplianceService {
     }
     const version = currentVersion;
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       // Serialize the logical visitor+purpose stream. A transaction without
       // this lock does not make find-then-create safe at READ COMMITTED: two
       // concurrent choices could both observe no current row and append the
@@ -139,7 +141,7 @@ export class ComplianceService {
       // revoke → grant remains a legally useful history rather than mutating
       // the original evidence row in place.
       if (existing && existing.granted === granted && existing.version === version) {
-        return { row: existing, changed: false as const };
+        return existing;
       }
       const row = await tx.consent.create({
         data: {
@@ -151,19 +153,20 @@ export class ComplianceService {
           metadata: { method: 'anonymous_cookie' },
         },
       });
-      return { row, changed: true as const };
+      // Consent rows are legal evidence; the audit must be part of the same
+      // transaction so a rolled-back consent never leaves a success record.
+      await this.audit.logStrict(
+        {
+          actorId: 'anonymous',
+          actorRole: 'anonymous',
+          action: granted ? 'consent_granted' : 'consent_revoked',
+          targetType: 'consent',
+          targetId: row.id,
+        },
+        tx,
+      );
+      return row;
     });
-
-    if (result.changed) {
-      void this.audit.log({
-        actorId: 'anonymous',
-        actorRole: 'anonymous',
-        action: granted ? 'consent_granted' : 'consent_revoked',
-        targetType: 'consent',
-        targetId: result.row.id,
-      });
-    }
-    return result.row;
   }
 
   async getConsent(userId: string, purpose: string) {
@@ -256,8 +259,8 @@ export class ComplianceService {
     retainDays: number | null | undefined,
   ): Promise<number> {
     if (retainDays === null || retainDays === undefined) return 0;
-    if (!Number.isInteger(retainDays) || retainDays < 0) {
-      throw new Error(`Invalid retention window for ${category}: retainDays must be non-negative`);
+    if (!Number.isInteger(retainDays) || retainDays <= 0) {
+      throw new Error(`Invalid retention window for ${category}: retainDays must be positive`);
     }
     if (category === 'export_cache') return 0;
     if (!['webhook_events', 'audit_logs', 'sessions'].includes(category)) {

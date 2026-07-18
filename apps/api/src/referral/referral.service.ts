@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { Prisma } from '@waitlayer/db';
 import { primaryCurrency, REFERRAL } from '@waitlayer/shared';
 
 import { isUniqueConstraintViolation } from '../common/utils/errors';
@@ -298,6 +299,134 @@ export class ReferralService {
         });
     }
     return result;
+  }
+
+  /**
+   * Reverse a single referral reward.
+   *
+   * Round 36: processReferralRewards writes three rows (platformLedger credit in
+   * bucket `referral_bonus`, a `referralReward`, and an `earningsLedger` credit)
+   * but no code path ever reversed them — a banned/confirmed-fraud referrer kept
+   * the bonus forever because `reverseEarnings` is keyed on impressionId/clickId
+   * which referral earnings rows never carry. This method is the missing inverse:
+   * it flips the `referralReward` to `reversed`, writes a compensating
+   * `platformLedger` reversal in the `referral_bonus` bucket, and flips the
+   * matching `earningsLedger` credit to `reversed`.
+   *
+   * All three writes are idempotent on their statuses / unique idempotency keys,
+   * so a repeated call (or a concurrent one) is a clean no-op. If the earnings row
+   * already flowed to `paid` (payout already settled), the credit cannot be
+   * clawed back by a status flip; the row is left untouched and the caller should
+   * surface the `paidSkipped` count to route the user into recovery-debt instead.
+   *
+   * Accepts an optional transaction client so fraud resolution can reverse the
+   * referral reward inside the same locked transaction as the flag flip.
+   */
+  async reverseReferralReward(
+    referralId: string,
+    reason: string,
+    transactionClient?: Prisma.TransactionClient,
+  ): Promise<{ reversed: number; paidSkipped: number }> {
+    const execute = async (tx: Prisma.TransactionClient) => {
+      // 1. Flip the referralReward row(s) to `reversed` (CAS on non-terminal
+      //    status). The @@unique([referralId]) guarantees at most one reward.
+      const rewardFlip = await tx.referralReward.updateMany({
+        where: { referralId, status: 'confirmed' },
+        data: { status: 'reversed' },
+      });
+      if (rewardFlip.count === 0) {
+        // Either no reward was ever created for this referral, or it was already
+        // reversed. Idempotent no-op — nothing to compensate.
+        return { reversed: 0, paidSkipped: 0 };
+      }
+
+      // 2. Read the matching earningsLedger credit to recover the canonical
+      //    amountMinor + currency (the reward row and earnings row share the
+      //    same value by construction). Rows already `paid` cannot be clawed
+      //    back by a status flip — surface that as paidSkipped for recovery-debt.
+      const earningsRow = await tx.earningsLedger.findUnique({
+        where: { idempotencyKey: `ref-rew-earn-${referralId}` },
+      });
+      let paidSkipped = 0;
+      if (earningsRow) {
+        if (earningsRow.status === 'paid') {
+          paidSkipped = 1;
+        } else {
+          // Flip confirmed / held / pending / estimated → reversed.
+          await tx.earningsLedger.update({
+            where: { id: earningsRow.id },
+            data: {
+              status: 'reversed',
+              heldByFlagId: null,
+              description: `Reversed: ${reason}`,
+            },
+          });
+        }
+      }
+
+      // 3. Compensating platformLedger reversal in the referral_bonus bucket —
+      //    zeroes out the credit written at reward time so the referral_bonus
+      //    bucket net returns to its pre-reward balance. Idempotent via a
+      //    deterministic `-rev` idempotency key (P2002 caught). Written once
+      //    with the real amountMinor; if there is no earnings row to mirror (a
+      //    defensive branch that shouldn't happen given rewardFlip.count > 0),
+      //    a 0n reversal keeps the bucket accounting-neutral and waits on the
+      //    idempotency floor for any future correction.
+      const reversalAmount = earningsRow?.amountMinor ?? 0n;
+      const reversalCurrency = earningsRow?.currency ?? REFERRAL.CURRENCY;
+      const platKey = `ref-rew-${referralId}-rev`;
+      try {
+        await tx.platformLedger.create({
+          data: {
+            entryType: 'reversal',
+            status: 'confirmed',
+            amountMinor: reversalAmount,
+            currency: reversalCurrency,
+            bucket: 'referral_bonus',
+            referenceId: referralId,
+            idempotencyKey: platKey,
+            description: `Referral reward reversed: ${reason}`,
+          },
+        });
+      } catch (err: unknown) {
+        if (!isUniqueConstraintViolation(err)) throw err;
+      }
+
+      return { reversed: rewardFlip.count, paidSkipped };
+    };
+
+    if (transactionClient) return execute(transactionClient);
+    return this.prisma.$transaction(execute);
+  }
+
+  /**
+   * Reverse every non-terminal referral reward credited to a user (referrer).
+   * The entry point for fraud/ban: when a referrer is confirmed fraudulent or
+   * banned, claw back ALL their outstanding referral bonuses atomically.
+   * Returns the aggregate `{ reversed, paidSkipped }` so the caller can surface
+   * any payouts that already settled (those become recovery-debt cases).
+   */
+  async reverseAllReferralRewardsForUser(
+    referrerUserId: string,
+    reason: string,
+    transactionClient?: Prisma.TransactionClient,
+  ): Promise<{ reversed: number; paidSkipped: number }> {
+    const execute = async (tx: Prisma.TransactionClient) => {
+      const rewards = await tx.referralReward.findMany({
+        where: { userId: referrerUserId, status: 'confirmed' },
+        select: { referralId: true },
+      });
+      let reversed = 0;
+      let paidSkipped = 0;
+      for (const r of rewards) {
+        const res = await this.reverseReferralReward(r.referralId, reason, tx);
+        reversed += res.reversed;
+        paidSkipped += res.paidSkipped;
+      }
+      return { reversed, paidSkipped };
+    };
+    if (transactionClient) return execute(transactionClient);
+    return this.prisma.$transaction(execute);
   }
 
   /** Bounded retry worker for paid users whose first-payout reward is pending. */

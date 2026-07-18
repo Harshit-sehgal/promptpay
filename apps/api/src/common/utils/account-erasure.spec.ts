@@ -16,6 +16,7 @@ function makePrisma() {
     },
     earningsLedger: {
       aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
+      groupBy: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue(null),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
@@ -28,6 +29,9 @@ function makePrisma() {
     advertiserLedger: {
       groupBy: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue(null),
+    },
+    platformLedger: {
+      create: vi.fn().mockResolvedValue({}),
     },
     campaign: {
       findFirst: vi.fn().mockResolvedValue(null),
@@ -188,5 +192,49 @@ describe('eraseAccountIdentity', () => {
       /blocked while.*earnings remain.*forfeitBalance=true/,
     );
     expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('emits a delete_account audit inside the transaction when audit service is provided', async () => {
+    const { prisma, tx } = makePrisma();
+    tx.advertiser.findUnique.mockResolvedValue({ id: 'adv-1' } as never);
+    const audit = {
+      logStrict: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await eraseAccountIdentity(prisma, 'user-1', { forfeitBalance: false }, audit as any, {
+      actorId: 'user-1',
+      actorRole: 'developer',
+      action: 'delete_account',
+    });
+
+    expect(audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'user-1',
+        actorRole: 'developer',
+        action: 'delete_account',
+        targetType: 'user',
+        targetId: 'user-1',
+        beforeSnap: { priorEmail: 'person@example.com', status: 'active' },
+      }),
+      expect.anything(),
+    );
+    // Ensure the audit was written AFTER the user was marked deleted.
+    expect(tx.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'user-1' } }),
+    );
+    expect(audit.logStrict).toHaveBeenCalled();
+  });
+
+  it('does not emit an audit when no audit service is provided', async () => {
+    const { prisma, tx } = makePrisma();
+    tx.advertiser.findUnique.mockResolvedValue({ id: 'adv-1' } as never);
+    const audit = {
+      logStrict: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await eraseAccountIdentity(prisma, 'user-1');
+
+    expect(audit.logStrict).not.toHaveBeenCalled();
+    expect(tx.user.update).toHaveBeenCalled();
   });
 });

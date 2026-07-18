@@ -91,10 +91,10 @@ vi.mock('../src/status-bar', () => ({
 import { activate } from '../src/extension';
 
 const zeroBalance = {
-  available: { amountMinor: 0, currency: 'USD' },
-  pending: { amountMinor: 0, currency: 'USD' },
-  total: { amountMinor: 0, currency: 'USD' },
-  paidOut: { amountMinor: 0, currency: 'USD' },
+  available: { amountMinor: 0n, currency: 'USD' },
+  pending: { amountMinor: 0n, currency: 'USD' },
+  total: { amountMinor: 0n, currency: 'USD' },
+  paidOut: { amountMinor: 0n, currency: 'USD' },
 };
 
 function makeContext(): vscode.ExtensionContext {
@@ -141,11 +141,11 @@ describe('extension auth commands', () => {
     expect(mock.status.setEarnings).not.toHaveBeenCalled();
     balance.resolve({
       ...zeroBalance,
-      available: { amountMinor: 950, currency: 'EUR' },
+      available: { amountMinor: 950n, currency: 'EUR' },
     });
     await commandPromise;
 
-    expect(mock.status.setEarnings).toHaveBeenCalledWith(950, 'EUR');
+    expect(mock.status.setEarnings).toHaveBeenCalledWith(950n, 'EUR');
   });
 
   it('switches the status bar to logged out when logout completes', async () => {

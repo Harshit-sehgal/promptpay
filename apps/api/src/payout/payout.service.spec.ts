@@ -3,69 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
-import { AuditService } from '../audit/audit.service';
-import { LedgerService } from '../ledger/ledger.service';
-import { ReferralService } from '../referral/referral.service';
-import { PayoutService } from './payout.service';
-
-function makePayoutService(prismaOverrides: Record<string, unknown> = {}, require2fa = false) {
-  const prisma = {
-    user: {
-      findUnique: vi.fn().mockResolvedValue({
-        id: 'u1',
-        status: 'active',
-        emailVerified: true,
-        twoFactorEnabled: false,
-      }),
-    },
-    earningsLedger: {
-      // available = confirmed credits − confirmed debits − allocated. Mock the
-      // real credit/debit semantics so the verification guard (not the
-      // insufficient-earnings guard) is the one under test.
-      aggregate: vi.fn((args: { where?: { entryType?: string } }) => {
-        if (args?.where?.entryType === 'debit') {
-          return Promise.resolve({ _sum: { amountMinor: 0n } });
-        }
-        return Promise.resolve({ _sum: { amountMinor: 10_00n } });
-      }),
-    },
-    payoutAllocation: {
-      aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
-    },
-    fraudFlag: { count: vi.fn().mockResolvedValue(0) },
-    payoutAccount: {
-      findUnique: vi.fn(),
-      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-    },
-    $executeRaw: vi.fn().mockResolvedValue(1),
-    $queryRaw: vi.fn().mockResolvedValue([]),
-    $transaction: vi.fn((cb: (tx: unknown) => Promise<unknown>) => cb(prisma)),
-    ...prismaOverrides,
-  };
-  const config = {
-    get: vi.fn((key: string) =>
-      key === 'PAYOUT_REQUIRE_2FA' ? (require2fa ? 'true' : undefined) : undefined,
-    ),
-  } as unknown as ConstructorParameters<typeof PayoutService>[4];
-  const referral = { processReferralRewards: vi.fn().mockResolvedValue(undefined) };
-  const runtimeConfig = {
-    isPayoutRequestsEnabled: vi.fn().mockResolvedValue(true),
-    isProviderEnabled: vi.fn().mockResolvedValue(true),
-    isCurrencyAllowed: vi.fn().mockResolvedValue(true),
-  };
-  const service = new PayoutService(
-    prisma as never,
-    {} as LedgerService,
-    referral as unknown as ReferralService,
-    { log: vi.fn().mockResolvedValue(undefined) } as unknown as AuditService,
-    config,
-    {} as never,
-    {} as never,
-    {} as never,
-    runtimeConfig as never,
-  );
-  return { prisma, service };
-}
+import { makePayoutService } from './test/payout-test-helper';
 
 describe('PayoutService.requestPayout payout-account verification', () => {
   it('rejects a payout to an unverified destination', async () => {
@@ -824,6 +762,457 @@ describe('PayoutService.processPayout partial approvals', () => {
       },
     });
   });
+
+  it('rolls back the partial-approval split when a concurrent fraud hold flips the earnings entry (#9)', async () => {
+    // A partial approval (approved 600 of requested 1000) tries to split the
+    // earnings row. The CAS retire is gated on `status: 'confirmed'`; a
+    // concurrent holdEarnings (fraud service) flips the row to 'held', so
+    // updateMany returns count===0. processPayout must throw "concurrently
+    // modified" and the whole tx — including the approved→processing claim —
+    // rolls back, so the payout stays recoverable and the hold is NOT
+    // overwritten. The provider is never called.
+    const payoutAccount = {
+      id: 'acc1',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+      isFrozen: false,
+    };
+    const earningsEntry = {
+      id: 'earn-1',
+      userId: 'u1',
+      campaignId: 'camp-1',
+      impressionId: 'imp-1',
+      clickId: null,
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 1000n,
+      currency: 'USD',
+      availableAt: new Date('2026-07-09T00:00:00.000Z'),
+      description: 'Original earning',
+    };
+    const allocation = {
+      id: 'alloc-1',
+      payoutRequestId: 'payout-1',
+      earningsEntryId: earningsEntry.id,
+      amountMinor: 1000n,
+      earningsEntry,
+    };
+    const payoutForProcessing = {
+      id: 'payout-1',
+      userId: 'u1',
+      user: { status: 'active' },
+      payoutAccount,
+      status: 'processing',
+      requestedAmountMinor: 1000,
+      approvedAmountMinor: 600,
+      currency: 'USD',
+      allocations: [allocation],
+    };
+    const providerInitiate = vi.fn();
+    const { service, prisma } = makePayoutService({
+      payoutRequest: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'payout-1', status: 'approved', payoutAccount })
+          .mockResolvedValueOnce(payoutForProcessing),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      payoutAllocation: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
+        delete: vi.fn(),
+        update: vi.fn(),
+      },
+      earningsLedger: {
+        findUnique: vi.fn().mockResolvedValue(earningsEntry),
+        // CAS retire fails: a concurrent fraud hold flipped the row to 'held'.
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn(),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      payoutTransaction: {
+        create: vi.fn(),
+        updateMany: vi.fn(),
+      },
+    });
+    (service as unknown as { providers: Record<string, unknown> }).providers = {
+      manual: { readiness: () => ({ ok: true }), initiate: providerInitiate },
+    };
+
+    await expect(service.processPayout('payout-1')).rejects.toThrow('concurrently modified');
+    // The provider was never called: the tx rolled back before provider I/O.
+    expect(providerInitiate).not.toHaveBeenCalled();
+    // No new earnings rows were created (the split did not complete).
+    expect(prisma.earningsLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('eligibility query filters to confirmed status so only the remainder row is allocated', async () => {
+    // After a partial approval split, the original earnings entry is retired
+    // to 'reversed' and a remainder row is created as 'confirmed'. The eligibility
+    // query in allocatePayoutEarnings filters by status: 'confirmed', so the
+    // reversed original is excluded at the database layer and only the remainder
+    // can be allocated.
+    const payoutAccount = {
+      id: 'acc1',
+      userId: 'u1',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+      isFrozen: false,
+      currency: 'USD',
+      createdAt: new Date(),
+    };
+    const remainderEntry = {
+      id: 'earn-remainder',
+      userId: 'u1',
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 1000n,
+      currency: 'USD',
+      availableAt: new Date('2026-07-09T00:00:00.000Z'),
+      description: 'Payout partial-approval remainder',
+    };
+
+    const { prisma, service } = makePayoutService({
+      payoutAccount: { findUnique: vi.fn().mockResolvedValue(payoutAccount) },
+      earningsLedger: {
+        findMany: vi.fn().mockResolvedValue([remainderEntry]),
+        findUnique: vi.fn().mockResolvedValue(remainderEntry),
+        aggregate: vi.fn((args: { where?: { entryType?: string } }) => {
+          if (args?.where?.entryType === 'debit') {
+            return Promise.resolve({ _sum: { amountMinor: 0n } });
+          }
+          return Promise.resolve({ _sum: { amountMinor: 1000n } });
+        }),
+        update: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi.fn(),
+      },
+      payoutAllocation: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
+        create: vi.fn(),
+      },
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'payout-2',
+          status: 'requested',
+          requestedAmountMinor: 1000n,
+          approvedAmountMinor: null,
+          currency: 'USD',
+          allocations: [],
+        }),
+        create: vi.fn().mockResolvedValue({
+          id: 'payout-2',
+          userId: 'u1',
+          payoutAccountId: 'acc1',
+          status: 'requested',
+          requestedAmountMinor: 1000n,
+          currency: 'USD',
+          allocations: [],
+        }),
+      },
+    });
+
+    await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+    });
+
+    // The eligibility query filters to confirmed entries, so the reversed
+    // original is excluded at the database layer.
+    expect(prisma.earningsLedger.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'u1',
+          status: 'confirmed',
+          entryType: 'credit',
+          currency: 'USD',
+        }),
+      }),
+    );
+    // Only the confirmed remainder is allocated.
+    expect(prisma.payoutAllocation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payoutRequestId: 'payout-2',
+        earningsEntryId: 'earn-remainder',
+        amountMinor: 1000n,
+      }),
+    });
+  });
+
+  it('can re-allocate the unpaid remainder in a subsequent payout request', async () => {
+    // After a partial approval split, the remainder row must be eligible for a
+    // new payout. We simulate the post-split state: the original entry is
+    // reversed, the paid slice is allocated to the first payout, and the
+    // remainder row is confirmed. A new requestPayout for the remainder amount
+    // must succeed and allocate the remainder row.
+    const payoutAccount = {
+      id: 'acc1',
+      userId: 'u1',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+      isFrozen: false,
+      currency: 'USD',
+      createdAt: new Date(),
+    };
+    const remainderEntry = {
+      id: 'earn-remainder',
+      userId: 'u1',
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 1000n,
+      currency: 'USD',
+      availableAt: new Date('2026-07-09T00:00:00.000Z'),
+      description: 'Payout partial-approval remainder',
+    };
+
+    const { prisma, service } = makePayoutService({
+      payoutAccount: { findUnique: vi.fn().mockResolvedValue(payoutAccount) },
+      earningsLedger: {
+        findMany: vi.fn().mockResolvedValue([remainderEntry]),
+        findUnique: vi.fn().mockResolvedValue(remainderEntry),
+        aggregate: vi.fn((args: { where?: { entryType?: string } }) => {
+          if (args?.where?.entryType === 'debit') {
+            return Promise.resolve({ _sum: { amountMinor: 0n } });
+          }
+          return Promise.resolve({ _sum: { amountMinor: 1000n } });
+        }),
+        update: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi.fn(),
+      },
+      payoutAllocation: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
+        create: vi.fn(),
+      },
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'payout-2',
+          status: 'requested',
+          requestedAmountMinor: 1000n,
+          approvedAmountMinor: null,
+          currency: 'USD',
+          allocations: [],
+        }),
+        create: vi.fn().mockResolvedValue({
+          id: 'payout-2',
+          userId: 'u1',
+          payoutAccountId: 'acc1',
+          status: 'requested',
+          requestedAmountMinor: 1000n,
+          currency: 'USD',
+          allocations: [],
+        }),
+      },
+    });
+
+    await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+    });
+
+    // The remainder row should be allocated without splitting (it already
+    // matches the requested amount).
+    expect(prisma.earningsLedger.create).not.toHaveBeenCalled();
+    expect(prisma.payoutAllocation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payoutRequestId: 'payout-2',
+        earningsEntryId: 'earn-remainder',
+        amountMinor: 1000n,
+      }),
+    });
+  });
+
+  it('keeps the unpaid remainder confirmed and withdrawable after a partial approval split', async () => {
+    const payoutAccount = {
+      id: 'acc1',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+    };
+    const earningsEntry = {
+      id: 'earn-1',
+      userId: 'u1',
+      campaignId: 'camp-1',
+      impressionId: 'imp-1',
+      clickId: null,
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 1000n,
+      currency: 'USD',
+      availableAt: new Date('2026-07-09T00:00:00.000Z'),
+      description: 'Original earning',
+    };
+    const allocation = {
+      id: 'alloc-1',
+      payoutRequestId: 'payout-1',
+      earningsEntryId: earningsEntry.id,
+      amountMinor: 1000n,
+      earningsEntry,
+    };
+    const payoutForProcessing = {
+      id: 'payout-1',
+      userId: 'u1',
+      user: { status: 'active' },
+      payoutAccount,
+      status: 'processing',
+      requestedAmountMinor: 1000,
+      approvedAmountMinor: 600,
+      currency: 'USD',
+      allocations: [allocation],
+    };
+
+    const { prisma, service } = makePayoutService({
+      payoutRequest: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'payout-1', status: 'approved', payoutAccount })
+          .mockResolvedValueOnce(payoutForProcessing),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      payoutAllocation: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
+        delete: vi.fn(),
+        update: vi.fn(),
+      },
+      earningsLedger: {
+        findUnique: vi.fn().mockResolvedValue(earningsEntry),
+        update: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'earn-paid-slice' })
+          .mockResolvedValueOnce({ id: 'earn-remainder' }),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      payoutTransaction: {
+        create: vi.fn().mockResolvedValue({ id: 'ptx-1' }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    });
+
+    await service.processPayout('payout-1');
+
+    // The remainder row is created as confirmed so it remains withdrawable.
+    expect(prisma.earningsLedger.create).toHaveBeenNthCalledWith(2, {
+      data: expect.objectContaining({
+        userId: 'u1',
+        amountMinor: 400n,
+        status: 'confirmed',
+        idempotencyKey: `payout_remainder_payout-1_${earningsEntry.id}`,
+      }),
+    });
+    // The original row is retired so it cannot also be counted as available.
+    expect(prisma.earningsLedger.updateMany).toHaveBeenCalledWith({
+      where: { id: earningsEntry.id, status: 'confirmed' },
+      data: {
+        status: 'reversed',
+        description: 'Superseded by partial payout approval payout-1',
+      },
+    });
+  });
+
+  it('does not split the same entry again on retry after provider failure', async () => {
+    // First attempt: partial approval splits the entry, then the provider fails.
+    // The payout is left in a failed state with allocations released. A retry
+    // must allocate the already-created remainder row, not re-split the original
+    // reversed entry.
+    const payoutAccount = {
+      id: 'acc1',
+      provider: 'manual',
+      destination: 'manual-destination',
+      isActive: true,
+      isVerified: true,
+    };
+    const originalEntry = {
+      id: 'earn-1',
+      userId: 'u1',
+      campaignId: 'camp-1',
+      impressionId: 'imp-1',
+      clickId: null,
+      entryType: 'credit',
+      status: 'confirmed',
+      amountMinor: 1000n,
+      currency: 'USD',
+      availableAt: new Date('2026-07-09T00:00:00.000Z'),
+      description: 'Original earning',
+    };
+    const allocation = {
+      id: 'alloc-1',
+      payoutRequestId: 'payout-1',
+      earningsEntryId: originalEntry.id,
+      amountMinor: 1000n,
+      earningsEntry: originalEntry,
+    };
+    const payoutForProcessing = {
+      id: 'payout-1',
+      userId: 'u1',
+      user: { status: 'active' },
+      payoutAccount,
+      status: 'processing',
+      requestedAmountMinor: 1000,
+      approvedAmountMinor: 600,
+      currency: 'USD',
+      allocations: [allocation],
+    };
+
+    const providerInitiate = vi.fn().mockRejectedValue(new Error('provider network error'));
+    const { prisma, service } = makePayoutService({
+      payoutRequest: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'payout-1', status: 'approved', payoutAccount })
+          .mockResolvedValueOnce(payoutForProcessing)
+          .mockResolvedValueOnce({ id: 'payout-1', status: 'processing', payoutAccount }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      payoutAllocation: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountMinor: 0n } }),
+        delete: vi.fn(),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn(),
+      },
+      earningsLedger: {
+        findUnique: vi.fn().mockResolvedValue(originalEntry),
+        update: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 'earn-paid-slice' })
+          .mockResolvedValueOnce({ id: 'earn-remainder' }),
+        count: vi.fn().mockResolvedValue(0),
+      },
+      payoutTransaction: {
+        create: vi.fn().mockResolvedValue({ id: 'ptx-1' }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    });
+    (service as unknown as { providers: Record<string, unknown> }).providers = {
+      manual: {
+        readiness: () => ({ ok: true }),
+        initiate: providerInitiate,
+        checkStatus: vi.fn(),
+      },
+    };
+
+    await expect(service.processPayout('payout-1')).rejects.toThrow(
+      'Payout provider outcome is unknown; allocations remain reserved for reconciliation',
+    );
+
+    // The split happened exactly once during the first (and only) processPayout.
+    // A real retry would require a new payout request against the remainder row;
+    // the important invariant is that the original entry was reversed once and
+    // the remainder row was created once.
+    expect(prisma.earningsLedger.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.earningsLedger.create).toHaveBeenCalledTimes(2);
+  });
 });
 
 // ── Idempotency-key tests for requestPayout ──
@@ -868,6 +1257,7 @@ describe('PayoutService.requestPayout idempotency', () => {
     const existing = {
       id: 'pr-existing',
       userId: 'u1',
+      payoutAccountId: 'acc1',
       status: 'requested',
       requestedAmountMinor: 1000n,
       currency: 'USD',
@@ -896,15 +1286,25 @@ describe('PayoutService.requestPayout idempotency', () => {
     const winner = {
       id: 'pr-winner',
       userId: 'u1',
+      payoutAccountId: 'acc1',
       status: 'requested',
       requestedAmountMinor: 1000n,
       currency: 'USD',
       idempotencyKey: 'race-key',
       allocations: [],
     };
+    // Three findUnique reads: (1) outside-tx pre-check → null (no existing
+    // yet), (2) in-tx pre-check → null (concurrent request still in-flight),
+    // (3) P2002-catch re-read with the normal client → winner (concurrent
+    // request committed between the in-tx pre-check and the create). The tx
+    // mock passes `prisma` as `tx`, so all three hit the same mock.
     const { prisma, service } = makeIdempotentService({
       payoutRequest: {
-        findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(winner),
+        findUnique: vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(winner),
         create: vi.fn().mockImplementation(() => {
           throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
             clientVersion: '0.0.0',
@@ -930,6 +1330,7 @@ describe('PayoutService.requestPayout idempotency', () => {
     const existing = {
       id: 'pr-trim',
       userId: 'u1',
+      payoutAccountId: 'acc1',
       status: 'requested',
       requestedAmountMinor: 1000n,
       currency: 'USD',
@@ -1043,6 +1444,168 @@ describe('PayoutService.requestPayout idempotency', () => {
       expect.objectContaining({
         data: expect.objectContaining({ idempotencyKey: undefined }),
       }),
+    );
+  });
+
+  it('rejects a replay with a different amount (409, not a silent return)', async () => {
+    const existing = {
+      id: 'pr-amt',
+      userId: 'u1',
+      payoutAccountId: 'acc1',
+      status: 'requested',
+      requestedAmountMinor: 2000n,
+      currency: 'USD',
+      idempotencyKey: 'key-amt',
+      allocations: [],
+    };
+    const { prisma, service } = makeIdempotentService({
+      payoutRequest: { findUnique: vi.fn().mockResolvedValue(existing), create: vi.fn() },
+    });
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        idempotencyKey: 'key-amt',
+      }),
+    ).rejects.toThrow('different amount');
+    expect(prisma.payoutRequest.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a replay with a different payout account', async () => {
+    const existing = {
+      id: 'pr-acc',
+      userId: 'u1',
+      payoutAccountId: 'acc-other',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'key-acc',
+      allocations: [],
+    };
+    const { service } = makeIdempotentService({
+      payoutRequest: { findUnique: vi.fn().mockResolvedValue(existing), create: vi.fn() },
+    });
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        idempotencyKey: 'key-acc',
+      }),
+    ).rejects.toThrow('different payout account');
+  });
+
+  it('rejects a replay with a different currency', async () => {
+    const existing = {
+      id: 'pr-cur',
+      userId: 'u1',
+      payoutAccountId: 'acc1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'EUR',
+      idempotencyKey: 'key-cur',
+      allocations: [],
+    };
+    const { service } = makeIdempotentService({
+      payoutRequest: { findUnique: vi.fn().mockResolvedValue(existing), create: vi.fn() },
+    });
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        idempotencyKey: 'key-cur',
+      }),
+    ).rejects.toThrow('different currency');
+  });
+
+  it('rejects a replay with different selected earnings entries', async () => {
+    const existing = {
+      id: 'pr-ent',
+      userId: 'u1',
+      payoutAccountId: 'acc1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'key-ent',
+      allocations: [{ earningsEntryId: 'e-original' }],
+    };
+    const { service } = makeIdempotentService({
+      payoutRequest: { findUnique: vi.fn().mockResolvedValue(existing), create: vi.fn() },
+    });
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        earningsEntryIds: ['e-different'],
+        idempotencyKey: 'key-ent',
+      }),
+    ).rejects.toThrow('different earnings entries');
+  });
+
+  it('does not emit a request_payout audit event when the transaction rolls back (#7)', async () => {
+    // The tx rolls back because allocatePayoutEarnings finds no confirmed
+    // earnings (findMany → []). A rolled-back payout request must NOT leave a
+    // success audit record: audit.logStrict is called INSIDE the $transaction,
+    // so a rejection rolls the audit row back with the rest of the tx.
+    const { service, audit } = makeIdempotentService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null),
+        create: vi.fn().mockResolvedValue({ id: 'pr-rb', allocations: [] }),
+      },
+    });
+    await expect(
+      service.requestPayout('u1', {
+        payoutAccountId: 'acc1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        idempotencyKey: 'rb-key',
+      }),
+    ).rejects.toThrow('Insufficient confirmed earnings');
+    expect(audit.logStrict).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
+  });
+
+  it('emits a request_payout audit event after a successful commit (#7)', async () => {
+    const created = {
+      id: 'pr-ok',
+      userId: 'u1',
+      payoutAccountId: 'acc1',
+      status: 'requested',
+      requestedAmountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'ok-key',
+      allocations: [{ earningsEntryId: 'earn-1' }],
+    };
+    const { service, audit, prisma } = makeIdempotentService({
+      payoutRequest: {
+        findUnique: vi.fn().mockImplementation((args: { where: Record<string, unknown> }) => {
+          if ('userId_idempotencyKey' in args.where) return Promise.resolve(null);
+          return Promise.resolve(created);
+        }),
+        create: vi.fn().mockResolvedValue({ id: 'pr-ok', allocations: [] }),
+      },
+    });
+    prisma.earningsLedger.findMany.mockResolvedValue([
+      {
+        id: 'earn-1',
+        amountMinor: 1000n,
+        currency: 'USD',
+        entryType: 'credit',
+        status: 'confirmed',
+      },
+    ]);
+    await service.requestPayout('u1', {
+      payoutAccountId: 'acc1',
+      amountMinor: 1000n,
+      currency: 'USD',
+      idempotencyKey: 'ok-key',
+    });
+    expect(audit.logStrict).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'request_payout', targetId: 'pr-ok' }),
+      expect.anything(),
     );
   });
 });

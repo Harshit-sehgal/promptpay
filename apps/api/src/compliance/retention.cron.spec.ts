@@ -33,10 +33,7 @@ describe('bounded multi-replica retention', () => {
     tx.dataRetentionConfig.findMany.mockResolvedValue([
       { category: 'webhook_events', retainDays: 90 },
     ]);
-    tx.$executeRaw
-      .mockResolvedValueOnce(500)
-      .mockResolvedValueOnce(500)
-      .mockResolvedValueOnce(12);
+    tx.$executeRaw.mockResolvedValueOnce(500).mockResolvedValueOnce(500).mockResolvedValueOnce(12);
 
     await expect(service.runAllRetention()).resolves.toEqual({ acquired: true, deleted: 1012 });
     expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
@@ -58,7 +55,18 @@ describe('bounded multi-replica retention', () => {
       retainDays: -1,
     });
 
-    await expect(service.purge('audit_logs')).rejects.toThrow(/must be non-negative/);
+    await expect(service.purge('audit_logs')).rejects.toThrow(/must be positive/);
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('rejects a zero retention window (Round 37 — would purge everything instantly)', async () => {
+    const { service, tx } = makeService();
+    tx.dataRetentionConfig.findUnique.mockResolvedValue({
+      category: 'audit_logs',
+      retainDays: 0,
+    });
+
+    await expect(service.purge('audit_logs')).rejects.toThrow(/must be positive/);
     expect(tx.$executeRaw).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
+import { Prisma } from '@waitlayer/db';
+
 import { AuditService } from '../audit/audit.service';
 import { CURRENT_CONSENT_VERSIONS, SIGNUP_CONSENT_PURPOSES } from '../compliance/consent-versions';
 import { PrismaService } from '../config/prisma.service';
@@ -39,23 +41,33 @@ export class AuthEmailTrait {
     return versions;
   }
 
-  logSignupConsents(
+  async logSignupConsents(
     user: {
       id: string;
       role: string;
     },
     consentRows: SignupConsentRecord[],
     method: SignupConsentMethod,
+    tx?: Prisma.TransactionClient,
   ) {
     for (const consent of consentRows) {
-      void this.audit.log({
+      // Consent records are legal evidence; the audit must be part of the
+      // signup transaction so a rolled-back signup never leaves consent-granted
+      // records. When no transaction client is passed, fall back to best-effort
+      // logging (kept for callers outside a transaction).
+      const entry = {
         actorId: user.id,
         actorRole: user.role,
         action: 'consent_granted',
         targetType: 'consent',
         targetId: consent.id,
         afterSnap: { purpose: consent.purpose, version: consent.version, method },
-      });
+      };
+      if (tx) {
+        await this.audit.logStrict(entry, tx);
+      } else {
+        void this.audit.log(entry);
+      }
     }
   }
 
@@ -158,19 +170,27 @@ export class AuthEmailTrait {
       );
     }
     // Update user to verified
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { emailVerified: true },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { emailVerified: true },
+      });
+      // Email verification is a key identity signal; the audit must be part
+      // of the same transaction so a rolled-back verification never leaves a
+      // success record.
+      await this.audit.logStrict(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: 'email_verified',
+          targetType: 'user',
+          targetId: user.id,
+        },
+        tx,
+      );
     });
     // Recompute trust score to account for email verification (+10 points)
-    await this.fraud.computeTrustScore(user.id); // Audit: email verified — key identity signal
-    void this.audit.log({
-      actorId: user.id,
-      actorRole: user.role,
-      action: 'email_verified',
-      targetType: 'user',
-      targetId: user.id,
-    });
+    await this.fraud.computeTrustScore(user.id);
     return {
       message: 'Email verified successfully',
       email: user.email,

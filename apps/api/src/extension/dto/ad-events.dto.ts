@@ -3,6 +3,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -166,14 +167,29 @@ export class AdClickDto {
   signature!: string;
 }
 
+/**
+ * Canonical set of report reasons. Closed-set to prevent unbounded free-text
+ * stored in reason column (which admins may render later). Deviant clients
+ * cannot inject HTML or invent reasons for adversarial filtering.
+ */
+export const REPORT_AD_REASONS = [
+  'inappropriate_content',
+  'misleading',
+  'broken_link',
+  'privacy_concern',
+  'fraud',
+  'other',
+] as const;
+
 export class ReportAdDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
   impressionToken!: string;
 
-  @ApiProperty()
+  @ApiProperty({ enum: REPORT_AD_REASONS })
   @IsString()
+  @IsIn(REPORT_AD_REASONS)
   @MinLength(1)
   @MaxLength(128)
   reason!: string;
@@ -181,6 +197,7 @@ export class ReportAdDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(1024)
   details?: string;
 

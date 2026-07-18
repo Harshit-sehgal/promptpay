@@ -241,7 +241,11 @@ export default function AdminCampaignsPage() {
                             </div>
                             <p className="text-white text-xs truncate">{cr.sponsoredMessage}</p>
                             <a
-                              href={cr.destinationUrl}
+                              href={
+                                /^https?:\/\//i.test(cr.destinationUrl ?? '')
+                                  ? cr.destinationUrl
+                                  : '#'
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-brand-500 hover:text-brand-400 text-xs truncate block mt-0.5"

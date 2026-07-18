@@ -287,6 +287,10 @@ export class StripeWebhookController implements OnModuleInit {
         });
         break;
       }
+      case 'account.updated': {
+        await this.handleAccountUpdated(event);
+        break;
+      }
       case 'payout.paid': {
         await this.handlePayoutPaid(event);
         break;
@@ -578,6 +582,122 @@ export class StripeWebhookController implements OnModuleInit {
     });
   }
 
+  /**
+   * Auto-verify a developer's Stripe Connect payout account when Stripe fires
+   * `account.updated` reporting onboarding completion
+   * (charges_enabled + payouts_enabled + details_submitted).
+   *
+   * Without this handler, a developer who completes Stripe Connect onboarding
+   * stays `isVerified: false` forever and can never receive payouts without a
+   * manual admin `setPayoutAccountVerified` call — the only verification path
+   * documented in `createStripeConnectOnboarding` was this webhook, which the
+   * switch never routed. (Round 37.)
+   *
+   * CAS-gated on `isVerified: false` so a later admin rejection (which flips
+   * `isVerified` back to false) takes precedence and a stale/redelivered
+   * `account.updated` cannot resurrect a rejected account without an explicit
+   * admin re-verification. The CAS also scopes to `provider: 'stripe_connect'`
+   * and the exact `destination` (acct_...) so an attacker cannot post an
+   * `account.updated` for their own connected account and verify someone
+   * else's payout row.
+   */
+  private async handleAccountUpdated(event: Stripe.Event): Promise<void> {
+    const account = event.data.object as Stripe.Account;
+    const accountId = account.id;
+    // Verify the account's capabilities directly from Stripe — the webhook
+    // payload's `charges_enabled`/`payouts_enabled` reflect the event snapshot,
+    // but a re-retrieve guards against a malformed/old payload and matches the
+    // authoritative state Stripe just recorded.
+    let verification: {
+      chargesEnabled: boolean;
+      payoutsEnabled: boolean;
+      detailsSubmitted: boolean;
+    } | null;
+    try {
+      verification = await this.stripe.retrieveConnectAccountVerification(accountId);
+    } catch (err: unknown) {
+      this.logger.warn(
+        `account.updated for ${accountId}: failed to re-retrieve verification (${getErrorMessage(
+          err,
+        )}); marking webhook processed`,
+      );
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id, processingStatus: 'processing' },
+        data: { processingStatus: 'processed', error: 'account_retrieve_failed' },
+      });
+      return;
+    }
+    if (!verification) {
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
+      return;
+    }
+    const isOnboarded =
+      verification.chargesEnabled && verification.payoutsEnabled && verification.detailsSubmitted;
+    if (!isOnboarded) {
+      // Onboarding still incomplete — acknowledge receipt and wait for the
+      // next `account.updated`. Do NOT flip `isVerified` (it is already false
+      // for a pending onboarding account).
+      this.logger.log(
+        `account.updated for ${accountId}: onboarding still incomplete (charges=${verification.chargesEnabled}, payouts=${verification.payoutsEnabled}, details=${verification.detailsSubmitted})`,
+      );
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: { processingStatus: 'processed', processedAt: new Date() },
+      });
+      return;
+    }
+
+    // CAS-flip the matching payout account to verified. `where` scopes to
+    // `provider: 'stripe_connect'`, `destination: accountId`, and
+    // `isVerified: false` so only a genuinely-pending account for THIS Stripe
+    // account is promoted, and a later admin rejection (which would flip
+    // `isVerified` back to false then re-true manually) takes precedence.
+    const flip = await this.prisma.payoutAccount.updateMany({
+      where: {
+        provider: 'stripe_connect',
+        destination: accountId,
+        isVerified: false,
+        isActive: true,
+      },
+      data: { isVerified: true },
+    });
+    if (flip.count > 0) {
+      const payoutAccount = await this.prisma.payoutAccount.findFirst({
+        where: { provider: 'stripe_connect', destination: accountId, isActive: true },
+        select: { id: true, userId: true },
+      });
+      if (payoutAccount) {
+        await this.audit.logStrict({
+          actorId: 'stripe_webhook',
+          actorRole: 'system',
+          action: 'stripe_connect_auto_verified',
+          targetType: 'payout_account',
+          targetId: payoutAccount.id,
+          beforeSnap: {
+            userId: payoutAccount.userId,
+            accountId,
+          },
+        });
+        this.logger.log(
+          `Stripe Connect account ${accountId} auto-verified by account.updated webhook (user=${payoutAccount.userId})`,
+        );
+      }
+    } else {
+      // Either no matching active payout account, or it was already verified
+      // / admin-rejected. All are benign; ack the webhook.
+      this.logger.log(
+        `account.updated for ${accountId}: no pending unverified active payout account to verify (already verified, rejected, or unknown to us)`,
+      );
+    }
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'stripe', eventId: event.id },
+      data: { processingStatus: 'processed', processedAt: new Date() },
+    });
+  }
+
   /** Reverse advertiser ledger entries when a charge is refunded */
   private async handleRefund(event: Stripe.Event): Promise<void> {
     const refund = event.data.object as Stripe.Refund;
@@ -747,19 +867,77 @@ export class StripeWebhookController implements OnModuleInit {
         currency: true,
       },
     });
+
+    // ── Hold restore + retire, atomically per hold row (Round 33 Gap C) ──
+    // A refund supersedes any active dispute: the disputed slice must return
+    // to spendable (restore the parent credit) AND the hold row must retire
+    // (status 'held' → 'reversed') so a later `charge.dispute.closed` cannot
+    // re-release the same slice via its won-restore path (double restore) or
+    // write it off via its lost path (phantom deduction). These two writes
+    // MUST commit atomically: a crash between the restore and the retire
+    // leaves the parent re-incremented (slice spendable) while the hold row
+    // still sits at 'held' — and the next `dispute.closed` winning path
+    // scratches the restore credit row in, a second time, double-counting
+    // the held slice against the advertiser/platform. Folding both writes
+    // into a single per-hold `$transaction` guarantees either both happen
+    // or neither does, so a re-delivery of the same refund (or a won
+    // dispute arriving on a delayed retry) converges instead of corrupting.
+    // We do NOT also fold the per-entry reversal rows below into this tx —
+    // those are idempotent per `(pi, refundId, entryId)` and crash-safe
+    // independently: a crash before the reversal block leaves the parent
+    // untouched (the restore/retire block runs first); a crash after it
+    // leaves the parent restored AND the hold retired, with at worst some
+    // refund rows missing (re-delivery recreates them).
     for (const hold of heldRows) {
-      await this.prisma.advertiserLedger.updateMany({
-        where: {
-          stripePaymentIntentId: details.paymentIntentId,
-          advertiserId: hold.advertiserId,
-          campaignId: hold.campaignId,
-          entryType: 'credit',
-          status: { notIn: ['reversed', 'void'] },
-          stripeDisputeId: null,
-        },
-        data: { amountMinor: { increment: hold.amountMinor } },
+      await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await tx.advertiserLedger.updateMany({
+          where: {
+            stripePaymentIntentId: details.paymentIntentId,
+            advertiserId: hold.advertiserId,
+            campaignId: hold.campaignId,
+            entryType: 'credit',
+            status: { notIn: ['reversed', 'void'] },
+            stripeDisputeId: null,
+          },
+          data: { amountMinor: { increment: hold.amountMinor } },
+        });
+        // Retire the hold row in this same tx so restore + retire commit or
+        // roll back together. We retire unconditionally (parent-restore may be
+        // a no-op if the parent was already reversed by a prior full refund,
+        // but the hold row must still come off 'held' or a late won-dispute
+        // close path would re-release the slice against a parent that no
+        // longer has it).
+        await tx.advertiserLedger.updateMany({
+          where: { id: hold.id, status: 'held' },
+          data: { status: 'reversed' },
+        });
       });
+      this.logger.log(
+        `Restored + retired dispute hold ${hold.id} — superseded by refund ${refund.id} on PI ${details.paymentIntentId}`,
+      );
     }
+
+    // ── Re-read credit entries after the dispute-hold restore ──
+    // The restore above re-incremented each parent credit row's amountMinor
+    // by the held-slice values, but the in-memory `entries` array (read before
+    // the restore at line 618) still carries the pre-restore amounts — zero on
+    // a fully-disputed deposit. The reversal loop below must compute
+    // reversalAmount from the current (restored) amountMinor or a fully-
+    // disputed-then-refunded deposit writes 0-amount advertiser refund rows and
+    // the platform-cash side is debited for the full refund without a matching
+    // advertiser credit — the books break. Re-read the same rows post-restore
+    // so the loop sees the correct per-row amounts.
+    const restoredEntries =
+      entries.length > 0
+        ? await this.prisma.advertiserLedger.findMany({
+            where: {
+              stripePaymentIntentId: details.paymentIntentId,
+              entryType: 'credit',
+              status: { notIn: ['reversed', 'void'] },
+              stripeDisputeId: null,
+            },
+          })
+        : [];
 
     // Create a reversal entry for each active entry on this payment intent.
     // Each refund row is idempotent on `stripe_refund_{pi}_{refundId}_{entryId}`
@@ -776,7 +954,7 @@ export class StripeWebhookController implements OnModuleInit {
     // already-`reversed` row, masking the contention. The CAS + in-tx
     // aggregate closes both windows: only one delivery wins the flip and it
     // wins it atomically with its threshold read.
-    for (const entry of entries) {
+    for (const entry of restoredEntries) {
       if (remaining <= 0n) break;
       const reversalAmount = entry.amountMinor < remaining ? entry.amountMinor : remaining;
       remaining -= reversalAmount;
@@ -810,36 +988,10 @@ export class StripeWebhookController implements OnModuleInit {
       });
     }
 
-    // ── Retire any active dispute hold rows for this payment intent ──
-    // A refund returns money to the cardholder regardless of the dispute
-    // outcome — the dispute becomes moot (Stripe typically closes it when a
-    // charge is fully refunded). Any held slice that was frozen by a
-    // `charge.dispute.created` delivery is superseded by this refund; we
-    // retire the hold row(s) so the dispute-close handler (won/lost) has
-    // nothing left to erroneously release or write-off. The hold retire is
-    // CAS-gated on `status: 'held'` and no new hold-specific reversal row
-    // is needed — the advertiser's deposit credit has already been fully
-    // reversed above (the parent row and any won-restore credits excluded by
-    // `stripeDisputeId: null`). The net effect is a clean advertiser ledger
-    // with no orphaned hold rows awaiting a dispute resolution that won't
-    // come.
-    const holdRows = await this.prisma.advertiserLedger.findMany({
-      where: {
-        stripePaymentIntentId: details.paymentIntentId,
-        entryType: 'hold',
-        status: 'held',
-      },
-      select: { id: true },
-    });
-    for (const hold of holdRows) {
-      await this.prisma.advertiserLedger.updateMany({
-        where: { id: hold.id, status: 'held' },
-        data: { status: 'reversed' },
-      });
-      this.logger.log(
-        `Retired dispute hold ${hold.id} — superseded by refund ${refund.id} on PI ${details.paymentIntentId}`,
-      );
-    }
+    // (Hold retire now happens atomically with the parent restore inside the
+    // preceding per-hold `$transaction` — see the Round 33 Gap C note above.
+    // No separate retire pass here: a crash between restore and retire was
+    // the gap, and folding both into one tx closes it.)
 
     this.logger.log(
       `Refund processed: paymentIntent=${details.paymentIntentId}, amount=${totalRefunded} ${details.currency}`,
@@ -1007,10 +1159,53 @@ export class StripeWebhookController implements OnModuleInit {
         // freshly created (not on replay/idempotent skip), preventing a
         // double-decrement on stall-reclaim re-delivery.
         if (holdCreated) {
-          await tx.advertiserLedger.updateMany({
-            where: { id: entry.id, status: 'confirmed' },
-            data: { amountMinor: { decrement: holdAmount } },
-          });
+          // Issue A-063 / Round 33 Gap B / Round 34 regression-fix: prevent
+          // the parent credit from going negative when two DISTINCT concurrent
+          // disputes on the same payment intent both target this row. The
+          // outer `creditEntries` read (line 982) is outside this per-entry tx,
+          // so two disputes could each compute `holdAmount = entry.amountMinor`
+          // against the same pre-dispute value and both decrement — driving
+          // the parent below zero even though each individual hold is itself
+          // correct. The CAS `status: 'confirmed'` alone does NOT close the
+          // race because the parent is never flipped to 'held' (only the
+          // child `hold` row is) — both decrements match a still-confirmed
+          // parent. The uint guard `amountMinor >= holdAmount` makes the
+          // decrement fail closed instead of going negative; the RUNNING
+          // case is unaffected (the outer `holdAmount = min(entry,
+          // remainingDisputeMinor)` already bounds a single dispute to the
+          // remaining slice). Use raw SQL so the positivity predicate is
+          // part of the atomic UPDATE, not a TOCTOU between a read and a
+          // Prisma `decrement`.
+          //
+          // Round 34 regression: an earlier draft logged `warn` and fell
+          // through on `decrementRows === 0`, which committed the `hold`
+          // row at the top of this same `$transaction` without a matching
+          // parent decrement. `handleDisputeClosed` then later wrote a
+          // phantom `reversal` (lost) or `restore credit` (won) for that
+          // orphan hold, since it keyed on the hold row's `amountMinor`
+          // alone — not on whether the parent had actually been debited.
+          // The sibling spend path (extension-ad) throws on the same
+          // `spent === 0` pattern; we do the same here. Throwing rolls
+          // back the WHOLE per-entry tx including the `hold` create, so
+          // the close handler has no orphan to act on. The disputed slice
+          // remains spendable in the parent — same end-state as today's
+          // broken under-freeze, but with no orphan hold to corrupt the
+          // books later. Stripe's `charge.dispute.created` is naturally
+          // idempotent; a re-delivery (after the other concurrent dispute
+          // settles) re-sources `holdAmount` from the now-corrected
+          // parent and the freeze proceeds normally.
+          const decrementRows: number = await tx.$executeRaw`
+            UPDATE "advertiser_ledger"
+            SET "amountMinor" = "amountMinor" - ${holdAmount}::bigint
+            WHERE "id" = ${entry.id}::text
+              AND "status" = 'confirmed'
+              AND "amountMinor" >= ${holdAmount}::bigint
+          `;
+          if (decrementRows === 0) {
+            throw new Error(
+              `Dispute ${dispute.id} parent credit ${entry.id} could not be decremented (no longer confirmed or insufficient remainder) — rolling back the hold create to avoid an orphan hold row`,
+            );
+          }
         }
       });
       remainingDisputeMinor -= holdAmount;
@@ -1147,6 +1342,35 @@ export class StripeWebhookController implements OnModuleInit {
     for (const hold of holdEntries) {
       const settleIdempotencyKey = `stripe_dispute_${won ? 'won' : 'lost'}_${dispute.id}_${hold.id}`;
       await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // Round 35: claim the hold FIRST via a CAS flip `held → reversed`.
+        // The `handleRefund` path (Round 33 Gap C) retires this same hold row
+        // and restores the disputed slice to the advertiser by INCREMENTING the
+        // parent credit — a disjoint restore mechanism from this won-path
+        // `create` of a fresh credit (disjoint idempotency-key space, so the
+        // P2002 guard on the create does NOT cross-protect). If a refund has
+        // already retired the hold, a concurrent `dispute.closed won` here must
+        // NOT create a second restore credit (double-restore = money created
+        // from nothing, platform cash under-debited). The CAS retire is the
+        // single gate: count === 0 means another handler (refund, or a prior
+        // delivery of this same dispute-close) already settled this hold —
+        // abort the whole per-hold transaction before any money-side create.
+        // The throw propagates to `runProcessing`, which flips the webhookEvent
+        // back to `pending` for Stripe retry; on retry the `holdEntries` read
+        // will no longer include this hold (it is now `reversed`), so the loop
+        // converges. This mirrors the Round 34 `handleDispute` freeze-path
+        // throw-on-decrementRows===0 pattern.
+        const retire = await tx.advertiserLedger.updateMany({
+          where: { id: hold.id, status: 'held' },
+          data: { status: 'reversed' },
+        });
+        if (retire.count === 0) {
+          throw new Error(
+            `Dispute-close hold ${hold.id} for dispute ${dispute.id} could not be retired ` +
+              `(already settled by a concurrent refund or prior delivery) — aborting ` +
+              `${won ? 'won-restore' : 'lost-writeoff'} to avoid double-restore`,
+          );
+        }
+
         if (won) {
           try {
             await tx.advertiserLedger.create({
@@ -1205,12 +1429,6 @@ export class StripeWebhookController implements OnModuleInit {
             if (getErrorCode(err) !== 'P2002') throw err;
           }
         }
-
-        // Retire the hold row either way.
-        await tx.advertiserLedger.updateMany({
-          where: { id: hold.id, status: 'held' },
-          data: { status: 'reversed' },
-        });
       });
     }
 

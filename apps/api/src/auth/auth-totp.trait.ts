@@ -35,7 +35,17 @@ export class AuthTotpTrait {
    *  who has taken over a session from silently turning MFA off.
    */
   async setupTwoFactor(userId: string, proof: TwoFactorSetupDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        twoFactorEnabled: true,
+        passwordHash: true,
+        googleId: true,
+      },
+    });
     if (!user) throw new BadRequestException('User not found');
     if (user.twoFactorEnabled) {
       throw new BadRequestException(
@@ -62,15 +72,16 @@ export class AuthTotpTrait {
         where: { id: userId },
         data: { twoFactorSecret: this.encryptTotpSecret(secret) },
       });
-      await tx.auditLog.create({
-        data: {
+      await this.audit.logStrict(
+        {
           actorId: userId,
           actorRole: user.role,
           action: 'two_factor_setup_started',
           targetType: 'user',
           targetId: userId,
         },
-      });
+        tx,
+      );
     });
     return {
       secret,
@@ -102,15 +113,16 @@ export class AuthTotpTrait {
         where: { userId, ...(currentJti ? { id: { not: currentJti } } : {}) },
         data: { revoked: true },
       });
-      await tx.auditLog.create({
-        data: {
+      await this.audit.logStrict(
+        {
           actorId: userId,
           actorRole: user.role,
           action: 'two_factor_enabled',
           targetType: 'user',
           targetId: userId,
         },
-      });
+        tx,
+      );
     });
     return { twoFactorEnabled: true, backupCodes };
   }
@@ -136,15 +148,16 @@ export class AuthTotpTrait {
         },
       });
       await tx.session.updateMany({ where: { userId }, data: { revoked: true } });
-      await tx.auditLog.create({
-        data: {
+      await this.audit.logStrict(
+        {
           actorId: userId,
           actorRole: user.role,
           action: 'two_factor_disabled',
           targetType: 'user',
           targetId: userId,
         },
-      });
+        tx,
+      );
     });
     return { twoFactorEnabled: false };
   }
@@ -232,15 +245,16 @@ export class AuthTotpTrait {
         where: { userId, ...(currentJti ? { id: { not: currentJti } } : {}) },
         data: { revoked: true },
       });
-      await tx.auditLog.create({
-        data: {
+      await this.audit.logStrict(
+        {
           actorId: userId,
           actorRole: user.role,
           action: 'two_factor_backup_codes_regenerated',
           targetType: 'user',
           targetId: userId,
         },
-      });
+        tx,
+      );
     });
     return { backupCodes };
   }
@@ -273,15 +287,16 @@ export class AuthTotpTrait {
            AND ${hash} = ANY("two_factor_backup_code_hashes")
       `;
       if (consumed !== 1) return false;
-      await tx.auditLog.create({
-        data: {
+      await this.audit.logStrict(
+        {
           actorId: user.id,
           actorRole: user.role,
           action: 'two_factor_backup_code_used',
           targetType: 'user',
           targetId: user.id,
         },
-      });
+        tx,
+      );
       return true;
     });
   }

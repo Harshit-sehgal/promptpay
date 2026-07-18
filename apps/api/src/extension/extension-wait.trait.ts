@@ -54,6 +54,16 @@ export class ExtensionWaitTrait {
     if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
+    // Duplicate start check — a @@unique([waitStateId, eventType]) guards at
+    // the DB layer (migration 20260718020000), but give the client a clean
+    // 409 rather than a raw P2002 constraint violation.
+    const duplicateStart = await this.prisma.waitStateEvent.findFirst({
+      where: { waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
+      select: { id: true },
+    });
+    if (duplicateStart) {
+      throw new ConflictException('A wait_state_start event already exists for this waitStateId.');
+    }
     // Idempotency: only return an existing event after ownership/signature pass.
     const existing = await this.prisma.waitStateEvent.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },

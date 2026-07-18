@@ -585,7 +585,7 @@ model WaitStateEvent {
 
   @@index([userId, createdAt])
   @@index([deviceId, createdAt])
-  @@index([waitStateId, eventType])
+  @@unique([waitStateId, eventType])
   @@index([confidence], map: "wait_state_events_confidence_idx")
   @@index([isFalsePositive], map: "wait_state_events_false_positive_idx")
   @@map("wait_state_events")
@@ -705,6 +705,7 @@ model AdReport {
   @@index([impressionId])
   @@index([userId])
   @@index([creativeId])
+  @@unique([impressionId, userId])
   @@map("ad_reports")
 }
 
@@ -1092,6 +1093,38 @@ model AuditLog {
   @@index([actorId, createdAt])
   @@index([targetType, targetId, createdAt])
   @@map("audit_logs")
+}
+
+/**
+ * Durable outbox for post-commit audit events. When a mandatory audit entry
+ * cannot be written to `AuditLog` synchronously (e.g. the audit table is
+ * temporarily unreachable after the business transaction has already
+ * committed), the event is persisted here and drained by `AuditOutboxCron`
+ * until it is successfully inserted into `AuditLog`. This prevents silent
+ * loss of financial/security audit history without blocking the original
+ * business operation.
+ */
+model AuditOutbox {
+  id          String    @id @default(uuid())
+  actorId     String
+  actorRole   String
+  targetType  String
+  targetId    String
+  action      String
+  beforeSnap  Json?
+  afterSnap   Json?
+  ipHash      String?
+  retryCount  Int       @default(0) @map("retry_count")
+  maxRetries  Int       @default(10) @map("max_retries")
+  lastError   String?   @map("last_error")
+  nextRetryAt DateTime  @db.Timestamptz @map("next_retry_at")
+  processedAt DateTime? @map("processed_at")
+  failedAt    DateTime? @map("failed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([nextRetryAt])
+  @@index([createdAt])
+  @@map("audit_outbox")
 }
 
 model CronLease {

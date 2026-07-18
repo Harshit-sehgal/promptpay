@@ -9,6 +9,7 @@ import {
   Max,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -441,4 +442,40 @@ export class PayoutAccountFreezeDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
+}
+
+export class ReleasePayoutFenceDto {
+  @ApiProperty()
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  reason!: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Provider transaction identifier from the reconciled payout',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  providerTxId?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Final resolution summary (e.g. paid, failed, cancelled)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  resolution?: string;
+}
+
+/** Internal options shape for {@link AdminPayoutsTrait.releasePayoutFence}. */
+export interface ReleasePayoutFenceOptions {
+  payoutAccountId: string;
+  reviewerId: string;
+  reviewerRole: string;
+  reason: string;
+  providerTxId?: string;
+  resolution?: string;
 }

@@ -155,6 +155,30 @@ export enum ReferralStatus {
   PENDING = 'pending',
   REWARDED = 'rewarded',
 }
+
+// ── Extension WaitState / Ad Lifecycle Event Types ──
+// Round 33 schema-gap: the `WaitStateEvent.eventType` Prisma enum (DB name
+// `EventType`, members `wait_state_start`, `wait_state_end`, `ad_request`,
+// `ad_rendered`, `qualified_impression`, `click`, `report_ad`) had no shared
+// TS counterpart. Every other DB enum has a mirror here; this was the sole
+// outlier, forcing client code that needs these constants to either import
+// `@waitlayer/db` (splitting the package boundary) or hardcode strings (no
+// single source of truth). Added as a pure additive export with a clear
+// disambiguating name (`WaitStateEventType`) — using `EventType` here would
+// shadow a common global name and risk confusion in callers. Existing
+// hardcoded string sites across `apps/api` are unchanged for now; consumers
+// can migrate incrementally and a future sweep can replace literals with
+// `WaitStateEventType.X`. Member values are byte-identical to the Prisma
+// enum so a swap from string literal to enum is a no-op at the DB layer.
+export enum WaitStateEventType {
+  WAIT_STATE_START = 'wait_state_start',
+  WAIT_STATE_END = 'wait_state_end',
+  AD_REQUEST = 'ad_request',
+  AD_RENDERED = 'ad_rendered',
+  QUALIFIED_IMPRESSION = 'qualified_impression',
+  CLICK = 'click',
+  REPORT_AD = 'report_ad',
+}
 // ── Prohibited Ad Categories ──
 export const PROHIBITED_CATEGORIES = [
   'gambling',

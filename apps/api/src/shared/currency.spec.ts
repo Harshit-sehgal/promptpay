@@ -49,9 +49,13 @@ describe('currency policy table', () => {
   });
 
   describe('primaryCurrency (multi-currency summary fix)', () => {
-    it('picks the currency with the strictly-largest positive balance', () => {
-      expect(primaryCurrency({ USD: 50n, EUR: 30n })).toBe('USD');
-      expect(primaryCurrency({ EUR: 30n, USD: 50n })).toBe('USD');
+    it('picks the first positive-balance currency in ascending code order', () => {
+      // Old (buggy) behaviour picked the largest raw minor value. That is a
+      // cross-currency magnitude comparison and is invalid. The fix picks the
+      // first positive currency alphabetically — a deterministic, non-monetary
+      // choice — so USD/EUR ordering no longer depends on raw minor magnitudes.
+      expect(primaryCurrency({ USD: 50n, EUR: 30n })).toBe('EUR');
+      expect(primaryCurrency({ EUR: 30n, USD: 50n })).toBe('EUR');
     });
 
     it('returns a non-USD currency when it is the only positive one', () => {
@@ -63,6 +67,18 @@ describe('currency policy table', () => {
       expect(primaryCurrency({})).toBe('USD');
       expect(primaryCurrency({ USD: 0n, EUR: 0n })).toBe('USD');
       expect(primaryCurrency({ USD: -5n })).toBe('USD');
+      expect(primaryCurrency({ USD: -5n, EUR: -100n })).toBe('USD');
+    });
+
+    it('never compares raw minor units across currencies for JPY vs USD', () => {
+      // 100 JPY minor units and 100 USD cents are NOT the same amount. The
+      // old magnitude comparison would have called USD "larger" purely from
+      // raw numerics that are incomparable across currencies. The deterministic
+      // alphabetical pick returns EUR (the first positive) regardless of the
+      // fact that JPY's raw 100 == USD's raw 100.
+      expect(primaryCurrency({ JPY: 100n, USD: 100n, EUR: 1n })).toBe('EUR');
+      expect(primaryCurrency({ JPY: 100n })).toBe('JPY');
+      expect(primaryCurrency({ USD: 100n })).toBe('USD');
     });
   });
 });

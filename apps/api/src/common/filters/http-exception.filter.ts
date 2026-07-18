@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import { Request,Response } from 'express';
+import { Request, Response } from 'express';
 import {
   ArgumentsHost,
   Catch,
@@ -18,27 +18,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+      exception instanceof HttpException ? exception.getResponse() : 'Internal server error';
     // Reuse the request-scoped id stamped by the requestId middleware in
     // main.ts so the filter's log line + JSON response match the
     // LoggingInterceptor's access log — operators can correlate a client's
     // `requestId` to both the access log and the 5xx stack trace. Fall back
     // to a fresh UUID if the header is somehow absent (e.g. non-HTTP RPC).
-    const requestId = (request.headers['x-request-id'] as string | undefined) || crypto.randomUUID();
+    const requestId =
+      (request.headers['x-request-id'] as string | undefined) || crypto.randomUUID();
 
-    // Log 5xx errors with the full stack — these are unexpected failures that
-    // need investigation. 4xx errors are client mistakes and are already logged
-    // by the LoggingInterceptor (which also echoes the same requestId).
+    // Log 5xx errors with a sanitized stack — these are unexpected failures
+    // that need investigation. 4xx errors are client mistakes and are already
+    // logged by the LoggingInterceptor (which also echoes the same requestId).
+    // Stacks from external HTTP clients can echo Authorization headers, API
+    // keys, or tokens, so we redact before writing to the log stream.
     if (status >= 500) {
-      this.logger.error(
-        `Unhandled exception (requestId=${requestId}): ${exception instanceof Error ? exception.stack : String(exception)}`,
-      );
+      const raw = exception instanceof Error ? exception.stack : String(exception);
+      this.logger.error(`Unhandled exception (requestId=${requestId}): ${sanitizeLogText(raw)}`);
     }
 
     // If headers were already sent (e.g. streaming response), we can't write
@@ -52,9 +50,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // can correlate even when the body is consumed elsewhere.
     response.setHeader('x-request-id', requestId);
 
-    const errorProp = typeof message === 'object' && message !== null
-      ? (message as { error?: string })?.error
-      : undefined;
+    const errorProp =
+      typeof message === 'object' && message !== null
+        ? (message as { error?: string })?.error
+        : undefined;
 
     response.status(status).json({
       statusCode: status,
@@ -89,4 +88,20 @@ function getExceptionMessage(message: unknown): unknown {
   if (typeof message === 'string') return message;
   const nested = (message as { message?: unknown })?.message;
   return nested ?? message;
+}
+
+/**
+ * Redact tokens, cookies, and query-string secrets from free-form log text.
+ * This is a last-line-of-defense scrub for stack traces and error strings
+ * that may have captured request metadata from external HTTP clients.
+ */
+function sanitizeLogText(text: string | undefined): string {
+  if (!text) return '';
+  return text
+    .replace(/(\bAuthorization\s*[:=]\s*)[^\n]+/gi, '$1[redacted]')
+    .replace(/(\bBearer\s+)\S+/gi, '$1[redacted]')
+    .replace(/(\bcookie\s*[:=]\s*)[^\n]+/gi, '$1[redacted]')
+    .replace(/(\bX-Api-Key\s*[:=]\s*)[^\n]+/gi, '$1[redacted]')
+    .replace(/(\?)([^\s]*)/g, '$1[redacted]')
+    .replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '[email]');
 }

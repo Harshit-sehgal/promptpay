@@ -57,6 +57,16 @@ export class DeveloperController {
 
   @ApiOperation({ summary: 'Update settings' })
   @Patch('settings')
+  // Round 34: settings changes (ads enable flag, quiet-mode windows, hourly
+  // ad cap, blocked categories, timezone) shape how and whether this account
+  // earns, and quiet-mode / blocked-categories can be used to silently stall
+  // ad delivery. An attacker who took over the account would flip these to
+  // suppress traffic or alter the earning profile; the audit row makes the
+  // change visible in the timeline with a scrubbed before/after body snapshot.
+  // `targetType: 'user'` so the interceptor fetches the account's pre-state
+  // (id/role/status); the settings diff itself is in beforeSnap.body.
+  @Audit('update_developer_settings', 'user')
+  @UseInterceptors(AuditInterceptor)
   updateSettings(@CurrentUser('id') userId: string, @Body() dto: UpdateSettingsDto) {
     return this.service.updateSettings(userId, dto);
   }

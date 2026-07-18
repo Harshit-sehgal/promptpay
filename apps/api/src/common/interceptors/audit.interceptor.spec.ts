@@ -32,6 +32,18 @@ describe('AuditInterceptor credential scrubbing', () => {
       publicKeyLabel: 'Laptop',
     });
   });
+
+  it('recursively scrubs nested arrays of objects', () => {
+    expect(
+      scrubBody({
+        items: [[{ password: 'deep-secret' }]],
+        flat: [{ apiKey: 'flat-secret' }],
+      }),
+    ).toEqual({
+      items: [[{ password: '[redacted]' }]],
+      flat: [{ apiKey: '[redacted]' }],
+    });
+  });
 });
 
 describe('AuditInterceptor durable success acknowledgement', () => {

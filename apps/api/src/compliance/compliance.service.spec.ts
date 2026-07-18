@@ -17,6 +17,7 @@ const mockPrisma = {
 
 const audit = {
   log: vi.fn().mockResolvedValue(undefined),
+  logStrict: vi.fn().mockResolvedValue(undefined),
 } as any;
 
 function makeService() {
@@ -59,8 +60,9 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
     // Defaults to the current required version when omitted.
     expect(data.version).toBe('2026-07-01');
     expect(data.granted).toBe(true);
-    expect(audit.log).toHaveBeenCalledWith(
+    expect(audit.logStrict).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'consent_granted', actorId: 'anonymous' }),
+      expect.anything(),
     );
   });
 
@@ -84,8 +86,9 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
     expect(row.granted).toBe(false);
     const data = mockPrisma.consent.create.mock.calls[0][0].data;
     expect(data.granted).toBe(false);
-    expect(audit.log).toHaveBeenCalledWith(
+    expect(audit.logStrict).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'consent_revoked', actorId: 'anonymous' }),
+      expect.anything(),
     );
   });
 
@@ -164,7 +167,7 @@ describe('ComplianceService — anonymous (logged-out) consent (A-009)', () => {
     ).resolves.toBe(existing);
     expect(mockPrisma.$executeRaw).toHaveBeenCalled();
     expect(mockPrisma.consent.create).not.toHaveBeenCalled();
-    expect(audit.log).not.toHaveBeenCalled();
+    expect(audit.logStrict).not.toHaveBeenCalled();
   });
 
   it('does not store the raw visitorId — only its hash', async () => {
@@ -246,6 +249,6 @@ describe('ComplianceService — stale consent semantics', () => {
       service.recordConsent('user-1', 'developer', 'privacy_policy', '2026-07-01', true),
     ).resolves.toBe(existing);
     expect(mockPrisma.consent.create).not.toHaveBeenCalled();
-    expect(audit.log).not.toHaveBeenCalled();
+    expect(audit.logStrict).not.toHaveBeenCalled();
   });
 });

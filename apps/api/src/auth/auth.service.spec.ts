@@ -85,6 +85,7 @@ function makeService(overrides?: Record<string, string>) {
     googleVerifier,
     fraud,
     email,
+    audit,
     createAccessToken: (sub: string, role: string, ttl = '15m', jti = 'access-jti') =>
       jwt.signAsync({ sub, role, aud: ['waitlayer-client', 'access'], jti }, {
         expiresIn: ttl,
@@ -164,7 +165,7 @@ describe('AuthService', () => {
 
   describe('signUp', () => {
     it('creates a new user and returns token pair', async () => {
-      const { service } = makeService();
+      const { service, audit } = makeService();
       mockPrisma.user.findUnique.mockResolvedValue(null);
       mockPrisma.user.create.mockResolvedValue({
         id: 'u-1',
@@ -196,6 +197,10 @@ describe('AuthService', () => {
       expect(mockPrisma.userSettings.create).toHaveBeenCalled();
       expect(mockPrisma.trustScore.create).toHaveBeenCalled();
       expect(mockPrisma.session.create).toHaveBeenCalled();
+      expect(audit.logStrict).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'signup', targetId: 'u-1' }),
+        expect.anything(),
+      );
     });
 
     it('throws ConflictException for duplicate email', async () => {
@@ -928,7 +933,7 @@ describe('AuthService', () => {
     });
 
     it('should create a new developer profile and return tokens if new user signs up via Google', async () => {
-      const { service, googleVerifier } = makeService();
+      const { service, googleVerifier, audit } = makeService();
       googleVerifier.verify.mockResolvedValue({
         sub: 'google-456',
         email: 'new-google@test.com',
@@ -963,6 +968,10 @@ describe('AuthService', () => {
       const purposes = mockPrisma.consent.create.mock.calls.map((c: any) => c[0].data.purpose);
       expect(purposes).toContain('terms_of_service');
       expect(purposes).toContain('privacy_policy');
+      expect(audit.logStrict).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'google_signup', targetId: 'u-new-google' }),
+        expect.anything(),
+      );
     });
 
     it('rejects first-time Google signup without age/terms consent (A-034)', async () => {

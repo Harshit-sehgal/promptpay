@@ -37,11 +37,14 @@ const mockPrisma: any = {
   payoutRequest: {
     findUnique: vi.fn(),
     updateMany: vi.fn(),
+    findMany: vi.fn(),
   },
   payoutAccount: {
+    findMany: vi.fn(),
     findUnique: vi.fn(),
     updateMany: vi.fn(),
     update: vi.fn(),
+    count: vi.fn(),
   },
   fraudFlag: {
     groupBy: vi.fn(),
@@ -51,7 +54,10 @@ const mockPrisma: any = {
 
 describe('AdminService', () => {
   let service: AdminService;
-  const mockAudit = { log: vi.fn().mockResolvedValue(undefined) };
+  const mockAudit = {
+    log: vi.fn().mockResolvedValue(undefined),
+    logStrict: vi.fn().mockResolvedValue(undefined),
+  };
   const mockFraud = { computeTrustScore: vi.fn() };
   const mockEmail = {
     sendPayoutAccountFrozenAlert: vi.fn().mockResolvedValue({ delivered: true, driver: 'console' }),
@@ -59,6 +65,8 @@ describe('AdminService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Restore the default transaction mock in case a previous test changed it.
+    mockPrisma.$transaction = vi.fn(async (callback: any) => callback(mockPrisma));
     service = new AdminService(
       mockPrisma,
       mockAudit as any,
@@ -104,6 +112,8 @@ describe('AdminService', () => {
       //   4. totalReserveReversal   (fraud_reserve reversal)
       //   5. totalCashCredit        (cash credit)        — advertiser deposit cash bucket
       //   6. totalCashReversal      (cash reversal)
+      //   7. totalReferralBonusCredit   (referral_bonus credit)   — Round 36
+      //   8. totalReferralBonusReversal (referral_bonus reversal) — Round 36
       mockPrisma.platformLedger.groupBy
         .mockResolvedValueOnce([
           { currency: 'USD', _sum: { amountMinor: 30 } },
@@ -116,7 +126,9 @@ describe('AdminService', () => {
         ])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]) // totalCashCredit
-        .mockResolvedValueOnce([]); // totalCashReversal
+        .mockResolvedValueOnce([]) // totalCashReversal
+        .mockResolvedValueOnce([]) // totalReferralBonusCredit
+        .mockResolvedValueOnce([]); // totalReferralBonusReversal
       mockPrisma.user.findMany.mockResolvedValue([{ id: 'dev-1', email: 'dev@example.com' }]);
       // $queryRaw call order in getMoneyIntegrityReport:
       //   1. campaign discrepancies (WITH debits join) -> empty
@@ -142,6 +154,7 @@ describe('AdminService', () => {
           netPlatformFeeMinor: 60n,
           netReserveMinor: 20n,
           netCashMinor: 0n,
+          netReferralBonusMinor: 0n,
           splitSumMinor: 200n,
           discrepancyMinor: 0n,
         },
@@ -152,6 +165,7 @@ describe('AdminService', () => {
           netPlatformFeeMinor: 30n,
           netReserveMinor: 10n,
           netCashMinor: 0n,
+          netReferralBonusMinor: 0n,
           splitSumMinor: 100n,
           discrepancyMinor: 0n,
         },
@@ -549,12 +563,13 @@ describe('AdminService', () => {
         where: { id: 'pa-1' },
         data: { isVerified: true },
       });
-      expect(mockAudit.log).toHaveBeenCalledWith(
+      expect(mockAudit.logStrict).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'payout_account_verified',
           targetId: 'pa-1',
           afterSnap: expect.objectContaining({ reason: 'ownership confirmed' }),
         }),
+        expect.anything(),
       );
     });
 
@@ -618,12 +633,13 @@ describe('AdminService', () => {
           isFrozen: true,
         },
       });
-      expect(mockAudit.log).toHaveBeenCalledWith(
+      expect(mockAudit.logStrict).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'payout_account_frozen',
           targetId: 'pa-1',
           afterSnap: expect.objectContaining({ reason: 'suspected takeover' }),
         }),
+        expect.anything(),
       );
     });
 
@@ -676,12 +692,13 @@ describe('AdminService', () => {
         where: { id: 'pa-1' },
         data: { isFrozen: false },
       });
-      expect(mockAudit.log).toHaveBeenCalledWith(
+      expect(mockAudit.logStrict).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'payout_account_unfrozen',
           targetId: 'pa-1',
           afterSnap: expect.objectContaining({ reason: 'cleared' }),
         }),
+        expect.anything(),
       );
     });
 
@@ -755,8 +772,9 @@ describe('AdminService', () => {
           time: expect.any(String),
         }),
       );
-      expect(mockAudit.log).toHaveBeenCalledWith(
+      expect(mockAudit.logStrict).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'payout_account_frozen' }),
+        expect.anything(),
       );
     });
 
@@ -790,7 +808,7 @@ describe('AdminService', () => {
             isFrozen: true,
           },
         });
-        expect(mockAudit.log).toHaveBeenCalled();
+        expect(mockAudit.logStrict).toHaveBeenCalled();
         // Drain microtasks so the .catch(console.warn) runs before the spy check.
         await new Promise((r) => process.nextTick(r));
         expect(warnSpy).toHaveBeenCalledWith(
@@ -799,6 +817,278 @@ describe('AdminService', () => {
       } finally {
         warnSpy.mockRestore();
       }
+    });
+
+    it('lists accounts with an active provider-initiation fence', async () => {
+      const fenced = [
+        {
+          id: 'pa-fenced',
+          provider: 'wise',
+          destination: 'wise-dest',
+          initiationPayoutId: 'payout-1',
+          user: { id: 'u1', email: 'dev@example.com' },
+        },
+      ];
+      mockPrisma.payoutAccount.findMany.mockResolvedValue(fenced);
+      mockPrisma.payoutAccount.count.mockResolvedValue(2);
+
+      const result = await service.getFencedAccounts({ page: 1, limit: 10 });
+
+      expect(mockPrisma.payoutAccount.findMany).toHaveBeenCalledWith({
+        where: { initiationPayoutId: { not: null } },
+        include: { user: { select: { id: true, email: true } } },
+        orderBy: { updatedAt: 'desc' },
+        skip: 0,
+        take: 10,
+      });
+      expect(mockPrisma.payoutAccount.count).toHaveBeenCalledWith({
+        where: { initiationPayoutId: { not: null } },
+      });
+      expect(result).toEqual({ items: fenced, total: 2, page: 1, limit: 10 });
+    });
+
+    it('applies default pagination when no params are provided', async () => {
+      const fenced: unknown[] = [];
+      mockPrisma.payoutAccount.findMany.mockResolvedValue(fenced);
+      mockPrisma.payoutAccount.count.mockResolvedValue(0);
+
+      await service.getFencedAccounts();
+
+      expect(mockPrisma.payoutAccount.findMany).toHaveBeenCalledWith({
+        where: { initiationPayoutId: { not: null } },
+        include: { user: { select: { id: true, email: true } } },
+        orderBy: { updatedAt: 'desc' },
+        skip: 0,
+        take: 50,
+      });
+    });
+
+    it('clamps pagination limit to a maximum of 100', async () => {
+      const fenced: unknown[] = [];
+      mockPrisma.payoutAccount.findMany.mockResolvedValue(fenced);
+      mockPrisma.payoutAccount.count.mockResolvedValue(0);
+
+      await service.getFencedAccounts({ page: 2, limit: 200 });
+
+      expect(mockPrisma.payoutAccount.findMany).toHaveBeenCalledWith({
+        where: { initiationPayoutId: { not: null } },
+        include: { user: { select: { id: true, email: true } } },
+        orderBy: { updatedAt: 'desc' },
+        skip: 100,
+        take: 100,
+      });
+    });
+
+    it.each([
+      { status: 'paid', allowed: true },
+      { status: 'failed', allowed: true },
+      { status: 'rejected', allowed: true },
+      { status: 'cancelled', allowed: true },
+      { status: 'processing', allowed: false },
+      { status: 'requested', allowed: false },
+      { status: 'under_review', allowed: false },
+      { status: 'approved', allowed: false },
+    ])(
+      'releases fence only when referenced payout is terminal ($status -> $allowed)',
+      async ({ status, allowed }) => {
+        const account = {
+          id: 'pa-1',
+          provider: 'wise',
+          destination: 'wise-dest',
+          initiationPayoutId: 'payout-1',
+          user: { id: 'u1', email: 'dev@example.com' },
+        };
+        mockPrisma.payoutAccount.findUnique.mockResolvedValue(account);
+        mockPrisma.payoutRequest.findUnique.mockResolvedValue({ status });
+        mockPrisma.payoutAccount.update.mockResolvedValue({
+          ...account,
+          initiationPayoutId: null,
+        });
+
+        if (allowed) {
+          const result = await service.releasePayoutFence({
+            payoutAccountId: 'pa-1',
+            reviewerId: 'admin-1',
+            reviewerRole: 'admin',
+            reason: 'provider outcome confirmed',
+            providerTxId: 'provider-tx-123',
+            resolution: 'paid',
+          });
+          expect(result.initiationPayoutId).toBeNull();
+          expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
+            where: { id: 'pa-1' },
+            data: { initiationPayoutId: null },
+          });
+          expect(mockAudit.logStrict).toHaveBeenCalledWith(
+            expect.objectContaining({
+              action: 'release_payout_fence',
+              afterSnap: expect.objectContaining({
+                observedPayoutStatus: status,
+                providerTxId: 'provider-tx-123',
+                resolution: 'paid',
+              }),
+            }),
+            expect.anything(),
+          );
+        } else {
+          await expect(
+            service.releasePayoutFence({
+              payoutAccountId: 'pa-1',
+              reviewerId: 'admin-1',
+              reviewerRole: 'admin',
+              reason: 'provider outcome confirmed',
+            }),
+          ).rejects.toThrow(/confirm the provider outcome/);
+          expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it('releases a fence without optional providerTxId/resolution', async () => {
+      const account = {
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: 'payout-1',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(account);
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({ status: 'paid' });
+      mockPrisma.payoutAccount.update.mockResolvedValue({
+        ...account,
+        initiationPayoutId: null,
+      });
+
+      await service.releasePayoutFence({
+        payoutAccountId: 'pa-1',
+        reviewerId: 'admin-1',
+        reviewerRole: 'admin',
+        reason: 'provider outcome confirmed',
+      });
+
+      expect(mockAudit.logStrict).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'release_payout_fence',
+          afterSnap: expect.objectContaining({
+            observedPayoutStatus: 'paid',
+            providerTxId: null,
+            resolution: null,
+          }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects fence release when the referenced payout no longer exists', async () => {
+      const account = {
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: 'payout-1',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(account);
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'payout was deleted',
+        }),
+      ).rejects.toThrow('no longer exists');
+
+      expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects releasing a fence for an account without an active fence', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: null,
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'no fence',
+        }),
+      ).rejects.toThrow('does not have an active initiation fence');
+    });
+
+    it('throws NotFoundException when releasing a fence for a missing account', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'ghost',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'missing',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('leaves the fence intact if the clearing transaction fails', async () => {
+      const account = {
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: 'payout-1',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(account);
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({ status: 'paid' });
+      mockPrisma.$transaction.mockRejectedValueOnce(new Error('database connection lost'));
+
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'provider outcome confirmed',
+        }),
+      ).rejects.toThrow('database connection lost');
+
+      // The fence was never cleared — no update could set initiationPayoutId to null.
+      expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { initiationPayoutId: null } }),
+      );
+      // The account record still carries the fence.
+      expect(account.initiationPayoutId).toBe('payout-1');
+    });
+
+    it('retains the fence when the referenced payout is still in flight (timeout/crash recovery)', async () => {
+      const account = {
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: 'payout-1',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(account);
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({ status: 'processing' });
+
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'provider outcome confirmed',
+        }),
+      ).rejects.toThrow(/confirm the provider outcome/);
+
+      // The fence stays in place because the payout is non-terminal.
+      expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: { initiationPayoutId: null } }),
+      );
+      // The account record still carries the fence.
+      expect(account.initiationPayoutId).toBe('payout-1');
     });
   });
 });

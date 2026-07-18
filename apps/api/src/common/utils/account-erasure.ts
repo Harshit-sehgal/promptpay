@@ -2,6 +2,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
+import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../config/prisma.service';
 
 const EARNINGS_OBLIGATION_STATUSES = ['estimated', 'pending', 'confirmed', 'held'] as const;
@@ -23,6 +24,12 @@ export interface EraseAccountOptions {
   forfeitBalance?: boolean;
 }
 
+export interface EraseAccountAuditInput {
+  actorId: string;
+  actorRole: string;
+  action?: string;
+}
+
 /**
  * Erase direct account identifiers without silently forfeiting or stranding
  * money. The user row is retained as a pseudonymous FK anchor for financial,
@@ -36,6 +43,8 @@ export async function eraseAccountIdentity(
   prisma: PrismaService,
   userId: string,
   options: EraseAccountOptions = {},
+  audit?: AuditService,
+  auditEntry?: EraseAccountAuditInput,
 ): Promise<{ deleted: true; priorEmail: string }> {
   return prisma.$transaction(
     async (tx) => {
@@ -174,6 +183,23 @@ export async function eraseAccountIdentity(
         },
       });
 
+      // Account deletion is an irreversible, security-critical action. The
+      // audit must be part of the same transaction so a rolled-back deletion
+      // never leaves a false success record.
+      if (audit && auditEntry) {
+        await audit.logStrict(
+          {
+            actorId: auditEntry.actorId,
+            actorRole: auditEntry.actorRole,
+            action: auditEntry.action ?? 'delete_account',
+            targetType: 'user',
+            targetId: userId,
+            beforeSnap: { priorEmail: user.email, status: user.status },
+          },
+          tx,
+        );
+      }
+
       return { deleted: true as const, priorEmail: user.email };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15_000 },
@@ -227,7 +253,30 @@ async function assertNoFinancialErasureObligations(
       }
       // Reverse all remaining credit earnings as forfeited. This zeroes the
       // balance so the preflight passes. The reversed entries remain in the
-      // ledger as an audit trail — money is conserved.
+      // ledger as an audit trail.
+      //
+      // Round 35: write matching forfeit credits to the platform cash bucket
+      // so the global split-conservation invariant stays balanced:
+      //   advertiser_spend = netEarnings + netPlatform + netReserve + netCash.
+      // Without this, flipping developer credits to 'reversed' (removed from
+      // netEarnings) while the platform_fee and fraud_reserve from those same
+      // ads stay confirmed produces a permanent discrepancy flagged by the
+      // money-integrity reconciliation cron. The forfeit amount is always
+      // sub-threshold (≤FORFEIT_THRESHOLD_MINOR, ~$10), so money at risk is
+      // small, but the integrity-report noise creates operator desensitization.
+      //
+      // Aggregate before flipping so the currency breakdown reflects the rows
+      // we are about to reverse; then flip; then write the cash credits from
+      // the pre-flip snapshot. All inside the same $transaction.
+      const forfeitByCurrencyPreFlip = await tx.earningsLedger.groupBy({
+        by: ['currency'],
+        where: {
+          userId,
+          entryType: 'credit',
+          status: { in: [...EARNINGS_OBLIGATION_STATUSES] },
+        },
+        _sum: { amountMinor: true },
+      });
       await tx.earningsLedger.updateMany({
         where: {
           userId,
@@ -238,6 +287,24 @@ async function assertNoFinancialErasureObligations(
           status: 'reversed',
         },
       });
+      for (const row of forfeitByCurrencyPreFlip.filter(
+        (r) => BigInt(r._sum.amountMinor ?? 0n) > 0n,
+      )) {
+        const currency = row.currency ?? 'USD';
+        const amount = BigInt(row._sum.amountMinor ?? 0n);
+        await tx.platformLedger.create({
+          data: {
+            entryType: 'credit',
+            status: 'confirmed',
+            amountMinor: amount,
+            currency,
+            bucket: 'cash',
+            referenceId: userId,
+            idempotencyKey: `gdpr-forfeit-${userId}-${currency}`,
+            description: `GDPR erasure forfeited developer balance for ${userId} (${currency})`,
+          },
+        });
+      }
     } else {
       throw new ConflictException(
         'Account deletion is blocked while estimated, pending, confirmed, or held earnings remain. Withdraw available funds and resolve pending or held earnings first, or set forfeitBalance=true to forfeit sub-threshold earnings below the payout minimum.',

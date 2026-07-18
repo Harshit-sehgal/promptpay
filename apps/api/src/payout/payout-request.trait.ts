@@ -5,6 +5,7 @@ import { EarningsLedger, Prisma } from '@waitlayer/db';
 import { payoutMinimumMinor, payoutProviderLaunchStatus, PayoutStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
+import { isUniqueConstraintViolation } from '../common/utils/errors';
 import {
   CircuitBreakerOpenError,
   providerBreaker,
@@ -48,6 +49,49 @@ export class PayoutRequestTrait {
   ) {
     const key = (currency || 'USD').toUpperCase();
     totals[key] = (totals[key] ?? 0n) + amountMinor;
+  }
+
+  /**
+   * Verify a replayed idempotency-key request carries the same payload as the
+   * original. A replay with a different amount, currency, payout account, or
+   * selected earnings entries is a client error (409 Conflict), not a silent
+   * return of an unrelated earlier payout. Same-user is guaranteed by the
+   * (userId, idempotencyKey) unique index, so it is not re-checked here.
+   */
+  private verifyIdempotentReplay(
+    existing: Prisma.PayoutRequestGetPayload<{ include: { allocations: true } }>,
+    dto: {
+      payoutAccountId: string;
+      amountMinor: bigint;
+      currency: string;
+      earningsEntryIds?: string[];
+    },
+    normalizedCurrency: string,
+  ): void {
+    if (existing.payoutAccountId !== dto.payoutAccountId) {
+      throw new ConflictException(
+        'Idempotency key was already used with a different payout account',
+      );
+    }
+    if (existing.requestedAmountMinor !== dto.amountMinor) {
+      throw new ConflictException('Idempotency key was already used with a different amount');
+    }
+    if (existing.currency.toUpperCase() !== normalizedCurrency) {
+      throw new ConflictException('Idempotency key was already used with a different currency');
+    }
+    if (dto.earningsEntryIds && dto.earningsEntryIds.length > 0) {
+      const existingEntryIds = new Set(
+        existing.allocations.map((a: { earningsEntryId: string }) => a.earningsEntryId),
+      );
+      const sameEntries =
+        dto.earningsEntryIds.length === existingEntryIds.size &&
+        dto.earningsEntryIds.every((id) => existingEntryIds.has(id));
+      if (!sameEntries) {
+        throw new ConflictException(
+          'Idempotency key was already used with different earnings entries',
+        );
+      }
+    }
   }
 
   /** Allocate specific confirmed earnings to a payout request */
@@ -255,8 +299,32 @@ export class PayoutRequestTrait {
         'Two-factor authentication is required before requesting a payout',
       );
     }
-    // Minimum threshold check — per-currency floor from the currency policy.
+    // Normalize currency early so the idempotency replay check can compare
+    // apples-to-apples before any balance/account pre-checks.
     const currency = dto.currency.trim().toUpperCase();
+    // ── Idempotency replay check (earliest possible, after auth) ──
+    // A replayed request with the same user-scoped key must be detected before
+    // balance/account/fraud pre-checks so that a mismatched payload always
+    // returns 409, even if the original payout consumed the available balance
+    // or the account state has changed. This intentionally skips the
+    // `isCurrencyAllowed` and minimum-payout checks for replays: the key was
+    // already used, so the original payout's currency/amount are the only valid
+    // reference, regardless of current policy or balance. The (userId,
+    // idempotencyKey) unique index is the authoritative floor; the in-tx
+    // pre-check below handles the race where a concurrent request commits
+    // between this read and the INSERT.
+    const idempotencyKey = dto.idempotencyKey?.trim();
+    if (idempotencyKey) {
+      const existing = await this.prisma.payoutRequest.findUnique({
+        where: { userId_idempotencyKey: { userId, idempotencyKey } },
+        include: { allocations: true },
+      });
+      if (existing) {
+        this.verifyIdempotentReplay(existing, dto, currency);
+        return existing;
+      }
+    }
+    // Minimum threshold check — per-currency floor from the currency policy.
     if (!(await this.runtimeConfig.isCurrencyAllowed(currency))) {
       throw new BadRequestException(`Currency "${currency}" is currently blocked`);
     }
@@ -365,42 +433,49 @@ export class PayoutRequestTrait {
     // allocated-entry exclusions bound to RESERVED_PAYOUT_STATUSES), so two
     // concurrent payouts cannot double-allocate the same entry. The unique
     // index on `payout_allocations.earningsEntryId` is the DB floor.
-    const idempotencyKey = dto.idempotencyKey?.trim();
-    return this.prisma.$transaction(async (tx) => {
-      // Idempotency: a replayed request with the same user-scoped key returns
-      // the existing payout instead of creating a duplicate. The unique index
-      // on (userId, idempotencyKey) is the authoritative floor; this pre-check
-      // is the fast path for replays.
-      if (idempotencyKey) {
-        const existing = await tx.payoutRequest.findUnique({
-          where: { userId_idempotencyKey: { userId, idempotencyKey } },
-          include: { allocations: true },
-        });
-        if (existing) {
-          return existing;
+    let committed: Prisma.PayoutRequestGetPayload<{ include: { allocations: true } }>;
+    try {
+      committed = await this.prisma.$transaction(async (tx) => {
+        // In-tx pre-check (safe: SELECT before any failed statement). Handles
+        // the race where a concurrent request committed after the outside
+        // pre-check but before this tx opened.
+        if (idempotencyKey) {
+          const existing = await tx.payoutRequest.findUnique({
+            where: { userId_idempotencyKey: { userId, idempotencyKey } },
+            include: { allocations: true },
+          });
+          if (existing) {
+            this.verifyIdempotentReplay(existing, dto, currency);
+            return existing;
+          }
         }
-      }
 
-      // Re-check fraud state inside the authoritative allocation transaction.
-      // An escalated flag is still under review and must remain payout-blocking;
-      // escalation cannot become a way to bypass the outer pre-check. Share the
-      // user's advisory lock with fraud creation so this predicate and creation
-      // of the reserved payout cannot pass one another unobserved.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${payoutFraudLockKey(userId)}))`;
-      const activeFraudFlags = await tx.fraudFlag.count({
-        where: {
-          userId,
-          status: { in: ACTIVE_FRAUD_FLAG_STATUSES },
-          severity: { in: ['high', 'critical'] },
-        },
-      });
-      if (activeFraudFlags > 0) {
-        throw new ForbiddenException('Payout blocked due to pending fraud review');
-      }
+        // Re-check fraud state inside the authoritative allocation transaction.
+        // An escalated flag is still under review and must remain payout-blocking;
+        // escalation cannot become a way to bypass the outer pre-check. Share the
+        // user's advisory lock with fraud creation so this predicate and creation
+        // of the reserved payout cannot pass one another unobserved.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${payoutFraudLockKey(userId)}))`;
+        const activeFraudFlags = await tx.fraudFlag.count({
+          where: {
+            userId,
+            status: { in: ACTIVE_FRAUD_FLAG_STATUSES },
+            severity: { in: ['high', 'critical'] },
+          },
+        });
+        if (activeFraudFlags > 0) {
+          throw new ForbiddenException('Payout blocked due to pending fraud review');
+        }
 
-      let payoutRequest: Prisma.PayoutRequestGetPayload<{ include: { allocations: true } }>;
-      try {
-        payoutRequest = await tx.payoutRequest.create({
+        // Create the payout request. If a concurrent request with the same
+        // idempotency key committed between the pre-check and this INSERT, the
+        // unique constraint throws P2002. We deliberately do NOT catch it here:
+        // a statement-level constraint failure leaves the PostgreSQL
+        // transaction aborted/unusable, so any further query on `tx` would fail
+        // with "current transaction is aborted, commands ignored until end of
+        // transaction block". Let the tx roll back and re-read the winner with
+        // the normal Prisma client outside the $transaction call.
+        const payoutRequest = await tx.payoutRequest.create({
           data: {
             userId,
             payoutAccountId: dto.payoutAccountId,
@@ -411,50 +486,64 @@ export class PayoutRequestTrait {
           },
           include: { allocations: true },
         });
-      } catch (err: unknown) {
-        // Race: another request with the same idempotency key committed
-        // between the pre-check and the create. Return the winner.
-        if (
-          idempotencyKey &&
-          err instanceof Prisma.PrismaClientKnownRequestError &&
-          err.code === 'P2002'
-        ) {
-          const winner = await tx.payoutRequest.findUnique({
-            where: { userId_idempotencyKey: { userId, idempotencyKey } },
-            include: { allocations: true },
-          });
-          if (winner) return winner;
-        }
-        throw err;
-      }
-      await this.allocatePayoutEarnings(
-        tx,
-        payoutRequest.id,
-        userId,
-        dto.amountMinor,
-        currency,
-        dto.earningsEntryIds,
-      );
-      const final = await tx.payoutRequest.findUnique({
-        where: { id: payoutRequest.id },
-        include: { allocations: true },
-      });
-      // Audit: payout requested — top-tier money-movement event. Fire
-      // post-commit so we don't log an audit event if the tx rolls back.
-      void this.audit.log({
-        actorId: userId,
-        actorRole: 'developer',
-        action: 'request_payout',
-        targetType: 'payout_request',
-        targetId: payoutRequest.id,
-        beforeSnap: {
-          requestedAmountMinor: String(dto.amountMinor),
+        await this.allocatePayoutEarnings(
+          tx,
+          payoutRequest.id,
+          userId,
+          dto.amountMinor,
           currency,
-          allocationCount: dto.earningsEntryIds?.length ?? 0,
-        },
+          dto.earningsEntryIds,
+        );
+        const finalRow = await tx.payoutRequest.findUnique({
+          where: { id: payoutRequest.id },
+          include: { allocations: true },
+        });
+        // The row was just created in this tx, so it is guaranteed to exist.
+        if (!finalRow) {
+          throw new Error(`Payout request ${payoutRequest.id} vanished mid-transaction`);
+        }
+        // Audit INSIDE the transaction so a rolled-back payout request never
+        // leaves a success audit record, and a committed payout request is
+        // guaranteed to have a matching audit row. This is a mandatory
+        // financial event: audit failure fails the whole transaction.
+        await this.audit.logStrict(
+          {
+            actorId: userId,
+            actorRole: 'developer',
+            action: 'request_payout',
+            targetType: 'payout_request',
+            targetId: finalRow.id,
+            beforeSnap: {
+              requestedAmountMinor: String(dto.amountMinor),
+              currency,
+              allocationCount: dto.earningsEntryIds?.length ?? 0,
+            },
+          },
+          tx,
+        );
+        return finalRow;
       });
-      return final;
-    });
+    } catch (err: unknown) {
+      // The tx rolled back after a P2002 on (userId, idempotencyKey). The only
+      // P2002 that can escape the $transaction is the idempotency-key one:
+      // allocatePayoutEarnings catches the payout_allocations.earningsEntryId
+      // P2002 and converts it to a BadRequestException. Re-read the winner with
+      // the NORMAL client (the tx connection is closed) and verify the replayed
+      // payload matches; a mismatched-payload reuse is a 409, not a silent
+      // return of an unrelated earlier payout.
+      if (idempotencyKey && isUniqueConstraintViolation(err)) {
+        const winner = await this.prisma.payoutRequest.findUnique({
+          where: { userId_idempotencyKey: { userId, idempotencyKey } },
+          include: { allocations: true },
+        });
+        if (winner) {
+          this.verifyIdempotentReplay(winner, dto, currency);
+          return winner;
+        }
+      }
+      throw err;
+    }
+    return committed!;
   }
 
   /** Process an approved payout via the configured provider.

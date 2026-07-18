@@ -18,8 +18,15 @@ const STATIC_CACHEABLE_PATHS = [
 ];
 
 /**
- * Next.js proxy that gates protected routes on the httpOnly
+ * Next.js Edge middleware that gates protected routes on the httpOnly
  * `access_token` cookie.
+ *
+ * IMPORTANT: Next.js only loads middleware from a file literally named
+ * `middleware.ts` (or root `middleware.ts`) exporting `middleware`. Round 26
+ * accidentally renamed this file to `proxy.ts` with `export async function proxy`,
+ * which Next.js silently ignores — the Edge auth gate stopped loading and every
+ * protected page was reachable by disabling client-side JS. Round 36 restored
+ * the required `middleware.ts` / `export async function middleware` naming.
  *
  * History:
  *   (1) Originally the route gate checked a static `session=1` cookie — a
@@ -30,7 +37,7 @@ const STATIC_CACHEABLE_PATHS = [
  *       `localStorage`, exposed to any XSS exfiltration.
  *   (3) Now (this version) tokens live in httpOnly cookies (`access_token` +
  *       `refresh_token`) set by the Next.js Route Handlers — not reachable
- *       by JavaScript at all. The proxy verifies the httpOnly `access_token`
+ *       by JavaScript at all. The middleware verifies the httpOnly `access_token`
  *       cookie the same way.
  *
  * Edge-runtime compatible: `jose` is zero-dependency and works in Next.js
@@ -117,7 +124,7 @@ async function verifyJwtWithConfiguredKeys(
   throw lastError;
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isProtected = PROTECTED_PREFIXES.some(
@@ -224,7 +231,7 @@ function redirectToLogin(pathname: string, request: NextRequest): NextResponse {
 export const config = {
   matcher: [
     /*
-     * Match only protected prefix paths so the proxy (including jose JWT
+     * Match only protected prefix paths so the middleware (including jose JWT
      * verification) is loaded in Edge runtime only for auth-gated pages, not
      * for every public page (homepage, login, signup, etc.). Public pages
      * pass through without the Edge runtime cost.
@@ -235,7 +242,7 @@ export const config = {
     '/developer/:path*',
     '/advertiser/:path*',
     '/admin/:path*',
-    // Public static/marketing pages — the proxy handles caching headers
+    // Public static/marketing pages — the middleware handles caching headers
     '/',
     '/pricing',
     '/comparison',

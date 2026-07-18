@@ -21,8 +21,11 @@ export class PrismaExceptionFilter implements ExceptionFilter<Prisma.PrismaClien
 
     const { status, message } = this.mapError(exception);
 
+    // Never log `exception.message` — Prisma client errors can echo the raw
+    // query and its bound parameters (passwords, tokens, PII). Log only the
+    // safe correlation/request ids and the Prisma error code.
     this.logger.error(
-      `Prisma error (requestId=${requestId}, code=${exception.code}): ${exception.message}`,
+      `Prisma error (requestId=${requestId}, code=${exception.code}, status=${status})`,
     );
 
     if (response.headersSent) {

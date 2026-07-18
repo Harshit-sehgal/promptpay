@@ -1,1017 +1,2730 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-
-/* ── Small inline SVG icons (no emoji) ── */
-const IconDownload = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
-);
-const IconMessage = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-  </svg>
-);
-const IconEye = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-const IconWallet = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-    <line x1="1" y1="10" x2="23" y2="10" />
-  </svg>
-);
-const IconCheck = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
-const IconShield = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-  </svg>
-);
-const IconDollar = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="12" y1="1" x2="12" y2="23" />
-    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-  </svg>
-);
-const IconChart = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="18" y1="20" x2="18" y2="10" />
-    <line x1="12" y1="20" x2="12" y2="4" />
-    <line x1="6" y1="20" x2="6" y2="14" />
-  </svg>
-);
-const IconLock = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-  </svg>
-);
-const IconSliders = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="4" y1="21" x2="4" y2="14" />
-    <line x1="4" y1="10" x2="4" y2="3" />
-    <line x1="12" y1="21" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12" y2="3" />
-    <line x1="20" y1="21" x2="20" y2="16" />
-    <line x1="20" y1="12" x2="20" y2="3" />
-    <line x1="1" y1="14" x2="7" y2="14" />
-    <line x1="9" y1="8" x2="15" y2="8" />
-    <line x1="17" y1="16" x2="23" y2="16" />
-  </svg>
-);
-const IconStar = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-  </svg>
-);
-const IconTarget = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <circle cx="12" cy="12" r="6" />
-    <circle cx="12" cy="12" r="2" />
-  </svg>
-);
-const IconGlobe = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <line x1="2" y1="12" x2="22" y2="12" />
-    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-  </svg>
-);
-const IconSettings = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
-);
-const IconRefresh = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="23 4 23 10 17 10" />
-    <polyline points="1 20 1 14 7 14" />
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-  </svg>
-);
+import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/lib/auth-context';
+import { getDashboardPath } from '@/lib/auth-routing';
 
 export default function HomePage() {
-  const [calcMode, setCalcMode] = useState<'developer' | 'advertiser'>('developer');
+  const { isAuthenticated, user } = useAuth();
+  const dashboardPath = user ? getDashboardPath(user.role) : '/developer';
 
-  // Developer calculator states
-  const [devQueries, setDevQueries] = useState<number>(200);
-  const [devAdFrequency, setDevAdFrequency] = useState<number>(40);
-  const [devCpm, setDevCpm] = useState<number>(35);
+  /* ── Terminal Simulator Animation State ── */
+  const [termStep, setTermStep] = useState(0);
+  const [sponsorIndex, setSponsorIndex] = useState(0);
+  const sponsorsList = [
+    { name: 'Railway', desc: 'Deploy from your terminal in minutes', color: '#13111a' },
+    { name: 'Neon', desc: 'Serverless Postgres for AI-native apps', color: '#00e599' },
+    { name: 'Sentry', desc: 'Find production bugs before users do', color: '#362d59' },
+    { name: 'Clerk', desc: 'Authentication built for modern apps', color: '#6c47ff' },
+  ];
 
-  // Advertiser calculator states
-  const [advBudget, setAdvBudget] = useState<number>(500);
-  const [advCpm, setAdvCpm] = useState<number>(35);
-  const [advCtr, setAdvCtr] = useState<number>(1.5);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTermStep((prev) => {
+        if (prev >= 4) {
+          return 0;
+        }
+        const next = prev + 1;
+        if (next === 1) {
+          setSponsorIndex((idx) => (idx + 1) % sponsorsList.length);
+        }
+        return next;
+      });
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [sponsorsList.length]);
 
-  // Developer calculations
-  const devDailyImpressions = devQueries * (devAdFrequency / 100);
-  const devMonthlyImpressions = devDailyImpressions * 20; // 20 working days
-  const devMonthlySpend = (devMonthlyImpressions / 1000) * devCpm;
-  const devMonthlyEarnings = devMonthlySpend * 0.6; // 60% split
-  const devDailyEarnings = devMonthlyEarnings / 20;
-  const devAnnualEarnings = devMonthlyEarnings * 12;
+  const activeSponsor = sponsorsList[sponsorIndex];
 
-  // Advertiser calculations
-  const advImpressions = Math.round((advBudget / advCpm) * 1000);
-  const advClicks = Math.round(advImpressions * (advCtr / 100));
-  const advCpc = advClicks > 0 ? advBudget / advClicks : 0;
+  /* ── Verification Pipeline State ── */
+  const [verifyStep, setVerifyStep] = useState(0);
+  const [verifiedCount, setVerifiedCount] = useState(1284);
+  const [verifyStarted, setVerifyStarted] = useState(false);
+  const verifyRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVerifyStarted(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    if (verifyRef.current) {
+      observer.observe(verifyRef.current);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!verifyStarted) return;
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      currentStep++;
+      setVerifyStep(currentStep);
+      if (currentStep >= 5) {
+        setVerifiedCount(1285);
+        clearInterval(interval);
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [verifyStarted]);
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* ── Navigation ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass-nav border-b border-surface-200/80">
-        <div className="mx-auto max-w-6xl px-6 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-              W
-            </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
+    <div className="min-h-screen bg-white text-[#0a0a0a] antialiased selection:bg-[#0a0a0a] selection:text-white">
+      {/* ── Navigation Header ── */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: 'rgba(255,255,255,.82)',
+          backdropFilter: 'saturate(180%) blur(14px)',
+          borderBottom: '1px solid #ececec',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '1180px',
+            margin: '0 auto',
+            padding: '0 32px',
+            height: '64px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="0" y="1.5" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
+              <rect x="0" y="6.8" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
+              <rect x="0" y="12.1" width="11" height="2.4" rx="0.4" fill="var(--accent,#16a34a)" />
+            </svg>
+            <span style={{ fontSize: '16.5px', fontWeight: 600, letterSpacing: '-.01em' }}>
               WaitLayer
             </span>
           </Link>
-          <div className="hidden md:flex items-center gap-8">
-            <a
-              href="#how-it-works"
-              className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
-            >
-              How it works
-            </a>
-            <a
-              href="#developers"
-              className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
-            >
+          <nav
+            className="wl-nav-links"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '34px',
+              fontSize: '14.5px',
+              color: '#444',
+            }}
+          >
+            <a href="#developers" className="wl-link-u" style={{ opacity: 0.85 }}>
               Developers
             </a>
-            <a
-              href="#advertisers"
-              className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
-            >
-              Advertisers
+            <a href="#sponsors" className="wl-link-u" style={{ opacity: 0.85 }}>
+              Sponsors
             </a>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/auth/login"
-              className="text-surface-600 hover:text-surface-900 text-[14px] font-medium transition-colors px-3 py-1.5"
-            >
-              Log in
+            <Link href="/pricing" className="wl-link-u" style={{ opacity: 0.85 }}>
+              Pricing
             </Link>
-            <Link
-              href="/auth/signup?role=developer"
-              className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Start earning
+            <a href="#trust" className="wl-link-u" style={{ opacity: 0.85 }}>
+              Trust
+            </a>
+            <Link href="/comparison" className="wl-link-u" style={{ opacity: 0.85 }}>
+              Roadmap
             </Link>
-          </div>
+          </nav>
+          <Link
+            href={isAuthenticated ? dashboardPath : '/auth/signup?role=developer'}
+            className="wlh-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: '38px',
+              padding: '0 18px',
+              background: '#0a0a0a',
+              color: '#fff',
+              fontSize: '14px',
+              fontWeight: 500,
+              borderRadius: '7px',
+            }}
+          >
+            {isAuthenticated ? 'Dashboard' : 'Join beta'}
+          </Link>
         </div>
-      </nav>
+      </header>
 
-      <main id="main-content" tabIndex={-1}>
-        {/* ── Hero ── */}
-        <section className="pt-36 pb-28 px-6 relative">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="inline-flex items-center gap-2 bg-brand-50 border border-brand-200/60 rounded-full px-3.5 py-1 text-brand-600 text-[13px] font-medium mb-8">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
-              Privacy-first · Global payouts · Fraud-resistant
-            </div>
-            <h1 className="text-5xl md:text-[68px] font-bold text-surface-900 tracking-tight leading-[1.08] mb-7">
-              Earn from AI
-              <br />
-              <span className="gradient-text">wait time.</span>
-            </h1>
-            <p className="text-lg md:text-xl text-surface-500 max-w-2xl mx-auto mb-12 leading-relaxed font-light">
-              WaitLayer helps developers earn from opt-in sponsored messages shown during AI coding
-              assistant wait states — with PayPal-first payouts, transparent earnings, and
-              privacy-first integrations.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Link
-                href="/auth/signup?role=developer"
-                className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20"
-              >
-                Start earning →
-              </Link>
-              <Link
-                href="#how-it-works"
-                className="bg-surface-100 hover:bg-surface-200 text-surface-700 font-medium px-7 py-3 rounded-xl text-[15px] transition-colors border border-surface-200"
-              >
-                Learn more
-              </Link>
-            </div>
-          </div>
-
-          {/* Subtle decorative gradient */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-to-b from-brand-100/30 via-brand-50/15 to-transparent rounded-full blur-3xl pointer-events-none -z-10" />
-        </section>
-
-        {/* ── Integration band ── */}
-        <section className="py-12 px-6 border-y border-surface-100 bg-surface-50/50">
-          <div className="mx-auto max-w-5xl text-center">
-            <p className="text-surface-400 text-[13px] font-medium uppercase tracking-wider mb-4">
-              Built for the AI-native era
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-surface-300">
-              {['VS Code', 'Cursor', 'Windsurf', 'Cline', 'Claude Code', 'Terminal'].map((tool) => (
-                <span key={tool} className="text-[15px] font-medium">
-                  {tool}
-                </span>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── How it works ── */}
-        <section id="how-it-works" className="py-32 px-6">
-          <div className="mx-auto max-w-5xl">
-            <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-                How it works
-              </h2>
-              <p className="text-surface-500 text-lg max-w-xl mx-auto">
-                A simple marketplace loop — from wait state to payout.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              {[
-                {
-                  step: '01',
-                  title: 'Install extension',
-                  desc: 'Add the WaitLayer VS Code extension or terminal CLI',
-                  Icon: IconDownload,
-                },
-                {
-                  step: '02',
-                  title: 'See sponsored messages',
-                  desc: 'Opt-in ads appear during AI coding wait states',
-                  Icon: IconMessage,
-                },
-                {
-                  step: '03',
-                  title: 'Impression tracked',
-                  desc: 'Qualified after 5-second minimum visible duration',
-                  Icon: IconEye,
-                },
-                {
-                  step: '04',
-                  title: 'Advertiser charged',
-                  desc: 'Ledger-based accounting: 60% user, 30% platform, 10% reserve',
-                  Icon: IconWallet,
-                },
-                {
-                  step: '05',
-                  title: 'Get paid',
-                  desc: 'PayPal-first payouts with transparent earning states',
-                  Icon: IconCheck,
-                },
-              ].map((item) => (
+      <main id="top">
+        {/* ── Section 1: Hero ── */}
+        <section style={{ padding: '76px 0 88px', borderBottom: '1px solid #ececec' }}>
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div
+              className="wl-hero-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0,1.04fr) minmax(0,.96fr)',
+                gap: '68px',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
                 <div
-                  key={item.step}
-                  className="card-hover bg-white border border-surface-200/80 rounded-2xl p-7 relative group"
+                  className="wlh-in"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '9px',
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '11.5px',
+                    letterSpacing: '.12em',
+                    textTransform: 'uppercase',
+                    color: '#666',
+                    border: '1px solid #e2e2e2',
+                    borderRadius: '100px',
+                    padding: '6px 13px',
+                    marginBottom: '26px',
+                  }}
                 >
-                  <span className="text-brand-500/20 mb-4 block">
-                    <item.Icon />
-                  </span>
-                  <span className="text-brand-400/30 text-6xl font-bold absolute top-3 right-5 leading-none select-none">
-                    {item.step}
-                  </span>
-                  <h3 className="text-surface-900 font-semibold text-[15px] mb-2 relative z-10">
-                    {item.title}
-                  </h3>
-                  <p className="text-surface-500 text-[14px] leading-relaxed relative z-10">
-                    {item.desc}
-                  </p>
+                  <span
+                    className="wl-dot"
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: 'var(--accent,#16a34a)',
+                      display: 'inline-block',
+                    }}
+                  ></span>
+                  Verified attention for AI agents
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── For Developers ── */}
-        <section id="developers" className="py-32 px-6 bg-surface-50/60">
-          <div className="mx-auto max-w-6xl">
-            <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-                For developers
-              </h2>
-              <p className="text-surface-500 text-lg max-w-xl mx-auto">
-                Your attention has value. Here's how you keep control.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {[
-                {
-                  title: 'Earn from waiting',
-                  desc: 'You already wait for AI responses. Now earn from that time with clearly labeled, opt-in sponsored messages.',
-                  Icon: IconDollar,
-                },
-                {
-                  title: 'PayPal-first payouts',
-                  desc: 'We start with PayPal because it works globally. Stripe, Payoneer, Wise, and Razorpay support comes next.',
-                  Icon: IconWallet,
-                },
-                {
-                  title: 'Transparent earnings',
-                  desc: 'Estimated, pending, confirmed, and held — every earning state is visible. No hidden balances.',
-                  Icon: IconChart,
-                },
-                {
-                  title: 'Privacy-first',
-                  desc: 'We never read your code, prompts, completions, or file names. Privacy is enforced by schema, not just policy.',
-                  Icon: IconLock,
-                },
-                {
-                  title: 'Full control',
-                  desc: 'Disable ads any time. Block categories. Set quiet mode. Choose your ad frequency. Your attention, your rules.',
-                  Icon: IconSliders,
-                },
-                {
-                  title: 'Trust scoring',
-                  desc: 'Transparent trust levels determine payout speed. Verify email + GitHub to earn faster.',
-                  Icon: IconStar,
-                },
-              ].map((item) => (
+                <h1
+                  className="wlh-in animate-fadeIn"
+                  style={{
+                    fontFamily: "'Instrument Serif', Georgia, serif",
+                    fontWeight: 400,
+                    fontSize: 'clamp(40px, 5.2vw, 64px)',
+                    lineHeight: 1.02,
+                    letterSpacing: '-.02em',
+                    margin: '0 0 24px',
+                    color: '#0a0a0a',
+                    textWrap: 'balance',
+                    animationDelay: '70ms',
+                  }}
+                >
+                  Earn from the time you spend waiting on AI.
+                </h1>
+                <p
+                  className="wlh-in"
+                  style={{
+                    maxWidth: '480px',
+                    fontSize: '18.5px',
+                    lineHeight: 1.6,
+                    color: '#555',
+                    margin: '0 0 30px',
+                    animationDelay: '140ms',
+                  }}
+                >
+                  Your coding agent works; you wait. WaitLayer turns that wait into one clearly
+                  labeled sponsor line — verified, private, and paid back to you.
+                </p>
                 <div
-                  key={item.title}
-                  className="card-hover bg-white border border-surface-200/80 rounded-2xl p-8"
+                  className="wlh-in"
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    alignItems: 'center',
+                    marginBottom: '26px',
+                    animationDelay: '210ms',
+                  }}
                 >
-                  <span className="text-brand-500/30 mb-4 block">
-                    <item.Icon />
-                  </span>
-                  <h3 className="text-surface-900 font-semibold text-[16px] mb-3">{item.title}</h3>
-                  <p className="text-surface-500 text-[14px] leading-relaxed">{item.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── For Advertisers ── */}
-        <section id="advertisers" className="py-32 px-6">
-          <div className="mx-auto max-w-6xl">
-            <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-                For advertisers
-              </h2>
-              <p className="text-surface-500 text-lg max-w-xl mx-auto">
-                Reach developers while they're building — not scrolling.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {[
-                {
-                  title: 'Verified developer attention',
-                  desc: 'Reach developers while they are actively building — not scrolling feeds or browsing passively.',
-                  Icon: IconTarget,
-                },
-                {
-                  title: 'Transparent performance',
-                  desc: 'Real CPM, CPC, CTR, and invalid traffic reporting. Know what you pay for.',
-                  Icon: IconChart,
-                },
-                {
-                  title: 'Fraud protection',
-                  desc: 'Rate limits, trust scoring, minimum visible duration, and manual review before campaigns go live.',
-                  Icon: IconShield,
-                },
-                {
-                  title: 'Category & country targeting',
-                  desc: 'Target by developer category and country where a developer country is available. Tool type is captured for reporting, not campaign targeting.',
-                  Icon: IconGlobe,
-                },
-                {
-                  title: 'Self-serve campaigns',
-                  desc: 'Create and manage campaigns directly. Set budgets, frequency caps, and category filters.',
-                  Icon: IconSettings,
-                },
-                {
-                  title: 'Invalid traffic credits',
-                  desc: 'When fraud is detected, you get credits back. You only pay for valid impressions.',
-                  Icon: IconRefresh,
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="card-hover bg-white border border-surface-200/80 rounded-2xl p-8"
-                >
-                  <span className="text-brand-500/30 mb-4 block">
-                    <item.Icon />
-                  </span>
-                  <h3 className="text-surface-900 font-semibold text-[16px] mb-3">{item.title}</h3>
-                  <p className="text-surface-500 text-[14px] leading-relaxed">{item.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── Interactive Calculator Section ── */}
-        <section className="py-32 px-6 border-t border-surface-100 bg-white">
-          <div className="mx-auto max-w-5xl">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-                Estimate your <span className="gradient-text">WaitLayer impact</span>
-              </h2>
-              <p className="text-surface-500 text-lg max-w-xl mx-auto">
-                Choose your role to calculate potential developer earnings or advertiser reach.
-              </p>
-
-              {/* Mode Toggle Switch */}
-              <div className="flex justify-center mt-8">
-                <div className="inline-flex rounded-full bg-surface-100 p-1 border border-surface-200/80">
-                  <button
-                    type="button"
-                    onClick={() => setCalcMode('developer')}
-                    className={`px-6 py-2 rounded-full text-[14px] font-semibold transition-all duration-200 ${
-                      calcMode === 'developer'
-                        ? 'bg-brand-500 text-white shadow-sm'
-                        : 'text-surface-500 hover:text-surface-900'
-                    }`}
-                  >
-                    For Developers
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCalcMode('advertiser')}
-                    className={`px-6 py-2 rounded-full text-[14px] font-semibold transition-all duration-200 ${
-                      calcMode === 'advertiser'
-                        ? 'bg-brand-500 text-white shadow-sm'
-                        : 'text-surface-500 hover:text-surface-900'
-                    }`}
-                  >
-                    For Advertisers
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-surface-50/60 border border-surface-200/80 rounded-3xl p-8 md:p-12 shadow-sm">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                {/* Left Column: Sliders */}
-                <div className="space-y-8">
-                  {calcMode === 'developer' ? (
-                    <>
-                      <h3 className="text-lg font-bold text-surface-900">
-                        Your Developer Activity
-                      </h3>
-
-                      {/* Daily Queries */}
-                      <div>
-                        <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
-                          <label htmlFor="impact-daily-queries">Daily AI Queries</label>
-                          <span className="font-semibold text-brand-600">{devQueries} queries</span>
-                        </div>
-                        <input
-                          id="impact-daily-queries"
-                          type="range"
-                          min="50"
-                          max="800"
-                          step="50"
-                          value={devQueries}
-                          onChange={(e) => setDevQueries(parseInt(e.target.value))}
-                          className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-                        />
-                        <div className="flex justify-between text-xs text-surface-400 mt-1">
-                          <span>50</span>
-                          <span>400</span>
-                          <span>800</span>
-                        </div>
-                      </div>
-
-                      {/* Ad Frequency */}
-                      <div>
-                        <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
-                          <label htmlFor="impact-ad-frequency">Ad Display Frequency</label>
-                          <span className="font-semibold text-brand-600">
-                            {devAdFrequency}% of queries
-                          </span>
-                        </div>
-                        <input
-                          id="impact-ad-frequency"
-                          type="range"
-                          min="10"
-                          max="100"
-                          step="10"
-                          value={devAdFrequency}
-                          onChange={(e) => setDevAdFrequency(parseInt(e.target.value))}
-                          className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-                        />
-                        <div className="flex justify-between text-xs text-surface-400 mt-1">
-                          <span>10% (minimal)</span>
-                          <span>50%</span>
-                          <span>100% (every wait)</span>
-                        </div>
-                      </div>
-
-                      {/* Estimated CPM */}
-                      <div>
-                        <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
-                          <label htmlFor="impact-developer-cpm">Average Campaign CPM</label>
-                          <span className="font-semibold text-brand-600">${devCpm}</span>
-                        </div>
-                        <input
-                          id="impact-developer-cpm"
-                          type="range"
-                          min="10"
-                          max="120"
-                          step="5"
-                          value={devCpm}
-                          onChange={(e) => setDevCpm(parseInt(e.target.value))}
-                          className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-                        />
-                        <div className="flex justify-between text-xs text-surface-400 mt-1">
-                          <span>$10</span>
-                          <span>$65</span>
-                          <span>$120</span>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <h3 className="text-lg font-bold text-surface-900">Your Campaign Settings</h3>
-
-                      {/* Budget */}
-                      <div>
-                        <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
-                          <label htmlFor="impact-campaign-budget">Campaign Budget</label>
-                          <span className="font-semibold text-brand-600">${advBudget}</span>
-                        </div>
-                        <input
-                          id="impact-campaign-budget"
-                          type="range"
-                          min="50"
-                          max="5000"
-                          step="50"
-                          value={advBudget}
-                          onChange={(e) => setAdvBudget(parseInt(e.target.value))}
-                          className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-                        />
-                        <div className="flex justify-between text-xs text-surface-400 mt-1">
-                          <span>$50</span>
-                          <span>$2,500</span>
-                          <span>$5,000</span>
-                        </div>
-                      </div>
-
-                      {/* Target CPM */}
-                      <div>
-                        <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
-                          <label htmlFor="impact-target-cpm">Target CPM</label>
-                          <span className="font-semibold text-brand-600">${advCpm}</span>
-                        </div>
-                        <input
-                          id="impact-target-cpm"
-                          type="range"
-                          min="15"
-                          max="120"
-                          step="5"
-                          value={advCpm}
-                          onChange={(e) => setAdvCpm(parseInt(e.target.value))}
-                          className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-                        />
-                        <div className="flex justify-between text-xs text-surface-400 mt-1">
-                          <span>$15</span>
-                          <span>$65</span>
-                          <span>$120</span>
-                        </div>
-                      </div>
-
-                      {/* Estimated CTR */}
-                      <div>
-                        <div className="flex justify-between text-sm font-medium text-surface-700 mb-2">
-                          <label htmlFor="impact-expected-ctr">
-                            Expected Click-Through Rate (CTR)
-                          </label>
-                          <span className="font-semibold text-brand-600">{advCtr}%</span>
-                        </div>
-                        <input
-                          id="impact-expected-ctr"
-                          type="range"
-                          min="0.5"
-                          max="5"
-                          step="0.1"
-                          value={advCtr}
-                          onChange={(e) => setAdvCtr(parseFloat(e.target.value))}
-                          className="w-full h-1.5 bg-surface-200 rounded-lg appearance-none cursor-pointer accent-brand-500"
-                        />
-                        <div className="flex justify-between text-xs text-surface-400 mt-1">
-                          <span>0.5%</span>
-                          <span>2.5%</span>
-                          <span>5.0%</span>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Right Column: Outcomes */}
-                <div className="flex flex-col justify-between bg-white border border-surface-200 rounded-2xl p-8">
-                  {calcMode === 'developer' ? (
-                    <>
-                      <div>
-                        <h4 className="text-surface-400 text-xs font-semibold uppercase tracking-wider mb-2">
-                          Estimated Developer Revenue (60% split)
-                        </h4>
-                        <div className="text-5xl font-bold text-surface-900 tracking-tight mb-6">
-                          ${devMonthlyEarnings.toFixed(2)}
-                          <span className="text-lg font-normal text-surface-500"> / month</span>
-                        </div>
-
-                        <div className="space-y-4 border-t border-surface-100 pt-6">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-surface-500">Estimated Daily Earnings</span>
-                            <span className="font-semibold text-surface-900">
-                              ${devDailyEarnings.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-surface-500">Estimated Annual Earnings</span>
-                            <span className="font-semibold text-surface-900">
-                              ${devAnnualEarnings.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-surface-500">Monthly Impressions</span>
-                            <span className="font-semibold text-surface-900">
-                              {devMonthlyImpressions.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-8 pt-6 border-t border-surface-100">
-                        <p className="text-xs text-surface-400 leading-relaxed">
-                          *Estimates assume 20 active working days/month. High trust score status
-                          qualifies you for immediate payouts without hold periods.
-                        </p>
-                        <Link
-                          href="/auth/signup?role=developer"
-                          className="mt-5 w-full inline-flex items-center justify-center bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors"
-                        >
-                          Create Developer Account
-                        </Link>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div>
-                        <h4 className="text-surface-400 text-xs font-semibold uppercase tracking-wider mb-2">
-                          Estimated Campaign Reach
-                        </h4>
-                        <div className="text-5xl font-bold text-surface-900 tracking-tight mb-6">
-                          {advImpressions.toLocaleString()}
-                          <span className="text-lg font-normal text-surface-500"> impressions</span>
-                        </div>
-
-                        <div className="space-y-4 border-t border-surface-100 pt-6">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-surface-500">Estimated Clicks ({advCtr}%)</span>
-                            <span className="font-semibold text-surface-900">
-                              {advClicks.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-surface-500">Effective Cost Per Click (CPC)</span>
-                            <span className="font-semibold text-surface-900">
-                              ${advCpc.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-surface-500">Audience</span>
-                            <span className="font-semibold text-surface-900">
-                              Verified Active Developers
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-8 pt-6 border-t border-surface-100">
-                        <p className="text-xs text-surface-400 leading-relaxed">
-                          *All ad delivery uses rate limit controls and fingerprint verification to
-                          prevent click fraud. Platform commissions split directly to developers.
-                        </p>
-                        <Link
-                          href="/auth/signup?role=advertiser"
-                          className="mt-5 w-full inline-flex items-center justify-center bg-surface-900 hover:bg-surface-800 text-white font-semibold py-3.5 px-4 rounded-xl text-[14px] transition-colors"
-                        >
-                          Start Advertiser Campaign
-                        </Link>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Revenue split showcase ── */}
-        <section className="py-32 px-6 bg-surface-50/60">
-          <div className="mx-auto max-w-4xl text-center">
-            <h2 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-              Transparent economics
-            </h2>
-            <p className="text-surface-500 text-lg max-w-xl mx-auto mb-16">
-              Every dollar is accounted for. No hidden fees.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="card-hover bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
-                <div className="text-5xl font-bold gradient-text mb-3">60%</div>
-                <div className="text-surface-900 font-semibold text-[15px] mb-1">
-                  Developer earns
-                </div>
-                <p className="text-surface-500 text-[14px]">
-                  The majority goes to the person whose attention is being valued.
-                </p>
-              </div>
-              <div className="card-hover bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
-                <div className="text-5xl font-bold text-surface-900 mb-3">30%</div>
-                <div className="text-surface-900 font-semibold text-[15px] mb-1">Platform</div>
-                <p className="text-surface-500 text-[14px]">
-                  Infrastructure, fraud detection, payment processing, and support.
-                </p>
-              </div>
-              <div className="card-hover bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
-                <div className="text-5xl font-bold text-surface-400 mb-3">10%</div>
-                <div className="text-surface-900 font-semibold text-[15px] mb-1">
-                  Fraud & payment reserve
-                </div>
-                <p className="text-surface-500 text-[14px]">
-                  Reserve for disputed impressions, chargebacks, and payout failures.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── CTA ── */}
-        <section className="py-32 px-6">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-              Ready to start?
-            </h2>
-            <p className="text-surface-500 text-lg mb-10 max-w-md mx-auto">
-              Join developers who earn from AI wait time. Set up in under 2 minutes.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Link
-                href="/auth/signup?role=developer"
-                className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-8 py-3.5 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20"
-              >
-                Sign up free →
-              </Link>
-              <Link
-                href="/auth/login"
-                className="text-surface-500 hover:text-surface-700 font-medium px-6 py-3.5 text-[15px] transition-colors"
-              >
-                Log in
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Footer ── */}
-      </main>
-
-      <footer className="py-16 px-6 border-t border-surface-200/60">
-        <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col md:flex-row items-start justify-between gap-10">
-            <div>
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-6 h-6 rounded bg-brand-500 flex items-center justify-center text-white font-bold text-[10px]">
-                  W
-                </div>
-                <span className="text-surface-900 font-semibold text-[14px]">WaitLayer</span>
-              </div>
-              <p className="text-surface-400 text-[14px] max-w-xs leading-relaxed">
-                Privacy-first reward marketplace for AI coding assistant wait states.
-              </p>
-            </div>
-            <div className="flex gap-16">
-              <div>
-                <h4 className="text-surface-900 font-semibold text-[13px] mb-3">Product</h4>
-                <div className="flex flex-col gap-2">
                   <Link
+                    href={isAuthenticated ? dashboardPath : '/auth/signup?role=developer'}
+                    className="wlh-btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      height: '50px',
+                      padding: '0 26px',
+                      background: '#0a0a0a',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '15.5px',
+                      fontWeight: 600,
+                      borderRadius: '9px',
+                    }}
+                  >
+                    {isAuthenticated ? 'Go to Dashboard' : 'Join the founding beta'}
+                  </Link>
+                  <a
+                    className="wl-link-u"
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '13px',
+                      color: '#666',
+                    }}
+                    href="#trust"
+                  >
+                    What we never collect →
+                  </a>
+                </div>
+                <div
+                  className="wlh-in"
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '8px 16px',
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '12px',
+                    color: '#9a9a9a',
+                    animationDelay: '280ms',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
+                    <span>Claude Code first</span>
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
+                    <span style={{ color: '#dcdcdc' }}>/</span>
+                    <span>No code · prompts · output</span>
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
+                    <span style={{ color: '#dcdcdc' }}>/</span>
+                    <span>70% to you</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Terminal Simulator */}
+              <div className="wlh-in" style={{ minWidth: 0, animationDelay: '180ms' }}>
+                <div
+                  aria-hidden="true"
+                  style={{
+                    background: '#0c0c0c',
+                    border: '1px solid #1c1c1c',
+                    borderRadius: '14px',
+                    boxShadow: 'var(--term-shadow)',
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    overflow: 'hidden',
+                    userSelect: 'none',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                      padding: '12px 16px',
+                      borderBottom: '1px solid #181818',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '11px',
+                        height: '11px',
+                        borderRadius: '50%',
+                        background: '#ff5f56',
+                        opacity: 0.9,
+                      }}
+                    ></span>
+                    <span
+                      style={{
+                        width: '11px',
+                        height: '11px',
+                        borderRadius: '50%',
+                        background: '#ffbd2e',
+                        opacity: 0.9,
+                      }}
+                    ></span>
+                    <span
+                      style={{
+                        width: '11px',
+                        height: '11px',
+                        borderRadius: '50%',
+                        background: '#27c93f',
+                        opacity: 0.9,
+                      }}
+                    ></span>
+                    <span style={{ marginLeft: '8px', color: '#5b5b5b', fontSize: '11.5px' }}>
+                      claude — ~/projects/waitlayer
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      padding: '20px 22px 18px',
+                      fontSize: 'clamp(11px, 3vw, 13px)',
+                      lineHeight: 1.5,
+                      color: '#cfcfcf',
+                      minHeight: '250px',
+                    }}
+                  >
+                    <div style={{ transition: 'opacity .4s ease' }}>
+                      <span style={{ color: '#5b5b5b' }}>&gt;</span> refactor the auth middleware to
+                      use the session helper
+                      <span
+                        className="wl-vcaret"
+                        style={{
+                          display: 'inline-block',
+                          width: '8px',
+                          height: '14px',
+                          background: 'currentColor',
+                          verticalAlign: 'middle',
+                        }}
+                      ></span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        height: '20px',
+                        display: 'flex',
+                        flexWrap: 'nowrap',
+                        alignItems: 'center',
+                        gap: '8px',
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap',
+                        opacity: termStep >= 1 ? 1 : 0,
+                        transition: 'opacity .45s ease',
+                      }}
+                    >
+                      <span style={{ color: 'var(--accent,#16a34a)', flex: 'none' }}>✓</span>
+                      <span style={{ color: '#9a9a9a' }}>done · 8.2s</span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: '14px',
+                        border: '1px solid #1e1e1e',
+                        borderRadius: '8px',
+                        background: '#0f0f0f',
+                        padding: '11px 13px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        opacity: termStep >= 2 ? 1 : 0,
+                        transform: termStep >= 2 ? 'none' : 'translateY(6px)',
+                        transition: 'opacity .5s ease, transform .5s cubic-bezier(.2,.7,.3,1)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: '15px',
+                          height: '15px',
+                          borderRadius: '4px',
+                          background: activeSponsor.color,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flex: 'none',
+                        }}
+                      >
+                        <svg width="8" height="8" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M4 18 L12 5 L20 18 Z"
+                            fill="none"
+                            stroke="#fff"
+                            strokeWidth="2.4"
+                          ></path>
+                        </svg>
+                      </span>
+                      <span
+                        style={{
+                          color: '#6f6f6f',
+                          flex: 'none',
+                          fontSize: '11px',
+                          letterSpacing: '.06em',
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        Sponsored
+                      </span>
+                      <span style={{ color: '#e8e8e8', flex: 'none' }}>{activeSponsor.name}</span>
+                      <span style={{ color: '#3a3a3a' }}>·</span>
+                      <span
+                        style={{
+                          color: '#9a9a9a',
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {activeSponsor.desc}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: '14px',
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '6px 14px',
+                        alignItems: 'center',
+                        minHeight: '18px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: '#bdbdbd',
+                          fontSize: '12px',
+                          opacity: termStep >= 3 ? 1 : 0,
+                          transition: 'opacity .3s ease',
+                        }}
+                      >
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="var(--accent,#16a34a)"
+                          strokeWidth="2.6"
+                          style={{ flex: 'none' }}
+                        >
+                          <path d="M5 12.5l4 4 10-10"></path>
+                        </svg>
+                        signature valid
+                      </span>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: '#bdbdbd',
+                          fontSize: '12px',
+                          opacity: termStep >= 3 ? 1 : 0,
+                          transition: 'opacity .3s ease .25s',
+                        }}
+                      >
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="var(--accent,#16a34a)"
+                          strokeWidth="2.6"
+                          style={{ flex: 'none' }}
+                        >
+                          <path d="M5 12.5l4 4 10-10"></path>
+                        </svg>
+                        not a duplicate
+                      </span>
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: '#bdbdbd',
+                          fontSize: '12px',
+                          opacity: termStep >= 3 ? 1 : 0,
+                          transition: 'opacity .3s ease .5s',
+                        }}
+                      >
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="var(--accent,#16a34a)"
+                          strokeWidth="2.6"
+                          style={{ flex: 'none' }}
+                        >
+                          <path d="M5 12.5l4 4 10-10"></path>
+                        </svg>
+                        fraud-cleared
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: '16px',
+                        paddingTop: '14px',
+                        borderTop: '1px solid #181818',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        opacity: termStep >= 4 ? 1 : 0,
+                        transform: termStep >= 4 ? 'none' : 'translateY(4px)',
+                        transition: 'opacity .5s ease, transform .5s ease',
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          color: 'var(--accent,#16a34a)',
+                          fontSize: '14px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: 'var(--accent,#16a34a)',
+                          }}
+                          className="wl-dot"
+                        ></span>
+                        verified · +$0.014 earned
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Section 2: Three Cards ── */}
+        <section
+          style={{ padding: '60px 0', background: '#fafafa', borderBottom: '1px solid #ececec' }}
+        >
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div
+              className="wl-cards"
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}
+            >
+              <div style={{ padding: '6px 28px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginBottom: '14px',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '11px',
+                      color: '#16a34a',
+                    }}
+                  >
+                    01
+                  </span>
+                  <span style={{ flex: 1, height: '1px', background: '#e6e6e6' }}></span>
+                </div>
+                <div
+                  style={{
+                    fontSize: '17px',
+                    fontWeight: 600,
+                    color: '#0a0a0a',
+                    marginBottom: '7px',
+                  }}
+                >
+                  Your agent works
+                </div>
+                <p style={{ fontSize: '14.5px', lineHeight: 1.55, color: '#666', margin: 0 }}>
+                  You ask Claude Code to build. Then you wait — many times a day.
+                </p>
+              </div>
+              <div style={{ padding: '6px 28px', borderLeft: '1px solid #e6e6e6' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginBottom: '14px',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '11px',
+                      color: '#16a34a',
+                    }}
+                  >
+                    02
+                  </span>
+                  <span style={{ flex: 1, height: '1px', background: '#e6e6e6' }}></span>
+                </div>
+                <div
+                  style={{
+                    fontSize: '17px',
+                    fontWeight: 600,
+                    color: '#0a0a0a',
+                    marginBottom: '7px',
+                  }}
+                >
+                  One labeled line
+                </div>
+                <p style={{ fontSize: '14.5px', lineHeight: 1.55, color: '#666', margin: 0 }}>
+                  A single, clearly-marked sponsor line appears in the wait. Nothing else changes.
+                </p>
+              </div>
+              <div style={{ padding: '6px 28px', borderLeft: '1px solid #e6e6e6' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginBottom: '14px',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '11px',
+                      color: '#16a34a',
+                    }}
+                  >
+                    03
+                  </span>
+                  <span style={{ flex: 1, height: '1px', background: '#e6e6e6' }}></span>
+                </div>
+                <div
+                  style={{
+                    fontSize: '17px',
+                    fontWeight: 600,
+                    color: '#0a0a0a',
+                    marginBottom: '7px',
+                  }}
+                >
+                  You earn
+                </div>
+                <p style={{ fontSize: '14.5px', lineHeight: 1.55, color: '#666', margin: 0 }}>
+                  It clears verification, and you keep 70% of the media spend.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Section 3: Verification ── */}
+        <section
+          ref={verifyRef}
+          className="wl-sec"
+          style={{ padding: '100px 0', borderBottom: '1px solid #ececec' }}
+        >
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div
+              className="wl-2col wlh-in"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '.82fr 1.18fr',
+                gap: '56px',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '11.5px',
+                    letterSpacing: '.14em',
+                    textTransform: 'uppercase',
+                    color: '#999',
+                  }}
+                >
+                  Verification
+                </div>
+                <h2
+                  style={{
+                    fontFamily: "'Instrument Serif', serif",
+                    fontWeight: 400,
+                    fontSize: 'clamp(32px, 4.4vw, 52px)',
+                    lineHeight: 1.04,
+                    letterSpacing: '-.014em',
+                    margin: '14px 0 0',
+                    color: '#0a0a0a',
+                    textWrap: 'balance',
+                  }}
+                >
+                  Verified, or it doesn't count.
+                </h2>
+                <p
+                  style={{
+                    fontSize: '17px',
+                    lineHeight: 1.62,
+                    color: '#555',
+                    margin: '20px 0 0',
+                    maxWidth: '400px',
+                  }}
+                >
+                  Every impression clears the same five checks before it can ever earn — measured on
+                  your machine, settled to a local ledger.
+                </p>
+              </div>
+              <div>
+                <div
+                  style={{
+                    border: '1px solid #e6e6e6',
+                    borderRadius: '16px',
+                    background: '#fff',
+                    padding: '26px 30px 30px',
+                    boxShadow: '0 18px 40px -32px rgba(0,0,0,.25)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      marginBottom: '28px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '9px',
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '11px',
+                        letterSpacing: '.1em',
+                        textTransform: 'uppercase',
+                        color: '#888',
+                      }}
+                    >
+                      <span
+                        className={verifyStep >= 5 ? '' : 'wl-dot'}
+                        style={{
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: '#16a34a',
+                        }}
+                      ></span>
+                      {verifyStep >= 5
+                        ? 'Impression verified'
+                        : `Verifying impression${'.'.repeat(verifyStep % 4)}`}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '12px',
+                        color: '#999',
+                      }}
+                    >
+                      ledger ·{' '}
+                      <span
+                        style={{
+                          color: verifyStep === 5 ? '#16a34a' : '#0a0a0a',
+                          transition: 'color .25s ease',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {verifiedCount.toLocaleString()}
+                      </span>{' '}
+                      verified
+                    </span>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '10%',
+                        right: '10%',
+                        top: '11px',
+                        height: '2px',
+                        background: '#ececec',
+                      }}
+                    ></div>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: '10%',
+                        top: '11px',
+                        height: '2px',
+                        width: verifyStep <= 1 ? '0%' : `${(verifyStep - 1) * 20}%`,
+                        background: '#16a34a',
+                        transition: 'width .45s cubic-bezier(.4,.8,.4,1)',
+                      }}
+                    ></div>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(5, 1fr)',
+                        position: 'relative',
+                      }}
+                    >
+                      {/* Step 1: Visible */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: 0,
+                          padding: '0 4px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: verifyStep >= 1 ? '#16a34a' : '#fff',
+                            border: verifyStep >= 1 ? '1.5px solid #16a34a' : '1.5px solid #d8d8d8',
+                            transform: verifyStep >= 1 ? 'scale(1.08)' : 'scale(1)',
+                            boxShadow: verifyStep >= 1 ? '0 0 8px rgba(22,163,74,.4)' : 'none',
+                            transition:
+                              'background .3s ease, border-color .3s ease, box-shadow .3s ease, transform .45s cubic-bezier(.175, .885, .32, 1.275)',
+                            flex: 'none',
+                          }}
+                        >
+                          {verifyStep >= 1 ? (
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#fff"
+                              strokeWidth="3.5"
+                            >
+                              <path d="M5 12l5 5L20 7" />
+                            </svg>
+                          ) : (
+                            <span
+                              style={{
+                                width: '5px',
+                                height: '5px',
+                                borderRadius: '50%',
+                                background: '#c8c8c8',
+                              }}
+                            ></span>
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            marginTop: '12px',
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '11px',
+                            textAlign: 'center',
+                            lineHeight: 1.3,
+                            color: verifyStep >= 1 ? '#16a34a' : '#aaa',
+                            transition: 'color .3s ease',
+                          }}
+                        >
+                          Visible ≥ 5s
+                        </span>
+                      </div>
+
+                      {/* Step 2: Signature */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: 0,
+                          padding: '0 4px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: verifyStep >= 2 ? '#16a34a' : '#fff',
+                            border: verifyStep >= 2 ? '1.5px solid #16a34a' : '1.5px solid #d8d8d8',
+                            transform: verifyStep >= 2 ? 'scale(1.08)' : 'scale(1)',
+                            boxShadow: verifyStep >= 2 ? '0 0 8px rgba(22,163,74,.4)' : 'none',
+                            transition:
+                              'background .3s ease, border-color .3s ease, box-shadow .3s ease, transform .45s cubic-bezier(.175, .885, .32, 1.275)',
+                            flex: 'none',
+                          }}
+                        >
+                          {verifyStep >= 2 ? (
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#fff"
+                              strokeWidth="3.5"
+                            >
+                              <path d="M5 12l5 5L20 7" />
+                            </svg>
+                          ) : (
+                            <span
+                              style={{
+                                width: '5px',
+                                height: '5px',
+                                borderRadius: '50%',
+                                background: '#c8c8c8',
+                              }}
+                            ></span>
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            marginTop: '12px',
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '11px',
+                            textAlign: 'center',
+                            lineHeight: 1.3,
+                            color: verifyStep >= 2 ? '#16a34a' : '#aaa',
+                            transition: 'color .3s ease',
+                          }}
+                        >
+                          Signature
+                        </span>
+                      </div>
+
+                      {/* Step 3: Not duplicate */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: 0,
+                          padding: '0 4px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: verifyStep >= 3 ? '#16a34a' : '#fff',
+                            border: verifyStep >= 3 ? '1.5px solid #16a34a' : '1.5px solid #d8d8d8',
+                            transform: verifyStep >= 3 ? 'scale(1.08)' : 'scale(1)',
+                            boxShadow: verifyStep >= 3 ? '0 0 8px rgba(22,163,74,.4)' : 'none',
+                            transition:
+                              'background .3s ease, border-color .3s ease, box-shadow .3s ease, transform .45s cubic-bezier(.175, .885, .32, 1.275)',
+                            flex: 'none',
+                          }}
+                        >
+                          {verifyStep >= 3 ? (
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#fff"
+                              strokeWidth="3.5"
+                            >
+                              <path d="M5 12l5 5L20 7" />
+                            </svg>
+                          ) : (
+                            <span
+                              style={{
+                                width: '5px',
+                                height: '5px',
+                                borderRadius: '50%',
+                                background: '#c8c8c8',
+                              }}
+                            ></span>
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            marginTop: '12px',
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '11px',
+                            textAlign: 'center',
+                            lineHeight: 1.3,
+                            color: verifyStep >= 3 ? '#16a34a' : '#aaa',
+                            transition: 'color .3s ease',
+                          }}
+                        >
+                          Not duplicate
+                        </span>
+                      </div>
+
+                      {/* Step 4: Within budget */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: 0,
+                          padding: '0 4px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: verifyStep >= 4 ? '#16a34a' : '#fff',
+                            border: verifyStep >= 4 ? '1.5px solid #16a34a' : '1.5px solid #d8d8d8',
+                            transform: verifyStep >= 4 ? 'scale(1.08)' : 'scale(1)',
+                            boxShadow: verifyStep >= 4 ? '0 0 8px rgba(22,163,74,.4)' : 'none',
+                            transition:
+                              'background .3s ease, border-color .3s ease, box-shadow .3s ease, transform .45s cubic-bezier(.175, .885, .32, 1.275)',
+                            flex: 'none',
+                          }}
+                        >
+                          {verifyStep >= 4 ? (
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#fff"
+                              strokeWidth="3.5"
+                            >
+                              <path d="M5 12l5 5L20 7" />
+                            </svg>
+                          ) : (
+                            <span
+                              style={{
+                                width: '5px',
+                                height: '5px',
+                                borderRadius: '50%',
+                                background: '#c8c8c8',
+                              }}
+                            ></span>
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            marginTop: '12px',
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '11px',
+                            textAlign: 'center',
+                            lineHeight: 1.3,
+                            color: verifyStep >= 4 ? '#16a34a' : '#aaa',
+                            transition: 'color .3s ease',
+                          }}
+                        >
+                          Within budget
+                        </span>
+                      </div>
+
+                      {/* Step 5: Fraud-cleared */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          minWidth: 0,
+                          padding: '0 4px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '22px',
+                            height: '22px',
+                            borderRadius: '50%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: verifyStep >= 5 ? '#16a34a' : '#fff',
+                            border: verifyStep >= 5 ? '1.5px solid #16a34a' : '1.5px solid #d8d8d8',
+                            transform: verifyStep >= 5 ? 'scale(1.08)' : 'scale(1)',
+                            boxShadow: verifyStep >= 5 ? '0 0 8px rgba(22,163,74,.4)' : 'none',
+                            transition:
+                              'background .3s ease, border-color .3s ease, box-shadow .3s ease, transform .45s cubic-bezier(.175, .885, .32, 1.275)',
+                            flex: 'none',
+                          }}
+                        >
+                          {verifyStep >= 5 ? (
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="#fff"
+                              strokeWidth="3.5"
+                            >
+                              <path d="M5 12l5 5L20 7" />
+                            </svg>
+                          ) : (
+                            <span
+                              style={{
+                                width: '5px',
+                                height: '5px',
+                                borderRadius: '50%',
+                                background: '#c8c8c8',
+                              }}
+                            ></span>
+                          )}
+                        </span>
+                        <span
+                          style={{
+                            marginTop: '12px',
+                            fontFamily: "'IBM Plex Mono', monospace",
+                            fontSize: '11px',
+                            textAlign: 'center',
+                            lineHeight: 1.3,
+                            color: verifyStep >= 5 ? '#16a34a' : '#aaa',
+                            transition: 'color .3s ease',
+                          }}
+                        >
+                          Fraud-cleared
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: '26px',
+                      paddingTop: '18px',
+                      borderTop: '1px solid #f0f0f0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '13px',
+                    }}
+                  >
+                    <span style={{ color: '#cfcfcf' }}>→</span>
+                    <span
+                      style={{
+                        color: verifyStep >= 5 ? '#16a34a' : '#999',
+                        transition: 'color .3s ease',
+                      }}
+                    >
+                      {verifyStep >= 5
+                        ? 'ledger candidate · verified'
+                        : 'ledger candidate · pending'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Section 4: Trust ── */}
+        <section
+          id="trust"
+          className="wl-sec"
+          style={{ padding: '104px 0', background: '#0a0a0a', color: '#fff' }}
+        >
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div style={{ maxWidth: '620px' }}>
+              <div
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '11.5px',
+                  letterSpacing: '.14em',
+                  textTransform: 'uppercase',
+                  color: '#7a7a7a',
+                }}
+              >
+                Trust
+              </div>
+              <h2
+                style={{
+                  fontFamily: "'Instrument Serif', serif",
+                  fontWeight: 400,
+                  fontSize: 'clamp(32px, 4.4vw, 52px)',
+                  lineHeight: 1.04,
+                  letterSpacing: '-.014em',
+                  margin: '14px 0 0',
+                  color: '#fff',
+                  textWrap: 'balance',
+                }}
+              >
+                We measure the wait, not your work.
+              </h2>
+              <p
+                style={{
+                  fontSize: '17.5px',
+                  lineHeight: 1.62,
+                  color: '#9a9a9a',
+                  margin: '20px 0 0',
+                }}
+              >
+                A hard boundary sits between WaitLayer and everything in your terminal — enforced in
+                the client, before any data leaves your machine.
+              </p>
+            </div>
+
+            <div
+              className="wl-2col wlh-in"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '16px',
+                marginTop: '44px',
+              }}
+            >
+              <div
+                style={{
+                  border: '1px solid #1f1f1f',
+                  borderRadius: '14px',
+                  background: '#0d0d0d',
+                  padding: '26px 28px',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '11px',
+                    letterSpacing: '.1em',
+                    textTransform: 'uppercase',
+                    color: '#a8524c',
+                    marginBottom: '18px',
+                  }}
+                >
+                  Never collected
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '13px 18px' }}>
+                  {[
+                    'Source code',
+                    'Prompts & completions',
+                    'Terminal output',
+                    'Shell history',
+                    'File contents',
+                    'Repo & branch names',
+                    'Dependency files',
+                    'Secrets & env vars',
+                  ].map((f) => (
+                    <div
+                      key={f}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '14.5px',
+                        color: '#cfcfcf',
+                      }}
+                    >
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#a8524c"
+                        strokeWidth="2"
+                        style={{ flex: 'none' }}
+                      >
+                        <path d="M5 5l14 14M19 5L5 19"></path>
+                      </svg>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: '1px solid #16301f',
+                  borderRadius: '14px',
+                  background: '#08110b',
+                  padding: '26px 28px',
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '11px',
+                    letterSpacing: '.1em',
+                    textTransform: 'uppercase',
+                    color: '#5a8a6a',
+                    marginBottom: '18px',
+                  }}
+                >
+                  All we read — a fixed allowlist
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '13px 18px' }}>
+                  {[
+                    'Install ID',
+                    'Agent type',
+                    'Surface type',
+                    'Client version',
+                    'Eligible duration',
+                    'Impression ID',
+                    'Click event',
+                    'Payout status',
+                  ].map((f) => (
+                    <div
+                      key={f}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        fontSize: '14.5px',
+                        color: '#dcdcdc',
+                      }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#16a34a"
+                        strokeWidth="2.6"
+                        style={{ flex: 'none' }}
+                      >
+                        <path d="M5 12.5l4 4 10-10"></path>
+                      </svg>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                marginTop: '26px',
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '12.5px',
+                  lineHeight: 1.6,
+                  color: '#6f6f6f',
+                  margin: 0,
+                  maxWidth: '560px',
+                }}
+              >
+                The allowlist is enforced in the client. If a field isn't on it, it's never
+                assembled into a payload.
+              </p>
+              <Link
+                className="wl-link-u"
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '13px',
+                  color: '#fff',
+                  flex: 'none',
+                }}
+                href="/privacy"
+              >
+                Read the full trust policy →
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Section 5: The Line ── */}
+        <section
+          className="wl-sec"
+          style={{ padding: '104px 0', borderBottom: '1px solid #ececec' }}
+        >
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div
+              className="wl-2col wlh-in"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '.82fr 1.18fr',
+                gap: '60px',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '11.5px',
+                    letterSpacing: '.14em',
+                    textTransform: 'uppercase',
+                    color: '#999',
+                  }}
+                >
+                  The line
+                </div>
+                <h2
+                  style={{
+                    fontFamily: "'Instrument Serif', serif",
+                    fontWeight: 400,
+                    fontSize: 'clamp(32px, 4.4vw, 52px)',
+                    lineHeight: 1.04,
+                    letterSpacing: '-.014em',
+                    margin: '14px 0 0',
+                    color: '#0a0a0a',
+                    textWrap: 'balance',
+                  }}
+                >
+                  One line. Always labeled.
+                </h2>
+                <p
+                  style={{
+                    fontSize: '17px',
+                    lineHeight: 1.62,
+                    color: '#555',
+                    margin: '20px 0 24px',
+                    maxWidth: '380px',
+                  }}
+                >
+                  Developer-tool sponsors only — shown once during the wait, never disguised as your
+                  work.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {[
+                    'No popups',
+                    'No takeovers',
+                    'No consumer junk',
+                    'No hidden native ads',
+                    'No misleading placement',
+                    'Developer-tool sponsors only',
+                  ].map((t) => (
+                    <span
+                      key={t}
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '11.5px',
+                        color: '#666',
+                        border: '1px solid #e6e6e6',
+                        borderRadius: '6px',
+                        padding: '5px 9px',
+                        background: '#fafafa',
+                      }}
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    background: '#0c0c0c',
+                    border: '1px solid #1c1c1c',
+                    borderRadius: '14px',
+                    padding: '22px 24px',
+                    boxShadow: 'var(--term-shadow)',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {[
+                      {
+                        name: 'Neon',
+                        desc: 'Serverless Postgres for AI-native apps',
+                        color: '#00e599',
+                      },
+                      {
+                        name: 'Sentry',
+                        desc: 'Find production bugs before users do',
+                        color: '#362d59',
+                      },
+                      {
+                        name: 'Railway',
+                        desc: 'Deploy from your terminal in minutes',
+                        color: '#13111a',
+                      },
+                      {
+                        name: 'Clerk',
+                        desc: 'Authentication built for modern apps',
+                        color: '#6c47ff',
+                      },
+                    ].map((s) => (
+                      <div
+                        key={s.name}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '10px 76px 62px 1fr',
+                          alignItems: 'center',
+                          columnGap: '11px',
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '13.5px',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '2px',
+                            background: s.color,
+                          }}
+                        ></span>
+                        <span
+                          style={{
+                            color: '#6f6f6f',
+                            fontSize: '11px',
+                            letterSpacing: '.05em',
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          Sponsored
+                        </span>
+                        <span style={{ color: '#e8e8e8' }}>{s.name}</span>
+                        <span
+                          style={{
+                            color: '#9a9a9a',
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <span style={{ color: '#3a3a3a', marginRight: '9px' }}>·</span>
+                          {s.desc}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Section 6: For Developers ── */}
+        <section
+          id="developers"
+          className="wl-sec"
+          style={{ padding: '104px 0', background: '#fafafa', borderBottom: '1px solid #ececec' }}
+        >
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div
+              className="wl-2col wlh-in"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '56px',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '11.5px',
+                    letterSpacing: '.14em',
+                    textTransform: 'uppercase',
+                    color: '#999',
+                  }}
+                >
+                  For developers
+                </div>
+                <h2
+                  style={{
+                    fontFamily: "'Instrument Serif', serif",
+                    fontWeight: 400,
+                    fontSize: 'clamp(32px, 4.4vw, 52px)',
+                    lineHeight: 1.04,
+                    letterSpacing: '-.014em',
+                    margin: '14px 0 0',
+                    color: '#0a0a0a',
+                    textWrap: 'balance',
+                  }}
+                >
+                  Earn back what you spend on AI.
+                </h2>
+                <p
+                  style={{
+                    fontSize: '17px',
+                    lineHeight: 1.62,
+                    color: '#555',
+                    margin: '20px 0 24px',
+                    maxWidth: '440px',
+                  }}
+                >
+                  Active AI-agent users earn from real wait time and offset the tools they already
+                  pay for — without changing how they work.
+                </p>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '11px',
+                  }}
+                >
+                  {[
+                    'Earn from real wait time',
+                    '70% of verified media spend',
+                    'Cash, USDC, or compute credits',
+                    'Stay in your terminal — no workflow change',
+                  ].map((li) => (
+                    <li
+                      key={li}
+                      style={{
+                        display: 'flex',
+                        gap: '11px',
+                        alignItems: 'center',
+                        fontSize: '15px',
+                        color: '#444',
+                      }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#16a34a"
+                        strokeWidth="2.6"
+                        style={{ flex: 'none' }}
+                      >
+                        <path d="M5 12.5l4 4 10-10"></path>
+                      </svg>
+                      {li}
+                    </li>
+                  ))}
+                </ul>
+                <div
+                  style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '26px' }}
+                >
+                  <Link
+                    className="wlh-btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      height: '46px',
+                      padding: '0 22px',
+                      background: '#0a0a0a',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      borderRadius: '9px',
+                    }}
+                    href={isAuthenticated ? dashboardPath : '/auth/signup?role=developer'}
+                  >
+                    {isAuthenticated ? 'Go to Dashboard' : 'Join the founding beta'}
+                  </Link>
+                  <Link
+                    className="wl-link-u"
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '13px',
+                      color: '#666',
+                    }}
                     href="/pricing"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
                   >
-                    Pricing
+                    How earning works →
                   </Link>
-                  <Link
-                    href="/comparison"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
-                  >
-                    Comparison
-                  </Link>
-                  <a
-                    href="#how-it-works"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
-                  >
-                    How it works
-                  </a>
-                  <a
-                    href="#developers"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
-                  >
-                    For developers
-                  </a>
-                  <a
-                    href="#advertisers"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
-                  >
-                    For advertisers
-                  </a>
                 </div>
               </div>
+
               <div>
-                <h4 className="text-surface-900 font-semibold text-[13px] mb-3">Legal</h4>
-                <div className="flex flex-col gap-2">
-                  <Link
-                    href="/privacy"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                <div
+                  className="wlh-card"
+                  style={{
+                    border: '1px solid #e6e6e6',
+                    borderRadius: '16px',
+                    background: '#fff',
+                    padding: '28px 30px',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: '10px',
+                      marginBottom: '6px',
+                    }}
                   >
-                    Privacy
+                    <span
+                      style={{
+                        fontFamily: "'Instrument Serif', serif",
+                        fontSize: '46px',
+                        lineHeight: 1,
+                        color: '#0a0a0a',
+                      }}
+                    >
+                      70%
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '12.5px',
+                        color: '#777',
+                      }}
+                    >
+                      of verified media spend goes to you
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      height: '14px',
+                      borderRadius: '7px',
+                      overflow: 'hidden',
+                      border: '1px solid #e6e6e6',
+                      margin: '16px 0 8px',
+                      background: '#fafafa',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '70%',
+                        background: '#0a0a0a',
+                        transformOrigin: 'left center',
+                        transform: 'scaleX(1)',
+                        transition: 'transform .95s cubic-bezier(.34,.85,.32,1)',
+                      }}
+                    ></div>
+                    <div style={{ width: '30%', background: '#fff' }}></div>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '11px',
+                      color: '#999',
+                      marginBottom: '22px',
+                    }}
+                  >
+                    <span>you</span>
+                    <span>platform</span>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '11px',
+                      letterSpacing: '.08em',
+                      textTransform: 'uppercase',
+                      color: '#999',
+                      marginBottom: '11px',
+                    }}
+                  >
+                    Payout when eligible
+                  </div>
+                  <div
+                    className="wlh-stagger"
+                    style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '22px' }}
+                  >
+                    {['Cash', 'USDC', 'Compute credits'].map((p) => (
+                      <span
+                        key={p}
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '12.5px',
+                          color: '#333',
+                          border: '1px solid #e2e2e2',
+                          borderRadius: '7px',
+                          padding: '7px 11px',
+                          background: '#fafafa',
+                        }}
+                      >
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                  <div
+                    style={{
+                      background: '#fffaf3',
+                      border: '1px solid #f0e2c8',
+                      borderRadius: '10px',
+                      padding: '15px 16px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginBottom: '9px',
+                      }}
+                    >
+                      <span style={{ color: '#d97706', fontWeight: 'bold' }}>!</span>
+                      <span
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '10.5px',
+                          letterSpacing: '.1em',
+                          textTransform: 'uppercase',
+                          color: '#b46708',
+                        }}
+                      >
+                        What beta means
+                      </span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.62, color: '#8a7a55' }}>
+                      No guaranteed earnings yet. During beta you help verify the first supply of
+                      AI-agent wait states — cashable earnings begin when verified impressions match
+                      sponsor-funded campaigns.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Section 7: For Sponsors ── */}
+        <section
+          id="sponsors"
+          className="wl-sec"
+          style={{
+            padding: '104px 0',
+            background: '#0a0a0a',
+            color: '#fff',
+            borderBottom: '1px solid #1a1a1a',
+          }}
+        >
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div
+              className="wl-2col wlh-in"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '56px',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    background: '#0d0d0d',
+                    border: '1px solid #1c1c1c',
+                    borderRadius: '16px',
+                    padding: '24px 26px',
+                    boxShadow: 'var(--term-shadow)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '5px 11px',
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '13.5px',
+                      color: '#cfcfcf',
+                      minWidth: 0,
+                      paddingBottom: '18px',
+                      borderBottom: '1px solid #181818',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '2px',
+                        background: '#00e599',
+                        flex: 'none',
+                      }}
+                    ></span>
+                    <span
+                      style={{
+                        color: '#6f6f6f',
+                        flex: 'none',
+                        fontSize: '11px',
+                        letterSpacing: '.05em',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Sponsored
+                    </span>
+                    <span style={{ color: '#e8e8e8', flex: 'none' }}>Your tool</span>
+                    <span style={{ color: '#3a3a3a', flex: 'none' }}>·</span>
+                    <span style={{ color: '#9a9a9a', minWidth: 0 }}>
+                      One developer-relevant line
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '12px',
+                      marginTop: '18px',
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '10.5px',
+                          letterSpacing: '.06em',
+                          textTransform: 'uppercase',
+                          color: '#6a6a6a',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        Impressions
+                      </div>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '7px',
+                          fontSize: '13px',
+                          color: '#dcdcdc',
+                        }}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#5fbd83"
+                          strokeWidth="2.6"
+                          style={{ flex: 'none' }}
+                        >
+                          <path d="M5 12.5l4 4 10-10"></path>
+                        </svg>
+                        verified
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '10.5px',
+                          letterSpacing: '.06em',
+                          textTransform: 'uppercase',
+                          color: '#6a6a6a',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        Delivery
+                      </div>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '7px',
+                          fontSize: '13px',
+                          color: '#dcdcdc',
+                        }}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#5fbd83"
+                          stroke-width="2.6"
+                          style={{ flex: 'none' }}
+                        >
+                          <path d="M5 12.5l4 4 10-10"></path>
+                        </svg>
+                        fraud-reviewed
+                      </div>
+                    </div>
+                    <div>
+                      <div
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '10.5px',
+                          letterSpacing: '.06em',
+                          textTransform: 'uppercase',
+                          color: '#6a6a6a',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        Audience
+                      </div>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '7px',
+                          fontSize: '13px',
+                          color: '#dcdcdc',
+                        }}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#5fbd83"
+                          stroke-width="2.6"
+                          style={{ flex: 'none' }}
+                        >
+                          <path d="M5 12.5l4 4 10-10"></path>
+                        </svg>
+                        dev-tools only
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: '18px',
+                      paddingTop: '16px',
+                      borderTop: '1px solid #181818',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '6px 16px',
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '11.5px',
+                      color: '#7a7a7a',
+                    }}
+                  >
+                    <span>reporting:</span>
+                    <span style={{ color: '#cfcfcf' }}>1,000 impressions</span>
+                    <span style={{ color: '#3a3a3a' }}>·</span>
+                    <span style={{ color: '#cfcfcf' }}>38 clicks</span>
+                    <span style={{ color: '#3a3a3a' }}>·</span>
+                    <span style={{ color: '#cfcfcf' }}>$20 CPM</span>
+                    <span style={{ color: '#3a3a3a' }}>·</span>
+                    <span style={{ color: '#5fbd83' }}>$0.52 CPC</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontSize: '11.5px',
+                    letterSpacing: '.14em',
+                    textTransform: 'uppercase',
+                    color: '#a78bfa',
+                  }}
+                >
+                  For sponsors
+                </div>
+                <h2
+                  style={{
+                    fontFamily: "'Instrument Serif', serif",
+                    fontWeight: 400,
+                    fontSize: 'clamp(32px, 4.4vw, 52px)',
+                    lineHeight: 1.04,
+                    letterSpacing: '-.014em',
+                    margin: '14px 0 0',
+                    color: '#fff',
+                    textWrap: 'balance',
+                  }}
+                >
+                  Reach builders where they actually work.
+                </h2>
+                <p
+                  style={{
+                    fontSize: '17px',
+                    lineHeight: 1.62,
+                    color: '#9a9a9a',
+                    margin: '20px 0 24px',
+                    maxWidth: '440px',
+                  }}
+                >
+                  Privacy-preserving access to AI-native developers during real coding sessions —
+                  verified, fraud-reviewed, and developer-tools only. From $750/mo.
+                </p>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '11px',
+                  }}
+                >
+                  {[
+                    'Verified five-second impressions',
+                    'Fraud-reviewed delivery',
+                    'Developer-tool environment only',
+                    'Click and campaign reporting',
+                  ].map((li) => (
+                    <li
+                      key={li}
+                      style={{
+                        display: 'flex',
+                        gap: '11px',
+                        alignItems: 'center',
+                        fontSize: '15px',
+                        color: '#cfcfcf',
+                      }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#5fbd83"
+                        strokeWidth="2.6"
+                        style={{ flex: 'none' }}
+                      >
+                        <path d="M5 12.5l4 4 10-10"></path>
+                      </svg>
+                      {li}
+                    </li>
+                  ))}
+                </ul>
+                <div style={{ marginTop: '24px' }}>
+                  <div
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '10.5px',
+                      letterSpacing: '.1em',
+                      textTransform: 'uppercase',
+                      color: '#6a6a6a',
+                      marginBottom: '11px',
+                    }}
+                  >
+                    Founding sponsors get
+                  </div>
+                  <div
+                    className="wlh-stagger"
+                    style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}
+                  >
+                    {[
+                      'Priority pricing',
+                      'Discounted founding CPM',
+                      'Category exclusivity',
+                      'Creative feedback',
+                      'Rollover protection',
+                    ].map((tag) => (
+                      <span
+                        key={tag}
+                        style={{
+                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontSize: '11.5px',
+                          color: '#bdbdbd',
+                          border: '1px solid #262626',
+                          borderRadius: '7px',
+                          padding: '6px 10px',
+                          background: '#0f0f0f',
+                        }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div
+                  style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '26px' }}
+                >
+                  <Link
+                    className="wlh-btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      height: '46px',
+                      padding: '0 22px',
+                      background: '#fff',
+                      color: '#0a0a0a',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      borderRadius: '9px',
+                    }}
+                    href="/auth/signup?role=advertiser"
+                  >
+                    Reserve a sponsor slot
                   </Link>
                   <Link
-                    href="/terms"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="wl-link-u"
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '13px',
+                      color: '#cfcfcf',
+                    }}
+                    href="/pricing"
                   >
-                    Terms
-                  </Link>
-                  <Link
-                    href="/advertiser-policy"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
-                  >
-                    Advertiser Policy
-                  </Link>
-                  <Link
-                    href="/payout-policy"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
-                  >
-                    Payout Policy
-                  </Link>
-                  <Link
-                    href="/contact"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
-                  >
-                    Contact
+                    See pricing →
                   </Link>
                 </div>
               </div>
             </div>
           </div>
-          <div className="mt-12 pt-6 border-t border-surface-100 text-surface-400 text-[13px]">
-            © 2026 WaitLayer. All rights reserved.
+        </section>
+
+        {/* ── Section 8: The Network ── */}
+        <section
+          className="wl-sec"
+          style={{ padding: '100px 0', borderBottom: '1px solid #ececec' }}
+        >
+          <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>
+            <div style={{ maxWidth: '720px' }}>
+              <div
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '11.5px',
+                  letterSpacing: '.14em',
+                  textTransform: 'uppercase',
+                  color: '#999',
+                }}
+              >
+                The network
+              </div>
+              <h2
+                style={{
+                  fontFamily: "'Instrument Serif', serif",
+                  fontWeight: 400,
+                  fontSize: 'clamp(32px, 4.4vw, 52px)',
+                  lineHeight: 1.04,
+                  letterSpacing: '-.014em',
+                  margin: '14px 0 0',
+                  color: '#0a0a0a',
+                  textWrap: 'balance',
+                }}
+              >
+                We're building the network layer for AI-agent attention.
+              </h2>
+              <p
+                style={{
+                  fontSize: '17.5px',
+                  lineHeight: 1.62,
+                  color: '#555',
+                  margin: '20px 0 0',
+                  maxWidth: '600px',
+                }}
+              >
+                Rendering a sponsor line isn't the moat. Verifying quality, routing demand, and
+                settling value across the agent stack is — measurement, marketplace, and settlement
+                for AI-agent attention.
+              </p>
+            </div>
+
+            <div
+              className="wl-cards"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '16px',
+                marginTop: '44px',
+              }}
+            >
+              {/* Card 1: Now */}
+              <div
+                className="wlh-card wlh-in"
+                style={{
+                  border: '1px solid #e6e6e6',
+                  borderRadius: '14px',
+                  background: '#fff',
+                  padding: '24px 26px',
+                  height: '100%',
+                  animationDelay: '0ms',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '9px',
+                    marginBottom: '18px',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '9px' }}>
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: '#16a34a',
+                      }}
+                    ></span>
+                    <span
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '11.5px',
+                        letterSpacing: '.1em',
+                        textTransform: 'uppercase',
+                        color: '#666',
+                      }}
+                    >
+                      Now
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '10.5px',
+                      letterSpacing: '.06em',
+                      textTransform: 'uppercase',
+                      color: '#bbb',
+                    }}
+                  >
+                    Measurement
+                  </span>
+                </div>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '11px',
+                  }}
+                >
+                  {[
+                    'Claude Code status line',
+                    'Local verification ledger',
+                    'Founding developer beta',
+                  ].map((item) => (
+                    <li
+                      key={item}
+                      style={{
+                        fontSize: '14.5px',
+                        color: '#444',
+                        paddingLeft: '14px',
+                        position: 'relative',
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: '9px',
+                          width: '4px',
+                          height: '4px',
+                          borderRadius: '50%',
+                          background: '#cfcfcf',
+                        }}
+                      ></span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Card 2: Next */}
+              <div
+                className="wlh-card wlh-in"
+                style={{
+                  border: '1px solid #e6e6e6',
+                  borderRadius: '14px',
+                  background: '#fff',
+                  padding: '24px 26px',
+                  height: '100%',
+                  animationDelay: '100ms',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '9px',
+                    marginBottom: '18px',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '9px' }}>
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: '#d97706',
+                      }}
+                    ></span>
+                    <span
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '11.5px',
+                        letterSpacing: '.1em',
+                        textTransform: 'uppercase',
+                        color: '#666',
+                      }}
+                    >
+                      Next
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '10.5px',
+                      letterSpacing: '.06em',
+                      textTransform: 'uppercase',
+                      color: '#bbb',
+                    }}
+                  >
+                    Marketplace
+                  </span>
+                </div>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '11px',
+                  }}
+                >
+                  {[
+                    'Funded sponsor campaigns',
+                    'Qualified actions & compute credits',
+                    'Cash & USDC payouts',
+                    'Codex CLI',
+                  ].map((item) => (
+                    <li
+                      key={item}
+                      style={{
+                        fontSize: '14.5px',
+                        color: '#444',
+                        paddingLeft: '14px',
+                        position: 'relative',
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: '9px',
+                          width: '4px',
+                          height: '4px',
+                          borderRadius: '50%',
+                          background: '#cfcfcf',
+                        }}
+                      ></span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Card 3: Later */}
+              <div
+                className="wlh-card wlh-in"
+                style={{
+                  border: '1px solid #e6e6e6',
+                  borderRadius: '14px',
+                  background: '#fff',
+                  padding: '24px 26px',
+                  height: '100%',
+                  animationDelay: '200ms',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '9px',
+                    marginBottom: '18px',
+                  }}
+                >
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '9px' }}>
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: '#6d28d9',
+                      }}
+                    ></span>
+                    <span
+                      style={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontSize: '11.5px',
+                        letterSpacing: '.1em',
+                        textTransform: 'uppercase',
+                        color: '#666',
+                      }}
+                    >
+                      Later
+                    </span>
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontSize: '10.5px',
+                      letterSpacing: '.06em',
+                      textTransform: 'uppercase',
+                      color: '#bbb',
+                    }}
+                  >
+                    Settlement
+                  </span>
+                </div>
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    margin: 0,
+                    padding: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '11px',
+                  }}
+                >
+                  {[
+                    'Cross-agent surfaces — tmux, PTY, Aider, Gemini',
+                    'Compute-credit settlement',
+                    'Quality scoring & marketplace',
+                  ].map((item) => (
+                    <li
+                      key={item}
+                      style={{
+                        fontSize: '14.5px',
+                        color: '#444',
+                        paddingLeft: '14px',
+                        position: 'relative',
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: 'absolute',
+                          left: 0,
+                          top: '9px',
+                          width: '4px',
+                          height: '4px',
+                          borderRadius: '50%',
+                          background: '#cfcfcf',
+                        }}
+                      ></span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
-        </div>
-      </footer>
+        </section>
+
+        {/* ── Section 9: Stop Giving Away ── */}
+        <section
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            background: '#0a0a0a',
+            color: '#fff',
+            padding: '138px 0',
+          }}
+        >
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(22, 1fr)',
+              gridTemplateRows: 'repeat(11, 1fr)',
+              padding: '44px 3%',
+              pointerEvents: 'none',
+              maskImage: 'radial-gradient(ellipse 62% 62% at 50% 50%, transparent 26%, #000 80%)',
+              WebkitMaskImage:
+                'radial-gradient(ellipse 62% 62% at 50% 50%, transparent 26%, #000 80%)',
+            }}
+          >
+            {Array.from({ length: 242 }).map((_, idx) => {
+              const col = idx % 22;
+              const row = Math.floor(idx / 22);
+              const dist = Math.sqrt((col - 10.5) ** 2 + (row - 5) ** 2);
+              const delay = (dist * 0.18).toFixed(2);
+              return (
+                <span
+                  key={idx}
+                  className="wlh-node"
+                  style={{
+                    animationDelay: `${delay}s`,
+                    justifySelf: 'center',
+                    alignSelf: 'center',
+                  }}
+                ></span>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              maxWidth: '1000px',
+              margin: '0 auto',
+              padding: '0 32px',
+              position: 'relative',
+              zIndex: 1,
+            }}
+          >
+            <div className="wlh-in" style={{ textAlign: 'center' }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '9px',
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '11.5px',
+                  letterSpacing: '.14em',
+                  textTransform: 'uppercase',
+                  color: '#7f7f7f',
+                  marginBottom: '26px',
+                }}
+              >
+                <span
+                  className="wl-dot"
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: 'var(--accent,#16a34a)',
+                    display: 'inline-block',
+                  }}
+                ></span>
+                The verified attention network
+              </div>
+              <h2
+                style={{
+                  fontFamily: "'Instrument Serif', serif",
+                  fontWeight: 400,
+                  fontSize: 'clamp(40px, 5.6vw, 70px)',
+                  lineHeight: 1,
+                  letterSpacing: '-.02em',
+                  margin: '0 auto 18px',
+                  maxWidth: '680px',
+                  color: '#fff',
+                  textWrap: 'balance',
+                }}
+              >
+                Stop giving away your wait time.
+              </h2>
+              <p
+                style={{
+                  fontSize: '18.5px',
+                  lineHeight: 1.6,
+                  color: '#9a9a9a',
+                  margin: '0 auto 34px',
+                  maxWidth: '480px',
+                }}
+              >
+                Join the founding beta and earn from the time you already spend waiting on AI.
+              </p>
+
+              <div
+                style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'center' }}
+              >
+                <Link
+                  className="wlh-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    height: '52px',
+                    padding: '0 30px',
+                    background: '#fff',
+                    color: '#0a0a0a',
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    borderRadius: '9px',
+                  }}
+                  href={isAuthenticated ? dashboardPath : '/auth/signup?role=developer'}
+                >
+                  {isAuthenticated ? 'Go to Dashboard' : 'Join the founding beta'}
+                </Link>
+                <Link
+                  className="wlh-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    height: '52px',
+                    padding: '0 30px',
+                    background: 'transparent',
+                    color: '#fff',
+                    border: '1px solid #3a3a3a',
+                    fontSize: '16px',
+                    fontWeight: 600,
+                    borderRadius: '9px',
+                  }}
+                  href={
+                    isAuthenticated && user?.role === 'advertiser'
+                      ? '/advertiser'
+                      : '/auth/signup?role=advertiser'
+                  }
+                >
+                  Become a sponsor
+                </Link>
+              </div>
+
+              <div
+                style={{
+                  marginTop: '20px',
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: '12px',
+                  color: '#6a6a6a',
+                }}
+              >
+                No guaranteed earnings · your work stays yours · cancel anytime
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

@@ -1,7 +1,15 @@
 import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 
 import { BidType, Prisma } from '@waitlayer/db';
-import { AD_SERVING, CampaignStatus, formatMinorUnits } from '@waitlayer/shared';
+import {
+  AD_SERVING,
+  campaignMaximumBudgetMinor,
+  campaignMinimumBidMinor,
+  campaignMinimumBudgetMinor,
+  CampaignStatus,
+  formatMinorUnits,
+  getCurrencyPolicy,
+} from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
@@ -32,50 +40,80 @@ export class AdvertiserCampaignTrait {
     },
   ) {
     const currency = dto.currency?.trim().toUpperCase() || 'USD';
-    // Validate budget
-    if (dto.budgetTotalMinor < AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR) {
+    // Validate budget against the PER-CURRENCY policy (#5). The old global
+    // MIN_CAMPAIGN_BUDGET_MINOR/MAX_CAMPAIGN_BUDGET_MINOR constants represent a
+    // USD-shaped `$50`/`$1M` that, when re-applied verbatim to a zero-decimal
+    // currency (JPY) or three-decimal currency (BHD), are economically wrong.
+    // Each supported currency now carries its own minor-unit thresholds in
+    // CURRENCY_POLICY — the single source of truth for DTO, service, web.
+    if (!getCurrencyPolicy(currency)) {
+      throw new BadRequestException(`Currency "${currency}" is not supported`);
+    }
+    const minBudget = campaignMinimumBudgetMinor(currency);
+    const maxBudget = campaignMaximumBudgetMinor(currency);
+    if (dto.budgetTotalMinor < minBudget) {
       throw new BadRequestException(
-        `Minimum budget is ${formatMinorUnits(BigInt(AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR), currency)}`,
+        `Minimum budget is ${formatMinorUnits(minBudget, currency)} (${currency})`,
       );
     }
-    if (dto.budgetTotalMinor > AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR) {
+    if (dto.budgetTotalMinor > maxBudget) {
       throw new BadRequestException(
-        `Maximum budget is ${formatMinorUnits(BigInt(AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR), currency)}`,
+        `Maximum budget is ${formatMinorUnits(maxBudget, currency)} (${currency})`,
       );
     }
-    if (dto.bidAmountMinor <= 0) {
+    if (dto.bidAmountMinor <= 0n) {
       throw new BadRequestException('Bid amount must be positive');
+    }
+    const minBid = campaignMinimumBidMinor(currency);
+    if (dto.bidAmountMinor < minBid) {
+      throw new BadRequestException(
+        `Minimum bid is ${formatMinorUnits(minBid, currency)} (${currency})`,
+      );
+    }
+    // bid must never exceed total budget, and the budget must cover at least
+    // one billable event of this campaign's bid type.
+    if (dto.bidAmountMinor > dto.budgetTotalMinor) {
+      throw new BadRequestException('Bid amount cannot exceed total budget');
+    }
+    if (dto.budgetTotalMinor < dto.bidAmountMinor) {
+      throw new BadRequestException('Budget must cover at least one billable event');
     }
     // Validate campaign category (blocks prohibited categories)
     await this.campaignService.validateCampaignCategory(dto.category);
     if (!(await this.runtimeConfig.isCurrencyAllowed(currency))) {
       throw new BadRequestException(`Currency "${currency}" is currently blocked`);
     }
-    const campaign = await this.prisma.campaign.create({
-      data: {
-        advertiserId,
-        name: dto.name,
-        category: dto.category,
-        bidType: dto.bidType as BidType,
-        bidAmountMinor: dto.bidAmountMinor,
-        budgetTotalMinor: dto.budgetTotalMinor,
-        currency,
-        frequencyCapPerHour: dto.frequencyCapPerHour ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_HOUR,
-        frequencyCapPerDay: dto.frequencyCapPerDay ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_DAY,
-      },
-    });
-    void this.audit.log({
-      actorId: advertiserId,
-      actorRole: 'advertiser',
-      action: 'create_campaign',
-      targetType: 'campaign',
-      targetId: campaign.id,
-      beforeSnap: {
-        name: dto.name,
-        category: dto.category,
-        bidType: dto.bidType,
-        budgetTotalMinor: String(dto.budgetTotalMinor),
-      },
+    const campaign = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const created = await tx.campaign.create({
+        data: {
+          advertiserId,
+          name: dto.name,
+          category: dto.category,
+          bidType: dto.bidType as BidType,
+          bidAmountMinor: dto.bidAmountMinor,
+          budgetTotalMinor: dto.budgetTotalMinor,
+          currency,
+          frequencyCapPerHour: dto.frequencyCapPerHour ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_HOUR,
+          frequencyCapPerDay: dto.frequencyCapPerDay ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_DAY,
+        },
+      });
+      await this.audit.logStrict(
+        {
+          actorId: advertiserId,
+          actorRole: 'advertiser',
+          action: 'create_campaign',
+          targetType: 'campaign',
+          targetId: created.id,
+          beforeSnap: {
+            name: dto.name,
+            category: dto.category,
+            bidType: dto.bidType,
+            budgetTotalMinor: String(dto.budgetTotalMinor),
+          },
+        },
+        tx,
+      );
+      return created;
     });
     return campaign;
   }
@@ -102,6 +140,17 @@ export class AdvertiserCampaignTrait {
         where: { campaignId, status: 'draft' },
         data: { status: 'pending_review' },
       });
+      await this.audit.logStrict(
+        {
+          actorId: advertiserId,
+          actorRole: 'advertiser',
+          action: 'submit_campaign',
+          targetType: 'campaign',
+          targetId: campaignId,
+          beforeSnap: { oldStatus: campaign.status },
+        },
+        tx,
+      );
       return tx.campaign.findUnique({ where: { id: campaignId } });
     });
     if (!submitted) {
@@ -111,14 +160,6 @@ export class AdvertiserCampaignTrait {
         'Campaign can only be submitted from DRAFT status',
       );
     }
-    void this.audit.log({
-      actorId: advertiserId,
-      actorRole: 'advertiser',
-      action: 'submit_campaign',
-      targetType: 'campaign',
-      targetId: campaignId,
-      beforeSnap: { oldStatus: campaign.status },
-    });
     return submitted;
   }
 
@@ -133,24 +174,29 @@ export class AdvertiserCampaignTrait {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
     this.validateTransition(campaign.status, 'draft');
-    const claimed = await this.prisma.campaign.updateMany({
-      where: { id: campaignId, advertiserId, status: CampaignStatus.REJECTED },
-      data: { status: CampaignStatus.DRAFT },
-    });
-    if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(
-        campaignId,
-        advertiserId,
-        'Campaign can only be reset to draft from REJECTED status',
+    const updated = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const claimed = await tx.campaign.updateMany({
+        where: { id: campaignId, advertiserId, status: CampaignStatus.REJECTED },
+        data: { status: CampaignStatus.DRAFT },
+      });
+      if (claimed.count === 0) {
+        await this.throwCampaignStateConflict(
+          campaignId,
+          advertiserId,
+          'Campaign can only be reset to draft from REJECTED status',
+        );
+      }
+      await this.audit.logStrict(
+        {
+          actorId: advertiserId,
+          actorRole: 'advertiser',
+          action: 'reset_campaign_to_draft',
+          targetType: 'campaign',
+          targetId: campaignId,
+        },
+        tx,
       );
-    }
-    const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
-    void this.audit.log({
-      actorId: advertiserId,
-      actorRole: 'advertiser',
-      action: 'reset_campaign_to_draft',
-      targetType: 'campaign',
-      targetId: campaignId,
+      return tx.campaign.findUnique({ where: { id: campaignId } });
     });
     return updated;
   }
@@ -160,24 +206,29 @@ export class AdvertiserCampaignTrait {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
     this.validateTransition(campaign.status, 'paused');
-    const claimed = await this.prisma.campaign.updateMany({
-      where: { id: campaignId, advertiserId, status: CampaignStatus.ACTIVE },
-      data: { status: CampaignStatus.PAUSED, pausedAt: new Date() },
-    });
-    if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(
-        campaignId,
-        advertiserId,
-        'Campaign can only be paused from ACTIVE status',
+    const paused = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const claimed = await tx.campaign.updateMany({
+        where: { id: campaignId, advertiserId, status: CampaignStatus.ACTIVE },
+        data: { status: CampaignStatus.PAUSED, pausedAt: new Date() },
+      });
+      if (claimed.count === 0) {
+        await this.throwCampaignStateConflict(
+          campaignId,
+          advertiserId,
+          'Campaign can only be paused from ACTIVE status',
+        );
+      }
+      await this.audit.logStrict(
+        {
+          actorId: advertiserId,
+          actorRole: 'advertiser',
+          action: 'pause_campaign',
+          targetType: 'campaign',
+          targetId: campaignId,
+        },
+        tx,
       );
-    }
-    const paused = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
-    void this.audit.log({
-      actorId: advertiserId,
-      actorRole: 'advertiser',
-      action: 'pause_campaign',
-      targetType: 'campaign',
-      targetId: campaignId,
+      return tx.campaign.findUnique({ where: { id: campaignId } });
     });
     return paused;
   }
@@ -205,24 +256,29 @@ export class AdvertiserCampaignTrait {
       );
     }
     this.validateTransition(campaign.status, 'active');
-    const claimed = await this.prisma.campaign.updateMany({
-      where: { id: campaignId, advertiserId, status: CampaignStatus.PAUSED },
-      data: { status: CampaignStatus.ACTIVE, pausedAt: null, activatedAt: new Date() },
-    });
-    if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(
-        campaignId,
-        advertiserId,
-        'Campaign can only be resumed from PAUSED status',
+    const resumed = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const claimed = await tx.campaign.updateMany({
+        where: { id: campaignId, advertiserId, status: CampaignStatus.PAUSED },
+        data: { status: CampaignStatus.ACTIVE, pausedAt: null, activatedAt: new Date() },
+      });
+      if (claimed.count === 0) {
+        await this.throwCampaignStateConflict(
+          campaignId,
+          advertiserId,
+          'Campaign can only be resumed from PAUSED status',
+        );
+      }
+      await this.audit.logStrict(
+        {
+          actorId: advertiserId,
+          actorRole: 'advertiser',
+          action: 'resume_campaign',
+          targetType: 'campaign',
+          targetId: campaignId,
+        },
+        tx,
       );
-    }
-    const resumed = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
-    void this.audit.log({
-      actorId: advertiserId,
-      actorRole: 'advertiser',
-      action: 'resume_campaign',
-      targetType: 'campaign',
-      targetId: campaignId,
+      return tx.campaign.findUnique({ where: { id: campaignId } });
     });
     return resumed;
   }
@@ -262,6 +318,24 @@ export class AdvertiserCampaignTrait {
       if (claimed.count === 0) {
         return { archived: false as const };
       }
+      // Archive is a terminal money-relevant state change; the audit must be
+      // part of the same transaction so a rolled-back archive never leaves a
+      // false success record.
+      await this.audit.logStrict(
+        {
+          actorId: advertiserId,
+          actorRole: 'advertiser',
+          action: 'archive_campaign',
+          targetType: 'campaign',
+          targetId: campaignId,
+          beforeSnap: {
+            oldStatus: campaign.status,
+            releasedReservationMinor: String(campaign.budgetReservedMinor ?? 0n),
+            currency: campaign.currency,
+          },
+        },
+        tx,
+      );
       return { archived: true as const };
     });
     if (!result.archived) {
@@ -269,18 +343,6 @@ export class AdvertiserCampaignTrait {
     }
     const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     this.logger.log(`Archived campaign ${campaignId}; advertiser funds remain in shared balance`);
-    void this.audit.log({
-      actorId: advertiserId,
-      actorRole: 'advertiser',
-      action: 'archive_campaign',
-      targetType: 'campaign',
-      targetId: campaignId,
-      beforeSnap: {
-        oldStatus: campaign.status,
-        releasedReservationMinor: String(campaign.budgetReservedMinor ?? 0n),
-        currency: campaign.currency,
-      },
-    });
     return { campaign: updated, refundEntry: null, archived: true };
   }
 
@@ -311,55 +373,74 @@ export class AdvertiserCampaignTrait {
       }
     }
     // Re-validate inputs — the createCampaign path enforces bounds, but
-    // an update can be used to bypass them. Mirror the same checks.
+    // an update can be used to bypass them. Mirror the same per-currency checks.
+    const validationCurrency = (dto.currency ?? campaign.currency).trim().toUpperCase();
+    if (!getCurrencyPolicy(validationCurrency)) {
+      throw new BadRequestException(`Currency "${validationCurrency}" is not supported`);
+    }
+    const effectiveBid = dto.bidAmountMinor ?? campaign.bidAmountMinor;
+    const effectiveBudget = dto.budgetTotalMinor ?? campaign.budgetTotalMinor;
     if (dto.budgetTotalMinor !== undefined) {
-      const validationCurrency = dto.currency ?? campaign.currency;
-      if (dto.budgetTotalMinor < AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR) {
+      const minBudget = campaignMinimumBudgetMinor(validationCurrency);
+      const maxBudget = campaignMaximumBudgetMinor(validationCurrency);
+      if (dto.budgetTotalMinor < minBudget) {
         throw new BadRequestException(
-          `Minimum budget is ${formatMinorUnits(
-            BigInt(AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR),
-            validationCurrency,
-          )}`,
+          `Minimum budget is ${formatMinorUnits(minBudget, validationCurrency)} (${validationCurrency})`,
         );
       }
-      if (dto.budgetTotalMinor > AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR) {
+      if (dto.budgetTotalMinor > maxBudget) {
         throw new BadRequestException(
-          `Maximum budget is ${formatMinorUnits(
-            BigInt(AD_SERVING.MAX_CAMPAIGN_BUDGET_MINOR),
-            validationCurrency,
-          )}`,
+          `Maximum budget is ${formatMinorUnits(maxBudget, validationCurrency)} (${validationCurrency})`,
         );
       }
     }
-    if (dto.bidAmountMinor !== undefined && dto.bidAmountMinor <= 0) {
-      throw new BadRequestException('Bid amount must be positive');
+    if (dto.bidAmountMinor !== undefined) {
+      if (dto.bidAmountMinor <= 0n) {
+        throw new BadRequestException('Bid amount must be positive');
+      }
+      const minBid = campaignMinimumBidMinor(validationCurrency);
+      if (dto.bidAmountMinor < minBid) {
+        throw new BadRequestException(
+          `Minimum bid is ${formatMinorUnits(minBid, validationCurrency)} (${validationCurrency})`,
+        );
+      }
     }
-    const claimed = await this.prisma.campaign.updateMany({
-      where: { id: campaignId, advertiserId, status: CampaignStatus.DRAFT },
-      data: dto,
-    });
-    if (claimed.count === 0) {
-      await this.throwCampaignStateConflict(
-        campaignId,
-        advertiserId,
-        'Campaign can only be edited in DRAFT status',
-      );
+    // Combined bid<=budget invariant
+    if (effectiveBudget < effectiveBid) {
+      throw new BadRequestException('Bid amount cannot exceed total budget');
     }
-    const updated = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
-    void this.audit.log({
-      actorId: advertiserId,
-      actorRole: 'advertiser',
-      action: 'update_campaign',
-      targetType: 'campaign',
-      targetId: campaignId,
-      beforeSnap: {
-        changes: {
-          ...dto,
-          bidAmountMinor: dto.bidAmountMinor !== undefined ? String(dto.bidAmountMinor) : undefined,
-          budgetTotalMinor:
-            dto.budgetTotalMinor !== undefined ? String(dto.budgetTotalMinor) : undefined,
+    const updated = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const claimed = await tx.campaign.updateMany({
+        where: { id: campaignId, advertiserId, status: CampaignStatus.DRAFT },
+        data: dto,
+      });
+      if (claimed.count === 0) {
+        await this.throwCampaignStateConflict(
+          campaignId,
+          advertiserId,
+          'Campaign can only be edited in DRAFT status',
+        );
+      }
+      await this.audit.logStrict(
+        {
+          actorId: advertiserId,
+          actorRole: 'advertiser',
+          action: 'update_campaign',
+          targetType: 'campaign',
+          targetId: campaignId,
+          beforeSnap: {
+            changes: {
+              ...dto,
+              bidAmountMinor:
+                dto.bidAmountMinor !== undefined ? String(dto.bidAmountMinor) : undefined,
+              budgetTotalMinor:
+                dto.budgetTotalMinor !== undefined ? String(dto.budgetTotalMinor) : undefined,
+            },
+          },
         },
-      },
+        tx,
+      );
+      return tx.campaign.findUnique({ where: { id: campaignId } });
     });
     return updated;
   }

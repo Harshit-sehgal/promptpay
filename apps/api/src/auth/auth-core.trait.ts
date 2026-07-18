@@ -54,7 +54,7 @@ export class AuthCoreTrait {
     if (existing) throw new ConflictException('Email already registered');
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const referralCode = await this.generateReferralCode();
-    const { user, consentRows } = await this.prisma.$transaction(async (tx) => {
+    const { user } = await this.prisma.$transaction(async (tx) => {
       let createdUser;
       let candidateReferralCode = referralCode;
       for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -122,8 +122,8 @@ export class AuthCoreTrait {
         'signup',
         signupConsentVersions,
       );
-      await tx.auditLog.create({
-        data: {
+      await this.audit.logStrict(
+        {
           actorId: createdUser.id,
           actorRole: createdUser.role,
           action: 'signup',
@@ -131,11 +131,12 @@ export class AuthCoreTrait {
           targetId: createdUser.id,
           afterSnap: { role: createdUser.role },
         },
-      });
+        tx,
+      );
+      await this.logSignupConsents(createdUser, consentRows, 'signup', tx);
       return { user: createdUser, consentRows };
     });
     const tokens = await this.generateTokenPair(user.id, user.role);
-    this.logSignupConsents(user, consentRows, 'signup');
     return {
       user: this.sanitizeUser(user),
       ...tokens,
@@ -298,11 +299,22 @@ export class AuthCoreTrait {
         'google_signup',
         signupConsentVersions,
       );
+      await this.audit.logStrict(
+        {
+          actorId: createdUser.id,
+          actorRole: createdUser.role,
+          action: 'google_signup',
+          targetType: 'user',
+          targetId: createdUser.id,
+          afterSnap: { role: createdUser.role, googleVerified: true },
+        },
+        tx,
+      );
+      await this.logSignupConsents(createdUser, consentRows, 'google_signup', tx);
       return { user: createdUser, consentRows };
     });
     user = googleSignup.user;
     const tokens = await this.generateTokenPair(user.id, user.role);
-    this.logSignupConsents(user, googleSignup.consentRows, 'google_signup');
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
@@ -342,21 +354,38 @@ export class AuthCoreTrait {
           where: { id: jti },
           select: { tokenFamily: true },
         });
-        const family = racedSession?.tokenFamily ?? payload.family;
-        await tx.session.updateMany({
-          where: { userId: payload.sub, ...(family ? { tokenFamily: family } : {}) },
-          data: { revoked: true },
-        });
-        await tx.auditLog.create({
-          data: {
+        // When the session row still exists, revoke the entire family it
+        // belongs to — the CAS-lose signals token reuse and the DB-truth
+        // family is the server's view of which devices are siblings.
+        //
+        // When the session row is gone (cleanup cron prunes it after
+        // expiresAt + 7d), there is no DB-truth family to revoke. The
+        // `payload.family` claim is self-asserted by the JWT bearer and
+        // must NOT be trusted as a revocation target. Just reject.
+        if (racedSession) {
+          await tx.session.updateMany({
+            where: {
+              userId: payload.sub,
+              ...(racedSession.tokenFamily ? { tokenFamily: racedSession.tokenFamily } : {}),
+            },
+            data: { revoked: true },
+          });
+        }
+        await this.audit.logStrict(
+          {
             actorId: payload.sub,
             actorRole: 'unknown',
             action: 'refresh_reuse_detected',
             targetType: 'session',
             targetId: jti,
-            afterSnap: { reason: 'cas_lost', family: family ?? null },
+            afterSnap: {
+              reason: 'cas_lost',
+              sessionRowGone: !racedSession,
+              family: racedSession?.tokenFamily ?? null,
+            },
           },
-        });
+          tx,
+        );
         return { error: 'reuse' as const };
       }
 
@@ -370,8 +399,8 @@ export class AuthCoreTrait {
           },
           data: { revoked: true },
         });
-        await tx.auditLog.create({
-          data: {
+        await this.audit.logStrict(
+          {
             actorId: payload.sub,
             actorRole: 'unknown',
             action: 'refresh_reuse_detected',
@@ -379,7 +408,8 @@ export class AuthCoreTrait {
             targetId: jti,
             afterSnap: { reason: 'hash_mismatch', family: session.tokenFamily },
           },
-        });
+          tx,
+        );
         return { error: 'hash' as const };
       }
       const user = await tx.user.findUnique({ where: { id: payload.sub } });
@@ -414,15 +444,16 @@ export class AuthCoreTrait {
         where: { userId, ...(jti ? { id: jti } : {}) },
         data: { revoked: true },
       });
-      await tx.auditLog.create({
-        data: {
+      await this.audit.logStrict(
+        {
           actorId: userId,
           actorRole: user?.role ?? 'unknown',
           action: 'logout',
           targetType: 'session',
           targetId: jti ?? userId,
         },
-      });
+        tx,
+      );
     });
     return { loggedOut: true };
   }

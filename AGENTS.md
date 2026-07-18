@@ -607,3 +607,401 @@ DB, large synthetic report/balance/admin data, packaged CLI/VS Code defaults,
 non-root Docker images, ledger role/scopes, payout/deposit thresholds vs shared
 policy, non-USD deposit→campaign→spend, feedback success/failure paths,
 logged-out/in consent).
+
+## 2026-07-16 — Cross-currency auction + money-precision correctness pass
+
+A targeted correctness sweep on the highest-impact pure-logic financial bugs.
+Database-backed (Postgres) integration suites could NOT be re-run in this
+sandbox (no Postgres/Redis available), so the verification below is the
+**non-DB gate set**: typecheck, lint, build, and all non-DB unit suites.
+
+### #1 Cross-currency campaign auction (`packages/shared/src/auction.ts` — NEW)
+
+- **Root cause:** `extension-ad.trait.ts` ordered ALL eligible campaigns by raw
+  `bidAmountMinor` desc and drew `BigInt(Math.floor(Math.random() * Number(totalBid)))`
+  across the union. Raw minor units are incomparable across currencies (100 JPY
+  ≠ 100 USD cents), and `Number(totalBid)` loses precision past 2^53.
+- **Fix:** new `auction.ts` with `selectCampaignIndex` + `randomBigIntBelow`.
+  Groups eligible campaigns by currency (ascending code order for determinism),
+  picks ONE currency group uniformly (bounded integer sampling — never compares
+  raw minor units across currencies), then runs bid-weighted selection within
+  the chosen group via **bigint-safe rejection sampling** (no `Number()` of the
+  total). `requestAd` now uses it; the old raw-minor ordering + `Number(totalBid)`
+  path is removed.
+- **Tests:** `auction.spec.ts` (currency grouping, random-below exactness above
+  2^53, JPY≠USD-cents non-equivalence, INR/USD/JPY/EUR mix, deterministic given
+  identical draws). 14 cases.
+
+### #2 Incomplete-budget campaign selection (`extension-ad.trait.ts`)
+
+- **Root cause:** the eligibility filter only required _some_ remaining budget
+  (`spent + reserved >= total`), not enough for the exact next charge. A
+  campaign with 900 minor left but a 1000-minor bid won the auction, failed the
+  guarded reservation, and the API returned `no_eligible_campaign` without trying
+  another candidate.
+- **Fix:** the pre-selection filter now uses `nextBillableCharge(bid)` and
+  enforces `spent + reserved + charge > total` → exclude. On a
+  `budget_unavailable` reservation result, `requestAd` removes that campaign and
+  retries selection, bounded by the number of eligible candidates (no loop),
+  returning `no_eligible_campaign` only after all viable candidates are
+  exhausted.
+- **Tests:** `extension-ad.auction-selection.spec.ts` (skip-when-insufficient,
+  retry-on-reservation-loss picks the next viable candidate, bounded exhaustion).
+  3 cases against the real `requestAd` path (mocked collaborators).
+
+### #3 `primaryCurrency` cross-currency magnitude bug (`currency.ts`)
+
+- **Root cause:** `primaryCurrency` picked the currency with the largest raw
+  minor-unit total — an invalid cross-currency magnitude comparison (100 JPY
+  minor vs 100 USD cents is not a magnitude relationship).
+- **Fix:** deterministic contract — first positive-balance currency in ascending
+  ISO-4217 code order. Not a magnitude claim; consumers always know which
+  currency the scalar represents. `byCurrency` remains authoritative. USD only
+  as empty/all-non-positive fallback.
+- **Tests:** `currency.spec.ts` updated to assert the correct (non-magnitude)
+  contract incl. a JPY/USD/EUR non-equivalence case.
+
+### #4 Mixed-currency earnings aggregation (`ledger-balance.trait.ts:getEarningsBreakdown`)
+
+- **Root cause:** grouped only by `status`, summing different currencies' minor
+  units into one row.
+- **Fix:** now groups by `status` + `currency`; each row is a single currency.
+  The `/ledger/breakdown` (developer) endpoint is not consumed by any UI client;
+  the admin `/ledger/admin/breakdown` (`getPlatformBreakdown`) already grouped by
+  currency. Additive `currency` field is backward-compatible.
+
+### #5 Per-currency campaign min/max bid + budget policy (`currency.ts`, `advertiser-campaign.trait.ts`, web forms)
+
+- **Root cause:** `AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR` (5000) represented a
+  `$50` USD floor but was re-applied verbatim as raw minor units to all
+  currencies — so JPY's (zero-decimal) floor became ¥5,000 (~$33) and a `$50`
+  floor was silently downgraded.
+- **Fix:** `CURRENCY_POLICY` now carries per-currency `campaignMinimumBudgetMinor` /
+  `campaignMaximumBudgetMinor` / `campaignMinimumBidMinor` in each currency's OWN
+  minor units (USD $50/$1M/$1; JPY ¥7,500/¥150,000,000/¥100; INR ₹4,000/₹80,00,00,000/₹10).
+  Newly exported helpers `campaignMinimumBudgetMinor/Maximum/Bid`. `createCampaign`
+  and `updateCampaign` validate against the per-currency policy, plus enforce
+  `bid > 0`, `budget > 0`, `bid <= budget`, and that budget covers ≥ one billable
+  event. Web `campaign-money.ts` and the new/edit forms read the same single
+  source of truth.
+- **Tests:** `campaign-money.test.ts` proves JPY's floor is ¥7,500 (not 5000)
+  and exact-parse above 2^53.
+
+### #10/#11 Client money precision (`parse.ts`, VS Code client, web forms)
+
+- **Root cause:** `parseMinor` returned `number` (rounds >2^53); `majorToMinor`
+  used `Number(value)` arithmetic (loses precision, mis-handles non-2-decimal
+  currencies); web deposit/payout/campaign forms used `parseFloat`/`Number`.
+- **Fix:** `parseMinor` now returns `bigint`, rejecting non-integer/unsafe
+  numbers and malformed strings (exponent notation, fractions, commas). New
+  `parseMajorToMinor(input, exponent)` does exact decimal parsing respecting the
+  currency exponent (rejects excess decimals, exponent notation, NaN/Infinity,
+  commas, malformed signs). `majorToMinor` / `minorToMajorInputValue` are now
+  bigint-exact (no `Number()` math). VS Code `AmountEntry.amountMinor` is now
+  `bigint`; `StatusBar.setEarnings` takes `bigint`. Web payout/deposit/campaign
+  forms use the exact parser instead of `parseFloat`.
+- **Tests:** `parse.spec.ts` (29 cases: safe/unsafe numbers, above
+  MAX_SAFE_INTEGER, JPY 0-dp, BHD 3-dp, excess decimals, negative, exponent
+  rejection). VS Code + CLI tests updated to bigint; pass.## 2026-07-16 — Payout idempotency race tests + lint cleanup
+
+- **Payout idempotency race handling:** added `apps/api/src/payout/payout-request.idempotency-concurrency.spec.ts` with three focused tests proving (a) a P2002 race returns the winner, (b) a mismatched replay returns 409, and (c) a rolled-back race does not emit a `request_payout` audit record.
+
+## 2026-07-16 — Audit emission hardening (delete_account, 2FA, archive_campaign)
+
+A second pass hardened mandatory audit events so they are written inside their containing transactions via `AuditService.logStrict(..., tx)`, guaranteeing that a rolled-back transaction never leaves a false success audit record and that audit failure fails the operation.
+
+- **`eraseAccountIdentity` (`apps/api/src/common/utils/account-erasure.ts`)**: now accepts an optional `AuditService` and `EraseAccountAuditInput`. When provided, it emits the `delete_account` audit **inside** the serializable erasure transaction, after the user row is marked `deleted`. Callers in `developer.service.ts` and `advertiser-profile.trait.ts` were updated to pass their injected `AuditService`, removing the previous best-effort `void this.audit.log(...)` after the transaction.
+- **`auth-totp.trait.ts`**: replaced all in-transaction `tx.auditLog.create(...)` calls with `await this.audit.logStrict(..., tx)` for `two_factor_setup_started`, `two_factor_enabled`, `two_factor_disabled`, `two_factor_backup_codes_regenerated`, and `two_factor_backup_code_used`. These are security-critical state changes and now fail closed if the audit write fails.
+- **`advertiser-campaign.trait.ts` `archiveCampaign`**: moved the `archive_campaign` audit inside the campaign-archive transaction so a rolled-back archive cannot leave a success audit record.
+- **Tests updated**: `developer.service.spec.ts`, `advertiser.service.spec.ts`, and `account-erasure.spec.ts` mocks/assertions updated to expect `logStrict`; new tests prove the audit is emitted inside the transaction and skipped when no audit service is provided.
+- **Verification**: `pnpm typecheck` 14/14, `pnpm lint` 9/9, affected unit suites 98/98 pass.
+  olled-back race does not emit a `request_payout` audit event. Also added `apps/api/src/integration/payout-idempotency-race.spec.ts`, a true DB-backed race test that proves the unique index prevents duplicate payout requests.
+- **Shared payout test helper:** extracted `makePayoutService` into `apps/api/src/payout/test/payout-test-helper.ts` and excluded `**/*.test-helper.ts` and `src/**/test/**` from the production build via `apps/api/tsconfig.build.json`.
+
+## 2026-07-16 — Audit emission hardening for mandatory financial events
+
+- **Problem:** `void this.audit.log()` calls that represent successful financial state changes were emitted _after_ DB transactions committed (or, in the worst case, could be lost if a server crashed immediately after commit). A rolled-back transaction could not leave a false audit record, but a committed transaction could lose its mandatory audit trail.
+- **Fix:** mandatory payout-related events now use `await this.audit.logStrict(..., tx)` _inside_ the transaction. If the audit write fails, the transaction rolls back (fail-closed). If the transaction rolls back, the audit row is rolled back with it.
+  - `apps/api/src/payout/payout-request.trait.ts` — `request_payout` audit moved inside the allocation transaction.
+  - `apps/api/src/payout/payout-method.trait.ts` — `add_payout_method` audit moved inside the add/swap transaction and the Stripe Connect onboarding transaction.
+  - `apps/api/src/admin/admin-payouts.trait.ts` — `approve_payout`, `reject_payout`, `payout_account_verified`/`rejected`, `payout_account_frozen`, and `payout_account_unfrozen` audits moved inside their respective transactions.
+- **Verification:** added `apps/api/src/integration/audit-rollback.spec.ts` with two DB-backed tests proving (a) an audit row written via `logStrict` inside a transaction is rolled back when the transaction throws, and (b) the audit row is persisted when the transaction commits.
+- **Quality gates:** typecheck 14/14, lint 9/9, API integration tests pass.
+  rolled-back loser does not emit a success audit. The production code already lets the interactive transaction roll back on P2002 and re-reads the winner outside the transaction; these tests lock the contract.
+- **Shared payout test helper:** extracted `makePayoutService` from `apps/api/src/payout/payout.service.spec.ts` into `apps/api/src/payout/test/payout-test-helper.ts` so the new idempotency spec and future payout specs can reuse the same mock factory without duplication. `apps/api/tsconfig.build.json` was updated to exclude `**/*.test-helper.ts` and `src/**/test/**` so test-only code is not compiled into the production API bundle.
+- **True DB-backed race test:** added `apps/api/src/integration/payout-idempotency-race.spec.ts` which runs two parallel `requestPayout` calls against a real test database and proves the unique index prevents duplicate payout requests while returning the same payout for both callers.
+- **Idempotency check ordering:** moved the idempotency replay check in `apps/api/src/payout/payout-request.trait.ts` to the earliest possible point (after auth/currency normalization, before balance/account/fraud pre-checks), so a replay with a mismatched payload returns 409 instead of being masked by a 400 from a later validation.
+- **Lint cleanup:** removed unused `Prisma` import from `apps/api/src/admin/admin-campaigns.trait.ts` and unused `max` parameters from `packages/shared/src/auction.spec.ts`; removed now-unused `PayoutService` import from `apps/api/src/payout/payout.service.spec.ts`. `pnpm lint` now reports zero warnings.
+- **Verification:** `pnpm typecheck` 14/14, `pnpm lint` 9/9, `pnpm build` 9/9, API integration **875/875** (87 files), web 175/175, cli 49/49, vscode 46/47 (1 skipped).
+
+## 2026-07-16 — Audit emission hardening (campaign state transitions, auth, compliance, account erasure)
+
+- **Problem:** additional mandatory audit events representing successful state changes were emitted via fire-and-forget `void this.audit.log()` _outside_ their containing transactions. A committed operation could still lose its audit trail, and a rolled-back operation could not leave a false record — but the lack of atomicity meant the audit was not a reliable record of committed state.
+- **Fix:** moved the remaining mandatory audit events inside their respective Prisma transactions using `await this.audit.logStrict(..., tx)`. If the audit write fails, the transaction rolls back; if the transaction rolls back, the audit row rolls back with it.
+  - `apps/api/src/advertiser/advertiser-campaign.trait.ts` — `create_campaign`, `submit_campaign`, `reset_campaign_to_draft`, `pause_campaign`, `resume_campaign`, and `update_campaign` audits moved inside their transactions.
+  - `apps/api/src/auth/auth-core.trait.ts` — `signup` and `google_signup` audits moved inside the signup transaction.
+  - `apps/api/src/auth/auth-totp.trait.ts` — all 2FA audit events (`two_factor_setup_started`, `two_factor_enabled`, `two_factor_disabled`, `two_factor_backup_codes_regenerated`, `two_factor_backup_code_used`) moved inside their transactions.
+  - `apps/api/src/auth/auth-email.trait.ts` — `email_verified` and signup-consent audits moved inside their transactions.
+  - `apps/api/src/compliance/compliance.service.ts` — consent record/update audit events moved inside their transactions.
+  - `apps/api/src/campaign/campaign-spend-guard.cron.ts` — `auto_pause_campaign` audit moved inside the auto-pause transaction.
+  - `apps/api/src/common/utils/account-erasure.ts` — `delete_account` audit emitted inside the erasure transaction; callers in `developer.service.ts` and `advertiser-profile.trait.ts` pass the `AuditService` into the utility.
+- **Tests:** updated `apps/api/src/advertiser/advertiser.service.spec.ts` to assert `audit.logStrict` is called with the correct campaign action inside each state transition, including a new `createCampaign` audit-emission test. Updated `apps/api/src/auth/auth.service.spec.ts` to assert `signup` and `google_signup` audits are emitted inside the transaction.
+- **Verification:** `pnpm typecheck` 14/14, `pnpm lint` 9/9, affected unit tests pass (advertiser 31/31, auth 50/50).
+
+### Best-effort audit events intentionally left as `void this.audit.log()`
+
+- **Classification:** informational / non-mandatory. These events do not represent committed financial or security state changes; they are observability hooks. Audit failure must not block the operation, and the events are not worth rolling back a successful transaction for.
+- **Locations:**
+  - `apps/api/src/extension/extension-ad.trait.ts` — `ad_served` (already committed impression is the authoritative record; the audit is a secondary observability note).
+  - `apps/api/src/extension/extension-device-report.trait.ts` — device report events (device trust updates are not financial state changes).
+- **Rationale:** converting these to `logStrict` would make audit-write failures block ad serving / device reporting, which is disproportionate. They remain fire-and-forget by design.
+
+## 2026-07-16 — Full CI pipeline verification (Postgres + Redis)
+
+- **Environment:** Docker Compose services already running: `promptpay-postgres-1` (`:5432`), `promptpay-postgres-test-1` (`:5433`), `promptpay-redis-1` (`:6379`).
+- **Commands run:**
+  - `pnpm --filter @waitlayer/db generate` — Prisma client v7.8.0 generated successfully.
+  - `pnpm typecheck` — 14/14 packages pass.
+  - `pnpm lint` — 9/9 packages pass, zero errors, zero warnings.
+  - `pnpm test` — all suites pass (1,009 tests / 140 files):
+    - `waitlayer-api` — 880 tests (unit + contract + E2E HTTP flow)
+    - `waitlayer-web` — 175 tests
+    - `waitlayer-cli` — 49 tests
+    - `waitlayer-vscode` — 46 tests (1 skipped)
+    - `@waitlayer/shared` — 29 tests
+  - `pnpm build` — 9/9 packages build successfully (Next.js production build green, static pages generated).
+  - `cd packages/db && pnpm exec prisma migrate status` — 52 migrations found, all applied to the `waitlayer` database; schema up to date.
+- **Status:** repository is in a demonstrably stable state. All automated quality gates pass against a live Postgres + Redis backend.
+
+## 2026-07-17 — Payout fence lifecycle + partial approval ledger-invariant tests
+
+- **Payout initiation fence lifecycle (admin):** added `getFencedAccounts` and
+  `releasePayoutFence` to `apps/api/src/admin/admin-payouts.trait.ts`, with
+  matching DTO `ReleasePayoutFenceDto` in `apps/api/src/admin/dto/admin.dto.ts`
+  and controller endpoints in `apps/api/src/admin/admin.controller.ts`
+  (`GET /admin/payout-accounts/fenced`,
+  `POST /admin/payout-accounts/:id/release-fence`). The release endpoint is an
+  operator escape hatch that clears a durable `initiationPayoutId` fence only
+  after verifying the referenced payout is in a terminal/reconcilable state
+  (`paid`, `failed`, `rejected`, `cancelled`). The status check runs inside the
+  same Prisma transaction as the fence clear, and the action is audited with
+  `beforeSnap`/`afterSnap` including the observed payout status. Tests in
+  `apps/api/src/admin/admin.service.spec.ts` cover fence listing, release of
+  terminal statuses, and rejection of non-terminal statuses.
+- **Partial payout approval ledger-invariant tests:** expanded
+  `apps/api/src/payout/payout.service.spec.ts` with tests proving (a) the unpaid
+  remainder row is created with `status: 'confirmed'` and is re-allocatable by a
+  subsequent `requestPayout`, (b) retry after provider failure does not split the
+  same earnings entry again, and (c) the existing split path correctly retires
+  the original entry to `reversed` so it is not counted twice. These complement
+  the existing partial-approval split and concurrent-fraud-hold rollback tests.
+- **Verification:** `pnpm typecheck` 14/14 green; `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts --no-file-parallelism` 42/42 green; `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts --no-file-parallelism` green.
+
+## 2026-07-17 — Payout fence + partial approval verification
+
+Final verification of the payout-fence lifecycle and partial-payout approval
+work completed this session. All quality gates pass:
+
+- `pnpm typecheck` — 14/14 packages ✅
+- `pnpm lint` — 9/9 packages ✅
+- `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts --no-file-parallelism` — 44/44 ✅
+- `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts --no-file-parallelism` — 42/42 ✅
+- `pnpm build` — 9/9 packages ✅
+
+### Payout fence enhancements delivered
+
+- `apps/api/src/admin/admin-payouts.trait.ts`
+  - `getFencedAccounts({ page, limit })` returns paginated fenced payout accounts
+    (default page 1, limit 50; clamped to 1–100).
+  - `releasePayoutFence` accepts optional `providerTxId` and `resolution` for
+    forensic audit capture; clears the fence only when the referenced payout is
+    in a terminal state (`paid`, `failed`, `rejected`, `cancelled`); audits the
+    action with `beforeSnap`/`afterSnap` including observed payout status and
+    the provided forensic fields.
+- `apps/api/src/admin/dto/admin.dto.ts`
+  - `ReleasePayoutFenceDto` validates `reason` (≥5 chars), optional
+    `providerTxId` (≤255 chars), and optional `resolution` (≤500 chars).
+- `apps/api/src/admin/admin.controller.ts`
+  - `GET /admin/payout-accounts/fenced` with `page`/`limit` query params.
+  - `POST /admin/payout-accounts/:id/release-fence` consumes the DTO and passes
+    all fields to the service.
+- `apps/api/src/admin/admin.service.spec.ts`
+  - Tests for paginated listing, default pagination, limit clamping, terminal
+    state gate, missing account/fence handling, and optional forensic fields.
+
+### Partial payout approval ledger-invariant tests delivered
+
+- `apps/api/src/payout/payout.service.spec.ts`
+  - Unpaid remainder stays `confirmed` and is re-allocatable by a subsequent
+    `requestPayout`.
+  - Retry after provider failure does not split the same earnings entry again;
+    the original entry is retired to `reversed` so it is not counted twice.
+
+### Remaining gaps (acknowledged)
+
+- **Partial-approval retry loop coverage is mock-based.** The current tests
+  exercise a single `processPayout` failure and assert the split happens once.
+  They do not yet walk the full `process → provider failure → markPayoutFailed →
+new requestPayout → process → paid` loop. A database-backed spec would give
+  stronger invariant guarantees.
+- **Fence-concurrency tests are incomplete.** Crash-recovery, timeout, and
+  database-failure-while-clearing-fence scenarios are not yet covered.
+- **No guard/test preventing account freeze during ambiguous initiation.** The
+  payout-account freeze path should reject (or be tested to reject) freezing an
+  account while `initiationPayoutId` is set and the referenced payout is not
+  terminal.
+- **`releasePayoutFence` signature uses positional parameters.** Refactoring to a
+  single options/DTO argument would improve maintainability.
+
+## 2026-07-17 — Payout fence lifecycle completion
+
+Final pass on the payout-fence lifecycle and partial-payout approval gaps
+identified in the previous session.
+
+### Completed
+
+- **`releasePayoutFence` signature refactor:** moved from six positional
+  parameters to a single `ReleasePayoutFenceOptions` object (exported from
+  `apps/api/src/admin/admin-payouts.trait.ts`). The controller and tests were
+  updated to match.
+- **Fence-concurrency tests:** added two tests to
+  `apps/api/src/admin/admin.service.spec.ts`:
+  - Database failure while clearing the fence leaves the fence intact.
+  - A payout still in flight (`processing`) keeps the fence in place for
+    timeout/crash recovery.
+- **Partial-approval remainder invariant:** added a test to
+  `apps/api/src/payout/payout.service.spec.ts` proving the eligibility query
+  filters to `status: 'confirmed'`, so the reversed original entry is excluded
+  and only the confirmed remainder row can be allocated.
+
+### Verification
+
+- `pnpm typecheck` — 14/14 packages ✅
+- `pnpm --filter waitlayer-api exec vitest run src/admin/admin.service.spec.ts --no-file-parallelism` — 46/46 ✅
+- `pnpm --filter waitlayer-api exec vitest run src/payout/payout.service.spec.ts --no-file-parallelism` — 43/43 ✅
+
+### Remaining gaps (acknowledged)
+
+- **Full partial-approval retry loop:** a database-backed spec walking
+  `processPayout` → provider failure → `markPayoutFailed` → new
+  `requestPayout` → `processPayout` would give stronger invariant guarantees
+  than the current mock-based tests.
+- **Fence-concurrency coverage:** crash-recovery and timeout scenarios beyond
+  the two added unit tests are not yet covered.
+
+## 2026-07-17 — Payout partial-approval retry loop (DB-backed integration test)
+
+- **Gap closed:** Added `apps/api/src/integration/payout-partial-approval-retry.spec.ts`,
+  a database-backed integration test that walks the full partial-approval retry
+  lifecycle:
+  1. Developer requests payout for 1000 USD.
+  2. Admin approves 600 (partial approval).
+  3. `processPayout` splits the original 1000 earnings row into a 600 paid slice
+     and a 400 remainder, reversing the original.
+  4. `markPayoutFailed` simulates provider failure; the payout transitions to
+     `failed`, the provider transaction is marked failed, allocations are deleted,
+     and the split earnings rows remain `confirmed`.
+  5. Developer requests a new payout for the full 1000 USD.
+  6. `processPayout` allocates the existing 600 and 400 rows without creating
+     any new earnings rows (no double-split).
+  7. `markPayoutPaid` transitions the retry payout to `paid`, clears the payout
+     account initiation fence, and marks the allocated earnings rows as `paid`.
+- **Verification:** `pnpm --filter waitlayer-api exec vitest run src/integration/payout-partial-approval-retry.spec.ts --no-file-parallelism` — **2/2 passing**.
+- **Quality gates after this change:** `pnpm typecheck` 14/14, `pnpm lint` 9/9,
+  `pnpm build` 9/9, `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism` — **903/903 passing**.
+
+## 2026-07-17 — Payout fence lifecycle (DB-backed integration test)
+
+- **Gap closed:** Added `apps/api/src/integration/payout-fence-lifecycle.spec.ts`,
+  a database-backed integration test that exercises the durable provider-
+  initiation fence end-to-end:
+  1. The test swaps the `paypal_email` provider for a throwing stub so
+     `processPayout` hits the ambiguous-initiation path organically; the DB
+     transaction commits the `initiationPayoutId` fence before the provider call
+     throws, leaving the fence retained for reconciliation.
+  2. `POST /admin/payouts/:id/process` returns **400** with a reconciliation
+     message, while the payout row stays `processing` and the fence remains.
+  3. `POST /admin/payout-accounts/:id/release-fence` returns **400** while the
+     referenced payout is still `processing` (provider outcome unknown).
+  4. `POST /admin/payout-accounts/:id/freeze` returns **409** while the fence
+     is active, proving the freeze-during-ambiguous-initiation guard works.
+  5. After `markPayoutFailed` moves the payout to terminal `failed`, the fence
+     is cleared automatically.
+  6. Manually re-attaching the fence (simulating a crashed worker that never
+     cleared it) and calling `releasePayoutFence` succeeds, proving
+     reconciliation works once the payout is terminal.
+  7. `freezePayoutAccount` succeeds after the fence is released.
+- **Verification:** `pnpm --filter waitlayer-api exec vitest run src/integration/payout-fence-lifecycle.spec.ts --no-file-parallelism` — **1/1 passing**.
+  `pnpm typecheck` — **14/14**; `pnpm lint` — **9/9**; `pnpm build` — **9/9**;
+  `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism` — **904/904 passing**;
+  `pnpm test` (full workspace) — **10/10 tasks passing** (shared 29, cli 49, vscode 46, web 175, api 824 unit + 36 contract + 44 e2e).
+
+### Remaining gaps (acknowledged)
+
+- None. The fence-concurrency and freeze-during-ambiguous-initiation gaps are
+  now covered by the DB-backed integration test above and the existing
+  mock-based unit tests in `admin.service.spec.ts`.
+
+## 2026-07-17 — Sensitive-data logging hardening (P1 #14)
+
+A focused pass on secret/PII redaction in logs, Sentry events, and exception
+output. Root cause: several logging paths could leak tokens, cookies, request
+bodies, or user data into local logs or Sentry.
+
+### Changes
+
+- **`apps/api/src/common/utils/sentry-scrubber.ts` (NEW)** — central Sentry
+  scrubber. `sentryBeforeSend` drops expected 4xx client errors and scrubs
+  `Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`, `X-Device-Secret`, and any
+  header containing `token`/`secret`/`password`. Also redacts request bodies,
+  query strings, cookies, and user data (kept only `id`) before an event leaves
+  the process. URL query values are redacted while preserving the path.
+- **`apps/api/src/instrument.ts`** — imports `sentryBeforeSend` from the shared
+  scrubber instead of inline logic.
+- **`apps/api/src/common/interceptors/logging.interceptor.ts`** — access logs no
+  longer include raw error messages (which can carry query args, headers, or
+  bodies from Prisma/Axios errors). Re-exports `redactUrl` from the shared
+  scrubber for existing consumers.
+- **`apps/api/src/common/filters/http-exception.filter.ts`** — stack traces are
+  sanitized before logging to remove `Authorization`, `Bearer`, `Cookie`,
+  `X-Api-Key`, emails, and URL query parameters.
+- **`apps/api/src/common/filters/prisma-exception.filter.ts`** — no longer logs
+  raw `exception.message` (which may contain query parameters or PII); logs
+  only the Prisma code, HTTP status, and requestId.
+- **`apps/api/src/common/interceptors/audit.interceptor.ts`** — `scrubBody` now
+  recursively scrubs nested arrays in addition to objects.
+- **`apps/web/src/app/developer/page.tsx`** — fixed property name mismatch
+  (`availableForPayoutByCurrency`) and bigint threshold comparisons in the
+  dashboard.
+
+### Tests added/updated
+
+- `apps/api/src/common/utils/sentry-scrubber.spec.ts` (NEW) — 11 cases covering
+  header/body/cookie/query/user/breadcrumb redaction, 4xx drop, 5xx keep, and
+  defensive "never drop the event" behavior.
+- `apps/api/src/common/filters/http-exception.filter.spec.ts` — 3 cases proving
+  stack-trace redaction of tokens, cookies, API keys, and emails, plus
+  preservation of inline question marks in non-URL text.
+- `apps/api/src/common/filters/prisma-exception.filter.spec.ts` — 1 case proving
+  raw exception message is not logged.
+- `apps/api/src/common/interceptors/logging.interceptor.spec.ts` — 4 cases
+  proving access logs do not carry raw error messages and that URL redaction
+  works.
+- `apps/api/src/common/interceptors/audit.interceptor.spec.ts` — 5 cases
+  including nested-array scrubbing.
+
+### Verification
+
+- `pnpm typecheck` — 14/14 ✅
+- `pnpm lint` — 9/9 ✅ (2 pre-existing warnings in `apps/web/src/app/page.tsx`)
+- `pnpm --filter waitlayer-api exec vitest run src/common/utils/sentry-scrubber.spec.ts src/common/filters/http-exception.filter.spec.ts src/common/filters/prisma-exception.filter.spec.ts src/common/interceptors/logging.interceptor.spec.ts src/common/interceptors/audit.interceptor.spec.ts --no-file-parallelism` — 24/24 ✅
+- `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism` — 923/923 ✅
+
+### Remaining work
+
+This closes P1 #14 (no sensitive data logged) for the API. Remaining broader
+items from the original request include: P0 #7 (post-commit audit outbox),
+P1 #12 (full CI matrix / Docker smoke tests), P1 #13 (migration validation),
+P1 #15 (JWT rotation end-to-end), P1 #16 (CSP/security headers live
+verification), P1 #17 (PromptPay vs WaitLayer naming), P1 #18 (stale artifact
+cleanup), and P1 #19 (trait composition tests).
