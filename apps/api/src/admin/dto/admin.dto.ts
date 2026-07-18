@@ -479,3 +479,15 @@ export interface ReleasePayoutFenceOptions {
   providerTxId?: string;
   resolution?: string;
 }
+
+export class ResolveDeadLetterDto {
+  @ApiProperty({
+    description: 'Reason the dead-letter row is being resolved (operator decision).',
+    minLength: 5,
+    maxLength: 500,
+  })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  reason!: string;
+}

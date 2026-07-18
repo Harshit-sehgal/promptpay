@@ -16,6 +16,7 @@ export {
   RejectCampaignDto,
   RejectPayoutDto,
   ReleasePayoutFenceDto,
+  ResolveDeadLetterDto,
   ResolveFraudFlagDto,
   ResolveRecoveryDebtCaseDto,
   ToggleToolIntegrationDto,

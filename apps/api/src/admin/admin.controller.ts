@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
+import { AuditService } from '../audit/audit.service';
 import { CurrentUser, Roles } from '../common/decorators';
 import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -37,6 +38,7 @@ import {
   RejectCampaignDto,
   RejectPayoutDto,
   ReleasePayoutFenceDto,
+  ResolveDeadLetterDto,
   ResolveFraudFlagDto,
   ResolveRecoveryDebtCaseDto,
   ToggleRuntimeConfigDto,
@@ -55,6 +57,7 @@ export class AdminController {
   constructor(
     private service: AdminService,
     private runtimeConfig: RuntimeConfigService,
+    private audit: AuditService,
   ) {}
 
   @ApiOperation({ summary: 'Get admin overview' })
@@ -396,6 +399,45 @@ export class AdminController {
       providerTxId: dto.providerTxId,
       resolution: dto.resolution,
     });
+  }
+
+  @ApiOperation({ summary: 'List audit outbox dead-letter rows (failed audit events)' })
+  @Get('audit-outbox/dead-letter')
+  @Roles('admin', 'support', 'super_admin')
+  listDeadLetter(@Query('page') page?: string, @Query('limit') limit?: string) {
+    return this.audit.listDeadLetter({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @ApiOperation({ summary: 'Requeue an audit outbox dead-letter row for another drain attempt' })
+  @Post('audit-outbox/dead-letter/:id/retry')
+  @Roles('admin', 'support', 'super_admin')
+  async retryDeadLetter(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') actorId: string,
+    @CurrentUser('role') actorRole: string,
+  ) {
+    await this.audit.retryDeadLetter(id, { actorId, actorRole });
+    return { ok: true };
+  }
+
+  @ApiOperation({ summary: 'Resolve an audit outbox dead-letter row' })
+  @Post('audit-outbox/dead-letter/:id/resolve')
+  @Roles('admin', 'support', 'super_admin')
+  async resolveDeadLetter(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') actorId: string,
+    @CurrentUser('role') actorRole: string,
+    @Body() dto: ResolveDeadLetterDto,
+  ) {
+    await this.audit.resolveDeadLetter(id, {
+      reason: dto.reason,
+      actorId,
+      actorRole,
+    });
+    return { ok: true };
   }
 
   // ── Archive Refunds ──

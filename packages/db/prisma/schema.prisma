@@ -1121,10 +1121,14 @@ model AuditOutbox {
   nextRetryAt DateTime  @db.Timestamptz @map("next_retry_at")
   processedAt DateTime? @map("processed_at")
   failedAt    DateTime? @map("failed_at")
+  resolvedAt  DateTime? @db.Timestamptz @map("resolved_at")
+  resolvedBy  String?   @map("resolved_by")
+  resolution  String?   @map("resolution")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@index([nextRetryAt])
   @@index([createdAt])
+  @@index([failedAt], map: "audit_outbox_failed_at_idx")
   @@map("audit_outbox")
 }
 

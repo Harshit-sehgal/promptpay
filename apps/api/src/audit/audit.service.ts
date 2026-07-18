@@ -1,4 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
@@ -270,5 +276,110 @@ export class AuditService {
     ]);
 
     return { items, total, page, limit };
+  }
+
+  /**
+   * List dead-letter rows (audit_outbox rows that exhausted retries and have a
+   * non-null failedAt). Resolved rows are excluded unless includeResolved.
+   * Operators triage these to recover audit events that never reached AuditLog.
+   */
+  async listDeadLetter(params?: { page?: number; limit?: number; includeResolved?: boolean }) {
+    const page = Math.max(1, params?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params?.limit ?? 50));
+    const skip = (page - 1) * limit;
+    const where: Prisma.AuditOutboxWhereInput = { failedAt: { not: null } };
+    if (!params?.includeResolved) where.resolvedAt = null;
+
+    const [items, total] = await Promise.all([
+      this.prisma.auditOutbox.findMany({
+        where,
+        orderBy: { failedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.auditOutbox.count({ where }),
+    ]);
+
+    return { items, total, page, limit };
+  }
+
+  /** Count of active (unresolved) dead-letter rows — for dashboards/alerts. */
+  async countDeadLetter(): Promise<number> {
+    return this.prisma.auditOutbox.count({
+      where: { failedAt: { not: null }, resolvedAt: null },
+    });
+  }
+
+  /**
+   * Requeue a dead-letter row for another drain attempt: clears failedAt, resets
+   * retryCount, and sets nextRetryAt to now so the leased cron reprocesses it.
+   * Emits an immutable operator audit entry (fail-closed) recording the retry.
+   */
+  async retryDeadLetter(id: string, actor: { actorId: string; actorRole: string }): Promise<void> {
+    const row = await this.prisma.auditOutbox.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException(`Audit outbox row ${id} not found`);
+    if (row.failedAt === null) return; // not in dead-letter; nothing to retry
+
+    await this.prisma.auditOutbox.update({
+      where: { id },
+      data: {
+        retryCount: 0,
+        failedAt: null,
+        lastError: null,
+        nextRetryAt: new Date(),
+      },
+    });
+
+    await this.logStrict({
+      actorId: actor.actorId,
+      actorRole: actor.actorRole,
+      action: 'audit_dead_letter_retry',
+      targetType: 'audit_outbox',
+      targetId: id,
+      beforeSnap: { lastError: row.lastError } as Prisma.InputJsonValue,
+      afterSnap: { status: 'requeued' } as Prisma.InputJsonValue,
+    });
+  }
+
+  /**
+   * Resolve a dead-letter row: mark it resolved (resolvedAt/resolvedBy/resolution)
+   * so it is excluded from the active dead-letter list, and emit an immutable
+   * operator audit entry recording the decision. Resolving is terminal — a
+   * resolved row cannot be retried or resolved again.
+   */
+  async resolveDeadLetter(
+    id: string,
+    input: { reason: string; actorId: string; actorRole: string },
+  ): Promise<void> {
+    const row = await this.prisma.auditOutbox.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException(`Audit outbox row ${id} not found`);
+    if (row.failedAt === null) {
+      throw new BadRequestException(`Audit outbox row ${id} is not in dead-letter`);
+    }
+    if (row.resolvedAt) {
+      throw new ConflictException(`Audit outbox row ${id} is already resolved`);
+    }
+
+    await this.prisma.auditOutbox.update({
+      where: { id },
+      data: {
+        resolvedAt: new Date(),
+        resolvedBy: input.actorId,
+        resolution: input.reason,
+      },
+    });
+
+    await this.logStrict({
+      actorId: input.actorId,
+      actorRole: input.actorRole,
+      action: 'audit_dead_letter_resolved',
+      targetType: 'audit_outbox',
+      targetId: id,
+      beforeSnap: { lastError: row.lastError } as Prisma.InputJsonValue,
+      afterSnap: {
+        resolution: input.reason,
+        resolvedBy: input.actorId,
+      } as Prisma.InputJsonValue,
+    });
   }
 }
