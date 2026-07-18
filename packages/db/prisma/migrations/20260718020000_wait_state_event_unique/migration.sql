@@ -13,9 +13,10 @@
 DELETE FROM "wait_state_events" a
 USING "wait_state_events" b
 WHERE
-  a.wait_state_id = b.wait_state_id
-  AND a.event_type = b.event_type
-  AND a.created_at > b.created_at;
+  a."waitStateId" = b."waitStateId"
+  AND a."eventType" = b."eventType"
+  AND (a."createdAt" > b."createdAt"
+       OR (a."createdAt" = b."createdAt" AND a."id" > b."id"));
 
-CREATE UNIQUE INDEX "wait_state_events_wait_state_id_event_type_key"
-  ON "wait_state_events" ("wait_state_id", "event_type");
+CREATE UNIQUE INDEX "wait_state_events_waitStateId_eventType_key"
+  ON "wait_state_events" ("waitStateId", "eventType");

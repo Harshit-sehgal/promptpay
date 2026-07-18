@@ -10,9 +10,10 @@
 DELETE FROM "ad_reports" a
 USING "ad_reports" b
 WHERE
-  a.impression_id = b.impression_id
-  AND a.user_id = b.user_id
-  AND a.created_at > b.created_at;
+  a."impressionId" = b."impressionId"
+  AND a."userId" = b."userId"
+  AND (a."createdAt" > b."createdAt"
+       OR (a."createdAt" = b."createdAt" AND a."id" > b."id"));
 
-CREATE UNIQUE INDEX "ad_reports_impression_id_user_id_key"
-  ON "ad_reports" ("impression_id", "user_id");
+CREATE UNIQUE INDEX "ad_reports_impressionId_userId_key"
+  ON "ad_reports" ("impressionId", "userId");
