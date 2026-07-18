@@ -17,7 +17,10 @@ import * as crypto from 'crypto';
  *      currency group gets an equal chance regardless of bid magnitude. This
  *      is the cross-currency arbitration: it NEVER compares raw minor units
  *      across currencies, so `100 JPY` cannot compete as equal to
- *      `100 USD cents`.
+ *      `100 USD cents`. Selection is uniform over currency GROUPS — NOT over
+ *      individual campaigns — so a currency with one campaign has the same
+ *      overall serving probability as a currency with many. This avoids
+ *      currency or campaign-count hegemony in the marketplace.
  *   3. Within the chosen currency group, run bid-weighted random selection
  *      using **bigint-safe** rejection sampling — never `Number(totalBid)`,
  *      which loses precision once total bid exceeds `Number.MAX_SAFE_INTEGER`.
@@ -131,7 +134,12 @@ export function selectCampaignIndex<T extends CampaignBid>(
   const indices = group.indices;
 
   // Within-currency weighted selection by raw bid (valid: same currency).
-  const totalBid = indices.reduce((sum, i) => sum + campaigns[i].bidAmountMinor, 0n);
+  // Negative bids are clamped to 0 for weighting: a malformed/negative bid must
+  // never skew the relative weights of valid campaigns. (DTO validation already
+  // enforces MinBigInt(1), so this clamp is defensive only.)
+  const bidOf = (i: number): bigint =>
+    campaigns[i].bidAmountMinor < 0n ? 0n : campaigns[i].bidAmountMinor;
+  const totalBid = indices.reduce((sum, i) => sum + bidOf(i), 0n);
   if (totalBid <= 0n) {
     // Uniform fallback when all bids in the group are zero.
     const pick = randomBelow(BigInt(indices.length));
@@ -139,7 +147,7 @@ export function selectCampaignIndex<T extends CampaignBid>(
   }
   let random = randomBelow(totalBid);
   for (const i of indices) {
-    random -= campaigns[i].bidAmountMinor;
+    random -= bidOf(i);
     if (random < 0n) return i;
   }
   // Defensive: floating drift is impossible with bigint exact math, but keep

@@ -168,3 +168,94 @@ describe('selectCampaignIndex — cross-currency safety', () => {
     expect(camps[idx].id).toBe('jpy');
   });
 });
+
+describe('selectCampaignIndex — inventory policy (P1.2)', () => {
+  it('gives each currency group equal overall serving probability (group-uniform, not count-weighted)', () => {
+    // 100 USD campaigns vs 1 JPY campaign. Under group-uniform selection the
+    // single JPY campaign must win ~50% of the time, NOT ~1%.
+    const campaigns = [
+      ...Array.from({ length: 100 }, (_, i) => ({
+        id: `usd-${i}`,
+        currency: 'USD',
+        bidAmountMinor: 10n,
+      })),
+      { id: 'jpy-1', currency: 'JPY', bidAmountMinor: 10n },
+    ];
+    let jpy = 0;
+    const N = 4000;
+    for (let k = 0; k < N; k++) {
+      if (campaigns[selectCampaignIndex(campaigns)].currency === 'JPY') jpy++;
+    }
+    const rate = jpy / N;
+    expect(rate).toBeGreaterThan(0.43);
+    expect(rate).toBeLessThan(0.57);
+  });
+
+  it('never lets a huge bid in one currency affect another currency selection', () => {
+    const campaigns = [
+      { id: 'usd', currency: 'USD', bidAmountMinor: 10n },
+      { id: 'jpy', currency: 'JPY', bidAmountMinor: 1_000_000_000n },
+    ];
+    let usd = 0;
+    const N = 4000;
+    for (let k = 0; k < N; k++) {
+      if (campaigns[selectCampaignIndex(campaigns)].currency === 'USD') usd++;
+    }
+    const rate = usd / N;
+    expect(rate).toBeGreaterThan(0.43);
+    expect(rate).toBeLessThan(0.57);
+  });
+});
+
+describe('selectCampaignIndex — adversarial robustness (P1.3)', () => {
+  it('a dominant within-currency bid wins proportionally', () => {
+    const campaigns = [
+      { id: 'low', currency: 'USD', bidAmountMinor: 10n },
+      { id: 'high', currency: 'USD', bidAmountMinor: 1000n },
+    ];
+    let high = 0;
+    const N = 4000;
+    for (let k = 0; k < N; k++) {
+      if (campaigns[selectCampaignIndex(campaigns)].id === 'high') high++;
+    }
+    expect(high / N).toBeGreaterThan(0.95);
+  });
+
+  it('clamps a malformed negative bid to zero weight (never skews others)', () => {
+    const campaigns = [
+      { id: 'neg', currency: 'USD', bidAmountMinor: -5n },
+      { id: 'ok', currency: 'USD', bidAmountMinor: 10n },
+    ];
+    for (let k = 0; k < 200; k++) {
+      expect(selectCampaignIndex(campaigns)).toBe(1);
+    }
+  });
+
+  it('all-zero bids fall back to uniform, no campaign can force a win', () => {
+    const campaigns = [
+      { id: 'a', currency: 'USD', bidAmountMinor: 0n },
+      { id: 'b', currency: 'USD', bidAmountMinor: 0n },
+    ];
+    const counts = [0, 0];
+    for (let k = 0; k < 4000; k++) counts[selectCampaignIndex(campaigns)]++;
+    expect(counts[0] / 4000).toBeGreaterThan(0.43);
+    expect(counts[1] / 4000).toBeGreaterThan(0.43);
+  });
+
+  it('duplicate entries in the input receive proportional double weight (caller must dedupe)', () => {
+    // The auction weights by array index, not by campaign id. If the same
+    // campaign is passed twice (caller bug), it gets double weight — proving
+    // requestAd must supply a deduplicated eligible set.
+    const campaigns = [
+      { id: 'x', currency: 'USD', bidAmountMinor: 10n },
+      { id: 'x', currency: 'USD', bidAmountMinor: 10n },
+      { id: 'y', currency: 'USD', bidAmountMinor: 10n },
+    ];
+    const seen = { x: 0, y: 0 };
+    for (let k = 0; k < 6000; k++) {
+      seen[campaigns[selectCampaignIndex(campaigns)].id as 'x' | 'y']++;
+    }
+    expect(seen.x / 6000).toBeGreaterThan(0.6);
+    expect(seen.y / 6000).toBeLessThan(0.4);
+  });
+});
