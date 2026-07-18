@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { captureMessage } from '@sentry/nestjs';
 
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from './audit.service';
+vi.mock('@sentry/nestjs', () => ({
+  captureMessage: vi.fn(),
+}));
 
 describe('AuditService outbox', () => {
   let prisma: PrismaService;
@@ -234,5 +238,17 @@ describe('AuditService outbox', () => {
     // The second call returns the in-flight drain promise; the row is drained once.
     expect(a).toBe(b);
     expect(prisma.auditLog.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits to the independent Sentry sink when both the direct write and outbox write fail', async () => {
+    (prisma.auditLog.create as Mock).mockRejectedValue(new Error('db down'));
+    (prisma.auditOutbox.create as Mock).mockRejectedValue(new Error('outbox down'));
+
+    await audit.log(entry);
+
+    expect(captureMessage).toHaveBeenCalledWith(
+      'audit_outbox_write_failed',
+      expect.objectContaining({ level: 'error' }),
+    );
   });
 });

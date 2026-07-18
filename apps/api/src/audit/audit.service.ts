@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 
 import { Prisma } from '@waitlayer/db';
 
@@ -202,6 +203,34 @@ export class AuditService {
           (enqueueErr as Error).message ?? String(enqueueErr)
         }`,
       );
+      this.emitEmergencySink(entry, enqueueErr);
+    }
+  }
+
+  /**
+   * Independent emergency sink, reached ONLY when BOTH the direct AuditLog
+   * write and the durable outbox write fail — i.e. the audit entry is about to
+   * be lost. Sentry is independent of the primary Postgres store, so it
+   * survives a total DB outage that the outbox (which shares that DB) cannot.
+   * Payloads are deliberately minimal — no beforeSnap/afterSnap, which may
+   * contain PII — and the shared Sentry beforeSend scrubber strips any
+   * secrets that slip through. This is the alert hook for "both writes failed".
+   */
+  private emitEmergencySink(entry: AuditLogEntry, err: unknown): void {
+    try {
+      Sentry.captureMessage('audit_outbox_write_failed', {
+        level: 'error',
+        extra: {
+          action: entry.action,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
+          actorId: entry.actorId,
+          actorRole: entry.actorRole,
+          error: (err as Error)?.message ?? String(err),
+        },
+      });
+    } catch {
+      // Independent sink must never crash the audit path.
     }
   }
 
