@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from './audit.service';
@@ -9,8 +9,13 @@ describe('AuditService outbox', () => {
 
   beforeEach(() => {
     prisma = {
-      auditLog: { create: vi.fn() },
+      auditLog: { create: vi.fn(), upsert: vi.fn() },
       auditOutbox: { create: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+      // processOutbox is invoked by the leased AuditOutboxCron (the sole
+      // scheduler); it is also safe to call directly. $transaction here invokes
+      // the callback with the same mock so upsert/update assertions land on
+      // `prisma` (tx === prisma).
+      $transaction: vi.fn(async (cb: (tx: PrismaService) => Promise<unknown>) => cb(prisma)),
     } as unknown as PrismaService;
     audit = new AuditService(prisma);
   });
@@ -25,7 +30,7 @@ describe('AuditService outbox', () => {
   };
 
   it('writes directly to AuditLog when the direct write succeeds', async () => {
-    (prisma.auditLog.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'log-1' });
+    (prisma.auditLog.create as Mock).mockResolvedValue({ id: 'log-1' });
     await audit.log(entry);
     expect(prisma.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -36,8 +41,8 @@ describe('AuditService outbox', () => {
   });
 
   it('queues to the durable outbox when the direct write fails', async () => {
-    (prisma.auditLog.create as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('db down'));
-    (prisma.auditOutbox.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'outbox-1' });
+    (prisma.auditLog.create as Mock).mockRejectedValue(new Error('db down'));
+    (prisma.auditOutbox.create as Mock).mockResolvedValue({ id: 'outbox-1' });
 
     await audit.log(entry);
 
@@ -53,7 +58,7 @@ describe('AuditService outbox', () => {
     );
   });
 
-  it('processOutbox drains pending rows into AuditLog and marks them processed', async () => {
+  it('processOutbox drains pending rows into AuditLog (idempotently) and marks them processed', async () => {
     const outboxRow = {
       id: 'outbox-1',
       ...entry,
@@ -63,16 +68,23 @@ describe('AuditService outbox', () => {
       processedAt: null,
       createdAt: new Date(),
     };
-    (prisma.auditOutbox.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([outboxRow]);
-    (prisma.auditLog.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'log-1' });
-    (prisma.auditOutbox.update as ReturnType<typeof vi.fn>).mockResolvedValue(outboxRow);
+    (prisma.auditOutbox.findMany as Mock).mockResolvedValue([outboxRow]);
+    (prisma.auditLog.upsert as Mock).mockResolvedValue({ id: 'log-1' });
+    (prisma.auditOutbox.update as Mock).mockResolvedValue(outboxRow);
 
     const processed = await audit.processOutbox();
 
     expect(processed).toBe(1);
-    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+    // Upsert keyed on sourceOutboxId guarantees replay cannot duplicate the audit row.
+    expect(prisma.auditLog.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ actorId: 'user-1', action: 'test_action' }),
+        where: { sourceOutboxId: 'outbox-1' },
+        create: expect.objectContaining({
+          actorId: 'user-1',
+          action: 'test_action',
+          sourceOutboxId: 'outbox-1',
+        }),
+        update: {},
       }),
     );
     expect(prisma.auditOutbox.update).toHaveBeenCalledWith(
@@ -95,9 +107,9 @@ describe('AuditService outbox', () => {
       failedAt: null,
       createdAt: new Date(),
     };
-    (prisma.auditOutbox.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([outboxRow]);
-    (prisma.auditLog.create as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('still down'));
-    (prisma.auditOutbox.update as ReturnType<typeof vi.fn>).mockResolvedValue(outboxRow);
+    (prisma.auditOutbox.findMany as Mock).mockResolvedValue([outboxRow]);
+    (prisma.auditLog.upsert as Mock).mockRejectedValue(new Error('still down'));
+    (prisma.auditOutbox.update as Mock).mockResolvedValue(outboxRow);
 
     const processed = await audit.processOutbox();
 
@@ -126,9 +138,9 @@ describe('AuditService outbox', () => {
       failedAt: null,
       createdAt: new Date(),
     };
-    (prisma.auditOutbox.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([outboxRow]);
-    (prisma.auditLog.create as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('still down'));
-    (prisma.auditOutbox.update as ReturnType<typeof vi.fn>).mockResolvedValue(outboxRow);
+    (prisma.auditOutbox.findMany as Mock).mockResolvedValue([outboxRow]);
+    (prisma.auditLog.upsert as Mock).mockRejectedValue(new Error('still down'));
+    (prisma.auditOutbox.update as Mock).mockResolvedValue(outboxRow);
 
     const processed = await audit.processOutbox();
 
@@ -143,5 +155,84 @@ describe('AuditService outbox', () => {
         }),
       }),
     );
+  });
+
+  it('replays an unprocessed outbox row without duplicating the audit log', async () => {
+    const outboxRow = {
+      id: 'outbox-1',
+      ...entry,
+      retryCount: 0,
+      lastError: null,
+      nextRetryAt: new Date(Date.now() - 1_000),
+      processedAt: null,
+      createdAt: new Date(),
+    };
+    (prisma.auditOutbox.findMany as Mock).mockResolvedValue([outboxRow]);
+    (prisma.auditLog.upsert as Mock).mockResolvedValue({ id: 'log-1' });
+    (prisma.auditOutbox.update as Mock).mockResolvedValue(outboxRow);
+
+    await audit.processOutbox();
+    await audit.processOutbox();
+
+    // Crash after the audit insert but before processedAt: the row is still
+    // pending, so a second drain re-upserts with the same sourceOutboxId.
+    expect(prisma.auditLog.upsert).toHaveBeenCalledTimes(2);
+    for (const call of (prisma.auditLog.upsert as Mock).mock.calls) {
+      expect(call[0].where).toEqual({ sourceOutboxId: 'outbox-1' });
+    }
+  });
+
+  it('survives a crash after the audit insert but before processedAt is committed', async () => {
+    const outboxRow = {
+      id: 'outbox-1',
+      ...entry,
+      retryCount: 0,
+      lastError: null,
+      nextRetryAt: new Date(Date.now() - 1_000),
+      processedAt: null,
+      createdAt: new Date(),
+    };
+    (prisma.auditOutbox.findMany as Mock).mockResolvedValue([outboxRow]);
+    (prisma.auditLog.upsert as Mock).mockResolvedValue({ id: 'log-1' });
+    (prisma.auditOutbox.update as Mock).mockResolvedValue(outboxRow);
+    // The drain transaction commits the audit insert, then drops before
+    // processedAt is persisted — simulating a crash / failover mid-transaction.
+    (prisma.$transaction as Mock).mockImplementation(
+      async (cb: (tx: PrismaService) => Promise<unknown>) => {
+        await cb(prisma);
+        throw new Error('connection dropped after audit insert');
+      },
+    );
+
+    await audit.processOutbox();
+    await audit.processOutbox();
+
+    // The audit row is upserted on the stable sourceOutboxId each attempt, so a
+    // crash between insert and processedAt can never create a duplicate.
+    expect(prisma.auditLog.upsert).toHaveBeenCalledTimes(2);
+    for (const call of (prisma.auditLog.upsert as Mock).mock.calls) {
+      expect(call[0].where).toEqual({ sourceOutboxId: 'outbox-1' });
+    }
+  });
+
+  it('serializes concurrent processOutbox calls within a single process', async () => {
+    const outboxRow = {
+      id: 'outbox-1',
+      ...entry,
+      retryCount: 0,
+      lastError: null,
+      nextRetryAt: new Date(Date.now() - 1_000),
+      processedAt: null,
+      createdAt: new Date(),
+    };
+    (prisma.auditOutbox.findMany as Mock).mockResolvedValue([outboxRow]);
+    (prisma.auditLog.upsert as Mock).mockResolvedValue({ id: 'log-1' });
+    (prisma.auditOutbox.update as Mock).mockResolvedValue(outboxRow);
+
+    const [a, b] = await Promise.all([audit.processOutbox(), audit.processOutbox()]);
+
+    // The second call returns the in-flight drain promise; the row is drained once.
+    expect(a).toBe(b);
+    expect(prisma.auditLog.upsert).toHaveBeenCalledTimes(1);
   });
 });

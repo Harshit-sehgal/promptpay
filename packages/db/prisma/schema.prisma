@@ -1079,6 +1079,7 @@ model AuditLog {
   beforeSnap Json?
   afterSnap  Json?
   ipHash     String?
+  sourceOutboxId String? @unique @map("source_outbox_id")
 
   createdAt DateTime @default(now())
 

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
@@ -44,27 +44,11 @@ export interface AuditOutboxRow {
  * success while the evidence is only queued.
  */
 @Injectable()
-export class AuditService implements OnModuleInit, OnModuleDestroy {
+export class AuditService {
   private readonly logger = new Logger(AuditService.name);
-  private retryTimer?: NodeJS.Timeout;
   private drainPromise: Promise<number> | null = null;
 
   constructor(private prisma: PrismaService) {}
-
-  onModuleInit() {
-    // Drain the durable outbox every 30 seconds. Failed best-effort audit
-    // writes are retried until they succeed, so transient audit-table outages
-    // no longer silently lose history.
-    this.retryTimer = setInterval(() => {
-      void this.processOutbox().catch(() => {
-        // Keep retrying on the next tick; rows remain in the outbox.
-      });
-    }, 30_000);
-  }
-
-  onModuleDestroy() {
-    if (this.retryTimer) clearInterval(this.retryTimer);
-  }
 
   /**
    * Persist a security- or money-critical audit entry before the operation is
@@ -97,7 +81,8 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
   /**
    * Drain pending outbox rows into `AuditLog`. Returns the number of rows
    * successfully processed. Safe to call concurrently: serialised by
-   * `drainPromise`.
+   * `drainPromise`. The leased `AuditOutboxCron` is the sole scheduler that
+   * invokes this; it must not be triggered by a second timer.
    */
   async processOutbox(batchSize = 100): Promise<number> {
     if (this.drainPromise) {
@@ -122,11 +107,7 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     let processed = 0;
     for (const row of rows) {
       try {
-        await this.write(this.outboxRowToEntry(row));
-        await this.prisma.auditOutbox.update({
-          where: { id: row.id },
-          data: { processedAt: new Date() },
-        });
+        await this.drainRow(row);
         processed++;
       } catch (err) {
         const retryCount = row.retryCount + 1;
@@ -152,6 +133,38 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return processed;
+  }
+
+  /**
+   * Atomically insert the audit log (idempotently, keyed on the outbox id) and
+   * mark the outbox row processed. If this transaction rolls back after the
+   * audit insert — a crash, connection drop, or replica failover — the next
+   * drain re-attempts: the `sourceOutboxId` unique key makes the upsert a
+   * no-op, so replay can never create a duplicate audit record.
+   */
+  private async drainRow(row: AuditOutboxRow): Promise<void> {
+    const entry = this.outboxRowToEntry(row);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditLog.upsert({
+        where: { sourceOutboxId: row.id },
+        create: {
+          actorId: entry.actorId,
+          actorRole: entry.actorRole,
+          action: entry.action,
+          targetType: entry.targetType,
+          targetId: entry.targetId,
+          beforeSnap: entry.beforeSnap ?? undefined,
+          afterSnap: entry.afterSnap ?? undefined,
+          ipHash: entry.ipHash,
+          sourceOutboxId: row.id,
+        },
+        update: {},
+      });
+      await tx.auditOutbox.update({
+        where: { id: row.id },
+        data: { processedAt: new Date() },
+      });
+    });
   }
 
   private async enqueueOutbox(entry: AuditLogEntry, err: unknown): Promise<void> {
