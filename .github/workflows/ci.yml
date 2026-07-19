@@ -117,7 +117,7 @@ jobs:
           node apps/api/dist/apps/api/src/main.js &
           API_PID=$!
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:4002/api/v1/health/ready; then break; fi
+            if curl -fsS -o /dev/null http://localhost:4002/api/v1/health/ready; then break; fi
             if [ "$i" -eq 30 ]; then echo "API not ready"; kill $API_PID 2>/dev/null; exit 1; fi
             sleep 2
           done
@@ -132,7 +132,7 @@ jobs:
           pnpm --filter waitlayer-web start &
           WEB_PID=$!
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:3000; then break; fi
+            if curl -fsS -o /dev/null http://localhost:3000; then break; fi
             if [ "$i" -eq 30 ]; then echo "Web not ready"; kill $WEB_PID 2>/dev/null; exit 1; fi
             sleep 2
           done
@@ -433,6 +433,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b7351df727350dca84cb9d725d57dcf5bc82ba26 # v3
         with:

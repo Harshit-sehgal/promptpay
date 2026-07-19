@@ -2,6 +2,7 @@
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 WORKDIR /app
+ENV CI=true
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
 COPY packages/db/package.json packages/db/
