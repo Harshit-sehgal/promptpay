@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
+import { AlertsService } from '../observability/alerts.service';
+import { MetricsService } from '../observability/metrics.service';
 import { AdminService } from './admin.service';
 import { MoneyIntegrityCronService } from './money-integrity.cron';
 
@@ -44,6 +46,7 @@ function makeCron(
   } as unknown as AdminService;
   const audit = {
     logStrict: vi.fn().mockResolvedValue(undefined),
+    countDeadLetter: vi.fn().mockResolvedValue(overrides.report === 'drift' ? 2 : 0),
   } as unknown as AuditService;
   const prisma = {
     // acquireCronLease runs a $queryRaw that returns the leasing owner's row.
@@ -63,9 +66,31 @@ function makeCron(
       return undefined;
     }),
   } as unknown as ConfigService;
+  const metrics = {
+    increment: vi.fn(),
+    gauge: vi.fn(),
+    snapshot: vi.fn().mockReturnValue({ counters: {}, gauges: {} }),
+    recordLedgerDiscrepancy: vi.fn(),
+    recordFailedAuditRows: vi.fn(),
+  } as unknown as MetricsService;
+  const alerts = {
+    alert: vi.fn(),
+    alertLedgerDiscrepancy: vi.fn(),
+    alertNegativeAdvertiserBalance: vi.fn(),
+    alertCampaignOverBudget: vi.fn(),
+    alertAuditDeadLetter: vi.fn(),
+  } as unknown as AlertsService;
 
-  const cron = new MoneyIntegrityCronService(admin, audit, prisma, emailQueue, config);
-  return { cron, admin, audit, emailQueue, config };
+  const cron = new MoneyIntegrityCronService(
+    admin,
+    audit,
+    prisma,
+    emailQueue,
+    config,
+    metrics,
+    alerts,
+  );
+  return { cron, admin, audit, emailQueue, config, metrics, alerts };
 }
 
 describe('MoneyIntegrityCronService alerting', () => {
@@ -111,5 +136,14 @@ describe('MoneyIntegrityCronService alerting', () => {
     const { cron, emailQueue } = makeCron({ report: 'drift', opsAlertEmail: undefined });
     await (cron as unknown as { tick: () => Promise<void> }).tick();
     expect(emailQueue.sendMoneyIntegrityAlert).not.toHaveBeenCalled();
+  });
+  it('records observability metrics + alerts on drift (P1.24/P1.25)', async () => {
+    const { cron, metrics, alerts } = makeCron({ report: 'drift', opsAlertEmail: 'ops@x.com' });
+    await (cron as unknown as { tick: () => Promise<void> }).tick();
+    expect(metrics.recordLedgerDiscrepancy).toHaveBeenCalled();
+    expect(alerts.alertLedgerDiscrepancy).toHaveBeenCalled();
+    expect(alerts.alertCampaignOverBudget).toHaveBeenCalled();
+    expect(alerts.alertAuditDeadLetter).toHaveBeenCalled();
+    expect(metrics.recordFailedAuditRows).toHaveBeenCalledWith(2);
   });
 });

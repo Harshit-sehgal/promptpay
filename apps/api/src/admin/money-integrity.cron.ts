@@ -6,6 +6,8 @@ import { AuditService } from '../audit/audit.service';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
+import { AlertsService } from '../observability/alerts.service';
+import { MetricsService } from '../observability/metrics.service';
 import { AdminService } from './admin.service';
 
 /**
@@ -46,6 +48,8 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
     private prisma: PrismaService,
     private emailQueue: EmailQueueService,
     private config: ConfigService,
+    private metrics: MetricsService,
+    private alerts: AlertsService,
   ) {}
 
   onApplicationBootstrap() {
@@ -73,6 +77,14 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
         ))
       ) {
         return;
+      }
+      // (P1.25) Surface any audit dead-letter rows so a failed audit write is
+      // never silently lost. Read-only; runs on every scan regardless of the
+      // money-integrity report outcome.
+      const deadLetterCount = await this.audit.countDeadLetter();
+      this.metrics.recordFailedAuditRows(deadLetterCount);
+      if (deadLetterCount > 0) {
+        this.alerts.alertAuditDeadLetter({ count: deadLetterCount });
       }
       const report = await this.admin.getMoneyIntegrityReport();
       if (report.status === 'healthy') return;
@@ -105,6 +117,19 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
           `globalDiscrepancyByCurrency=${JSON.stringify(globalDiscrepancies)}. ` +
           discrepancies.join('; '),
       );
+      this.metrics.recordLedgerDiscrepancy();
+      this.alerts.alertLedgerDiscrepancy({
+        totalDiffMinor: String(totalDiff),
+        currencyCount: Object.keys(globalDiscrepancies).length,
+        campaignDiscrepancyCount: report.campaignDiscrepancies.length,
+        negativeBalanceCount: report.negativeDeveloperBalances.length,
+      });
+      for (const b of report.negativeDeveloperBalances) {
+        this.alerts.alertNegativeAdvertiserBalance({ userId: b.userId, currency: b.currency });
+      }
+      for (const d of report.campaignDiscrepancies) {
+        this.alerts.alertCampaignOverBudget({ campaignId: d.campaignId, currency: d.currency });
+      }
 
       await this.audit.logStrict({
         actorId: 'system',

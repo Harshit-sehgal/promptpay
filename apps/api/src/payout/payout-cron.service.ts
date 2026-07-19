@@ -6,6 +6,8 @@ import { PayoutStatus } from '@waitlayer/shared';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 import { PrismaService } from '../config/prisma.service';
+import { AlertsService } from '../observability/alerts.service';
+import { MetricsService } from '../observability/metrics.service';
 import { ReferralService } from '../referral/referral.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { boundedPositiveInt } from './payout.constants';
@@ -47,6 +49,8 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
     private readonly payoutService: PayoutService,
     private readonly referral: ReferralService,
     private readonly runtimeConfig: RuntimeConfigService,
+    private readonly metrics: MetricsService,
+    private readonly alerts: AlertsService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -107,7 +111,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
       // Find processing payouts that were claimed at least STALL_THRESHOLD_MS ago
       // (avoid re-checking payouts that were just submitted by processPayout)
       // `approvedAmountMinor` and `currency` are selected specifically to feed
-      // `markPayoutPaid`'s amount/currency cross-check (Round 27 Fix 2): the
+      // `markPayoutPaid`'s amount/currency cross-check (self-check): the
       // admin DTO supplies these from the request body, but the cron has no
       // body — the next-best authoritative source is the stored values on the
       // PayoutRequest itself (the operator approved / requested them, so any
@@ -139,6 +143,15 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
       let failedCount = 0;
 
       for (const payout of processingPayouts) {
+        const processedAt = payout.processedAt;
+        const fenceAgeMs = processedAt ? Date.now() - processedAt.getTime() : 0;
+        const FENCE_AGE_THRESHOLD_MS = Number(
+          process.env.PAYOUT_FENCE_ALERT_AGE_MS ?? 30 * 60 * 1000,
+        );
+        if (fenceAgeMs > FENCE_AGE_THRESHOLD_MS) {
+          this.metrics.recordRetainedPayoutFence();
+          this.alerts.alertPayoutFenceAge({ payoutId: payout.id, ageMs: fenceAgeMs });
+        }
         const providerTxId = payout.transactions[0]?.providerTxId;
         if (!providerTxId) {
           this.logger.warn(
@@ -178,7 +191,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
               `Payout ${payout.id} (${payout.payoutAccount.provider}:${providerTxId}) is confirmed paid — auto-completing`,
             );
 
-            // Round 27 Fix 2: pass the stored approved/requested amount +
+            // Self-check: pass the stored approved/requested amount +
             // currency as the cross-check fields so markPayoutPaid's
             // `expectedAmountMinor !== undefined` guard fires for the cron
             // path. The provider's checkStatus returns no amount (only
@@ -221,6 +234,9 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
           `Payout poll complete: checked=${checked}, completed=${completed}, failed=${failedCount}`,
         );
       }
+      this.metrics.increment('payout_poll_checked', checked);
+      this.metrics.increment('payout_poll_completed', completed);
+      this.metrics.increment('payout_poll_failed', failedCount);
 
       return { checked, completed, failed: failedCount };
     } catch (err) {

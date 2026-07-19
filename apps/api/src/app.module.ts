@@ -25,6 +25,7 @@ import { FeedbackModule } from './feedback/feedback.module';
 import { FraudModule } from './fraud/fraud.module';
 import { HealthModule } from './health/health.module';
 import { LedgerModule } from './ledger/ledger.module';
+import { ObservabilityModule } from './observability/observability.module';
 import { PayoutModule } from './payout/payout.module';
 import { ReferralModule } from './referral/referral.module';
 
@@ -69,6 +70,7 @@ import { ReferralModule } from './referral/referral.module';
     CampaignModule,
     ReferralModule,
     ComplianceModule,
+    ObservabilityModule,
   ],
   providers: [
     // ApiKeyGuard first: it's a no-op unless `x-api-key` is present AND the

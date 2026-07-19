@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PayoutStatus } from '@waitlayer/shared';
 
+import { AlertsService } from '../observability/alerts.service';
+import { MetricsService } from '../observability/metrics.service';
 import { PayoutCronService } from './payout-cron.service';
 
 const mockPrisma = {
@@ -48,6 +50,16 @@ const mockRuntimeConfig = {
   isAutoPayoutProcessingEnabled: vi.fn().mockResolvedValue(true),
 };
 
+const mockMetrics = {
+  increment: vi.fn(),
+  gauge: vi.fn(),
+  snapshot: vi.fn().mockReturnValue({ counters: {}, gauges: {} }),
+  recordRetainedPayoutFence: vi.fn(),
+} as unknown as MetricsService;
+const mockAlerts = {
+  alert: vi.fn(),
+  alertPayoutFenceAge: vi.fn(),
+} as unknown as AlertsService;
 describe('PayoutCronService', () => {
   let service: PayoutCronService;
 
@@ -58,6 +70,8 @@ describe('PayoutCronService', () => {
       mockPayoutService as any,
       mockReferral as any,
       mockRuntimeConfig as any,
+      mockMetrics,
+      mockAlerts,
     );
     // Prevent the actual interval from starting in tests
     vi.spyOn(service as any, 'pollProcessingPayouts').mockResolvedValue({
@@ -280,6 +294,31 @@ describe('PayoutCronService', () => {
 
       expect(result).toEqual({ checked: 0, completed: 0, failed: 0 });
       expect(mockPrisma.payoutRequest.findMany).not.toHaveBeenCalled();
+    });
+    it('fires a payout-fence-age alert for a long-stuck processing payout (P1.25)', async () => {
+      const old = new Date(Date.now() - 60 * 60 * 1000); // 1h ago
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_old',
+          status: 'processing',
+          currency: 'USD',
+          requestedAmountMinor: 1000n,
+          approvedAmountMinor: 1000n,
+          processedAt: old,
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@x.com' },
+          transactions: [{ providerTxId: 'tx_x' }],
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockPayPalProvider);
+      mockPayPalProvider.checkStatus.mockResolvedValue({ status: 'processing' });
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      await service.pollProcessingPayouts();
+
+      expect(mockAlerts.alertPayoutFenceAge).toHaveBeenCalledWith(
+        expect.objectContaining({ payoutId: 'req_old' }),
+      );
+      expect(mockMetrics.increment).toHaveBeenCalledWith('payout_poll_checked', 1);
     });
   });
 });
