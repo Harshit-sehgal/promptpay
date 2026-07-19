@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { EarningsCalculator } from '@/components/earnings-calculator';
 import { useAuth } from '@/lib/auth-context';
 import { getDashboardPath } from '@/lib/auth-routing';
 
@@ -275,7 +276,7 @@ export default function HomePage() {
                     gap: '8px 16px',
                     fontFamily: "'IBM Plex Mono', monospace",
                     fontSize: '12px',
-                    color: '#9a9a9a',
+                    color: '#6b6b6b',
                     animationDelay: '280ms',
                   }}
                 >
@@ -283,11 +284,11 @@ export default function HomePage() {
                     <span>Claude Code first</span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ color: '#dcdcdc' }}>/</span>
+                    <span style={{ color: '#6b6b6b' }}>/</span>
                     <span>No code · prompts · output</span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ color: '#dcdcdc' }}>/</span>
+                    <span style={{ color: '#6b6b6b' }}>/</span>
                     <span>70% to you</span>
                   </span>
                 </div>
@@ -343,7 +344,7 @@ export default function HomePage() {
                         opacity: 0.9,
                       }}
                     ></span>
-                    <span style={{ marginLeft: '8px', color: '#5b5b5b', fontSize: '11.5px' }}>
+                    <span style={{ marginLeft: '8px', color: '#a8a8a8', fontSize: '11.5px' }}>
                       claude — ~/projects/waitlayer
                     </span>
                   </div>
@@ -357,7 +358,7 @@ export default function HomePage() {
                     }}
                   >
                     <div style={{ transition: 'opacity .4s ease' }}>
-                      <span style={{ color: '#5b5b5b' }}>&gt;</span> refactor the auth middleware to
+                      <span style={{ color: '#a8a8a8' }}>&gt;</span> refactor the auth middleware to
                       use the session helper
                       <span
                         className="wl-vcaret"
@@ -386,7 +387,7 @@ export default function HomePage() {
                       }}
                     >
                       <span style={{ color: 'var(--accent,#16a34a)', flex: 'none' }}>✓</span>
-                      <span style={{ color: '#9a9a9a' }}>done · 8.2s</span>
+                      <span style={{ color: '#b5b5b5' }}>done · 8.2s</span>
                     </div>
 
                     <div
@@ -427,7 +428,7 @@ export default function HomePage() {
                       </span>
                       <span
                         style={{
-                          color: '#6f6f6f',
+                          color: '#a8a8a8',
                           flex: 'none',
                           fontSize: '11px',
                           letterSpacing: '.06em',
@@ -440,7 +441,7 @@ export default function HomePage() {
                       <span style={{ color: '#3a3a3a' }}>·</span>
                       <span
                         style={{
-                          color: '#9a9a9a',
+                          color: '#b5b5b5',
                           minWidth: 0,
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -598,7 +599,7 @@ export default function HomePage() {
                     style={{
                       fontFamily: "'IBM Plex Mono', monospace",
                       fontSize: '11px',
-                      color: '#16a34a',
+                      color: '#15803d',
                     }}
                   >
                     01
@@ -632,7 +633,7 @@ export default function HomePage() {
                     style={{
                       fontFamily: "'IBM Plex Mono', monospace",
                       fontSize: '11px',
-                      color: '#16a34a',
+                      color: '#15803d',
                     }}
                   >
                     02
@@ -666,7 +667,7 @@ export default function HomePage() {
                     style={{
                       fontFamily: "'IBM Plex Mono', monospace",
                       fontSize: '11px',
-                      color: '#16a34a',
+                      color: '#15803d',
                     }}
                   >
                     03
@@ -714,7 +715,7 @@ export default function HomePage() {
                     fontSize: '11.5px',
                     letterSpacing: '.14em',
                     textTransform: 'uppercase',
-                    color: '#999',
+                    color: '#6b6b6b',
                   }}
                 >
                   Verification
@@ -775,7 +776,7 @@ export default function HomePage() {
                         fontSize: '11px',
                         letterSpacing: '.1em',
                         textTransform: 'uppercase',
-                        color: '#888',
+                        color: '#6b6b6b',
                       }}
                     >
                       <span
@@ -795,7 +796,7 @@ export default function HomePage() {
                       style={{
                         fontFamily: "'IBM Plex Mono', monospace",
                         fontSize: '12px',
-                        color: '#999',
+                        color: '#6b6b6b',
                       }}
                     >
                       ledger ·{' '}
@@ -898,7 +899,7 @@ export default function HomePage() {
                             fontSize: '11px',
                             textAlign: 'center',
                             lineHeight: 1.3,
-                            color: verifyStep >= 1 ? '#16a34a' : '#aaa',
+                            color: verifyStep >= 1 ? '#16a34a' : '#6b6b6b',
                             transition: 'color .3s ease',
                           }}
                         >
@@ -962,7 +963,7 @@ export default function HomePage() {
                             fontSize: '11px',
                             textAlign: 'center',
                             lineHeight: 1.3,
-                            color: verifyStep >= 2 ? '#16a34a' : '#aaa',
+                            color: verifyStep >= 2 ? '#16a34a' : '#6b6b6b',
                             transition: 'color .3s ease',
                           }}
                         >
@@ -1026,7 +1027,7 @@ export default function HomePage() {
                             fontSize: '11px',
                             textAlign: 'center',
                             lineHeight: 1.3,
-                            color: verifyStep >= 3 ? '#16a34a' : '#aaa',
+                            color: verifyStep >= 3 ? '#16a34a' : '#6b6b6b',
                             transition: 'color .3s ease',
                           }}
                         >
@@ -1090,7 +1091,7 @@ export default function HomePage() {
                             fontSize: '11px',
                             textAlign: 'center',
                             lineHeight: 1.3,
-                            color: verifyStep >= 4 ? '#16a34a' : '#aaa',
+                            color: verifyStep >= 4 ? '#16a34a' : '#6b6b6b',
                             transition: 'color .3s ease',
                           }}
                         >
@@ -1154,7 +1155,7 @@ export default function HomePage() {
                             fontSize: '11px',
                             textAlign: 'center',
                             lineHeight: 1.3,
-                            color: verifyStep >= 5 ? '#16a34a' : '#aaa',
+                            color: verifyStep >= 5 ? '#16a34a' : '#6b6b6b',
                             transition: 'color .3s ease',
                           }}
                         >
@@ -1179,7 +1180,7 @@ export default function HomePage() {
                     <span style={{ color: '#cfcfcf' }}>→</span>
                     <span
                       style={{
-                        color: verifyStep >= 5 ? '#16a34a' : '#999',
+                        color: verifyStep >= 5 ? '#16a34a' : '#6b6b6b',
                         transition: 'color .3s ease',
                       }}
                     >
@@ -1231,7 +1232,7 @@ export default function HomePage() {
                 style={{
                   fontSize: '17.5px',
                   lineHeight: 1.62,
-                  color: '#9a9a9a',
+                  color: '#b5b5b5',
                   margin: '20px 0 0',
                 }}
               >
@@ -1263,7 +1264,7 @@ export default function HomePage() {
                     fontSize: '11px',
                     letterSpacing: '.1em',
                     textTransform: 'uppercase',
-                    color: '#a8524c',
+                    color: '#e09a92',
                     marginBottom: '18px',
                   }}
                 >
@@ -1345,7 +1346,7 @@ export default function HomePage() {
                         alignItems: 'center',
                         gap: '10px',
                         fontSize: '14.5px',
-                        color: '#dcdcdc',
+                        color: '#b5b5b5',
                       }}
                     >
                       <svg
@@ -1381,7 +1382,7 @@ export default function HomePage() {
                   fontFamily: "'IBM Plex Mono', monospace",
                   fontSize: '12.5px',
                   lineHeight: 1.6,
-                  color: '#6f6f6f',
+                  color: '#a8a8a8',
                   margin: 0,
                   maxWidth: '560px',
                 }}
@@ -1427,7 +1428,7 @@ export default function HomePage() {
                     fontSize: '11.5px',
                     letterSpacing: '.14em',
                     textTransform: 'uppercase',
-                    color: '#999',
+                    color: '#6b6b6b',
                   }}
                 >
                   The line
@@ -1539,7 +1540,7 @@ export default function HomePage() {
                         ></span>
                         <span
                           style={{
-                            color: '#6f6f6f',
+                            color: '#a8a8a8',
                             fontSize: '11px',
                             letterSpacing: '.05em',
                             textTransform: 'uppercase',
@@ -1550,7 +1551,7 @@ export default function HomePage() {
                         <span style={{ color: '#e8e8e8' }}>{s.name}</span>
                         <span
                           style={{
-                            color: '#9a9a9a',
+                            color: '#b5b5b5',
                             minWidth: 0,
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -1592,7 +1593,7 @@ export default function HomePage() {
                     fontSize: '11.5px',
                     letterSpacing: '.14em',
                     textTransform: 'uppercase',
-                    color: '#999',
+                    color: '#6b6b6b',
                   }}
                 >
                   For developers
@@ -1731,7 +1732,7 @@ export default function HomePage() {
                       style={{
                         fontFamily: "'IBM Plex Mono', monospace",
                         fontSize: '12.5px',
-                        color: '#777',
+                        color: '#6b6b6b',
                       }}
                     >
                       of verified media spend goes to you
@@ -1765,7 +1766,7 @@ export default function HomePage() {
                       justifyContent: 'space-between',
                       fontFamily: "'IBM Plex Mono', monospace",
                       fontSize: '11px',
-                      color: '#999',
+                      color: '#6b6b6b',
                       marginBottom: '22px',
                     }}
                   >
@@ -1778,7 +1779,7 @@ export default function HomePage() {
                       fontSize: '11px',
                       letterSpacing: '.08em',
                       textTransform: 'uppercase',
-                      color: '#999',
+                      color: '#6b6b6b',
                       marginBottom: '11px',
                     }}
                   >
@@ -1828,13 +1829,13 @@ export default function HomePage() {
                           fontSize: '10.5px',
                           letterSpacing: '.1em',
                           textTransform: 'uppercase',
-                          color: '#b46708',
+                          color: '#92560a',
                         }}
                       >
                         What beta means
                       </span>
                     </div>
-                    <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.62, color: '#8a7a55' }}>
+                    <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.62, color: '#6b5e3a' }}>
                       No guaranteed earnings yet. During beta you help verify the first supply of
                       AI-agent wait states — cashable earnings begin when verified impressions match
                       sponsor-funded campaigns.
@@ -1846,6 +1847,7 @@ export default function HomePage() {
           </div>
         </section>
 
+        <EarningsCalculator />
         {/* ── Section 7: For Sponsors ── */}
         <section
           id="sponsors"
@@ -1902,7 +1904,7 @@ export default function HomePage() {
                     ></span>
                     <span
                       style={{
-                        color: '#6f6f6f',
+                        color: '#a8a8a8',
                         flex: 'none',
                         fontSize: '11px',
                         letterSpacing: '.05em',
@@ -1913,7 +1915,7 @@ export default function HomePage() {
                     </span>
                     <span style={{ color: '#e8e8e8', flex: 'none' }}>Your tool</span>
                     <span style={{ color: '#3a3a3a', flex: 'none' }}>·</span>
-                    <span style={{ color: '#9a9a9a', minWidth: 0 }}>
+                    <span style={{ color: '#b5b5b5', minWidth: 0 }}>
                       One developer-relevant line
                     </span>
                   </div>
@@ -1932,7 +1934,7 @@ export default function HomePage() {
                           fontSize: '10.5px',
                           letterSpacing: '.06em',
                           textTransform: 'uppercase',
-                          color: '#6a6a6a',
+                          color: '#a8a8a8',
                           marginBottom: '6px',
                         }}
                       >
@@ -1944,7 +1946,7 @@ export default function HomePage() {
                           alignItems: 'center',
                           gap: '7px',
                           fontSize: '13px',
-                          color: '#dcdcdc',
+                          color: '#b5b5b5',
                         }}
                       >
                         <svg
@@ -1968,7 +1970,7 @@ export default function HomePage() {
                           fontSize: '10.5px',
                           letterSpacing: '.06em',
                           textTransform: 'uppercase',
-                          color: '#6a6a6a',
+                          color: '#a8a8a8',
                           marginBottom: '6px',
                         }}
                       >
@@ -1980,7 +1982,7 @@ export default function HomePage() {
                           alignItems: 'center',
                           gap: '7px',
                           fontSize: '13px',
-                          color: '#dcdcdc',
+                          color: '#b5b5b5',
                         }}
                       >
                         <svg
@@ -2004,7 +2006,7 @@ export default function HomePage() {
                           fontSize: '10.5px',
                           letterSpacing: '.06em',
                           textTransform: 'uppercase',
-                          color: '#6a6a6a',
+                          color: '#a8a8a8',
                           marginBottom: '6px',
                         }}
                       >
@@ -2016,7 +2018,7 @@ export default function HomePage() {
                           alignItems: 'center',
                           gap: '7px',
                           fontSize: '13px',
-                          color: '#dcdcdc',
+                          color: '#b5b5b5',
                         }}
                       >
                         <svg
@@ -2089,7 +2091,7 @@ export default function HomePage() {
                   style={{
                     fontSize: '17px',
                     lineHeight: 1.62,
-                    color: '#9a9a9a',
+                    color: '#b5b5b5',
                     margin: '20px 0 24px',
                     maxWidth: '440px',
                   }}
@@ -2145,7 +2147,7 @@ export default function HomePage() {
                       fontSize: '10.5px',
                       letterSpacing: '.1em',
                       textTransform: 'uppercase',
-                      color: '#6a6a6a',
+                      color: '#a8a8a8',
                       marginBottom: '11px',
                     }}
                   >
@@ -2229,7 +2231,7 @@ export default function HomePage() {
                   fontSize: '11.5px',
                   letterSpacing: '.14em',
                   textTransform: 'uppercase',
-                  color: '#999',
+                  color: '#6b6b6b',
                 }}
               >
                 The network
@@ -2320,7 +2322,7 @@ export default function HomePage() {
                       fontSize: '10.5px',
                       letterSpacing: '.06em',
                       textTransform: 'uppercase',
-                      color: '#bbb',
+                      color: '#6b6b6b',
                     }}
                   >
                     Measurement
@@ -2415,7 +2417,7 @@ export default function HomePage() {
                       fontSize: '10.5px',
                       letterSpacing: '.06em',
                       textTransform: 'uppercase',
-                      color: '#bbb',
+                      color: '#6b6b6b',
                     }}
                   >
                     Marketplace
@@ -2511,7 +2513,7 @@ export default function HomePage() {
                       fontSize: '10.5px',
                       letterSpacing: '.06em',
                       textTransform: 'uppercase',
-                      color: '#bbb',
+                      color: '#6b6b6b',
                     }}
                   >
                     Settlement
@@ -2659,7 +2661,7 @@ export default function HomePage() {
                 style={{
                   fontSize: '18.5px',
                   lineHeight: 1.6,
-                  color: '#9a9a9a',
+                  color: '#b5b5b5',
                   margin: '0 auto 34px',
                   maxWidth: '480px',
                 }}
@@ -2716,7 +2718,7 @@ export default function HomePage() {
                   marginTop: '20px',
                   fontFamily: "'IBM Plex Mono', monospace",
                   fontSize: '12px',
-                  color: '#6a6a6a',
+                  color: '#a8a8a8',
                 }}
               >
                 No guaranteed earnings · your work stays yours · cancel anytime

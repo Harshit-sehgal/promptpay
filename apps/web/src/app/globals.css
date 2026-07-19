@@ -220,7 +220,10 @@ body {
     grid-template-columns: 1fr 1fr !important;
   }
   .wl-nav-links {
-    display: none !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 16px !important;
+    justify-content: flex-start;
   }
   .wl-sec {
     padding: 72px 0 !important;

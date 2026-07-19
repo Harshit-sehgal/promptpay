@@ -39,7 +39,7 @@ export default function SiteFooter() {
               style={{
                 fontSize: '14px',
                 lineHeight: 1.6,
-                color: '#777',
+                color: '#6b6b6b',
                 maxWidth: '280px',
                 margin: 0,
               }}
@@ -54,7 +54,7 @@ export default function SiteFooter() {
                 fontSize: '11px',
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
-                color: '#aaa',
+                color: '#6b6b6b',
                 marginBottom: '16px',
               }}
             >
@@ -106,7 +106,7 @@ export default function SiteFooter() {
                 fontSize: '11px',
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
-                color: '#aaa',
+                color: '#6b6b6b',
                 marginBottom: '16px',
               }}
             >
@@ -178,7 +178,7 @@ export default function SiteFooter() {
                 fontSize: '11px',
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
-                color: '#aaa',
+                color: '#6b6b6b',
                 marginBottom: '16px',
               }}
             >
@@ -227,7 +227,7 @@ export default function SiteFooter() {
           }}
         >
           <span
-            style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: '#888' }}
+            style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: '#6b6b6b' }}
           >
             No code access. No prompt access. No terminal-output collection.
           </span>
@@ -248,7 +248,7 @@ export default function SiteFooter() {
             Cookie Settings
           </button>
           <span
-            style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: '#aaa' }}
+            style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: '#6b6b6b' }}
           >
             © {new Date().getFullYear()} WaitLayer
           </span>

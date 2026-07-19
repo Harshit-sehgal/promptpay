@@ -76,7 +76,7 @@ export default function ChangelogPage() {
                 >
                   {release.version}
                 </span>
-                <span style={{ fontSize: '13px', color: '#888' }}>{release.date}</span>
+                <span style={{ fontSize: '13px', color: '#6b6b6b' }}>{release.date}</span>
                 <h2
                   style={{
                     fontSize: '20px',
