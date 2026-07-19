@@ -420,13 +420,13 @@ jobs:
         run: node scripts/audit-claims.mjs
   # ── Security scanning (P1.22) ──
   # CodeQL, secret scanning, filesystem CVE scan, SBOM, and license check.
-  # Advisory for now (continue-on-error) so it surfaces findings without
-  # blocking the existing green pipeline; make it blocking after the initial
-  # triage clears criticals (the job must fail releases on critical CVEs).
+  # Blocking: a critical secret leak or CRITICAL/HIGH CVE must fail the
+  # release. Trivy already gates on CRITICAL,HIGH (exit-code 1); gitleaks
+  # fails on any leak; this job no longer runs advisory.
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: true
+    continue-on-error: false
     permissions:
       security-events: write
       actions: read

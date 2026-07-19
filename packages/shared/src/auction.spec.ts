@@ -48,6 +48,27 @@ describe('randomBigIntBelow', () => {
       expect(v >= 0n && v < max).toBe(true);
     }
   });
+  it('is uniform over small bounds (2, 3, 5, 7, 10)', () => {
+    for (const bound of [2n, 3n, 5n, 7n, 10n]) {
+      const counts = new Map<bigint, number>();
+      const N = 30000;
+      for (let i = 0; i < N; i++) {
+        const v = randomBigIntBelow(bound);
+        expect(v >= 0n && v < bound).toBe(true);
+        counts.set(v, (counts.get(v) ?? 0) + 1);
+      }
+      const expected = N / Number(bound);
+      for (let b = 0n; b < bound; b++) {
+        const c = counts.get(b) ?? 0;
+        // Every bucket must be observed; the tolerance catches a gross skew
+        // (e.g. a modulo-over-wrong-range regression) without flaking on
+        // normal sampling noise. The fix masks to a power-of-two range so the
+        // true distribution is exactly uniform.
+        expect(c).toBeGreaterThan(0);
+        expect(Math.abs(c - expected)).toBeLessThan(expected * 0.25);
+      }
+    }
+  });
 });
 
 describe('selectCampaignIndex — cross-currency safety', () => {

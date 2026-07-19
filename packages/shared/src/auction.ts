@@ -54,24 +54,31 @@ export function randomBigIntBelow(maxExclusive: bigint): bigint {
   if (maxExclusive <= 0n) return 0n;
   const bitLen = maxExclusive.toString(2).length;
   const byteLen = Math.max(1, Math.ceil(bitLen / 8));
-  // To keep rejection bias low, sample from the next byte boundary above.
+  // Mask the sampled value to exactly `bitLen` low bits so the sample space is
+  // [0, 2^bitLen) — a power of two >= maxExclusive. Rejection sampling over a
+  // power-of-two range yields a perfectly uniform result over [0, maxExclusive)
+  // (every accepted value has exactly one representation), fixing the old
+  // "sample a full byte then reject" bias that over-weighted some buckets for
+  // small bounds (e.g. maxExclusive = 3) and the modulo fallback's bias.
+  const mask = (1n << BigInt(bitLen)) - 1n;
   for (let attempt = 0; attempt < 64; attempt++) {
     const bytes = crypto.randomBytes(byteLen);
     let value = 0n;
     for (let i = 0; i < byteLen; i++) {
       value = (value << 8n) | BigInt(bytes[i]);
     }
+    value &= mask;
     if (value < maxExclusive) return value;
   }
-  // Fallback: modulo. Has negligible bias for large bit lengths and is still
-  // bigint-exact. Reached only after 64 rejections (effectively never for
-  // realistic bid totals).
+  // Fallback (effectively never reached): only triggers after 64 independent
+  // rejections, which is astronomically unlikely for any realistic bound.
   const bytes = crypto.randomBytes(byteLen);
   let value = 0n;
   for (let i = 0; i < byteLen; i++) {
     value = (value << 8n) | BigInt(bytes[i]);
   }
-  return value % maxExclusive;
+  value &= mask;
+  return value < maxExclusive ? value : value % maxExclusive;
 }
 
 /**

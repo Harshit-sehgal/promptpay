@@ -16,15 +16,22 @@ function hasBearerHeader(req: { headers: Record<string, string | string | undefi
 }
 
 /**
- * Extracts the httpOnly access_token cookie value (raw, no signature check).
- * Used only for credential-presence detection.
+ * Extracts the raw httpOnly access-token cookie value (no signature check).
+ * Used only for credential-presence detection. The web app prefers the
+ * host-bound `__Host-access_token` cookie (Secure + Path=/, no Domain) and
+ * falls back to the bare `access_token` name as a dev/HTTP compatibility shim
+ * (see JwtStrategy). Both names must be detected so a request carrying a
+ * `__Host-access_token` cookie + `x-api-key` is still treated as a
+ * dual-credential request and forced through JWT validation (reconciliation +
+ * revocation checks).
  */
 function hasAccessCookie(req: {
   cookies?: Record<string, unknown>;
   signedCookies?: Record<string, unknown>;
 }): boolean {
   const src = req.cookies ?? req.signedCookies;
-  return !!(src && typeof src.access_token === 'string');
+  if (!src) return false;
+  return typeof src.access_token === 'string' || typeof src['__Host-access_token'] === 'string';
 }
 
 /**

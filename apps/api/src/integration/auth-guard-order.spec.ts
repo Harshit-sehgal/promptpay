@@ -425,6 +425,42 @@ describe('P0.4 Auth guard-order (real app, DB-backed)', () => {
       .set('x-api-key', keyB)
       .expect(401);
   });
+  // 10c/10d/10e/10f — `__Host-access_token` (the production-secure cookie name)
+  // MUST also be detected as a JWT credential, so it is forced through JWT
+  // validation when combined with an API key. Regression for the hasAccessCookie
+  // bug where only `access_token` was detected (a `__Host-access_token` + API
+  // key request was treated as API-key-only, bypassing revocation checks).
+  it('10c. __Host-access_token cookie JWT + same-owner API key -> 200', async () => {
+    await request(server())
+      .get('/api/v1/advertiser/profile')
+      .set('Cookie', `__Host-access_token=${advAToken}`)
+      .set('x-api-key', keyA)
+      .expect(200);
+  });
+
+  it('10d. __Host-access_token cookie JWT + different-owner API key -> 401', async () => {
+    await request(server())
+      .get('/api/v1/advertiser/profile')
+      .set('Cookie', `__Host-access_token=${advAToken}`)
+      .set('x-api-key', keyB)
+      .expect(401);
+  });
+
+  it('10e. __Host-access_token cookie JWT (revoked session) + API key -> 401', async () => {
+    await request(server())
+      .get('/api/v1/advertiser/profile')
+      .set('Cookie', `__Host-access_token=${advARevokedToken}`)
+      .set('x-api-key', keyA)
+      .expect(401);
+  });
+
+  it('10f. __Host-access_token cookie JWT (expired) + API key -> 401', async () => {
+    await request(server())
+      .get('/api/v1/advertiser/profile')
+      .set('Cookie', `__Host-access_token=${advAExpiredToken}`)
+      .set('x-api-key', keyA)
+      .expect(401);
+  });
 
   // ───────────────────────────────────────────────────────────────────────
   // 11. malformed bearer token + valid API key -> 401.

@@ -289,7 +289,7 @@ export default function HomePage() {
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
                     <span style={{ color: '#6b6b6b' }}>/</span>
-                    <span>70% to you</span>
+                    <span>60% to you</span>
                   </span>
                 </div>
               </div>
@@ -685,7 +685,7 @@ export default function HomePage() {
                   You earn
                 </div>
                 <p style={{ fontSize: '14.5px', lineHeight: 1.55, color: '#666', margin: 0 }}>
-                  It clears verification, and you keep 70% of the media spend.
+                  It clears verification, and you keep 60% of the media spend.
                 </p>
               </div>
             </div>
@@ -1636,7 +1636,7 @@ export default function HomePage() {
                 >
                   {[
                     'Earn from real wait time',
-                    '70% of verified media spend',
+                    '60% of verified media spend',
                     'Cash, USDC, or compute credits',
                     'Stay in your terminal — no workflow change',
                   ].map((li) => (
@@ -1726,7 +1726,7 @@ export default function HomePage() {
                         color: '#0a0a0a',
                       }}
                     >
-                      70%
+                      60%
                     </span>
                     <span
                       style={{
@@ -1751,7 +1751,7 @@ export default function HomePage() {
                   >
                     <div
                       style={{
-                        width: '70%',
+                        width: '60%',
                         background: '#0a0a0a',
                         transformOrigin: 'left center',
                         transform: 'scaleX(1)',

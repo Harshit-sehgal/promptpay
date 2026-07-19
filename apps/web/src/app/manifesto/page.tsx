@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Manifesto — WaitLayer',
   description:
-    'WaitLayer Manifesto — developer attention is sacred, privacy is non-negotiable, and creators deserve 70% of the value they generate.',
+    'WaitLayer Manifesto — developer attention is sacred, privacy is non-negotiable, and creators deserve 60% of the value they generate.',
 };
 
 export default function ManifestoPage() {
@@ -84,10 +84,10 @@ export default function ManifestoPage() {
               fontWeight: 400,
             }}
           >
-            3. The 70% Revenue Share Standard
+            3. The 60% Revenue Share Standard
           </h2>
           <p>
-            Platforms take too much. We commit to a permanent model where the developers receive 70%
+            Platforms take too much. We commit to a permanent model where the developers receive 60%
             of every sponsor dollar spent. By rewarding engineers fairly, we build a sustainable
             attention marketplace where sponsors reach highly-engaged professionals, and builders
             offset their tooling costs.
