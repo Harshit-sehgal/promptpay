@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
-import { mapToolToSignals } from './detector-adapters';
+import { mapToolToSignals, resolveAdapter } from './detector-adapters';
 
 export interface WaitStateDetectorOptions {
   /** Callback to read the configurable inactivity timeout (ms). Default 15_000. */
@@ -28,6 +28,14 @@ export interface WaitStateEvent {
   signals: WaitSignal[];
   /** Version of the detector that produced these signals. */
   detectorVersion: string;
+  /**
+   * When true the wait is a local-only "shadow" detection excluded from
+   * monetization. Generic inactivity is a weak heuristic, not proof of AI
+   * generation, so an inactivity-only wait is shadowed until corroborated by
+   * a stronger signal (ai_generation / task / terminal, …). Adapters may also
+   * force this via `DetectorAdapter.shadowOnly`.
+   */
+  shadow?: boolean;
 }
 
 /**
@@ -64,6 +72,8 @@ export class WaitStateDetector {
   private inactivityTimer?: NodeJS.Timeout;
   private lastEditTime = 0;
   private getInactivityTimeoutMs: () => number;
+  /** Whether the active wait is a shadow (non-monetizable) detection. */
+  private waitShadow = false;
 
   /** Tracks whether we are currently inside an inferred wait state. */
   private inWait = false;
@@ -255,8 +265,12 @@ export class WaitStateDetector {
     const editor = vscode.window.activeTextEditor;
 
     if (editor && idleTime >= inactivityThresholdMs) {
-      // User has stopped typing for 4+ seconds while editor is open and focused.
-      // This is a strong signal that AI is generating/thinking.
+      // User has stopped typing for the inactivity threshold (default ~15s)
+      // while a file editor is open and focused. Editor inactivity is only a
+      // WEAK heuristic for AI generation — it is just as consistent with the
+      // user reading docs or thinking. It is therefore treated as a shadow
+      // (non-monetizable) signal unless corroborated by stronger evidence
+      // (ai_generation / task / terminal).
       this.enterWait('inactivity');
     }
 
@@ -275,13 +289,24 @@ export class WaitStateDetector {
     this.waitStateId = generateWaitStateId();
     this.waitTool = tool;
 
+    const adapter = resolveAdapter(tool);
+    const signals = adapter.signals;
+    // Generic inactivity is a weak heuristic, not proof of AI generation. A
+    // wait whose ONLY signal is inactivity (or whose adapter is flagged
+    // shadowOnly) is kept in local shadow mode — excluded from monetization
+    // until corroborated by a stronger signal (ai_generation / task / terminal).
+    const onlyInactivity = signals.length === 1 && signals[0].type === 'inactivity';
+    const shadow = adapter.shadowOnly === true || onlyInactivity;
+    this.waitShadow = shadow;
+
     const event: WaitStateEvent = {
       startTime: this.waitStart,
       durationMs: 0, // updated at end
       tool,
       waitStateId: this.waitStateId,
-      signals: mapToolToSignals(tool),
+      signals,
       detectorVersion: DETECTOR_VERSION,
+      shadow,
     };
 
     // Emit signal for external listeners (extension.ts uses onWaitStateStart)
@@ -311,6 +336,7 @@ export class WaitStateDetector {
       waitStateId: this.waitStateId,
       signals: mapToolToSignals(this.waitTool),
       detectorVersion: DETECTOR_VERSION,
+      shadow: this.waitShadow,
     };
 
     this.emitSignal({ type: 'wait_end', event });

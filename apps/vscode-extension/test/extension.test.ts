@@ -216,7 +216,7 @@ describe('extension reportFalseWait command', () => {
     await mock.commands.get('waitlayer.reportFalseWait')?.();
 
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
-    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-wait-1');
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-wait-1', undefined);
     expect(mock.showInformationMessage).toHaveBeenCalledWith(
       'WaitLayer: thanks — this wait has been flagged as a false detection',
     );
@@ -246,6 +246,23 @@ describe('extension reportFalseWait command', () => {
     await mock.commands.get('waitlayer.reportFalseWait')?.();
 
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
-    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-b');
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-b', undefined);
+  });
+
+  it('forwards an optional reason to flagFalsePositive', async () => {
+    await activateAndClearBootState();
+    const event = {
+      startTime: Date.now(),
+      durationMs: 25,
+      tool: 'task',
+      waitStateId: 'fp-reason',
+    };
+    mock.signalHandler?.({ type: 'wait_start', event });
+
+    const reason = 'Just reading docs, not AI';
+    await mock.commands.get('waitlayer.reportFalseWait')?.(reason);
+
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-reason', reason);
   });
 });

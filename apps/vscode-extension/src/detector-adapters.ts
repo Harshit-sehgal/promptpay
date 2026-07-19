@@ -18,6 +18,13 @@ export interface DetectorAdapter {
   readonly signals: WaitSignal[];
   /** Whether this adapter handles the given wait cause / tool name. */
   matches(toolName: string): boolean;
+  /**
+   * When true, waits produced by this adapter are "shadow" detections: kept
+   * local and excluded from monetization until corroborated by a stronger
+   * signal. Set for weak heuristics (e.g. generic inactivity) whose only
+   * signal is `inactivity` and which are NOT reliable proof of AI generation.
+   */
+  readonly shadowOnly?: boolean;
 }
 
 /** A static adapter: fixed tool set, fixed signal list. */
@@ -26,6 +33,7 @@ class StaticAdapter implements DetectorAdapter {
     public readonly tool: string,
     public readonly signals: WaitSignal[],
     private readonly aliases: string[] = [],
+    public readonly shadowOnly: boolean = false,
   ) {}
 
   matches(toolName: string): boolean {
@@ -47,15 +55,20 @@ export const clineAdapter = new StaticAdapter('cline', [{ type: 'ai_generation' 
 export const aiderAdapter = new StaticAdapter('aider', [{ type: 'ai_generation' }], ['aider']);
 export const terminalAdapter = new StaticAdapter('terminal', [{ type: 'lifecycle_event' }]);
 export const taskAdapter = new StaticAdapter('task', [{ type: 'active_task' }]);
-export const inactivityAdapter = new StaticAdapter('inactivity', [{ type: 'inactivity' }]);
+export const inactivityAdapter = new StaticAdapter(
+  'inactivity',
+  [{ type: 'inactivity' }],
+  [],
+  true,
+);
 export const manualAiAdapter = new StaticAdapter(
   'ai',
   [{ type: 'ai_generation' }],
   ['ai', 'manual'],
 );
 
-/** Fallback adapter — NEVER emits `ai_generation`. */
-export const defaultAdapter = new StaticAdapter('unknown', [{ type: 'inactivity' }]);
+/** Fallback adapter — NEVER emits `ai_generation`. Shadow-only (weak heuristic). */
+export const defaultAdapter = new StaticAdapter('unknown', [{ type: 'inactivity' }], [], true);
 
 /**
  * Ordered adapter registry. `manualAiAdapter` is first so its `ai`/`manual`

@@ -82,3 +82,55 @@ describe('WaitStateDetector — categorized signals', () => {
     }
   });
 });
+
+describe('WaitStateDetector — shadow (non-monetizable) waits (P1.14 / P2.5)', () => {
+  let detector: WaitStateDetector;
+
+  beforeEach(() => {
+    mock.taskStart = undefined;
+    mock.taskEnd = undefined;
+    detector = new WaitStateDetector({ getInactivityTimeoutMs: () => 15_000 });
+  });
+
+  /** Triggers a manual wait and returns the emitted wait_start event. */
+  function captureWaitStart(tool: string): WaitStateEvent {
+    const events: WaitStateEvent[] = [];
+    detector.onWaitStateStart((e) => events.push(e));
+    detector.triggerManualWait(tool);
+    return events[0];
+  }
+
+  it('marks an inactivity-only wait as shadow', () => {
+    const event = captureWaitStart('inactivity');
+    expect(event.shadow).toBe(true);
+    // The signal set is unchanged — still a plain inactivity signal.
+    expect(event.signals).toEqual([{ type: 'inactivity' }]);
+  });
+
+  it('marks an unknown-tool wait (default adapter, shadowOnly) as shadow', () => {
+    const event = captureWaitStart('some-unknown-tool');
+    expect(event.shadow).toBe(true);
+    expect(event.signals).toEqual([{ type: 'inactivity' }]);
+  });
+
+  it('does NOT mark an ai_generation wait as shadow', () => {
+    const event = captureWaitStart('codex');
+    expect(event.shadow).toBeFalsy();
+    expect(event.signals).toEqual([{ type: 'ai_generation' }]);
+  });
+
+  it('does NOT mark a task wait as shadow', () => {
+    const event = captureWaitStart('task');
+    expect(event.shadow).toBeFalsy();
+    expect(event.signals).toEqual([{ type: 'active_task' }]);
+  });
+  it('carries the shadow flag through to the matching wait_end event', () => {
+    detector.triggerManualWait('inactivity');
+    const ends: WaitStateEvent[] = [];
+    detector.onSignal((s) => {
+      if (s.type === 'wait_end') ends.push(s.event);
+    });
+    detector.endManualWait();
+    expect(ends[0].shadow).toBe(true);
+  });
+});

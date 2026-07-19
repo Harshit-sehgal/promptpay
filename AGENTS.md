@@ -1005,3 +1005,54 @@ P1 #12 (full CI matrix / Docker smoke tests), P1 #13 (migration validation),
 P1 #15 (JWT rotation end-to-end), P1 #16 (CSP/security headers live
 verification), P1 #17 (PromptPay vs WaitLayer naming), P1 #18 (stale artifact
 cleanup), and P1 #19 (trait composition tests).
+
+## 2026-07-20 — Remaining assessment items closed (code-complete + gate green)
+
+A continuation pass closed the remaining code-level assessment items (the
+expanded "fix all the remaining things" objective). All changes are verified by
+the full local quality gate — **`pnpm typecheck` 14/14, `pnpm lint` 9/9 (API now
+0 warnings), `pnpm build` 9/9, and tests: shared 72, web 175, vscode 74+1
+skipped, cli 49, api 1140 (incl. DB-backed integration).**
+
+### Items closed this session (with evidence)
+
+- **P1.2** cross-currency auction inventory weighting — `packages/shared/src/auction.ts` (`selectCampaignIndex` weighted by eligible-campaign count per currency group; bigint-safe rejection sampling); `auction.spec.ts` proves sparse-vs-dense currency no longer equal. (shared 72 ✅)
+- **P1.4** mixed-currency `byCurrency` rendering — web screens already iterate `byCurrency` maps; no deprecated scalar is the sole source of truth on any web client. (web 175 ✅)
+- **P1.11** payout-fence telemetry — `apps/api/src/admin/admin-payouts.trait.ts` + `admin.dto.ts` (`FencedAccountDto`/`FencedAccountOwnerDto`, `ReleasePayoutFenceResponseDto` surface `reconciliationAttempts`/`lastReconciliationAt`/`escalatedAt`); `admin.service.spec.ts` 47 ✅.
+- **P1.12** webhook payload minimize + unsupported-event retention — `stripe-webhook.controller.ts` stores a minimized payload (`id/type/created/dataObjectId/dataObjectStatus` + SHA-256 `rawHash`), keeps full event JSON out; unsupported types retained as `pending_review`. **Regression fixed:** the reclaim cron (`webhook-reclaim-cron.service.ts`) previously cast the minimized `payload` as a full `Stripe.Event` (broken for supported-event crash recovery); it now reconstructs the full event via `StripeProvider.getEvent(id)` (P1.12 intent preserved — full event never stored). `stripe-webhook.spec.ts` assertion corrected to `pending_review`. (api 1140 ✅)
+- **P1.13** INR per-currency policy + round-trip — `packages/shared/src/currency.ts` (`campaignMinimumBudgetMinor/Maximum/Bid` per currency; INR = ₹80 crore clarified); `currency.spec.ts` round-trip + semantics. (shared 72 ✅) _`currency.spec.ts` also hardened with `Record<string, bigint>` to keep `primaryCurrency` indexing typecheck-clean._
+- **P1.14** inactivity shadow mode — `apps/vscode-extension/src/detector-adapters.ts` (`shadowOnly`), `wait-detector.ts` (`shadow` flag on `inactivity`-only waits), `extension.ts` (`reportFalseWait` accepts `reason`). (vscode 74+1skipped ✅)
+- **P1.15** tool-specific detector adapters — `detector-adapters.ts` (`DetectorAdapter` interface + 9 adapters + `resolveAdapter`/`mapToolToSignals`); `detector-adapters.spec.ts` 7 ✅. (vscode ✅)
+- **P1.16** detector-quality dataset — `packages/shared/src/detector-quality.ts` + `detector-quality.dataset.ts` (22 samples) + `detector-quality.spec.ts` 6 ✅. (shared ✅)
+- **P1.17** detector rollback (shadow) — `shadowOnly` adapters + `defaultAdapter` shadow; staged rollout/shadow path exists. (vscode ✅)
+- **P1.18** false-positive reason — `api-client.ts` `flagFalsePositive(waitStateId, reason?)`; `extension.ts` forwards `reason`; spec proves forwarding. (vscode ✅)
+- **P1.20** CI separation — `ci.yml` build-and-test → 10 parallel job categories; YAML validated.
+- **P1.22** security blocking — `ci.yml` security job `continue-on-error: false` (verified).
+- **P1.23** staging gate — `.github/workflows/staging.yml` (migrate-staging / staging-smoke / promote-production w/ approval envs) + `scripts/staging-smoke.mjs`; YAML + `node --check` clean.
+- **P1.24** durable metrics — `metrics.service.ts` `toPrometheus()` bigint-exact; `metrics.service.prometheus.spec.ts` 5 ✅; `observability.controller.ts` returns Prometheus on `text/plain`.
+- **P1.25** alerts dedupe/cooldown + spike wiring — `alerts.service.ts` `sendAlert` (15-min cooldown) + `recordRate`; `fraud.service.ts` CTR-spike, `extension.service.ts` false-positive-spike; specs 7 + 47 ✅.
+- **P2.2** unified state machines — `campaign/creative-state-machine.ts` (`CREATIVE_TRANSITIONS` + `validateCreativeTransition`, spec 31-ish across both) and `admin/admin-recovery-debt-state-machine.ts` (`RECOVERY_DEBT_TRANSITIONS` + `validateRecoveryDebtTransition`); the recovery-debt validator is wired fail-closed into `resolveRecoveryDebtCase`/`openRecoveryDebtCase`. (`payout-state-machine.ts` + `CAMPAIGN_TRANSITIONS` pre-existed.) Creative call sites remain intentionally idempotent (documented in the module). (api 1140 ✅)
+- **P2.5** stale-comment cleanup — `wait-detector.ts` misleading "4+ seconds / strong signal" comment removed; reclaim cron warn copy clarified. (lint 0 warnings)
+- **P2.7** homepage copy soften — `apps/web/src/app/page.tsx` "Claude Code first" → inclusive "Built for Claude Code, Cursor, and your terminal". (web 175 ✅)
+
+The original top-10 (from the prior session) remain verified: `__Host-access_token`
+detection (P0.3/P0.4), 70%→60% homepage claim (P2.7), bias-free
+`randomBigIntBelow` (P1.3), CI definition (P0.5), INR value (P1.13), detector
+adapters (P1.15), detector-quality dataset (P1.16), payout reconciliation (P1.10),
+staging gate (P1.23), durable metrics (P1.24).
+
+### Environment-blocked (NOT verifiable in this sandbox)
+
+- **Item 4 — green CI run on the exact SHA.** `gh` CLI absent, `act` not
+  installed, no GitHub auth; the working tree also has uncommitted files (the
+  P1.10/P1.12 regression fixes above). The _local_ equivalent of every CI job
+  category is green (typecheck/lint/build/test/e2e/security all pass), but an
+  actual GitHub Actions run on the pinned SHA cannot be triggered here.
+- **Item 8 (live-provider half) — real Stripe/PayPal/Wise test-mode lifecycles**
+  (webhook-before-response, duplicated initiation, provider-side idempotency,
+  mismatched amount/currency, timeouts). No provider test-mode credentials are
+  available. The DB-backed `payout-sandbox-run.spec.ts` (stub/minimized payload
+  path) is green; only the live-provider end-to-end lifecycles are unverified.
+
+No code deliverable is outstanding. The two blocked items are external
+infrastructure / credential constraints, not source defects.

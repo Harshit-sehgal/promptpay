@@ -18,6 +18,7 @@ import {
   sanitizeOptionalString,
   toTerminalRecoveryDebtStatus,
 } from './admin.constants';
+import { validateRecoveryDebtTransition } from './admin-recovery-debt-state-machine';
 
 export class AdminDevicesTrait {
   declare prisma: PrismaService;
@@ -374,6 +375,9 @@ export class AdminDevicesTrait {
           orderBy: { createdAt: 'desc' },
         });
         if (existing) {
+          // Fail-closed pre-check against the recovery-debt state machine (P2.2):
+          // re-classifying an active case (open ↔ in_collections) is allowed.
+          validateRecoveryDebtTransition(existing.status, status);
           return tx.recoveryDebtCase.update({
             where: { id: existing.id },
             data: {
@@ -441,6 +445,9 @@ export class AdminDevicesTrait {
       where: { id: params.caseId },
     });
     if (!existing) throw new BadRequestException('Recovery debt case not found');
+    // Fail-closed pre-check against the recovery-debt state machine (P2.2):
+    // only an ACTIVE case may be resolved to a terminal status.
+    validateRecoveryDebtTransition(existing.status, terminalStatus);
     const updated = await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.recoveryDebtCase.updateMany({
         where: {

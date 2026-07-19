@@ -50,4 +50,42 @@ describe('AlertsService (P1.25)', () => {
     alerts.alertPayoutFenceAge({ payoutId: 'req_1', ageMs: 9_000_000 });
     expect(metrics.getCounter('alert{event=payout_fence_age}')).toBe(1);
   });
+
+  it('suppresses duplicate alerts within the cooldown window', () => {
+    delete process.env.SENTRY_DSN;
+    const metrics = new MetricsService();
+    const alerts = new AlertsService(metrics);
+    const first = alerts.sendAlert('ledger_discrepancy', 'k1', { totalDiffMinor: '500' });
+    const second = alerts.sendAlert('ledger_discrepancy', 'k1', { totalDiffMinor: '500' });
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    // Metric (and Sentry/side effects) only fire once.
+    expect(metrics.getCounter('alert{event=ledger_discrepancy}')).toBe(1);
+  });
+
+  it('still fires a distinct alert (different key) within the cooldown', () => {
+    delete process.env.SENTRY_DSN;
+    const metrics = new MetricsService();
+    const alerts = new AlertsService(metrics);
+    const first = alerts.sendAlert('ledger_discrepancy', 'k1', {});
+    const distinct = alerts.sendAlert('ledger_discrepancy', 'k2', {});
+    expect(first).toBe(true);
+    expect(distinct).toBe(true);
+    expect(metrics.getCounter('alert{event=ledger_discrepancy}')).toBe(2);
+  });
+
+  it('wires a declared alert (payout_escalation) through sendAlert', () => {
+    delete process.env.SENTRY_DSN;
+    const metrics = new MetricsService();
+    const alerts = new AlertsService(metrics);
+    const spy = vi.spyOn(alerts, 'sendAlert');
+    alerts.alertPayoutEscalation({ payoutId: 'req_x', ageMs: 99, reason: 'still_processing' });
+    expect(spy).toHaveBeenCalledWith(
+      'payout_escalation',
+      'payout:req_x',
+      expect.objectContaining({ payoutId: 'req_x', reason: 'still_processing' }),
+    );
+    // The wired path still forwards the underlying alert once.
+    expect(metrics.getCounter('alert{event=payout_escalation}')).toBe(1);
+  });
 });

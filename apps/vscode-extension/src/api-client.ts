@@ -258,8 +258,13 @@ export class ApiClient {
    * Bearer token, so no event signature is required — mirror the simple
    * signed-POST-free calls and let `post` attach the auth header.
    */
-  async flagFalsePositive(waitStateId: string): Promise<void> {
-    await this.post(`/extension/wait-state/${waitStateId}/false-positive`, {});
+  async flagFalsePositive(waitStateId: string, reason?: string): Promise<void> {
+    const payload: Record<string, unknown> = {};
+    // Optional free-text reason the developer gave when flagging the wait.
+    // Omitted from the payload entirely when not provided, so older callers
+    // (and server builds) that don't expect it stay backward compatible.
+    if (reason !== undefined) payload.reason = reason;
+    await this.post(`/extension/wait-state/${waitStateId}/false-positive`, payload);
   }
 
   async requestAd(input: {

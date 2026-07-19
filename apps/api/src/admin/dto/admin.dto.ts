@@ -479,6 +479,121 @@ export interface ReleasePayoutFenceOptions {
   providerTxId?: string;
   resolution?: string;
 }
+/**
+ * Reconciliation telemetry surfaced on fenced-account views (P1.11). These
+ * mirror the P1.10 columns on {@link PayoutRequest} and let operators triage a
+ * stuck initiation fence without a second lookup.
+ */
+export class FencedAccountOwnerDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() email!: string;
+}
+export class FencedAccountDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() userId!: string;
+  @ApiProperty() provider!: string;
+  @ApiProperty() destination!: string;
+  @ApiProperty() currency!: string;
+  @ApiProperty() isVerified!: boolean;
+  @ApiProperty() isActive!: boolean;
+  @ApiProperty() isFrozen!: boolean;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'Id of the in-flight payout holding the durable initiation fence.',
+  })
+  @IsOptional()
+  initiationPayoutId!: string | null;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: FencedAccountOwnerDto,
+    description: 'Owner of the fenced payout account.',
+  })
+  @IsOptional()
+  user!: FencedAccountOwnerDto | null;
+
+  @ApiProperty({
+    description:
+      'Number of provider reconciliation poll attempts recorded against the fenced payout.',
+  })
+  reconciliationAttempts!: number;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'ISO-8601 timestamp of the most recent reconciliation poll for the fenced payout.',
+  })
+  @IsOptional()
+  lastReconciliationAt!: string | null;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'ISO-8601 timestamp when the fenced payout was escalated for manual review.',
+  })
+  @IsOptional()
+  escalatedAt!: string | null;
+}
+
+/** Paginated response for {@link AdminController.getFencedAccounts}. */
+export class FencedAccountListResponseDto {
+  @ApiProperty({ type: () => [FencedAccountDto] })
+  items!: FencedAccountDto[];
+
+  @ApiProperty() total!: number;
+  @ApiProperty() page!: number;
+  @ApiProperty() limit!: number;
+}
+
+/**
+ * Response for {@link AdminController.releasePayoutFence}. Carries the cleared
+ * account plus the reconciliation telemetry of the payout whose fence was
+ * released, so operators retain the context after the link is severed.
+ */
+export class ReleasePayoutFenceResponseDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() userId!: string;
+  @ApiProperty() provider!: string;
+  @ApiProperty() destination!: string;
+  @ApiProperty() currency!: string;
+  @ApiProperty() isVerified!: boolean;
+  @ApiProperty() isActive!: boolean;
+  @ApiProperty() isFrozen!: boolean;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'Always null after a successful fence release.',
+  })
+  @IsOptional()
+  initiationPayoutId!: string | null;
+
+  @ApiProperty({
+    description:
+      'Number of provider reconciliation poll attempts recorded against the released payout.',
+  })
+  reconciliationAttempts!: number;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description:
+      'ISO-8601 timestamp of the most recent reconciliation poll for the released payout.',
+  })
+  @IsOptional()
+  lastReconciliationAt!: string | null;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'ISO-8601 timestamp when the released payout was escalated for manual review.',
+  })
+  @IsOptional()
+  escalatedAt!: string | null;
+}
 
 export class ResolveDeadLetterDto {
   @ApiProperty({

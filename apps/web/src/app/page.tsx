@@ -281,7 +281,7 @@ export default function HomePage() {
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
-                    <span>Claude Code first</span>
+                    <span>Built for Claude Code, Cursor, and your terminal</span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
                     <span style={{ color: '#6b6b6b' }}>/</span>

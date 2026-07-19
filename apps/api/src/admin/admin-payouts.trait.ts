@@ -4,8 +4,19 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
 import { PayoutService } from '../payout/payout.service';
-import { ReleasePayoutFenceOptions } from './dto/admin.dto';
+import {
+  FencedAccountListResponseDto,
+  ReleasePayoutFenceOptions,
+  ReleasePayoutFenceResponseDto,
+} from './dto/admin.dto';
 export type { ReleasePayoutFenceOptions };
+/** Minimal shape of the reconciliation columns we surface on fenced views. */
+interface ReconciliationTelemetry {
+  id: string;
+  reconciliationAttempts: number;
+  lastReconciliationAt: Date | null;
+  escalatedAt: Date | null;
+}
 
 export class AdminPayoutsTrait {
   declare prisma: PrismaService;
@@ -371,7 +382,10 @@ export class AdminPayoutsTrait {
    * from new payouts and from being frozen until the fence is cleared.
    * Operators use this for operational monitoring and reconciliation.
    */
-  async getFencedAccounts(params?: { page?: number; limit?: number }) {
+  async getFencedAccounts(params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<FencedAccountListResponseDto> {
     const page = Math.max(1, params?.page ?? 1);
     const limit = Math.min(100, Math.max(1, params?.limit ?? 50));
     const skip = (page - 1) * limit;
@@ -387,7 +401,43 @@ export class AdminPayoutsTrait {
         where: { initiationPayoutId: { not: null } },
       }),
     ]);
-    return { items, total, page, limit };
+
+    // Batch-load reconciliation telemetry for each fenced account's in-flight
+    // (initiation) payout. Fenced accounts always carry an initiationPayoutId
+    // by definition, so the associated PayoutRequest is the authoritative
+    // source for reconciliationAttempts / lastReconciliationAt / escalatedAt.
+    const initiationIds = items
+      .map((a) => a.initiationPayoutId)
+      .filter((id): id is string => Boolean(id));
+    const reconciliationById = new Map<string, ReconciliationTelemetry>();
+    if (initiationIds.length > 0) {
+      const payouts = await this.prisma.payoutRequest.findMany({
+        where: { id: { in: initiationIds } },
+        select: {
+          id: true,
+          reconciliationAttempts: true,
+          lastReconciliationAt: true,
+          escalatedAt: true,
+        },
+      });
+      for (const payout of payouts) {
+        reconciliationById.set(payout.id, payout);
+      }
+    }
+
+    const enriched = items.map((account) => {
+      const telemetry = account.initiationPayoutId
+        ? reconciliationById.get(account.initiationPayoutId)
+        : undefined;
+      return {
+        ...account,
+        reconciliationAttempts: telemetry?.reconciliationAttempts ?? 0,
+        lastReconciliationAt: telemetry?.lastReconciliationAt?.toISOString() ?? null,
+        escalatedAt: telemetry?.escalatedAt?.toISOString() ?? null,
+      };
+    });
+
+    return { items: enriched, total, page, limit };
   }
 
   /**
@@ -397,7 +447,9 @@ export class AdminPayoutsTrait {
    * failure or a crashed worker). It must only be used after the operator has
    * confirmed the provider outcome for the referenced payout.
    */
-  async releasePayoutFence(options: ReleasePayoutFenceOptions) {
+  async releasePayoutFence(
+    options: ReleasePayoutFenceOptions,
+  ): Promise<ReleasePayoutFenceResponseDto> {
     const { payoutAccountId, reviewerId, reviewerRole, reason, providerTxId, resolution } = options;
     const account = await this.prisma.payoutAccount.findUnique({
       where: { id: payoutAccountId },
@@ -420,7 +472,12 @@ export class AdminPayoutsTrait {
       // its fence could allow a second concurrent initiation.
       const fencedPayout = await tx.payoutRequest.findUnique({
         where: { id: initiationPayoutId },
-        select: { status: true },
+        select: {
+          status: true,
+          reconciliationAttempts: true,
+          lastReconciliationAt: true,
+          escalatedAt: true,
+        },
       });
       if (!fencedPayout) {
         throw new BadRequestException(
@@ -464,9 +521,19 @@ export class AdminPayoutsTrait {
         },
         tx,
       );
-      return row;
+      return {
+        row,
+        telemetry: {
+          reconciliationAttempts: fencedPayout.reconciliationAttempts ?? 0,
+          lastReconciliationAt: fencedPayout.lastReconciliationAt?.toISOString() ?? null,
+          escalatedAt: fencedPayout.escalatedAt?.toISOString() ?? null,
+        },
+      };
     });
-    return updated;
+    return {
+      ...updated.row,
+      ...updated.telemetry,
+    };
   }
 
   /**

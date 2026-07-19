@@ -7,6 +7,7 @@ import { ComplianceService } from '../compliance/compliance.service';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { AlertsService } from '../observability/alerts.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { ServedAd } from './extension.constants';
 import { ExtensionAdTrait } from './extension-ad.trait';
@@ -23,6 +24,7 @@ export class ExtensionService {
     public compliance: ComplianceService,
     public googleVerifier: GoogleTokenVerifier,
     public runtimeConfig: RuntimeConfigService,
+    public alerts?: AlertsService,
   ) {}
   adCache: LRUCache<string, { ad: ServedAd }> = new LRUCache<
     string,
@@ -41,7 +43,9 @@ export class ExtensionService {
 }
 
 export interface ExtensionService
-  extends ExtensionDeviceReportTrait, ExtensionAdTrait, ExtensionWaitTrait {}
+  extends ExtensionDeviceReportTrait, ExtensionAdTrait, ExtensionWaitTrait {
+  alerts?: AlertsService;
+}
 
 for (const name of Object.getOwnPropertyNames(ExtensionDeviceReportTrait.prototype)) {
   if (name === 'constructor') continue;

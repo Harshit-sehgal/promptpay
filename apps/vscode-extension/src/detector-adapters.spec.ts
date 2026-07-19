@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_TOOL_VALUES,
   claudeCodeAdapter,
+  codexAdapter,
   cursorAdapter,
   defaultAdapter,
   DETECTOR_ADAPTERS,
+  inactivityAdapter,
   manualAiAdapter,
   mapToolToSignals,
   resolveAdapter,
@@ -54,5 +56,24 @@ describe('DetectorAdapter registry (P1.15)', () => {
     expect(DETECTOR_ADAPTERS).toContain(manualAiAdapter);
     // The fallback adapter is resolved outside the registry.
     expect(resolveAdapter('definitely-unknown')).toBe(defaultAdapter);
+  });
+});
+
+describe('DetectorAdapter shadowOnly (P1.14 / P2.5)', () => {
+  it('flags the inactivity adapter as shadow-only (weak heuristic)', () => {
+    expect(inactivityAdapter.shadowOnly).toBe(true);
+    expect(resolveAdapter('inactivity').shadowOnly).toBe(true);
+  });
+
+  it('flags the fallback default adapter as shadow-only', () => {
+    expect(defaultAdapter.shadowOnly).toBe(true);
+    expect(resolveAdapter('some-unknown-tool').shadowOnly).toBe(true);
+  });
+
+  it('does NOT mark strong-signal adapters (ai_generation / task / terminal) as shadow-only', () => {
+    expect(claudeCodeAdapter.shadowOnly).not.toBe(true);
+    expect(taskAdapter.shadowOnly).not.toBe(true);
+    expect(terminalAdapter.shadowOnly).not.toBe(true);
+    expect(resolveAdapter('codex').shadowOnly).not.toBe(true);
   });
 });

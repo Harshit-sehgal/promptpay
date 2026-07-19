@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { Request } from 'express';
 import Stripe from 'stripe';
 import {
@@ -136,15 +137,32 @@ export class StripeWebhookController implements OnModuleInit {
 
     // 1. Insert or detect replay
     try {
-      // Validate the externally-supplied event shape before persisting it to
-      // the JSON column (rejects prototype-pollution / non-serializable input).
-      assertSafeJson(event, `event.${event.id}`);
+      // Persist a minimized payload rather than the full Stripe event. The raw
+      // body is integrity-checked via a SHA-256 hash (replay / signature
+      // corroboration) and only the fields an operator needs for triage are
+      // retained; the full event JSON is never stored (keeps the
+      // webhook_events table small and avoids retaining PII we don't need).
+      const dataObject = (event.data?.object ?? {}) as { id?: string; status?: string };
+      const rawHash = createHash('sha256')
+        .update(Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody))
+        .digest('hex');
+      const minimizedPayload = {
+        id: event.id,
+        type: event.type,
+        created: event.created ?? null,
+        livemode: event.livemode ?? null,
+        api_version: event.api_version ?? null,
+        dataObjectId: dataObject.id ?? null,
+        dataObjectStatus: dataObject.status ?? null,
+        rawHash,
+      };
+      assertSafeJson(minimizedPayload, `event.${event.id}`);
       await this.prisma.webhookEvent.create({
         data: {
           provider: 'stripe',
           eventId: event.id,
           eventType: event.type,
-          payload: event as unknown as Prisma.InputJsonValue,
+          payload: minimizedPayload as unknown as Prisma.InputJsonValue,
           processingStatus: 'pending',
         },
       });
@@ -302,15 +320,18 @@ export class StripeWebhookController implements OnModuleInit {
         break;
       }
       default:
-        // Mark unhandled events as processed so the webhook_event row
-        // converges to a terminal state instead of stuck in 'processing'
-        // (which the 30-min stall-reclaim would otherwise re-pull forever,
-        // and Stripe would re-deliver on top of that). We deliberately do
-        // NOT process the payload — just acknowledge receipt.
-        this.logger.log(`Unhandled Stripe event type: ${event.type}`);
+        // Unsupported event types are NOT auto-marked `processed`. Marking
+        // them processed would silently drop an event an operator may need to
+        // inspect (new Stripe event types, a misconfigured webhook filter,
+        // etc.). Instead retain them under a review status so an operator can
+        // triage; the minimized payload + rawHash persisted at ingest give
+        // them everything needed without the full event JSON.
+        this.logger.log(
+          `Unsupported Stripe event type: ${event.type} — retaining for operator review`,
+        );
         await this.prisma.webhookEvent.updateMany({
           where: { provider: 'stripe', eventId: event.id },
-          data: { processingStatus: 'processed', processedAt: new Date() },
+          data: { processingStatus: 'pending_review', processedAt: null },
         });
     }
   }

@@ -12,6 +12,7 @@ const mock = vi.hoisted(() => ({
   config: {} as Record<string, unknown>,
   secrets: {} as Record<string, string>,
   captured: [] as Array<Record<string, unknown>>,
+  bodies: [] as string[],
   deleted: [] as string[],
   inputs: [] as Array<string | undefined>,
   responses: [] as Array<{ status: number; body: string }>,
@@ -78,7 +79,9 @@ function fakeRequest(
     return {
       setTimeout: vi.fn(),
       on: vi.fn(),
-      write: vi.fn(),
+      write: (b: string) => {
+        mock.bodies.push(b);
+      },
       end: vi.fn(),
     };
   };
@@ -113,7 +116,7 @@ beforeEach(() => {
   mock.config = {};
   mock.secrets = {};
   mock.captured = [];
-  mock.deleted = [];
+  mock.bodies = [];
   mock.inputs = [];
   mock.responses = [];
   mock.storeHook = undefined;
@@ -433,5 +436,33 @@ describe('ApiClient — flagFalsePositive', () => {
     expect(opts.headers['Authorization']).toBe('Bearer tok-123');
     expect(opts.headers['X-Extension-Version']).toBe('0.0.1');
     expect(opts.headers['X-Tool-Type']).toBe('vscode');
+  });
+
+  it('includes the optional reason in the payload when provided', async () => {
+    mock.config['apiUrl'] = 'https://api.example.com/api/v1';
+    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+      accessToken: 'tok-123',
+      refreshToken: 'rt-456',
+    });
+    const client = makeClient();
+
+    await client.flagFalsePositive('wz-9', 'false alarm — reading docs');
+
+    expect(mock.bodies).toHaveLength(1);
+    expect(JSON.parse(mock.bodies[0])).toMatchObject({ reason: 'false alarm — reading docs' });
+  });
+
+  it('omits reason from the payload when not provided (backward compatible)', async () => {
+    mock.config['apiUrl'] = 'https://api.example.com/api/v1';
+    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+      accessToken: 'tok-123',
+      refreshToken: 'rt-456',
+    });
+    const client = makeClient();
+
+    await client.flagFalsePositive('wz-9');
+
+    expect(mock.bodies).toHaveLength(1);
+    expect(JSON.parse(mock.bodies[0])).not.toHaveProperty('reason');
   });
 });

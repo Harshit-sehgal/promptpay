@@ -121,7 +121,6 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
   let adminToken: string;
 
   beforeAll(async () => {
-    const previousRedisUrl = process.env.REDIS_URL;
     process.env.REDIS_URL = '';
 
     const moduleFixture: TestingModule = await Test.createTestingModule({

@@ -1,9 +1,12 @@
+import { createHash } from 'crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 import { StripeWebhookController } from './stripe-webhook.controller';
 
 function makeController(options: { depositDuplicate?: boolean } = {}) {
   const stripe = {
+    isEnabled: () => true,
+    verifyWebhookSignature: vi.fn(),
     getRefundDetails: vi.fn().mockResolvedValue({
       paymentIntentId: 'pi_money',
       amountMinor: 1000,
@@ -41,7 +44,16 @@ function makeController(options: { depositDuplicate?: boolean } = {}) {
         .mockResolvedValue([{ id: 'cash-refund-1', amountMinor: 1000n, currency: 'USD' }]),
       upsert: vi.fn().mockResolvedValue({ id: 'cash-orphan-1' }),
     },
-    webhookEvent: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    webhookEvent: {
+      create: vi.fn().mockResolvedValue({ id: 'wh-1' }),
+      findUnique: vi.fn().mockResolvedValue({
+        provider: 'stripe',
+        eventId: 'evt',
+        processingStatus: 'pending',
+        processedAt: null,
+      }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     campaign: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
     $executeRaw: vi.fn().mockResolvedValue(0),
     // The real handleRefund (and the Round 27 Fix 1 parent-restoration loop)
@@ -237,6 +249,70 @@ describe('StripeWebhookController money reconciliation', () => {
     expect(audit.logStrict).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'stripe_deposit_refund_required' }),
     );
+  });
+
+  it('persists only a minimized payload plus a raw hash, never the full event', async () => {
+    const event = {
+      id: 'evt_min_1',
+      type: 'checkout.session.completed',
+      created: 1_700_000_000,
+      livemode: false,
+      api_version: '2023-10-16',
+      data: { object: { id: 'cs_min_1', status: 'complete', amount_total: 2000 } },
+    };
+    const rawBody = JSON.stringify(event);
+    const { controller, prisma, stripe } = makeController();
+    stripe.verifyWebhookSignature = vi.fn().mockReturnValue(event);
+    const expectedHash = createHash('sha256').update(rawBody).digest('hex');
+
+    await controller.handleWebhook({
+      headers: { 'stripe-signature': 'signed' },
+      rawBody: Buffer.from(rawBody),
+    });
+
+    expect(prisma.webhookEvent.create).toHaveBeenCalledTimes(1);
+    const createCall = prisma.webhookEvent.create.mock.calls[0][0];
+    const stored = createCall.data.payload;
+    expect(stored).toEqual({
+      id: 'evt_min_1',
+      type: 'checkout.session.completed',
+      created: 1_700_000_000,
+      livemode: false,
+      api_version: '2023-10-16',
+      dataObjectId: 'cs_min_1',
+      dataObjectStatus: 'complete',
+      rawHash: expectedHash,
+    });
+    // The full event JSON must NOT be persisted — no nested `data` envelope
+    // and none of the original event's arbitrary fields survive.
+    expect(stored).not.toHaveProperty('data');
+    expect(stored).not.toHaveProperty('amount_total');
+  });
+
+  it('retains an unsupported event type for review instead of marking it processed', async () => {
+    const event = {
+      id: 'evt_unsupported_1',
+      type: 'customer.created',
+      created: 1_700_000_000,
+      livemode: false,
+      api_version: '2023-10-16',
+      data: { object: { id: 'cus_unsupported_1' } },
+    };
+    const { controller, prisma, stripe } = makeController();
+    stripe.verifyWebhookSignature = vi.fn().mockReturnValue(event);
+
+    await controller.handleWebhook({
+      headers: { 'stripe-signature': 'signed' },
+      rawBody: Buffer.from(JSON.stringify(event)),
+    });
+
+    const statuses = prisma.webhookEvent.updateMany.mock.calls.map(
+      (c) => c[0].data.processingStatus,
+    );
+    // Unsupported types are retained (pending_review) for operator triage and
+    // must never be silently auto-marked `processed`.
+    expect(statuses).not.toContain('processed');
+    expect(statuses).toContain('pending_review');
   });
   describe('processEvent dispatch coverage (switch arms)', () => {
     it('dispatches checkout.session.completed to handlePaymentSuccess', async () => {

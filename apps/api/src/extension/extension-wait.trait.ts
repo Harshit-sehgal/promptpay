@@ -8,6 +8,7 @@ import {
 import { Prisma, ToolTypeEnum } from '@waitlayer/db';
 
 import { PrismaService } from '../config/prisma.service';
+import { AlertsService } from '../observability/alerts.service';
 import {
   computeWaitConfidence,
   MINIMUM_WAIT_CONFIDENCE,
@@ -26,8 +27,14 @@ import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 export { computeWaitConfidence, MINIMUM_WAIT_CONFIDENCE, SIGNAL_WEIGHTS };
 export type { WaitSignal };
 
+// P1.25 alert spike tuning: how many false-positive reports within the trailing
+// window count as a "spike" (detector precision regression) worth alerting on.
+const FP_SPIKE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const FP_SPIKE_THRESHOLD = 5;
+
 export class ExtensionWaitTrait {
   declare prisma: PrismaService;
+  declare alerts?: AlertsService;
 
   // ── Wait State Events ──
   async recordWaitStateStart(
@@ -204,6 +211,13 @@ export class ExtensionWaitTrait {
     if (!start) throw new NotFoundException('Wait state not found');
     if (start.userId !== userId) {
       throw new ForbiddenException('You do not own this wait state');
+    }
+    // P1.25: alert on a burst of false-positive reports (detector precision
+    // regression) rather than every single one.
+    const burst =
+      this.alerts?.recordRate('wait_false_positive_spike', 'global', FP_SPIKE_WINDOW_MS) ?? 0;
+    if (burst >= FP_SPIKE_THRESHOLD) {
+      this.alerts?.sendAlert('wait_false_positive_spike', 'global', { windowCount: burst });
     }
     return this.prisma.waitStateEvent.update({
       where: { id: start.id },

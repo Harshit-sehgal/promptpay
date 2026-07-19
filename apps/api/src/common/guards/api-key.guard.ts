@@ -5,7 +5,6 @@ import { Reflector } from '@nestjs/core';
 import { UserRole } from '@waitlayer/db';
 
 import { ApiKeyService } from '../../developer/api-key.service';
-import { AuthenticatedPrincipal } from '../auth/principal';
 import { ALLOW_API_KEY, REQUIRED_API_KEY_SCOPES } from '../decorators/allow-api-key.decorator';
 
 interface RequestWithOptionalUser extends Request {

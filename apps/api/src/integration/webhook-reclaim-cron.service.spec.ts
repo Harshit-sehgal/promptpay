@@ -26,7 +26,14 @@ function makeMocks() {
   const eventBus = {
     dispatch: vi.fn().mockResolvedValue(undefined),
   };
-  return { prisma: prisma as any, eventBus: eventBus as any };
+  // The persisted webhookEvent row stores only a minimized payload; the reclaim
+  // cron reconstructs the full event from Stripe by id (P1.12).
+  const stripe = {
+    getEvent: vi.fn((eventId: string) =>
+      Promise.resolve({ id: eventId, type: 'checkout.session.completed', data: { object: {} } }),
+    ),
+  };
+  return { prisma: prisma as any, eventBus: eventBus as any, stripe: stripe as any };
 }
 
 const orphanRow = (id: string, ageMs: number) => ({
@@ -36,6 +43,12 @@ const orphanRow = (id: string, ageMs: number) => ({
   processingStatus: 'processing',
   payload: { id: `evt_${id}`, type: 'checkout.session.completed' },
   updatedAt: new Date(Date.now() - ageMs),
+});
+
+const fullEvent = (id: string) => ({
+  id: `evt_${id}`,
+  type: 'checkout.session.completed',
+  data: { object: {} },
 });
 
 describe('WebhookReclaimCronService (A-062)', () => {
@@ -53,8 +66,8 @@ describe('WebhookReclaimCronService (A-062)', () => {
   it('does nothing when explicitly disabled outside production', async () => {
     process.env.NODE_ENV = 'test';
     process.env.WEBHOOK_RECLAIM_CRON = 'false';
-    const { prisma, eventBus } = makeMocks();
-    const service = new WebhookReclaimCronService(prisma, eventBus);
+    const { prisma, eventBus, stripe } = makeMocks();
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
 
     const result = await service.reclaimOrphanedWebhooks();
 
@@ -66,18 +79,18 @@ describe('WebhookReclaimCronService (A-062)', () => {
   it('is enabled by default in production when the override is absent', async () => {
     process.env.NODE_ENV = 'production';
     delete process.env.WEBHOOK_RECLAIM_CRON;
-    const { prisma, eventBus } = makeMocks();
+    const { prisma, eventBus, stripe } = makeMocks();
     prisma.webhookEvent.seed([orphanRow('prod', 40 * 60 * 1000)]);
-    const service = new WebhookReclaimCronService(prisma, eventBus);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
 
     await expect(service.reclaimOrphanedWebhooks()).resolves.toEqual({ found: 1, requeued: 1 });
   });
 
   it('re-queues orphaned rows when enabled', async () => {
     process.env.WEBHOOK_RECLAIM_CRON = 'true';
-    const { prisma, eventBus } = makeMocks();
+    const { prisma, eventBus, stripe } = makeMocks();
     prisma.webhookEvent.seed([orphanRow('a', 40 * 60 * 1000)]);
-    const service = new WebhookReclaimCronService(prisma, eventBus);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
 
     const result = await service.reclaimOrphanedWebhooks();
 
@@ -94,17 +107,18 @@ describe('WebhookReclaimCronService (A-062)', () => {
         data: { processingStatus: 'pending' },
       }),
     );
+    expect(stripe.getEvent).toHaveBeenCalledWith('evt_a');
     expect(eventBus.dispatch).toHaveBeenCalledWith('stripe.webhook', {
-      event: orphanRow('a', 0).payload,
+      event: fullEvent('a'),
     });
   });
 
   it('ignores rows younger than the orphan age threshold', async () => {
     process.env.WEBHOOK_RECLAIM_CRON = 'true';
-    const { prisma, eventBus } = makeMocks();
+    const { prisma, eventBus, stripe } = makeMocks();
     // Updated only 5 minutes ago — within the 35-min reclaim threshold.
     prisma.webhookEvent.seed([orphanRow('b', 5 * 60 * 1000)]);
-    const service = new WebhookReclaimCronService(prisma, eventBus);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
 
     const result = await service.reclaimOrphanedWebhooks();
 
@@ -114,9 +128,9 @@ describe('WebhookReclaimCronService (A-062)', () => {
 
   it('re-queues multiple orphaned rows in one run', async () => {
     process.env.WEBHOOK_RECLAIM_CRON = 'true';
-    const { prisma, eventBus } = makeMocks();
+    const { prisma, eventBus, stripe } = makeMocks();
     prisma.webhookEvent.seed([orphanRow('a', 40 * 60 * 1000), orphanRow('b', 50 * 60 * 1000)]);
-    const service = new WebhookReclaimCronService(prisma, eventBus);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
 
     const result = await service.reclaimOrphanedWebhooks();
 
@@ -124,15 +138,16 @@ describe('WebhookReclaimCronService (A-062)', () => {
     expect(eventBus.dispatch).toHaveBeenCalledTimes(2);
   });
 
-  it('skips rows whose payload is not a parseable Stripe event', async () => {
+  it('skips rows whose payload is missing an event id', async () => {
     process.env.WEBHOOK_RECLAIM_CRON = 'true';
-    const { prisma, eventBus } = makeMocks();
+    const { prisma, eventBus, stripe } = makeMocks();
     prisma.webhookEvent.seed([{ ...orphanRow('bad', 40 * 60 * 1000), payload: null }]);
-    const service = new WebhookReclaimCronService(prisma, eventBus);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
 
     const result = await service.reclaimOrphanedWebhooks();
 
     expect(result).toEqual({ found: 1, requeued: 0 });
+    expect(stripe.getEvent).not.toHaveBeenCalled();
     expect(eventBus.dispatch).not.toHaveBeenCalled();
   });
 });

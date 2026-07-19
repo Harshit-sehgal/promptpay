@@ -191,9 +191,10 @@ describe('selectCampaignIndex — cross-currency safety', () => {
 });
 
 describe('selectCampaignIndex — inventory policy (P1.2)', () => {
-  it('gives each currency group equal overall serving probability (group-uniform, not count-weighted)', () => {
-    // 100 USD campaigns vs 1 JPY campaign. Under group-uniform selection the
-    // single JPY campaign must win ~50% of the time, NOT ~1%.
+  it('weights currency-group selection by eligible-campaign count (sparse currency no longer equal to dense)', () => {
+    // 100 USD campaigns vs 1 JPY campaign. Under count-weighted selection the
+    // single JPY campaign must win ~1/101 of the time (~1%), NOT ~50% as the
+    // old group-uniform pick gave it — proving sparse-currency gaming is gone.
     const campaigns = [
       ...Array.from({ length: 100 }, (_, i) => ({
         id: `usd-${i}`,
@@ -203,13 +204,39 @@ describe('selectCampaignIndex — inventory policy (P1.2)', () => {
       { id: 'jpy-1', currency: 'JPY', bidAmountMinor: 10n },
     ];
     let jpy = 0;
-    const N = 4000;
+    let usd = 0;
+    const N = 8000;
     for (let k = 0; k < N; k++) {
-      if (campaigns[selectCampaignIndex(campaigns)].currency === 'JPY') jpy++;
+      const c = campaigns[selectCampaignIndex(campaigns)];
+      if (c.currency === 'JPY') jpy++;
+      else usd++;
     }
-    const rate = jpy / N;
-    expect(rate).toBeGreaterThan(0.43);
-    expect(rate).toBeLessThan(0.57);
+    const jpyRate = jpy / N;
+    const usdRate = usd / N;
+    // Sparse currency gets only its proportional (~1%) share — nowhere near
+    // the 50% the old uniform pick allowed.
+    expect(jpyRate).toBeLessThan(0.05);
+    expect(jpyRate).toBeGreaterThan(0);
+    expect(usdRate).toBeGreaterThan(0.9);
+  });
+
+  it('currency-group selection probability is proportional to eligible-campaign count', () => {
+    // 3 USD campaigns vs 1 JPY campaign → USD group should win ~75% of the
+    // time (3/4), confirming weighting is by campaign count, not uniform.
+    const campaigns = [
+      { id: 'usd-0', currency: 'USD', bidAmountMinor: 10n },
+      { id: 'usd-1', currency: 'USD', bidAmountMinor: 10n },
+      { id: 'usd-2', currency: 'USD', bidAmountMinor: 10n },
+      { id: 'jpy-1', currency: 'JPY', bidAmountMinor: 10n },
+    ];
+    let usd = 0;
+    const N = 8000;
+    for (let k = 0; k < N; k++) {
+      if (campaigns[selectCampaignIndex(campaigns)].currency === 'USD') usd++;
+    }
+    const rate = usd / N;
+    expect(rate).toBeGreaterThan(0.65);
+    expect(rate).toBeLessThan(0.85);
   });
 
   it('never lets a huge bid in one currency affect another currency selection', () => {

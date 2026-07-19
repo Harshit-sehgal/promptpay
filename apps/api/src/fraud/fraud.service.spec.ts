@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FraudFlagStatus } from '@waitlayer/db';
 
+import { AlertsService } from '../observability/alerts.service';
+import { MetricsService } from '../observability/metrics.service';
 import { validateFraudFlagTransition } from './fraud.constants';
 import { FraudService } from './fraud.service';
 
@@ -86,6 +88,11 @@ const mockLedger = {
   reverseEarnings: vi.fn(),
 } as any;
 
+const mockAlerts = {
+  recordRate: vi.fn(() => 0),
+  sendAlert: vi.fn(() => false),
+} as unknown as AlertsService;
+
 function mockUserWithFlags(overrides: any = {}) {
   return {
     emailVerified: false,
@@ -104,8 +111,8 @@ describe('FraudService', () => {
     mockPrisma.$executeRaw.mockResolvedValue(1);
     mockPrisma.$queryRaw.mockResolvedValue([{ count: 0 }]);
     mockPrisma.payoutAllocation.count.mockResolvedValue(0);
+    service = new FraudService(prismaRef, mockLedger, mockAlerts);
     mockPrisma.earningsLedger.updateMany.mockResolvedValue({ count: 0 });
-    service = new FraudService(prismaRef, mockLedger);
   });
 
   describe('computeTrustScore', () => {
@@ -795,6 +802,40 @@ describe('FraudService', () => {
       mockPrisma.user.findUnique.mockResolvedValue({ country: 'US' });
       await service.checkCountryDeviceChange('u-1', 'dev-1', 'US');
       expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ctr_impression_spike alert (P1.25)', () => {
+    it('raises a deduplicated alert when anomalous CTR recurs for a user', async () => {
+      // Real AlertsService so the sliding-window + cooldown dedupe run end to end.
+      const metrics = new MetricsService();
+      const alerts = new AlertsService(metrics);
+      const sendSpy = vi.spyOn(alerts, 'sendAlert');
+      const service = new FraudService(prismaRef, mockLedger, alerts);
+
+      // createFlag -> computeTrustScore reads user.createdAt; pin a valid user
+      // so the shared mock (leaked from other tests) doesn't trip it.
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      // 5+ impressions and >50% CTR => suspicious_ctr branch each call.
+      // adClick.count is called twice per check: once for the per-impression
+      // duplicate-click guard (must be 0) and once for the trailing-hour count.
+      mockPrisma.adClick.count.mockImplementation((args: { where?: { impressionId?: string } }) =>
+        Promise.resolve(args?.where?.impressionId ? 0 : 4),
+      );
+      mockPrisma.adImpression.count.mockResolvedValue(5); // impressions in the hour
+
+      for (let i = 0; i < 6; i++) {
+        await service.checkClickPatterns('u-1', `imp-${i}`);
+      }
+
+      // Wired detection path called sendAlert for the spike.
+      expect(sendSpy).toHaveBeenCalledWith(
+        'ctr_impression_spike',
+        'user:u-1',
+        expect.objectContaining({ userId: 'u-1', windowCount: expect.any(Number) }),
+      );
+      // Cooldown dedupe: only the first fire within the window is forwarded.
+      expect(metrics.getCounter('alert{event=ctr_impression_spike}')).toBe(1);
     });
   });
 });

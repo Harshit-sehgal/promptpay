@@ -174,14 +174,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
           this.alerts.alertPayoutFenceAge({ payoutId: payout.id, ageMs });
         }
 
-        const providerTxId = payout.transactions[0]?.providerTxId;
-        let outcome: string = providerTxId ? 'pending' : 'no_provider_txid';
-
-        // Automatic escalation by age (P1.10): any payout stuck in
-        // `processing` past the escalation window is flagged for manual
-        // review — including the ambiguous-initiation case (no providerTxId)
-        // that previously was silently skipped by the poll loop. The flag is
-        // sticky (escalatedAt) so the escalation alert fires exactly once.
+        const providerTxId = payout.transactions[0]?.providerTxId ?? undefined;
         const escalateNow = ageMs > this.ESCALATION_AGE_MS && payout.escalatedAt == null;
         if (escalateNow) {
           this.alerts.alertPayoutEscalation({
@@ -191,13 +184,33 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
           });
         }
 
+        // Per-payout reconciliation-attempt accumulator (P1.10). A local
+        // accumulator keeps multiple attempts within a single poll
+        // append-correctly and durably — the previous implementation re-read the
+        // stale original log on every call, so a second in-iteration attempt
+        // would overwrite the first.
+        const attempts: Prisma.JsonArray = Array.isArray(payout.reconciliationLog)
+          ? [...(payout.reconciliationLog as Prisma.JsonArray)]
+          : [];
+        const recordAttempt = async (attemptOutcome: string): Promise<void> => {
+          attempts.push({ at: new Date().toISOString(), outcome: attemptOutcome });
+          const capped = attempts.slice(-20);
+          await this.prisma.payoutRequest.update({
+            where: { id: payout.id },
+            data: {
+              reconciliationAttempts: { increment: 1 },
+              lastReconciliationAt: new Date(),
+              reconciliationLog: capped,
+              ...(escalateNow ? { escalatedAt: new Date() } : {}),
+            },
+          });
+        };
+
         if (!providerTxId) {
           // Ambiguous initiation: no provider transaction id was captured at
           // request time. Attempt reconciliation by our platform-controlled
-          // external reference (payoutRequestId) when the provider supports
-          // it (P1.10). Providers that can't resolve by external reference
-          // omit `checkStatusByReference`, or return `processing` — in both
-          // cases we fall through to attempt + escalate below.
+          // external reference (payoutRequestId) when the provider supports it
+          // (P1.10). If the provider resolves the payout we act immediately.
           const refProvider = this.payoutService.getProvider(payout.payoutAccount.provider);
           const refFn = refProvider?.checkStatusByReference;
           if (refFn) {
@@ -224,12 +237,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
                   expectedCurrency: payout.currency,
                 });
                 completed++;
-                await this.recordReconciliationAttempt(
-                  payout.id,
-                  payout.reconciliationLog,
-                  'ref_paid',
-                  escalateNow,
-                );
+                await recordAttempt('ref_paid');
                 continue;
               }
               if (refStatus?.status === 'failed') {
@@ -242,28 +250,28 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
                   failureReason: 'Provider reported failure via external-reference status poll',
                 });
                 failedCount++;
-                await this.recordReconciliationAttempt(
-                  payout.id,
-                  payout.reconciliationLog,
-                  'ref_failed',
-                  escalateNow,
-                );
+                await recordAttempt('ref_failed');
                 continue;
               }
             } catch {
-              // Reference lookup unsupported/errored — fall through to attempt+escalate.
+              // Reference lookup unsupported/errored — fall through to the
+              // normal provider status poll below.
             }
           }
+          // Ambiguous initiation with no successful external-reference
+          // resolution: record the attempt (for audit/escalation history) and
+          // STILL poll the provider via checkStatus using the platform
+          // reference. A processing payout must always be reconciled — the
+          // original behaviour polled every processing payout, and providers
+          // such as `paypal_email`/`manual` report status by external reference
+          // even without a captured transaction id. This fixes the regression
+          // where no-providerTxId payouts were silently skipped (P1.10).
           this.logger.warn(
             `Payout ${payout.id} is in processing status but has no provider transaction — recorded reconciliation attempt${escalateNow ? ' and escalated for manual review' : ''}`,
           );
-          await this.recordReconciliationAttempt(
-            payout.id,
-            payout.reconciliationLog,
-            'no_provider_txid',
-            escalateNow,
-          );
-          continue;
+          await recordAttempt('no_provider_txid');
+          // NOTE: intentionally no `continue` — fall through to the provider
+          // checkStatus poll so the payout is still reconciled.
         }
 
         const provider = this.payoutService.getProvider(payout.payoutAccount.provider);
@@ -271,28 +279,19 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
           this.logger.warn(
             `Provider "${payout.payoutAccount.provider}" for payout ${payout.id} is not available — skipping`,
           );
-          outcome = 'provider_unavailable';
-          await this.recordReconciliationAttempt(
-            payout.id,
-            payout.reconciliationLog,
-            outcome,
-            escalateNow,
-          );
+          await recordAttempt('provider_unavailable');
           continue;
         }
 
         checked++;
 
         try {
-          // Wrap the external PSP status check in a timeout + circuit breaker
-          // (per provider) so an unresponsive provider can't hang the poll
-          // loop or be hammered while unhealthy.
           const status = await providerBreaker.call(
             `checkStatus:${payout.payoutAccount.provider}`,
             () =>
               withTimeout(
                 () =>
-                  provider.checkStatus(providerTxId, {
+                  provider.checkStatus(providerTxId ?? payout.id, {
                     destination: payout.payoutAccount.destination,
                     externalReference: payout.id,
                   }),
@@ -304,61 +303,34 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
             this.logger.log(
               `Payout ${payout.id} (${payout.payoutAccount.provider}:${providerTxId}) is confirmed paid — auto-completing`,
             );
-
-            // Self-check: pass the stored approved/requested amount +
-            // currency as the cross-check fields so markPayoutPaid's
-            // `expectedAmountMinor !== undefined` guard fires for the cron
-            // path. The provider's checkStatus returns no amount (only
-            // status + paidAt), so we cannot cross-check against the
-            // provider — but we CAN self-check that the stored values are
-            // coherent: caught null / 0 / wrong-currency would surface here
-            // instead of silently flipping a payout to `paid`.
             await this.payoutService.markPayoutPaid(payout.id, {
               providerTxId,
               paidAt: (status.paidAt ?? new Date()).toISOString(),
               expectedAmountMinor: payout.approvedAmountMinor ?? payout.requestedAmountMinor,
               expectedCurrency: payout.currency,
             });
-
             completed++;
           } else if (status.status === 'failed') {
             this.logger.warn(
               `Payout ${payout.id} (${payout.payoutAccount.provider}:${providerTxId}) has failed — marking as failed`,
             );
-
             await this.payoutService.markPayoutFailed(payout.id, {
               provider: payout.payoutAccount.provider,
               providerTxId,
               failureReason: 'Provider reported failure via status poll',
             });
-
             failedCount++;
           } else if (AMBIGUOUS_RECONCILIATION_STATUSES.has(status.status)) {
-            // Ambiguous / not-yet-resolved initiation status (e.g.
-            // initiate_pending, requires_review, processing). The fence is
-            // retained; escalation-by-age handles long-stuck payouts (P1.10).
             this.logger.log(
               `Payout ${payout.id} in ambiguous reconciliation status "${status.status}" — retaining fence`,
             );
           }
-          // Record the ACTUAL provider status in the attempt history so
-          // operators can see exactly what the provider reported (P1.10).
-          await this.recordReconciliationAttempt(
-            payout.id,
-            payout.reconciliationLog,
-            status.status,
-            escalateNow,
-          );
+          await recordAttempt(status.status);
         } catch (err) {
           this.logger.error(
             `Failed to check status for payout ${payout.id} (${providerTxId}): ${err instanceof Error ? err.message : err}`,
           );
-          await this.recordReconciliationAttempt(
-            payout.id,
-            payout.reconciliationLog,
-            'error',
-            escalateNow,
-          );
+          await recordAttempt('error');
           // Don't throw — let the cron continue to other payouts
         }
       }
@@ -379,33 +351,5 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
     } finally {
       this.pollInFlight = false;
     }
-  }
-
-  /**
-   * Record a structured reconciliation attempt for a payout (P1.10):
-   * increments the attempt counter, stamps the last-attempt time, appends a
-   * capped entry to the JSON attempt log, and (when escalating) sets the
-   * sticky `escalatedAt` flag so the escalation alert fires only once.
-   */
-  private async recordReconciliationAttempt(
-    payoutId: string,
-    priorLog: unknown,
-    outcome: string,
-    escalateNow: boolean,
-  ): Promise<void> {
-    const log: Prisma.JsonArray = Array.isArray(priorLog)
-      ? [...(priorLog as Prisma.JsonArray)]
-      : [];
-    log.push({ at: new Date().toISOString(), outcome });
-    const capped = log.slice(-20);
-    await this.prisma.payoutRequest.update({
-      where: { id: payoutId },
-      data: {
-        reconciliationAttempts: { increment: 1 },
-        lastReconciliationAt: new Date(),
-        reconciliationLog: capped,
-        ...(escalateNow ? { escalatedAt: new Date() } : {}),
-      },
-    });
   }
 }

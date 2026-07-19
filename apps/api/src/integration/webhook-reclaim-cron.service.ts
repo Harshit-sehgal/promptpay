@@ -1,8 +1,8 @@
-import type Stripe from 'stripe';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { EventBus } from '../common/events/event-bus';
 import { PrismaService } from '../config/prisma.service';
+import { StripeProvider } from '../payout/providers';
 
 /**
  * Optional webhook-event reclaim worker (engineering hardening, issue A-062).
@@ -47,6 +47,7 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBus,
+    private readonly stripe: StripeProvider,
   ) {}
 
   onApplicationBootstrap() {
@@ -109,10 +110,21 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
       this.logger.log(`Found ${orphans.length} orphaned webhook event(s) to reclaim.`);
       let requeued = 0;
       for (const row of orphans) {
-        const event = row.payload as unknown as Stripe.Event | undefined;
-        if (!event?.id) {
+        // The persisted webhookEvent row stores only a MINIMIZED payload
+        // (id/type/created/dataObjectId/dataObjectStatus + SHA-256 rawHash),
+        // not the full Stripe event. Reconstruct the complete event from Stripe
+        // by id so runProcessing has the data.object it needs (P1.12).
+        const eventId = (row.payload as { id?: string } | null)?.id;
+        if (!eventId) {
           this.logger.warn(
-            `Skipping webhook event ${row.id} (${row.eventId}) — payload is missing or not a Stripe event`,
+            `Skipping webhook event ${row.id} (${row.eventId}) — minimized payload is missing an event id`,
+          );
+          continue;
+        }
+        const event = await this.stripe.getEvent(eventId);
+        if (!event) {
+          this.logger.warn(
+            `Skipping webhook event ${row.id} (${row.eventId}) — could not retrieve event ${eventId} from Stripe`,
           );
           continue;
         }

@@ -819,18 +819,30 @@ describe('AdminService', () => {
       }
     });
 
-    it('lists accounts with an active provider-initiation fence', async () => {
+    it('lists accounts with an active provider-initiation fence, including reconciliation telemetry', async () => {
       const fenced = [
         {
           id: 'pa-fenced',
+          userId: 'u1',
           provider: 'wise',
           destination: 'wise-dest',
+          currency: 'USD',
+          isVerified: true,
+          isActive: true,
+          isFrozen: false,
           initiationPayoutId: 'payout-1',
           user: { id: 'u1', email: 'dev@example.com' },
         },
       ];
+      const initiationPayout = {
+        id: 'payout-1',
+        reconciliationAttempts: 3,
+        lastReconciliationAt: new Date('2026-07-19T10:00:00.000Z'),
+        escalatedAt: null,
+      };
       mockPrisma.payoutAccount.findMany.mockResolvedValue(fenced);
       mockPrisma.payoutAccount.count.mockResolvedValue(2);
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([initiationPayout]);
 
       const result = await service.getFencedAccounts({ page: 1, limit: 10 });
 
@@ -841,10 +853,30 @@ describe('AdminService', () => {
         skip: 0,
         take: 10,
       });
+      expect(mockPrisma.payoutRequest.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['payout-1'] } },
+        select: {
+          id: true,
+          reconciliationAttempts: true,
+          lastReconciliationAt: true,
+          escalatedAt: true,
+        },
+      });
       expect(mockPrisma.payoutAccount.count).toHaveBeenCalledWith({
         where: { initiationPayoutId: { not: null } },
       });
-      expect(result).toEqual({ items: fenced, total: 2, page: 1, limit: 10 });
+      expect(result.total).toBe(2);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(10);
+      expect(result.items).toHaveLength(1);
+      // P1.11: the fenced-account view surfaces reconciliation metadata.
+      expect(result.items[0]).toMatchObject({
+        id: 'pa-fenced',
+        initiationPayoutId: 'payout-1',
+        reconciliationAttempts: 3,
+        lastReconciliationAt: '2026-07-19T10:00:00.000Z',
+        escalatedAt: null,
+      });
     });
 
     it('applies default pagination when no params are provided', async () => {
@@ -1089,6 +1121,39 @@ describe('AdminService', () => {
       );
       // The account record still carries the fence.
       expect(account.initiationPayoutId).toBe('payout-1');
+    });
+    it('surfaces reconciliation telemetry on the released account (P1.11)', async () => {
+      const account = {
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: 'payout-1',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(account);
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+        status: 'paid',
+        reconciliationAttempts: 5,
+        lastReconciliationAt: new Date('2026-07-19T12:00:00.000Z'),
+        escalatedAt: new Date('2026-07-18T08:30:00.000Z'),
+      });
+      mockPrisma.payoutAccount.update.mockResolvedValue({
+        ...account,
+        initiationPayoutId: null,
+      });
+
+      const result = await service.releasePayoutFence({
+        payoutAccountId: 'pa-1',
+        reviewerId: 'admin-1',
+        reviewerRole: 'admin',
+        reason: 'provider outcome confirmed',
+      });
+
+      expect(result.initiationPayoutId).toBeNull();
+      // P1.11: reconciliation metadata from the released payout is carried on the response.
+      expect(result.reconciliationAttempts).toBe(5);
+      expect(result.lastReconciliationAt).toBe('2026-07-19T12:00:00.000Z');
+      expect(result.escalatedAt).toBe('2026-07-18T08:30:00.000Z');
     });
   });
 });

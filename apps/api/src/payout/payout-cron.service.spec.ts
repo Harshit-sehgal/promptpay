@@ -122,11 +122,16 @@ describe('PayoutCronService', () => {
       ]);
 
       vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      // The cron now always polls a processing payout (including ambiguous
+      // initiations with no provider transaction) via the provider's
+      // checkStatus, so checkStatus must be exercised and `checked` incremented.
+      mockPayPalProvider.checkStatus.mockResolvedValue({ status: 'processing' });
+      mockPayoutService.getProvider.mockReturnValue(mockPayPalProvider);
       const result = await service.pollProcessingPayouts();
 
-      expect(result).toEqual({ checked: 0, completed: 0, failed: 0 });
+      expect(result).toEqual({ checked: 1, completed: 0, failed: 0 });
       expect(mockPayoutService.getProvider).toHaveBeenCalledWith('paypal_payouts');
-      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledTimes(2);
       const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
       expect(updateCall.where).toEqual({ id: 'req_1' });
       expect(updateCall.data.reconciliationAttempts).toEqual({ increment: 1 });
@@ -351,7 +356,7 @@ describe('PayoutCronService', () => {
       vi.mocked(service as any).pollProcessingPayouts.mockRestore();
       await service.pollProcessingPayouts();
 
-      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledTimes(2);
       const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
       expect(updateCall.data.escalatedAt).toBeInstanceOf(Date);
       expect(updateCall.data.reconciliationLog).toEqual([

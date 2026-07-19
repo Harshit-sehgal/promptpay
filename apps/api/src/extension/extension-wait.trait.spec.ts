@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { AlertsService } from '../observability/alerts.service';
+import { MetricsService } from '../observability/metrics.service';
 import {
   computeWaitConfidence,
   ExtensionWaitTrait,
@@ -79,6 +81,36 @@ describe('ExtensionWaitTrait.flagFalsePositive', () => {
       where: { id: 'ws-1' },
       data: { isFalsePositive: true },
     });
+  });
+
+  it('raises a deduplicated wait_false_positive_spike alert on a burst of reports (P1.25)', async () => {
+    const start = {
+      id: 'ws-1',
+      userId: 'u1',
+      waitStateId: 'ws-id-1',
+      eventType: 'wait_state_start',
+    };
+    const { prisma, trait } = makeTrait();
+    const metrics = new MetricsService();
+    const alerts = new AlertsService(metrics);
+    const sendSpy = vi.spyOn(alerts, 'sendAlert');
+    (trait as unknown as { alerts: AlertsService }).alerts = alerts;
+
+    prisma.waitStateEvent.findFirst.mockResolvedValue(start);
+    prisma.waitStateEvent.update.mockResolvedValue({ ...start, isFalsePositive: true });
+
+    // 5 reports (threshold) + 1 => a single deduplicated spike alert.
+    for (let i = 0; i < 6; i++) {
+      await trait.flagFalsePositive('u1', `ws-id-${i}`);
+    }
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      'wait_false_positive_spike',
+      'global',
+      expect.objectContaining({ windowCount: expect.any(Number) }),
+    );
+    // Cooldown dedupe: only the first fire within the window is forwarded.
+    expect(metrics.getCounter('alert{event=wait_false_positive_spike}')).toBe(1);
   });
 
   it('throws NotFoundException when no matching wait state exists', async () => {

@@ -16,11 +16,17 @@ import { FraudFlagType, FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@waitlay
 
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { AlertsService } from '../observability/alerts.service';
 import {
   ACTIVE_FRAUD_FLAG_STATUSES,
   payoutFraudLockKey,
   validateFraudFlagTransition,
 } from './fraud.constants';
+
+// P1.25 alert spike tuning: how many anomalous-CTR detections per user within
+// the trailing window count as a "spike" worth alerting on.
+const CTR_SPIKE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const CTR_SPIKE_THRESHOLD = 5;
 
 function fraudSeverityRank(severity: string): number {
   return { low: 0, medium: 1, high: 2, critical: 3 }[severity] ?? -1;
@@ -31,6 +37,7 @@ export class FraudService {
   constructor(
     private prisma: PrismaService,
     private ledger: LedgerService,
+    private readonly alerts?: AlertsService,
   ) {}
 
   // ── Rate Limit Checks ──
@@ -103,6 +110,18 @@ export class FraudService {
         userId,
         evidence: { clicks, impressions, ctr: clicks / impressions },
       });
+      // P1.25: alert on a burst of anomalous CTR (a CTR spike), not every
+      // single detection. The sliding-window counter + cooldown dedupe keeps
+      // the alert stream actionable.
+      const burst =
+        this.alerts?.recordRate('ctr_impression_spike', userId, CTR_SPIKE_WINDOW_MS) ?? 0;
+      if (burst >= CTR_SPIKE_THRESHOLD) {
+        this.alerts?.sendAlert('ctr_impression_spike', `user:${userId}`, {
+          userId,
+          ctr: clicks / impressions,
+          windowCount: burst,
+        });
+      }
       return { allowed: false, reason: 'suspicious_ctr' };
     }
 

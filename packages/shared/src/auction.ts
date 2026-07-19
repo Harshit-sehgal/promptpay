@@ -13,14 +13,19 @@ import * as crypto from 'crypto';
  * **independent auctions per currency**:
  *   1. Group eligible campaigns by currency (currency codes sorted for a
  *      stable iteration order — deterministic given the same input set).
- *   2. Uniformly pick one currency group (bounded integer sampling), so every
- *      currency group gets an equal chance regardless of bid magnitude. This
- *      is the cross-currency arbitration: it NEVER compares raw minor units
- *      across currencies, so `100 JPY` cannot compete as equal to
- *      `100 USD cents`. Selection is uniform over currency GROUPS — NOT over
- *      individual campaigns — so a currency with one campaign has the same
- *      overall serving probability as a currency with many. This avoids
- *      currency or campaign-count hegemony in the marketplace.
+ *   2. Pick one currency group with probability **proportional to the number
+ *      of eligible campaigns it contains** (bounded bigint sampling over the
+ *      sum of eligible-campaign counts). This is the cross-currency
+ *      arbitration: it NEVER compares raw minor units across currencies, so
+ *      `100 JPY` cannot compete as equal to `100 USD cents`. Selection is
+ *      weighted over currency GROUPS by campaign *count* (not by bid
+ *      magnitude), so a sparse currency (one campaign) can no longer buy
+ *      equal inventory share to a dense one — an advertiser cannot game
+ *      inventory by choosing a currency with few competing campaigns.
+ *
+ *      Known limitation: group weighting is by eligible-campaign count only
+ *      and is NOT tied to the requesting user's country or preferred
+ *      currency (no geo). Adding geo is explicitly out of scope here.
  *   3. Within the chosen currency group, run bid-weighted random selection
  *      using **bigint-safe** rejection sampling — never `Number(totalBid)`,
  *      which loses precision once total bid exceeds `Number.MAX_SAFE_INTEGER`.
@@ -118,10 +123,12 @@ export function nextBillableCharge(bidAmountMinor: bigint): bigint {
  *  - If every eligible campaign has a zero bid, selection within a group is
  *    uniform (each campaign equally likely) rather than deterministically
  *    picking the first — phrased the same way as random-below with a fallback.
- *  - When multiple currencies are eligible, one currency group is chosen
- *    uniformly at random (bounded integer sampling of the group index),
- *    independent of bid magnitude. Determinism is preserved given identical
- *    random draws.
+ *  - When multiple currencies are eligible, one currency group is chosen with
+ *    probability proportional to the number of eligible campaigns it contains
+ *    (bounded bigint sampling over the total eligible-campaign count), NOT
+ *    uniformly and NOT by bid magnitude. This stops sparse-currency gaming
+ *    while keeping determinism (identical inputs + identical draws => same
+ *    group).
  */
 export function selectCampaignIndex<T extends CampaignBid>(
   campaigns: T[],
@@ -133,11 +140,28 @@ export function selectCampaignIndex<T extends CampaignBid>(
   const randomBelow = options.randomBelow ?? randomBigIntBelow;
   const groups = groupCampaignsByCurrency(campaigns);
 
-  // Cross-currency arbitration: uniform pick of one currency group. Never
-  // compares raw minor units across currencies.
-  const groupPick = randomBelow(BigInt(groups.length));
-  const groupIdx = Number(groupPick);
-  const group = groups[Math.min(groupIdx, groups.length - 1)];
+  // Cross-currency arbitration: weight each currency group by the number of
+  // eligible campaigns it contains (probability ∝ eligible-campaign count).
+  // This removes the sparse-currency gaming vector — under the old
+  // group-uniform pick a currency with a single campaign had the same overall
+  // serving probability as a currency with hundreds, so an advertiser could
+  // buy cheap inventory by choosing a sparse currency. Now a dense currency is
+  // proportionally more likely to be served. Determinism is preserved:
+  // identical eligible set + identical RNG draws => identical group picked.
+  // KNOWN LIMITATION: this is NOT tied to the user's country or preferred
+  // currency (no geo) — out of scope here.
+  const sizes = groups.map((g) => BigInt(g.indices.length));
+  const totalEligible = sizes.reduce((sum, n) => sum + n, 0n);
+  const groupDraw = randomBelow(totalEligible);
+  let acc = 0n;
+  let group = groups[groups.length - 1];
+  for (let i = 0; i < groups.length; i++) {
+    acc += sizes[i];
+    if (groupDraw < acc) {
+      group = groups[i];
+      break;
+    }
+  }
   const indices = group.indices;
 
   // Within-currency weighted selection by raw bid (valid: same currency).

@@ -209,6 +209,23 @@ export class StripeProvider {
 
     return { paymentIntentId, amountMinor, currency, reason, status };
   }
+  /**
+   * Retrieve a full Stripe event by its id. Used by the webhook reclaim cron
+   * to reconstruct the complete event for crash-recovery reprocessing: the
+   * persisted webhookEvent row stores only a minimized payload (id/type/
+   * created/... + SHA-256 rawHash), not the full event JSON.
+   */
+  async getEvent(eventId: string): Promise<Stripe.Event | null> {
+    if (!this.stripe) return null;
+    try {
+      return await this.stripe.events.retrieve(eventId);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to retrieve Stripe event ${eventId} for reclaim: ${err instanceof Error ? err.message : err}`,
+      );
+      return null;
+    }
+  }
 }
 
 /**

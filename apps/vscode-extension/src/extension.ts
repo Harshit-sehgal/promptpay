@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('waitlayer.openDashboard', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://waitlayer.com/developer'));
     }),
-    vscode.commands.registerCommand('waitlayer.reportFalseWait', async () => {
+    vscode.commands.registerCommand('waitlayer.reportFalseWait', async (reason?: string) => {
       if (!activeWaitStateId) {
         vscode.window.showInformationMessage('WaitLayer: no active wait to report');
         return;
@@ -84,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
       try {
-        await api.flagFalsePositive(activeWaitStateId);
+        await api.flagFalsePositive(activeWaitStateId, reason);
         flaggedWaitStateId = activeWaitStateId;
         vscode.window.showInformationMessage(
           'WaitLayer: thanks — this wait has been flagged as a false detection',
@@ -101,6 +101,14 @@ export function activate(context: vscode.ExtensionContext) {
   detector.onSignal(async (signal) => {
     if (signal.type === 'wait_start') {
       const event = signal.event;
+
+      // Shadow waits (weak inactivity-only detections or shadowOnly-adapter
+      // waits) are local-only and excluded from monetization: record nothing
+      // server-side and request no ad, so they create no API traffic, no noisy
+      // wait records, and no misleading analytics. The detector still tracks
+      // them locally for its own state machine.
+      if (event.shadow) return;
+
       activeWaitStateId = event.waitStateId;
       flaggedWaitStateId = null;
 

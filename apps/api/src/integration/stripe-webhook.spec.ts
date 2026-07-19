@@ -342,7 +342,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     const evt = await prisma.webhookEvent.findUnique({
       where: { provider_eventId: { provider: 'stripe', eventId: 'evt_unhandled_1' } },
     });
-    expect(evt?.processingStatus).toBe('processed');
+    expect(evt?.processingStatus).toBe('pending_review');
   });
 
   it('freezes only the disputed slice for a partial dispute', async () => {

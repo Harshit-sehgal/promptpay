@@ -107,12 +107,20 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
   INR: {
     code: 'INR',
     minorUnitExponent: 2,
+    // Deposit/payout floors are intentionally LOW (operator decision): ₹1 and
+    // ₹10 respectively. They are deliberately small to lower the barrier to
+    // entry for the Indian market and are documented as such — they are NOT
+    // scaled to the ~$50-equivalent campaign thresholds below.
     depositMinimumMinor: 100, // ₹1 deposit floor
     payoutMinimumMinor: 1000, // ₹10 payout floor
     // ~$50-equivalent nominal thresholds in INR's own paise (explicitly
     // configured, NOT the USD 5000-minor value re-applied — that would be a
     // ₹50 minimum, an order of magnitude low).
     campaignMinimumBudgetMinor: 400_000, // ₹4,000
+    // ₹80,00,00,000 = 80 crore = 80,000,000,000 paise. This cap is expressed in
+    // INR MINOR units (paise), NOT rupees — the largest campaign budget an
+    // advertiser may set in INR. (₹1 crore = 10,000,000 rupees =
+    // 1,000,000,000 paise.)
     campaignMaximumBudgetMinor: 80_000_000_000, // ₹80,00,00,000 = 80 crore = 80,000,000,000 paise
     campaignMinimumBidMinor: 1_000, // ₹10
     providers: [PayoutProvider.WISE, PayoutProvider.MANUAL],
