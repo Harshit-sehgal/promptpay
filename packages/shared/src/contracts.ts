@@ -299,21 +299,28 @@ export const PayoutAvailableResponse = z.object({
 export const LedgerBalanceResponse = z.object({
   available: z.object({
     amountMinor: z.coerce.bigint().nonnegative(),
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     currency: z.string(),
     byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
   pending: z.object({
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     amountMinor: z.coerce.bigint().nonnegative(),
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     currency: z.string(),
     byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
   total: z.object({
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     amountMinor: z.coerce.bigint().nonnegative(),
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     currency: z.string(),
     byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),
   paidOut: z.object({
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     amountMinor: z.coerce.bigint().nonnegative(),
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     currency: z.string(),
     byCurrency: z.record(z.string(), z.coerce.bigint().nonnegative()).optional(),
   }),

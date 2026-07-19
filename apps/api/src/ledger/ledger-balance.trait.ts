@@ -12,6 +12,7 @@ export class LedgerBalanceTrait {
   // ── Balance Queries ──
   /** Get total confirmed (available) earnings for a user */
   async getAvailableBalance(userId: string): Promise<{
+    /** @deprecated use `byCurrency`; single-currency fallback, never sum across currencies */
     amountMinor: bigint;
     currency: string;
     byCurrency: Record<string, bigint>;
@@ -46,6 +47,7 @@ export class LedgerBalanceTrait {
 
   /** Get total pending (estimated + confirmed) earnings for a user */
   async getPendingBalance(userId: string): Promise<{
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     amountMinor: bigint;
     currency: string;
     byCurrency: Record<string, bigint>;
@@ -85,6 +87,7 @@ export class LedgerBalanceTrait {
 
   /** Get all-time total earnings for a user (excluding reversed/void) */
   async getTotalEarnings(userId: string): Promise<{
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     amountMinor: bigint;
     currency: string;
     byCurrency: Record<string, bigint>;
@@ -139,6 +142,7 @@ export class LedgerBalanceTrait {
 
   /** Get paid-out total for a user */
   async getPaidOutTotal(userId: string): Promise<{
+    /** @deprecated use byCurrency; single-currency fallback, never sum across currencies */
     amountMinor: bigint;
     currency: string;
     byCurrency: Record<string, bigint>;
