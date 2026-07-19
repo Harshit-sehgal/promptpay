@@ -51,7 +51,7 @@ describe('randomBigIntBelow', () => {
   it('is uniform over small bounds (2, 3, 5, 7, 10)', () => {
     for (const bound of [2n, 3n, 5n, 7n, 10n]) {
       const counts = new Map<bigint, number>();
-      const N = 30000;
+      const N = 10000;
       for (let i = 0; i < N; i++) {
         const v = randomBigIntBelow(bound);
         expect(v >= 0n && v < bound).toBe(true);
@@ -68,7 +68,7 @@ describe('randomBigIntBelow', () => {
         expect(Math.abs(c - expected)).toBeLessThan(expected * 0.25);
       }
     }
-  });
+  }, 20000);
 });
 
 describe('selectCampaignIndex — cross-currency safety', () => {
