@@ -18,7 +18,7 @@ COPY apps/vscode-extension/package.json apps/vscode-extension/
 # pnpm 11 blocks packages not in onlyBuiltDependencies from running install
 # scripts. The .npmrc config approves esbuild and Prisma packages.
 # HUSKY=0 prevents the husky prepare script from failing (no .git in Docker).
-RUN echo 'only-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-pg' > .npmrc \
+RUN printf 'only-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-pg\nconfirm-modules-purge=false\n' > .npmrc \
   && HUSKY=0 pnpm install --frozen-lockfile
 
 # ── Build Stage: turbo build all packages ──
@@ -90,7 +90,7 @@ RUN npm install -g prisma@7.8.0
 # the base stage (offline — the store is already populated). `--ignore-scripts`
 # avoids running the inherited @prisma/client postinstall before the CLI is
 # wired up; we regenerate the client explicitly below.
-RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false
+RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 
 # Regenerate the Prisma client for the production dependency set (offline, using
 # the global CLI). Required because `--ignore-scripts` skipped it above and the
@@ -131,7 +131,7 @@ COPY --from=build /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
 COPY --from=build /app/package.json /app/package.json
 # Drop devDependencies (see api stage note). pnpm operates on the workspace root
 # at /app and strips dev deps from the hoisted store.
-RUN HUSKY=0 pnpm install --prod --frozen-lockfile --config.confirmModulesPurge=false
+RUN HUSKY=0 pnpm install --prod --frozen-lockfile
 
 RUN chown -R node:node /app
 USER node
