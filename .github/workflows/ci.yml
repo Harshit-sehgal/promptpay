@@ -199,8 +199,7 @@ jobs:
       - name: Package VS Code extension (no publish)
         run: |
           mkdir -p artifacts/vscode
-          pnpm --filter waitlayer-vscode package:vsix -- \
-            --out "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
+          pnpm --filter waitlayer-vscode exec vsce package --no-dependencies -o "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
       - name: Smoke test VSIX metadata
         run: |
           test -s artifacts/vscode/waitlayer-vscode.vsix
