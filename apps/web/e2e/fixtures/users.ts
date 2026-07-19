@@ -90,8 +90,11 @@ export async function loginAs(page: Page, user: TestUser): Promise<void> {
   await page.locator('input[type="email"]').fill(user.email);
   await page.locator('input[type="password"]').fill(user.password);
   await page.locator('button[type="submit"]').click();
-  // Wait for redirect away from login
-  await page.waitForURL((url) => !url.pathname.includes('/auth/login'), { timeout: 15_000 });
+  // Wait for redirect away from login. 30s headroom: the BFF does two
+  // sequential API calls (login + /auth/me) and under CI suite load the
+  // local API can be slow enough to exceed a tighter budget on emulated
+  // mobile devices.
+  await page.waitForURL((url) => !url.pathname.includes('/auth/login'), { timeout: 45_000 });
 }
 
 /**

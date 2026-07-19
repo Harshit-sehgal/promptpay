@@ -45,7 +45,8 @@ export function rateLimitIdentity(req: {
   headers: Headers;
 }): RateLimitIdentity {
   const existing =
-    req.cookies.get(`__Host-${CLIENT_ID_COOKIE}`)?.value ?? req.cookies.get(CLIENT_ID_COOKIE)?.value;
+    req.cookies.get(`__Host-${CLIENT_ID_COOKIE}`)?.value ??
+    req.cookies.get(CLIENT_ID_COOKIE)?.value;
   const validExisting = existing && /^[0-9a-f-]{36}$/i.test(existing) ? existing : undefined;
   const clientId = validExisting ?? randomUUID();
   const secret = process.env.JWT_SECRET;
@@ -220,17 +221,18 @@ export function isSecure(headers: Headers): boolean {
   // refresh tokens over cleartext — that's the highest-leverage mistake
   // the previous decision order enabled.
   if (process.env.COOKIE_SECURE === 'true') return true;
+  // Honour COOKIE_SECURE=false in ALL environments, including production. This
+  // is the documented operator escape hatch for staging/CI hosts served over
+  // plain HTTP (NODE_ENV=production but no TLS terminus). Without it the
+  // browser silently drops Secure cookies over HTTP and login fails with no
+  // signal. Real HTTPS deploys should not set this override.
   if (process.env.COOKIE_SECURE === 'false') {
     if (process.env.NODE_ENV === 'production') {
-      // Loud warning surfaces immediately in deploy logs — operators who
-      // set this combination have a misconfigured TLS terminus, not a
-      // missing escape hatch.
       console.warn(
-        '[waitlayer] COOKIE_SECURE=false is IGNORED in NODE_ENV=production — refusing to ' +
-          'issue non-Secure auth cookies. Either set COOKIE_SECURE=true, remove the override, ' +
-          'or change NODE_ENV if this really is a staging deploy.',
+        '[waitlayer] COOKIE_SECURE=false: issuing non-Secure auth cookies because NODE_ENV=production ' +
+          'but the override is set. Only safe if the web is served over plain HTTP (e.g. an internal ' +
+          'staging host or CI). For any internet-facing deploy, terminate TLS and remove this override.',
       );
-      return true;
     }
     return false;
   }

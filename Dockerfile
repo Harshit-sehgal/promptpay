@@ -131,7 +131,7 @@ COPY --from=build /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
 COPY --from=build /app/package.json /app/package.json
 # Drop devDependencies (see api stage note). pnpm operates on the workspace root
 # at /app and strips dev deps from the hoisted store.
-RUN HUSKY=0 pnpm install --prod --frozen-lockfile
+RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 
 RUN chown -R node:node /app
 USER node
