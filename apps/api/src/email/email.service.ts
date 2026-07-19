@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { privacyPseudonym } from '../common/utils/privacy-hash';
 
-/** Round 34: HTML-escape dynamic values interpolated into transactional email
+/** HTML-escape dynamic values interpolated into transactional email
  * bodies so admin-set reason strings and operator-supplied metadata cannot
  * inject script or markup into emails. Escapes the standard five XML entities
  * plus the single-quote character (ASCII apostrophe) for attribute-safe use. */
@@ -330,7 +330,7 @@ export class EmailService {
       ttlMs: 24 * 60 * 60 * 1000,
       html: this.layout(
         'Payout account frozen',
-        // Round 34: HTML-escape admin-supplied metadata (actorRole, reason,
+        // HTML-escape admin-supplied metadata (actorRole, reason,
         // provider, currency, destination, time) before interpolating into
         // the email body. `reason` is the highest-risk field (free-form
         // admin input), but all named fields get escaped as a defence-in-
@@ -457,7 +457,7 @@ export class EmailService {
 
   /** Minimal, client-safe HTML layout shared by all transactional emails.
    *
-   * Round 34: `title` and `footer` are HTML-escaped here — most call sites pass
+   * `title` and `footer` are HTML-escaped here — most call sites pass
    * controlled string literals for these, but the gate here is the single-source
    * safety net. Dynamic values that go into `bodyHtml` MUST be escaped by each
    * builder BEFORE interpolating into the HTML string (see

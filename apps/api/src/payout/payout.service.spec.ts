@@ -1610,7 +1610,7 @@ describe('PayoutService.requestPayout idempotency', () => {
   });
 });
 
-// ── Round 27 Fix 8: markPayoutPaid/markPayoutFailed direct unit tests ──
+// ── markPayoutPaid/markPayoutFailed direct unit tests ──
 // These two terminal state transitions are the highest-stakes mutations in the
 // payout state machine; prior to this round they had no direct unit coverage
 // and were tested only indirectly via e2e + cron (mocked trait wholesale) +
@@ -2112,7 +2112,7 @@ describe('markPayoutFailed terminal state transition', () => {
   });
 });
 
-// ── Round 28: payout account freeze gate (A-085) ──
+// ── payout account freeze gate (A-085) ──
 
 describe('PayoutService.requestPayout payout-account freeze gate', () => {
   it('rejects a payout to a frozen destination even if verified', async () => {

@@ -411,3 +411,27 @@ describe('ApiClient — auth state ordering', () => {
     expect(mock.secrets['waitlayer.authTokens']).toBeDefined();
   });
 });
+
+describe('ApiClient — flagFalsePositive', () => {
+  it('POSTs to the false-positive endpoint for the given wait state with auth', async () => {
+    mock.config['apiUrl'] = 'https://api.example.com/api/v1';
+    mock.secrets['waitlayer.authTokens'] = JSON.stringify({
+      accessToken: 'tok-123',
+      refreshToken: 'rt-456',
+    });
+    const client = makeClient();
+
+    await client.flagFalsePositive('wz-9');
+
+    const opts = mock.captured[0] as {
+      method: string;
+      path: string;
+      headers: Record<string, string>;
+    };
+    expect(opts.method).toBe('POST');
+    expect(opts.path).toBe('/api/v1/extension/wait-state/wz-9/false-positive');
+    expect(opts.headers['Authorization']).toBe('Bearer tok-123');
+    expect(opts.headers['X-Extension-Version']).toBe('0.0.1');
+    expect(opts.headers['X-Tool-Type']).toBe('vscode');
+  });
+});

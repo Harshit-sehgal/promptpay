@@ -434,7 +434,7 @@ export class ExtensionDeviceReportTrait {
     // retried even after isBillable was already flipped false. The old guard on
     // the snapshot value permanently skipped compensation when the first
     // reversal attempt failed after the report transaction committed.
-    // Round 40: AdReport now has @@unique([impressionId, userId]). The
+    // AdReport now has @@unique([impressionId, userId]). The
     // old findFirst + conditional create raced on concurrent reportAd →
     // both inserts succeeded (no unique guard), creating duplicate rows.
     // Now wrap in try/catch for P2002: the DB unique is the floor.

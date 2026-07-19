@@ -95,7 +95,7 @@ export class AuditInterceptor implements NestInterceptor {
       }
     }
 
-    const actorId = req.user?.sub ?? req.user?.id ?? 'unknown';
+    const actorId = req.user?.id ?? req.user?.sub ?? 'unknown';
     const actorRole = req.user?.role ?? 'unknown';
 
     let action: string;
@@ -320,7 +320,7 @@ function parseAdminUrl(
 /**
  * One-way hash of IP for audit storage — no raw IPs persisted.
  *
- * Round 35: uses ONLY req.ip (the Express trust-proxy-resolved client IP).
+ * uses ONLY req.ip (the Express trust-proxy-resolved client IP).
  * The x-forwarded-for header is client-controlled; reading it directly
  * enables IP spoofing that defeats audit pseudonymization. Other guards
  * (brute-force, throttle-by-route) explicitly document this as a security

@@ -172,7 +172,7 @@ export class AdminOverviewTrait {
           status: 'confirmed',
         },
       }),
-      // Round 36: referral_bonus bucket — platform-funded referral rewards.
+      // referral_bonus bucket — platform-funded referral rewards.
       // These are credits to the platform ledger that fund developer earnings;
       // the netReferralBonus term absorbs the earnings-side increase so the
       // split-sum invariant stays balanced after every referral reward.
@@ -228,8 +228,8 @@ export class AdminOverviewTrait {
           const netCash = netCashByCurrency[currency] ?? 0n;
           const netAdvertiserPosition = netAdvertiserPositionByCurrency[currency] ?? 0n;
           const netReferralBonus = netReferralBonusByCurrency[currency] ?? 0n;
-          // Round 35: include netCash in the split-sum equation.
-          // Round 36: include netReferralBonus as a negative term. Referral
+          // include netCash in the split-sum equation.
+          //   include netReferralBonus as a negative term. Referral
           //   bonuses are a platform-funded outflow: a platformLedger credit in
           //   bucket `referral_bonus` is written alongside each earningsLedger
           //   credit for the referrer. The bonus increases netEarnings (the

@@ -16,7 +16,11 @@ import { FraudFlagType, FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@waitlay
 
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { ACTIVE_FRAUD_FLAG_STATUSES, payoutFraudLockKey } from './fraud.constants';
+import {
+  ACTIVE_FRAUD_FLAG_STATUSES,
+  payoutFraudLockKey,
+  validateFraudFlagTransition,
+} from './fraud.constants';
 
 function fraudSeverityRank(severity: string): number {
   return { low: 0, medium: 1, high: 2, critical: 3 }[severity] ?? -1;
@@ -717,6 +721,11 @@ export class FraudService {
 
         let claimed = false;
         if (ACTIVE_FRAUD_FLAG_STATUSES.includes(current.status)) {
+          // Declarative state-machine guard: validate the
+          // open/reviewing/escalated → resolved_* transition before the CAS
+          // updateMany. Terminal states skip this branch and keep their
+          // existing idempotent resolution behavior.
+          validateFraudFlagTransition(current.status, newStatus);
           const result = await tx.fraudFlag.updateMany({
             where: { id: flagId, status: { in: ACTIVE_FRAUD_FLAG_STATUSES } },
             data: { status: newStatus, reviewerId, reviewNote, resolvedAt: new Date() },
@@ -750,7 +759,7 @@ export class FraudService {
             tx,
           );
         } else if (isValid && current.userId) {
-          // Round 36: behavioral critical flags (SHARED_PAYOUT_DESTINATION,
+          // behavioral critical flags (SHARED_PAYOUT_DESTINATION,
           // IMPOSSIBLE_VOLUME, SELF_CLICKING without a click/impression) have no
           // single entity whose earnings can be reversed. The hold at createFlag
           // spans every confirmed/pending/estimated row for the user, but the
@@ -808,6 +817,9 @@ export class FraudService {
 
     let claimed = false;
     if (flag.status === DbFraudFlagStatus.open || flag.status === DbFraudFlagStatus.reviewing) {
+      // Declarative state-machine guard: validate the open/reviewing →
+      // escalated transition before the CAS updateMany.
+      validateFraudFlagTransition(flag.status, DbFraudFlagStatus.escalated);
       const result = await this.prisma.fraudFlag.updateMany({
         where: {
           id: flagId,

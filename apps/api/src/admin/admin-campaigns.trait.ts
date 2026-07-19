@@ -48,7 +48,7 @@ export class AdminCampaignsTrait {
     // balance floor, so approval must not label an unfunded campaign active.
     const hasApprovedCreative = campaign.creatives.some((c) => c.status === 'approved');
     const hasBudget = campaign.budgetSpentMinor < campaign.budgetTotalMinor;
-    // Round 36: pre-compute the static creatives/budget predicates outside the
+    // pre-compute the static creatives/budget predicates outside the
     // transaction (they don't drift on advertiser ledger), but defer the funded-
     // balance read to INSIDE the transaction. Reading it here on `this.prisma`
     // was a TOCTOU: a concurrent Stripe refund/dispute could drain the balance

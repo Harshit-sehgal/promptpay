@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FraudFlagStatus } from '@waitlayer/db';
+
+import { validateFraudFlagTransition } from './fraud.constants';
 import { FraudService } from './fraud.service';
 
 const mockPrisma = {
@@ -793,5 +796,84 @@ describe('FraudService', () => {
       await service.checkCountryDeviceChange('u-1', 'dev-1', 'US');
       expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
     });
+  });
+});
+
+// ── Declarative fraud-flag transition guard unit tests ──
+// These assert FRAUD_FLAG_TRANSITIONS is enforced by validateFraudFlagTransition
+// directly. (The spec's generic `resolved`/`dismissed` collapse onto the two
+// concrete resolved outcomes the schema supports: resolved_valid/resolved_invalid.)
+
+describe('validateFraudFlagTransition (declarative guard)', () => {
+  it('allows open → reviewing', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.open, FraudFlagStatus.reviewing),
+    ).not.toThrow();
+  });
+
+  it('allows open → escalated', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.open, FraudFlagStatus.escalated),
+    ).not.toThrow();
+  });
+
+  it('allows open → resolved_valid and open → resolved_invalid', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.open, FraudFlagStatus.resolved_valid),
+    ).not.toThrow();
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.open, FraudFlagStatus.resolved_invalid),
+    ).not.toThrow();
+  });
+
+  it('allows reviewing → escalated and reviewing → resolved_*', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.reviewing, FraudFlagStatus.escalated),
+    ).not.toThrow();
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.reviewing, FraudFlagStatus.resolved_valid),
+    ).not.toThrow();
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.reviewing, FraudFlagStatus.resolved_invalid),
+    ).not.toThrow();
+  });
+
+  it('allows escalated → resolved_valid and escalated → resolved_invalid', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.escalated, FraudFlagStatus.resolved_valid),
+    ).not.toThrow();
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.escalated, FraudFlagStatus.resolved_invalid),
+    ).not.toThrow();
+  });
+
+  it('rejects resolved_valid → open (terminal state cannot leave)', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.resolved_valid, FraudFlagStatus.open),
+    ).toThrow(/Invalid fraud flag transition/);
+  });
+
+  it('rejects resolved_invalid → escalated (terminal state cannot leave)', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.resolved_invalid, FraudFlagStatus.escalated),
+    ).toThrow(/Invalid fraud flag transition/);
+  });
+
+  it('rejects reviewing → open (illegal backwards hop)', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.reviewing, FraudFlagStatus.open),
+    ).toThrow(/Invalid fraud flag transition/);
+  });
+
+  it('rejects escalated → reviewing (illegal backwards hop)', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.escalated, FraudFlagStatus.reviewing),
+    ).toThrow(/Invalid fraud flag transition/);
+  });
+
+  it('rejects resolved_valid → resolved_invalid (terminal to terminal)', () => {
+    expect(() =>
+      validateFraudFlagTransition(FraudFlagStatus.resolved_valid, FraudFlagStatus.resolved_invalid),
+    ).toThrow(/Invalid fraud flag transition/);
   });
 });

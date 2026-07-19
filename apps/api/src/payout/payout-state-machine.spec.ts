@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { PayoutStatus } from '@waitlayer/shared';
+
 import { AuditService } from '../audit/audit.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReferralService } from '../referral/referral.service';
 import { PayoutService } from './payout.service';
+import { validatePayoutTransition } from './payout-state-machine';
 
 /**
  * Financial state-machine, concurrency, replay, duplicate-webhook and
@@ -738,5 +741,84 @@ describe('Duplicate-webhook replay idempotency (unit level)', () => {
 
     // deleteMany was called both times but count=0 on the replay —
     // no double-release of earnings allocations.
+  });
+});
+
+// ── Declarative transition guard unit tests ──
+// These assert the PAYOUT_TRANSITIONS table is enforced by validatePayoutTransition
+// directly, complementing the CAS-level tests above.
+
+describe('validatePayoutTransition (declarative guard)', () => {
+  it('allows processing → paid (canonical mark-paid transition)', () => {
+    expect(() =>
+      validatePayoutTransition(PayoutStatus.PROCESSING, PayoutStatus.PAID),
+    ).not.toThrow();
+  });
+
+  it('allows processing → failed (canonical mark-failed transition)', () => {
+    expect(() =>
+      validatePayoutTransition(PayoutStatus.PROCESSING, PayoutStatus.FAILED),
+    ).not.toThrow();
+  });
+
+  it('allows approved → paid (CAS permits approved/processing → paid)', () => {
+    expect(() => validatePayoutTransition(PayoutStatus.APPROVED, PayoutStatus.PAID)).not.toThrow();
+  });
+
+  it('allows approved → failed', () => {
+    expect(() =>
+      validatePayoutTransition(PayoutStatus.APPROVED, PayoutStatus.FAILED),
+    ).not.toThrow();
+  });
+
+  it('allows approved → processing (processPayout)', () => {
+    expect(() =>
+      validatePayoutTransition(PayoutStatus.APPROVED, PayoutStatus.PROCESSING),
+    ).not.toThrow();
+  });
+
+  it('allows requested → under_review and under_review → approved', () => {
+    expect(() =>
+      validatePayoutTransition(PayoutStatus.REQUESTED, PayoutStatus.UNDER_REVIEW),
+    ).not.toThrow();
+    expect(() =>
+      validatePayoutTransition(PayoutStatus.UNDER_REVIEW, PayoutStatus.APPROVED),
+    ).not.toThrow();
+  });
+
+  it('rejects requested → paid (illegal jump)', () => {
+    expect(() => validatePayoutTransition(PayoutStatus.REQUESTED, PayoutStatus.PAID)).toThrow(
+      /Invalid payout transition/,
+    );
+  });
+
+  it('rejects under_review → paid (illegal jump)', () => {
+    expect(() => validatePayoutTransition(PayoutStatus.UNDER_REVIEW, PayoutStatus.PAID)).toThrow(
+      /Invalid payout transition/,
+    );
+  });
+
+  it('rejects processing → requested (illegal backwards hop)', () => {
+    expect(() => validatePayoutTransition(PayoutStatus.PROCESSING, PayoutStatus.REQUESTED)).toThrow(
+      /Invalid payout transition/,
+    );
+  });
+
+  it('rejects paid → processing (terminal state cannot leave)', () => {
+    expect(() => validatePayoutTransition(PayoutStatus.PAID, PayoutStatus.PROCESSING)).toThrow(
+      /Invalid payout transition/,
+    );
+  });
+
+  it('rejects failed → paid (terminal state cannot leave)', () => {
+    expect(() => validatePayoutTransition(PayoutStatus.FAILED, PayoutStatus.PAID)).toThrow(
+      /Invalid payout transition/,
+    );
+  });
+
+  it('rejects approved → under_review (illegal backwards hop)', () => {
+    expect(() =>
+      validatePayoutTransition(PayoutStatus.APPROVED, PayoutStatus.UNDER_REVIEW),
+    ).toThrow(/Invalid payout transition/);
   });
 });

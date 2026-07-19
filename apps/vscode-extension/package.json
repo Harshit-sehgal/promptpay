@@ -21,7 +21,8 @@
     "onCommand:waitlayer.logout",
     "onCommand:waitlayer.showEarnings",
     "onCommand:waitlayer.toggleAds",
-    "onCommand:waitlayer.openDashboard"
+    "onCommand:waitlayer.openDashboard",
+    "onCommand:waitlayer.reportFalseWait"
   ],
   "contributes": {
     "commands": [
@@ -44,6 +45,10 @@
       {
         "command": "waitlayer.openDashboard",
         "title": "WaitLayer: Open Dashboard"
+      },
+      {
+        "command": "waitlayer.reportFalseWait",
+        "title": "WaitLayer: Report false wait detection"
       }
     ],
     "configuration": {
@@ -91,7 +96,15 @@
           "description": "WaitLayer API base URL"
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "waitlayer.reportFalseWait",
+        "key": "ctrl+alt+f",
+        "mac": "cmd+alt+f",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "pnpm run bundle",

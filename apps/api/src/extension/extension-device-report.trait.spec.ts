@@ -21,7 +21,7 @@ describe('ExtensionDeviceReportTrait.reportAd retry safety', () => {
         update: vi.fn().mockResolvedValue({ ...impression, isBillable: false }),
       },
       adReport: {
-        // Round 40: compound-key findUnique replaces findFirst for
+        // compound-key findUnique replaces findFirst for
         // @@unique([impressionId, userId]); under the Prisma compound-key
         // API, the mock property is `findUnique`, not a compound-key
         // accessor. The trait code calls

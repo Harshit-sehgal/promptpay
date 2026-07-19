@@ -304,7 +304,7 @@ export class ReferralService {
   /**
    * Reverse a single referral reward.
    *
-   * Round 36: processReferralRewards writes three rows (platformLedger credit in
+   * processReferralRewards writes three rows (platformLedger credit in
    * bucket `referral_bonus`, a `referralReward`, and an `earningsLedger` credit)
    * but no code path ever reversed them — a banned/confirmed-fraud referrer kept
    * the bonus forever because `reverseEarnings` is keyed on impressionId/clickId

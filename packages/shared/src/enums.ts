@@ -157,7 +157,7 @@ export enum ReferralStatus {
 }
 
 // ── Extension WaitState / Ad Lifecycle Event Types ──
-// Round 33 schema-gap: the `WaitStateEvent.eventType` Prisma enum (DB name
+// schema-gap: the `WaitStateEvent.eventType` Prisma enum (DB name
 // `EventType`, members `wait_state_start`, `wait_state_end`, `ad_request`,
 // `ad_rendered`, `qualified_impression`, `click`, `report_ad`) had no shared
 // TS counterpart. Every other DB enum has a mirror here; this was the sole

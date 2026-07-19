@@ -54,7 +54,7 @@ function makeController(options: { depositDuplicate?: boolean } = {}) {
     logStrict: vi.fn().mockResolvedValue(undefined),
   };
   const referral = { processReferralRewards: vi.fn().mockResolvedValue(undefined) };
-  // Round 29: StripeWebhookController now depends on PayoutService for
+  // StripeWebhookController now depends on PayoutService for
   // handlePayoutFailed's markPayoutFailed delegation. Tests that don't
   // exercise the payout-failed path pass a stub here; the integration
   // test (`src/integration/stripe-webhook.spec.ts`) wires the real

@@ -21,6 +21,7 @@ export const RUNTIME_CONFIG_KEYS = {
   BLOCKED_CURRENCIES: { scope: 'currencies', target: 'blocked' },
   BLOCKED_EXTENSION_VERSIONS: { scope: 'extension', target: 'versions.blocked' },
   EXTENSION_MIN_VERSION: { scope: 'extension', target: 'min_version' },
+  DETECTOR_VERSION: { scope: 'detector', target: '1.0.0' },
 } as const satisfies Record<string, RuntimeConfigKey>;
 
 interface CacheEntry<T> {
@@ -255,6 +256,23 @@ export class RuntimeConfigService {
     const minVersion = await this.getString(RUNTIME_CONFIG_KEYS.EXTENSION_MIN_VERSION, null);
     if (!minVersion) return true;
     return this.compareVersions(version, minVersion) >= 0;
+  }
+
+  /**
+   * Detector-version kill-switch (P1.17). Operators disable a specific wait
+   * detector release via `POST /admin/settings/detector/<version>/toggle`
+   * (`{enabled:false}`); the value is stored as `{ enabled: boolean }` under
+   * the `detector` scope. Defaults to `true` when no config row exists so an
+   * unconfigured version stays enabled (existing behavior unchanged). A null
+   * or missing version is treated as enabled because it cannot be attributed
+   * to a specific disabled release.
+   */
+  async isDetectorVersionEnabled(detectorVersion: string | null | undefined): Promise<boolean> {
+    if (!detectorVersion) return true;
+    return this.getBoolean(
+      { scope: RUNTIME_CONFIG_KEYS.DETECTOR_VERSION.scope, target: detectorVersion },
+      true,
+    );
   }
 
   // ── Private helpers ──

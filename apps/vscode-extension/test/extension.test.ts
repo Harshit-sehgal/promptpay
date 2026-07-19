@@ -11,6 +11,7 @@ const mock = vi.hoisted(() => ({
     waitStateStart: vi.fn(),
     waitStateEnd: vi.fn(),
     requestAd: vi.fn(),
+    flagFalsePositive: vi.fn(),
   },
   config: {
     getInactivityTimeoutMs: vi.fn(() => 15_000),
@@ -41,6 +42,8 @@ const mock = vi.hoisted(() => ({
     showAdServing: vi.fn(),
     showIdle: vi.fn(),
   },
+  showInformationMessage: vi.fn(),
+  showErrorMessage: vi.fn(),
 }));
 
 vi.mock('vscode', () => ({
@@ -51,8 +54,8 @@ vi.mock('vscode', () => ({
     }),
   },
   window: {
-    showInformationMessage: vi.fn(),
-    showErrorMessage: vi.fn(),
+    showInformationMessage: mock.showInformationMessage,
+    showErrorMessage: mock.showErrorMessage,
   },
   env: { openExternal: vi.fn() },
   Uri: { parse: vi.fn((value: string) => value) },
@@ -119,6 +122,7 @@ beforeEach(() => {
   mock.api.waitStateStart.mockResolvedValue({});
   mock.api.waitStateEnd.mockResolvedValue({});
   mock.api.requestAd.mockResolvedValue(null);
+  mock.api.flagFalsePositive.mockResolvedValue(undefined);
   mock.config.adsEnabled.mockResolvedValue(false);
   mock.config.inQuietHours.mockResolvedValue(false);
   mock.config.getMaxAdsPerHour.mockResolvedValue(5);
@@ -186,5 +190,62 @@ describe('extension wait lifecycle', () => {
       mock.api.waitStateEnd.mock.invocationCallOrder[0],
     );
     expect(mock.api.requestAd).not.toHaveBeenCalled();
+  });
+});
+
+describe('extension reportFalseWait command', () => {
+  it('does nothing when there is no active wait', async () => {
+    await activateAndClearBootState();
+
+    await mock.commands.get('waitlayer.reportFalseWait')?.();
+
+    expect(mock.api.flagFalsePositive).not.toHaveBeenCalled();
+    expect(mock.showInformationMessage).toHaveBeenCalledWith('WaitLayer: no active wait to report');
+  });
+
+  it('flags the active wait state and then reports already-flagged on repeat', async () => {
+    await activateAndClearBootState();
+    const event = {
+      startTime: Date.now(),
+      durationMs: 25,
+      tool: 'task',
+      waitStateId: 'fp-wait-1',
+    };
+    mock.signalHandler?.({ type: 'wait_start', event });
+
+    await mock.commands.get('waitlayer.reportFalseWait')?.();
+
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-wait-1');
+    expect(mock.showInformationMessage).toHaveBeenCalledWith(
+      'WaitLayer: thanks — this wait has been flagged as a false detection',
+    );
+
+    await mock.commands.get('waitlayer.reportFalseWait')?.();
+
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
+    expect(mock.showInformationMessage).toHaveBeenCalledWith(
+      'WaitLayer: this wait has already been reported as a false detection',
+    );
+  });
+
+  it('clears the flagged state when a new wait starts', async () => {
+    await activateAndClearBootState();
+    mock.signalHandler?.({
+      type: 'wait_start',
+      event: { startTime: Date.now(), durationMs: 25, tool: 'task', waitStateId: 'fp-a' },
+    });
+    await mock.commands.get('waitlayer.reportFalseWait')?.();
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
+
+    mock.api.flagFalsePositive.mockClear();
+    mock.signalHandler?.({
+      type: 'wait_start',
+      event: { startTime: Date.now(), durationMs: 25, tool: 'task', waitStateId: 'fp-b' },
+    });
+    await mock.commands.get('waitlayer.reportFalseWait')?.();
+
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-b');
   });
 });

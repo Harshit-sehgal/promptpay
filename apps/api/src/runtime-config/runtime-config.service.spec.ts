@@ -154,4 +154,32 @@ describe('RuntimeConfigService', () => {
       });
     });
   });
+  describe('isDetectorVersionEnabled', () => {
+    it('defaults to true when no config row exists', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+      const result = await service.isDetectorVersionEnabled('1.0.0');
+      expect(result).toBe(true);
+      expect(mockPrisma.systemSetting.findUnique).toHaveBeenCalledWith({
+        where: { scope_target: { scope: 'detector', target: '1.0.0' } },
+      });
+    });
+
+    it('returns true when the detector version is enabled', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue({ value: { enabled: true } });
+      const result = await service.isDetectorVersionEnabled('1.0.0');
+      expect(result).toBe(true);
+    });
+
+    it('returns false when the detector version is disabled', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue({ value: { enabled: false } });
+      const result = await service.isDetectorVersionEnabled('1.0.0');
+      expect(result).toBe(false);
+    });
+
+    it('returns true for a null/undefined version without a DB lookup', async () => {
+      const result = await service.isDetectorVersionEnabled(undefined);
+      expect(result).toBe(true);
+      expect(mockPrisma.systemSetting.findUnique).not.toHaveBeenCalled();
+    });
+  });
 });

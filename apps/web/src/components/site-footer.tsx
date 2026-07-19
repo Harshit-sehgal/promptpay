@@ -153,6 +153,21 @@ export default function SiteFooter() {
                   Advertiser Policy
                 </Link>
               </li>
+              <li>
+                <Link href="/legal/cookie-policy" className="wl-link-u">
+                  Cookie Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/legal/data-retention" className="wl-link-u">
+                  Data retention
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy#ccpa" className="wl-link-u">
+                  Do Not Sell or Share My Personal Information
+                </Link>
+              </li>
             </ul>
           </div>
           <div>

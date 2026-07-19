@@ -26,6 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
   let adTimestamps: number[] = [];
   const sessionId = crypto.randomUUID();
   let activeWaitStateId: string | null = null;
+  let flaggedWaitStateId: string | null = null;
   const waitStartPromises = new Map<string, Promise<string | null>>();
 
   // Register all commands
@@ -71,6 +72,29 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('waitlayer.openDashboard', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://waitlayer.com/developer'));
     }),
+    vscode.commands.registerCommand('waitlayer.reportFalseWait', async () => {
+      if (!activeWaitStateId) {
+        vscode.window.showInformationMessage('WaitLayer: no active wait to report');
+        return;
+      }
+      if (flaggedWaitStateId === activeWaitStateId) {
+        vscode.window.showInformationMessage(
+          'WaitLayer: this wait has already been reported as a false detection',
+        );
+        return;
+      }
+      try {
+        await api.flagFalsePositive(activeWaitStateId);
+        flaggedWaitStateId = activeWaitStateId;
+        vscode.window.showInformationMessage(
+          'WaitLayer: thanks — this wait has been flagged as a false detection',
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`WaitLayer: failed to flag false-positive wait — ${msg}`);
+        vscode.window.showErrorMessage(`WaitLayer: failed to report false wait — ${msg}`);
+      }
+    }),
   ];
 
   // Wait-state detection — fires when AI assistant shows waiting indicator
@@ -78,6 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
     if (signal.type === 'wait_start') {
       const event = signal.event;
       activeWaitStateId = event.waitStateId;
+      flaggedWaitStateId = null;
 
       const startPromise = (async (): Promise<string | null> => {
         try {

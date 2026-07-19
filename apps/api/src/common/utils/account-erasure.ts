@@ -255,7 +255,7 @@ async function assertNoFinancialErasureObligations(
       // balance so the preflight passes. The reversed entries remain in the
       // ledger as an audit trail.
       //
-      // Round 35: write matching forfeit credits to the platform cash bucket
+      // write matching forfeit credits to the platform cash bucket
       // so the global split-conservation invariant stays balanced:
       //   advertiser_spend = netEarnings + netPlatform + netReserve + netCash.
       // Without this, flipping developer credits to 'reversed' (removed from

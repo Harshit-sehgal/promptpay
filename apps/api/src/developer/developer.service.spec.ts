@@ -303,7 +303,7 @@ describe('DeveloperService', () => {
 
   describe('getEarningsSummary', () => {
     it('aggregates ledger totals in the database instead of loading every row', async () => {
-      mockPrisma.earningsLedger.groupBy.mockResolvedValue([]); // Round 37: second call for allocations returns empty
+      mockPrisma.earningsLedger.groupBy.mockResolvedValue([]); // second call for allocations returns empty
 
       // Override only the first groupBy call (the main summary aggregation)
       // with a mockImplementation that returns the right data on the first

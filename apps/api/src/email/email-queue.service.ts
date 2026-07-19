@@ -76,7 +76,7 @@ export class EmailQueueService {
       const encryptedHtml = this.encrypt(msg.html);
       const encryptedText = msg.text ? this.encrypt(msg.text) : null;
 
-      // Round 35: try create-first, catch P2002 on the contentHash @unique
+      // try create-first, catch P2002 on the contentHash @unique
       // constraint, and fall through to an update that preserves the existing
       // retry-count (backoff clock) + timestamps (expiresAt). The prior
       // findUnique-then-create was a classic TOCTOU: two concurrent

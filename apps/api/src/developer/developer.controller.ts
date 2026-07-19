@@ -57,7 +57,7 @@ export class DeveloperController {
 
   @ApiOperation({ summary: 'Update settings' })
   @Patch('settings')
-  // Round 34: settings changes (ads enable flag, quiet-mode windows, hourly
+  // settings changes (ads enable flag, quiet-mode windows, hourly
   // ad cap, blocked categories, timezone) shape how and whether this account
   // earns, and quiet-mode / blocked-categories can be used to silently stall
   // ad delivery. An attacker who took over the account would flip these to

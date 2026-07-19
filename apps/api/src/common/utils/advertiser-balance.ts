@@ -16,7 +16,7 @@ type BalanceClient = Pick<PrismaService, 'advertiserLedger'>;
  *    and only reduce the spendable balance once an admin confirms the Stripe
  *    refund (`status: 'confirmed'`). A `pending` refund must NOT reserve the
  *    advertiser's balance — see admin-campaigns.trait.ts `confirmArchiveRefund`
- *    and the archive-refund comment in advertiser-campaign.trait.ts. (Round 29
+ *    and the archive-refund comment in advertiser-campaign.trait.ts. (
  *    fixed a bug where the code subtracted any `refund` row regardless of
  *    status; the doc-comment was already correct, the implementation was not.)
  *  - Dispute holds / reversals live on row `status` ('held' / 'reversed'),
@@ -54,7 +54,7 @@ export async function getAdvertiserBalance(
     // admin-campaigns.trait.ts confirmArchiveRefund), so it must not reserve
     // the advertiser's balance. The previous code subtracted any `refund`
     // row regardless of status, contradicting the doc-comment and the
-    // archive-refund confirm flow. (Round 29.)
+    // archive-refund confirm flow.
     if (row.entryType === 'refund') {
       if (row.status === 'confirmed') refunds += amount;
       continue;
@@ -97,7 +97,7 @@ export async function getAdvertiserBalancesByCurrency(
     const amount = BigInt(row._sum.amountMinor ?? 0);
     // Pending archive refunds must NOT reserve the advertiser's balance —
     // see getAdvertiserBalance above. Only subtract a `refund` once an admin
-    // has confirmed the Stripe refund issuance. (Round 29.)
+    // has confirmed the Stripe refund issuance.
     if (row.entryType === 'refund') {
       if (row.status === 'confirmed') map.set(key, current - amount);
       continue;

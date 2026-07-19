@@ -198,7 +198,7 @@ export const PayoutMethodResponse = z.object({
   currency: z.string(),
   isVerified: z.boolean(),
   isActive: z.boolean(),
-  // Round 33 drift fix: PayoutAccount also carries a `isFrozen` /
+  // drift fix: PayoutAccount also carries a `isFrozen` /
   // `initiationPayoutId` fence pair used by the payout-request lock (see
   // `payout-request.trait.ts`). When a request is `processing`, the chosen
   // account is fenced (`isFrozen=true`, `initiationPayoutId=request.id`) so
@@ -280,7 +280,7 @@ export const PayoutAvailableResponse = z.object({
   totalMinor: z.coerce.bigint().nonnegative(),
   currency: z.string(),
   count: z.number().nonnegative(),
-  // Round 33 drift fix: the payout summary returns `page`, `limit`, and
+  // drift fix: the payout summary returns `page`, `limit`, and
   // `hasMore` (see `payout-summary.trait.ts getAvailableForPayout`) so the
   // client can paginate without re-fetching the count. These were missing
   // from the Zod contract — typed consumers silently lost the pagination
@@ -321,7 +321,7 @@ export const LedgerBalanceResponse = z.object({
 
 /** GET /api/v1/developer/dashboard response
  *
- * Round 33 drift fix: the developer dashboard shape was previously
+ * drift fix: the developer dashboard shape was previously
  * hand-rolled in two places (web `DashboardData` interface and CLI
  * `getOverview` raw type), with no canonical Zod contract bridging
  * server and client. Field renames (e.g. Round 32's

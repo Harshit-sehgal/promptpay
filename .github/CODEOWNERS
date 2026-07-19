@@ -1,0 +1,29 @@
+# CODEOWNERS (P1.21)
+#
+# PRs that change the paths below require review from the named owners before
+# merge. Replace `@promptpay1` with the real GitLab groups/users for this
+# project. Enforce via "Protected branches" in GitLab (see
+# docs/ops/branch-protection.md).
+
+# Authentication & identity
+/apps/api/src/auth/          @promptpay1
+/apps/api/src/common/guards/ @promptpay1
+
+# Ledger, ad serving, campaign (money-critical)
+/apps/api/src/ledger/        @promptpay1
+/apps/api/src/extension/     @promptpay1
+/apps/api/src/campaign/      @promptpay1
+
+# Payouts
+/apps/api/src/payout/        @promptpay1
+
+# Migrations & schema
+/packages/db/prisma/         @promptpay1
+
+# CI / deployment
+/.github/                    @promptpay1
+/Dockerfile                  @promptpay1
+/docker-compose.yml          @promptpay1
+
+# Default owners
+*                            @promptpay1

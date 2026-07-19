@@ -666,7 +666,7 @@ describe('API Contract Tests', () => {
       expect(() => PayoutAvailableResponse.parse(res.body)).not.toThrow();
     });
 
-    // Round 27 Fix 9: this now performs a real HTTP call against the live
+    // this now performs a real HTTP call against the live
     // endpoint to assert endpoint↔schema drift, instead of parsing a synthetic
     // mock object that the schema could drift from silently.
     it('POST /payout/request schema is structurally valid (real HTTP)', async () => {

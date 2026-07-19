@@ -382,21 +382,33 @@ reports drift.
 
 **Purpose:** A bad wait-detector release spikes false positives (P1.17).
 
-**Steps:** Kill-switch the detector version via the runtime config key
-(e.g. `detector:1.0.0`):
+**Steps:** Kill-switch the detector version via the runtime config toggle
+(e.g. `detector:1.0.0`). The key uses the `detector` scope and the version
+as the target; the value is `{ enabled: boolean }`. Disabling it blocks two
+paths with no extension update required:
+
+1. `recordWaitStateStart` refuses to record wait states for the disabled
+   detector version (the start event is rejected, so no billable wait is
+   created).
+2. `requestAd` refuses to serve ads for any wait state whose
+   `detectorVersion` matches a disabled version
+   (`reason: detector_version_disabled`).
 
 ```bash
-curl -X POST "<APP>/admin/runtime-config/detector:1.0.0" \
+curl -X POST "<APP>/admin/settings/detector/1.0.0/toggle" \
   -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 ```
 
 Tool-specific enable/disable switches use the same mechanism
-(`ToggleToolIntegrationDto`, `POST /admin/tools/:tool/integration`).
+(`ToggleRuntimeConfigDto`, `POST /admin/tools/:tool/integration`).
 
 **Verification:** `GET /observability/metrics` `detector_version{version=1.0.0}`
-stops incrementing; false-positive rate (`false_positives`) drops.
+stops incrementing; false-positive rate (`false_positives`) drops; no new ad
+impressions report `detector_version="1.0.0"`.
 
-**Rollback:** re-enable the key (no extension update required).
+**Rollback:** re-enable the key with `{"enabled": true}` (no extension update
+required).
 
 **Approvals:** On-call SRE + product.

@@ -20,6 +20,7 @@ export function createMockRuntimeConfig(
     isCountryAllowed: vi.fn().mockResolvedValue(true),
     isCurrencyAllowed: vi.fn().mockResolvedValue(true),
     isExtensionVersionAllowed: vi.fn().mockResolvedValue(true),
+    isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
     getBoolean: vi.fn().mockResolvedValue(true),
     setBoolean: vi.fn().mockResolvedValue({}),
     getStringArray: vi.fn().mockResolvedValue([]),

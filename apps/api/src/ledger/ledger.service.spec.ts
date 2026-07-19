@@ -207,7 +207,7 @@ describe('LedgerService', () => {
 
   describe('getPendingBalance', () => {
     it('returns sum of pending and estimated earnings, net of confirmed recovery debits', async () => {
-      // Round 33 Gap D: getPendingBalance now subtracts confirmed `debit`
+      // Gap D: getPendingBalance now subtracts confirmed `debit`
       // rows (recovery debt) the same way getAvailableBalance does. The first
       // groupBy call returns the credits (estimated + pending); the second
       // returns the confirmed recovery debits.
@@ -718,7 +718,7 @@ describe('LedgerService', () => {
     });
 
     /**
-     * Round 11 follow-up: `reverseEarnings` previously keyed ONLY on
+     * follow-up: `reverseEarnings` previously keyed ONLY on
      * `impressionId`, so confirmed click-fraud (a flag carrying
      * `clickId` but no `impressionId`) skipped reversals entirely —
      * the developer's click-credit stayed `confirmed`, the advertiser

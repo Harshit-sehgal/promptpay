@@ -50,7 +50,7 @@ export class LedgerBalanceTrait {
     currency: string;
     byCurrency: Record<string, bigint>;
   }> {
-    // Round 33 Gap D: pending must also subtract confirmed `debit` rows, the
+    // Gap D: pending must also subtract confirmed `debit` rows, the
     // same way `getAvailableBalance` and `getTotalEarnings` do. Recovery-debt
     // rows written by `reverseEarnings` (post-payout fraud claw-back) are
     // `entryType: 'debit', status: 'confirmed'`. Without this subtraction, a

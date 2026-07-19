@@ -13,6 +13,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { FraudFlagStatus, FraudFlagType, FraudSeverity, Prisma } from '@waitlayer/db';
+import { PayoutStatus } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { EventBus } from '../common/events/event-bus';
@@ -21,6 +22,7 @@ import { assertSafeJson } from '../common/utils/json-value';
 import { PrismaService } from '../config/prisma.service';
 import { ReferralService } from '../referral/referral.service';
 import { PayoutService } from './payout.service';
+import { validatePayoutTransition } from './payout-state-machine';
 import { StripeProvider } from './providers';
 
 type RawBodyRequest = Request & { rawBody?: Buffer | string };
@@ -591,7 +593,7 @@ export class StripeWebhookController implements OnModuleInit {
    * stays `isVerified: false` forever and can never receive payouts without a
    * manual admin `setPayoutAccountVerified` call — the only verification path
    * documented in `createStripeConnectOnboarding` was this webhook, which the
-   * switch never routed. (Round 37.)
+   * switch never routed.
    *
    * CAS-gated on `isVerified: false` so a later admin rejection (which flips
    * `isVerified` back to false) takes precedence and a stale/redelivered
@@ -801,7 +803,7 @@ export class StripeWebhookController implements OnModuleInit {
       this.logger.warn(
         `No active ledger entries found for paymentIntent ${details.paymentIntentId} in refund ${event.id} — cash refund recorded, advertiser side skipped`,
       );
-      // Round 27 Fix 10: audit-log the platform-cash debit even on the
+      // audit-log the platform-cash debit even on the
       // orphan-advertiser-side path. Stripe moved money OUT against this PI;
       // the platform refund row was written, but the audit trail was blank —
       // investigators relying on `audit_logs` would see no record of this
@@ -829,7 +831,7 @@ export class StripeWebhookController implements OnModuleInit {
     }
 
     // ── Restore parent-deposit remainder before reversing ──
-    // Issue A-063 / Round 27 Fix 1: handleDispute.decrement freezes the
+    // Issue A-063: handleDispute.decrement freezes the
     // disputed slice by decrementing the parent deposit credit row's
     // `amountMinor` by the held amount (the separate `hold` ledger row
     // carries the full frozen value). When a refund arrives on a payment
@@ -868,7 +870,7 @@ export class StripeWebhookController implements OnModuleInit {
       },
     });
 
-    // ── Hold restore + retire, atomically per hold row (Round 33 Gap C) ──
+    // ── Hold restore + retire, atomically per hold row ──
     // A refund supersedes any active dispute: the disputed slice must return
     // to spendable (restore the parent credit) AND the hold row must retire
     // (status 'held' → 'reversed') so a later `charge.dispute.closed` cannot
@@ -1159,7 +1161,7 @@ export class StripeWebhookController implements OnModuleInit {
         // freshly created (not on replay/idempotent skip), preventing a
         // double-decrement on stall-reclaim re-delivery.
         if (holdCreated) {
-          // Issue A-063 / Round 33 Gap B / Round 34 regression-fix: prevent
+          // Issue A-063: prevent
           // the parent credit from going negative when two DISTINCT concurrent
           // disputes on the same payment intent both target this row. The
           // outer `creditEntries` read (line 982) is outside this per-entry tx,
@@ -1177,7 +1179,7 @@ export class StripeWebhookController implements OnModuleInit {
           // part of the atomic UPDATE, not a TOCTOU between a read and a
           // Prisma `decrement`.
           //
-          // Round 34 regression: an earlier draft logged `warn` and fell
+          // regression: an earlier draft logged `warn` and fell
           // through on `decrementRows === 0`, which committed the `hold`
           // row at the top of this same `$transaction` without a matching
           // parent decrement. `handleDisputeClosed` then later wrote a
@@ -1342,7 +1344,7 @@ export class StripeWebhookController implements OnModuleInit {
     for (const hold of holdEntries) {
       const settleIdempotencyKey = `stripe_dispute_${won ? 'won' : 'lost'}_${dispute.id}_${hold.id}`;
       await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-        // Round 35: claim the hold FIRST via a CAS flip `held → reversed`.
+        // claim the hold FIRST via a CAS flip `held → reversed`.
         // The `handleRefund` path (Round 33 Gap C) retires this same hold row
         // and restores the disputed slice to the advertiser by INCREMENTING the
         // parent credit — a disjoint restore mechanism from this won-path
@@ -1522,6 +1524,12 @@ export class StripeWebhookController implements OnModuleInit {
       });
       return;
     }
+    // Declarative state-machine guard: reject any PayoutRequest transition not
+    // enumerated in PAYOUT_TRANSITIONS (e.g. a `requested` payout that somehow
+    // received a Stripe `payout.paid`). The atomic CAS
+    // `updateMany where status in ('approved','processing')` below stays the
+    // authoritative concurrency check.
+    validatePayoutTransition(payoutRequest.status as PayoutStatus, PayoutStatus.PAID);
 
     // Collect ALL allocated earnings entry IDs (not just confirmed ones) so
     // the post-check `paidCount === earningsIds.length` below actually
@@ -1648,7 +1656,7 @@ export class StripeWebhookController implements OnModuleInit {
    * same write shape as `markPayoutPaid`, mirrored for the failure direction
    * so the two terminal transitions are symmetric.
    *
-   * Round 29: the previous handler logged a `requires_review` audit but did
+   * the previous handler logged a `requires_review` audit but did
    * NOT flip the request, did NOT release the allocations, and did NOT stamp
    * `PayoutTransaction.status = 'failed'`. That left the PayoutRequest stuck
    * in `processing` and the allocations reserving earnings — the developer

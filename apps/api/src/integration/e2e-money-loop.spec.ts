@@ -1834,7 +1834,7 @@ describe('E2E Money Loop', () => {
         eventSecret: DEVICE_EVENT_SECRET,
         user: { status: 'active' },
       });
-      // Round 39: recordWaitStateStart now has a duplicate-waitState-check
+      // recordWaitStateStart now has a duplicate-waitState-check
       // (findFirst waitStateId+eventType) that must see no prior start for the
       // test to succeed. That duplicate check already ran (against the default
       // findFirst→null from beforeEach) before this mockImplementation is

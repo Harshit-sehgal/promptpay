@@ -124,7 +124,7 @@ describe('EmailQueueService', () => {
 
   it('updates an existing row without resetting retry count (P2002 race recovery)', async () => {
     mockEmail.send.mockResolvedValueOnce({ delivered: false, driver: 'resend' });
-    // Round 35: enqueueOrSend now tries create first; on P2002 (contentHash
+    // enqueueOrSend now tries create first; on P2002 (contentHash
     // @unique race) it falls through to findUniqueOrThrow + update.
     mockPrisma.emailQueue.create.mockRejectedValueOnce({ code: 'P2002' });
     mockPrisma.emailQueue.findUniqueOrThrow.mockResolvedValueOnce({

@@ -250,6 +250,17 @@ export class ApiClient {
       signature: await this.signEventPayload(payload),
     });
   }
+  /**
+   * Flag a wait state as a false positive. The flag is stored on the start
+   * event server-side (ExtensionWaitTrait.flagFalsePositive →
+   * POST /extension/wait-state/:waitStateId/false-positive) and feeds
+   * detector-precision analytics. This is a developer action gated by the
+   * Bearer token, so no event signature is required — mirror the simple
+   * signed-POST-free calls and let `post` attach the auth header.
+   */
+  async flagFalsePositive(waitStateId: string): Promise<void> {
+    await this.post(`/extension/wait-state/${waitStateId}/false-positive`, {});
+  }
 
   async requestAd(input: {
     deviceId: string;
@@ -560,13 +571,13 @@ export class ApiClient {
     }
     const requestHostname = requestHostnameForUrl(url);
     const transport = url.protocol === 'https:' ? https : http;
-    // Round 36: bound DNS resolution explicitly. `req.setTimeout` covers the
+    // bound DNS resolution explicitly. `req.setTimeout` covers the
     // established-connection wall clock but NOT the DNS lookup phase. A hung
     // resolver (misconfigured /etc/resolv.conf, unreachable DNS server, captive
     // portal) would block every extension API call indefinitely — and because
     // ad-panel lifecycle callbacks fire these synchronously, a single hung
     // socket freezes the entire ad-serving pipeline until VS Code is restarted.
-    // This mirrors the CLI `lookupWithTimeout` fix (Round 30 / 36).
+    // This mirrors the CLI `lookupWithTimeout` fix.
     const lookupWithTimeout = (
       hostname: string,
       _options: dns.LookupOptions,

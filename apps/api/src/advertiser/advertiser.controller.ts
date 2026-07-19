@@ -66,7 +66,7 @@ function resolveApiContext(req: {
     }
     return { userId: req.apiKey.ownerId, advertiserId: req.apiKey.advertiserId, auth: 'apikey' };
   }
-  const userId = req.user?.sub ?? req.user?.id;
+  const userId = req.user?.id ?? req.user?.sub;
   if (!userId) throw new BadRequestException('Missing authenticated principal');
   return { userId, advertiserId: null, auth: 'jwt' };
 }

@@ -112,8 +112,8 @@ describe('AdminService', () => {
       //   4. totalReserveReversal   (fraud_reserve reversal)
       //   5. totalCashCredit        (cash credit)        — advertiser deposit cash bucket
       //   6. totalCashReversal      (cash reversal)
-      //   7. totalReferralBonusCredit   (referral_bonus credit)   — Round 36
-      //   8. totalReferralBonusReversal (referral_bonus reversal) — Round 36
+      //   7. totalReferralBonusCredit   (referral_bonus credit)
+      //   8. totalReferralBonusReversal (referral_bonus reversal)
       mockPrisma.platformLedger.groupBy
         .mockResolvedValueOnce([
           { currency: 'USD', _sum: { amountMinor: 30 } },

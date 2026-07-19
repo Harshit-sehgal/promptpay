@@ -47,7 +47,7 @@ export class PayoutMethodTrait {
   ) {
     const { provider, destination, currency } = await this.normalizePayoutMethod(dto);
     const method = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // Round 40: guard against deactivating a payout account that has
+      // guard against deactivating a payout account that has
       // in-flight payout requests (requested / under_review / approved /
       // processing). Deactivating such an account permanently wedges those
       // requests — processPayout will see isActive:false and refuse, but the
@@ -174,7 +174,7 @@ export class PayoutMethodTrait {
       // ownership. Accepting an arbitrary `acct_*` string here would let any
       // developer register someone else's Stripe Connected account as their
       // payout destination — a direct money-steal vector once an admin later
-      // verifies it. (Round 37 provenance fix.)
+      // verifies it.
       throw new BadRequestException(
         'Stripe Connect accounts must be added via the onboarding flow, not manually.',
       );

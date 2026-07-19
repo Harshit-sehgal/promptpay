@@ -127,7 +127,7 @@ export function scrubSentryEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
         return { ...crumb, data };
       });
     }
-    // Round 38: scrub event.extra and event.contexts to catch strings the
+    // scrub event.extra and event.contexts to catch strings the
     // exception filters write into the event payload — message text from
     // HttpException, raw audit reasons, etc. Headers/url in extra get the
     // same treatment as request.*.

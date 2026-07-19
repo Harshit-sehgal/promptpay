@@ -54,6 +54,14 @@ export class ExtensionWaitTrait {
     if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
+    // P1.17: detector-version kill-switch. A disabled detector version must
+    // not record billable wait states, so operators can roll back a bad
+    // wait-detector release without an extension update.
+    if (!(await this.runtimeConfig.isDetectorVersionEnabled(dto.detectorVersion))) {
+      throw new ForbiddenException(
+        `Detector version "${dto.detectorVersion}" is currently disabled`,
+      );
+    }
     // Duplicate start check — a @@unique([waitStateId, eventType]) guards at
     // the DB layer (migration 20260718020000), but give the client a clean
     // 409 rather than a raw P2002 constraint violation.

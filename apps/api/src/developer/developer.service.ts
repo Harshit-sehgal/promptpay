@@ -144,9 +144,9 @@ export class DeveloperService {
       summary.confirmedEarningsByCurrency,
     );
     // Seed availableForPayoutByCurrency from confirmedEarningsByCurrency
-    // before subtracting in-flight allocations (Round 37).
+    // before subtracting in-flight allocations.
     summary.availableForPayoutByCurrency = { ...summary.confirmedEarningsByCurrency };
-    // Round 37: Subtract in-flight payout allocations from availableForPayout.
+    // Subtract in-flight payout allocations from availableForPayout.
     // Without this correction, the developer dashboard mirrors confirmed earnings
     // as "available for payout" while a pending/processing payout already
     // reserves some of those same earnings entries — the developer sees a

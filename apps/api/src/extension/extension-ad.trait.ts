@@ -131,6 +131,12 @@ export class ExtensionAdTrait {
     if (!waitStart) {
       throw new BadRequestException('No matching active wait state start');
     }
+    // P1.17: detector-version kill-switch. Refuse to serve ads for a disabled
+    // detector version so a bad release cannot accrue billable impressions,
+    // even if a wait state was recorded before the kill-switch took effect.
+    if (!(await this.runtimeConfig.isDetectorVersionEnabled(waitStart.detectorVersion))) {
+      return { ad: null, reason: 'detector_version_disabled' };
+    }
     // Do not bill inactivity-only events. Wait states must have sufficient
     // confidence (from AI tools, active tasks, commands, lifecycle events)
     // and not be flagged as a false positive by the user.
@@ -1066,7 +1072,7 @@ export class ExtensionAdTrait {
     void this.fraud
       .checkRepeatedClickAbuse(impression.userId, impression.campaignId)
       .catch(() => undefined);
-    // Round 40: removed redundant existingClick findFirst (non-locked read).
+    // removed redundant existingClick findFirst (non-locked read).
     // @unique(impressionId) on AdClick + P2002 catch below are the real floor
     // — the findFirst misled readers into thinking JS was load-bearing when
     // the DB unique constraint already guarantees exactly one click per

@@ -22,6 +22,7 @@ import {
 } from './payout.constants';
 import { PayoutMethodTrait } from './payout-method.trait';
 import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
+import { validatePayoutTransition } from './payout-state-machine';
 
 const DEFAULT_PROVIDER_CALL_TIMEOUT_MS = 15_000;
 function providerCallTimeoutMs(config: ConfigService): number {
@@ -613,7 +614,7 @@ export class PayoutRequestTrait {
         include: {
           user: { select: { status: true } },
           payoutAccount: true,
-          // Round 27 Fix 6: explicit `orderBy` so the trim loop below trims a
+          // explicit `orderBy` so the trim loop below trims a
           // deterministic allocation slice across retries / Postgres versions.
           // Prisma relation includes default to no implicit ordering, which
           // made "oldest-first to keep the most recently allocated slice"
@@ -706,7 +707,7 @@ export class PayoutRequestTrait {
             });
             if (earningsEntry && earningsEntry.amountMinor > remaining) {
               const remainderMinor = earningsEntry.amountMinor - remaining;
-              // Round 27 Fix 5: CAS-pin the earnings retire to `status: 'confirmed'`
+              // CAS-pin the earnings retire to `status: 'confirmed'`
               // so a concurrent `holdEarnings` (fraud service) can't be silently
               // overwritten. If this row was concurrently held, the count===0 path
               // throws a clear 400 instead of silently retiring a held row
@@ -1089,6 +1090,12 @@ export class PayoutRequestTrait {
     // The payout-row conditional `update where status in ('approved','processing')`
     // ensures that at most one caller flips the state from a legal pre-state;
     // the loser (count === 0) re-reads to decide idempotent-return vs. throw.
+    // Declarative state-machine guard: reject any PayoutRequest transition not
+    // enumerated in PAYOUT_TRANSITIONS. The atomic CAS
+    // `updateMany where status in ('approved','processing')` below stays the
+    // authoritative concurrency check — this is the human-readable gate layered
+    // in front of it.
+    validatePayoutTransition(payout.status as PayoutStatus, PayoutStatus.PAID);
     const result = await this.prisma.$transaction(async (tx) => {
       // 1. Atomic conditional flip: only from a payable pre-state.
       const paidUpdate = await tx.payoutRequest.updateMany({
@@ -1246,6 +1253,17 @@ export class PayoutRequestTrait {
       failureReason: string;
     },
   ) {
+    // Declarative state-machine guard: reject any PayoutRequest transition not
+    // enumerated in PAYOUT_TRANSITIONS. The atomic CAS
+    // `updateMany where status in ('approved','processing')` below stays the
+    // authoritative concurrency check. We load the current row only to read its
+    // status for the guard; a `failed` payout is skipped so a re-delivered
+    // failure stays idempotent (no-op return, not a throw), and a missing row
+    // defers to the existing CAS/re-read not-found path.
+    const payout = await this.prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+    if (payout && payout.status !== PayoutStatus.FAILED) {
+      validatePayoutTransition(payout.status as PayoutStatus, PayoutStatus.FAILED);
+    }
     const dbProvider = this.toDbPayoutProvider(data.provider);
     return this.prisma.$transaction(async (tx) => {
       const failed = await tx.payoutRequest.updateMany({

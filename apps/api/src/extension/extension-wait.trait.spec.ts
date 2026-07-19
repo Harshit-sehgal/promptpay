@@ -170,3 +170,72 @@ describe('wait-detection evaluation fixtures', () => {
     expect(result.confidence >= MINIMUM_WAIT_CONFIDENCE).toBe(isWait);
   });
 });
+
+describe('ExtensionWaitTrait.recordWaitStateStart — detector version kill-switch (P1.17)', () => {
+  function makeTrait(overrides: Record<string, unknown> = {}) {
+    const prisma = {
+      device: { findUnique: vi.fn() },
+      waitStateEvent: {
+        findFirst: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+      },
+    };
+    const runtimeConfig = {
+      isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
+      ...(overrides.runtimeConfig as Record<string, unknown>),
+    };
+    const { runtimeConfig: _ignored, ...rest } = overrides;
+    const trait = new ExtensionWaitTrait();
+    Object.assign(trait as unknown as Record<string, unknown>, {
+      prisma,
+      runtimeConfig,
+      enforcePrivacyOn: vi.fn(),
+      verifyDeviceSignature: vi.fn().mockResolvedValue(true),
+      ...rest,
+    });
+    return { prisma, runtimeConfig, trait };
+  }
+
+  const baseDto = {
+    deviceId: 'd1',
+    sessionId: 's1',
+    toolType: 'cursor',
+    waitStateId: 'ws1',
+    idempotencyKey: 'idk1',
+    detectorVersion: '1.0.0',
+    signature: 'sig',
+  };
+
+  it('throws ForbiddenException and does not record when the detector version is disabled', async () => {
+    const { prisma, runtimeConfig, trait } = makeTrait({
+      runtimeConfig: { isDetectorVersionEnabled: vi.fn().mockResolvedValue(false) },
+    });
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1' });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+
+    await expect(trait.recordWaitStateStart('u1', baseDto)).rejects.toThrow(
+      /Detector version .* is currently disabled/,
+    );
+    expect(prisma.waitStateEvent.create).not.toHaveBeenCalled();
+    expect(runtimeConfig.isDetectorVersionEnabled).toHaveBeenCalledWith('1.0.0');
+  });
+
+  it('records the wait state normally when the detector version is enabled', async () => {
+    const { prisma, runtimeConfig, trait } = makeTrait();
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1' });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+    prisma.waitStateEvent.create.mockResolvedValue({
+      id: 'evt-1',
+      eventType: 'wait_state_start',
+      detectorVersion: '1.0.0',
+    });
+
+    const result = await trait.recordWaitStateStart('u1', baseDto);
+    expect(runtimeConfig.isDetectorVersionEnabled).toHaveBeenCalledWith('1.0.0');
+    expect(prisma.waitStateEvent.create).toHaveBeenCalledTimes(1);
+    expect(result.detectorVersion).toBe('1.0.0');
+  });
+});

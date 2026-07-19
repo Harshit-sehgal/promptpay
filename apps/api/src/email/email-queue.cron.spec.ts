@@ -149,7 +149,7 @@ describe('EmailQueueCron', () => {
 
     const result = await cron.processQueue();
 
-    // Round 38: the row is parked (update) rather than deleted, so ops can
+    // the row is parked (update) rather than deleted, so ops can
     // inspect why a security-critical email was permanently dropped. The
     // terminal `lastError` marker + far-future `nextRetryAt` keeps the row
     // out of the retry batch until the `expiresAt` purge eventually removes
