@@ -2,6 +2,8 @@ export * from './auction';
 export * from './constants';
 export * from './contracts';
 export * from './currency';
+export * from './detector-quality';
+export * from './detector-quality.dataset';
 export * from './enums';
 export * from './feature-flags';
 export * from './money';

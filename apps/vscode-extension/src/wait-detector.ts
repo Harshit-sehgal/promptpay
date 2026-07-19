@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+import { mapToolToSignals } from './detector-adapters';
+
 export interface WaitStateDetectorOptions {
   /** Callback to read the configurable inactivity timeout (ms). Default 15_000. */
   getInactivityTimeoutMs: () => number;
@@ -341,37 +343,6 @@ export class WaitStateDetector {
         /* never let a listener disrupt detector */
       }
     }
-  }
-}
-
-/**
- * Maps a wait "tool"/cause to its canonical detector signal(s).
- *
- * Known structural causes map to dedicated signal types. AI-assistant and
- * manual AI-tool waits map to `ai_generation`. Unknown or empty causes fall
- * back to `inactivity` — inactivity is NEVER mapped to `ai_generation`, so a
- * misclassified wait cannot inflate the server's wait confidence.
- */
-const AI_TOOL_VALUES = ['codex', 'cline', 'aider', 'claude', 'cursor'];
-
-export function mapToolToSignals(tool: string): WaitSignal[] {
-  switch (tool) {
-    case 'task':
-      return [{ type: 'active_task' }];
-    case 'terminal':
-      return [{ type: 'lifecycle_event' }];
-    case 'inactivity':
-      return [{ type: 'inactivity' }];
-    case 'ai':
-    case 'manual':
-      // 'ai'/'manual' triggered by an AI-tool command.
-      return [{ type: 'ai_generation' }];
-    default:
-      if (AI_TOOL_VALUES.includes(tool)) {
-        return [{ type: 'ai_generation' }];
-      }
-      // Unknown/empty tool -> inactivity signal, never ai_generation.
-      return [{ type: 'inactivity' }];
   }
 }
 

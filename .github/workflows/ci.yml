@@ -9,13 +9,67 @@ on:
   pull_request:
 
 jobs:
-  build-and-test:
+  # ── Typecheck (isolated job: fastest feedback, runs in parallel) ──
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Typecheck
+        run: pnpm run typecheck
+
+  # ── Lint (isolated job) ──
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Lint
+        run: pnpm run lint
+
+  # ── Build (isolated job) ──
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Build
+        run: pnpm run build
+
+  # ── Unit / integration tests + migration release gate + coverage ──
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [22]
     services:
       postgres:
         image: postgres:16-alpine
@@ -50,10 +104,11 @@ jobs:
           version: 11.9.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
       - name: Generate ephemeral RS256 keys
         run: |
           PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
@@ -66,49 +121,76 @@ jobs:
             printf '%s\n' "$PUBLIC_KEY"
             echo 'WAITLAYER_PUBLIC_KEY_EOF'
           } >> "$GITHUB_ENV"
-
-      - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
-
       - name: Audit dependencies
         run: pnpm audit --audit-level moderate
-
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Build
-        run: pnpm run build
-
-      # Migration release gate (A-012): apply all migrations, then assert the
-      # database is fully migrated and exactly matches schema.prisma.
       - name: Apply migrations
         run: pnpm --filter @waitlayer/db migrate:deploy
       - name: Assert no pending migrations
         run: pnpm --filter @waitlayer/db migrate:status
       - name: Assert migration-built schema has no drift
         run: pnpm --filter @waitlayer/db migrate:drift
-
       - name: Test
         run: pnpm test
-
-      # ── Coverage enforcement (mandatory priority) ──
-      # Run unit/integration tests with coverage thresholds so critical
-      # financial modules cannot regress below the configured floor.
       - name: Enforce API coverage
         run: pnpm --filter waitlayer-api test:cov
-      # Per-file branch-coverage floor for critical financial modules. The
-      # global threshold is a blunt average; this locks each money path against
-      # regression and surfaces the gap to the 90% branch target.
       - name: Enforce financial-module branch coverage
         run: node scripts/enforce-financial-coverage.mjs
 
-      # ── Playwright browser E2E tests (mandatory priority) ──
-      # Build and boot the web + API, then run Playwright smoke tests
-      # against the live servers. This catches hydration errors, layout
-      # regressions, and missing content that only surface in a real DOM.
+  # ── Playwright browser E2E + production health-metric enforcement ──
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: waitlayer_test
+          POSTGRES_USER: waitlayer
+          POSTGRES_PASSWORD: waitlayer-test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U waitlayer -d waitlayer_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+      JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Generate ephemeral RS256 keys
+        run: |
+          PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
+          PUBLIC_KEY=$(printf '%s\n' "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          {
+            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            printf '%s\n' "$PRIVATE_KEY"
+            echo 'WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            printf '%s\n' "$PUBLIC_KEY"
+            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+          } >> "$GITHUB_ENV"
       - name: Install Playwright browsers
         run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
       - name: Boot API for E2E
@@ -147,16 +229,11 @@ jobs:
         run: pnpm --filter waitlayer-web e2e
         env:
           E2E_BASE_URL: http://localhost:3000
-
-      # Enforce production health metrics after E2E tests have exercised the
-      # system. Fail the build if ledger discrepancies or provider failures
-      # are detected, so financial drift or degraded payout rails cannot ship.
       - name: Enforce health metrics
         run: pnpm --filter waitlayer-api exec node "$GITHUB_WORKSPACE/scripts/enforce-health-metrics.mjs"
         env:
           DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
           API_BASE_URL: http://localhost:4002
-
       - name: Cleanup E2E servers
         if: always()
         run: |
@@ -165,7 +242,6 @@ jobs:
             kill $API_PID $WEB_PID 2>/dev/null || true
             rm -f /tmp/e2e_pids
           fi
-
       - name: Verify CLI bin artifacts exist
         run: pnpm --filter waitlayer-cli pack:check
 

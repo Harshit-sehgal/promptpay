@@ -27,12 +27,8 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import {
-  DETECTOR_VERSION,
-  mapToolToSignals,
-  WaitStateDetector,
-  WaitStateEvent,
-} from './wait-detector';
+import { mapToolToSignals } from './detector-adapters';
+import { DETECTOR_VERSION, WaitStateDetector, WaitStateEvent } from './wait-detector';
 
 describe('WaitStateDetector — categorized signals', () => {
   let detector: WaitStateDetector;

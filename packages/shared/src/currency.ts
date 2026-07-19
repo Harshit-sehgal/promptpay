@@ -113,7 +113,7 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
     // configured, NOT the USD 5000-minor value re-applied — that would be a
     // ₹50 minimum, an order of magnitude low).
     campaignMinimumBudgetMinor: 400_000, // ₹4,000
-    campaignMaximumBudgetMinor: 80_000_000_000, // ₹80,00,00,000 (= 8,000,000,000 paise)
+    campaignMaximumBudgetMinor: 80_000_000_000, // ₹80,00,00,000 = 80 crore = 80,000,000,000 paise
     campaignMinimumBidMinor: 1_000, // ₹10
     providers: [PayoutProvider.WISE, PayoutProvider.MANUAL],
   },

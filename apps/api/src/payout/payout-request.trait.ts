@@ -998,7 +998,7 @@ export class PayoutRequestTrait {
   async markPayoutPaid(
     payoutId: string,
     data: {
-      providerTxId: string;
+      providerTxId?: string;
       paidAt: string;
       // Optional cross-check fields supplied by the admin body (MarkPayoutPaidDto).
       // When present, the stored approved/requested amountMinor AND currency MUST
@@ -1249,7 +1249,7 @@ export class PayoutRequestTrait {
     payoutId: string,
     data: {
       provider: string;
-      providerTxId: string;
+      providerTxId?: string;
       failureReason: string;
     },
   ) {

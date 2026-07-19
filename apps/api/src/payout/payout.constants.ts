@@ -45,7 +45,23 @@ export interface PayoutProviderHandler {
     providerTxId: string,
     context?: {
       destination?: string;
+      /** Our platform-controlled reference (payoutRequestId) for correlation. */
+      externalReference?: string;
     },
+  ): Promise<{
+    status: string;
+    paidAt?: Date;
+  }>;
+  /**
+   * Reconcile a payout by our platform-controlled external reference
+   * (payoutRequestId) instead of the provider's transaction id. Optional:
+   * providers that cannot resolve by external reference (most PSPs) omit this.
+   * When present, the reconciliation worker uses it for ambiguous-initiation
+   * payouts that have no captured providerTxId (P1.10).
+   */
+  checkStatusByReference?(
+    externalReference: string,
+    context?: { destination?: string },
   ): Promise<{
     status: string;
     paidAt?: Date;

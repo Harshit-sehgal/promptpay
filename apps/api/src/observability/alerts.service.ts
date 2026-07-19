@@ -29,6 +29,7 @@ export type AlertEvent =
   | 'wait_false_positive_spike'
   | 'ctr_impression_spike'
   | 'provider_failure_rate'
+  | 'payout_escalation'
   | 'auth_identity_mismatch';
 
 @Injectable()
@@ -85,5 +86,8 @@ export class AlertsService {
   }
   alertAuthIdentityMismatch(ctx: Record<string, unknown> = {}): void {
     this.alert('auth_identity_mismatch', ctx);
+  }
+  alertPayoutEscalation(ctx: Record<string, unknown> = {}): void {
+    this.alert('payout_escalation', ctx);
   }
 }

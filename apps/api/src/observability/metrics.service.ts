@@ -6,16 +6,28 @@ import { Injectable, Logger } from '@nestjs/common';
  * Lightweight, in-process counters/gauges covering the ad-serving, wait-
  * detection, money and reliability surfaces required by P1.24. It is
  * intentionally dependency-free (no external TSDB) so it cannot fail the
- * request path: every emit is a Map mutation. A real deployment can scrape
- * `GET /observability/metrics` or later forward `snapshot()` to Prometheus.
+ * request path: every emit is a Map mutation.
  *
- * Counts are exact for event rates; bigint monetary gauges are coerced to
- * `number` for display only — the authoritative exact reconciliation lives in
- * the money-integrity report, not here.
+ * Durability & multi-replica: `toPrometheus()` exposes every metric in the
+ * Prometheus text-exposition format so an external Prometheus can scrape it
+ * (pull model) and build a durable time series, historical dashboards and
+ * Alertmanager thresholds. Each replica exposes its own `/metrics`, labelled
+ * by `instance`, so replicas no longer diverge silently and restarts no
+ * longer reset the only copy.
+ *
+ * Monetary values are stored as `bigint` and never coerced to `number` at
+ * emit time (the previous `Number(minor)` coercion silently lost precision
+ * above 2^53 minor units). They are exact in `snapshot()` and rendered as
+ * decimal strings to Prometheus; only Prometheus' own float64 limit applies
+ * beyond 2^53, which is inherent to the scrape protocol, not a bug here.
  */
 export interface MetricsSnapshot {
   counters: Record<string, number>;
   gauges: Record<string, number>;
+  /** Bigint monetary counters, stringified for JSON (exact, no precision loss). */
+  moneyCounters?: Record<string, string>;
+  /** Bigint monetary gauges, stringified for JSON (exact, no precision loss). */
+  moneyGauges?: Record<string, string>;
   timestamp: string;
 }
 
@@ -24,6 +36,11 @@ export class MetricsService {
   private readonly logger = new Logger(MetricsService.name);
   private readonly counters = new Map<string, number>();
   private readonly gauges = new Map<string, number>();
+  // Bigint-safe monetary accumulators (P1.24). Exact in memory and in the
+  // JSON snapshot; rendered as decimal strings to Prometheus. No silent
+  // number coercion for monetary amounts.
+  private readonly moneyCounters = new Map<string, bigint>();
+  private readonly moneyGauges = new Map<string, bigint>();
 
   increment(name: string, by = 1): void {
     if (!Number.isFinite(by)) return;
@@ -46,8 +63,80 @@ export class MetricsService {
     return {
       counters: Object.fromEntries(this.counters),
       gauges: Object.fromEntries(this.gauges),
+      moneyCounters: Object.fromEntries([...this.moneyCounters].map(([k, v]) => [k, v.toString()])),
+      moneyGauges: Object.fromEntries([...this.moneyGauges].map(([k, v]) => [k, v.toString()])),
       timestamp: new Date().toISOString(),
     };
+  }
+  // --- Bigint-safe monetary helpers (P1.24) ---
+  incrementMoney(name: string, by: bigint): void {
+    if (typeof by !== 'bigint') return;
+    this.moneyCounters.set(name, (this.moneyCounters.get(name) ?? 0n) + by);
+  }
+
+  gaugeMoney(name: string, value: bigint): void {
+    if (typeof value !== 'bigint') return;
+    this.moneyGauges.set(name, value);
+  }
+
+  getMoneyCounter(name: string): bigint {
+    return this.moneyCounters.get(name) ?? 0n;
+  }
+
+  getMoneyGauge(name: string): bigint {
+    return this.moneyGauges.get(name) ?? 0n;
+  }
+
+  /**
+   * Render all metrics in Prometheus text-exposition format so an external
+   * Prometheus can scrape this process (pull model) and build a durable time
+   series, historical dashboards and Alertmanager thresholds. Monetary
+   * bigint gauges/counters are emitted as decimal strings (exact). Every
+   * series is labelled with `instance` so multiple replicas are distinguishable.
+   */
+  toPrometheus(): string {
+    const instance =
+      process.env.PROMETHEUS_INSTANCE || process.env.POD_NAME || process.env.HOSTNAME || 'api';
+    const lines: string[] = [];
+    const label = `instance="${instance}"`;
+    const esc = (s: string) => s.replace(/"/g, '\\"');
+    // Convert an internal key like `ad_served{currency=USD}` into a
+    // Prometheus-valid `ad_served{currency="USD",instance="..."}`.
+    const promName = (key: string): { name: string; labels: string } => {
+      const m = key.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\{(.+)\}$/);
+      if (!m) return { name: key, labels: label };
+      const inner = m[2]
+        .split(',')
+        .map((pair) => {
+          const eq = pair.indexOf('=');
+          const k = pair.slice(0, eq).trim();
+          const v = pair.slice(eq + 1).trim();
+          return `${k}="${esc(v)}"`;
+        })
+        .join(',');
+      return { name: m[1], labels: `${inner},${label}` };
+    };
+    for (const [key, value] of this.counters) {
+      const { name, labels } = promName(key);
+      lines.push(`# TYPE ${name} counter`);
+      lines.push(`${name}{${labels}} ${value}`);
+    }
+    for (const [key, value] of this.gauges) {
+      const { name, labels } = promName(key);
+      lines.push(`# TYPE ${name} gauge`);
+      lines.push(`${name}{${labels}} ${value}`);
+    }
+    for (const [key, value] of this.moneyCounters) {
+      const { name, labels } = promName(key);
+      lines.push(`# TYPE ${name} counter`);
+      lines.push(`${name}{${labels}} ${value.toString()}`);
+    }
+    for (const [key, value] of this.moneyGauges) {
+      const { name, labels } = promName(key);
+      lines.push(`# TYPE ${name} gauge`);
+      lines.push(`${name}{${labels}} ${value.toString()}`);
+    }
+    return lines.join('\n') + '\n';
   }
 
   // --- Ad serving (P1.24) ---
@@ -101,7 +190,7 @@ export class MetricsService {
 
   // --- Money (P1.24) ---
   recordCampaignSpendMinor(currency: string, minor: bigint): void {
-    this.increment(`campaign_spend_minor{currency=${currency}}`, Number(minor));
+    this.incrementMoney(`campaign_spend_minor{currency=${currency}}`, minor);
   }
   recordReservation(): void {
     this.increment('reservations');
@@ -113,7 +202,7 @@ export class MetricsService {
     this.increment('developer_earnings_events');
   }
   recordPlatformLedgerDiscrepancyMinor(minor: bigint): void {
-    this.gauge('platform_ledger_discrepancy_minor', Number(minor));
+    this.gaugeMoney('platform_ledger_discrepancy_minor', minor);
   }
   recordPayoutAllocations(): void {
     this.increment('payout_allocations');

@@ -13,6 +13,7 @@ const mockPrisma = {
     findUnique: vi.fn(),
     updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     count: vi.fn(),
+    update: vi.fn().mockResolvedValue(undefined),
   },
   payoutTransaction: {
     create: vi.fn(),
@@ -58,6 +59,7 @@ const mockMetrics = {
 } as unknown as MetricsService;
 const mockAlerts = {
   alert: vi.fn(),
+  alertPayoutEscalation: vi.fn(),
   alertPayoutFenceAge: vi.fn(),
 } as unknown as AlertsService;
 describe('PayoutCronService', () => {
@@ -108,13 +110,14 @@ describe('PayoutCronService', () => {
       });
     });
 
-    it('skips payouts with no provider transaction', async () => {
+    it('records a reconciliation attempt for a payout with no provider transaction (no silent skip)', async () => {
       mockPrisma.payoutRequest.findMany.mockResolvedValue([
         {
           id: 'req_1',
           status: 'processing',
           payoutAccount: { provider: 'paypal_payouts', destination: 'dev@test.com' },
           transactions: [], // no transaction row
+          reconciliationLog: null,
         },
       ]);
 
@@ -122,7 +125,16 @@ describe('PayoutCronService', () => {
       const result = await service.pollProcessingPayouts();
 
       expect(result).toEqual({ checked: 0, completed: 0, failed: 0 });
-      expect(mockPayoutService.getProvider).not.toHaveBeenCalled();
+      expect(mockPayoutService.getProvider).toHaveBeenCalledWith('paypal_payouts');
+      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledTimes(1);
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.where).toEqual({ id: 'req_1' });
+      expect(updateCall.data.reconciliationAttempts).toEqual({ increment: 1 });
+      expect(updateCall.data.escalatedAt).toBeUndefined();
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'no_provider_txid' },
+      ]);
+      expect(mockAlerts.alertPayoutEscalation).not.toHaveBeenCalled();
     });
 
     it('skips payouts with unavailable provider', async () => {
@@ -165,6 +177,7 @@ describe('PayoutCronService', () => {
       expect(result).toEqual({ checked: 1, completed: 1, failed: 0 });
       expect(mockPayPalProvider.checkStatus).toHaveBeenCalledWith('pp_tx_123', {
         destination: 'dev@paypal.com',
+        externalReference: 'req_1',
       });
       expect(mockPayoutService.markPayoutPaid).toHaveBeenCalledWith('req_1', {
         providerTxId: 'pp_tx_123',
@@ -319,6 +332,226 @@ describe('PayoutCronService', () => {
         expect.objectContaining({ payoutId: 'req_old' }),
       );
       expect(mockMetrics.increment).toHaveBeenCalledWith('payout_poll_checked', 1);
+    });
+
+    it('escalates a long-stuck processing payout without a provider transaction (P1.10)', async () => {
+      const old = new Date(Date.now() - 48 * 60 * 60 * 1000); // 48h ago
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_aged',
+          status: 'processing',
+          processedAt: old,
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@x.com' },
+          transactions: [], // ambiguous initiation, no providerTxId
+          reconciliationLog: null,
+          escalatedAt: null,
+        },
+      ]);
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      await service.pollProcessingPayouts();
+
+      expect(mockPrisma.payoutRequest.update).toHaveBeenCalledTimes(1);
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.data.escalatedAt).toBeInstanceOf(Date);
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'no_provider_txid' },
+      ]);
+      expect(mockAlerts.alertPayoutEscalation).toHaveBeenCalledWith(
+        expect.objectContaining({ payoutId: 'req_aged', reason: 'no_provider_txid' }),
+      );
+    });
+
+    it('escalates a long-stuck processing payout the provider still reports processing (P1.10)', async () => {
+      const old = new Date(Date.now() - 48 * 60 * 60 * 1000); // 48h ago
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_stuck',
+          status: 'processing',
+          processedAt: old,
+          currency: 'USD',
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@x.com' },
+          transactions: [{ providerTxId: 'tx_stuck' }],
+          reconciliationLog: null,
+          escalatedAt: null,
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockPayPalProvider);
+      mockPayPalProvider.checkStatus.mockResolvedValue({ status: 'processing' });
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      await service.pollProcessingPayouts();
+
+      expect(mockAlerts.alertPayoutEscalation).toHaveBeenCalledWith(
+        expect.objectContaining({ payoutId: 'req_stuck', reason: 'still_processing' }),
+      );
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.data.escalatedAt).toBeInstanceOf(Date);
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'processing' },
+      ]);
+    });
+    it('treats initiate_pending as ambiguous and retains the fence (P1.10)', async () => {
+      const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_init',
+          status: 'processing',
+          processedAt: old,
+          currency: 'USD',
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@x.com' },
+          transactions: [{ providerTxId: 'tx_init' }],
+          reconciliationLog: null,
+          escalatedAt: null,
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockPayPalProvider);
+      mockPayPalProvider.checkStatus.mockResolvedValue({ status: 'initiate_pending' });
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      const result = await service.pollProcessingPayouts();
+
+      expect(result).toEqual({ checked: 1, completed: 0, failed: 0 });
+      expect(mockPayoutService.markPayoutPaid).not.toHaveBeenCalled();
+      expect(mockPayoutService.markPayoutFailed).not.toHaveBeenCalled();
+      expect(mockAlerts.alertPayoutEscalation).toHaveBeenCalledWith(
+        expect.objectContaining({ payoutId: 'req_init', reason: 'still_processing' }),
+      );
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'initiate_pending' },
+      ]);
+    });
+
+    it('treats requires_review as ambiguous and retains the fence (P1.10)', async () => {
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_review',
+          status: 'processing',
+          currency: 'USD',
+          payoutAccount: { provider: 'stripe_connect', destination: 'acct_x' },
+          transactions: [{ providerTxId: 'po_review' }],
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockStripeProvider);
+      mockStripeProvider.checkStatus.mockResolvedValue({ status: 'requires_review' });
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      const result = await service.pollProcessingPayouts();
+
+      expect(result).toEqual({ checked: 1, completed: 0, failed: 0 });
+      expect(mockPayoutService.markPayoutPaid).not.toHaveBeenCalled();
+      expect(mockPayoutService.markPayoutFailed).not.toHaveBeenCalled();
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'requires_review' },
+      ]);
+    });
+
+    it('resolves a no-provider-txid payout via external-reference lookup when paid (P1.10)', async () => {
+      const paidAt = new Date('2026-07-07T12:00:00Z');
+      const mockRefProvider = {
+        checkStatus: vi.fn(),
+        checkStatusByReference: vi.fn().mockResolvedValue({ status: 'paid', paidAt }),
+      };
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_ref_paid',
+          status: 'processing',
+          currency: 'USD',
+          requestedAmountMinor: 2500n,
+          approvedAmountMinor: null,
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@x.com' },
+          transactions: [], // no providerTxId (ambiguous initiation)
+          reconciliationLog: null,
+          escalatedAt: null,
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockRefProvider);
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      const result = await service.pollProcessingPayouts();
+
+      expect(result).toEqual({ checked: 0, completed: 1, failed: 0 });
+      expect(mockRefProvider.checkStatusByReference).toHaveBeenCalledWith('req_ref_paid', {
+        destination: 'dev@x.com',
+      });
+      expect(mockPayoutService.markPayoutPaid).toHaveBeenCalledWith(
+        'req_ref_paid',
+        expect.objectContaining({ expectedAmountMinor: 2500n, expectedCurrency: 'USD' }),
+      );
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'ref_paid' },
+      ]);
+    });
+
+    it('resolves a no-provider-txid payout via external-reference lookup when failed (P1.10)', async () => {
+      const mockRefProvider = {
+        checkStatus: vi.fn(),
+        checkStatusByReference: vi.fn().mockResolvedValue({ status: 'failed' }),
+      };
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_ref_fail',
+          status: 'processing',
+          currency: 'USD',
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@x.com' },
+          transactions: [],
+          reconciliationLog: null,
+          escalatedAt: null,
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockRefProvider);
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      const result = await service.pollProcessingPayouts();
+
+      expect(result).toEqual({ checked: 0, completed: 0, failed: 1 });
+      expect(mockPayoutService.markPayoutFailed).toHaveBeenCalledWith(
+        'req_ref_fail',
+        expect.objectContaining({ provider: 'paypal_payouts' }),
+      );
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'ref_failed' },
+      ]);
+    });
+
+    it('falls back to attempt+escalate when external-reference lookup returns processing (P1.10)', async () => {
+      const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const mockRefProvider = {
+        checkStatus: vi.fn(),
+        checkStatusByReference: vi.fn().mockResolvedValue({ status: 'processing' }),
+      };
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_ref_pending',
+          status: 'processing',
+          processedAt: old,
+          payoutAccount: { provider: 'paypal_payouts', destination: 'dev@x.com' },
+          transactions: [],
+          reconciliationLog: null,
+          escalatedAt: null,
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockRefProvider);
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      await service.pollProcessingPayouts();
+
+      expect(mockRefProvider.checkStatusByReference).toHaveBeenCalledWith('req_ref_pending', {
+        destination: 'dev@x.com',
+      });
+      expect(mockPayoutService.markPayoutPaid).not.toHaveBeenCalled();
+      expect(mockPayoutService.markPayoutFailed).not.toHaveBeenCalled();
+      expect(mockAlerts.alertPayoutEscalation).toHaveBeenCalledWith(
+        expect.objectContaining({ payoutId: 'req_ref_pending', reason: 'no_provider_txid' }),
+      );
+      const updateCall = mockPrisma.payoutRequest.update.mock.calls[0][0];
+      expect(updateCall.data.reconciliationLog).toEqual([
+        { at: expect.any(String), outcome: 'no_provider_txid' },
+      ]);
     });
   });
 });

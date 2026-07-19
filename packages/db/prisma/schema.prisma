@@ -837,7 +837,15 @@ model PayoutRequest {
   reviewNote           String?
   processedAt          DateTime?
   paidAt               DateTime?
-
+  // P1.10 reconciliation telemetry: structured attempt history + escalation.
+  // The worker records every poll attempt (capped JSON log) and escalates a
+  // payout that stays `processing` past the escalation window — including the
+  // ambiguous-initiation case (no providerTxId) that previously was silently
+  // skipped by the poll loop.
+  reconciliationAttempts Int          @default(0)
+  lastReconciliationAt  DateTime?
+  escalatedAt           DateTime?
+  reconciliationLog     Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
