@@ -153,7 +153,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main id="top">
+      <main id="main-content" tabIndex={-1}>
         {/* ── Section 1: Hero ── */}
         <section style={{ padding: '76px 0 88px', borderBottom: '1px solid #ececec' }}>
           <div style={{ maxWidth: '1180px', margin: '0 auto', padding: '0 32px' }}>

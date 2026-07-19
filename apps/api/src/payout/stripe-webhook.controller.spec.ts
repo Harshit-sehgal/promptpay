@@ -238,4 +238,68 @@ describe('StripeWebhookController money reconciliation', () => {
       expect.objectContaining({ action: 'stripe_deposit_refund_required' }),
     );
   });
+  describe('processEvent dispatch coverage (switch arms)', () => {
+    it('dispatches checkout.session.completed to handlePaymentSuccess', async () => {
+      const { controller } = makeController();
+      await expect(
+        controller.processEvent({
+          id: 'evt_disp_cs',
+          type: 'checkout.session.completed',
+          data: { object: { id: 'cs_disp' } },
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('dispatches checkout.session.async_payment_succeeded to handlePaymentSuccess', async () => {
+      const { controller } = makeController();
+      await expect(
+        controller.processEvent({
+          id: 'evt_disp_async',
+          type: 'checkout.session.async_payment_succeeded',
+          data: { object: { id: 'cs_disp_async' } },
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('dispatches refund.created to handleRefund', async () => {
+      const { controller } = makeController();
+      await expect(
+        controller.processEvent({
+          id: 'evt_disp_refund',
+          type: 'refund.created',
+          data: { object: { id: 're_disp' } },
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('dispatches charge.dispute.funds_withdrawn without further ledger action', async () => {
+      const { controller, prisma } = makeController();
+      await expect(
+        controller.processEvent({
+          id: 'evt_disp_dw',
+          type: 'charge.dispute.funds_withdrawn',
+        }),
+      ).resolves.toBeUndefined();
+      expect(prisma.webhookEvent.updateMany).toHaveBeenCalled();
+    });
+
+    it('dispatches account.updated to handleAccountUpdated and converges the event', async () => {
+      const { controller, prisma, stripe } = makeController();
+      stripe.retrieveConnectAccountVerification = vi
+        .fn()
+        .mockResolvedValue({ chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true });
+      prisma.payoutAccount = {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findFirst: vi.fn().mockResolvedValue(null),
+      };
+      await expect(
+        controller.processEvent({
+          id: 'evt_disp_acct',
+          type: 'account.updated',
+          data: { object: { id: 'acct_disp' } },
+        }),
+      ).resolves.toBeUndefined();
+      expect(prisma.payoutAccount.updateMany).toHaveBeenCalled();
+    });
+  });
 });

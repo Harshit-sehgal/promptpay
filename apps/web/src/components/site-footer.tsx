@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { openCookieSettings } from '@/components/cookie-consent';
 
 export default function SiteFooter() {
   return (
@@ -230,6 +231,22 @@ export default function SiteFooter() {
           >
             No code access. No prompt access. No terminal-output collection.
           </span>
+          <button
+            type="button"
+            onClick={openCookieSettings}
+            style={{
+              fontFamily: "'IBM Plex Mono', monospace",
+              fontSize: '12px',
+              color: '#555',
+              background: 'none',
+              border: '1px solid #ddd',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              cursor: 'pointer',
+            }}
+          >
+            Cookie Settings
+          </button>
           <span
             style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: '#aaa' }}
           >
