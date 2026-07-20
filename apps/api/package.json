@@ -13,11 +13,11 @@
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run test:unit && pnpm run test:contract && pnpm run test:e2e-http",
-    "test:unit": "vitest run --exclude src/integration/contract-tests.spec.ts --exclude src/integration/e2e-http-flow.spec.ts",
-    "test:contract": "vitest run src/integration/contract-tests.spec.ts",
-    "test:e2e-http": "vitest run src/integration/e2e-http-flow.spec.ts",
+    "test:unit": "vitest run --no-file-parallelism --exclude src/integration/contract-tests.spec.ts --exclude src/integration/e2e-http-flow.spec.ts",
+    "test:contract": "vitest run --no-file-parallelism src/integration/contract-tests.spec.ts",
+    "test:e2e-http": "vitest run --no-file-parallelism src/integration/e2e-http-flow.spec.ts",
     "test:watch": "vitest",
-    "test:cov": "vitest run --coverage"
+    "test:cov": "vitest run --no-file-parallelism --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
