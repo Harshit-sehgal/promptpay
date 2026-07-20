@@ -174,6 +174,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   logout(@CurrentUser('id') userId: string, @CurrentUser('jti') jti: string) {
+    // Design decision (P0.3): logout revokes only the current session (jti),
+    // not the entire token family. This lets a user log out one device
+    // without killing sessions on other devices. Full family revocation is
+    // available via /auth/sessions/revoke-others when the user wants to
+    // terminate all other sessions.
     return this.authService.logout(userId, jti);
   }
 
