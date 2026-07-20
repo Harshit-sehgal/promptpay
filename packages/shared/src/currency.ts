@@ -31,6 +31,14 @@ export interface CurrencyPolicy {
   campaignMaximumBudgetMinor: number;
   /** Minimum per-event bid in this currency's own minor units. */
   campaignMinimumBidMinor: number;
+  /**
+   * High-value payout-fence release threshold, in this currency's OWN minor
+   * units. Releasing an initiation fence whose referenced payout meets/exceeds
+   * this amount requires a second (distinct) approver (P1.11). Per-currency so
+   * the control means the same economic magnitude across currencies. Optional;
+   * when absent the per-currency default map / env override is used.
+   */
+  highValueFenceReleaseMinor?: number;
   /** Payout providers that can settle in this currency. */
   providers: PayoutProvider[];
 }
@@ -272,6 +280,36 @@ export function campaignMinimumBidMinor(code: string | null | undefined): bigint
   return BigInt(
     getCurrencyPolicy(code)?.campaignMinimumBidMinor ?? DEFAULT_POLICY.campaignMinimumBidMinor,
   );
+}
+/**
+ * High-value payout-fence release threshold, in the payout's OWN minor units.
+ * When releasing an initiation fence whose referenced payout meets/exceeds this
+ * amount, a second (distinct) approver is required (P1.11). Per-currency so the
+ * control means the same economic magnitude across currencies.
+ */
+const HIGH_VALUE_FENCE_RELEASE_MINOR: Record<string, number> = {
+  USD: 1_000_000, // $10,000
+  EUR: 1_000_000,
+  GBP: 1_000_000,
+  CAD: 1_000_000,
+  AUD: 1_000_000,
+  BRL: 1_000_000,
+  INR: 800_000_00, // ₹8,00,000 (~$9.6k)
+  JPY: 1_500_000, // ¥1,500,000 (~$10k)
+};
+
+export function highValueFenceReleaseMinor(code: string | null | undefined): bigint {
+  const policy = getCurrencyPolicy(code);
+  if (policy?.highValueFenceReleaseMinor != null) {
+    return BigInt(policy.highValueFenceReleaseMinor);
+  }
+  const upper = code?.toUpperCase();
+  if (upper && HIGH_VALUE_FENCE_RELEASE_MINOR[upper] != null) {
+    return BigInt(HIGH_VALUE_FENCE_RELEASE_MINOR[upper]);
+  }
+  const env = process.env.PAYOUT_FENCE_HIGH_VALUE_MINOR;
+  if (env && /^\d+$/.test(env)) return BigInt(env);
+  return 1_000_000n;
 }
 
 /** Whether the given provider can settle the given currency. */

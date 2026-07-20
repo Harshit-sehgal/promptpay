@@ -398,6 +398,7 @@ export class AdminController {
       reason: dto.reason,
       providerTxId: dto.providerTxId,
       resolution: dto.resolution,
+      secondApproverId: dto.secondApproverId,
     });
   }
 

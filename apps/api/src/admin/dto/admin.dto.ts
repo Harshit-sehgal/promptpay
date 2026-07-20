@@ -468,6 +468,15 @@ export class ReleasePayoutFenceDto {
   @IsString()
   @MaxLength(500)
   resolution?: string;
+  @ApiProperty({
+    required: false,
+    description:
+      'Second approver id required for high-value fence releases (P1.11). Must differ from the releasing operator.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  secondApproverId?: string;
 }
 
 /** Internal options shape for {@link AdminPayoutsTrait.releasePayoutFence}. */
@@ -478,6 +487,8 @@ export interface ReleasePayoutFenceOptions {
   reason: string;
   providerTxId?: string;
   resolution?: string;
+  /** Second approver (P1.11) — required for high-value fence releases. */
+  secondApproverId?: string;
 }
 /**
  * Reconciliation telemetry surfaced on fenced-account views (P1.11). These
@@ -536,6 +547,30 @@ export class FencedAccountDto {
   })
   @IsOptional()
   escalatedAt!: string | null;
+
+  @ApiProperty({
+    description: 'Number of active (open/reviewing/escalated) fraud flags on the account owner.',
+  })
+  activeFraudFlags!: number;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: () => FencedAccountLedgerAllocationsDto,
+    description: 'Summary of ledger allocations reserved by the fenced (in-flight) payout.',
+  })
+  @IsOptional()
+  ledgerAllocations?: FencedAccountLedgerAllocationsDto | null;
+}
+
+/** Summary of ledger allocations tied to a fenced (in-flight) payout (P1.11). */
+export class FencedAccountLedgerAllocationsDto {
+  @ApiProperty({ description: 'Number of earnings entries allocated to the fenced payout.' })
+  count!: number;
+  @ApiProperty({ description: 'Total allocated amount in minor units.' })
+  totalMinor!: bigint;
+  @ApiProperty({ description: 'Currency of the allocated earnings (matches the fenced payout).' })
+  currency!: string;
 }
 
 /** Paginated response for {@link AdminController.getFencedAccounts}. */

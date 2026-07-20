@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
+import { highValueFenceReleaseMinor } from '@waitlayer/shared';
+
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
@@ -410,11 +412,13 @@ export class AdminPayoutsTrait {
       .map((a) => a.initiationPayoutId)
       .filter((id): id is string => Boolean(id));
     const reconciliationById = new Map<string, ReconciliationTelemetry>();
+    const currencyById = new Map<string, string>();
     if (initiationIds.length > 0) {
       const payouts = await this.prisma.payoutRequest.findMany({
         where: { id: { in: initiationIds } },
         select: {
           id: true,
+          currency: true,
           reconciliationAttempts: true,
           lastReconciliationAt: true,
           escalatedAt: true,
@@ -422,6 +426,53 @@ export class AdminPayoutsTrait {
       });
       for (const payout of payouts) {
         reconciliationById.set(payout.id, payout);
+        currencyById.set(payout.id, payout.currency ?? 'USD');
+      }
+    }
+    // Associated active (open/reviewing/escalated) fraud flags per account
+    // owner (P1.11): operators releasing a fence should see if the developer
+    // has unresolved fraud flags. One batched query keyed by userId.
+    const userIds = items.map((a) => a.user?.id).filter((id): id is string => Boolean(id));
+    const fraudFlagsByUser = new Map<string, number>();
+    if (userIds.length > 0) {
+      const fraudFlags =
+        (await this.prisma.fraudFlag.findMany({
+          where: { userId: { in: userIds }, status: { in: ['open', 'reviewing', 'escalated'] } },
+          select: { userId: true },
+        })) ?? [];
+      for (const flag of fraudFlags) {
+        if (flag.userId) {
+          fraudFlagsByUser.set(flag.userId, (fraudFlagsByUser.get(flag.userId) ?? 0) + 1);
+        }
+      }
+    }
+
+    // Ledger allocations tied to each fenced (in-flight) payout (P1.11): shows
+    // how much earnings the payout has reserved. One batched query keyed by
+    // payoutRequestId.
+    const allocationSummaryById = new Map<
+      string,
+      { count: number; totalMinor: bigint; currency: string }
+    >();
+    if (initiationIds.length > 0) {
+      const allocations =
+        (await this.prisma.payoutAllocation.findMany({
+          where: { payoutRequestId: { in: initiationIds } },
+          select: { payoutRequestId: true, amountMinor: true },
+        })) ?? [];
+      for (const alloc of allocations) {
+        const currency = currencyById.get(alloc.payoutRequestId) ?? 'USD';
+        const summary = allocationSummaryById.get(alloc.payoutRequestId);
+        if (summary) {
+          summary.count += 1;
+          summary.totalMinor += alloc.amountMinor;
+        } else {
+          allocationSummaryById.set(alloc.payoutRequestId, {
+            count: 1,
+            totalMinor: alloc.amountMinor,
+            currency,
+          });
+        }
       }
     }
 
@@ -429,11 +480,17 @@ export class AdminPayoutsTrait {
       const telemetry = account.initiationPayoutId
         ? reconciliationById.get(account.initiationPayoutId)
         : undefined;
+      const activeFraud = account.user?.id ? (fraudFlagsByUser.get(account.user.id) ?? 0) : 0;
+      const ledgerAllocations = account.initiationPayoutId
+        ? (allocationSummaryById.get(account.initiationPayoutId) ?? null)
+        : null;
       return {
         ...account,
         reconciliationAttempts: telemetry?.reconciliationAttempts ?? 0,
         lastReconciliationAt: telemetry?.lastReconciliationAt?.toISOString() ?? null,
         escalatedAt: telemetry?.escalatedAt?.toISOString() ?? null,
+        activeFraudFlags: activeFraud,
+        ledgerAllocations,
       };
     });
 
@@ -450,7 +507,15 @@ export class AdminPayoutsTrait {
   async releasePayoutFence(
     options: ReleasePayoutFenceOptions,
   ): Promise<ReleasePayoutFenceResponseDto> {
-    const { payoutAccountId, reviewerId, reviewerRole, reason, providerTxId, resolution } = options;
+    const {
+      payoutAccountId,
+      reviewerId,
+      reviewerRole,
+      reason,
+      providerTxId,
+      resolution,
+      secondApproverId,
+    } = options;
     const account = await this.prisma.payoutAccount.findUnique({
       where: { id: payoutAccountId },
       include: { user: { select: { id: true, email: true } } },
@@ -476,6 +541,9 @@ export class AdminPayoutsTrait {
           status: true,
           reconciliationAttempts: true,
           lastReconciliationAt: true,
+          currency: true,
+          approvedAmountMinor: true,
+          requestedAmountMinor: true,
           escalatedAt: true,
         },
       });
@@ -489,6 +557,26 @@ export class AdminPayoutsTrait {
         throw new BadRequestException(
           `Payout ${account.initiationPayoutId} is in status '${fencedPayout.status}'; confirm the provider outcome before releasing the fence`,
         );
+      }
+      // High-value second-person approval (P1.11): an initiation fence whose
+      // referenced payout meets/exceeds the per-currency high-value threshold
+      // requires a second, distinct approver before the account can be
+      // unblocked. Enforced inside the same transaction as the terminal-state
+      // check so a concurrent path cannot skip it.
+      const threshold = highValueFenceReleaseMinor(fencedPayout.currency);
+      const exposureMinor =
+        fencedPayout.approvedAmountMinor ?? fencedPayout.requestedAmountMinor ?? 0n;
+      if (exposureMinor >= threshold) {
+        if (!secondApproverId) {
+          throw new BadRequestException(
+            `High-value fence release (>= ${threshold} ${fencedPayout.currency}) requires a second approver (secondApproverId)`,
+          );
+        }
+        if (secondApproverId === reviewerId) {
+          throw new BadRequestException(
+            'High-value fence release requires a second approver distinct from the releasing operator',
+          );
+        }
       }
       const row = await tx.payoutAccount.update({
         where: { id: payoutAccountId },
@@ -517,6 +605,7 @@ export class AdminPayoutsTrait {
             observedPayoutStatus: fencedPayout.status,
             providerTxId: providerTxId ?? null,
             resolution: resolution ?? null,
+            secondApproverId: secondApproverId ?? null,
           },
         },
         tx,

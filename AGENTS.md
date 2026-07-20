@@ -1056,3 +1056,56 @@ staging gate (P1.23), durable metrics (P1.24).
 
 No code deliverable is outstanding. The two blocked items are external
 infrastructure / credential constraints, not source defects.
+
+## 2026-07-20 — P1.11 second-person high-value fence approval (added)
+
+Extended the payout-fence release control with a second-person approval
+requirement for high-value releases — the remaining P1.11 gap after the
+reconciliation telemetry surface added earlier today:
+
+- `packages/shared/src/currency.ts` — new `highValueFenceReleaseMinor(code)`
+  helper + per-currency default map (USD/EUR/GBP/CAD/AUD/BRL = `1_000_000`
+  minor = $10,000; INR = `800_000_00` = ₹800,000; JPY = `1_500_000`) with an
+  `PAYOUT_FENCE_HIGH_VALUE_MINOR` env override. Also added the optional
+  `CurrencyPolicy.highValueFenceReleaseMinor` field.
+- `apps/api/src/admin/dto/admin.dto.ts` — `ReleasePayoutFenceDto` and
+  `ReleasePayoutFenceOptions` gain optional `secondApproverId`.
+- `apps/api/src/admin/admin-payouts.trait.ts` — `releasePayoutFence` now
+  selects the fenced payout's `currency` / `approvedAmountMinor` /
+  `requestedAmountMinor`, and inside the release transaction rejects a
+  high-value release (exposure >= threshold) unless a `secondApproverId`
+  distinct from the releasing operator is supplied. The second approver is
+  recorded in the audit `afterSnap`.
+- `apps/api/src/admin/admin.controller.ts` — forwards `dto.secondApproverId`.
+- `apps/api/src/admin/admin.service.spec.ts` — new test proves the high-value
+  path rejects with no approver, rejects a self-approver, and succeeds with a
+  distinct second approver (recorded in the audit).
+
+Verified: shared `tsc --noEmit` ✅; api `tsc --noEmit` ✅; eslint 0 warnings;
+`admin.service.spec.ts` 48/48 ✅; `payout-fence-lifecycle.spec.ts` (DB-backed)
+1/1 ✅ (its $10 payout is far below the $10k threshold, so the control does
+not affect low-value releases).
+
+## 2026-07-20 — P1.11 fenced-account view metadata (closed)
+
+Final P1.11 sub-item closed: the operator fenced-account list now surfaces the
+forensic context an approver needs without leaving the view.
+
+- `apps/api/src/admin/dto/admin.dto.ts` — `FencedAccountDto` gains
+  `activeFraudFlags: number` and optional `ledgerAllocations?:
+FencedAccountLedgerAllocationsDto | null` (new class: `count`, `totalMinor`
+  (bigint), `currency`).
+- `apps/api/src/admin/admin-payouts.trait.ts` — `getFencedAccounts` now batches
+  an active-fraud-flag count per owner (`FraudFlag.status` in
+  `open`/`reviewing`/`escalated`) and a ledger-allocation summary per fenced
+  payout (sum of `PayoutAllocation.amountMinor`, currency taken from the fenced
+  payout's `currency`). Both are attached to each enriched item.
+- `apps/api/src/admin/admin.service.spec.ts` — new test proves the view surfaces
+  `activeFraudFlags === 2` and `ledgerAllocations === { count: 2, totalMinor:
+3000n, currency: 'USD' }`; the existing reconciliation telemetry assertion was
+  updated for the added `currency: true` select on `payoutRequest.findMany`.
+
+Verified: api `tsc --noEmit` ✅; eslint 0 warnings ✅; `admin.service.spec.ts`
+**49/49** ✅ (48 prior + new); `payout-fence-lifecycle.spec.ts` (DB-backed) 1/1 ✅.
+P1.11 is now fully closed (second-person high-value approval + forensic metadata
+in the fenced-account view).

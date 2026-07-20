@@ -48,6 +48,10 @@ const mockPrisma: any = {
   },
   fraudFlag: {
     groupBy: vi.fn(),
+    findMany: vi.fn(),
+  },
+  payoutAllocation: {
+    findMany: vi.fn(),
   },
   $transaction: vi.fn(async (callback: any) => callback(mockPrisma)),
 };
@@ -857,6 +861,7 @@ describe('AdminService', () => {
         where: { id: { in: ['payout-1'] } },
         select: {
           id: true,
+          currency: true,
           reconciliationAttempts: true,
           lastReconciliationAt: true,
           escalatedAt: true,
@@ -1154,6 +1159,99 @@ describe('AdminService', () => {
       expect(result.reconciliationAttempts).toBe(5);
       expect(result.lastReconciliationAt).toBe('2026-07-19T12:00:00.000Z');
       expect(result.escalatedAt).toBe('2026-07-18T08:30:00.000Z');
+    });
+    it('requires a distinct second approver for high-value fence releases (P1.11)', async () => {
+      const account = {
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: 'payout-1',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      const highValuePayout = {
+        status: 'paid',
+        currency: 'USD',
+        approvedAmountMinor: 50_000_00n,
+        requestedAmountMinor: 50_000_00n,
+        reconciliationAttempts: 3,
+        lastReconciliationAt: null,
+        escalatedAt: null,
+      };
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue(account);
+      mockPrisma.payoutRequest.findUnique.mockResolvedValue(highValuePayout);
+      mockPrisma.payoutAccount.update.mockResolvedValue({
+        ...account,
+        initiationPayoutId: null,
+      });
+
+      // No second approver -> rejected.
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'high value release',
+        }),
+      ).rejects.toThrow(/High-value fence release/);
+
+      // Second approver identical to releaser -> rejected.
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'high value release',
+          secondApproverId: 'admin-1',
+        }),
+      ).rejects.toThrow(/distinct/);
+
+      // Distinct second approver -> succeeds and is recorded in the audit.
+      const result = await service.releasePayoutFence({
+        payoutAccountId: 'pa-1',
+        reviewerId: 'admin-1',
+        reviewerRole: 'admin',
+        reason: 'high value release',
+        secondApproverId: 'admin-2',
+      });
+      expect(result.initiationPayoutId).toBeNull();
+      expect(mockAudit.logStrict).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'release_payout_fence',
+          afterSnap: expect.objectContaining({ secondApproverId: 'admin-2' }),
+        }),
+        expect.anything(),
+      );
+    });
+    it('surfaces associated active fraud flags and ledger allocations on fenced accounts (P1.11)', async () => {
+      const account = {
+        id: 'pa-1',
+        provider: 'wise',
+        destination: 'wise-dest',
+        initiationPayoutId: 'payout-1',
+        user: { id: 'u1', email: 'dev@example.com' },
+      };
+      mockPrisma.payoutAccount.findMany.mockResolvedValue([account]);
+      mockPrisma.payoutAccount.count.mockResolvedValue(1);
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'payout-1',
+          currency: 'USD',
+          reconciliationAttempts: 2,
+          lastReconciliationAt: null,
+          escalatedAt: null,
+        },
+      ]);
+      mockPrisma.fraudFlag.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u1' }]);
+      mockPrisma.payoutAllocation.findMany.mockResolvedValue([
+        { payoutRequestId: 'payout-1', amountMinor: 1000n },
+        { payoutRequestId: 'payout-1', amountMinor: 2000n },
+      ]);
+
+      const result = await service.getFencedAccounts();
+      expect(result.items).toHaveLength(1);
+      const item = result.items[0];
+      expect(item.activeFraudFlags).toBe(2);
+      expect(item.ledgerAllocations).toEqual({ count: 2, totalMinor: 3000n, currency: 'USD' });
     });
   });
 });
