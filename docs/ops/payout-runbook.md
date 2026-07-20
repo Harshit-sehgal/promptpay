@@ -142,3 +142,57 @@ Use when a payout destination is confirmed or highly suspected to be compromised
 ### 7.3 Idempotency
 
 Both endpoints are **non-idempotent by design** — re-freezing an already-frozen account (or unfreezing a non-frozen one) returns `409 Conflict` so admins see the duplicate state. This matches the strict state-machine guards on `approvePayout` / `rejectPayout` and prevents silent double-actions. There is no `freeze_noop` audit entry; the conflict path is `audit.log`-free because no state changed.
+---
+
+## 8. Launch Provider Configuration (A-030)
+
+Which automated payout rails are live at launch is an **operator decision**, not
+a code change. The code enforces a single source of truth
+(`packages/shared/src/payout-providers.ts`) and a deploy-time gate.
+
+### 8.1 Default catalogue (safe-seed)
+
+| Provider         | Default status | Notes                                |
+| ---------------- | -------------- | ------------------------------------ |
+| `paypal_email`   | `available`    | Admin-processed, launch-safe         |
+| `manual`         | `available`    | Admin-processed, launch-safe         |
+| `paypal_payouts` | `coming_soon`  | Gated until credentials configured   |
+| `stripe_connect` | `coming_soon`  | Gated until credentials configured   |
+| `wise`           | `coming_soon`  | Gated until credentials configured   |
+| `payoneer`       | `coming_soon`  | Stub-only — rejected at registration |
+| `razorpay`       | `coming_soon`  | Stub-only — rejected at registration |
+
+`payoneer` / `razorpay` have no real handler; the API rejects them at
+`addPayoutMethod` / `normalizePayoutMethod` regardless of any override (security
+gate — do not promote them).
+
+### 8.2 Deploy-time gate (no code edit required)
+
+Set `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` (JSON map of
+`provider → "available" | "coming_soon"`) in the web build/env. Unknown or
+malformed keys are ignored. Example promoting the three real automated rails:
+
+```json
+{
+  "paypal_payouts": "available",
+  "stripe_connect": "available",
+  "wise": "available"
+}
+```
+
+The web UI list and the API (`normalizePayoutMethod` → `payoutProviderLaunchStatus`)
+both honour this gate, so a `coming_soon` provider cannot be registered
+server-side (throws `BadRequestException`).
+
+### 8.3 Provider credentials (required once a rail is promoted)
+
+| Provider       | Env vars                                                                           | Mode                  |
+| -------------- | ---------------------------------------------------------------------------------- | --------------------- |
+| PayPal Payouts | `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE`                          | `sandbox` for testing |
+| Stripe Connect | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`                                       | —                     |
+| Wise           | `WISE_API_TOKEN`, `WISE_PROFILE_ID`, `WISE_MODE`, `WISE_EMAIL_RECIPIENTS_VERIFIED` | `sandbox` for testing |
+
+When the credentials for a promoted provider are absent, its provider reports
+`enabled = false` and payouts fall back to `dev_stub_*` in non-production (no
+real money moves). **In production, an unconfigured-but-promoted provider will
+fail payout initiation** — only promote a rail after its credentials are set.
