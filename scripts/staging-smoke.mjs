@@ -66,12 +66,12 @@ function ok(message) {
   console.log(`[ok] ${message}`);
 }
 
-function signToken(user, privateKey, expiresIn = '10m') {
+function signToken(user, privateKey, sessionId, expiresIn = '10m') {
   return jwt.sign(
     {
       sub: user.id,
       role: user.role,
-      jti: randomUUID(),
+      jti: sessionId,
       aud: ['waitlayer-client', 'access'],
       iss: 'waitlayer',
     },
@@ -131,10 +131,12 @@ async function main() {
     const developer = await upsert(STAGING_DEV_EMAIL, 'developer');
 
     // Sessions so the JWT strategy accepts the tokens.
-    const mkSession = async (userId) =>
-      prisma.session.create({
+    // Each token's jti must match a real, active Session row for the same user.
+    const mkSession = async (userId) => {
+      const sessionId = randomUUID();
+      await prisma.session.create({
         data: {
-          id: randomUUID(),
+          id: sessionId,
           userId,
           tokenHash: randomUUID(),
           tokenFamily: randomUUID(),
@@ -142,13 +144,45 @@ async function main() {
           expiresAt: new Date(Date.now() + 10 * 60 * 1000),
         },
       });
-    await mkSession(admin.id);
-    await mkSession(advertiser.id);
-    await mkSession(developer.id);
+      return sessionId;
+    };
+    const adminSessionId = await mkSession(admin.id);
+    const advSessionId = await mkSession(advertiser.id);
+    const devSessionId = await mkSession(developer.id);
 
-    const adminToken = signToken(admin, privateKey);
-    const advToken = signToken(advertiser, privateKey);
-    const devToken = signToken(developer, privateKey);
+    // Verify each session row belongs to the intended subject before signing.
+    for (const [role, user, sessionId] of [
+      ['admin', admin, adminSessionId],
+      ['advertiser', advertiser, advSessionId],
+      ['developer', developer, devSessionId],
+    ]) {
+      const session = await prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { userId: true, revoked: true },
+      });
+      if (!session || session.revoked || session.userId !== user.id) {
+        fail(`${role} session ${sessionId} does not belong to user ${user.id}`);
+        process.exit(1);
+      }
+    }
+
+    const adminToken = signToken(admin, privateKey, adminSessionId);
+    const advToken = signToken(advertiser, privateKey, advSessionId);
+    const devToken = signToken(developer, privateKey, devSessionId);
+
+    // Preflight: every generated token must be accepted by /auth/me.
+    for (const [role, token] of [
+      ['admin', adminToken],
+      ['advertiser', advToken],
+      ['developer', devToken],
+    ]) {
+      const me = await api('GET', '/auth/me', token);
+      if (me.status !== 200) {
+        fail(`${role} token rejected by /auth/me (HTTP ${me.status}) — session binding mismatch`);
+        process.exit(1);
+      }
+      ok(`${role} token accepted by /auth/me`);
+    }
 
     if (!FULL_FLOW) {
       ok('STAGING_FULL_FLOW not set — skipping campaign/ad/payout flow');
