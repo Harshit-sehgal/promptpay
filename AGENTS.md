@@ -51,6 +51,27 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 
 ## Open Items (not code-completable / unverified)
 
+> **Status 2026-07-20 (final):** The 2026-07-20 assessment backlog — P0 #7
+> (post-commit audit outbox), P1 #12 (CI/Docker smoke), P1 #13 (migration
+> validation), P1 #15 (JWT rotation), P1 #16 (CSP header spec), P1 #17 (naming
+> no-op), P1 #18 (stale artifacts), P1 #19 (trait composition tests) — is
+> **fully closed and gate-verified** (see the "2026-07-20 — Backlog closure"
+> section). Every item resolvable by a source edit is closed; all four quality
+> gates pass (typecheck 14/14, lint 9/9, test ~1706, build 9/9) and the working
+> tree is clean.
+>
+> The only items still open are **external** (operator / infra / product /
+> legal). Re-checked 2026-07-20 with fresh evidence:
+>
+> - **P0.5** CI run on SHA — `gh` and `act` both absent in this sandbox; the
+>   local equivalent of every CI job category is green.
+> - **A-075** docker build — `docker` daemon is up, but `docker compose build
+api` still fails at `corepack prepare pnpm@11.9.0 --activate` (registry
+>   fetch failure, 2026-07-20 re-attempt) — network block, not a code defect.
+> - A-030 / A-018 callback / A-036 / A-047 full-browser / #12/#39/#103/#131 /
+>   P1.9 / P1.21 remain external for the documented reasons (credentials,
+>   product scope, GitHub settings). None are code defects.
+
 ### Build — Web `next build` RESOLVED (2026-07-11): `NODE_ENV=development` env leak, not a framework regression
 
 - **Symptom:** `cd apps/web && rm -rf .next && next build` failed during static prerender with `TypeError: Cannot read properties of null (reading 'useContext')` on `/_global-error/page`. The prior "9/9 green" build (2026-07-10) was a **stale `.next` cache** — a clean rebuild was never green _in this environment_.
