@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 import { Prisma } from '@waitlayer/db';
 
@@ -37,6 +38,7 @@ export class RuntimeConfigService {
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
+    private config: ConfigService,
   ) {}
 
   private cacheKey(scope: string, target: string): string {
@@ -273,6 +275,16 @@ export class RuntimeConfigService {
       { scope: RUNTIME_CONFIG_KEYS.DETECTOR_VERSION.scope, target: detectorVersion },
       true,
     );
+  }
+
+  /**
+   * Returns the raw comma-separated detector-version allowlist. The allowlist
+   * is read from the validated application config (fail-closed default is an
+   * empty string, which means no sources are treated as verified). Consumers
+   * should pass this string to `isVerifiedDetectorSource()`.
+   */
+  getVerifiedDetectorVersions(): string {
+    return (this.config.get<string>('VERIFIED_DETECTOR_VERSIONS') ?? '').trim();
   }
 
   // ── Private helpers ──

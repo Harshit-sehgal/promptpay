@@ -30,7 +30,6 @@ const CTR_SPIKE_THRESHOLD = 5;
 
 // P0.1: anomaly thresholds for behavioural verification of wait-state signals.
 const ANOMALY_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const ANOMALY_SHORT_WAIT_SECONDS = 5; // repeated exact short waits
 const ANOMALY_MIN_EVENTS = 5; // need at least this many events before flagging
 
 function fraudSeverityRank(severity: string): number {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createMockRuntimeConfig } from '../runtime-config/runtime-config.test-helper';
 import { ExtensionService } from './extension.service';
 
 /**
@@ -99,6 +100,13 @@ function makePrisma() {
     earningsLedger: { create: vi.fn(async (args: any) => args.data) },
     platformLedger: { create: vi.fn(async (args: any) => args.data) },
     trustScore: { findUnique: vi.fn().mockResolvedValue(null) },
+    waitStateEvent: {
+      findFirst: vi.fn().mockResolvedValue({
+        id: 'ws-1',
+        signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+        detectorVersion: '1.0.0',
+      }),
+    },
     adImpression: {
       findUnique: vi.fn(),
       update: vi.fn(async (args: any) => args.data),
@@ -178,6 +186,9 @@ describe('concurrent billable impressions cannot overdraw advertiser balance (A-
         { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,
         {} as any,
         {} as any,
+        createMockRuntimeConfig({
+          getVerifiedDetectorVersions: vi.fn().mockReturnValue('1.0.0'),
+        }),
       );
       (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
       prisma.adImpression.findUnique.mockResolvedValue(makeImpression('tok-1', 'camp-1'));
@@ -211,7 +222,17 @@ describe('concurrent billable impressions cannot overdraw advertiser balance (A-
     const compliance = {} as any;
     const googleVerifier = {} as any;
 
-    const service = new ExtensionService(prisma, audit, ledger, fraud, compliance, googleVerifier);
+    const service = new ExtensionService(
+      prisma,
+      audit,
+      ledger,
+      fraud,
+      compliance,
+      googleVerifier,
+      createMockRuntimeConfig({
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue('1.0.0'),
+      }),
+    );
     // Skip HMAC device-signature verification — out of scope for this test.
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
 
@@ -273,6 +294,9 @@ describe('concurrent billable impressions cannot overdraw advertiser balance (A-
       { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,
       {} as any,
       {} as any,
+      createMockRuntimeConfig({
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue('1.0.0'),
+      }),
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
 

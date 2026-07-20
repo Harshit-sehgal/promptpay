@@ -21,6 +21,11 @@ function validProviderStatusJson(value: string): boolean {
   }
 }
 
+function validVersionAllowlist(value: string): boolean {
+  if (value.trim() === '') return true;
+  return value.split(',').every((v) => /^[A-Za-z0-9._-]+$/.test(v.trim()) && v.trim().length > 0);
+}
+
 function isProductionOrigin(value: string): boolean {
   try {
     const url = new URL(value);
@@ -116,6 +121,17 @@ const envSchema = z
     EMAIL_QUEUE_SECRET: z.string().min(32).optional(),
     // Extension events use per-device eventSecret values issued at device
     // registration. There is intentionally no shared global extension HMAC.
+
+    // Wait-detector source allowlist. Comma-separated list of detector
+    // versions that the platform treats as verified. Empty/missing means all
+    // sources are unverified (fail-closed). Example: "1.0.0,1.1.0".
+    VERIFIED_DETECTOR_VERSIONS: z
+      .string()
+      .refine(
+        validVersionAllowlist,
+        'must be a comma-separated list of version tokens (a-z,0-9,.,_,-)',
+      )
+      .optional(),
 
     // Stripe (advertiser deposits)
     STRIPE_PUBLIC_KEY: z.string().optional(),

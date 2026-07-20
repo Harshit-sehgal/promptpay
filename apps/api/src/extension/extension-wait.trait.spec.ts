@@ -215,6 +215,7 @@ describe('ExtensionWaitTrait.recordWaitStateStart — detector version kill-swit
     };
     const runtimeConfig = {
       isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
+      getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
       ...(overrides.runtimeConfig as Record<string, unknown>),
     };
     const { runtimeConfig: _ignored, ...rest } = overrides;

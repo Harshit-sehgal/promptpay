@@ -111,9 +111,10 @@ export class ExtensionWaitTrait {
       }
       throw new ConflictException('A wait_state_start event already exists for this waitStateId.');
     }
+    const detectorAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
     const classification = classifyWaitState(
       dto.signals ?? [],
-      isVerifiedDetectorSource(dto.detectorVersion),
+      isVerifiedDetectorSource(dto.detectorVersion, detectorAllowlist),
     );
     // Persist only the signal categories, never the optional human-readable
     // details, so user code/PII never reaches the database.

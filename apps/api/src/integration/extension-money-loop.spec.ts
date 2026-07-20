@@ -607,6 +607,32 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     expect(earnings.length).toBe(0);
   });
 
+  // ── 1b. ai_generation + inactivity cannot earn (inactivity is not corroboration) ──
+  it('1b. ai_generation paired only with inactivity serves an ad but is not payment-eligible', async () => {
+    const ctx = await seedMoneyLoop('inactivity-coro', {
+      pricingModel: BidType.CPM,
+      budgetTotalMinor: 50000,
+      bidAmountMinor: 2000,
+      category: 'technology',
+      advertiserDepositMinor: 100000,
+    });
+
+    const res = await runMoneyLoop(ctx, {
+      signals: [{ type: 'ai_generation' }, { type: 'inactivity' }],
+    });
+    expect(res.adRes.status).toBe(200);
+    expect(res.adRes.body.ad).toBeDefined();
+    expect(res.impressionToken).toBeDefined();
+    expect(res.qualifyRes!.status).toBe(200);
+    expect(res.qualifyRes!.body.qualified).toBe(false);
+    expect(res.qualifyRes!.body.reason).toBe('uncorroborated_wait');
+
+    const earnings = await prisma.earningsLedger.findMany({
+      where: { userId: ctx.devUserId, campaignId: ctx.campaignId },
+    });
+    expect(earnings.length).toBe(0);
+  });
+
   // ── 2. CPC qualified impression WITHOUT click (no spend) ──
   it('2. serves a CPC ad and qualifies the impression but bills nothing without a click', async () => {
     const ctx = await seedMoneyLoop('cpc', {

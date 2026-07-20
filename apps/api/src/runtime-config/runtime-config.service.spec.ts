@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 
 import { AuditService } from '../audit/audit.service';
@@ -6,6 +7,7 @@ import { RUNTIME_CONFIG_KEYS, RuntimeConfigService } from './runtime-config.serv
 
 describe('RuntimeConfigService', () => {
   let service: RuntimeConfigService;
+  let configService: ConfigService;
 
   const mockPrisma = {
     systemSetting: {
@@ -25,10 +27,12 @@ describe('RuntimeConfigService', () => {
         RuntimeConfigService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAudit },
+        { provide: ConfigService, useValue: { get: vi.fn() } },
       ],
     }).compile();
 
     service = module.get(RuntimeConfigService);
+    configService = module.get<ConfigService>(ConfigService);
     vi.clearAllMocks();
   });
 
@@ -180,6 +184,18 @@ describe('RuntimeConfigService', () => {
       const result = await service.isDetectorVersionEnabled(undefined);
       expect(result).toBe(true);
       expect(mockPrisma.systemSetting.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getVerifiedDetectorVersions', () => {
+    it('returns the validated config value trimmed', () => {
+      configService.get = vi.fn().mockReturnValue('  1.0.0,1.1.0  ');
+      expect(service.getVerifiedDetectorVersions()).toBe('1.0.0,1.1.0');
+    });
+
+    it('returns an empty string when the config key is missing', () => {
+      configService.get = vi.fn().mockReturnValue(undefined);
+      expect(service.getVerifiedDetectorVersions()).toBe('');
     });
   });
 });

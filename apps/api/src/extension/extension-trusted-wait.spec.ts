@@ -21,7 +21,7 @@ describe('classifyWaitState (P0.1)', () => {
     expect(result.reason).toBe('ai_generation');
   });
 
-  it('makes a wait payment-eligible when a primary signal is corroborated', () => {
+  it('makes a wait payment-eligible when a primary signal is corroborated by another primary signal', () => {
     const result = classifyWaitState(
       [{ type: 'ai_generation' }, { type: 'command_execution' }],
       false,
@@ -29,6 +29,21 @@ describe('classifyWaitState (P0.1)', () => {
     expect(result.adEligible).toBe(true);
     expect(result.paymentEligible).toBe(true);
     expect(result.confidence).toBeGreaterThanOrEqual(MINIMUM_WAIT_CONFIDENCE);
+  });
+
+  it('rejects payment when corroborated only by a lifecycle event', () => {
+    const result = classifyWaitState(
+      [{ type: 'ai_generation' }, { type: 'lifecycle_event' }],
+      false,
+    );
+    expect(result.adEligible).toBe(true);
+    expect(result.paymentEligible).toBe(false);
+  });
+
+  it('rejects payment when the only second signal is inactivity', () => {
+    const result = classifyWaitState([{ type: 'ai_generation' }, { type: 'inactivity' }], false);
+    expect(result.adEligible).toBe(true);
+    expect(result.paymentEligible).toBe(false);
   });
 
   it('rejects payment when the only corroboration is another inactivity signal', () => {
@@ -66,29 +81,19 @@ describe('classifyWaitState (P0.1)', () => {
 });
 
 describe('isVerifiedDetectorSource (P0.1)', () => {
-  const originalEnv = process.env.VERIFIED_DETECTOR_VERSIONS;
-
-  afterEach(() => {
-    process.env.VERIFIED_DETECTOR_VERSIONS = originalEnv;
-  });
-
   it('treats missing env as unverified (fail-closed)', () => {
-    delete process.env.VERIFIED_DETECTOR_VERSIONS;
-    expect(isVerifiedDetectorSource('1.0.0')).toBe(false);
+    expect(isVerifiedDetectorSource('1.0.0', '')).toBe(false);
   });
 
   it('verifies a version in the allowlist', () => {
-    process.env.VERIFIED_DETECTOR_VERSIONS = '1.0.0, 1.1.0';
-    expect(isVerifiedDetectorSource('1.1.0')).toBe(true);
+    expect(isVerifiedDetectorSource('1.1.0', '1.0.0, 1.1.0')).toBe(true);
   });
 
   it('rejects a version not in the allowlist', () => {
-    process.env.VERIFIED_DETECTOR_VERSIONS = '1.0.0';
-    expect(isVerifiedDetectorSource('2.0.0')).toBe(false);
+    expect(isVerifiedDetectorSource('2.0.0', '1.0.0')).toBe(false);
   });
 
   it('rejects a missing detector version', () => {
-    process.env.VERIFIED_DETECTOR_VERSIONS = '1.0.0';
-    expect(isVerifiedDetectorSource(undefined)).toBe(false);
+    expect(isVerifiedDetectorSource(undefined, '1.0.0')).toBe(false);
   });
 });

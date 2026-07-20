@@ -314,7 +314,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
 
   // ── 1. CPM qualified impression credits developer earnings ──
   it('CPM: qualified impression credits developer earnings + advertiser debit + platform credit', async () => {
-    const { ad } = await runLoop([{ type: 'ai_generation' }]);
+    const { ad } = await runLoop(BILLABLE_WAIT_SIGNALS);
     expect(ad).not.toBeNull();
 
     const earnings = await prisma.earningsLedger.findMany({ where: { userId: developerId } });
@@ -346,7 +346,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   // ── 2. CPC qualified WITHOUT click → no earnings credit ──
   it('CPC: qualified impression without click does NOT credit earnings', async () => {
     await seedCampaign({ bidType: 'cpc' });
-    const { ad } = await runLoop([{ type: 'active_task' }], { click: false });
+    const { ad } = await runLoop(BILLABLE_WAIT_SIGNALS, { click: false });
     expect(ad).not.toBeNull();
 
     const earnings = await prisma.earningsLedger.findMany({
@@ -358,7 +358,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   // ── 3. CPC qualified WITH click → earnings credited ──
   it('CPC: qualified impression with click credits developer earnings', async () => {
     await seedCampaign({ bidType: 'cpc' });
-    const { ad } = await runLoop([{ type: 'command_execution' }], { click: true });
+    const { ad } = await runLoop(BILLABLE_WAIT_SIGNALS, { click: true });
     expect(ad).not.toBeNull();
 
     const earnings = await prisma.earningsLedger.findMany({ where: { userId: developerId } });
@@ -397,7 +397,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
 
   // ── 5. Wait ending before ad response still completes billing ──
   it('wait ending after ad allocation still credits earnings (end-before-response)', async () => {
-    const { ad } = await runLoop([{ type: 'ai_generation' }], { endAfterAd: true });
+    const { ad } = await runLoop(BILLABLE_WAIT_SIGNALS, { endAfterAd: true });
     expect(ad).not.toBeNull();
     const earnings = await prisma.earningsLedger.findMany({ where: { userId: developerId } });
     expect(earnings.length).toBe(1);
@@ -406,7 +406,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   // ── 6. Duplicate ad request → ConflictException ──
   it('duplicate ad request for the same wait throws ConflictException', async () => {
     const adIdem = uid('ad');
-    const { ad } = await runLoop([{ type: 'ai_generation' }], { adIdempotencyKey: adIdem });
+    const { ad } = await runLoop(BILLABLE_WAIT_SIGNALS, { adIdempotencyKey: adIdem });
     expect(ad).not.toBeNull();
     await expect(
       extension.requestAd(developerId, {
@@ -422,7 +422,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
 
   // ── 7. Duplicate impression qualification is idempotent ──
   it('duplicate impression qualification does not double-credit earnings', async () => {
-    const { token } = await runLoop([{ type: 'ai_generation' }]);
+    const { token } = await runLoop(BILLABLE_WAIT_SIGNALS);
     // Re-qualify with the SAME idempotency/dto shape.
     await extension.recordQualifiedImpression(developerId, {
       impressionToken: token!,
@@ -492,7 +492,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   // ── 10. Extension network retry (same idempotency key) → dedupe ──
   it('extension network retry with same idempotency key is deduplicated', async () => {
     const adIdem = uid('ad');
-    const { ad } = await runLoop([{ type: 'ai_generation' }], { adIdempotencyKey: adIdem });
+    const { ad } = await runLoop(BILLABLE_WAIT_SIGNALS, { adIdempotencyKey: adIdem });
     expect(ad).not.toBeNull();
     // Simulate the extension not receiving the response and retrying.
     await expect(

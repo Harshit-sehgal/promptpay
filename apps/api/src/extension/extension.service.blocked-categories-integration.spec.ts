@@ -69,7 +69,9 @@ function buildService(prismaMock: any) {
   const fraud = {} as any;
   const compliance = { isConsented: vi.fn(async () => false) } as any;
   const googleVerifier = {} as any;
-  const runtimeConfig = createMockRuntimeConfig();
+  const runtimeConfig = createMockRuntimeConfig({
+    getVerifiedDetectorVersions: vi.fn().mockReturnValue('1.0.0'),
+  });
   const service = new ExtensionService(
     prismaMock,
     audit,
@@ -119,7 +121,12 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
       waitStateEvent: {
         findFirst: vi.fn(async (args: any) =>
           args.where.eventType === 'wait_state_start'
-            ? { id: 'ws-evt', createdAt: new Date() }
+            ? {
+                id: 'ws-evt',
+                createdAt: new Date(),
+                signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+                detectorVersion: '1.0.0',
+              }
             : null,
         ),
       },
@@ -160,7 +167,12 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
       waitStateEvent: {
         findFirst: vi.fn(async (args: any) =>
           args.where.eventType === 'wait_state_start'
-            ? { id: 'ws-evt', createdAt: new Date() }
+            ? {
+                id: 'ws-evt',
+                createdAt: new Date(),
+                signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+                detectorVersion: '1.0.0',
+              }
             : null,
         ),
       },
@@ -198,7 +210,12 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
       waitStateEvent: {
         findFirst: vi.fn(async (args: any) =>
           args.where.eventType === 'wait_state_start'
-            ? { id: 'ws-evt', createdAt: new Date() }
+            ? {
+                id: 'ws-evt',
+                createdAt: new Date(),
+                signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+                detectorVersion: '1.0.0',
+              }
             : null,
         ),
       },
@@ -236,7 +253,12 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
       waitStateEvent: {
         findFirst: vi.fn(async (args: any) =>
           args.where.eventType === 'wait_state_start'
-            ? { id: 'ws-evt', createdAt: new Date() }
+            ? {
+                id: 'ws-evt',
+                createdAt: new Date(),
+                signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+                detectorVersion: '1.0.0',
+              }
             : null,
         ),
       },

@@ -114,7 +114,14 @@ export function classifyWaitState(
 
   const uniqueTypes = new Set(signals.map((s) => s.type));
   const hasPrimary = [...uniqueTypes].some((t) => PRIMARY_SIGNALS.includes(t));
-  const hasCorroboration = uniqueTypes.size >= 2;
+  // Corroboration must come from a meaningful (non-inactivity) signal.
+  // A primary signal + inactivity is still ad-eligible, but it is not
+  // enough to earn money. A `lifecycle_event` is also intentionally excluded
+  // from corroboration because it is ambiguous (focus change, tab switch,
+  // build finish, etc.) and can be fabricated cheaply. Payment requires at
+  // least two distinct primary signals.
+  const primaryTypes = [...uniqueTypes].filter((t) => PRIMARY_SIGNALS.includes(t));
+  const hasCorroboration = primaryTypes.length >= 2;
 
   const adEligible = hasPrimary && confidence >= MINIMUM_WAIT_CONFIDENCE;
   const paymentEligible = adEligible && hasCorroboration;
@@ -136,9 +143,21 @@ export function classifyWaitState(
  * is the safe fail-closed posture for an allowlist. Operators can enable a
  * known-good version by setting e.g. `VERIFIED_DETECTOR_VERSIONS=1.0.0,1.1.0`.
  */
-export function isVerifiedDetectorSource(detectorVersion: string | null | undefined): boolean {
+/**
+ * Check whether a detector version is on the verified allowlist.
+ *
+ * @param allowlistEnv - comma-separated list of trusted versions. Production
+ *   callers should always pass the value returned by
+ *   `RuntimeConfigService.getVerifiedDetectorVersions()` so the allowlist is
+ *   validated application config. The default is provided only for backward
+ *   compatibility with existing unit tests.
+ */
+export function isVerifiedDetectorSource(
+  detectorVersion: string | null | undefined,
+  allowlistEnv: string,
+): boolean {
   if (!detectorVersion) return false;
-  const allowlist = (process.env.VERIFIED_DETECTOR_VERSIONS ?? '').split(',').map((v) => v.trim());
+  const allowlist = allowlistEnv.split(',').map((v) => v.trim());
   if (allowlist.length === 0 || (allowlist.length === 1 && allowlist[0] === '')) {
     return false;
   }

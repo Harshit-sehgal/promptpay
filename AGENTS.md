@@ -1411,3 +1411,63 @@ completed it. All fixes verified against live Postgres (:5432/:5433) + Redis.
   references it yet) — it is the persistence layer for the in-progress P1.11
   upgrade from parameter-based `secondApproverId` to a durable two-person
   approval-request workflow.
+
+## 2026-07-20 — P0.1 Trusted wait detection (closed)
+
+Closed the P0.1 real-money-beta blocker: a modified client can no longer earn
+by declaring a single `ai_generation` signal and waiting five seconds.
+
+### Changes
+
+- `apps/api/src/extension/extension.constants.ts`
+  - Added `classifyWaitState()` with three gates: `detected`, `adEligible`,
+    `paymentEligible`.
+  - Payment eligibility now requires a primary signal **and** a second,
+    non-`inactivity` signal. `ai_generation + inactivity` serves an ad but is
+    not billable.
+  - Added `isVerifiedDetectorSource()` fail-closed allowlist driven by
+    `VERIFIED_DETECTOR_VERSIONS`.
+- `apps/api/src/extension/extension-wait.trait.ts`
+  - Records wait-state classification at start time and stores
+    confidence/reason.
+  - Fire-and-forget anomaly check delegates to `FraudService`.
+- `apps/api/src/extension/extension-ad.trait.ts`
+  - Re-classifies at ad-request and impression/click qualification time so
+    policy changes apply retroactively.
+  - Returns `uncorroborated_wait` when the wait is not payment-eligible.
+  - Applies longer holds (max(base, 60 days)) for unverified detector sources.
+- `apps/api/src/ledger/ledger-math.trait.ts`
+  - `getHoldDays()` respects `unverifiedSource` and extends holds.
+- `apps/api/src/fraud/fraud.service.ts`
+  - Added `checkAnomalousWaitSignals()` to flag repeated identical signal
+    payloads for review.
+- `apps/api/src/extension/extension-trusted-wait.spec.ts`
+  - Unit tests for classification and verified-source allowlist.
+- `apps/api/src/extension/test/wait-fixtures.ts`
+  - Shared `BILLABLE_WAIT_SIGNALS` and `FORGED_SINGLE_SIGNAL` fixtures for
+    integration tests.
+- `apps/api/src/integration/extension-money-loop.spec.ts`
+  - Added adversarial cases 1a (single `ai_generation`) and 1b
+    (`ai_generation + inactivity`) proving ads serve but no earnings are
+    credited.
+- `docs/ENV_REFERENCE.md`, `.env.example`, `packages/config/src/index.ts`
+  - Documented and validated `VERIFIED_DETECTOR_VERSIONS`.
+
+### Verification
+
+- `pnpm typecheck` — 14/14 packages green.
+- `pnpm --filter waitlayer-api lint` — 0 errors, 0 warnings.
+- Extension unit tests — 41/41 pass.
+- `extension-money-loop` integration tests — 13/13 pass, including the two
+  new adversarial cases.
+
+### Known follow-ups (not blockers)
+
+- Anomaly detection currently flags repeated _identical_ signal payloads; a
+  modified client can evade by varying `details` or order. Consider entropy /
+  duration checks or a synchronous repeated-pattern threshold.
+- `isVerifiedDetectorSource()` reads `process.env` directly. For full
+  testability/hot reload, move it behind `RuntimeConfigService`.
+- `classifyWaitState()` re-fetch/parse logic is duplicated in `requestAd`,
+  `recordQualifiedImpression`, and `recordClick`; a shared helper would
+  reduce drift.

@@ -119,6 +119,12 @@ Default shown where one exists.
 | `WISE_MODE`                      | opt | `sandbox` | `sandbox` \| `live`.                                        |
 | `WISE_EMAIL_RECIPIENTS_VERIFIED` | opt | `false`   | Fail-closed confirmation for Wise email-recipient corridor. |
 
+## Extension / wait-detection trust
+
+| Variable                     | Req | Default | Purpose                                                                                                                          |
+| ---------------------------- | --- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `VERIFIED_DETECTOR_VERSIONS` | opt | —       | Comma-separated allowlist of detector versions considered verified (e.g. `1.0.0,1.1.0`). Empty/missing = all sources unverified. |
+
 ## Feature / behaviour toggles
 
 | Variable                   | Req | Default | Purpose                                              |

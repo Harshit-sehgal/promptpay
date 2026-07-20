@@ -148,9 +148,10 @@ export class ExtensionAdTrait {
     const signals = ((waitStart.signals as unknown as WaitSignal[] | null) ?? []).filter(
       (s): s is WaitSignal => s && typeof s === 'object' && 'type' in s,
     );
+    const detectorAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
     const classification = classifyWaitState(
       signals,
-      isVerifiedDetectorSource(waitStart.detectorVersion),
+      isVerifiedDetectorSource(waitStart.detectorVersion, detectorAllowlist),
     );
     if (!classification.adEligible) {
       return { ad: null, reason: 'low_confidence_wait' };
@@ -637,9 +638,10 @@ export class ExtensionAdTrait {
     const waitSignals = (
       (waitStartForImpression?.signals as unknown as WaitSignal[] | null) ?? []
     ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
+    const detectorAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
     const classification = classifyWaitState(
       waitSignals,
-      isVerifiedDetectorSource(waitStartForImpression?.detectorVersion),
+      isVerifiedDetectorSource(waitStartForImpression?.detectorVersion, detectorAllowlist),
     );
     if (!classification.paymentEligible) {
       await this.invalidateImpressionAndReleaseReservation({
@@ -924,9 +926,10 @@ export class ExtensionAdTrait {
     const waitSignals = (
       (waitStartForClick?.signals as unknown as WaitSignal[] | null) ?? []
     ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
+    const clickAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
     const clickClassification = classifyWaitState(
       waitSignals,
-      isVerifiedDetectorSource(waitStartForClick?.detectorVersion),
+      isVerifiedDetectorSource(waitStartForClick?.detectorVersion, clickAllowlist),
     );
     if (isCpcBid && !clickClassification.paymentEligible) {
       return { clicked: false, reason: 'uncorroborated_wait' };

@@ -285,6 +285,18 @@ describe('LedgerService', () => {
     it('returns 30 for unknown states (defensive default)', () => {
       expect(service.getHoldDays('mystery-state')).toBe(30);
     });
+
+    it('extends holds to 60 days for unverified detector sources (P0.1)', () => {
+      expect(service.getHoldDays('high_trust', true)).toBe(60);
+      expect(service.getHoldDays('normal', true)).toBe(60);
+      expect(service.getHoldDays('new', true)).toBe(60);
+      expect(service.getHoldDays('low_trust', true)).toBe(60);
+    });
+
+    it('keeps restricted/banned holds indefinite even when unverified', () => {
+      expect(service.getHoldDays('restricted', true)).toBe(-1);
+      expect(service.getHoldDays('banned', true)).toBe(-1);
+    });
   });
 
   describe('recordImpressionEarnings', () => {

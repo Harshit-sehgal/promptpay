@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockRuntimeConfig } from '../runtime-config/runtime-config.test-helper';
 import { ExtensionService } from './extension.service';
 
+const VERIFIED_DETECTOR_VERSION = '1.0.0';
+
 // Pure-logic adversarial tests for the requestAd selection path:
 //   #1 — mixed-currency campaigns are never compared by raw bidAmountMinor
 //   #2 — a campaign lacking enough remaining budget is skipped and the next
@@ -50,7 +52,9 @@ function buildService(prismaMock: any, claimImpl: any) {
   const fraud = {} as any;
   const compliance = { isConsented: vi.fn(async () => false) } as any;
   const googleVerifier = {} as any;
-  const runtimeConfig = createMockRuntimeConfig();
+  const runtimeConfig = createMockRuntimeConfig({
+    getVerifiedDetectorVersions: vi.fn().mockReturnValue(VERIFIED_DETECTOR_VERSION),
+  });
   const service = new ExtensionService(
     prismaMock,
     audit,
@@ -79,7 +83,12 @@ function basePrisma(campaigns: any[]) {
     waitStateEvent: {
       findFirst: vi.fn(async (args: any) =>
         args.where.eventType === 'wait_state_start'
-          ? { id: 'ws-evt', createdAt: new Date() }
+          ? {
+              id: 'ws-evt',
+              createdAt: new Date(),
+              signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+              detectorVersion: VERIFIED_DETECTOR_VERSION,
+            }
           : null,
       ),
     },

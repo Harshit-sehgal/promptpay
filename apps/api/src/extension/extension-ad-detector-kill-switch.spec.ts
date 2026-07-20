@@ -19,6 +19,7 @@ describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', 
       isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       isAdsEnabled: vi.fn().mockResolvedValue(true),
       isCountryAllowed: vi.fn().mockResolvedValue(true),
+      getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
       ...(overrides.runtimeConfig as Record<string, unknown>),
     };
     const { runtimeConfig: _ignored, ...rest } = overrides;
