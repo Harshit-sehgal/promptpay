@@ -10,6 +10,14 @@ import type { WaitSignal } from './wait-detector';
  * detector core. Resolution falls back to an `inactivity` adapter that NEVER
  * emits `ai_generation`, so a misclassified wait can never inflate the
  * server's wait confidence.
+ *
+ * IMPORTANT: these adapters are HEURISTIC, name-based signal mappings — NOT
+ * verified live detection of the underlying AI tool. Claude Code, Cursor,
+ * Codex, Cline, and Aider do not expose runtime lifecycle events to this VS
+ * Code extension, so a tool name here reflects a user-reported or inferred
+ * wait cause, never a confirmed "this tool is actively generating" signal.
+ * The `waitlayer.triggerManualWait` command is the honest user-facing path
+ * for reporting a wait.
  */
 export interface DetectorAdapter {
   /** Canonical tool identifier this adapter owns (e.g. 'claude'). */

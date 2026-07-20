@@ -24,7 +24,8 @@
     "onCommand:waitlayer.openDashboard",
     "onCommand:waitlayer.reportFalseWait",
     "onCommand:waitlayer.showExperimentAssignment",
-    "onCommand:waitlayer.toggleDetectorSource"
+    "onCommand:waitlayer.toggleDetectorSource",
+    "onCommand:waitlayer.triggerManualWait"
   ],
   "contributes": {
     "commands": [
@@ -59,6 +60,10 @@
       {
         "command": "waitlayer.toggleDetectorSource",
         "title": "WaitLayer: Toggle detector source"
+      },
+      {
+        "command": "waitlayer.triggerManualWait",
+        "title": "WaitLayer: Report a wait (manual detection)"
       }
     ],
     "configuration": {
