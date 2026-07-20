@@ -88,11 +88,21 @@ export const DETECTOR_ADAPTERS: DetectorAdapter[] = [
 ];
 
 /** Resolve the adapter responsible for a wait cause, falling back to inactivity. */
-export function resolveAdapter(tool: string): DetectorAdapter {
-  return DETECTOR_ADAPTERS.find((a) => a.matches(tool)) ?? defaultAdapter;
+export function resolveAdapter(tool: string, disabled?: readonly string[]): DetectorAdapter {
+  const adapter = DETECTOR_ADAPTERS.find((a) => a.matches(tool)) ?? defaultAdapter;
+  // Per-source kill switch (P1.17/P1.18): a disabled source must never emit
+  // strong signals, so fall back to the default adapter (shadow-only, never
+  // ai_generation) when the resolved adapter's source is in the disabled set.
+  if (disabled && disabled.length > 0) {
+    const normalized = adapter.tool.toLowerCase();
+    if (disabled.some((s) => s.toLowerCase() === normalized)) {
+      return defaultAdapter;
+    }
+  }
+  return adapter;
 }
 
 /** Maps a wait cause to its canonical signal(s). Preserves the prior contract. */
-export function mapToolToSignals(tool: string): WaitSignal[] {
-  return resolveAdapter(tool).signals;
+export function mapToolToSignals(tool: string, disabled?: readonly string[]): WaitSignal[] {
+  return resolveAdapter(tool, disabled).signals;
 }

@@ -27,6 +27,7 @@ import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { verifyMigrationsApplied } from './config/migration-check';
 import { PrismaService } from './config/prisma.service';
+import { AlertsService } from './observability/alerts.service';
 
 async function bootstrap() {
   // Validate env on startup. Non-production environments allow
@@ -121,6 +122,12 @@ async function bootstrap() {
     await verifyMigrationsApplied(prisma);
   } catch (err) {
     console.error('[WaitLayer] Migration check failed:', err);
+    try {
+      const alerts = app.get(AlertsService);
+      await alerts.alertMigrationFailed({ error: String(err) });
+    } catch {
+      // never mask the migration failure
+    }
     throw err;
   }
 

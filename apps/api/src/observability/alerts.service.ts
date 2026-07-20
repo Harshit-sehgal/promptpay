@@ -146,4 +146,10 @@ export class AlertsService {
     const key = typeof ctx.payoutId === 'string' ? `payout:${ctx.payoutId}` : 'payout:unknown';
     this.sendAlert('payout_escalation', key, ctx);
   }
+  alertMigrationFailed(ctx: Record<string, unknown> = {}): void {
+    this.alert('migration_failed', ctx);
+  }
+  alertProviderFailureRate(ctx: Record<string, unknown> = {}): void {
+    this.alert('provider_failure_rate', ctx);
+  }
 }

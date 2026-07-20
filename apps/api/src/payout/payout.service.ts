@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { AlertsService } from '../observability/alerts.service';
 import { ReferralService } from '../referral/referral.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import {
@@ -36,6 +37,7 @@ export class PayoutService {
     public wise: WisePayoutProvider,
     public runtimeConfig: RuntimeConfigService,
     public fraudService: FraudService,
+    public alerts: AlertsService,
   ) {
     this.providers = {
       manual: new ManualPayoutProvider(),

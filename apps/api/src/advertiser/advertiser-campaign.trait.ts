@@ -3,19 +3,25 @@ import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common'
 import { BidType, Prisma } from '@waitlayer/db';
 import {
   AD_SERVING,
+  assertSameCurrency,
   campaignMaximumBudgetMinor,
   campaignMinimumBidMinor,
   campaignMinimumBudgetMinor,
   CampaignStatus,
   formatMinorUnits,
   getCurrencyPolicy,
+  Money,
+  validatePositiveMoney,
 } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { CampaignService } from '../campaign/campaign.service';
+import {
+  CampaignStatus as CampaignFsmStatus,
+  validateCampaignTransition,
+} from '../campaign/campaign-state-machine';
 import { PrismaService } from '../config/prisma.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
-import { CAMPAIGN_TRANSITIONS } from './advertiser.constants';
 import { AdvertiserProfileTrait } from './advertiser-profile.trait';
 
 export class AdvertiserCampaignTrait {
@@ -35,6 +41,8 @@ export class AdvertiserCampaignTrait {
       bidAmountMinor: bigint;
       budgetTotalMinor: bigint;
       currency?: string;
+      bid?: Money;
+      budget?: Money;
       frequencyCapPerHour?: number;
       frequencyCapPerDay?: number;
     },
@@ -51,17 +59,17 @@ export class AdvertiserCampaignTrait {
     }
     const minBudget = campaignMinimumBudgetMinor(currency);
     const maxBudget = campaignMaximumBudgetMinor(currency);
-    if (dto.budgetTotalMinor < minBudget) {
+    if (budgetMoney.amountMinor < minBudget) {
       throw new BadRequestException(
         `Minimum budget is ${formatMinorUnits(minBudget, currency)} (${currency})`,
       );
     }
-    if (dto.budgetTotalMinor > maxBudget) {
+    if (budgetMoney.amountMinor > maxBudget) {
       throw new BadRequestException(
         `Maximum budget is ${formatMinorUnits(maxBudget, currency)} (${currency})`,
       );
     }
-    if (dto.bidAmountMinor <= 0n) {
+    if (bidMoney.amountMinor <= 0n) {
       throw new BadRequestException('Bid amount must be positive');
     }
     const minBid = campaignMinimumBidMinor(currency);
@@ -129,7 +137,7 @@ export class AdvertiserCampaignTrait {
     if (campaign.creatives.length === 0) {
       throw new BadRequestException('Campaign must have at least one creative before submission');
     }
-    this.validateTransition(campaign.status, 'submitted');
+    validateCampaignTransition(campaign.status as CampaignFsmStatus, 'submitted');
     const submitted = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const claimed = await tx.campaign.updateMany({
         where: { id: campaignId, advertiserId, status: CampaignStatus.DRAFT },
@@ -173,7 +181,7 @@ export class AdvertiserCampaignTrait {
   async resetCampaignToDraft(campaignId: string, advertiserId: string) {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
-    this.validateTransition(campaign.status, 'draft');
+    validateCampaignTransition(campaign.status as CampaignFsmStatus, 'draft');
     const updated = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const claimed = await tx.campaign.updateMany({
         where: { id: campaignId, advertiserId, status: CampaignStatus.REJECTED },
@@ -205,7 +213,7 @@ export class AdvertiserCampaignTrait {
   async pauseCampaign(campaignId: string, advertiserId: string) {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId } });
     if (!campaign || campaign.advertiserId !== advertiserId) throw new ForbiddenException();
-    this.validateTransition(campaign.status, 'paused');
+    validateCampaignTransition(campaign.status as CampaignFsmStatus, 'paused');
     const paused = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const claimed = await tx.campaign.updateMany({
         where: { id: campaignId, advertiserId, status: CampaignStatus.ACTIVE },
@@ -255,7 +263,7 @@ export class AdvertiserCampaignTrait {
         'Cannot resume campaign: advertiser has no funded balance. Please deposit funds first.',
       );
     }
-    this.validateTransition(campaign.status, 'active');
+    validateCampaignTransition(campaign.status as CampaignFsmStatus, 'active');
     const resumed = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const claimed = await tx.campaign.updateMany({
         where: { id: campaignId, advertiserId, status: CampaignStatus.PAUSED },
@@ -298,12 +306,16 @@ export class AdvertiserCampaignTrait {
     if (campaign.status === 'archived') {
       return { campaign, refundEntry: null, archived: false };
     }
-    // Allow archiving from any non-terminal state. `archived` is the only
-    // state we explicitly reject above (idempotent). The CAMPAIGN_TRANSITIONS
-    // table doesn't list archived as a target for any state, so we bypass
-    // validateTransition here — archive is a deliberate "close forever"
-    // action available from every live state.
-    //
+    // P2.2.2 — fail-closed: only the documented lifecycle states may be
+    // archived (draft / approved / active / paused). This replaces the prior
+    // "archive from any non-terminal state" escape hatch with an explicit,
+    // declarative guard.
+    validateCampaignTransition(campaign.status as CampaignFsmStatus, 'archived');
+    // Archiving from a state outside the documented lifecycle (e.g.
+    // submitted / under_review / rejected) is now rejected by the guard above.
+    // The CAS flip below still only fires when the row is not already archived
+    // (idempotent re-invocation guard) and remains the authoritative
+    // concurrency control; the declarative guard is purely a pre-check.
     const result = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // CAS flip: only if not already archived (re-invocation guard). This
       // UPDATE acquires the row lock; concurrent impression writes to
@@ -456,16 +468,6 @@ export class AdvertiserCampaignTrait {
     });
     if (!current || current.advertiserId !== advertiserId) throw new ForbiddenException();
     throw new BadRequestException(`${message}; current status is ${current.status}`);
-  }
-
-  // ── Private ──
-  validateTransition(currentStatus: string, newStatus: string) {
-    const allowed = CAMPAIGN_TRANSITIONS[currentStatus];
-    if (!allowed || !allowed.includes(newStatus as CampaignStatus)) {
-      throw new BadRequestException(
-        `Invalid campaign transition: ${currentStatus} → ${newStatus}. Allowed: ${allowed?.join(', ') || 'none'}`,
-      );
-    }
   }
 }
 export interface AdvertiserCampaignTrait extends AdvertiserProfileTrait {}

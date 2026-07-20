@@ -28,11 +28,10 @@ interface RequestWithOptionalUser extends Request {
  * clause → cross-tenant data leak (earnings/payout/developer exports).
  *
  * The synthesized user carries the owner's id and role (resolved in
- * validateApiKey). `sub` mirrors `id` to match the JWT payload convention
- * (req.user.sub is what the advertiser controller's resolveApiContext reads
- * on the JWT path). `advertiserId` from the key stays available on
- * `req.apiKey` for routes that need the key's *scoped* advertiser rather than
- * the owner's own profile (advertiser controller).
+ * validateApiKey) so `@CurrentUser('id')` / `RolesGuard` resolve the owner
+ * uniformly. `advertiserId` from the key stays available on `req.apiKey` for
+ * routes that need the key's *scoped* advertiser rather than the owner's own
+ * profile (advertiser controller).
  */
 function stampUserFromApiKey(
   req: RequestWithOptionalUser,
@@ -44,7 +43,6 @@ function stampUserFromApiKey(
   req.user = {
     id: apiKey.ownerId,
     sub: apiKey.ownerId,
-    role: apiKey.owner.role as UserRole,
     authMethod: 'api_key' as const,
   } as Record<string, unknown>;
 }

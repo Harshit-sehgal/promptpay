@@ -187,6 +187,17 @@ export const adminApi = {
     api.post(`/admin/payout-accounts/${id}/freeze`, { reason }),
   unfreezePayoutAccount: (id: string, reason?: string) =>
     api.post(`/admin/payout-accounts/${id}/unfreeze`, { reason }),
+  getFencedAccounts: (params?: { page?: number; limit?: number }) =>
+    api.get('/admin/payout-accounts/fenced', { params }),
+  releasePayoutFence: (
+    id: string,
+    data: {
+      reason: string;
+      providerTxId?: string;
+      resolution?: string;
+      secondApproverId?: string;
+    },
+  ) => api.post(`/admin/payout-accounts/${id}/release-fence`, data),
 };
 
 export const payoutApi = {

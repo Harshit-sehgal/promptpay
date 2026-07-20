@@ -409,6 +409,8 @@ function makeServices(): TestFixtures {
     {} as any,
     {} as any,
     runtimeConfig,
+    {} as never,
+    {} as never,
   );
 
   const developer = new DeveloperService(prismaRef, fraud, audit, mockGoogleVerifier as any);

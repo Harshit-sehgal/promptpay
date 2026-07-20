@@ -122,7 +122,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jti: payload.jti,
       mfaAt: payload.mfaAt,
       authMethod: 'jwt' as const,
-      sub: user.id,
     } as AuthenticatedPrincipal & {
       email: string;
       status: string;

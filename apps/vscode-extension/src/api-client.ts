@@ -39,6 +39,14 @@ interface AmountEntry {
   // precision loss that `Number()` introduces above 2^53.
   amountMinor: bigint;
   currency: string;
+  /**
+   * Per-currency minor-unit totals, serialized as decimal strings (matching
+   * exactly how the API sends BigInt columns). Present only when the account
+   * holds a mixed-currency balance. The scalar `amountMinor`/`currency` above
+   * remain the legacy single-currency fallback for any client that does not
+   * yet consume `byCurrency`.
+   */
+  byCurrency?: Record<string, string>;
 }
 
 /** Backend returns { available, pending, total, paidOut } each as { amountMinor, currency }. */
@@ -53,6 +61,7 @@ export interface Balance {
 interface RawAmountEntry {
   amountMinor: number | string;
   currency: string;
+  byCurrency?: Record<string, number | string>;
 }
 
 interface RawBalance {
@@ -333,28 +342,47 @@ export class ApiClient {
       signature: await this.signEventPayload(payload),
     });
   }
+  /** Normalize a raw per-currency map (number|string values) into the
+   *  `Record<string, string>` shape the `Balance` DTO exposes — stringified
+   *  exact bigints, matching how the API serializes BigInt columns. */
+  private byCurrencyToStrings(
+    raw: Record<string, number | string> | undefined,
+  ): Record<string, string> | undefined {
+    if (!raw) return undefined;
+    const out: Record<string, string> = {};
+    for (const [currency, value] of Object.entries(raw)) {
+      out[currency] = parseMinor(value).toString();
+    }
+    return out;
+  }
 
   async getBalance(): Promise<Balance> {
     // Backend returns flat { available, pending, total, paidOut } (no data wrapper).
-    // Monetary BigInt columns are serialized as strings; parse them back to numbers
-    // so downstream UI arithmetic works without implicit coercion.
+    // Monetary BigInt columns are serialized as strings; parse them back to
+    // bigints. Each entry also carries an optional `byCurrency` map of
+    // per-currency minor-unit totals (also serialized as decimal strings),
+    // which we preserve as a `Record<string, string>` for the UI.
     const res = await this.get<RawBalance>('/ledger/balance');
     return {
       available: {
         amountMinor: parseMinor(res.available.amountMinor),
         currency: res.available.currency,
+        byCurrency: this.byCurrencyToStrings(res.available.byCurrency),
       },
       pending: {
         amountMinor: parseMinor(res.pending.amountMinor),
         currency: res.pending.currency,
+        byCurrency: this.byCurrencyToStrings(res.pending.byCurrency),
       },
       total: {
         amountMinor: parseMinor(res.total.amountMinor),
         currency: res.total.currency,
+        byCurrency: this.byCurrencyToStrings(res.total.byCurrency),
       },
       paidOut: {
         amountMinor: parseMinor(res.paidOut.amountMinor),
         currency: res.paidOut.currency,
+        byCurrency: this.byCurrencyToStrings(res.paidOut.byCurrency),
       },
     };
   }

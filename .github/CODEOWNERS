@@ -1,9 +1,10 @@
 # CODEOWNERS (P1.21)
 #
 # PRs that change the paths below require review from the named owners before
-# merge. Replace `@promptpay1` with the real GitLab groups/users for this
-# project. Enforce via "Protected branches" in GitLab (see
-# docs/ops/branch-protection.md).
+# merge. Replace `@promptpay1` with the real GitHub team/org for this project
+# (the repository is hosted on GitHub as `Harshit-sehgal/promptpay`; the product
+# is branded WaitLayer). Enforce via "Require review from Code Owners" in GitHub
+# repo Settings → Branches (see docs/ops/branch-protection.md).
 
 # Authentication & identity
 /apps/api/src/auth/          @promptpay1

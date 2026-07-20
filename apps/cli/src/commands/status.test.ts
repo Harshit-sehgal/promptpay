@@ -104,6 +104,37 @@ describe('runStatus', () => {
     expect(output).not.toContain('$50.00');
     expect(output).not.toContain('$60.00');
   });
+  it('selects the primary currency by ISO order, never by raw magnitude (P1.4)', async () => {
+    // JPY has a SMALLER raw minor value, USD a LARGER one. The old magnitude
+    // rule would have picked USD; the deterministic rule must pick JPY (first
+    // positive currency in ascending ISO-4217 order).
+    mocks.api.getBalance.mockResolvedValue({
+      available: { amountMinor: 1000n, currency: 'JPY', byCurrency: { JPY: 1000n, USD: 9999n } },
+      pending: { amountMinor: 0n, currency: 'JPY', byCurrency: { JPY: 0n, USD: 500n } },
+      total: { amountMinor: 1000n, currency: 'JPY', byCurrency: { JPY: 1000n, USD: 9999n } },
+      paidOut: { amountMinor: 0n, currency: 'JPY', byCurrency: { JPY: 0n, USD: 0n } },
+    });
+    mocks.api.getOverview.mockResolvedValue({
+      estimatedEarnings: 1000n,
+      confirmedEarnings: 0n,
+      pendingEarnings: 0n,
+      lifetimeEarnings: 1000n,
+      estimatedEarningsByCurrency: { JPY: 1000n, USD: 9999n },
+      confirmedEarningsByCurrency: { JPY: 0n, USD: 0n },
+      pendingEarningsByCurrency: { JPY: 0n, USD: 0n },
+      lifetimeEarningsByCurrency: { JPY: 1000n, USD: 9999n },
+      trustLevel: 'normal',
+      trustScore: 72,
+    });
+
+    await runStatus();
+
+    const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
+    expect(output).toContain('¥1,000');
+    // USD has the larger raw minor value (9999) but must NOT be selected.
+    expect(output).not.toContain('$99.99');
+    expect(output).not.toContain('$');
+  });
 
   it('prints balances above Number.MAX_SAFE_INTEGER without losing cents', async () => {
     const exact = 9_007_199_254_740_993n;

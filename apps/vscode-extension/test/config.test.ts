@@ -192,3 +192,68 @@ describe('ConfigurationManager — device registration storage', () => {
     expect(secrets.delete).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('ConfigurationManager — detector rollout, kill switch & suppression (P1.17 / P1.18)', () => {
+  it('detectorRolloutPercent defaults to 100 and clamps to 0–100', () => {
+    const mgr = makeManager();
+    expect(mgr.detectorRolloutPercent()).toBe(100);
+
+    mock.config['detectorRolloutPercent'] = 25;
+    expect(mgr.detectorRolloutPercent()).toBe(25);
+
+    mock.config['detectorRolloutPercent'] = 250;
+    expect(mgr.detectorRolloutPercent()).toBe(100);
+
+    mock.config['detectorRolloutPercent'] = -5;
+    expect(mgr.detectorRolloutPercent()).toBe(0);
+
+    mock.config['detectorRolloutPercent'] = NaN;
+    expect(mgr.detectorRolloutPercent()).toBe(100);
+  });
+
+  it('getDisabledDetectorSources defaults to an empty list', () => {
+    const mgr = makeManager();
+    expect(mgr.getDisabledDetectorSources()).toEqual([]);
+
+    mock.config['disabledDetectorSources'] = ['inactivity', 'Task'];
+    expect(mgr.getDisabledDetectorSources()).toEqual(['inactivity', 'task']);
+  });
+
+  it('toggleDetectorSource adds then removes a normalized source and persists it', async () => {
+    const mgr = makeManager();
+    expect(mgr.getDisabledDetectorSources()).toEqual([]);
+
+    const afterAdd = await mgr.toggleDetectorSource('Inactivity');
+    expect(afterAdd).toEqual(['inactivity']);
+    expect(mgr.getDisabledDetectorSources()).toEqual(['inactivity']);
+
+    const afterRemove = await mgr.toggleDetectorSource('INACTIVITY');
+    expect(afterRemove).toEqual([]);
+    expect(mgr.getDisabledDetectorSources()).toEqual([]);
+  });
+
+  it('falsePositiveSuppressionMinutes defaults to 30 and clamps to >= 0', () => {
+    const mgr = makeManager();
+    expect(mgr.falsePositiveSuppressionMinutes()).toBe(30);
+
+    mock.config['falsePositiveSuppressionMinutes'] = 10;
+    expect(mgr.falsePositiveSuppressionMinutes()).toBe(10);
+
+    mock.config['falsePositiveSuppressionMinutes'] = -3;
+    expect(mgr.falsePositiveSuppressionMinutes()).toBe(0);
+
+    mock.config['falsePositiveSuppressionMinutes'] = NaN;
+    expect(mgr.falsePositiveSuppressionMinutes()).toBe(30);
+  });
+
+  it('preferredDisplayCurrency defaults to empty and is uppercased/trimmed (P1.4)', () => {
+    const mgr = makeManager();
+    expect(mgr.preferredDisplayCurrency()).toBe('');
+
+    mock.config['preferredDisplayCurrency'] = 'usd';
+    expect(mgr.preferredDisplayCurrency()).toBe('USD');
+
+    mock.config['preferredDisplayCurrency'] = '   ';
+    expect(mgr.preferredDisplayCurrency()).toBe('');
+  });
+});

@@ -11,6 +11,7 @@ describe('creative-state-machine', () => {
   const valid: Array<[CreativeStatus, CreativeStatus]> = [
     ['draft', 'pending_review'],
     ['draft', 'draft'],
+    ['draft', 'approved'],
     ['pending_review', 'approved'],
     ['pending_review', 'rejected'],
     ['pending_review', 'draft'],
@@ -23,7 +24,6 @@ describe('creative-state-machine', () => {
   });
 
   const invalid: Array<[CreativeStatus, CreativeStatus]> = [
-    ['draft', 'approved'],
     ['draft', 'rejected'],
     ['pending_review', 'pending_review'],
     ['approved', 'approved'],

@@ -73,6 +73,7 @@ function makePayoutService(prismaOverrides: Record<string, unknown> = {}) {
     {} as never,
     {} as never,
     runtimeConfig as never,
+    {} as never,
   );
   return { prisma, service };
 }

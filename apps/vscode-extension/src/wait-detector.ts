@@ -6,6 +6,16 @@ import { mapToolToSignals, resolveAdapter } from './detector-adapters';
 export interface WaitStateDetectorOptions {
   /** Callback to read the configurable inactivity timeout (ms). Default 15_000. */
   getInactivityTimeoutMs: () => number;
+  /**
+   * Returns the set of disabled detector signal sources (P1.17 / P1.18). A
+   * wait from a disabled source is never started. Default: all enabled.
+   */
+  getDisabledSources?: () => readonly string[];
+  /**
+   * Returns true when NEW waits should be suppressed (P1.18 false-positive
+   * cooldown). When true, `enterWait` refuses to start a fresh wait.
+   */
+  isSuppressed?: (now: number) => boolean;
 }
 
 export type WaitSignal =
@@ -86,6 +96,10 @@ export class WaitStateDetector {
    *  programmatic insertion (AI inline completion) does NOT terminate the
    *  wait; multiple edits in quick succession (real user typing) do. */
   private editsDuringWait = 0;
+  /** Disabled signal sources (P1.17 / P1.18). */
+  private getDisabledSources: () => readonly string[] = () => [];
+  /** Suppression predicate (P1.18 false-positive cooldown). */
+  private isSuppressedNow: ((now: number) => boolean) | undefined;
 
   // ── Task monitoring ──
   private activeTaskCount = 0;
@@ -98,6 +112,8 @@ export class WaitStateDetector {
 
   constructor(options?: WaitStateDetectorOptions) {
     this.getInactivityTimeoutMs = options?.getInactivityTimeoutMs ?? (() => 15_000);
+    this.getDisabledSources = options?.getDisabledSources ?? (() => []);
+    this.isSuppressedNow = options?.isSuppressed;
   }
 
   onWaitStateStart(fn: (e: WaitStateEvent) => void) {
@@ -284,12 +300,20 @@ export class WaitStateDetector {
       return this.waitStateId;
     }
 
+    // Per-source kill switch (P1.17 / P1.18): never start a wait from a
+    // disabled source. Returning the empty id signals "no wait started".
+    if (this.isSourceDisabled(tool)) return '';
+
+    // False-positive suppression (P1.18): do not start NEW waits while a
+    // suppression window is active. An already-running wait is left alone.
+    if (this.isSuppressedNow?.(Date.now())) return '';
+
     this.inWait = true;
     this.waitStart = Date.now();
     this.waitStateId = generateWaitStateId();
     this.waitTool = tool;
 
-    const adapter = resolveAdapter(tool);
+    const adapter = resolveAdapter(tool, this.getDisabledSources());
     const signals = adapter.signals;
     // Generic inactivity is a weak heuristic, not proof of AI generation. A
     // wait whose ONLY signal is inactivity (or whose adapter is flagged
@@ -314,6 +338,12 @@ export class WaitStateDetector {
     this.notify(event);
 
     return this.waitStateId;
+  }
+
+  /** Whether a signal source is disabled (case-insensitive). */
+  private isSourceDisabled(source: string): boolean {
+    const normalized = source.toLowerCase();
+    return this.getDisabledSources().some((s) => s.toLowerCase() === normalized);
   }
 
   private endWait() {

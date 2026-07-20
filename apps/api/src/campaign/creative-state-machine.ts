@@ -21,7 +21,7 @@ import { BadRequestException } from '@nestjs/common';
 export type CreativeStatus = 'draft' | 'pending_review' | 'approved' | 'rejected';
 
 export const CREATIVE_TRANSITIONS: Record<CreativeStatus, CreativeStatus[]> = {
-  draft: ['pending_review', 'draft'],
+  draft: ['pending_review', 'approved', 'draft'],
   pending_review: ['approved', 'rejected', 'draft'],
   approved: ['draft'],
   rejected: ['draft'],

@@ -1690,6 +1690,73 @@ describe('markPayoutPaid terminal state transition', () => {
       data: { initiationPayoutId: null },
     });
   });
+  it('fires payout_paid_without_provider_tx alert when marked paid without a providerTxId (P1.25)', async () => {
+    const payoutPaid = {
+      id: 'payout-1',
+      userId: 'u1',
+      status: 'approved',
+      approvedAmountMinor: 1000n,
+      currency: 'usd',
+      payoutAccount: { id: 'pa-1', provider: 'manual', isActive: true, isVerified: true },
+      allocations: [{ id: 'alloc-1', earningsEntryId: 'earn-1' }],
+    };
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const clearFence = vi.fn().mockResolvedValue({ count: 1 });
+    const $tx = vi.fn((cb: (tx: Record<string, unknown>) => Promise<unknown>) =>
+      cb({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(payoutPaid),
+          updateMany,
+          update: vi.fn(),
+          findFirst: vi.fn(),
+        },
+        payoutTransaction: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          findFirst: vi.fn(),
+          create: vi.fn(),
+        },
+        earningsLedger: {
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+          aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
+        },
+        platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+        payoutAccount: { updateMany: clearFence },
+        payoutAllocation: { updateMany: vi.fn(), deleteMany: vi.fn() },
+      }),
+    );
+    const { service } = makePayoutService({
+      payoutRequest: {
+        findUnique: vi.fn().mockResolvedValue(payoutPaid),
+        updateMany,
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      payoutTransaction: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
+      earningsLedger: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        aggregate: vi.fn().mockResolvedValue({ _count: { _all: 1 } }),
+      },
+      platformLedger: { upsert: vi.fn().mockResolvedValue({ id: 'pl-1' }) },
+      $transaction: $tx,
+    });
+
+    await service.markPayoutPaid('payout-1', {
+      paidAt: new Date().toISOString(),
+    });
+
+    expect(service.alerts.alertPayoutPaidWithoutProviderTx).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payoutId: 'payout-1',
+        provider: 'manual',
+        currency: 'usd',
+        amountMinor: 1000n,
+      }),
+    );
+  });
 
   it('rejects amount cross-check mismatch when expectedAmountMinor is supplied (Fix 2 regression lock)', async () => {
     const payout = {

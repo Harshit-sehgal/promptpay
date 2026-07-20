@@ -134,3 +134,53 @@ describe('WaitStateDetector — shadow (non-monetizable) waits (P1.14 / P2.5)', 
     expect(ends[0].shadow).toBe(true);
   });
 });
+
+describe('WaitStateDetector — per-source kill switch + suppression (P1.17 / P1.18)', () => {
+  function capture(detector: WaitStateDetector): WaitStateEvent[] {
+    const events: WaitStateEvent[] = [];
+    detector.onWaitStateStart((e) => events.push(e));
+    return events;
+  }
+
+  it('does not start a wait from a disabled source (no wait_start emitted, empty id)', () => {
+    const detector = new WaitStateDetector({
+      getInactivityTimeoutMs: () => 15_000,
+      getDisabledSources: () => ['inactivity'],
+    });
+    const events = capture(detector);
+    const id = detector.triggerManualWait('inactivity');
+    expect(id).toBe('');
+    expect(events).toHaveLength(0);
+  });
+
+  it('still starts waits from enabled sources when another is disabled', () => {
+    const detector = new WaitStateDetector({
+      getInactivityTimeoutMs: () => 15_000,
+      getDisabledSources: () => ['inactivity'],
+    });
+    const events = capture(detector);
+    const id = detector.triggerManualWait('task');
+    expect(id).not.toBe('');
+    expect(events).toHaveLength(1);
+    expect(events[0].signals).toEqual([{ type: 'active_task' }]);
+  });
+
+  it('does not start NEW waits while suppressed, but leaves an existing wait alone', () => {
+    let suppressed = false;
+    const detector = new WaitStateDetector({
+      getInactivityTimeoutMs: () => 15_000,
+      isSuppressed: () => suppressed,
+    });
+    const events = capture(detector);
+    const id1 = detector.triggerManualWait('task');
+    expect(id1).not.toBe('');
+    expect(events).toHaveLength(1);
+
+    detector.endManualWait();
+
+    suppressed = true;
+    const id2 = detector.triggerManualWait('terminal');
+    expect(id2).toBe('');
+    expect(events).toHaveLength(1);
+  });
+});

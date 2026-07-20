@@ -21,6 +21,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { depositMinimumMinor } from '@waitlayer/shared';
 
+import { AdvertiserContext, AuthenticatedPrincipal } from '../common/auth/principal';
 import { CurrentUser, Roles } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { ActionStepUp, ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -47,18 +48,10 @@ import {
  * source — keeping handler bodies free of auth-shape branching.
  */
 function resolveApiContext(req: {
-  user?: { id?: string; sub?: string };
+  user?: AuthenticatedPrincipal;
   apiKey?: { scopes: string[]; advertiserId: string | null; ownerId: string };
-}): {
-  userId: string;
-  advertiserId: string | null;
-  auth: 'jwt' | 'apikey';
-} {
+}): AdvertiserContext {
   if (req.apiKey) {
-    // For machine-to-machine the API key MUST be scoped to a specific
-    // advertiser (advertiserId is set at key-creation time and validated
-    // server-side). If it's null, the key is generic and cannot act on
-    // behalf of a particular advertiser — reject.
     if (!req.apiKey.advertiserId) {
       throw new ForbiddenException(
         'This API key is not scoped to an advertiser — create a per-advertiser key to call /advertiser/* routes',
@@ -66,7 +59,7 @@ function resolveApiContext(req: {
     }
     return { userId: req.apiKey.ownerId, advertiserId: req.apiKey.advertiserId, auth: 'apikey' };
   }
-  const userId = req.user?.id ?? req.user?.sub;
+  const userId = req.user?.id;
   if (!userId) throw new BadRequestException('Missing authenticated principal');
   return { userId, advertiserId: null, auth: 'jwt' };
 }

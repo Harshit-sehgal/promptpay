@@ -1,6 +1,7 @@
 import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 
+import { AlertsService } from '../../observability/alerts.service';
 import { AuthenticatedPrincipal } from '../auth/principal';
 
 /**
@@ -58,6 +59,9 @@ function hasAccessCookie(req: {
  */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
+  constructor(private readonly alerts: AlertsService) {
+    super();
+  }
   canActivate(context: ExecutionContext) {
     const req = context.switchToHttp().getRequest<{
       apiKey?: unknown;
@@ -99,6 +103,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const req = context.switchToHttp().getRequest<{
       apiKey?: { ownerId?: string | null };
       user?: AuthenticatedPrincipal;
+      url?: string;
+      method?: string;
     }>();
     if (!req.apiKey) return jwtUser; // normal JWT path, no reconciliation needed
     const apiKeyOwnerId = req.apiKey.ownerId;
@@ -108,11 +114,31 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     // (doing so let a JWT for user A piggyback an API key for user B).
     const jwtUserId = (jwtUser as AuthenticatedPrincipal).id;
     if (apiKeyOwnerId == null || jwtUserId == null) {
+      try {
+        this.alerts.alertAuthIdentityMismatch({
+          userId: jwtUserId,
+          apiKeyOwnerId,
+          path: req.url ?? '',
+          reason: 'missing_canonical_identity',
+        });
+      } catch {
+        // alerting failure must never mask the auth error
+      }
       throw new UnauthorizedException(
         'Missing canonical principal identity for dual-credential request',
       );
     }
     if (String(apiKeyOwnerId) !== String(jwtUserId)) {
+      try {
+        this.alerts.alertAuthIdentityMismatch({
+          userId: jwtUserId,
+          apiKeyOwnerId,
+          path: req.url ?? '',
+          reason: 'identity_mismatch',
+        });
+      } catch {
+        // alerting failure must never mask the auth error
+      }
       throw new UnauthorizedException(
         'JWT identity does not match API key owner — dual-credential requests must carry a JWT for the same principal',
       );

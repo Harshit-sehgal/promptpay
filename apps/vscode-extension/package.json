@@ -22,7 +22,9 @@
     "onCommand:waitlayer.showEarnings",
     "onCommand:waitlayer.toggleAds",
     "onCommand:waitlayer.openDashboard",
-    "onCommand:waitlayer.reportFalseWait"
+    "onCommand:waitlayer.reportFalseWait",
+    "onCommand:waitlayer.showExperimentAssignment",
+    "onCommand:waitlayer.toggleDetectorSource"
   ],
   "contributes": {
     "commands": [
@@ -49,6 +51,14 @@
       {
         "command": "waitlayer.reportFalseWait",
         "title": "WaitLayer: Report false wait detection"
+      },
+      {
+        "command": "waitlayer.showExperimentAssignment",
+        "title": "WaitLayer: Show detector experiment assignment"
+      },
+      {
+        "command": "waitlayer.toggleDetectorSource",
+        "title": "WaitLayer: Toggle detector source"
       }
     ],
     "configuration": {
@@ -94,6 +104,33 @@
           "type": "string",
           "default": "https://api.waitlayer.com/api/v1",
           "description": "WaitLayer API base URL"
+        },
+        "waitlayer.preferredDisplayCurrency": {
+          "type": "string",
+          "default": "",
+          "description": "Preferred display currency for earnings (e.g. USD, EUR, JPY). Empty uses the derived primary currency. Only used when present in your balance; otherwise the primary currency is shown with a note."
+        },
+        "waitlayer.detectorRolloutPercent": {
+          "type": "number",
+          "default": 100,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Staged rollout percentage (0-100) for detector experiments. Default 100 enrolls everyone."
+        },
+        "waitlayer.disabledDetectorSources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Detector signal sources to disable (e.g. inactivity, terminal, task, editor_idle)."
+        },
+        "waitlayer.falsePositiveSuppressionMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "maximum": 10080,
+          "description": "How long (minutes) new waits/ads are suppressed after reporting a false positive."
         }
       }
     },

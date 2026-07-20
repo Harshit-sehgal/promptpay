@@ -13,6 +13,7 @@ import {
 } from '../common/utils/provider-resilience';
 import { PrismaService } from '../config/prisma.service';
 import { ACTIVE_FRAUD_FLAG_STATUSES, payoutFraudLockKey } from '../fraud/fraud.constants';
+import { AlertsService } from '../observability/alerts.service';
 import { ReferralService } from '../referral/referral.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import {
@@ -42,6 +43,7 @@ export class PayoutRequestTrait {
   declare runtimeConfig: RuntimeConfigService;
   declare logger: Logger;
   declare providers: Record<string, PayoutProviderHandler>;
+  declare alerts: AlertsService;
 
   addCurrencyAmount(
     totals: Record<string, bigint>,
@@ -1095,6 +1097,24 @@ export class PayoutRequestTrait {
     // `updateMany where status in ('approved','processing')` below stays the
     // authoritative concurrency check — this is the human-readable gate layered
     // in front of it.
+    // Anomaly detection (P1.25): a payout marked paid without a provider
+    // transaction id is unusual. The reconciliation cron legitimately reaches
+    // this path via checkStatusByReference for completed payouts, and a
+    // manual/webhook mark-paid without a providerTxId is exactly the anomaly
+    // we want to surface. Fire BEFORE flipping the status so the event is
+    // captured. Wrapped so alerting can never block the payout transition.
+    if (!data.providerTxId) {
+      try {
+        this.alerts.alertPayoutPaidWithoutProviderTx({
+          payoutId,
+          provider: payout.payoutAccount.provider,
+          currency: payout.currency,
+          amountMinor: payout.approvedAmountMinor ?? payout.requestedAmountMinor,
+        });
+      } catch {
+        // alerting must never block the payout transition
+      }
+    }
     validatePayoutTransition(payout.status as PayoutStatus, PayoutStatus.PAID);
     const result = await this.prisma.$transaction(async (tx) => {
       // 1. Atomic conditional flip: only from a payable pre-state.

@@ -184,7 +184,11 @@ describe('CampaignService creative URL policy', () => {
   });
 
   it('persists the exact reviewer rejection reason on the creative (A-045)', async () => {
-    ctx.prisma.adCreative.findUnique.mockResolvedValue({ id: 'creative-1', campaignId: 'camp-1' });
+    ctx.prisma.adCreative.findUnique.mockResolvedValue({
+      id: 'creative-1',
+      campaignId: 'camp-1',
+      status: 'pending_review',
+    });
     ctx.prisma.adCreative.update.mockImplementation(
       async (args: { data: Record<string, unknown> }) => ({
         id: 'creative-1',

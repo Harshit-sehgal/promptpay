@@ -220,6 +220,75 @@ export class ConfigurationManager {
     }
     return null;
   }
+  /**
+   * Preferred display currency for earnings (e.g. 'USD', 'EUR', 'JPY').
+   * Empty string (default) ⇒ derived via `primaryCurrency` (first positive
+   * balance in ascending ISO-4217 order). P1.4.
+   */
+  preferredDisplayCurrency(): string {
+    const value = vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<string>('preferredDisplayCurrency');
+    return value && value.trim() ? value.trim().toUpperCase() : '';
+  }
+
+  /**
+   * Staged rollout percentage for detector experiments (P1.17). 0–100.
+   * Default 100 ⇒ every enrolled user is in the experiment (behavior
+   * unchanged from before the rollout existed). There is no runtime-config
+   * client fetch in the extension, so this settings value is the source.
+   */
+  detectorRolloutPercent(): number {
+    const pct = vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<number>('detectorRolloutPercent');
+    if (typeof pct !== 'number' || Number.isNaN(pct)) return 100;
+    return Math.max(0, Math.min(100, Math.floor(pct)));
+  }
+
+  /**
+   * Per-detector-source kill switch (P1.17 / P1.18). Returns the set of
+   * disabled signal sources (e.g. 'inactivity', 'terminal', 'task'). Default:
+   * empty (all sources enabled).
+   */
+  getDisabledDetectorSources(): string[] {
+    const list = vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<string[]>('disabledDetectorSources');
+    return Array.isArray(list) ? list.map((s) => s.toLowerCase()) : [];
+  }
+
+  async setDisabledDetectorSources(sources: string[]): Promise<void> {
+    await vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .update('disabledDetectorSources', sources, vscode.ConfigurationTarget.Global);
+  }
+
+  /**
+   * Toggle a single detector source on/off in `disabledDetectorSources`.
+   * Returns the resulting (lower-cased) disabled list.
+   */
+  async toggleDetectorSource(source: string): Promise<string[]> {
+    const normalized = source.toLowerCase();
+    const current = this.getDisabledDetectorSources();
+    const next = current.includes(normalized)
+      ? current.filter((s) => s !== normalized)
+      : [...current, normalized];
+    await this.setDisabledDetectorSources(next);
+    return next;
+  }
+
+  /**
+   * How long (minutes) NEW waits/ads are suppressed after a successful
+   * false-positive report (P1.18). Default 30.
+   */
+  falsePositiveSuppressionMinutes(): number {
+    const mins = vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<number>('falsePositiveSuppressionMinutes');
+    if (typeof mins !== 'number' || Number.isNaN(mins)) return 30;
+    return Math.max(0, Math.floor(mins));
+  }
 }
 
 function currentTimeHHMM(): string {

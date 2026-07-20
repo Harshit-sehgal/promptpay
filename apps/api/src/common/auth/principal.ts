@@ -6,9 +6,9 @@ import { UserRole } from '@waitlayer/db';
  * API key) authenticated it.
  *
  * Guards and downstream resolvers (e.g. `@CurrentUser`, `RolesGuard`,
- * advertiser `resolveApiContext`) must reconcile identity against `.id` only.
- * The legacy `.sub` field is retained purely for backward compatibility with
- * existing `.sub` readers and MUST NOT be used for identity reconciliation.
+ * advertiser `resolveApiContext`) MUST reconcile identity against `.id` only.
+ * There is no `.sub` alias — JWT `sub` is the inbound token claim, not the
+ * principal shape.
  */
 export interface AuthenticatedPrincipal {
   id: string;
@@ -16,6 +16,15 @@ export interface AuthenticatedPrincipal {
   authMethod: 'jwt' | 'api_key';
   jti?: string;
   mfaAt?: number;
-  /** Backward-compatibility alias; mirrors `id`. Never use for reconciliation. */
-  sub?: string;
+}
+
+/**
+ * Resolved advertiser request context: either the acting user (JWT) or the
+ * API key's scoped advertiser (machine-to-machine). Returned by the
+ * advertiser controller's `resolveApiContext` helper.
+ */
+export interface AdvertiserContext {
+  userId: string;
+  advertiserId: string | null;
+  auth: 'jwt' | 'apikey';
 }

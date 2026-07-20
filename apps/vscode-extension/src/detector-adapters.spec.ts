@@ -77,3 +77,25 @@ describe('DetectorAdapter shadowOnly (P1.14 / P2.5)', () => {
     expect(resolveAdapter('codex').shadowOnly).not.toBe(true);
   });
 });
+
+describe('DetectorAdapter per-source kill switch (P1.17 / P1.18)', () => {
+  it('falls back to the default adapter when the matched source is disabled', () => {
+    const adapter = resolveAdapter('terminal', ['terminal']);
+    expect(adapter).toBe(defaultAdapter);
+    expect(adapter.signals).toEqual([{ type: 'inactivity' }]);
+  });
+
+  it('keeps the matched adapter when the source is not disabled', () => {
+    const adapter = resolveAdapter('terminal', []);
+    expect(adapter.tool).toBe('terminal');
+  });
+
+  it('mapToolToSignals honors the disabled set (never emits ai_generation for a killed source)', () => {
+    expect(mapToolToSignals('terminal', ['terminal'])).toEqual([{ type: 'inactivity' }]);
+    expect(mapToolToSignals('task', ['task'])).toEqual([{ type: 'inactivity' }]);
+  });
+
+  it('case-insensitive: disabling "Task" also disables "task"', () => {
+    expect(resolveAdapter('task', ['Task'])).toBe(defaultAdapter);
+  });
+});

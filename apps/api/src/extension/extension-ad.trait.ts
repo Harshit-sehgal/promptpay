@@ -9,42 +9,32 @@ import {
 } from '@nestjs/common';
 
 import { BidType, Prisma } from '@waitlayer/db';
-import {
-  MINIMUM_VISIBLE_DURATION_MS,
-  nextBillableCharge,
-  selectCampaignIndex,
-} from '@waitlayer/shared';
+import { MINIMUM_VISIBLE_DURATION_MS } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
-import {
-  getAdvertiserBalance,
-  getAdvertiserBalancesByCurrency,
-} from '../common/utils/advertiser-balance';
-import { isSerializationError, isUniqueConstraintViolation } from '../common/utils/errors';
-import { normalizeCreativeDestination } from '../common/utils/external-url-policy';
+import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
+import { isUniqueConstraintViolation } from '../common/utils/errors';
 import { ComplianceService } from '../compliance/compliance.service';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { LedgerService } from '../ledger/ledger.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
-import { isCountryEligible, normalizeCountryCode } from './country-targeting';
+import { AuctionService } from './auction.service';
+import { normalizeCountryCode } from './country-targeting';
 import {
   adCacheKey,
   adIdempotencyCacheKey,
   AdvertiserBalanceExhaustedError,
   advertiserCurrencyLockKey,
   BudgetExhaustedError,
-  FREQUENCY_CAP_TXN_MAX_RETRIES,
-  isCategoryBlocked,
   mergeBlockedCategories,
   ServedAd,
 } from './extension.constants';
 import type { ExtensionService } from './extension.service';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 import { MINIMUM_WAIT_CONFIDENCE } from './extension-wait.trait';
-import { isUnderFrequencyCap } from './frequency-cap';
 import { formatHHMMInZone, isTimeInRange } from './quiet-hours';
 
 /**
@@ -66,6 +56,7 @@ export class ExtensionAdTrait {
   declare compliance: ComplianceService;
   declare runtimeConfig: RuntimeConfigService;
   declare adCache: LRUCache<string, { ad: ServedAd }>;
+  private auctionService?: AuctionService;
   declare logger: Logger;
 
   // ── Ad Serving ──
@@ -217,261 +208,38 @@ export class ExtensionAdTrait {
     if (cached) {
       return { ad: cached.ad };
     }
-    // Build campaign query with frequency capping
+    // Auction selection is delegated to AuctionService (P2.1 extraction). It
+    // replicates the previous inline logic exactly: fetch active campaigns with
+    // approved creatives, filter by budget/category/country/frequency/balance,
+    // run the currency-safe weighted auction, and retry on reservation loss.
+    const auctionService =
+      this.auctionService ?? (this.auctionService = new AuctionService(this.prisma, this.audit));
     const maxPerHour = settings?.maxAdsPerHour ?? 6;
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    // Find active campaigns with approved creatives (outside the critical
-    // section — read-mostly data, no contention).
-    const recentBillableCampaignIds = await this.recentBillableCampaignIds(userId, oneHourAgo);
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    // Per-campaign frequency-cap accounting (issue A-061). Count this user's
-    // served impressions for every candidate campaign within the trailing hour
-    // and day, then exclude campaigns that have already hit their configured
-    // cap. We count ALL impressions (billable or not) because the cap governs
-    // ad exposure, not billing.
-    const recentImpressions = await this.prisma.adImpression.findMany({
-      where: { userId, createdAt: { gte: oneDayAgo } },
-      select: { campaignId: true, createdAt: true },
-    });
-    const campaignHourCounts = new Map<string, number>();
-    const campaignDayCounts = new Map<string, number>();
-    for (const imp of recentImpressions) {
-      if (imp.createdAt >= oneHourAgo) {
-        campaignHourCounts.set(imp.campaignId, (campaignHourCounts.get(imp.campaignId) ?? 0) + 1);
-      }
-      campaignDayCounts.set(imp.campaignId, (campaignDayCounts.get(imp.campaignId) ?? 0) + 1);
-    }
-    // Build the where clause with as many filters as possible BEFORE the
-    // candidate limit so eligible campaigns are not excluded by an arbitrary
-    // take cap. Category filtering, frequency-de-dup, and the active-status
-    // gate all go into the query. Budget, country targeting, and per-campaign
-    // frequency caps are applied post-query (they require campaign-specific
-    // values not available in the where clause without complex raw SQL).
-    const campaignWhere: Prisma.CampaignWhereInput = {
-      status: 'active',
-      // Frequency cap: don't show same campaign within the hour
-      id: { notIn: recentBillableCampaignIds },
-    };
-    // Category filter: exclude blocked categories in the DB query itself
-    if (effectiveBlocked.length > 0) {
-      campaignWhere.category = { notIn: effectiveBlocked };
-    }
-    // If the client supplied an allow-list, restrict to those categories
-    if (dto.allowedCategories?.length) {
-      campaignWhere.category = {
-        ...(campaignWhere.category as Prisma.StringFilter | undefined),
-        in: dto.allowedCategories,
-      };
-    }
-    const campaigns = await this.prisma.campaign.findMany({
-      where: campaignWhere,
-      // Use a single select so we can fetch budgetReservedMinor alongside
-      // relations. Prisma forbids mixing top-level include and select.
-      select: {
-        id: true,
-        advertiserId: true,
-        name: true,
-        status: true,
-        category: true,
-        bidType: true,
-        bidAmountMinor: true,
-        budgetTotalMinor: true,
-        budgetSpentMinor: true,
-        budgetReservedMinor: true,
-        currency: true,
-        frequencyCapPerHour: true,
-        frequencyCapPerDay: true,
-        creatives: {
-          where: { status: 'approved' },
-        },
-        countryTargeting: true,
-      },
-    });
-    // Filter by budget, category preferences, and URL safety. The write path
-    // validates new creatives, but this keeps older approved DB rows from
-    // being served if they predate the policy or were imported manually.
-    const campaignsWithSafeCreatives = campaigns.map((c) => ({
-      ...c,
-      creatives: c.creatives.flatMap((creative) => {
-        try {
-          const normalized = normalizeCreativeDestination(creative);
-          return [{ ...creative, ...normalized }];
-        } catch (err) {
-          this.logger.warn(
-            `Skipping unsafe creative ${creative.id}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-          return [];
-        }
-      }),
-    }));
-    const initialEligible = campaignsWithSafeCreatives.filter((c) => {
-      if (c.creatives.length === 0) return false;
-      // Account for both committed spend and in-flight reservations. A campaign
-      // that has *some* remaining budget but NOT enough to cover its exact next
-      // billable charge must NOT win the auction (issue #2): otherwise it would
-      // win, fail the guarded reservation, and cause the API to return no ad
-      // without trying another eligible campaign. The next possible charge is
-      // the per-event bid for both CPM (reserved at impression) and CPC (spent
-      // at click) — see `nextBillableCharge`. Enforce spent + reserved + charge <= total.
-      const charge = nextBillableCharge(BigInt(c.bidAmountMinor));
-      if (
-        BigInt(c.budgetSpentMinor) + BigInt(c.budgetReservedMinor ?? 0n) + charge >
-        BigInt(c.budgetTotalMinor)
-      )
-        return false;
-      // Category filter
-      if (isCategoryBlocked(effectiveBlocked, c.category)) return false;
-      if (dto.allowedCategories?.length && !dto.allowedCategories.includes(c.category))
-        return false;
-      // Country-targeting filter (issue A-056). Campaigns with no targeting
-      // rows serve everywhere; include-lists restrict to listed countries and
-      // exclude-lists block listed countries.
-      if (!isCountryEligible(c, userCountry)) return false;
-      // Per-campaign frequency caps (issue A-061). A cap of 0/undefined means
-      // "no limit"; a positive cap is enforced against the user's served
-      // impressions in the trailing hour and day.
-      if (
-        !isUnderFrequencyCap(c, campaignHourCounts.get(c.id) ?? 0, campaignDayCounts.get(c.id) ?? 0)
-      ) {
-        return false;
-      }
-      return true;
-    });
-    if (!initialEligible.length) {
-      return { ad: null, reason: 'no_eligible_campaign' };
-    }
-    // Filter by per-currency advertiser balance (issue A-039). Each campaign is
-    // compared against its OWN currency balance, so an advertiser with plenty of
-    // EUR but zero USD cannot serve a USD campaign.
-    const advertiserIds = initialEligible.map((c) => c.advertiserId);
-    const advertiserBalances = await getAdvertiserBalancesByCurrency(this.prisma, advertiserIds);
-    const eligible = initialEligible.filter((c) => {
-      const balance = BigInt(advertiserBalances.get(`${c.advertiserId}:${c.currency}`) ?? 0);
-      return balance >= BigInt(c.bidAmountMinor);
+    const eligible = await auctionService.selectEligibleCampaign({
+      userId,
+      effectiveBlocked,
+      allowedCategories: dto.allowedCategories,
+      userCountry,
+      oneHourAgo,
+      oneDayAgo,
     });
     if (!eligible.length) {
       return { ad: null, reason: 'no_eligible_campaign' };
     }
-    // ── Currency-safe, bigint-safe selection + retry-on-reservation-loss ──
-    // OLD behaviour: a single weighted pass across ALL eligible campaigns using
-    // `Number(totalBid)` for the random draw, ordering by raw `bidAmountMinor`.
-    // Both are invalid: raw minor units are not comparable across currencies,
-    // and `Number(totalBid)` loses precision past 2^53. If the winner then lost
-    // the guarded CPM reservation (a concurrent request spent the last budget),
-    // the API returned `no_eligible_campaign` without trying another candidate.
-    //
-    // NEW behaviour: `selectCampaignIndex` runs an independent weighted auction
-    // per currency (no cross-currency bid comparison) and draws the random index
-    // with bigint-safe rejection sampling. When the chosen campaign loses the
-    // in-transaction reservation race, we remove it from the candidate set and
-    // retry selection — bounded by the number of eligible candidates so we
-    // never loop. `no_eligible_campaign` is returned only after every viable
-    // candidate has been exhausted.
-    const excludedIds = new Set<string>();
-    const MAX_CANDIDATE_ATTEMPTS = eligible.length;
-    for (let attempt = 0; attempt < MAX_CANDIDATE_ATTEMPTS; attempt++) {
-      const pool = eligible.filter((c) => !excludedIds.has(c.id));
-      if (pool.length === 0) break;
-      const poolIndex = selectCampaignIndex(
-        pool.map((c) => ({
-          id: c.id,
-          currency: c.currency,
-          bidAmountMinor: BigInt(c.bidAmountMinor),
-        })),
-      );
-      const selected = pool[poolIndex];
-      const creative = selected.creatives[0];
-      const impressionToken = crypto.randomUUID();
-      const impressionTokenHash = crypto.createHash('sha256').update(impressionToken).digest('hex');
-      const ad = {
-        impressionToken,
-        campaignId: selected.id,
-        creativeId: creative.id,
-        title: creative.title,
-        message: creative.sponsoredMessage,
-        label: 'Sponsored',
-        displayDomain: creative.displayDomain,
-        destinationUrl: creative.destinationUrl,
-        ctaText: creative.ctaText ?? null,
-      };
-      // ── Atomic claim ──
-      // The cap-check + impression insert must be atomic against concurrent
-      // ad-requests on the same user. Without a transaction, two in-flight
-      // requests both count "5 so far" and both insert → 7 impressions for a
-      // cap of 6. We use a serializable transaction guarded by a per-user
-      // Postgres advisory lock; the lock short-circuits serialization conflicts
-      // because only one transaction per user runs the critical section at a
-      // time. On a P2034/serialization failure we retry the whole claim.
-      let claim: Awaited<ReturnType<ExtensionService['claimImpression']>>;
-      let serRetries = 0;
-      for (;;) {
-        try {
-          claim = await this.claimImpression({
-            userId,
-            deviceId: dto.deviceId,
-            sessionId: dto.sessionId,
-            waitStateId: dto.waitStateId,
-            idempotencyKey: dto.idempotencyKey,
-            campaignId: selected.id,
-            creativeId: creative.id,
-            impressionTokenHash,
-            bidType: selected.bidType,
-            bidAmountMinor: BigInt(selected.bidAmountMinor),
-            maxPerHour,
-            oneHourAgo,
-          });
-          break;
-        } catch (err) {
-          if (isSerializationError(err) && ++serRetries < FREQUENCY_CAP_TXN_MAX_RETRIES) {
-            continue;
-          }
-          throw err;
-        }
-      }
-      if (claim.status === 'duplicate') {
-        throw new ConflictException('Ad already requested for this wait state');
-      }
-      if (claim.status === 'cap_reached') {
-        return { ad: null, reason: 'user_hourly_cap_reached' };
-      }
-      // The guard `budgetSpentMinor + budget_reserved_minor + charge <= budgetTotalMinor`
-      // failed inside the transaction: a concurrent request took the last budget
-      // (or the advertiser balance moved). Remove THIS campaign and try another
-      // candidate rather than returning no ad (issue #2).
-      if (claim.status === 'budget_unavailable') {
-        excludedIds.add(selected.id);
-        continue;
-      }
-      // Save to LRU cache for immediate retries. Both keys map to the same ad
-      // so a retry on either lookup hits the bounded cache. LRU's TTL evicts
-      // these after 60s — older than that there's no valid request anymore.
-      // Keys are namespaced by userId + deviceId (issue A-038).
-      this.adCache.set(adIdempotencyCacheKey(userId, dto.deviceId, dto.idempotencyKey), { ad });
-      this.adCache.set(adCacheKey(userId, dto.deviceId, dto.waitStateId), { ad });
-      // Audit log on every billable ad served. This is the platform's most
-      // sensitive money-flow and forensics here directly supports fraud
-      // detection (burst-detection on a single device/user) plus dispute
-      // resolution. claim.impressionId is the FK into ad_impression, the
-      // authoritative record linking the served ad to a downstream click /
-      // impression-qualified outcome. Fire-and-forget via audit.log().
-      if (claim.status === 'claimed' && claim.impressionId) {
-        void this.audit.log({
-          actorId: userId,
-          actorRole: 'developer',
-          action: 'ad_served',
-          targetType: 'impression',
-          targetId: claim.impressionId,
-          afterSnap: {
-            campaignId: selected.id,
-            creativeId: creative.id,
-            deviceId: dto.deviceId,
-            waitStateId: dto.waitStateId,
-          },
-        });
-      }
-      return { ad };
-    }
-    return { ad: null, reason: 'no_eligible_campaign' };
+    return auctionService.runAuction({
+      eligible,
+      userId,
+      deviceId: dto.deviceId,
+      sessionId: dto.sessionId,
+      waitStateId: dto.waitStateId,
+      idempotencyKey: dto.idempotencyKey,
+      maxPerHour,
+      oneHourAgo,
+      adCache: this.adCache,
+      claimImpression: (args) => this.claimImpression(args),
+    });
   }
 
   /**

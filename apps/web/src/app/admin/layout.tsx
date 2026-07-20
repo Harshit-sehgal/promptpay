@@ -11,6 +11,7 @@ const ADMIN_NAV = [
   { label: 'Fraud review', href: '/admin/fraud' },
   { label: 'Device recovery', href: '/admin/devices' },
   { label: 'Payout requests', href: '/admin/payouts' },
+  { label: 'Fenced payout accounts', href: '/admin/payouts/fenced' },
   { label: 'Recovery debt', href: '/admin/recovery-debt' },
   { label: 'Ledger / Revenue', href: '/admin/ledger' },
   { label: 'Operations', href: '/admin/operations' },

@@ -14,6 +14,7 @@ import {
   normalizeCreativeUpdate,
 } from '../common/utils/external-url-policy';
 import { PrismaService } from '../config/prisma.service';
+import { CreativeStatus, validateCreativeTransition } from './creative-state-machine';
 
 const MAX_CREATIVES_PER_CAMPAIGN = 100;
 const MAX_COUNTRY_TARGETS = 249;
@@ -173,6 +174,13 @@ export class CampaignService {
   async approveCreative(creativeId: string) {
     const creative = await this.prisma.adCreative.findUnique({ where: { id: creativeId } });
     if (!creative) throw new NotFoundException('Creative not found');
+    // P2.2.1 — fail-closed approval. A creative may be approved only from
+    // `pending_review` or directly from `draft` (a freshly created creative
+    // approved without an explicit review step, as the e2e suite exercises);
+    // an already-`approved` creative is an idempotent no-op.
+    if (creative.status !== 'approved') {
+      validateCreativeTransition(creative.status as CreativeStatus, 'approved');
+    }
 
     const updated = await this.prisma.adCreative.update({
       where: { id: creativeId },
@@ -222,6 +230,11 @@ export class CampaignService {
     // an empty placeholder, defeating A-045's "cannot reject without a reason".
     if (!reason || reason.trim().length === 0) {
       throw new BadRequestException('A non-empty rejection reason is required');
+    }
+    // P2.2.1 — fail-closed rejection. From `pending_review` or `draft`; an
+    // already-`rejected` creative is an idempotent no-op.
+    if (creative.status !== 'rejected') {
+      validateCreativeTransition(creative.status as CreativeStatus, 'rejected');
     }
 
     const rejected = await this.prisma.adCreative.update({

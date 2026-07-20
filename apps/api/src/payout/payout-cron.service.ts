@@ -42,6 +42,20 @@ const AMBIGUOUS_RECONCILIATION_STATUSES = new Set<string>([
   'pending_initiation',
   'requires_review',
 ]);
+/**
+ * A narrow subset of `AMBIGUOUS_RECONCILIATION_STATUSES` that represents a
+ * TRUE ambiguous initiation — a provider-reported status meaning "started but
+ * its outcome is genuinely unresolved" (e.g. `initiate_pending`,
+ * `pending_initiation`, `requires_review`). Plain `processing` is excluded: it
+ * is the routine in-flight state and would be noisy to alert on every poll.
+ * When the provider reports one of these for a processing payout we surface a
+ * dedicated ambiguous-outcome alert (P1.25).
+ */
+const AMBIGUOUS_INITIATION_ALERT_STATUSES = new Set<string>([
+  'initiate_pending',
+  'pending_initiation',
+  'requires_review',
+]);
 
 @Injectable()
 export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -324,12 +338,43 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
             this.logger.log(
               `Payout ${payout.id} in ambiguous reconciliation status "${status.status}" — retaining fence`,
             );
+            // Only a TRUE ambiguous initiation (not routine `processing`) is
+            // worth alerting on — see AMBIGUOUS_INITIATION_ALERT_STATUSES. The
+            // existing cooldown dedupe in AlertsService suppresses per-poll
+            // noise for the same payout.
+            if (AMBIGUOUS_INITIATION_ALERT_STATUSES.has(status.status)) {
+              this.alerts.alertAmbiguousPayoutOutcome({
+                payoutId: payout.id,
+                provider: payout.payoutAccount.provider,
+                status: status.status,
+                reason: 'unresolved_ambiguous_initiation',
+              });
+            }
           }
           await recordAttempt(status.status);
         } catch (err) {
           this.logger.error(
             `Failed to check status for payout ${payout.id} (${providerTxId}): ${err instanceof Error ? err.message : err}`,
           );
+          // Provider-failure spike detection (P1.25): record the failure and
+          // alert only once the rolling 15-minute count crosses the threshold.
+          // Alerting must never mask the underlying provider error.
+          try {
+            const count = this.alerts.recordRate(
+              'provider_failure',
+              payout.payoutAccount.provider,
+              15 * 60 * 1000,
+            );
+            if (count >= 5) {
+              this.alerts.alertProviderFailureRate({
+                provider: payout.payoutAccount.provider,
+                count,
+                windowMs: 900_000,
+              });
+            }
+          } catch {
+            // alerting failure must not mask the underlying provider error
+          }
           await recordAttempt('error');
           // Don't throw — let the cron continue to other payouts
         }

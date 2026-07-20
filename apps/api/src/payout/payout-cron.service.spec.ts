@@ -61,6 +61,9 @@ const mockAlerts = {
   alert: vi.fn(),
   alertPayoutEscalation: vi.fn(),
   alertPayoutFenceAge: vi.fn(),
+  alertAmbiguousPayoutOutcome: vi.fn(),
+  alertProviderFailureRate: vi.fn(),
+  recordRate: vi.fn(),
 } as unknown as AlertsService;
 describe('PayoutCronService', () => {
   let service: PayoutCronService;
@@ -557,6 +560,65 @@ describe('PayoutCronService', () => {
       expect(updateCall.data.reconciliationLog).toEqual([
         { at: expect.any(String), outcome: 'no_provider_txid' },
       ]);
+    });
+    it('alerts on a true ambiguous initiation (e.g. requires_review) without escalating (P1.25)', async () => {
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_amb',
+          status: 'processing',
+          currency: 'USD',
+          payoutAccount: { provider: 'stripe_connect', destination: 'acct_x' },
+          transactions: [{ providerTxId: 'po_amb' }],
+          reconciliationLog: null,
+          escalatedAt: null,
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockStripeProvider);
+      mockStripeProvider.checkStatus.mockResolvedValue({ status: 'requires_review' });
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      const result = await service.pollProcessingPayouts();
+
+      expect(result).toEqual({ checked: 1, completed: 0, failed: 0 });
+      expect(mockAlerts.alertAmbiguousPayoutOutcome).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payoutId: 'req_amb',
+          provider: 'stripe_connect',
+          status: 'requires_review',
+          reason: 'unresolved_ambiguous_initiation',
+        }),
+      );
+      // A recent payout must not escalate, and the narrow subset must not trip
+      // the escalation path either.
+      expect(mockAlerts.alertPayoutEscalation).not.toHaveBeenCalled();
+    });
+
+    it('records provider failures and alerts once the 15-min count reaches 5 (P1.25)', async () => {
+      mockPrisma.payoutRequest.findMany.mockResolvedValue([
+        {
+          id: 'req_fail',
+          status: 'processing',
+          currency: 'USD',
+          payoutAccount: { provider: 'stripe_connect', destination: 'acct_err' },
+          transactions: [{ providerTxId: 'sc_err' }],
+        },
+      ]);
+      mockPayoutService.getProvider.mockReturnValue(mockStripeProvider);
+      mockStripeProvider.checkStatus.mockRejectedValue(new Error('Network error'));
+      mockAlerts.recordRate.mockReturnValue(5);
+
+      vi.mocked(service as any).pollProcessingPayouts.mockRestore();
+      const result = await service.pollProcessingPayouts();
+
+      expect(result).toEqual({ checked: 1, completed: 0, failed: 0 });
+      expect(mockAlerts.recordRate).toHaveBeenCalledWith(
+        'provider_failure',
+        'stripe_connect',
+        15 * 60 * 1000,
+      );
+      expect(mockAlerts.alertProviderFailureRate).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'stripe_connect', count: 5, windowMs: 900_000 }),
+      );
     });
   });
 });

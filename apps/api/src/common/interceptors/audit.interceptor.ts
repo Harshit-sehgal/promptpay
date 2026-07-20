@@ -95,7 +95,7 @@ export class AuditInterceptor implements NestInterceptor {
       }
     }
 
-    const actorId = req.user?.id ?? req.user?.sub ?? 'unknown';
+    const actorId = req.user?.id ?? 'unknown';
     const actorRole = req.user?.role ?? 'unknown';
 
     let action: string;

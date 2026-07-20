@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 
 import { AuditService } from '../../audit/audit.service';
 import { LedgerService } from '../../ledger/ledger.service';
+import { AlertsService } from '../../observability/alerts.service';
 import { ReferralService } from '../../referral/referral.service';
 import { PayoutService } from '../payout.service';
 
@@ -62,6 +63,9 @@ export function makePayoutService(
     log: vi.fn().mockResolvedValue(undefined),
     logStrict: vi.fn().mockResolvedValue(undefined),
   } as unknown as AuditService;
+  const alerts = {
+    alertPayoutPaidWithoutProviderTx: vi.fn(),
+  } as unknown as AlertsService;
   const service = new PayoutService(
     prisma as never,
     {} as LedgerService,
@@ -73,6 +77,7 @@ export function makePayoutService(
     {} as never,
     runtimeConfig as never,
     {} as never,
+    alerts,
   );
   return { prisma, service, audit };
 }

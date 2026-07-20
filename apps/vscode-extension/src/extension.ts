@@ -7,17 +7,65 @@ import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
 import { ApiClient } from './api-client';
 import { ConfigurationManager } from './config';
+import { computeSuppressUntil, KNOWN_DETECTOR_SOURCES } from './detector-policy';
+import { DetectorState } from './detector-state';
+import { formatBreakdown, parseByCurrency, resolveDisplayCurrency } from './earnings';
 import { StatusBar } from './status-bar';
 import { WaitStateDetector } from './wait-detector';
 
-export function activate(context: vscode.ExtensionContext) {
+/**
+ * Pick the amount+currency to render for a balance entry, honoring the user's
+ * `preferredDisplayCurrency` and falling back to the derived primary currency
+ * or the legacy scalar (see `earnings.ts`). Never fabricates a conversion.
+ */
+function displayAmountForEntry(
+  entry: { amountMinor: bigint; currency: string; byCurrency?: Record<string, string> },
+  preferred: string,
+): { amountMinor: bigint; currency: string } {
+  const { currency } = resolveDisplayCurrency(
+    entry.byCurrency,
+    preferred || undefined,
+    entry.currency,
+  );
+  const amount = entry.byCurrency
+    ? (parseByCurrency(entry.byCurrency)[currency] ?? entry.amountMinor)
+    : entry.amountMinor;
+  return { amountMinor: amount, currency };
+}
+
+/** Reasons a user may give when reporting a false-positive wait (P1.18). */
+const FALSE_WAIT_REASONS = [
+  'I was actively working, not waiting on AI',
+  'No AI generation was happening',
+  'Wait triggered by unrelated activity',
+  'Other',
+] as const;
+
+/** Action button shown on the in-wait notification (P1.18). */
+const REPORT_FALSE_POSITIVE_ACTION: vscode.MessageItem = { title: 'Report false positive' };
+export async function activate(context: vscode.ExtensionContext) {
   const config = new ConfigurationManager(context.secrets);
   const api = new ApiClient(config);
+  // Persisted detector state (experiment assignment + suppression window).
+  const detectorState = new DetectorState(context.globalState);
   const detector = new WaitStateDetector({
     getInactivityTimeoutMs: () => config.getInactivityTimeoutMs(),
+    // Per-source kill switch (P1.17 / P1.18): skip disabled detector sources.
+    getDisabledSources: () => config.getDisabledDetectorSources(),
+    // False-positive suppression (P1.18): suppress NEW waits while active.
+    isSuppressed: (now) => detectorState.isSuppressed(now),
   });
   const panel = new AdPanel(context, api);
   const status = new StatusBar();
+
+  // Staged rollout / experiment assignment (P1.17). Enrollment + variant are
+  // derived from a stable hash so they survive reloads (persisted in
+  // globalState on first enrollment). Default rollout 100 ⇒ everyone in.
+  await detectorState.getOrAssignExperiment(
+    await config.getDeviceUserId(),
+    vscode.env.machineId,
+    config.detectorRolloutPercent(),
+  );
 
   // Register status bar
   status.register(context);
@@ -40,7 +88,11 @@ export function activate(context: vscode.ExtensionContext) {
       status.setLoggedIn();
       try {
         const bal = await api.getBalance();
-        status.setEarnings(bal.available.amountMinor, bal.available.currency);
+        const { amountMinor, currency } = displayAmountForEntry(
+          bal.available,
+          config.preferredDisplayCurrency(),
+        );
+        status.setEarnings(amountMinor, currency);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`WaitLayer: post-login balance refresh failed — ${msg}`);
@@ -56,9 +108,29 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('waitlayer.showEarnings', async () => {
       try {
         const bal = await api.getBalance();
-        vscode.window.showInformationMessage(
-          `WaitLayer: ${formatMinorUnits(bal.available.amountMinor, bal.available.currency)} available (pending ${formatMinorUnits(bal.pending.amountMinor, bal.pending.currency)})`,
+        const preferred = config.preferredDisplayCurrency();
+        const { currency, note } = resolveDisplayCurrency(
+          bal.available.byCurrency,
+          preferred || undefined,
+          bal.available.currency,
         );
+        const available = bal.available.byCurrency
+          ? (parseByCurrency(bal.available.byCurrency)[currency] ?? bal.available.amountMinor)
+          : bal.available.amountMinor;
+        const pending = bal.pending.byCurrency
+          ? (parseByCurrency(bal.pending.byCurrency)[currency] ?? bal.pending.amountMinor)
+          : bal.pending.amountMinor;
+        const breakdown = formatBreakdown(bal.available.byCurrency);
+        const lines = [
+          `WaitLayer earnings — ${formatMinorUnits(available, currency)} available`,
+          `Pending: ${formatMinorUnits(pending, currency)}`,
+          ...(breakdown.length
+            ? ['', 'Per-currency breakdown:', ...breakdown.map((b) => `  ${b}`)]
+            : []),
+          ...(note ? ['', note] : []),
+          ...(preferred ? [`Preferred display currency: ${preferred}`] : []),
+        ];
+        vscode.window.showInformationMessage(lines.join('\n'));
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`WaitLayer: failed to fetch balance — ${msg}`);
@@ -83,9 +155,21 @@ export function activate(context: vscode.ExtensionContext) {
         );
         return;
       }
+      // P1.18 #1 — collect a reason via quick pick when none was supplied.
+      const finalReason =
+        reason ??
+        (await vscode.window.showQuickPick([...FALSE_WAIT_REASONS], {
+          placeHolder: 'Why is this a false detection?',
+        }));
+      if (!finalReason) return;
       try {
-        await api.flagFalsePositive(activeWaitStateId, reason);
+        await api.flagFalsePositive(activeWaitStateId, finalReason);
         flaggedWaitStateId = activeWaitStateId;
+        // P1.18 #2 — temporarily suppress NEW waits for the configured window
+        // so the user isn't immediately re-prompted after a false positive.
+        detectorState.setSuppressUntil(
+          computeSuppressUntil(config.falsePositiveSuppressionMinutes(), Date.now()),
+        );
         vscode.window.showInformationMessage(
           'WaitLayer: thanks — this wait has been flagged as a false detection',
         );
@@ -94,6 +178,30 @@ export function activate(context: vscode.ExtensionContext) {
         console.warn(`WaitLayer: failed to flag false-positive wait — ${msg}`);
         vscode.window.showErrorMessage(`WaitLayer: failed to report false wait — ${msg}`);
       }
+    }),
+    vscode.commands.registerCommand('waitlayer.toggleDetectorSource', async (source?: string) => {
+      const target =
+        source ??
+        (await vscode.window.showQuickPick([...KNOWN_DETECTOR_SOURCES], {
+          placeHolder: 'Toggle a detector signal source on/off',
+        }));
+      if (!target) return;
+      const disabled = await config.toggleDetectorSource(target);
+      const nowDisabled = disabled.includes(target.toLowerCase());
+      vscode.window.showInformationMessage(
+        `WaitLayer: detector source '${target}' is now ${nowDisabled ? 'disabled' : 'enabled'}`,
+      );
+    }),
+    vscode.commands.registerCommand('waitlayer.showExperimentAssignment', async () => {
+      const assignment = await detectorState.getOrAssignExperiment(
+        await config.getDeviceUserId(),
+        vscode.env.machineId,
+        config.detectorRolloutPercent(),
+      );
+      const detail = assignment.enrolled
+        ? `Enrolled — variant: ${assignment.variant} (bucket ${assignment.bucket}/100)`
+        : `Not enrolled (bucket ${assignment.bucket}/100, rollout ${config.detectorRolloutPercent()}%)`;
+      vscode.window.showInformationMessage(`WaitLayer detector experiment: ${detail}`);
     }),
   ];
 
@@ -111,6 +219,16 @@ export function activate(context: vscode.ExtensionContext) {
 
       activeWaitStateId = event.waitStateId;
       flaggedWaitStateId = null;
+      // P1.18 #3 — richer in-wait notification explaining the detection and
+      // offering a "Report false positive" action. Does not block the ad flow.
+      const choice = await vscode.window.showInformationMessage(
+        `WaitLayer detected an AI assistant wait (${event.tool}). ` +
+          `If this was a false detection, let us know.`,
+        REPORT_FALSE_POSITIVE_ACTION,
+      );
+      if (choice && choice.title === REPORT_FALSE_POSITIVE_ACTION.title) {
+        await vscode.commands.executeCommand('waitlayer.reportFalseWait');
+      }
 
       const startPromise = (async (): Promise<string | null> => {
         try {
@@ -272,7 +390,11 @@ export function activate(context: vscode.ExtensionContext) {
     api
       .getBalance()
       .then((bal) => {
-        status.setEarnings(bal.available.amountMinor, bal.available.currency);
+        const { amountMinor, currency } = displayAmountForEntry(
+          bal.available,
+          config.preferredDisplayCurrency(),
+        );
+        status.setEarnings(amountMinor, currency);
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : String(err);

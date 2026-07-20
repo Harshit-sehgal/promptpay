@@ -24,6 +24,7 @@ import { PrismaService } from '../config/prisma.service';
 import { ReferralService } from '../referral/referral.service';
 import { PayoutService } from './payout.service';
 import { validatePayoutTransition } from './payout-state-machine';
+import { validateWebhookTransition, WebhookProcessingStatus } from './payout-webhook-state-machine';
 import { StripeProvider } from './providers';
 
 type RawBodyRequest = Request & { rawBody?: Buffer | string };
@@ -210,6 +211,13 @@ export class StripeWebhookController implements OnModuleInit {
     //    Scope by provider so the claim never touches another provider's row
     //    even if an id coincided across providers before the
     //    provider_eventId composite-unique migration.
+    // P2.2.4 — fail-closed guard on the authoritative webhook lifecycle hop.
+    // The pending → processing claim is the only true state transition; a
+    // stalled `processing` row is re-claimed in place (an idempotent re-claim,
+    // not a lifecycle transition) and is intentionally NOT validated here.
+    if (existing.processingStatus === 'pending') {
+      validateWebhookTransition(existing.processingStatus as WebhookProcessingStatus, 'processing');
+    }
     const claimed = await this.prisma.webhookEvent.updateMany({
       where: {
         provider: 'stripe',
