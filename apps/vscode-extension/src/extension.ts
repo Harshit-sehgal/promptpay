@@ -7,7 +7,6 @@ import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
 import { ApiClient } from './api-client';
 import { ConfigurationManager } from './config';
-import { AI_TOOL_VALUES } from './detector-adapters';
 import { computeSuppressUntil, KNOWN_DETECTOR_SOURCES } from './detector-policy';
 import { DetectorState } from './detector-state';
 import { formatBreakdown, parseByCurrency, resolveDisplayCurrency } from './earnings';

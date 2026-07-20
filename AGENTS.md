@@ -1237,9 +1237,9 @@ Redis (:6379).
 ### Quality gates (full local run, live Postgres :5432 + Redis :6379)
 
 - `pnpm typecheck` — **14/14** packages.
-- `pnpm lint` — **9/9** packages, **0 new warnings** (1 pre-existing
-  `AI_TOOL_VALUES` unused in `apps/vscode-extension/src/extension.ts`,
-  unrelated to this work).
+- `pnpm lint` — **9/9** packages, **0 warnings** (the prior `AI_TOOL_VALUES`
+  unused-var warning in `apps/vscode-extension/src/extension.ts` was removed
+  2026-07-20, leaving the gate fully clean).
 - `pnpm test` — **api 1288** (119 files), **web 182**, **cli 50**,
   **vscode 114 + 1 skipped**, **shared 72** — counts include the new specs
   added this session (~1706 total).
@@ -1300,9 +1300,8 @@ After committing the straggler deliverables, **all four gates were executed from
 scratch** (not cited from a prior run):
 
 - `pnpm typecheck` — **14/14** packages.
-- `pnpm lint` — **9/9** packages (0 errors; 1 pre-existing benign
-  `AI_TOOL_VALUES` unused-var warning in `apps/vscode-extension/src/extension.ts`,
-  not introduced by this work).
+- `pnpm lint` — **9/9** packages (0 errors, **0 warnings** — the prior
+  `AI_TOOL_VALUES` unused-var warning was removed 2026-07-20).
 - `pnpm build` — **9/9** packages (web `next build` prerenders all routes
   including `/auth/signup` and `/developer`).
 - `pnpm test` — **10/10 workspace tasks green**: api **1288** (1208 unit +
