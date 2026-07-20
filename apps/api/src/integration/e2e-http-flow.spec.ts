@@ -12,6 +12,7 @@ import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
+import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 import { LedgerService } from '../ledger/ledger.service';
 
 async function cleanDb(prisma: PrismaService) {
@@ -633,7 +634,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         toolType: 'vscode',
         waitStateId,
         idempotencyKey: `start-${waitStateId}`,
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       const signature = signPayload(startPayload, deviceEventSecret);
 
@@ -765,7 +766,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         toolType: 'vscode',
         waitStateId: cpcWaitStateId,
         idempotencyKey: `start-${cpcWaitStateId}`,
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       const signature = signPayload(startPayload, deviceEventSecret);
 
@@ -965,7 +966,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId: 'dev2-wait',
         toolType: 'vscode',
         idempotencyKey: 'dev2-wait-start',
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -1048,7 +1049,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId: wsId,
         toolType: 'vscode',
         idempotencyKey: `start-${wsId}`,
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')

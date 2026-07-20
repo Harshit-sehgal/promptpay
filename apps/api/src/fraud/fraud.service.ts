@@ -28,6 +28,11 @@ import {
 const CTR_SPIKE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const CTR_SPIKE_THRESHOLD = 5;
 
+// P0.1: anomaly thresholds for behavioural verification of wait-state signals.
+const ANOMALY_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const ANOMALY_SHORT_WAIT_SECONDS = 5; // repeated exact short waits
+const ANOMALY_MIN_EVENTS = 5; // need at least this many events before flagging
+
 function fraudSeverityRank(severity: string): number {
   return { low: 0, medium: 1, high: 2, critical: 3 }[severity] ?? -1;
 }
@@ -446,6 +451,67 @@ export class FraudService {
         userId,
         deviceId,
         evidence: { platform, matchedIndicator: vmIndicators.find((i) => lower.includes(i)) },
+      });
+    }
+  }
+
+  // ── Wait-State Signal Anomaly Detection (P0.1) ──
+
+  /**
+   * Detect modified clients that forge wait-state signals by looking for
+   * behavioural anomalies: repeated identical signal sets, bursts of single-
+   * signal `ai_generation` events, or waits with identical short durations.
+   * This is intentionally best-effort; it creates a fraud flag for review but
+   * does not block the wait-state from being recorded.
+   */
+  async checkAnomalousWaitSignals(
+    userId: string,
+    deviceId: string,
+    signals: { type: string; details?: string }[],
+  ): Promise<void> {
+    const oneHourAgo = new Date(Date.now() - ANOMALY_WINDOW_MS);
+    const recent = await this.prisma.waitStateEvent.findMany({
+      where: {
+        userId,
+        deviceId,
+        eventType: 'wait_state_start',
+        createdAt: { gte: oneHourAgo },
+      },
+      select: { signals: true, duration: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    if (recent.length < ANOMALY_MIN_EVENTS) return;
+
+    // Normalize the incoming signal set for comparison.
+    const signalKey = (s: { type: string }[]) =>
+      [...new Set(s.map((x) => x.type).sort())].join(',');
+    const currentKey = signalKey(signals);
+
+    // Count identical signal payloads in the trailing window.
+    let identicalPayloadCount = 0;
+    for (const row of recent) {
+      const rowSignals = (row.signals as unknown as { type: string }[]) ?? [];
+      if (signalKey(rowSignals) === currentKey) {
+        identicalPayloadCount++;
+      }
+    }
+
+    // Repeated identical payloads, especially single-signal ai_generation,
+    // indicate a forged / scripted client.
+    if (identicalPayloadCount >= ANOMALY_MIN_EVENTS) {
+      await this.createFlag({
+        flagType: FraudFlagType.AUTOMATED_PATTERN,
+        severity: FraudSeverity.HIGH,
+        userId,
+        deviceId,
+        evidence: {
+          identicalPayloadCount,
+          windowMs: ANOMALY_WINDOW_MS,
+          signalKey: currentKey,
+          reason: 'repeated_identical_wait_signals',
+        },
       });
     }
   }

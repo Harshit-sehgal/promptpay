@@ -32,9 +32,6 @@ export const SIGNAL_WEIGHTS: Record<string, number> = {
 /** Minimum confidence for a wait state to be eligible for ad serving. */
 export const MINIMUM_WAIT_CONFIDENCE = 0.5;
 
-/** Minimum confidence / corroboration for a wait state to be eligible for payment. */
-export const PAYMENT_CONFIDENCE_THRESHOLD = 0.8;
-
 export interface WaitSignal {
   type: keyof typeof SIGNAL_WEIGHTS;
   details?: string;

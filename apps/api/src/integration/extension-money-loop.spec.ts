@@ -1,3 +1,4 @@
+import { BILLABLE_WAIT_SIGNALS, FORGED_SINGLE_SIGNAL } from '../extension/test/wait-fixtures';
 /** Linear-delay helper (Promise.withResolvers, project rule). */
 function delay(ms: number): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -355,7 +356,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
 
   async function runMoneyLoop(ctx: LoopCtx, opts: LoopOpts = {}): Promise<LoopResult> {
     const {
-      signals = [{ type: 'ai_generation' }],
+      signals = BILLABLE_WAIT_SIGNALS,
       detectorVersion = '1.0.0',
       click = false,
       endBeforeAd = false,
@@ -582,6 +583,30 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     expect(spend).toBeGreaterThan(0);
   });
 
+  // ── 1a. forged single-signal ai_generation cannot earn ──
+  it('1a. a forged single ai_generation signal serves an ad but is not payment-eligible', async () => {
+    const ctx = await seedMoneyLoop('forged', {
+      pricingModel: BidType.CPM,
+      budgetTotalMinor: 50000,
+      bidAmountMinor: 2000,
+      category: 'technology',
+      advertiserDepositMinor: 100000,
+    });
+
+    const res = await runMoneyLoop(ctx, { signals: FORGED_SINGLE_SIGNAL });
+    expect(res.adRes.status).toBe(200);
+    expect(res.adRes.body.ad).toBeDefined();
+    expect(res.impressionToken).toBeDefined();
+    expect(res.qualifyRes!.status).toBe(200);
+    expect(res.qualifyRes!.body.qualified).toBe(false);
+    expect(res.qualifyRes!.body.reason).toBe('uncorroborated_wait');
+
+    const earnings = await prisma.earningsLedger.findMany({
+      where: { userId: ctx.devUserId, campaignId: ctx.campaignId },
+    });
+    expect(earnings.length).toBe(0);
+  });
+
   // ── 2. CPC qualified impression WITHOUT click (no spend) ──
   it('2. serves a CPC ad and qualifies the impression but bills nothing without a click', async () => {
     const ctx = await seedMoneyLoop('cpc', {
@@ -803,7 +828,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       toolType: ToolType.VSCODE,
       waitStateId: ws1,
       idempotencyKey: `start-balexh`,
-      signals: [{ type: 'ai_generation' }],
+      signals: BILLABLE_WAIT_SIGNALS,
       detectorVersion: '1.0.0',
     });
     expect(start1.status).toBe(200);
@@ -825,7 +850,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       toolType: ToolType.VSCODE,
       waitStateId: ws2,
       idempotencyKey: `start2-balexh`,
-      signals: [{ type: 'ai_generation' }],
+      signals: BILLABLE_WAIT_SIGNALS,
       detectorVersion: '1.0.0',
     });
     const ad2 = await signed(AD, devToken, deviceEventSecret, {
@@ -911,7 +936,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       toolType: ToolType.VSCODE,
       waitStateId,
       idempotencyKey: `start-retry`,
-      signals: [{ type: 'ai_generation' }],
+      signals: BILLABLE_WAIT_SIGNALS,
       detectorVersion: '1.0.0',
     };
     const signature = signPayload(payload as Record<string, unknown>, deviceEventSecret);
@@ -947,7 +972,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       {
         skipStart: true,
         waitStateIdOverride: waitStateId,
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
         detectorVersion: '1.0.0',
       },
     );

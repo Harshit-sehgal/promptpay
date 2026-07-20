@@ -10,6 +10,7 @@ import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
+import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 
 /**
  * P1 #20 — wait-start idempotency ordering.
@@ -115,7 +116,7 @@ describe('wait-start idempotency ordering (P1 #20)', () => {
       toolType: 'vscode',
       waitStateId,
       idempotencyKey,
-      signals: [{ type: 'ai_generation' }],
+      signals: BILLABLE_WAIT_SIGNALS,
     };
     return { ...payload, signature: signPayload(payload, deviceEventSecret) };
   }

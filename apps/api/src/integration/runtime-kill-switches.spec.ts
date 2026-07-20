@@ -11,6 +11,7 @@ import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
+import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 
 async function cleanDb(prisma: PrismaService) {
@@ -233,7 +234,7 @@ describe('Runtime Kill Switches', () => {
         waitStateId: 'kill-ws',
         toolType: 'vscode',
         idempotencyKey: 'kill-wait-start',
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -385,7 +386,7 @@ describe('Runtime Kill Switches', () => {
         waitStateId: 'country-ws',
         toolType: 'vscode',
         idempotencyKey: 'country-wait-start',
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')

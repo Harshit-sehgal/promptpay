@@ -33,6 +33,7 @@ import {
   isVerifiedDetectorSource,
   mergeBlockedCategories,
   ServedAd,
+  WaitSignal,
 } from './extension.constants';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 import { MINIMUM_WAIT_CONFIDENCE } from './extension-wait.trait';
@@ -907,7 +908,30 @@ export class ExtensionAdTrait {
       select: { destinationUrl: true },
     });
     if (!creative) throw new NotFoundException('Creative not found');
-    const holdDays = this.ledger.getHoldDays(trustLevel);
+    // P0.1: Re-classify the original wait state for click billing so
+    // unverified detector sources get the extended hold and a single forged
+    // signal cannot earn via CPC either.
+    const waitStartForClick = await this.prisma.waitStateEvent.findFirst({
+      where: {
+        userId: impression.userId,
+        deviceId: impression.deviceId,
+        sessionId: impression.sessionId,
+        waitStateId: impression.waitStateId ?? '',
+        eventType: 'wait_state_start',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const waitSignals = (
+      (waitStartForClick?.signals as unknown as WaitSignal[] | null) ?? []
+    ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
+    const clickClassification = classifyWaitState(
+      waitSignals,
+      isVerifiedDetectorSource(waitStartForClick?.detectorVersion),
+    );
+    if (isCpcBid && !clickClassification.paymentEligible) {
+      return { clicked: false, reason: 'uncorroborated_wait' };
+    }
+    const holdDays = this.ledger.getHoldDays(trustLevel, clickClassification.unverifiedSource);
     // RESTRICTED → holdDays = -1 (indefinite). Never compute a past
     // `availableAt` for restricted users; null ⇒ never matures. See ledger.service.ts.
     const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);

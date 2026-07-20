@@ -27,6 +27,7 @@ import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
 import { ExtensionService } from '../extension/extension.service';
+import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 
 const DEV_SECRET = 'test-device-secret-e2e-money-loop';
@@ -445,7 +446,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       waitStateId,
       toolType: ToolType.CURSOR,
       idempotencyKey: uid('start'),
-      signals: [{ type: 'ai_generation' }] as never,
+      signals: BILLABLE_WAIT_SIGNALS as never,
       detectorVersion: '1.0.0',
       signature: 'sig',
     });
@@ -472,7 +473,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       waitStateId,
       toolType: ToolType.CURSOR,
       idempotencyKey: uid('start'),
-      signals: [{ type: 'ai_generation' }] as never,
+      signals: BILLABLE_WAIT_SIGNALS as never,
       detectorVersion: '1.0.0',
       signature: 'sig',
     });
@@ -518,7 +519,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       waitStateId,
       toolType: ToolType.CURSOR,
       idempotencyKey: uid('start'),
-      signals: [{ type: 'ai_generation' }] as never,
+      signals: BILLABLE_WAIT_SIGNALS as never,
       detectorVersion: '1.0.0',
       signature: 'sig',
     });

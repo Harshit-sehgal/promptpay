@@ -85,16 +85,28 @@ export class LedgerMathTrait {
     };
   }
 
-  /** Get hold days based on trust level */
-  getHoldDays(trustLevel: string): number {
+  /**
+   * Get hold days based on trust level and detector-source verification.
+   *
+   * P0.1: Unverified detector sources (modified clients or unknown detector
+   * versions) receive a longer hold even if the user is otherwise trusted.
+   * The extended hold gives the platform time to review behavioural signals
+   * before the earnings mature and become payout-eligible.
+   */
+  getHoldDays(trustLevel: string, unverifiedSource = false): number {
+    const EXTENDED_HOLD_DAYS = 60;
+    let base: number;
     switch (trustLevel) {
       case 'high_trust':
-        return PAYOUT_HOLD_DAYS.HIGH_TRUST;
+        base = PAYOUT_HOLD_DAYS.HIGH_TRUST;
+        break;
       case 'normal':
-        return PAYOUT_HOLD_DAYS.NORMAL;
+        base = PAYOUT_HOLD_DAYS.NORMAL;
+        break;
       case 'new':
       case 'low_trust':
-        return PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+        base = PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+        break;
       // `RESTRICTED = -1` and `BANNED = -1` are the contract for "indefinite
       // hold — never mature". Falling through to the default here would
       // silently give restricted/banned users a 30-day hold, defeating the
@@ -103,7 +115,11 @@ export class LedgerMathTrait {
       case 'banned':
         return PAYOUT_HOLD_DAYS.RESTRICTED;
       default:
-        return PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
+        base = PAYOUT_HOLD_DAYS.NEW_ACCOUNT;
     }
+    if (unverifiedSource) {
+      return Math.max(base, EXTENDED_HOLD_DAYS);
+    }
+    return base;
   }
 }

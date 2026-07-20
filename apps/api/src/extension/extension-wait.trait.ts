@@ -38,7 +38,7 @@ const FP_SPIKE_THRESHOLD = 5;
 export class ExtensionWaitTrait {
   declare prisma: PrismaService;
   declare alerts?: AlertsService;
-  declare fraud?: FraudService;
+  declare fraud: FraudService;
 
   // ── Wait State Events ──
   async recordWaitStateStart(

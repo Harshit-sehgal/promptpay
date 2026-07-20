@@ -37,6 +37,7 @@ import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
+import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 // Resolve after `ms` milliseconds without nested Promise-executor callbacks.
 function delay(ms: number): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -358,7 +359,7 @@ describe('API Contract Tests', () => {
         toolType: 'vscode',
         waitStateId: 'contract-ws',
         idempotencyKey: 'contract-ws-start',
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       const sig = signPayload(payload, deviceEventSecret);
       const res = await request(app.getHttpServer())
@@ -430,7 +431,7 @@ describe('API Contract Tests', () => {
         toolType: 'vscode',
         waitStateId: 'contract-ad-ws',
         idempotencyKey: 'contract-ad-ws-start',
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -541,7 +542,7 @@ describe('API Contract Tests', () => {
         toolType: 'vscode',
         waitStateId: 'concurrent-ws',
         idempotencyKey: 'concurrent-ws-start',
-        signals: [{ type: 'ai_generation' }],
+        signals: BILLABLE_WAIT_SIGNALS,
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
