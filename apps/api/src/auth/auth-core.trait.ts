@@ -323,18 +323,76 @@ export class AuthCoreTrait {
    *  - If a refresh token is used twice, the entire token family is revoked
    *  - This prevents token replay attacks
    */
-  async refresh(refreshToken: string) {
+  async refresh(token: string) {
     let payload: TokenPayload;
     try {
-      payload = await this.jwt.verifyAsync<TokenPayload>(refreshToken, {
+      payload = await this.jwt.verifyAsync<TokenPayload>(token, {
         secret: this.publicKey,
         algorithms: ['RS256'],
         issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
         audience: this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
       });
     } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException('Invalid token');
     }
+
+    // ── Access-token rotation ──
+    // A still-valid access JWT (as held by the CLI / VSCode-extension clients,
+    // which carry only an access token) can be exchanged for a fresh pair. The
+    // presented access token's session is consumed (revoked) so it cannot be
+    // replayed, and a brand-new access + refresh pair is issued. Reuse of a
+    // token whose session is already revoked is rejected as a replay.
+    if (audienceIncludes(payload.aud, 'access') && payload.jti) {
+      const accessJti = payload.jti;
+      const accessOutcome = await this.prisma.$transaction(async (tx) => {
+        // Serialize single-use consumption of the access token's session,
+        // closing the replay race where two requests present the same access
+        // token concurrently.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${accessJti}, 0))`;
+        const session = await tx.session.findUnique({ where: { id: accessJti } });
+        if (!session || session.revoked) {
+          // The presented access token maps to a missing/revoked session — a
+          // replay of an already-rotated token. Reject without issuing new
+          // tokens.
+          await this.audit.logStrict(
+            {
+              actorId: payload.sub,
+              actorRole: 'unknown',
+              action: 'refresh_reuse_detected',
+              targetType: 'session',
+              targetId: accessJti,
+              afterSnap: {
+                reason: 'access_token_session_missing_or_revoked',
+                sessionRowGone: !session,
+              },
+            },
+            tx,
+          );
+          return { error: 'reuse' as const };
+        }
+        // Consume the presented access token's session (rotation).
+        await tx.session.updateMany({
+          where: { id: accessJti, userId: payload.sub, revoked: false },
+          data: { revoked: true },
+        });
+        const user = await tx.user.findUnique({ where: { id: payload.sub } });
+        if (!user || !isActiveAccountStatus(user.status)) return { error: 'inactive' as const };
+        const tokens = await this.generateTokenPair(
+          user.id,
+          user.role,
+          undefined,
+          payload.mfaAt,
+          tx,
+        );
+        return { tokens };
+      });
+      if ('tokens' in accessOutcome) return accessOutcome.tokens;
+      if (accessOutcome.error === 'reuse') {
+        throw new UnauthorizedException('Token reuse detected — session revoked');
+      }
+      throw new UnauthorizedException('Invalid session');
+    }
+
     if (!audienceIncludes(payload.aud, 'refresh') || !payload.jti) {
       throw new UnauthorizedException('Invalid refresh token payload');
     }
@@ -391,7 +449,7 @@ export class AuthCoreTrait {
 
       const session = await tx.session.findUnique({ where: { id: jti } });
       if (!session) return { error: 'invalid' as const };
-      if (!(await this.verifyRefreshTokenHash(refreshToken, session.tokenHash))) {
+      if (!(await this.verifyRefreshTokenHash(token, session.tokenHash))) {
         await tx.session.updateMany({
           where: {
             userId: payload.sub,

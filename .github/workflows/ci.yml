@@ -366,6 +366,27 @@ jobs:
             -H 'Content-Type: application/json' -d '{}')
           if [ "$STATUS" != "400" ]; then echo "Unexpected login validation status: $STATUS (expected 400)"; exit 1; fi
           echo "Controller route resolved over TCP with expected validation status 400"
+
+          # Unauthenticated GET /auth/me must resolve over TCP and return 401
+          # (NOT 404): proves the auth controller is wired into the compiled
+          # image. A 404 here means the route was dropped at build time.
+          ME_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            http://localhost:4002/api/v1/auth/me)
+          if [ "$ME_STATUS" != "401" ]; then
+            echo "Unexpected GET /api/v1/auth/me status: $ME_STATUS (expected 401, not 404)"; exit 1
+          fi
+          echo "GET /api/v1/auth/me resolved over TCP with expected status 401"
+
+          # Swagger docs route must resolve over TCP and return 200 (NOT 404).
+          # docker-compose boots the api with NODE_ENV=development, so the
+          # OpenAPI UI is enabled; a 404 here means the doc route regressed.
+          DOCS_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            http://localhost:4002/api/v1/docs)
+          if [ "$DOCS_STATUS" != "200" ]; then
+            echo "Unexpected /api/v1/docs status: $DOCS_STATUS (expected 200, not 404)"; exit 1
+          fi
+          echo "GET /api/v1/docs resolved over TCP with expected status 200"
+
           docker compose -f docker-compose.yml down -v
         env:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+

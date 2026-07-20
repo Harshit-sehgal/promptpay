@@ -25,7 +25,8 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
-import { verifyMigrationsApplied } from './config/migration-check';
+import { validateMigrations } from './common/migration/migration-validator';
+import { getPrismaCliMigrationStatus } from './common/migration/prisma-migration-status';
 import { PrismaService } from './config/prisma.service';
 import { AlertsService } from './observability/alerts.service';
 
@@ -114,21 +115,28 @@ async function bootstrap() {
   // stops SIGKILL after the default 10s, leaking the brute-force in-memory
   // tracker, the cleanup interval, and any open Redis connection.
   app.enableShutdownHooks();
-
-  // Detect unapplied migrations before serving traffic. In production this
-  // fails fast; in development it logs a warning (A-012).
+  // Detect unapplied migrations AND schema drift before serving traffic.
+  // `verifyMigrationsApplied` (used by /health) still reports pending
+  // migrations; this gate additionally fails fast on silent schema drift
+  // via `prisma migrate diff` (P1 #13). Mirrors the existing migration
+  // check: fail closed in production, warn-only in development/test so
+  // local iteration and the DB-backed e2e suites are not blocked by a
+  // drifted or not-yet-migrated database.
   const prisma = app.get(PrismaService);
   try {
-    await verifyMigrationsApplied(prisma);
+    await validateMigrations(getPrismaCliMigrationStatus(prisma));
   } catch (err) {
     console.error('[WaitLayer] Migration check failed:', err);
-    try {
-      const alerts = app.get(AlertsService);
-      await alerts.alertMigrationFailed({ error: String(err) });
-    } catch {
-      // never mask the migration failure
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const alerts = app.get(AlertsService);
+        await alerts.alertMigrationFailed({ error: String(err) });
+      } catch {
+        // never mask the migration failure
+      }
+      throw err;
     }
-    throw err;
+    console.warn('[WaitLayer] Continuing boot despite migration mismatch (non-production).');
   }
 
   // ── OpenAPI / Swagger docs ───────────────────────────────

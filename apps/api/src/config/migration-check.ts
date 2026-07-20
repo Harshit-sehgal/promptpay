@@ -33,6 +33,21 @@ export async function listFolderMigrations(dir: string = MIGRATION_DIR): Promise
 interface AppliedMigrationRow {
   migration_name: string;
 }
+/**
+ * Read the set of migration names that have been successfully applied to the
+ * database (`_prisma_migrations` with `finished_at` set and no rollback).
+ * Kept separate from {@link verifyMigrationsApplied} so the drift gate can reuse
+ * the exact same query without re-implementing it.
+ */
+export async function getAppliedMigrationNames(prisma: PrismaService): Promise<Set<string>> {
+  const rows = await prisma.$queryRaw<AppliedMigrationRow[]>`
+    SELECT migration_name
+    FROM _prisma_migrations
+    WHERE finished_at IS NOT NULL
+      AND rolled_back_at IS NULL
+  `;
+  return new Set(rows.map((r) => r.migration_name));
+}
 
 /**
  * Compare on-disk migrations against the database's `_prisma_migrations`
@@ -69,12 +84,8 @@ export async function verifyMigrationsApplied(
 
   let applied: AppliedMigrationRow[];
   try {
-    applied = await prisma.$queryRaw<AppliedMigrationRow[]>`
-      SELECT migration_name
-      FROM _prisma_migrations
-      WHERE finished_at IS NOT NULL
-        AND rolled_back_at IS NULL
-    `;
+    const names = await getAppliedMigrationNames(prisma);
+    applied = Array.from(names).map((migration_name) => ({ migration_name }));
   } catch (error) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error(

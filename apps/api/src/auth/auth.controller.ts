@@ -146,13 +146,18 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshDto, @Req() req: Request) {
+    // Either a refresh token OR a still-valid access JWT may be presented.
+    const token = dto.refreshToken ?? dto.accessToken;
+    if (!token) {
+      throw new BadRequestException('Provide a refreshToken or accessToken');
+    }
     // Track repeated refresh-token failures the same way as password attempts.
     // Although the token hash itself is the credential (and JWT signature
     // verification is the canonical check), a refresh-token brute-force would
     // still consume DB lookup budget and surface as authentication noise.
     try {
       await BruteForceGuard.assertCanAttempt(req);
-      const result = await this.authService.refresh(dto.refreshToken);
+      const result = await this.authService.refresh(token);
       await BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {
@@ -166,15 +171,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Log out' })
   @Post('logout')
   @UseGuards(JwtAuthGuard)
-  @HttpCode(HttpStatus.OK)
-  logout(@CurrentUser('id') userId: string, @CurrentUser('jti') jti: string) {
-    return this.authService.logout(userId, jti);
-  }
-
   @ApiOperation({ summary: 'Log out using the refresh session' })
   @Post('logout/refresh')
   @HttpCode(HttpStatus.OK)
   logoutByRefresh(@Body() dto: RefreshDto) {
+    if (!dto.refreshToken) {
+      throw new BadRequestException('refreshToken is required');
+    }
     return this.authService.logoutByRefreshToken(dto.refreshToken);
   }
 
