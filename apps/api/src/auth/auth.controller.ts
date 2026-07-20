@@ -146,10 +146,11 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshDto, @Req() req: Request) {
-    // Either a refresh token OR a still-valid access JWT may be presented.
-    const token = dto.refreshToken ?? dto.accessToken;
-    if (!token) {
-      throw new BadRequestException('Provide a refreshToken or accessToken');
+    // Only refresh tokens may be exchanged for a new pair. Accepting a still-
+    // valid access token would let a short-lived stolen access token mint a
+    // long-lived refresh token, so the access-token rotation branch is removed.
+    if (!dto.refreshToken) {
+      throw new BadRequestException('refreshToken is required');
     }
     // Track repeated refresh-token failures the same way as password attempts.
     // Although the token hash itself is the credential (and JWT signature
@@ -157,7 +158,7 @@ export class AuthController {
     // still consume DB lookup budget and surface as authentication noise.
     try {
       await BruteForceGuard.assertCanAttempt(req);
-      const result = await this.authService.refresh(token);
+      const result = await this.authService.refresh(dto.refreshToken);
       await BruteForceGuard.resetOnSuccess(req);
       return result;
     } catch (err: unknown) {

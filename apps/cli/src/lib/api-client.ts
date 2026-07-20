@@ -619,7 +619,11 @@ export class ApiClient {
     const lookupWithTimeout = (
       hostname: string,
       _options: dns.LookupOptions,
-      cb: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+      cb: (
+        err: NodeJS.ErrnoException | null,
+        address: string | dns.LookupAddress[],
+        family?: number,
+      ) => void,
     ) => {
       let settled = false;
       const timer = setTimeout(() => {
@@ -633,10 +637,21 @@ export class ApiClient {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        // Node returns LookupAddress | LookupAddress[] depending on the
-        // `all` option; contract with our single-address cb is a string.
-        const addr = typeof address === 'string' ? address : (address[0]?.address ?? '');
-        cb(err as NodeJS.ErrnoException | null, addr, family);
+        if (err) {
+          cb(err, '', 4);
+          return;
+        }
+        // Node's lookup contract: the caller selects the result shape via the
+        // `all` option. `dns.lookup` already returns an array when `all: true`
+        // and a string otherwise, so forward it unchanged. The prior code
+        // collapsed the array to `address[0]?.address` and dropped `family`,
+        // which fed `onlookupall` a single string and threw
+        // "Invalid IP address: undefined" against a live host.
+        if (typeof address === 'string') {
+          cb(null, address, family);
+        } else {
+          cb(null, address);
+        }
       });
     };
     const req = transport.request(

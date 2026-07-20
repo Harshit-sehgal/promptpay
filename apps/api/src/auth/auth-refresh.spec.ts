@@ -168,18 +168,11 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('exchanging a still-valid access JWT returns a fresh pair and consumes it', async () => {
+  it('rejects a still-valid access JWT at the refresh endpoint (P0.2)', async () => {
     const { accessToken } = await auth.generateTokenPair(userId, UserRole.DEVELOPER);
     const oldJti = decode(accessToken).jti as string;
 
-    const result = await auth.refresh(accessToken);
-    expect(typeof result.accessToken).toBe('string');
-    expect(typeof result.refreshToken).toBe('string');
-    expect(result.accessToken).not.toBe(accessToken);
-
-    // The presented access token's session is now revoked.
-    const session = await prisma.session.findUnique({ where: { id: oldJti } });
-    expect(session?.revoked).toBe(true);
+    // The access token is still valid for API calls.
     await expect(
       strategy.validate({
         sub: userId,
@@ -187,10 +180,15 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
         jti: oldJti,
         aud: ['waitlayer-client', 'access'],
       }),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).resolves.toBeDefined();
 
-    // Replaying the same access token is rejected (reuse / replay).
+    // But it must NOT be accepted at /auth/refresh — a stolen short-lived
+    // access token must not be convertible into a long-lived refresh token.
     await expect(auth.refresh(accessToken)).rejects.toBeInstanceOf(UnauthorizedException);
+
+    // The access-token session must remain usable until it expires naturally.
+    const session = await prisma.session.findUnique({ where: { id: oldJti } });
+    expect(session?.revoked).toBe(false);
   });
 
   it('rejects a token with the wrong audience (401)', async () => {
