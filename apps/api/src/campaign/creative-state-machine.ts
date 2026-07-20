@@ -11,12 +11,11 @@ import { BadRequestException } from '@nestjs/common';
  * reject. `updateCreative` resets any non-terminal creative to `draft` for
  * re-review. `submitCampaign` moves a draft creative to `pending_review`.
  *
- * NOTE: `approveCreative` / `rejectCreative` are intentionally idempotent at
- * the call site (they re-assert the same status without a `from`-guard), so
- * this machine documents the *intended* lifecycle and is the canonical
- * reference for new call sites. Tightening the call sites to enforce
- * `validateCreativeTransition` is a deliberate follow-up that must not break
- * the idempotent re-approve path the e2e suite relies on.
+ * NOTE: `approveCreative` / `rejectCreative` now enforce this machine via
+ * `validateCreativeTransition`, but skip the guard when the creative is
+ * already in the target state (idempotent re-approve / re-reject). This keeps
+ * the e2e suite's draft → approved path and repeat-approval calls unbroken
+ * while still rejecting illegal transitions (e.g. pending_review → draft).
  */
 export type CreativeStatus = 'draft' | 'pending_review' | 'approved' | 'rejected';
 

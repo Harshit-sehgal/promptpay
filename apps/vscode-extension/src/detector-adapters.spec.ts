@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_TOOL_VALUES,
   claudeCodeAdapter,
-  codexAdapter,
   cursorAdapter,
   defaultAdapter,
   DETECTOR_ADAPTERS,

@@ -445,6 +445,65 @@ describe('AdvertiserService.createCampaign audit emission', () => {
   });
 });
 
+describe('AdvertiserService.createCampaign Money adoption (P2.3)', () => {
+  it('accepts a canonical bid Money object and stores its amount/currency', async () => {
+    const prisma = makePrisma();
+    const service = makeService(prisma);
+    let createdData: { bidAmountMinor: bigint; currency: string } | undefined;
+    prisma.campaign.create.mockImplementation(
+      async (args: { data: { bidAmountMinor: bigint; currency: string } }) => {
+        createdData = args.data;
+        return { id: 'c-money', ...args.data };
+      },
+    );
+    const result = await service.createCampaign('adv-1', {
+      name: 'Money Campaign',
+      category: 'tech',
+      bidType: 'cpm',
+      bidAmountMinor: 0n,
+      budgetTotalMinor: 10_000n,
+      currency: 'USD',
+      bid: { amountMinor: 200n, currency: 'USD' },
+    });
+    expect(result.id).toBe('c-money');
+    expect(createdData?.bidAmountMinor).toBe(200n);
+    expect(createdData?.currency).toBe('USD');
+  });
+
+  it('rejects a bid Money whose currency disagrees with the legacy currency (fail-closed)', async () => {
+    const prisma = makePrisma();
+    const service = makeService(prisma);
+    await expect(
+      service.createCampaign('adv-1', {
+        name: 'Money Campaign',
+        category: 'tech',
+        bidType: 'cpm',
+        bidAmountMinor: 200n,
+        budgetTotalMinor: 10_000n,
+        currency: 'USD',
+        bid: { amountMinor: 200n, currency: 'EUR' },
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects mismatched bid and budget currencies via assertSameCurrency', async () => {
+    const prisma = makePrisma();
+    const service = makeService(prisma);
+    await expect(
+      service.createCampaign('adv-1', {
+        name: 'Money Campaign',
+        category: 'tech',
+        bidType: 'cpm',
+        bidAmountMinor: 200n,
+        budgetTotalMinor: 10_000n,
+        currency: 'USD',
+        bid: { amountMinor: 200n, currency: 'USD' },
+        budget: { amountMinor: 10_000n, currency: 'EUR' },
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+});
+
 describe('AdvertiserService campaign state machine (A-020, A-021)', () => {
   let prisma: ReturnType<typeof makePrisma>;
   let service: AdvertiserService;

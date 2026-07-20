@@ -1109,3 +1109,40 @@ Verified: api `tsc --noEmit` ✅; eslint 0 warnings ✅; `admin.service.spec.ts`
 **49/49** ✅ (48 prior + new); `payout-fence-lifecycle.spec.ts` (DB-backed) 1/1 ✅.
 P1.11 is now fully closed (second-person high-value approval + forensic metadata
 in the fenced-account view).
+
+## 2026-07-20 — Final remaining-assessment completion pass (code + gate green)
+
+A continuation pass closed the last code-level assessment items (the earlier
+2026-07-20 section already closed most; this pass adds the wiring/extraction
+items that were still pending) and re-ran the full local quality gate.
+
+### Items closed this pass (with evidence)
+
+- **P1.25** wire every declared `AlertEvent` to a real detection path — `alerts.service.ts` gained `alertMigrationFailed` + `alertProviderFailureRate` helpers; `jwt-auth.guard.ts` fires `alertAuthIdentityMismatch` on both mismatch branches; `payout-request.trait.ts` `markPayoutPaid` fires `alertPayoutPaidWithoutProviderTx` when `providerTxId` is absent; `payout-cron.service.ts` fires `alertAmbiguousPayoutOutcome` for the narrow ambiguous-initiation subset and `alertProviderFailureRate` (via `recordRate` threshold) on provider `checkStatus` failures; `main.ts` bootstrap fires `alertMigrationFailed` on migration-check failure. All 6 declared alerts now fire (verified by live `AlertsService` ERROR logs during `pnpm test`).
+- **P2.1** `AuctionService` extracted (`extension/auction.service.ts`) from the inline loop in `extension-ad.trait.ts requestAd`; pure selection engine with currency-safe weighted auction + reservation-loss retry. `auction.service.spec.ts` 5 cases.
+- **P2.3** `Money` adopted at the `createCampaign` boundary — `CreateCampaignDto` gains optional `bid`/`budget: Money`; `advertiser-campaign.trait.ts` enforces same-currency agreement (fail-closed) and positivity; legacy minor-unit fields still persisted. 3 `advertiser.service.spec.ts` Money-boundary tests.
+- **P2.2** unified state machines — `campaign-state-machine.ts` (`validateCampaignTransition`, wired into submit/reset/pause/resume + fail-closed archive guard), `creative-state-machine.ts` (draft→approved added; idempotent approve/reject), `impression-state-machine.ts` (`validateImpressionTransition`), `payout-webhook-state-machine.ts` (minimal pending→processing guard in `stripe-webhook.controller.ts`).
+- **P2.4** identity context cleanup — `AuthenticatedPrincipal` no longer carries a legacy `.sub` alias; `jwt.strategy.ts` and `api-key.guard.ts` synthesize `id`-only principals; `advertiser.controller.ts` `resolveApiContext` uses `AuthenticatedPrincipal` + a new `AdvertiserContext` type and drops the `.sub` fallback; `audit.interceptor.ts` actor resolution uses `.id`.
+- **P1.22** license allow/deny enforcement — `scripts/check-licenses.mjs` (deny AGPL/GPL/SSPL/OSL/CC-BY-NC; allow LGPL/MPL/CC-BY) wired into `.github/workflows/ci.yml` replacing the previous `pnpm licenses list` step.
+- **P2.6** naming doc alignment — `docs/ops/branch-protection.md` corrected GitLab→GitHub (real remote `github.com/Harshit-sehgal/promptpay.git`) + added PromptPay/WaitLayer naming note; `.github/CODEOWNERS` comments aligned.
+
+### Re-confirmed this pass (parallel subagents, gate green)
+
+- **P1.4** CLI `primaryDisplayCurrency` magnitude bug + VS Code `Balance.byCurrency` / preferred display currency.
+- **P1.11** payout-fence operator UI (`apps/web` fenced-accounts list + release-fence modal).
+- **P1.17** staged rollout % + experiment assignments + per-source kill switch (`detector-policy.ts` etc.).
+- **P1.18** false-positive reason quick-pick + temp suppression + per-source disable + notification.
+
+### Quality gates (full local run)
+
+- `pnpm typecheck` — **14/14** packages.
+- `pnpm lint` — **9/9** packages, **0 warnings**.
+- `pnpm test` — **10/10 tasks** (api 1175 unit + 36 contract + 44 e2e; web/cli/vscode/shared all green).
+- `pnpm build` — **9/9** packages (Next.js production build green; web `next build` prerenders all routes).
+- API integration suite ran against live Postgres (:5432) + Redis (:6379).
+
+### Remaining items (NOT code-completable — env/infra constraints)
+
+- **P0.5** verified green CI run on the exact latest SHA — `gh`/GitHub Actions not reachable in this sandbox; the local equivalent of every CI job category is green.
+- **P1.9** real Stripe/PayPal/Wise test-mode lifecycles — no provider test-mode credentials; covered by the DB-backed `payout-sandbox-run.spec.ts` (stub path).
+- **P1.21** branch protection settings — documented in `docs/ops/branch-protection.md` + `.github/CODEOWNERS`; actual GitHub repo setting requires an operator action.

@@ -17,7 +17,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { BidType, depositMinimumMinor } from '@waitlayer/shared';
+import { BidType, depositMinimumMinor, Money } from '@waitlayer/shared';
 
 import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
@@ -71,12 +71,18 @@ export class CreateCampaignDto {
   @MinBigInt(1n)
   @Transform(toBigIntOrOriginal)
   bidAmountMinor!: bigint;
+  @ApiProperty({ required: false, description: 'Canonical bid as a Money value object.' })
+  @IsOptional()
+  bid?: Money;
 
   @ApiProperty()
   @IsBigInt()
   @MinBigInt(1n)
   @Transform(toBigIntOrOriginal)
   budgetTotalMinor!: bigint;
+  @ApiProperty({ required: false, description: 'Canonical budget as a Money value object.' })
+  @IsOptional()
+  budget?: Money;
 
   @ApiProperty({ required: false })
   @IsOptional()

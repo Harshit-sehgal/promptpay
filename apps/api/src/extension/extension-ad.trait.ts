@@ -32,7 +32,6 @@ import {
   mergeBlockedCategories,
   ServedAd,
 } from './extension.constants';
-import type { ExtensionService } from './extension.service';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 import { MINIMUM_WAIT_CONFIDENCE } from './extension-wait.trait';
 import { formatHHMMInZone, isTimeInRange } from './quiet-hours';

@@ -47,19 +47,20 @@ import {
  * are on `request.user`. Helpers below resolve the advertiserId from either
  * source — keeping handler bodies free of auth-shape branching.
  */
-function resolveApiContext(req: {
-  user?: AuthenticatedPrincipal;
-  apiKey?: { scopes: string[]; advertiserId: string | null; ownerId: string };
-}): AdvertiserContext {
-  if (req.apiKey) {
-    if (!req.apiKey.advertiserId) {
+function resolveApiContext(req: Request): AdvertiserContext {
+  const apiKey = (
+    req as Request & { apiKey?: { scopes: string[]; advertiserId: string | null; ownerId: string } }
+  ).apiKey;
+  if (apiKey) {
+    if (!apiKey.advertiserId) {
       throw new ForbiddenException(
         'This API key is not scoped to an advertiser — create a per-advertiser key to call /advertiser/* routes',
       );
     }
-    return { userId: req.apiKey.ownerId, advertiserId: req.apiKey.advertiserId, auth: 'apikey' };
+    return { userId: apiKey.ownerId, advertiserId: apiKey.advertiserId, auth: 'apikey' };
   }
-  const userId = req.user?.id;
+  const principal = req.user as AuthenticatedPrincipal | undefined;
+  const userId = principal?.id;
   if (!userId) throw new BadRequestException('Missing authenticated principal');
   return { userId, advertiserId: null, auth: 'jwt' };
 }

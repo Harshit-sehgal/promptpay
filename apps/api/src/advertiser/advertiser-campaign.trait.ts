@@ -47,7 +47,28 @@ export class AdvertiserCampaignTrait {
       frequencyCapPerDay?: number;
     },
   ) {
-    const currency = dto.currency?.trim().toUpperCase() || 'USD';
+    // P2.3 — adopt the Money value object at the create boundary. The canonical
+    // input is `bid` / `budget` (Money); the legacy `bidAmountMinor` +
+    // `currency` / `budgetTotalMinor` remain accepted for backwards
+    // compatibility. When BOTH forms are supplied they must agree on currency
+    // (fail-closed), and bid/budget must share a currency.
+    const legacyCurrency = dto.currency?.trim().toUpperCase() || 'USD';
+    const bidMoney: Money = dto.bid
+      ? { amountMinor: dto.bid.amountMinor, currency: dto.bid.currency }
+      : { amountMinor: dto.bidAmountMinor, currency: legacyCurrency };
+    const budgetMoney: Money = dto.budget
+      ? { amountMinor: dto.budget.amountMinor, currency: dto.budget.currency }
+      : { amountMinor: dto.budgetTotalMinor, currency: legacyCurrency };
+    if (dto.bid && dto.currency && dto.currency.trim().toUpperCase() !== dto.bid.currency) {
+      throw new BadRequestException('currency must match bid.currency when both are supplied');
+    }
+    if (dto.budget && dto.currency && dto.currency.trim().toUpperCase() !== dto.budget.currency) {
+      throw new BadRequestException('currency must match budget.currency when both are supplied');
+    }
+    assertSameCurrency(bidMoney, budgetMoney);
+    validatePositiveMoney(bidMoney);
+    validatePositiveMoney(budgetMoney);
+    const currency = bidMoney.currency;
     // Validate budget against the PER-CURRENCY policy (#5). The old global
     // MIN_CAMPAIGN_BUDGET_MINOR/MAX_CAMPAIGN_BUDGET_MINOR constants represent a
     // USD-shaped `$50`/`$1M` that, when re-applied verbatim to a zero-decimal
@@ -73,17 +94,17 @@ export class AdvertiserCampaignTrait {
       throw new BadRequestException('Bid amount must be positive');
     }
     const minBid = campaignMinimumBidMinor(currency);
-    if (dto.bidAmountMinor < minBid) {
+    if (bidMoney.amountMinor < minBid) {
       throw new BadRequestException(
         `Minimum bid is ${formatMinorUnits(minBid, currency)} (${currency})`,
       );
     }
     // bid must never exceed total budget, and the budget must cover at least
     // one billable event of this campaign's bid type.
-    if (dto.bidAmountMinor > dto.budgetTotalMinor) {
+    if (bidMoney.amountMinor > budgetMoney.amountMinor) {
       throw new BadRequestException('Bid amount cannot exceed total budget');
     }
-    if (dto.budgetTotalMinor < dto.bidAmountMinor) {
+    if (budgetMoney.amountMinor < bidMoney.amountMinor) {
       throw new BadRequestException('Budget must cover at least one billable event');
     }
     // Validate campaign category (blocks prohibited categories)
@@ -98,8 +119,8 @@ export class AdvertiserCampaignTrait {
           name: dto.name,
           category: dto.category,
           bidType: dto.bidType as BidType,
-          bidAmountMinor: dto.bidAmountMinor,
-          budgetTotalMinor: dto.budgetTotalMinor,
+          bidAmountMinor: bidMoney.amountMinor,
+          budgetTotalMinor: budgetMoney.amountMinor,
           currency,
           frequencyCapPerHour: dto.frequencyCapPerHour ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_HOUR,
           frequencyCapPerDay: dto.frequencyCapPerDay ?? AD_SERVING.DEFAULT_FREQUENCY_CAP_PER_DAY,
@@ -116,7 +137,7 @@ export class AdvertiserCampaignTrait {
             name: dto.name,
             category: dto.category,
             bidType: dto.bidType,
-            budgetTotalMinor: String(dto.budgetTotalMinor),
+            budgetTotalMinor: String(budgetMoney.amountMinor),
           },
         },
         tx,

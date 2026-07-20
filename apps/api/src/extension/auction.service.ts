@@ -16,9 +16,9 @@ import {
   adIdempotencyCacheKey,
   FREQUENCY_CAP_TXN_MAX_RETRIES,
   isCategoryBlocked,
-  isUnderFrequencyCap,
   ServedAd,
 } from './extension.constants';
+import { isUnderFrequencyCap } from './frequency-cap';
 
 /** A campaign as selected for the weighted auction (subset of the Prisma row). */
 export interface AuctionCreative {
@@ -53,7 +53,7 @@ export interface SelectEligibleCampaignParams {
   userId: string;
   effectiveBlocked: string[];
   allowedCategories?: string[];
-  userCountry: string | null;
+  userCountry?: string;
   oneHourAgo: Date;
   oneDayAgo: Date;
 }
@@ -310,7 +310,7 @@ export class AuctionService {
         title: creative.title,
         message: creative.sponsoredMessage,
         label: 'Sponsored',
-        displayDomain: creative.displayDomain,
+        displayDomain: creative.displayDomain ?? '',
         destinationUrl: creative.destinationUrl,
         ctaText: creative.ctaText ?? null,
       };

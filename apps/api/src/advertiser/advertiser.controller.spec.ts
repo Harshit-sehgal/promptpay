@@ -50,7 +50,7 @@ describe('AdvertiserController profile creation', () => {
     service.createProfile.mockResolvedValue({ id: 'adv-1', ...dto });
 
     const result = await controller.createProfile(
-      { user: { sub: 'user-1' } } as unknown as Request,
+      { user: { id: 'user-1' } } as unknown as Request,
       dto,
     );
 
@@ -174,7 +174,7 @@ describe('AdvertiserController export/delete API-key boundary (A-044)', () => {
     };
 
     const result = await controller.createDepositSession(
-      { user: { sub: 'user-1' } } as unknown as Request,
+      { user: { id: 'user-1' } } as unknown as Request,
       {
         amountMinor: 10000n,
         currency: 'usd',

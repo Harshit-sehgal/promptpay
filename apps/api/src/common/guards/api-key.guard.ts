@@ -42,7 +42,7 @@ function stampUserFromApiKey(
 ): void {
   req.user = {
     id: apiKey.ownerId,
-    sub: apiKey.ownerId,
+    role: apiKey.owner.role as UserRole,
     authMethod: 'api_key' as const,
   } as Record<string, unknown>;
 }
