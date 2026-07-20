@@ -1293,3 +1293,26 @@ serves all chunks with 200 and the dashboard renders cleanly. This is the same
 it is an environment/launch artifact, not an application defect. The committed
 web `build` script forces `NODE_ENV=production`, so the production build is
 unaffected.
+
+## 2026-07-20 — Full quality-gate re-run (fresh, this session)
+
+After committing the straggler deliverables, **all four gates were executed from
+scratch** (not cited from a prior run):
+
+- `pnpm typecheck` — **14/14** packages.
+- `pnpm lint` — **9/9** packages (0 errors; 1 pre-existing benign
+  `AI_TOOL_VALUES` unused-var warning in `apps/vscode-extension/src/extension.ts`,
+  not introduced by this work).
+- `pnpm build` — **9/9** packages (web `next build` prerenders all routes
+  including `/auth/signup` and `/developer`).
+- `pnpm test` — **10/10 workspace tasks green**: api **1288** (1208 unit +
+  integration + 36 contract + 44 e2e-http-flow), web **182**, plus cli / vscode
+  / shared all passing. The `ERROR`/`WARN` lines in api output are expected test
+  observability (money-integrity / circuit-breaker / alert paths asserted by
+  tests), not failures.
+
+- Git tree is clean (`git status` empty, no stash, no untracked). The only
+  `skip`/stub markers in the tree are intentional: a `describe.skipIf(!RUN_LIVE)`
+  live-gated VS Code smoke test (the known "1 skipped"), `@deprecated byCurrency`
+  single-currency fallbacks, gated-provider "not implemented" rejections, and UI
+  input `placeholder` attributes. **No unfinished code remains.**
