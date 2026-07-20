@@ -113,16 +113,25 @@ describe('WaitStateDetector — shadow (non-monetizable) waits (P1.14 / P2.5)', 
     expect(event.signals).toEqual([{ type: 'inactivity' }]);
   });
 
-  it('does NOT mark an ai_generation wait as shadow', () => {
+  it('marks a MANUAL ai_generation wait as shadow (P1 #12: manual waits are never auto-billable)', () => {
     const event = captureWaitStart('codex');
-    expect(event.shadow).toBeFalsy();
+    expect(event.shadow).toBe(true);
+    expect(event.manual).toBe(true);
+    // The signal set is unchanged — the adapter classification is preserved
+    // so the shadow telemetry still records WHY the user reported the wait.
     expect(event.signals).toEqual([{ type: 'ai_generation' }]);
   });
 
-  it('does NOT mark a task wait as shadow', () => {
-    const event = captureWaitStart('task');
-    expect(event.shadow).toBeFalsy();
-    expect(event.signals).toEqual([{ type: 'active_task' }]);
+  it('does NOT mark an AUTOMATIC task wait as shadow', () => {
+    const events: WaitStateEvent[] = [];
+    detector.onWaitStateStart((e) => events.push(e));
+    // Wire the automatic listeners (onDidStartTask → enterWait('task')).
+    detector.start({ subscriptions: [] } as never);
+    mock.taskStart?.({});
+    expect(events).toHaveLength(1);
+    expect(events[0].shadow).toBeFalsy();
+    expect(events[0].manual).toBe(false);
+    expect(events[0].signals).toEqual([{ type: 'active_task' }]);
   });
   it('carries the shadow flag through to the matching wait_end event', () => {
     detector.triggerManualWait('inactivity');

@@ -809,6 +809,8 @@ describe('E2E Money Loop', () => {
             sessionId: SESSION_ID,
             waitStateId: WAIT_STATE_ID,
             eventType: 'wait_state_start',
+            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            detectorVersion: '1.0.0',
             createdAt: new Date(Date.now() - 1000),
           });
         }
@@ -948,6 +950,8 @@ describe('E2E Money Loop', () => {
             sessionId: SESSION_ID,
             waitStateId: WAIT_STATE_ID,
             eventType: 'wait_state_start',
+            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            detectorVersion: '1.0.0',
             createdAt: new Date(Date.now() - 1000),
           });
         }
@@ -1144,6 +1148,7 @@ describe('E2E Money Loop', () => {
     const IMPRESSION_ID = uid('imp');
     const IMPRESSION_TOKEN = 'test-impression-token-12345';
     const DEVICE_ID = uid('dev');
+    const WAIT_STATE_ID = uid('ws');
 
     beforeEach(() => {
       // Fraud rate limit: under 60/hour
@@ -1164,6 +1169,7 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
         deviceId: DEVICE_ID,
         sessionId: uid('sess'),
+        waitStateId: WAIT_STATE_ID,
         impressionTokenHash: require('crypto')
           .createHash('sha256')
           .update(IMPRESSION_TOKEN)
@@ -1201,6 +1207,18 @@ describe('E2E Money Loop', () => {
         id: DEVICE_ID,
         userId: DEV_USER_ID,
         eventSecret: DEVICE_EVENT_SECRET,
+      });
+
+      // Re-classification needs the original wait_state_start row.
+      mockPrisma.waitStateEvent.findFirst.mockResolvedValue({
+        userId: DEV_USER_ID,
+        deviceId: DEVICE_ID,
+        sessionId: uid('sess'),
+        waitStateId: WAIT_STATE_ID,
+        eventType: 'wait_state_start',
+        signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+        detectorVersion: '1.0.0',
+        createdAt: new Date(Date.now() - 1000),
       });
     });
 
@@ -1316,6 +1334,7 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
         deviceId: DEVICE_ID,
         sessionId: uid('sess'),
+        waitStateId: WAIT_STATE_ID,
         impressionTokenHash: require('crypto')
           .createHash('sha256')
           .update(IMPRESSION_TOKEN)
@@ -1383,6 +1402,7 @@ describe('E2E Money Loop', () => {
     const CAMPAIGN_ID = uid('camp');
     const IMPRESSION_ID = uid('imp');
     const IMPRESSION_TOKEN = 'test-click-token-67890';
+    const WAIT_STATE_ID = uid('ws');
 
     beforeEach(() => {
       // Impression lookup
@@ -1393,6 +1413,7 @@ describe('E2E Money Loop', () => {
         userId: DEV_USER_ID,
         deviceId: uid('dev'),
         sessionId: uid('sess'),
+        waitStateId: WAIT_STATE_ID,
         impressionTokenHash: require('crypto')
           .createHash('sha256')
           .update(IMPRESSION_TOKEN)
@@ -1448,6 +1469,18 @@ describe('E2E Money Loop', () => {
         id: 'click-device',
         userId: DEV_USER_ID,
         eventSecret: DEVICE_EVENT_SECRET,
+      });
+
+      // Re-classification for CPC click payment needs the original wait start.
+      mockPrisma.waitStateEvent.findFirst.mockResolvedValue({
+        userId: DEV_USER_ID,
+        deviceId: 'click-device',
+        sessionId: uid('sess'),
+        waitStateId: WAIT_STATE_ID,
+        eventType: 'wait_state_start',
+        signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+        detectorVersion: '1.0.0',
+        createdAt: new Date(Date.now() - 1000),
       });
 
       installLedgerCapture();
@@ -1850,6 +1883,8 @@ describe('E2E Money Loop', () => {
             sessionId,
             waitStateId,
             eventType: 'wait_state_start',
+            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            detectorVersion: '1.0.0',
             createdAt: new Date(Date.now() - 1000),
           });
         }
@@ -1958,6 +1993,7 @@ describe('E2E Money Loop', () => {
         userId: devUserId,
         deviceId,
         sessionId,
+        waitStateId,
         impressionTokenHash: require('crypto')
           .createHash('sha256')
           .update(impressionToken)
@@ -2829,18 +2865,35 @@ describe('E2E Money Loop', () => {
       const hash = require('crypto').createHash('sha256').update(token).digest('hex');
 
       const cpcDevUserId = 'cpc-dev-user';
+      const cpcDeviceId = uid('dev');
+      const cpcSessionId = uid('sess');
+      const cpcWaitStateId = uid('ws-cpc');
+
       mockPrisma.device.findUnique.mockResolvedValue({
         id: 'cpc-device',
         userId: cpcDevUserId,
         eventSecret: DEVICE_EVENT_SECRET,
+      });
+
+      // Re-classification needs the original wait_state_start row.
+      mockPrisma.waitStateEvent.findFirst.mockResolvedValue({
+        userId: cpcDevUserId,
+        deviceId: cpcDeviceId,
+        sessionId: cpcSessionId,
+        waitStateId: cpcWaitStateId,
+        eventType: 'wait_state_start',
+        signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+        detectorVersion: '1.0.0',
+        createdAt: new Date(Date.now() - 1000),
       });
       mockPrisma.adImpression.findUnique.mockResolvedValue({
         id: impId,
         campaignId: uid('c'),
         creativeId: uid('cr'),
         userId: cpcDevUserId,
-        deviceId: uid('dev'),
-        sessionId: uid('sess'),
+        deviceId: cpcDeviceId,
+        sessionId: cpcSessionId,
+        waitStateId: cpcWaitStateId,
         impressionTokenHash: hash,
         renderedAt: new Date(Date.now() - 6000),
         campaign: {
@@ -2903,8 +2956,9 @@ describe('E2E Money Loop', () => {
         campaignId: uid('c'),
         creativeId: uid('cr'),
         userId: cpcDevUserId,
-        deviceId: uid('dev'),
-        sessionId: uid('sess'),
+        deviceId: cpcDeviceId,
+        sessionId: cpcSessionId,
+        waitStateId: cpcWaitStateId,
         impressionTokenHash: hash,
         qualifiedAt: new Date(), // Now qualified!
         campaign: {
@@ -3015,6 +3069,8 @@ describe('E2E Money Loop', () => {
             sessionId: 'sess-1',
             waitStateId: 'wait-1',
             eventType: 'wait_state_start',
+            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            detectorVersion: '1.0.0',
             createdAt: new Date(Date.now() - 1000),
           });
         }

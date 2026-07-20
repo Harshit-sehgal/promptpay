@@ -31,11 +31,17 @@ describe('classifyWaitState (P0.1)', () => {
     expect(result.confidence).toBeGreaterThanOrEqual(MINIMUM_WAIT_CONFIDENCE);
   });
 
-  it('rejects payment when corroborated only by a lifecycle event', () => {
+  it('rejects payment when a primary signal is only corroborated by a lifecycle event', () => {
     const result = classifyWaitState(
       [{ type: 'ai_generation' }, { type: 'lifecycle_event' }],
       false,
     );
+    expect(result.adEligible).toBe(true);
+    expect(result.paymentEligible).toBe(false);
+  });
+
+  it('rejects payment when duplicate primary signals are repeated (must be distinct types)', () => {
+    const result = classifyWaitState([{ type: 'ai_generation' }, { type: 'ai_generation' }], false);
     expect(result.adEligible).toBe(true);
     expect(result.paymentEligible).toBe(false);
   });

@@ -10,6 +10,7 @@ import { Prisma, ToolTypeEnum } from '@waitlayer/db';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { AlertsService } from '../observability/alerts.service';
+import type { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import {
   classifyWaitState,
   computeWaitConfidence,
@@ -39,6 +40,7 @@ export class ExtensionWaitTrait {
   declare prisma: PrismaService;
   declare alerts?: AlertsService;
   declare fraud: FraudService;
+  declare runtimeConfig: RuntimeConfigService;
 
   // ── Wait State Events ──
   async recordWaitStateStart(
@@ -270,8 +272,18 @@ export class ExtensionWaitTrait {
    * Flag a wait state as a false positive. Used by developers (or an admin
    * on their behalf) to improve the detector. The flag is stored on the
    * start event and is used by analytics/evaluation to compute precision.
+   *
+   * P1 #16: the normalized reason, optional note, and report timestamp are
+   * persisted alongside the flag (previously the reason was discarded).
+   * Repeated reports are IDEMPOTENT — only the first report's feedback is
+   * stored; later calls return the current row unchanged (and still feed the
+   * spike detector, so feedback spam stays visible without corrupting data).
    */
-  async flagFalsePositive(userId: string, waitStateId: string) {
+  async flagFalsePositive(
+    userId: string,
+    waitStateId: string,
+    feedback?: { reason?: string; note?: string },
+  ) {
     const start = await this.prisma.waitStateEvent.findFirst({
       where: { userId, waitStateId, eventType: 'wait_state_start' },
       orderBy: { createdAt: 'desc' },
@@ -279,6 +291,12 @@ export class ExtensionWaitTrait {
     if (!start) throw new NotFoundException('Wait state not found');
     if (start.userId !== userId) {
       throw new ForbiddenException('You do not own this wait state');
+    }
+    // Idempotency: never overwrite the first report's feedback. Also gate
+    // the alert spike counter so repeated calls for the same wait state do
+    // not artificially inflate the regression signal.
+    if (start.isFalsePositive) {
+      return start;
     }
     // P1.25: alert on a burst of false-positive reports (detector precision
     // regression) rather than every single one.
@@ -289,7 +307,12 @@ export class ExtensionWaitTrait {
     }
     return this.prisma.waitStateEvent.update({
       where: { id: start.id },
-      data: { isFalsePositive: true },
+      data: {
+        isFalsePositive: true,
+        falsePositiveReason: feedback?.reason ?? null,
+        falsePositiveNote: feedback?.note ?? null,
+        falsePositiveReportedAt: new Date(),
+      },
     });
   }
 }

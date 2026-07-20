@@ -8,6 +8,7 @@ import {
   AdClickDto,
   AdRenderedDto,
   AdRequestDto,
+  FlagFalsePositiveDto,
   QualifiedImpressionDto,
   RegisterDeviceDto,
   ReportAdDto,
@@ -44,11 +45,18 @@ export class ExtensionController {
     return this.service.recordWaitStateEnd(userId, dto);
   }
 
-  @ApiOperation({ summary: 'Flag a wait state as a false positive' })
+  @ApiOperation({
+    summary:
+      'Flag a wait state as a false positive. Accepts an optional normalized reason + bounded note (P1 #16); repeated reports are idempotent.',
+  })
   @Post('wait-state/:waitStateId/false-positive')
   @HttpCode(HttpStatus.OK)
-  flagFalsePositive(@CurrentUser('id') userId: string, @Param('waitStateId') waitStateId: string) {
-    return this.service.flagFalsePositive(userId, waitStateId);
+  flagFalsePositive(
+    @CurrentUser('id') userId: string,
+    @Param('waitStateId') waitStateId: string,
+    @Body() dto: FlagFalsePositiveDto,
+  ) {
+    return this.service.flagFalsePositive(userId, waitStateId, dto);
   }
 
   @ApiOperation({ summary: 'Request ad' })

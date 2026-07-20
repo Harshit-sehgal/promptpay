@@ -57,15 +57,6 @@ export class HealthController {
   }
 
   /**
-   * Readiness probe — used by Docker/K8s healthchecks and load balancers.
-   *
-   * Unlike `GET /health` (liveness, which always returns HTTP 200 so a
-   * crashed process can be detected and restarted), readiness returns a
-   * non-200 status when a required dependency (Postgres, Redis) is
-   * unavailable. This prevents routing traffic to an API that cannot safely
-   * serve it (A-042).
-   */
-  /**
    * Migration status endpoint — exposes whether the database has pending
    * migrations. This is useful for deployment validation and ops dashboards
    * (P1 #13). It does not fail; callers inspect `pending` and `upToDate`.
@@ -372,11 +363,13 @@ export class HealthController {
   }
 
   /**
-   * Compute wait-detection quality metrics: precision (confirmed billable
-   * impressions from high-confidence waits / all billable impressions) and
-   * the false-positive rate (flagged wait states / all wait states).
-   * Only the last 7 days are considered so the signal reflects current
-   * detector behaviour, not historical data.
+   * Compute wait-detection quality metrics: precision (high-confidence wait
+   * states that were NOT flagged as false-positive / all high-confidence
+   * wait states) and the false-positive rate (flagged high-confidence wait
+   * states / all high-confidence wait states). Low-confidence events are
+   * already blocked from billing, so quality is measured on the billable
+   * population only. Only the last 7 days are considered so the signal
+   * reflects current detector behaviour, not historical data.
    */
   private async computeWaitDetectionQuality(): Promise<{
     precision: number;
@@ -385,6 +378,7 @@ export class HealthController {
     flaggedFalsePositives: number;
     lowConfidenceBlocked: number;
     falsePositivesBySignal: Array<{ signal: string; count: number; rate: number }>;
+    falsePositivesByReason: Array<{ reason: string; count: number }>;
     signalWeightRecommendations: Array<{
       signal: string;
       currentWeight: number;
@@ -392,56 +386,85 @@ export class HealthController {
     }>;
   }> {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [totalWaitStates, flaggedFalsePositives, lowConfidenceBlocked, fpBySignalRows] =
-      await Promise.all([
-        this.prisma.waitStateEvent.count({
-          where: { eventType: 'wait_state_start', createdAt: { gte: sevenDaysAgo } },
-        }),
-        this.prisma.waitStateEvent.count({
-          where: {
-            eventType: 'wait_state_start',
-            isFalsePositive: true,
-            createdAt: { gte: sevenDaysAgo },
-          },
-        }),
-        // Low-confidence wait states blocked from billing (confidence below
-        // threshold or null) — the detector's safety floor.
-        this.prisma.waitStateEvent.count({
-          where: {
-            eventType: 'wait_state_start',
-            createdAt: { gte: sevenDaysAgo },
-            OR: [{ confidence: null }, { confidence: { lt: MINIMUM_WAIT_CONFIDENCE } }],
-          },
-        }),
-        // Per-signal-type false-positive breakdown: group flagged FPs by the
-        // `reason` field (which stores the dominant signal type). This makes
-        // the isFalsePositive feedback actionable — operators can see which
-        // signal types produce the most FPs and tune weights accordingly.
-        this.prisma.waitStateEvent.groupBy({
-          by: ['reason'],
-          where: {
-            eventType: 'wait_state_start',
-            isFalsePositive: true,
-            createdAt: { gte: sevenDaysAgo },
-          },
-          _count: { _all: true },
-        }),
-      ]);
-    const falsePositiveRate = totalWaitStates > 0 ? flaggedFalsePositives / totalWaitStates : 0;
+    const [
+      totalWaitStates,
+      flaggedFalsePositives,
+      lowConfidenceBlocked,
+      fpBySignalRows,
+      fpByReasonRows,
+    ] = await Promise.all([
+      this.prisma.waitStateEvent.count({
+        where: { eventType: 'wait_state_start', createdAt: { gte: sevenDaysAgo } },
+      }),
+      this.prisma.waitStateEvent.count({
+        where: {
+          eventType: 'wait_state_start',
+          isFalsePositive: true,
+          confidence: { gte: MINIMUM_WAIT_CONFIDENCE },
+          createdAt: { gte: sevenDaysAgo },
+        },
+      }),
+      // Low-confidence wait states blocked from billing (confidence below
+      // threshold or null) — the detector's safety floor.
+      this.prisma.waitStateEvent.count({
+        where: {
+          eventType: 'wait_state_start',
+          createdAt: { gte: sevenDaysAgo },
+          OR: [{ confidence: null }, { confidence: { lt: MINIMUM_WAIT_CONFIDENCE } }],
+        },
+      }),
+      // Per-signal-type false-positive breakdown: group flagged FPs by the
+      // `reason` field (which stores the dominant signal type). This makes
+      // the isFalsePositive feedback actionable — operators can see which
+      // signal types produce the most FPs and tune weights accordingly.
+      this.prisma.waitStateEvent.groupBy({
+        by: ['reason'],
+        where: {
+          eventType: 'wait_state_start',
+          isFalsePositive: true,
+          confidence: { gte: MINIMUM_WAIT_CONFIDENCE },
+          createdAt: { gte: sevenDaysAgo },
+        },
+        _count: { _all: true },
+      }),
+      // P1 #16: group by the USER-REPORTED normalized reason (distinct
+      // from the detector signal classification above) so release-quality
+      // evaluation can see WHY users dispute detections.
+      this.prisma.waitStateEvent.groupBy({
+        by: ['falsePositiveReason'],
+        where: {
+          eventType: 'wait_state_start',
+          isFalsePositive: true,
+          confidence: { gte: MINIMUM_WAIT_CONFIDENCE },
+          createdAt: { gte: sevenDaysAgo },
+        },
+        _count: { _all: true },
+      }),
+    ]);
     // Precision: high-confidence wait states that were NOT flagged as false
     // positive / all high-confidence wait states. Low-confidence events are
     // already blocked from billing, so precision is measured on the billable
-    // population only.
+    // population only. The false-positive counts must be scoped to the same
+    // high-confidence population so the numerator never underflows.
     const highConfidenceTotal = totalWaitStates - lowConfidenceBlocked;
-    const highConfidenceTruePositives = highConfidenceTotal - flaggedFalsePositives;
+    const highConfidenceTruePositives = Math.max(0, highConfidenceTotal - flaggedFalsePositives);
     const precision =
       highConfidenceTotal > 0 ? highConfidenceTruePositives / highConfidenceTotal : 1;
+    const falsePositiveRate =
+      highConfidenceTotal > 0 ? flaggedFalsePositives / highConfidenceTotal : 0;
 
     // Build per-signal FP breakdown
     const falsePositivesBySignal = fpBySignalRows.map((row) => ({
       signal: row.reason ?? 'unknown',
       count: row._count._all,
       rate: highConfidenceTotal > 0 ? row._count._all / highConfidenceTotal : 0,
+    }));
+
+    // P1 #16: per-reported-reason FP breakdown (unreported legacy rows
+    // bucket as 'unreported').
+    const falsePositivesByReason = fpByReasonRows.map((row) => ({
+      reason: row.falsePositiveReason ?? 'unreported',
+      count: row._count._all,
     }));
 
     // Generate weight-tuning recommendations: if a signal type's FP rate
@@ -471,6 +494,7 @@ export class HealthController {
       flaggedFalsePositives,
       lowConfidenceBlocked,
       falsePositivesBySignal,
+      falsePositivesByReason,
       signalWeightRecommendations,
     };
   }

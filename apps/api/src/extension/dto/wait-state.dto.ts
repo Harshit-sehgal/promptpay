@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -12,7 +13,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-import { ToolType } from '@waitlayer/shared';
+import { FALSE_POSITIVE_REASONS, FalsePositiveReason, ToolType } from '@waitlayer/shared';
 
 export class WaitSignalDto {
   @ApiProperty({
@@ -99,4 +100,24 @@ export class WaitStateEndDto {
   @IsString()
   @MinLength(1)
   signature!: string;
+}
+
+export class FlagFalsePositiveDto {
+  @ApiPropertyOptional({
+    description:
+      'Normalized false-positive reason code (P1 #16). Persisted with the report for detector-quality analytics.',
+    enum: FALSE_POSITIVE_REASONS,
+  })
+  @IsOptional()
+  @IsIn(FALSE_POSITIVE_REASONS)
+  reason?: FalsePositiveReason;
+
+  @ApiPropertyOptional({
+    description: 'Optional bounded free-text note (no code/PII).',
+    maxLength: 500,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }

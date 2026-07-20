@@ -2,16 +2,16 @@ import { UserRole } from './enums';
 
 /** Revenue split defaults */
 export const REVENUE_SPLIT = {
-  USER: 0.6,         // 60% to developer
-  PLATFORM: 0.3,     // 30% to platform
-  RESERVE: 0.1,      // 10% fraud/payment reserve
+  USER: 0.6, // 60% to developer
+  PLATFORM: 0.3, // 30% to platform
+  RESERVE: 0.1, // 10% fraud/payment reserve
 } as const;
 
 /** Launch incentive split */
 export const LAUNCH_INCENTIVE_SPLIT = {
-  USER: 0.8,         // 80% to developer for first 3 months
-  PLATFORM: 0.1,     // 10% to platform
-  RESERVE: 0.1,      // 10% fraud/payment reserve
+  USER: 0.8, // 80% to developer for first 3 months
+  PLATFORM: 0.1, // 10% to platform
+  RESERVE: 0.1, // 10% fraud/payment reserve
 } as const;
 
 /** Minimum visible duration in ms for a qualified impression */
@@ -19,7 +19,7 @@ export const MINIMUM_VISIBLE_DURATION_MS = 5000;
 
 /** Payout thresholds */
 export const PAYOUT = {
-  MINIMUM_THRESHOLD_USD: 10_00,       // $10 in cents
+  MINIMUM_THRESHOLD_USD: 10_00, // $10 in cents
   MINIMUM_THRESHOLD_MINOR: 10_00,
   CURRENCY: 'USD',
 } as const;
@@ -59,7 +59,7 @@ export const AD_SERVING = {
   MAX_ADS_PER_HOUR_DEFAULT: 6,
   MAX_ADS_PER_HOUR_MAX: 20,
   MAX_ADS_PER_HOUR_MIN: 1,
-  MIN_CAMPAIGN_BUDGET_MINOR: 50_00,    // $50 minimum
+  MIN_CAMPAIGN_BUDGET_MINOR: 50_00, // $50 minimum
   MAX_CAMPAIGN_BUDGET_MINOR: 1_000_000_00, // $1M max
   DEFAULT_FREQUENCY_CAP_PER_HOUR: 2,
   DEFAULT_FREQUENCY_CAP_PER_DAY: 6,
@@ -84,10 +84,7 @@ export const MAX_AD_MESSAGE_LENGTH = 80;
 /** Roles a user is permitted to self-assign at signup / OAuth registration.
  *  Privileged roles (admin, support, super_admin) must NEVER be reachable from
  *  self-service signup — they are granted only via an admin escalation path. */
-export const SIGNUP_ALLOWED_ROLES = [
-  UserRole.DEVELOPER,
-  UserRole.ADVERTISER,
-] as const;
+export const SIGNUP_ALLOWED_ROLES = [UserRole.DEVELOPER, UserRole.ADVERTISER] as const;
 
 export type SignupAllowedRole = (typeof SIGNUP_ALLOWED_ROLES)[number];
 
@@ -97,8 +94,23 @@ export const DEFAULT_COMPANY_NAME = 'Unnamed Company';
 /** Referral program */
 export const REFERRAL = {
   /** Reward paid to the referrer once the referred user qualifies */
-  REWARD_AMOUNT_MINOR: 5_00,         // $5 in cents
+  REWARD_AMOUNT_MINOR: 5_00, // $5 in cents
   CURRENCY: 'USD',
   /** Minimum first payout amount (in cents) the referred user must receive before reward triggers */
   FIRST_PAYOUT_THRESHOLD_MINOR: 10_00, // $10 in cents
 } as const;
+
+/**
+ * Normalized false-positive report reasons (P1 #16). Shared by the API
+ * (DTO validation) and the VS Code extension (quick-pick values) so the two
+ * cannot drift. The `other` value is the escape hatch that may carry a
+ * bounded free-text note.
+ */
+export const FALSE_POSITIVE_REASONS = [
+  'actively_working',
+  'no_ai_generation',
+  'unrelated_activity',
+  'other',
+] as const;
+
+export type FalsePositiveReason = (typeof FALSE_POSITIVE_REASONS)[number];

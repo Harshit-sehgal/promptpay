@@ -69,6 +69,7 @@ describe('ExtensionWaitTrait.flagFalsePositive', () => {
       userId: 'u1',
       waitStateId: 'ws-id-1',
       eventType: 'wait_state_start',
+      isFalsePositive: false,
     };
     const { prisma, trait } = makeTrait();
     prisma.waitStateEvent.findFirst.mockResolvedValue(start);
@@ -79,8 +80,69 @@ describe('ExtensionWaitTrait.flagFalsePositive', () => {
     expect(result.isFalsePositive).toBe(true);
     expect(prisma.waitStateEvent.update).toHaveBeenCalledWith({
       where: { id: 'ws-1' },
-      data: { isFalsePositive: true },
+      data: {
+        isFalsePositive: true,
+        falsePositiveReason: null,
+        falsePositiveNote: null,
+        falsePositiveReportedAt: expect.any(Date),
+      },
     });
+  });
+
+  it('persists the normalized reason, note and report timestamp (P1 #16)', async () => {
+    const start = {
+      id: 'ws-1',
+      userId: 'u1',
+      waitStateId: 'ws-id-1',
+      eventType: 'wait_state_start',
+      isFalsePositive: false,
+    };
+    const { prisma, trait } = makeTrait();
+    prisma.waitStateEvent.findFirst.mockResolvedValue(start);
+    prisma.waitStateEvent.update.mockImplementation((_args: { data: object }) => ({
+      ...start,
+      ..._args.data,
+    }));
+
+    const result = await trait.flagFalsePositive('u1', 'ws-id-1', {
+      reason: 'no_ai_generation',
+      note: 'was reading docs',
+    });
+
+    expect(prisma.waitStateEvent.update).toHaveBeenCalledWith({
+      where: { id: 'ws-1' },
+      data: {
+        isFalsePositive: true,
+        falsePositiveReason: 'no_ai_generation',
+        falsePositiveNote: 'was reading docs',
+        falsePositiveReportedAt: expect.any(Date),
+      },
+    });
+    expect(result.falsePositiveReason).toBe('no_ai_generation');
+    expect(result.falsePositiveReportedAt).toBeInstanceOf(Date);
+  });
+
+  it('is idempotent — a repeated report never overwrites the first feedback (P1 #16)', async () => {
+    const alreadyFlagged = {
+      id: 'ws-1',
+      userId: 'u1',
+      waitStateId: 'ws-id-1',
+      eventType: 'wait_state_start',
+      isFalsePositive: true,
+      falsePositiveReason: 'actively_working',
+      falsePositiveNote: null,
+      falsePositiveReportedAt: new Date('2026-07-20T00:00:00Z'),
+    };
+    const { prisma, trait } = makeTrait();
+    prisma.waitStateEvent.findFirst.mockResolvedValue(alreadyFlagged);
+
+    const result = await trait.flagFalsePositive('u1', 'ws-id-1', {
+      reason: 'other',
+      note: 'changed my mind',
+    });
+
+    expect(prisma.waitStateEvent.update).not.toHaveBeenCalled();
+    expect(result.falsePositiveReason).toBe('actively_working');
   });
 
   it('raises a deduplicated wait_false_positive_spike alert on a burst of reports (P1.25)', async () => {

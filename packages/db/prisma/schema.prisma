@@ -560,27 +560,34 @@ model ToolIntegration {
 // ══════════════════════════════════════════════════════════
 
 model WaitStateEvent {
-  id              String       @id @default(uuid())
-  userId          String
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceId        String
-  device          Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  sessionId       String
-  eventType       EventType
-  waitStateId     String
-  toolType        ToolTypeEnum
-  duration        Int?
-  ipHash          String?
-  signature       String
-  idempotencyKey  String       @unique
+  id                      String       @id @default(uuid())
+  userId                  String
+  user                    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId                String
+  device                  Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  sessionId               String
+  eventType               EventType
+  waitStateId             String
+  toolType                ToolTypeEnum
+  duration                Int?
+  ipHash                  String?
+  signature               String
+  idempotencyKey          String       @unique
   // Confidence-based wait-detection metadata (P0). Signals are categorized
   // telemetry (no user code) used to score whether this wait state is a real
   // productive wait vs. idle inactivity.
-  confidence      Float?
-  detectorVersion String?      @map("detector_version")
-  reason          String?
-  signals         Json?        @default("[]")
-  isFalsePositive Boolean      @default(false) @map("is_false_positive")
+  confidence              Float?
+  detectorVersion         String?      @map("detector_version")
+  reason                  String?
+  signals                 Json?        @default("[]")
+  isFalsePositive         Boolean      @default(false) @map("is_false_positive")
+  // User-reported false-positive feedback metadata (P1 #16): normalized
+  // reason code, optional bounded note, and report timestamp. Distinct from
+  // `reason` (the detector's dominant-signal classification). Idempotent —
+  // only the first report is stored; repeats are no-ops.
+  falsePositiveReason     String?      @map("false_positive_reason")
+  falsePositiveNote       String?      @map("false_positive_note")
+  falsePositiveReportedAt DateTime?    @map("false_positive_reported_at")
 
   createdAt DateTime @default(now())
 

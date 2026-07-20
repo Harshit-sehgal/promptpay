@@ -31,6 +31,7 @@ const mock = vi.hoisted(() => ({
   detector: {
     onSignal: vi.fn(),
     start: vi.fn(),
+    triggerManualWait: vi.fn(),
   },
   signalHandler: undefined as
     | ((signal: {
@@ -273,7 +274,7 @@ describe('extension reportFalseWait command', () => {
     expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-b', 'Some reason');
   });
 
-  it('forwards an optional reason to flagFalsePositive', async () => {
+  it('forwards a normalized reason code to flagFalsePositive (P1 #16)', async () => {
     await activateAndClearBootState();
     const event = {
       startTime: Date.now(),
@@ -283,11 +284,25 @@ describe('extension reportFalseWait command', () => {
     };
     mock.signalHandler?.({ type: 'wait_start', event });
 
-    const reason = 'Just reading docs, not AI';
-    await mock.commands.get('waitlayer.reportFalseWait')?.(reason);
+    await mock.commands.get('waitlayer.reportFalseWait')?.('no_ai_generation');
 
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
-    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-reason', reason);
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-reason', 'no_ai_generation');
+  });
+
+  it('degrades an unknown programmatic reason to the normalized other code', async () => {
+    await activateAndClearBootState();
+    const event = {
+      startTime: Date.now(),
+      durationMs: 25,
+      tool: 'task',
+      waitStateId: 'fp-reason-unknown',
+    };
+    mock.signalHandler?.({ type: 'wait_start', event });
+
+    await mock.commands.get('waitlayer.reportFalseWait')?.('Just reading docs, not AI');
+
+    expect(mock.api.flagFalsePositive).toHaveBeenCalledWith('fp-reason-unknown', 'other');
   });
 });
 
@@ -352,6 +367,42 @@ describe('extension detector controls (P1.17)', () => {
     expect(msg).toBeDefined();
     expect(msg).toContain('Enrolled');
     expect(msg).toContain('bucket');
+  });
+});
+
+describe('extension triggerManualWait command (P1 #12)', () => {
+  it('registers the manifest-advertised command and reports a shadow-only manual wait', async () => {
+    await activateAndClearBootState();
+    expect(mock.commands.has('waitlayer.triggerManualWait')).toBe(true);
+
+    mock.detector.triggerManualWait.mockReturnValue('ws-manual-1');
+    mock.showQuickPick.mockResolvedValue('codex');
+    await mock.commands.get('waitlayer.triggerManualWait')?.();
+
+    expect(mock.showQuickPick).toHaveBeenCalled();
+    expect(mock.detector.triggerManualWait).toHaveBeenCalledWith('codex');
+    const msg = mock.showInformationMessage.mock.calls
+      .map((c) => c[0])
+      .find((m): m is string => typeof m === 'string' && m.includes('manual wait reported'));
+    expect(msg).toBeDefined();
+    expect(msg).toContain('shadow-only');
+    expect(msg).toContain('never billable');
+  });
+
+  it('reports when the detector refuses to start (source disabled or suppressed)', async () => {
+    await activateAndClearBootState();
+    mock.detector.triggerManualWait.mockReturnValue('');
+
+    // Pass the tool directly — skips the quick-pick.
+    await (mock.commands.get('waitlayer.triggerManualWait') as (t?: string) => Promise<void>)(
+      'claude',
+    );
+
+    expect(mock.detector.triggerManualWait).toHaveBeenCalledWith('claude');
+    const msg = mock.showInformationMessage.mock.calls
+      .map((c) => c[0])
+      .find((m): m is string => typeof m === 'string' && m.includes('manual wait not started'));
+    expect(msg).toBeDefined();
   });
 });
 

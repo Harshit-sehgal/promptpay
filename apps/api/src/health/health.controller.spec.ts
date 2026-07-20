@@ -104,8 +104,8 @@ describe('HealthController metrics endpoint', () => {
     // highConfidenceTruePositives = 90 - 5 = 85
     // precision = 85 / 90 ≈ 0.944...
     expect(wait.precision).toBeGreaterThanOrEqual(0.9);
-    // falsePositiveRate = 5 / 100 = 0.05
-    expect(wait.falsePositiveRate).toBeLessThanOrEqual(0.05);
+    // falsePositiveRate = 5 / 90 ≈ 0.0556 (measured on the high-confidence population)
+    expect(wait.falsePositiveRate).toBeCloseTo(5 / 90, 10);
     expect(wait.totalWaitStates).toBe(100);
     expect(wait.flaggedFalsePositives).toBe(5);
     expect(wait.lowConfidenceBlocked).toBe(10);

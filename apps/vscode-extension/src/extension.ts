@@ -1,12 +1,13 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
-import { formatMinorUnits } from '@waitlayer/shared';
+import { FalsePositiveReason, formatMinorUnits } from '@waitlayer/shared';
 
 import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
 import { ApiClient } from './api-client';
 import { ConfigurationManager } from './config';
+import { AI_TOOL_VALUES } from './detector-adapters';
 import { computeSuppressUntil, KNOWN_DETECTOR_SOURCES } from './detector-policy';
 import { DetectorState } from './detector-state';
 import { formatBreakdown, parseByCurrency, resolveDisplayCurrency } from './earnings';
@@ -34,12 +35,14 @@ function displayAmountForEntry(
 }
 
 /** Reasons a user may give when reporting a false-positive wait (P1.18). */
-const FALSE_WAIT_REASONS = [
-  'I was actively working, not waiting on AI',
-  'No AI generation was happening',
-  'Wait triggered by unrelated activity',
-  'Other',
-] as const;
+// P1 #16: normalized reason CODES are sent to the API (shared contract
+// FALSE_POSITIVE_REASONS); labels are display-only.
+const FALSE_WAIT_REASONS: ReadonlyArray<{ label: string; value: FalsePositiveReason }> = [
+  { label: 'I was actively working, not waiting on AI', value: 'actively_working' },
+  { label: 'No AI generation was happening', value: 'no_ai_generation' },
+  { label: 'Wait triggered by unrelated activity', value: 'unrelated_activity' },
+  { label: 'Other', value: 'other' },
+];
 
 /** Action button shown on the in-wait notification (P1.18). */
 const REPORT_FALSE_POSITIVE_ACTION: vscode.MessageItem = { title: 'Report false positive' };
@@ -156,12 +159,24 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
       }
       // P1.18 #1 — collect a reason via quick pick when none was supplied.
-      const finalReason =
-        reason ??
-        (await vscode.window.showQuickPick([...FALSE_WAIT_REASONS], {
+      // The quick-pick shows labels; the API receives the normalized code.
+      // A programmatic reason that matches no known code/label degrades to
+      // 'other' rather than becoming a silent no-op (e.g. keybinding args).
+      // Tests (and some VS Code quick-pick configurations) may return a raw
+      // string; treat any string result as the final reason.
+      let picked: (typeof FALSE_WAIT_REASONS)[number] | string | undefined;
+      if (reason) {
+        picked =
+          FALSE_WAIT_REASONS.find((r) => r.value === reason || r.label === reason) ??
+          FALSE_WAIT_REASONS.find((r) => r.value === 'other');
+      } else {
+        const raw = await vscode.window.showQuickPick([...FALSE_WAIT_REASONS], {
           placeHolder: 'Why is this a false detection?',
-        }));
-      if (!finalReason) return;
+        });
+        picked = raw;
+      }
+      if (!picked) return;
+      const finalReason = typeof picked === 'string' ? picked : picked.value;
       try {
         await api.flagFalsePositive(activeWaitStateId, finalReason);
         flaggedWaitStateId = activeWaitStateId;
@@ -202,6 +217,28 @@ export async function activate(context: vscode.ExtensionContext) {
         ? `Enrolled — variant: ${assignment.variant} (bucket ${assignment.bucket}/100)`
         : `Not enrolled (bucket ${assignment.bucket}/100, rollout ${config.detectorRolloutPercent()}%)`;
       vscode.window.showInformationMessage(`WaitLayer detector experiment: ${detail}`);
+    }),
+    // P1 #12: the manifest advertises this command, so it must be registered.
+    // A manually reported wait is a diagnostics / shadow-mode feedback
+    // channel ONLY: the detector marks it `manual` + `shadow`, so it never
+    // reaches the server and is never billable.
+    vscode.commands.registerCommand('waitlayer.triggerManualWait', async (tool?: string) => {
+      const target =
+        tool ??
+        (await vscode.window.showQuickPick([...AI_TOOL_VALUES], {
+          placeHolder: 'Which AI tool are you waiting on? (manual report — never billable)',
+        }));
+      if (!target) return;
+      const waitStateId = detector.triggerManualWait(target);
+      if (!waitStateId) {
+        vscode.window.showInformationMessage(
+          `WaitLayer: manual wait not started (source '${target}' is disabled or suppressed)`,
+        );
+        return;
+      }
+      vscode.window.showInformationMessage(
+        `WaitLayer: manual wait reported for '${target}' (shadow-only — used for detection feedback, never billable)`,
+      );
     }),
   ];
 

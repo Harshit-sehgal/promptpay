@@ -83,13 +83,14 @@ export function computeWaitConfidence(signals: WaitSignal[]): {
  * Classify a wait state into the three trusted-detection gates:
  *   - detected: any non-empty signal set
  *   - adEligible: max signal confidence >= MINIMUM_WAIT_CONFIDENCE
- *   - paymentEligible: adEligible AND at least one primary signal is
- *     corroborated by a second distinct signal category
+ *   - paymentEligible: adEligible AND at least two distinct primary signals
+ *     are present
  *
  * A modified client that forges a single `ai_generation` signal can still
  * get an ad served (ad gate), but it cannot earn money because the payment
- * gate requires corroboration from another signal category. This separates
- * "detected wait", "eligible for ad", and "eligible for payment".
+ * gate requires corroboration from a second primary signal. This separates
+ * "detected wait", "eligible for ad", and "eligible for payment" and
+ * prevents a single forged signal from authorizing billing.
  *
  * @param isVerifiedSource - whether the detector version/source is on the
  *   operator's verified allowlist. Unverified sources still serve ads if
@@ -114,12 +115,12 @@ export function classifyWaitState(
 
   const uniqueTypes = new Set(signals.map((s) => s.type));
   const hasPrimary = [...uniqueTypes].some((t) => PRIMARY_SIGNALS.includes(t));
-  // Corroboration must come from a meaningful (non-inactivity) signal.
-  // A primary signal + inactivity is still ad-eligible, but it is not
-  // enough to earn money. A `lifecycle_event` is also intentionally excluded
-  // from corroboration because it is ambiguous (focus change, tab switch,
-  // build finish, etc.) and can be fabricated cheaply. Payment requires at
-  // least two distinct primary signals.
+  // Corroboration must come from a second *primary* signal. Payment cannot be
+  // authorized by client-declared `lifecycle_event` or `inactivity` signals
+  // because both are cheap to forge. A modified client that declares
+  // `ai_generation` + `lifecycle_event` and waits five seconds must not earn.
+  // Two distinct primary signals (ai_generation, active_task, command_execution)
+  // are required for payment eligibility.
   const primaryTypes = [...uniqueTypes].filter((t) => PRIMARY_SIGNALS.includes(t));
   const hasCorroboration = primaryTypes.length >= 2;
 

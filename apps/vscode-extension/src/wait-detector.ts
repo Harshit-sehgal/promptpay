@@ -46,6 +46,13 @@ export interface WaitStateEvent {
    * force this via `DetectorAdapter.shadowOnly`.
    */
   shadow?: boolean;
+  /**
+   * When true the wait was reported manually by the user (P1 #12:
+   * `waitlayer.triggerManualWait`). Manual waits are ALWAYS shadow waits —
+   * they are a diagnostics / shadow-mode feedback channel and must never
+   * become billable automatically.
+   */
+  manual?: boolean;
 }
 
 /**
@@ -84,6 +91,8 @@ export class WaitStateDetector {
   private getInactivityTimeoutMs: () => number;
   /** Whether the active wait is a shadow (non-monetizable) detection. */
   private waitShadow = false;
+  /** Whether the active wait was manually reported (always shadow). */
+  private waitManual = false;
 
   /** Tracks whether we are currently inside an inferred wait state. */
   private inWait = false;
@@ -237,7 +246,7 @@ export class WaitStateDetector {
 
   /** Public method to manually trigger a wait from a command */
   triggerManualWait(tool: string): string {
-    return this.enterWait(tool);
+    return this.enterWait(tool, true);
   }
 
   /** Public method to manually end a wait */
@@ -294,7 +303,7 @@ export class WaitStateDetector {
     this.scheduleInactivityCheck();
   }
 
-  private enterWait(tool: string): string {
+  private enterWait(tool: string, manual = false): string {
     if (this.inWait) {
       // Already in a wait — don't stack
       return this.waitStateId;
@@ -319,9 +328,12 @@ export class WaitStateDetector {
     // wait whose ONLY signal is inactivity (or whose adapter is flagged
     // shadowOnly) is kept in local shadow mode — excluded from monetization
     // until corroborated by a stronger signal (ai_generation / task / terminal).
+    // A MANUALLY reported wait (P1 #12) is shadow-only by design: user
+    // self-reports are a diagnostics/feedback channel, never auto-billable.
     const onlyInactivity = signals.length === 1 && signals[0].type === 'inactivity';
-    const shadow = adapter.shadowOnly === true || onlyInactivity;
+    const shadow = manual || adapter.shadowOnly === true || onlyInactivity;
     this.waitShadow = shadow;
+    this.waitManual = manual;
 
     const event: WaitStateEvent = {
       startTime: this.waitStart,
@@ -331,6 +343,7 @@ export class WaitStateDetector {
       signals,
       detectorVersion: DETECTOR_VERSION,
       shadow,
+      manual,
     };
 
     // Emit signal for external listeners (extension.ts uses onWaitStateStart)
@@ -367,12 +380,14 @@ export class WaitStateDetector {
       signals: mapToolToSignals(this.waitTool),
       detectorVersion: DETECTOR_VERSION,
       shadow: this.waitShadow,
+      manual: this.waitManual,
     };
 
     this.emitSignal({ type: 'wait_end', event });
 
     this.waitStart = 0;
     this.waitStateId = '';
+    this.waitManual = false;
     this.lastEditTime = Date.now();
   }
 

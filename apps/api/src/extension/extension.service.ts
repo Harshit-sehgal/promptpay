@@ -45,6 +45,14 @@ export class ExtensionService {
 export interface ExtensionService
   extends ExtensionDeviceReportTrait, ExtensionAdTrait, ExtensionWaitTrait {
   alerts?: AlertsService;
+  // The controller passes a third (optional) argument; make sure the merged
+  // interface keeps the optional parameter instead of collapsing to the two
+  // required arguments from another trait overload.
+  flagFalsePositive(
+    userId: string,
+    waitStateId: string,
+    feedback?: { reason?: string; note?: string },
+  ): ReturnType<ExtensionWaitTrait['flagFalsePositive']>;
 }
 
 for (const name of Object.getOwnPropertyNames(ExtensionDeviceReportTrait.prototype)) {
