@@ -68,9 +68,11 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 > - **A-075** docker build — `docker` daemon is up, but `docker compose build
 api` still fails at `corepack prepare pnpm@11.9.0 --activate` (registry
 >   fetch failure, 2026-07-20 re-attempt) — network block, not a code defect.
-> - A-030 / A-018 callback / A-036 / A-047 full-browser / #12/#39/#103/#131 /
+> - A-030 / A-018 callback / A-036 / #12/#39/#103/#131 /
 >   P1.9 / P1.21 remain external for the documented reasons (credentials,
->   product scope, GitHub settings). None are code defects.
+>   product scope, GitHub settings). None are code defects. **A-047 full
+>   browser signup/login/dashboard E2E is now live-verified 2026-07-20** (see
+>   note below) — removed from the external list.
 
 ### Build — Web `next build` RESOLVED (2026-07-11): `NODE_ENV=development` env leak, not a framework regression
 
@@ -209,9 +211,10 @@ browser or live-client check. **Status after the 2026-07-10 live-E2E session
   error path (`page.a046.test.ts`), A-083 middleware secret (`middleware.test.ts`).
 - Remain live/browser-only — genuine environment, operator, or design constraints,
   NOT code defects: A-027 (by design — no public recovery-token consume route),
-  A-047 signup (full real-browser cookie/re-prompt E2E still recommended — the
-  standalone API itself serves routes correctly, see findings; not by application
-  code), A-056 (client `country` population smoke). A-033, A-046, A-050, A-067 are
+  A-047 signup (full real-browser signup→login→dashboard E2E **live-verified
+  2026-07-20** — form submits via BFF, redirects to authenticated /developer,
+  `auth/me` 200, dashboard renders with data; the prior "recommended" caveat is
+  now closed), A-056 (client `country` population smoke).
   now covered by automated tests (see per-item notes). The CSP-hydration blocker
   previously listed here is RESOLVED:
   the committed `apps/web/next.config.js` `script-src` already allows
@@ -1177,7 +1180,7 @@ finished by a source change:
 - **A-075** full `docker compose build` e2e — blocked by npm-registry `ETIMEDOUT` in this sandbox; Dockerfile code path (`USER node`/`chown`/`HEALTHCHECK`) is correct.
 - **A-018** live Google OAuth ID-token callback — needs real Google credentials; CSP header live-verified.
 - **A-036** CCPA enforcement beyond ad serving (reporting/exports/audience) — product-undefined.
-- **A-047** full multi-step browser signup/re-prompt/cookie-set/expire E2E — code + cookie-banner live-verified 2026-07-15; route covered by in-process `e2e-http-flow`; full browser flow recommended but not code-blocked.
+- **A-047** full multi-step browser signup/login/dashboard E2E — **live-verified 2026-07-20** (form submit → authenticated /developer redirect, `auth/me` 200, dashboard renders with data under `NODE_ENV=production`); cookie-banner live-verified 2026-07-15; route covered by in-process `e2e-http-flow`. Fully closed.
 - **#12 / #39 / #103 / #131** age verification, analytics vendor, webhook async processing, message broker — product/legal/infra decisions; code done.
 
 ## 2026-07-20 — Backlog closure: P0 #7 + P1 #12–#19 code items + full quality gates
@@ -1257,4 +1260,36 @@ Redis (:6379).
 See the updated "Remaining items" list above. No code deliverable is
 outstanding; the open items are operator/infra/product/legal decisions or
 sandbox-only network constraints (P0.5, P1.9, P1.21, A-030, A-075, A-018
-callback, A-036, A-047 full browser, #12/#39/#103/#131).
+callback, A-036, #12/#39/#103/#131).
+
+## 2026-07-20 — A-047 full browser signup/login/dashboard E2E verified (closes last verifiable residual)
+
+A real headless-Chromium browser pass against the running standalone API
+(`node apps/api/dist/apps/api/src/main.js` on `:4002`) + web (`next start`) closed
+the final verifiable residual item, A-047:
+
+- **Signup form** at `/auth/signup?role=developer` renders in-browser (email,
+  password, age-confirmation checkbox, "Create account").
+- **Submit** posts through the BFF `POST /api/auth/signup` (which passes the
+  `rejectCrossOriginMutation` CSRF guard because the browser sends a matching
+  `Origin`); the API returns 201 and the client redirects to the authenticated
+  `/developer` dashboard. `GET /api/auth/me` → 200 (auth cookie set as
+  HttpOnly+Secure `__Host-` on the `localhost` secure context).
+- **Login** on a second origin (`/auth/login`) with the just-created account also
+  succeeds and reaches `/developer`.
+- **Dashboard** renders the full developer view (Earnings / Payouts / Trust /
+  Referrals, stats `$0.00` for the new account) with **no "Failed to load this
+  section" error** and **zero 4xx/5xx** responses.
+
+### NODE_ENV=development static-chunk 500 artifact (re-confirmed, not a code defect)
+
+When the web server was launched with the shell-inherited `NODE_ENV=development`,
+`next start` returned **500** for some `/_next/static/chunks/*.js` assets, which
+broke client hydration and surfaced as a dashboard "Failed to load this section"
+error — even though `GET /api/developer/dashboard` returned **200** with valid
+data. Re-launching `next start` with `NODE_ENV=production` (the Docker/CI path)
+serves all chunks with 200 and the dashboard renders cleanly. This is the same
+`NODE_ENV` env-leak class already documented under "Build — Web `next build`";
+it is an environment/launch artifact, not an application defect. The committed
+web `build` script forces `NODE_ENV=production`, so the production build is
+unaffected.
