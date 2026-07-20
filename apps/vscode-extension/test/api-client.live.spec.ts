@@ -95,8 +95,8 @@ describe.skipIf(!RUN_LIVE)('ApiClient live smoke against standalone API', () => 
     expect(balance).toHaveProperty('pending');
     expect(balance).toHaveProperty('total');
     expect(balance).toHaveProperty('paidOut');
-    -expect(typeof balance.available.amountMinor).toBe('bigint');
-    -expect(balance.available.amountMinor).toBe(0n);
+    expect(typeof balance.available.amountMinor).toBe('bigint');
+    expect(balance.available.amountMinor).toBe(0n);
     expect(typeof balance.available.currency).toBe('string');
   });
 });
