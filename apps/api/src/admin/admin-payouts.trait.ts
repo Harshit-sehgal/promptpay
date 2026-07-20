@@ -572,11 +572,11 @@ export class AdminPayoutsTrait {
   }
 
   /**
-   * Approve or reject a pending payout-fence release approval. When approved,
-   * the referenced payout account's initiation fence is released atomically.
-   * The approver must be a distinct active administrator.
+   * Review (approve or reject) a pending payout-fence release approval. When
+   * approved, the referenced payout account's initiation fence is released
+   * atomically. The approver must be a distinct active administrator.
    */
-  async approvePayoutFenceRelease(options: {
+  async reviewPayoutFenceRelease(options: {
     approvalId: string;
     approverId: string;
     approverSessionId: string;
@@ -617,7 +617,8 @@ export class AdminPayoutsTrait {
         decision,
         approvedAt: new Date(),
         reason: reason ?? approval.reason,
-        evidence: evidence ? JSON.parse(evidence) : approval.evidence,
+        evidence: (evidence ??
+          (approval.evidence as Prisma.InputJsonValue)) as Prisma.InputJsonValue,
       },
     });
     if (decision === 'rejected') {

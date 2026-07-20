@@ -25,6 +25,7 @@ import {
   AdminMetricsQueryDto,
   ApproveCampaignDto,
   ApprovePayoutDto,
+  ApprovePayoutFenceReleaseDto,
   ArchiveRefundQueueQueryDto,
   AuditLogQueryDto,
   EscalateFraudFlagDto,
@@ -38,6 +39,7 @@ import {
   RejectCampaignDto,
   RejectPayoutDto,
   ReleasePayoutFenceDto,
+  RequestPayoutFenceReleaseDto,
   ResolveDeadLetterDto,
   ResolveFraudFlagDto,
   ResolveRecoveryDebtCaseDto,
@@ -382,6 +384,48 @@ export class AdminController {
     });
   }
 
+  @ApiOperation({
+    summary: 'Request approval to release a payout account provider-initiation fence',
+  })
+  @Post('payout-accounts/:id/request-fence-release')
+  @Roles('admin', 'support', 'super_admin')
+  requestPayoutFenceRelease(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') requesterId: string,
+    @CurrentUser('jti') requesterSessionId: string,
+    @CurrentUser('mfaAt') requesterMfaAt: number | undefined,
+    @Body() dto: RequestPayoutFenceReleaseDto,
+  ) {
+    return this.service.requestPayoutFenceRelease({
+      payoutAccountId: id,
+      requesterId,
+      requesterSessionId,
+      requesterMfaAt: requesterMfaAt ? new Date(requesterMfaAt * 1000) : undefined,
+      reason: dto.reason,
+    });
+  }
+
+  @ApiOperation({ summary: 'Review a payout fence release approval (approve or reject)' })
+  @Post('payout-fence-release-approvals/:id/review')
+  @Roles('admin', 'support', 'super_admin')
+  reviewPayoutFenceRelease(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') approverId: string,
+    @CurrentUser('jti') approverSessionId: string,
+    @CurrentUser('mfaAt') approverMfaAt: number | undefined,
+    @Body() dto: ApprovePayoutFenceReleaseDto,
+  ) {
+    return this.service.reviewPayoutFenceRelease({
+      approvalId: id,
+      approverId,
+      approverSessionId,
+      approverMfaAt: approverMfaAt ? new Date(approverMfaAt * 1000) : undefined,
+      decision: dto.decision,
+      reason: dto.reason,
+      evidence: dto.evidence,
+    });
+  }
+
   @ApiOperation({ summary: 'Release a payout account provider-initiation fence' })
   @Post('payout-accounts/:id/release-fence')
   @Roles('admin', 'support', 'super_admin')
@@ -398,7 +442,7 @@ export class AdminController {
       reason: dto.reason,
       providerTxId: dto.providerTxId,
       resolution: dto.resolution,
-      secondApproverId: dto.secondApproverId,
+      approvalId: dto.approvalId,
     });
   }
 
