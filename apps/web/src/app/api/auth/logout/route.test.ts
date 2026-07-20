@@ -65,7 +65,10 @@ describe('logout route (A-049)', () => {
     }
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/auth/logout'),
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Bearer valid' }),
+      }),
     );
   });
 

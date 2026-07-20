@@ -4,7 +4,7 @@ import {
   apiBaseUrl,
   applyRateLimitIdentity,
   clearAuthCookies,
-  COOKIE_REFRESH,
+  COOKIE_ACCESS,
   isSecure,
   rateLimitIdentity,
   readAuthCookie,
@@ -28,14 +28,17 @@ export async function POST(req: NextRequest) {
     // cookies is correct. Network errors and 5xx responses propagate as
     // non-200 so the client surfaces a retryable failure rather than a false
     // sense of security.
-    const refreshToken = readAuthCookie(req, COOKIE_REFRESH, isSecure(req.headers));
+    const accessToken = readAuthCookie(req, COOKIE_ACCESS, isSecure(req.headers));
     const identity = rateLimitIdentity(req);
     let apiRes: Response;
     try {
-      apiRes = await fetch(`${apiBaseUrl()}/auth/logout/refresh`, {
+      apiRes = await fetch(`${apiBaseUrl()}/auth/logout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...identity.headers },
-        body: JSON.stringify({ refreshToken }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: accessToken ? `Bearer ${accessToken}` : '',
+          ...identity.headers,
+        },
       });
     } catch {
       // Network error — don't clear cookies; the revocation didn't happen.

@@ -169,9 +169,14 @@ export class AuthController {
     }
   }
 
-  @ApiOperation({ summary: 'Log out' })
+  @ApiOperation({ summary: 'Log out the current access-token session' })
   @Post('logout')
   @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  logout(@CurrentUser('id') userId: string, @CurrentUser('jti') jti: string) {
+    return this.authService.logout(userId, jti);
+  }
+
   @ApiOperation({ summary: 'Log out using the refresh session' })
   @Post('logout/refresh')
   @HttpCode(HttpStatus.OK)
