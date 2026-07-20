@@ -30,15 +30,18 @@ export async function POST(req: NextRequest) {
     // sense of security.
     const accessToken = readAuthCookie(req, COOKIE_ACCESS, isSecure(req.headers));
     const identity = rateLimitIdentity(req);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...identity.headers,
+    };
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
     let apiRes: Response;
     try {
       apiRes = await fetch(`${apiBaseUrl()}/auth/logout`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: accessToken ? `Bearer ${accessToken}` : '',
-          ...identity.headers,
-        },
+        headers,
       });
     } catch {
       // Network error — don't clear cookies; the revocation didn't happen.
