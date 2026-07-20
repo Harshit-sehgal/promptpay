@@ -65,6 +65,10 @@ jobs:
         run: pnpm --filter @waitlayer/db generate
       - name: Build
         run: pnpm run build
+      # P0.8: prove the host-side build output embeds no signing secrets
+      # (default targets: apps/web/.next + apps/api/dist).
+      - name: Scan build output for embedded signing secrets
+        run: node scripts/scan-build-secrets.mjs
 
   # ── Unit / integration tests + migration release gate + coverage ──
   test:
@@ -296,6 +300,12 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # P0.8 defense-in-depth: never emit buildx provenance/SBOM attestations.
+      # Provenance records build-arg values; no signing secrets are build args
+      # today, and this keeps that true even if a future build path switches
+      # to `docker buildx build` (which emits attestations by default).
+      BUILDX_NO_DEFAULT_ATTESTATIONS: '1'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -340,10 +350,22 @@ jobs:
       - name: Build web image (verifies build-time secret wiring)
         run: docker compose -f docker-compose.yml build web
         env:
-          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
           NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
           NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
+      # The web image is built INSIDE Docker, so the host apps/web/.next path
+      # does not exist in this job — scanning it would pass vacuously. Extract
+      # the built bundle from the image and scan that instead. The script
+      # hard-fails when an explicit target is missing.
+      - name: Scan web build output for embedded signing secrets
+        run: |
+          img=$(docker compose -f docker-compose.yml config --images | grep -- '-web$' | head -1)
+          test -n "$img" || { echo "web image name could not be resolved"; exit 1; }
+          cid=$(docker create "$img")
+          trap 'docker rm -f "$cid" >/dev/null' EXIT
+          rm -rf "$RUNNER_TEMP/web-next-scan"
+          docker cp "$cid":/app/apps/web/.next "$RUNNER_TEMP/web-next-scan"
+          node scripts/scan-build-secrets.mjs "$RUNNER_TEMP/web-next-scan"
       # Boot the COMPILED api image against real Postgres + Redis and confirm
       # it serves a real request over a socket (closes the standalone-404 gap
       # that the in-process suite could never catch).

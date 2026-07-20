@@ -69,17 +69,9 @@ export class ExtensionWaitTrait {
         `Detector version "${dto.detectorVersion}" is currently disabled`,
       );
     }
-    // Duplicate start check — a @@unique([waitStateId, eventType]) guards at
-    // the DB layer (migration 20260718020000), but give the client a clean
-    // 409 rather than a raw P2002 constraint violation.
-    const duplicateStart = await this.prisma.waitStateEvent.findFirst({
-      where: { waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
-      select: { id: true },
-    });
-    if (duplicateStart) {
-      throw new ConflictException('A wait_state_start event already exists for this waitStateId.');
-    }
-    // Idempotency: only return an existing event after ownership/signature pass.
+    // Idempotency ordering (P1 #20): locate the idempotency key FIRST — only
+    // after ownership/signature pass — so an exact retry returns the original
+    // row instead of a spurious 409 from the duplicate-waitStateId guard.
     const existing = await this.prisma.waitStateEvent.findUnique({
       where: { idempotencyKey: dto.idempotencyKey },
     });
@@ -94,26 +86,71 @@ export class ExtensionWaitTrait {
       }
       return existing;
     }
+    // Reject a waitStateId reused under a DIFFERENT key — a
+    // @@unique([waitStateId, eventType]) guards at the DB layer (migration
+    // 20260718025000), but give the client a clean 409 rather than a raw
+    // P2002 constraint violation.
+    const duplicateStart = await this.prisma.waitStateEvent.findFirst({
+      where: { waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
+    });
+    if (duplicateStart) {
+      // A concurrent exact retry may have committed BETWEEN our key lookup
+      // above and this check. If the existing start carries THIS request's
+      // key and payload identity, it is the same logical request — return
+      // the winner instead of a spurious 409.
+      if (
+        duplicateStart.idempotencyKey === dto.idempotencyKey &&
+        duplicateStart.userId === userId &&
+        duplicateStart.deviceId === dto.deviceId
+      ) {
+        return duplicateStart;
+      }
+      throw new ConflictException('A wait_state_start event already exists for this waitStateId.');
+    }
     const { confidence, reason } = computeWaitConfidence(dto.signals ?? []);
     // Persist only the signal categories, never the optional human-readable
     // details, so user code/PII never reaches the database.
     const sanitizedSignals = (dto.signals ?? []).map(({ type }) => ({ type }));
-    return this.prisma.waitStateEvent.create({
-      data: {
-        userId,
-        deviceId: dto.deviceId,
-        sessionId: dto.sessionId,
-        eventType: 'wait_state_start',
-        waitStateId: dto.waitStateId,
-        toolType: dto.toolType as ToolTypeEnum,
-        signature: dto.signature,
-        idempotencyKey: dto.idempotencyKey,
-        signals: sanitizedSignals as unknown as Prisma.InputJsonValue,
-        confidence,
-        reason,
-        detectorVersion: dto.detectorVersion,
-      },
-    });
+    try {
+      return await this.prisma.waitStateEvent.create({
+        data: {
+          userId,
+          deviceId: dto.deviceId,
+          sessionId: dto.sessionId,
+          eventType: 'wait_state_start',
+          waitStateId: dto.waitStateId,
+          toolType: dto.toolType as ToolTypeEnum,
+          signature: dto.signature,
+          idempotencyKey: dto.idempotencyKey,
+          signals: sanitizedSignals as unknown as Prisma.InputJsonValue,
+          confidence,
+          reason,
+          detectorVersion: dto.detectorVersion,
+        },
+      });
+    } catch (error) {
+      // Unique-race handling: a concurrent request committed between our
+      // checks and the insert. If it carried the SAME idempotency key and
+      // payload identity, it is a concurrent exact retry — return the winner.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const winner = await this.prisma.waitStateEvent.findUnique({
+          where: { idempotencyKey: dto.idempotencyKey },
+        });
+        if (
+          winner &&
+          winner.userId === userId &&
+          winner.deviceId === dto.deviceId &&
+          winner.waitStateId === dto.waitStateId &&
+          winner.eventType === 'wait_state_start'
+        ) {
+          return winner;
+        }
+        throw new ConflictException(
+          'A wait_state_start event already exists for this waitStateId.',
+        );
+      }
+      throw error;
+    }
   }
 
   async recordWaitStateEnd(

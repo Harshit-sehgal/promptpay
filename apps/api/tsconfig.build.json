@@ -5,5 +5,13 @@
     "outDir": "dist"
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test-helper.ts", "src/**/test/**"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.spec.ts",
+    "**/*.test-helper.ts",
+    "src/**/test/**",
+    "src/test-setup.ts",
+    "**/__fixtures__/**"
+  ]
 }

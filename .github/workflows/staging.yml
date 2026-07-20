@@ -76,7 +76,10 @@ jobs:
       - name: Build API + web images for staging
         run: docker compose -f docker-compose.yml build api web
         env:
-          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+          # JWT_SECRET is a runtime-only secret; never pass it to docker build.
+          # Never emit buildx provenance/SBOM attestations (they record
+          # build-arg values) — P0.8 defense-in-depth.
+          BUILDX_NO_DEFAULT_ATTESTATIONS: '1'
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}/api/v1
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.STAGING_GOOGLE_CLIENT_ID }}
       - name: Run staging smoke test

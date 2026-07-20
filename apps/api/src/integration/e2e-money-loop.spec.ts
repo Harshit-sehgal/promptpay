@@ -16,7 +16,7 @@ import { ExtensionService } from '../extension/extension.service';
 import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { PayoutService } from '../payout/payout.service';
-import { createMockRuntimeConfig } from '../runtime-config/test-helpers';
+import { createMockRuntimeConfig } from '../runtime-config/runtime-config.test-helper';
 
 // HMAC secret must match what ExtensionService uses
 const HMAC_SECRET = 'dev-secret-change-me-do-not-use-in-production';

@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { highValueFenceReleaseMinor } from '@waitlayer/shared';
 
@@ -19,6 +24,8 @@ interface ReconciliationTelemetry {
   lastReconciliationAt: Date | null;
   escalatedAt: Date | null;
 }
+
+const FENCE_APPROVAL_EXPIRY_MINUTES = 60;
 
 export class AdminPayoutsTrait {
   declare prisma: PrismaService;
@@ -498,6 +505,138 @@ export class AdminPayoutsTrait {
   }
 
   /**
+   * Verify a user is an active administrator with permission to act on fence
+   * releases. Throws ForbiddenException if not.
+   */
+  private async requireActiveAdmin(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, status: true },
+    });
+    if (
+      !user ||
+      user.status !== 'active' ||
+      (user.role !== 'admin' && user.role !== 'super_admin')
+    ) {
+      throw new ForbiddenException('Active administrator privileges are required');
+    }
+    return user.role;
+  }
+
+  /**
+   * Request a two-person approval for releasing a high-value payout account
+   * initiation fence. Admin A creates the request; Admin B must independently
+   * authenticate and approve it before the fence can be released.
+   */
+  async requestPayoutFenceRelease(options: {
+    payoutAccountId: string;
+    requesterId: string;
+    requesterSessionId: string;
+    requesterMfaAt?: Date;
+    reason: string;
+  }) {
+    const { payoutAccountId, requesterId, requesterSessionId, requesterMfaAt, reason } = options;
+    const account = await this.prisma.payoutAccount.findUnique({
+      where: { id: payoutAccountId },
+      include: { user: { select: { id: true, email: true } } },
+    });
+    if (!account) throw new NotFoundException('Payout account not found');
+    if (!account.initiationPayoutId) {
+      throw new BadRequestException('Payout account does not have an active initiation fence');
+    }
+    // Only active admins may request a release.
+    await this.requireActiveAdmin(requesterId);
+    const payout = await this.prisma.payoutRequest.findUnique({
+      where: { id: account.initiationPayoutId },
+      select: { requestedAmountMinor: true, approvedAmountMinor: true, currency: true },
+    });
+    if (!payout) {
+      throw new BadRequestException('Referenced payout no longer exists');
+    }
+    const requestedAmountMinor = payout.approvedAmountMinor ?? payout.requestedAmountMinor ?? 0n;
+    const expiresAt = new Date(Date.now() + FENCE_APPROVAL_EXPIRY_MINUTES * 60 * 1000);
+    const approval = await this.prisma.payoutFenceReleaseApproval.create({
+      data: {
+        payoutAccountId,
+        payoutRequestId: account.initiationPayoutId,
+        requestedAmountMinor,
+        currency: payout.currency,
+        requesterId,
+        requesterSessionId,
+        requesterMfaAt,
+        expiresAt,
+        reason,
+      },
+    });
+    return approval;
+  }
+
+  /**
+   * Approve or reject a pending payout-fence release approval. When approved,
+   * the referenced payout account's initiation fence is released atomically.
+   * The approver must be a distinct active administrator.
+   */
+  async approvePayoutFenceRelease(options: {
+    approvalId: string;
+    approverId: string;
+    approverSessionId: string;
+    approverMfaAt?: Date;
+    decision: 'approved' | 'rejected';
+    reason?: string;
+    evidence?: string;
+  }) {
+    const { approvalId, approverId, approverSessionId, approverMfaAt, decision, reason, evidence } =
+      options;
+    // Approver must be an active admin.
+    await this.requireActiveAdmin(approverId);
+    const approval = await this.prisma.payoutFenceReleaseApproval.findUnique({
+      where: { id: approvalId },
+    });
+    if (!approval) throw new NotFoundException('Fence release approval request not found');
+    if (approval.decision !== null) {
+      throw new ConflictException(`Fence release approval is already ${approval.decision}`);
+    }
+    if (approval.expiresAt < new Date()) {
+      // Mark expired inline so the caller sees a clear state.
+      await this.prisma.payoutFenceReleaseApproval.update({
+        where: { id: approvalId },
+        data: { decision: 'expired' },
+      });
+      throw new BadRequestException('Fence release approval request has expired');
+    }
+    if (approval.requesterId === approverId) {
+      throw new ForbiddenException('Approver must be distinct from the requester');
+    }
+    // Record the decision first. For rejections this is the final state.
+    const updated = await this.prisma.payoutFenceReleaseApproval.update({
+      where: { id: approvalId },
+      data: {
+        approverId,
+        approverSessionId,
+        approverMfaAt,
+        decision,
+        approvedAt: new Date(),
+        reason: reason ?? approval.reason,
+        evidence: evidence ? JSON.parse(evidence) : approval.evidence,
+      },
+    });
+    if (decision === 'rejected') {
+      return { approval: updated, released: false };
+    }
+    // Approved: perform the actual fence release using the durable approval as
+    // the second-authorizer record. We pass the approval id so the release
+    // path can correlate the audit.
+    const releaseResult = await this.releasePayoutFence({
+      payoutAccountId: approval.payoutAccountId,
+      reviewerId: approverId,
+      reviewerRole: 'admin',
+      reason: reason ?? approval.reason ?? 'approved via two-person release workflow',
+      approvalId: approval.id,
+    });
+    return { approval: updated, released: true, releaseResult };
+  }
+
+  /**
    * Explicitly release a payout account's durable initiation fence. This is an
    * operator escape hatch for the rare case where the automatic fence-clearing
    * in `markPayoutPaid`/`markPayoutFailed` could not run (e.g. a transient DB
@@ -514,7 +653,7 @@ export class AdminPayoutsTrait {
       reason,
       providerTxId,
       resolution,
-      secondApproverId,
+      approvalId,
     } = options;
     const account = await this.prisma.payoutAccount.findUnique({
       where: { id: payoutAccountId },
@@ -558,25 +697,48 @@ export class AdminPayoutsTrait {
           `Payout ${account.initiationPayoutId} is in status '${fencedPayout.status}'; confirm the provider outcome before releasing the fence`,
         );
       }
-      // High-value second-person approval (P1.11): an initiation fence whose
+      // High-value two-person approval (P0.4): an initiation fence whose
       // referenced payout meets/exceeds the per-currency high-value threshold
-      // requires a second, distinct approver before the account can be
-      // unblocked. Enforced inside the same transaction as the terminal-state
-      // check so a concurrent path cannot skip it.
-      const threshold = highValueFenceReleaseMinor(fencedPayout.currency);
+      // requires a durable, approved PayoutFenceReleaseApproval before the
+      // account can be unblocked. The approval id must be supplied and must
+      // be in approved state for the same payout account, not expired, and
+      // from a distinct second administrator.
       const exposureMinor =
         fencedPayout.approvedAmountMinor ?? fencedPayout.requestedAmountMinor ?? 0n;
+      const threshold = highValueFenceReleaseMinor(fencedPayout.currency);
+      let effectiveApproverId: string | null = null;
       if (exposureMinor >= threshold) {
-        if (!secondApproverId) {
+        if (!approvalId) {
           throw new BadRequestException(
-            `High-value fence release (>= ${threshold} ${fencedPayout.currency}) requires a second approver (secondApproverId)`,
+            `High-value fence release (>= ${threshold} ${fencedPayout.currency}) requires an approved two-person approval request (approvalId)`,
           );
         }
-        if (secondApproverId === reviewerId) {
+        const approval = await tx.payoutFenceReleaseApproval.findUnique({
+          where: { id: approvalId },
+        });
+        if (!approval) {
+          throw new BadRequestException('Specified fence release approval request not found');
+        }
+        if (approval.payoutAccountId !== payoutAccountId) {
+          throw new BadRequestException('Approval request does not match the payout account');
+        }
+        if (approval.payoutRequestId !== initiationPayoutId) {
+          throw new BadRequestException('Approval request does not match the fenced payout');
+        }
+        if (approval.decision !== 'approved') {
           throw new BadRequestException(
-            'High-value fence release requires a second approver distinct from the releasing operator',
+            `Fence release approval is not approved (status: ${approval.decision ?? 'pending'})`,
           );
         }
+        if (approval.expiresAt < new Date()) {
+          throw new BadRequestException('Fence release approval request has expired');
+        }
+        if (approval.requesterId === reviewerId) {
+          throw new BadRequestException(
+            'High-value fence release must be performed by the second approver, not the requester',
+          );
+        }
+        effectiveApproverId = approval.approverId ?? null;
       }
       const row = await tx.payoutAccount.update({
         where: { id: payoutAccountId },
@@ -605,7 +767,8 @@ export class AdminPayoutsTrait {
             observedPayoutStatus: fencedPayout.status,
             providerTxId: providerTxId ?? null,
             resolution: resolution ?? null,
-            secondApproverId: secondApproverId ?? null,
+            approvalId: approvalId ?? null,
+            secondApproverId: effectiveApproverId,
           },
         },
         tx,

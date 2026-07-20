@@ -468,15 +468,51 @@ export class ReleasePayoutFenceDto {
   @IsString()
   @MaxLength(500)
   resolution?: string;
+
   @ApiProperty({
     required: false,
     description:
-      'Second approver id required for high-value fence releases (P1.11). Must differ from the releasing operator.',
+      'Durable approval request id required for high-value fence releases (P0.4). The request must be in approved state and not expired.',
   })
   @IsOptional()
   @IsString()
   @MaxLength(255)
-  secondApproverId?: string;
+  approvalId?: string;
+}
+
+export class RequestPayoutFenceReleaseDto {
+  @ApiProperty({
+    description: 'Reason for requesting release of the initiation fence.',
+  })
+  @IsString()
+  @MinLength(5)
+  @MaxLength(500)
+  reason!: string;
+}
+
+export class ApprovePayoutFenceReleaseDto {
+  @ApiProperty({ description: "Decision for the approval request. 'approved' releases the fence." })
+  @IsIn(['approved', 'rejected'])
+  decision!: 'approved' | 'rejected';
+
+  @ApiProperty({
+    required: false,
+    description: 'Optional note or reason for the approval/rejection decision.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Optional supporting evidence / resolution notes (e.g. providerTxId, observed payout status).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  evidence?: string;
 }
 
 /** Internal options shape for {@link AdminPayoutsTrait.releasePayoutFence}. */
@@ -487,8 +523,13 @@ export interface ReleasePayoutFenceOptions {
   reason: string;
   providerTxId?: string;
   resolution?: string;
-  /** Second approver (P1.11) — required for high-value fence releases. */
-  secondApproverId?: string;
+  /**
+   * Durable approval request id (P0.4). Required for high-value fence
+   * releases; the request must be in `approved` state and not expired.
+   * For low-value releases this is optional and the existing single-operator
+   * path is used.
+   */
+  approvalId?: string;
 }
 /**
  * Reconciliation telemetry surfaced on fenced-account views (P1.11). These

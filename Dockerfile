@@ -29,6 +29,12 @@ RUN pnpm --filter @waitlayer/db run generate
 # Next.js inlines the Edge auth environment at *build* time. Supplying these
 # only as runtime container env does NOT reach the middleware bundle: protected
 # routes then reject valid cookies or validate them against stale defaults.
+#
+# SECURITY: JWT_PRIVATE_KEY and JWT_SECRET are runtime-only secrets and MUST
+# NOT be passed as build arguments. They are injected at container runtime via
+# the deployment platform (Docker secrets, env files, or a secrets manager).
+# JWT_PUBLIC_KEY/JWT_PUBLIC_KEYS are public verification keys, not secrets,
+# and are required at build time so the Edge middleware can verify cookies.
 ARG JWT_PUBLIC_KEY
 RUN test -n "$JWT_PUBLIC_KEY"
 ENV JWT_PUBLIC_KEY=$JWT_PUBLIC_KEY
@@ -38,8 +44,6 @@ ARG JWT_ISSUER=waitlayer
 ENV JWT_ISSUER=$JWT_ISSUER
 ARG JWT_AUDIENCE=waitlayer-client
 ENV JWT_AUDIENCE=$JWT_AUDIENCE
-ARG JWT_SECRET
-ENV JWT_SECRET=$JWT_SECRET
 ARG NEXT_PUBLIC_API_URL=http://localhost:4002/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com

@@ -23,11 +23,11 @@ function check(name, cond) {
 const dockerfile = read('Dockerfile');
 check('Dockerfile runs as non-root (USER node)', /^\s*USER node\b/m.test(dockerfile));
 check(
-  'Docker build tools are exact-version pinned and JWT has no default build secret',
+  'Docker build tools are exact-version pinned and JWT signing secrets are not build args',
   dockerfile.includes('pnpm@11.9.0') &&
     dockerfile.includes('prisma@7.8.0') &&
-    /^ARG JWT_SECRET\s*$/m.test(dockerfile) &&
-    !/^ARG JWT_SECRET=/m.test(dockerfile),
+    !dockerfile.includes('ARG JWT_SECRET') &&
+    !dockerfile.includes('ENV JWT_SECRET='),
 );
 
 // A-018: web CSP allows the Google Identity frame-src.

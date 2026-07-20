@@ -364,27 +364,28 @@ model UserSettings {
 // ══════════════════════════════════════════════════════════
 
 model PayoutAccount {
-  id                       String         @id @default(uuid())
-  userId                   String
-  user                     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider                 PayoutProvider
-  destination              String
-  currency                 String         @default("USD")
-  isVerified               Boolean        @default(false)
-  isActive                 Boolean        @default(true)
+  id                 String         @id @default(uuid())
+  userId             String
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider           PayoutProvider
+  destination        String
+  currency           String         @default("USD")
+  isVerified         Boolean        @default(false)
+  isActive           Boolean        @default(true)
   // Emergency freeze: operator-initiated block on a verified payout
   // destination. A frozen account cannot be used for payouts until an
   // admin explicitly unfreezes it, even if it remains verified and active.
-  isFrozen                 Boolean        @default(false) @map("is_frozen")
+  isFrozen           Boolean        @default(false) @map("is_frozen")
   // Durable fence for an outbound provider call. It is cleared only after the
   // referenced payout reaches a reconciled outcome; there is intentionally no
   // automatic expiry for ambiguous money movement.
-  initiationPayoutId String? @map("initiation_payout_id")
+  initiationPayoutId String?        @map("initiation_payout_id")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  payoutRequests PayoutRequest[]
+  payoutRequests        PayoutRequest[]
+  fenceReleaseApprovals PayoutFenceReleaseApproval[]
 
   @@index([userId, provider, isActive])
   @@index([initiationPayoutId], map: "payout_accounts_initiation_payout_id_idx")
@@ -583,9 +584,9 @@ model WaitStateEvent {
 
   createdAt DateTime @default(now())
 
+  @@unique([waitStateId, eventType])
   @@index([userId, createdAt])
   @@index([deviceId, createdAt])
-  @@unique([waitStateId, eventType])
   @@index([confidence], map: "wait_state_events_confidence_idx")
   @@index([isFalsePositive], map: "wait_state_events_false_positive_idx")
   @@map("wait_state_events")
@@ -702,10 +703,10 @@ model AdReport {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([impressionId, userId])
   @@index([impressionId])
   @@index([userId])
   @@index([creativeId])
-  @@unique([impressionId, userId])
   @@map("ad_reports")
 }
 
@@ -820,37 +821,38 @@ model PlatformLedger {
 // ══════════════════════════════════════════════════════════
 
 model PayoutRequest {
-  id                   String        @id @default(uuid())
-  userId               String
-  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payoutAccountId      String
-  payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Restrict)
-  status               PayoutStatus  @default(draft)
-  requestedAmountMinor BigInt
-  approvedAmountMinor  BigInt?
-  currency             String        @default("USD")
+  id                     String        @id @default(uuid())
+  userId                 String
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payoutAccountId        String
+  payoutAccount          PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Restrict)
+  status                 PayoutStatus  @default(draft)
+  requestedAmountMinor   BigInt
+  approvedAmountMinor    BigInt?
+  currency               String        @default("USD")
   // Client-supplied idempotency key. Scoped to the user so different users'
   // keys cannot collide, and so a replayed request returns the original
   // payout instead of creating a duplicate.
-  idempotencyKey       String?       @map("idempotency_key")
-  reviewerId           String?
-  reviewNote           String?
-  processedAt          DateTime?
-  paidAt               DateTime?
+  idempotencyKey         String?       @map("idempotency_key")
+  reviewerId             String?
+  reviewNote             String?
+  processedAt            DateTime?
+  paidAt                 DateTime?
   // P1.10 reconciliation telemetry: structured attempt history + escalation.
   // The worker records every poll attempt (capped JSON log) and escalates a
   // payout that stays `processing` past the escalation window — including the
   // ambiguous-initiation case (no providerTxId) that previously was silently
   // skipped by the poll loop.
-  reconciliationAttempts Int          @default(0)
-  lastReconciliationAt  DateTime?
-  escalatedAt           DateTime?
-  reconciliationLog     Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  reconciliationAttempts Int           @default(0)
+  lastReconciliationAt   DateTime?
+  escalatedAt            DateTime?
+  reconciliationLog      Json?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
 
-  transactions PayoutTransaction[]
-  allocations  PayoutAllocation[]
+  transactions          PayoutTransaction[]
+  allocations           PayoutAllocation[]
+  fenceReleaseApprovals PayoutFenceReleaseApproval[]
 
   @@unique([userId, idempotencyKey], map: "payout_requests_user_id_idempotency_key_key")
   @@index([userId])
@@ -904,6 +906,40 @@ model PayoutTransaction {
   // Single-column index for txId-only lookups from provider callbacks.
   @@index([providerTxId])
   @@map("payout_transactions")
+}
+
+model PayoutFenceReleaseApproval {
+  id                   String        @id @default(uuid())
+  payoutAccountId      String        @map("payout_account_id")
+  payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Cascade)
+  payoutRequestId      String        @map("payout_request_id")
+  payoutRequest        PayoutRequest @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  requestedAmountMinor BigInt        @map("requested_amount_minor")
+  currency             String
+  // Admin A: the operator who initiated the release request.
+  requesterId          String        @map("requester_id")
+  requesterSessionId   String        @map("requester_session_id")
+  requesterMfaAt       DateTime?     @map("requester_mfa_at") @db.Timestamptz
+  // Admin B: the distinct operator who reviewed and approved/rejected the request.
+  approverId           String?       @map("approver_id")
+  approverSessionId    String?       @map("approver_session_id")
+  approverMfaAt        DateTime?     @map("approver_mfa_at") @db.Timestamptz
+  requestedAt          DateTime      @default(now()) @map("requested_at")
+  approvedAt           DateTime?     @map("approved_at") @db.Timestamptz
+  // Requests expire if not reviewed within a bounded window (default 1 hour).
+  expiresAt            DateTime      @map("expires_at") @db.Timestamptz
+  // 'pending' | 'approved' | 'rejected' | 'expired'
+  decision             String?
+  reason               String?
+  // Supporting evidence / resolution notes (e.g. providerTxId, observed payout status).
+  evidence             Json?
+
+  @@index([payoutAccountId])
+  @@index([payoutRequestId])
+  @@index([requesterId])
+  @@index([approverId])
+  @@index([decision, expiresAt])
+  @@map("payout_fence_release_approvals")
 }
 
 model RecoveryDebtCase {
@@ -1078,15 +1114,15 @@ model WebhookEvent {
 // ══════════════════════════════════════════════════════════
 
 model AuditLog {
-  id         String  @id @default(uuid())
-  actorId    String
-  actorRole  String
-  targetType String
-  targetId   String
-  action     String
-  beforeSnap Json?
-  afterSnap  Json?
-  ipHash     String?
+  id             String  @id @default(uuid())
+  actorId        String
+  actorRole      String
+  targetType     String
+  targetId       String
+  action         String
+  beforeSnap     Json?
+  afterSnap      Json?
+  ipHash         String?
   sourceOutboxId String? @unique @map("source_outbox_id")
 
   createdAt DateTime @default(now())
@@ -1126,10 +1162,10 @@ model AuditOutbox {
   retryCount  Int       @default(0) @map("retry_count")
   maxRetries  Int       @default(10) @map("max_retries")
   lastError   String?   @map("last_error")
-  nextRetryAt DateTime  @db.Timestamptz @map("next_retry_at")
+  nextRetryAt DateTime  @map("next_retry_at") @db.Timestamptz
   processedAt DateTime? @map("processed_at")
   failedAt    DateTime? @map("failed_at")
-  resolvedAt  DateTime? @db.Timestamptz @map("resolved_at")
+  resolvedAt  DateTime? @map("resolved_at") @db.Timestamptz
   resolvedBy  String?   @map("resolved_by")
   resolution  String?   @map("resolution")
   createdAt   DateTime  @default(now()) @map("created_at")

@@ -5,7 +5,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { CampaignService } from '../campaign/campaign.service';
-import { createMockRuntimeConfig } from '../runtime-config/test-helpers';
+import { createMockRuntimeConfig } from '../runtime-config/runtime-config.test-helper';
 import { AdvertiserService, buildReportsDateFilter } from './advertiser.service';
 
 function makePrisma() {

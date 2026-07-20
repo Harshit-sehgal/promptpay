@@ -4,6 +4,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -36,6 +37,7 @@ import {
   TwoFactorSetupDto,
   VerifyEmailConfirmDto,
 } from './dto';
+import { buildJwks } from './jwks';
 import { deriveKeyId } from './jwt-key-id';
 
 function isCredentialFailure(err: unknown): boolean {
@@ -50,26 +52,18 @@ export class AuthController {
     private config: ConfigService,
   ) {}
 
-  @ApiOperation({ summary: 'Public JWKS for access-token verification' })
+  @ApiOperation({
+    summary:
+      'Public JWKS (RFC 7517) for access-token verification. Emits every accepted key (primary + rotation overlap) with full RSA members (n/e).',
+  })
   @Get('.well-known/jwks.json')
+  @Header('Cache-Control', 'public, max-age=300')
   getJwks() {
-    const publicKey = this.config.get<string>('JWT_PUBLIC_KEY');
-    if (!publicKey) {
-      throw new BadRequestException('JWT_PUBLIC_KEY is not configured');
+    try {
+      return buildJwks(this.config);
+    } catch {
+      throw new BadRequestException('JWT_PUBLIC_KEY (or JWT_PUBLIC_KEYS) is not configured');
     }
-    return {
-      keys: [
-        {
-          kty: 'RSA',
-          alg: 'RS256',
-          use: 'sig',
-          kid: deriveKeyId(publicKey),
-          // Strip PEM headers and whitespace to produce a raw base64-encoded
-          // modulus/exponent would require parsing the key. Clients can
-          // instead fetch the PEM-wrapped public key from /auth/public-key.
-        },
-      ],
-    };
   }
 
   @ApiOperation({ summary: 'Public signing key for access-token verification' })

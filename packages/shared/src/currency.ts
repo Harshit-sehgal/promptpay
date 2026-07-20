@@ -286,6 +286,13 @@ export function campaignMinimumBidMinor(code: string | null | undefined): bigint
  * When releasing an initiation fence whose referenced payout meets/exceeds this
  * amount, a second (distinct) approver is required (P1.11). Per-currency so the
  * control means the same economic magnitude across currencies.
+ *
+ * Precedence (highest first):
+ *   1. Global env override: PAYOUT_FENCE_HIGH_VALUE_MINOR
+ *   2. Per-currency env override: HIGH_VALUE_FENCE_<CURRENCY>_MINOR
+ *   3. Per-currency configured policy (CurrencyPolicy.highValueFenceReleaseMinor)
+ *   4. Per-currency safe default map
+ *   5. Fallback safe default (1_000_000 minor units)
  */
 const HIGH_VALUE_FENCE_RELEASE_MINOR: Record<string, number> = {
   USD: 1_000_000, // $10,000
@@ -299,16 +306,24 @@ const HIGH_VALUE_FENCE_RELEASE_MINOR: Record<string, number> = {
 };
 
 export function highValueFenceReleaseMinor(code: string | null | undefined): bigint {
+  const globalEnv = process.env.PAYOUT_FENCE_HIGH_VALUE_MINOR;
+  if (globalEnv && /^\d+$/.test(globalEnv)) return BigInt(globalEnv);
+
+  const upper = code?.toUpperCase();
+  if (upper) {
+    const perCurrencyEnv = process.env[`HIGH_VALUE_FENCE_${upper}_MINOR`];
+    if (perCurrencyEnv && /^\d+$/.test(perCurrencyEnv)) return BigInt(perCurrencyEnv);
+  }
+
   const policy = getCurrencyPolicy(code);
   if (policy?.highValueFenceReleaseMinor != null) {
     return BigInt(policy.highValueFenceReleaseMinor);
   }
-  const upper = code?.toUpperCase();
+
   if (upper && HIGH_VALUE_FENCE_RELEASE_MINOR[upper] != null) {
     return BigInt(HIGH_VALUE_FENCE_RELEASE_MINOR[upper]);
   }
-  const env = process.env.PAYOUT_FENCE_HIGH_VALUE_MINOR;
-  if (env && /^\d+$/.test(env)) return BigInt(env);
+
   return 1_000_000n;
 }
 

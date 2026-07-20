@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createMockRuntimeConfig } from '../runtime-config/test-helpers';
+import { createMockRuntimeConfig } from '../runtime-config/runtime-config.test-helper';
 import { ExtensionService } from './extension.service';
 
 // Pure-logic adversarial tests for the requestAd selection path:
