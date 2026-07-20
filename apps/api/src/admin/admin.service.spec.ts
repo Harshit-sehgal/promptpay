@@ -19,6 +19,7 @@ const mockPrisma: any = {
   $queryRaw: vi.fn().mockResolvedValue([]),
   user: {
     findMany: vi.fn(),
+    findUnique: vi.fn(),
   },
   earningsLedger: {
     groupBy: vi.fn(),
@@ -52,6 +53,11 @@ const mockPrisma: any = {
   },
   payoutAllocation: {
     findMany: vi.fn(),
+  },
+  payoutFenceReleaseApproval: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    update: vi.fn(),
   },
   $transaction: vi.fn(async (callback: any) => callback(mockPrisma)),
 };
@@ -1160,7 +1166,7 @@ describe('AdminService', () => {
       expect(result.lastReconciliationAt).toBe('2026-07-19T12:00:00.000Z');
       expect(result.escalatedAt).toBe('2026-07-18T08:30:00.000Z');
     });
-    it('requires a distinct second approver for high-value fence releases (P1.11)', async () => {
+    it('requires a durable approved two-person approval for high-value fence releases (P0.4)', async () => {
       const account = {
         id: 'pa-1',
         provider: 'wise',
@@ -1184,7 +1190,7 @@ describe('AdminService', () => {
         initiationPayoutId: null,
       });
 
-      // No second approver -> rejected.
+      // No approval id -> rejected.
       await expect(
         service.releasePayoutFence({
           payoutAccountId: 'pa-1',
@@ -1194,34 +1200,342 @@ describe('AdminService', () => {
         }),
       ).rejects.toThrow(/High-value fence release/);
 
-      // Second approver identical to releaser -> rejected.
+      // Approval id missing from DB -> rejected.
+      mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue(null);
       await expect(
         service.releasePayoutFence({
           payoutAccountId: 'pa-1',
           reviewerId: 'admin-1',
           reviewerRole: 'admin',
           reason: 'high value release',
-          secondApproverId: 'admin-1',
+          approvalId: 'approval-ghost',
         }),
-      ).rejects.toThrow(/distinct/);
+      ).rejects.toThrow(/not found/);
 
-      // Distinct second approver -> succeeds and is recorded in the audit.
+      // Approval for a different payout account -> rejected.
+      mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+        id: 'approval-1',
+        payoutAccountId: 'other-pa',
+        payoutRequestId: 'payout-1',
+        decision: 'approved',
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-1',
+          reviewerRole: 'admin',
+          reason: 'high value release',
+          approvalId: 'approval-1',
+        }),
+      ).rejects.toThrow(/does not match the payout account/);
+
+      // Approved, distinct second approver -> succeeds and records the approver.
+      mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+        id: 'approval-1',
+        payoutAccountId: 'pa-1',
+        payoutRequestId: 'payout-1',
+        decision: 'approved',
+        expiresAt: new Date(Date.now() + 60_000),
+        requesterId: 'admin-1',
+        approverId: 'admin-2',
+      });
+
+      // A different admin (admin-3) cannot release even when a valid approved approval exists.
+      await expect(
+        service.releasePayoutFence({
+          payoutAccountId: 'pa-1',
+          reviewerId: 'admin-3',
+          reviewerRole: 'admin',
+          reason: 'high value release by third admin',
+          approvalId: 'approval-1',
+        }),
+      ).rejects.toThrow('same administrator who approved');
+
       const result = await service.releasePayoutFence({
         payoutAccountId: 'pa-1',
-        reviewerId: 'admin-1',
+        reviewerId: 'admin-2',
         reviewerRole: 'admin',
         reason: 'high value release',
-        secondApproverId: 'admin-2',
+        approvalId: 'approval-1',
       });
       expect(result.initiationPayoutId).toBeNull();
       expect(mockAudit.logStrict).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'release_payout_fence',
-          afterSnap: expect.objectContaining({ secondApproverId: 'admin-2' }),
+          afterSnap: expect.objectContaining({
+            secondApproverId: 'admin-2',
+            approvalId: 'approval-1',
+          }),
         }),
         expect.anything(),
       );
     });
+    describe('two-person fence release approval (P0.4)', () => {
+      const activeAdmin = { id: 'admin-1', role: 'admin', status: 'active' };
+      const admin2 = { id: 'admin-2', role: 'admin', status: 'active' };
+
+      it('creates an approval request for a high-value fenced payout', async () => {
+        mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+          id: 'pa-1',
+          userId: 'u1',
+          provider: 'wise',
+          destination: 'wise-dest',
+          initiationPayoutId: 'payout-1',
+          user: { id: 'u1', email: 'dev@example.com' },
+        });
+        mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+          requestedAmountMinor: 50_000_00n,
+          approvedAmountMinor: null,
+          currency: 'USD',
+        });
+        mockPrisma.user.findUnique.mockResolvedValue(activeAdmin);
+        mockPrisma.payoutFenceReleaseApproval.create.mockResolvedValue({
+          id: 'approval-1',
+          payoutAccountId: 'pa-1',
+        });
+
+        const result = await service.requestPayoutFenceRelease({
+          payoutAccountId: 'pa-1',
+          requesterId: 'admin-1',
+          requesterSessionId: 'session-1',
+          requesterMfaAt: new Date(),
+          reason: 'provider confirmed paid, need release',
+        });
+
+        expect(result.payoutAccountId).toBe('pa-1');
+        expect(mockPrisma.payoutFenceReleaseApproval.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              payoutAccountId: 'pa-1',
+              payoutRequestId: 'payout-1',
+              requestedAmountMinor: 50_000_00n,
+              currency: 'USD',
+              requesterId: 'admin-1',
+              requesterSessionId: 'session-1',
+            }),
+          }),
+        );
+      });
+
+      it('rejects an approval request when the account has no active fence', async () => {
+        mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+          id: 'pa-1',
+          initiationPayoutId: null,
+        });
+
+        await expect(
+          service.requestPayoutFenceRelease({
+            payoutAccountId: 'pa-1',
+            requesterId: 'admin-1',
+            requesterSessionId: 'session-1',
+            reason: 'no fence',
+          }),
+        ).rejects.toThrow('does not have an active initiation fence');
+      });
+
+      it('rejects an approval request from a non-admin user', async () => {
+        mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+          id: 'pa-1',
+          initiationPayoutId: 'payout-1',
+        });
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'support-1',
+          role: 'support',
+          status: 'active',
+        });
+
+        await expect(
+          service.requestPayoutFenceRelease({
+            payoutAccountId: 'pa-1',
+            requesterId: 'support-1',
+            requesterSessionId: 'session-1',
+            reason: 'not an admin',
+          }),
+        ).rejects.toThrow('Active administrator privileges are required');
+      });
+
+      it('approves a pending request and releases the fence', async () => {
+        mockPrisma.user.findUnique
+          .mockResolvedValueOnce(admin2)
+          .mockResolvedValueOnce({ id: 'admin-1', role: 'admin', status: 'active' });
+        const approval = {
+          id: 'approval-1',
+          payoutAccountId: 'pa-1',
+          payoutRequestId: 'payout-1',
+          requesterId: 'admin-1',
+          decision: null,
+          expiresAt: new Date(Date.now() + 60_000),
+          reason: 'provider confirmed paid',
+          evidence: null,
+        };
+        // First read in reviewPayoutFenceRelease sees the pending approval; the
+        // second read inside releasePayoutFence expects the persisted approved row.
+        mockPrisma.payoutFenceReleaseApproval.findUnique
+          .mockResolvedValueOnce(approval)
+          .mockResolvedValueOnce({ ...approval, decision: 'approved', approverId: 'admin-2' });
+        mockPrisma.payoutFenceReleaseApproval.update.mockResolvedValue({
+          ...approval,
+          decision: 'approved',
+          approverId: 'admin-2',
+        });
+        mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+          id: 'pa-1',
+          provider: 'wise',
+          destination: 'wise-dest',
+          initiationPayoutId: 'payout-1',
+          user: { id: 'u1', email: 'dev@example.com' },
+        });
+        mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+          status: 'paid',
+          currency: 'USD',
+          approvedAmountMinor: 50_000_00n,
+          requestedAmountMinor: 50_000_00n,
+          reconciliationAttempts: 0,
+          lastReconciliationAt: null,
+          escalatedAt: null,
+        });
+        mockPrisma.payoutAccount.update.mockResolvedValue({
+          id: 'pa-1',
+          initiationPayoutId: null,
+        });
+
+        const result = (await service.reviewPayoutFenceRelease({
+          approvalId: 'approval-1',
+          approverId: 'admin-2',
+          approverRole: 'admin',
+          approverSessionId: 'session-2',
+          decision: 'approved',
+        })) as { released: boolean };
+
+        expect(result.released).toBe(true);
+        expect(mockPrisma.payoutFenceReleaseApproval.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              approverId: 'admin-2',
+              approverSessionId: 'session-2',
+              decision: 'approved',
+            }),
+          }),
+        );
+        expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
+          where: { id: 'pa-1' },
+          data: { initiationPayoutId: null },
+        });
+      });
+
+      it('rejects review when the approver is the same person as the requester', async () => {
+        mockPrisma.user.findUnique.mockResolvedValue(activeAdmin);
+        mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+          id: 'approval-1',
+          requesterId: 'admin-1',
+          decision: null,
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        await expect(
+          service.reviewPayoutFenceRelease({
+            approvalId: 'approval-1',
+            approverId: 'admin-1',
+            approverRole: 'admin',
+            approverSessionId: 'session-1',
+            decision: 'approved',
+          }),
+        ).rejects.toThrow('distinct from the requester');
+      });
+
+      it('rejects review of an already-decided approval', async () => {
+        mockPrisma.user.findUnique.mockResolvedValue(admin2);
+        mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+          id: 'approval-1',
+          requesterId: 'admin-1',
+          decision: 'rejected',
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        await expect(
+          service.reviewPayoutFenceRelease({
+            approvalId: 'approval-1',
+            approverId: 'admin-2',
+            approverRole: 'admin',
+            approverSessionId: 'session-2',
+            decision: 'approved',
+          }),
+        ).rejects.toThrow(/already/);
+      });
+
+      it('rejects an expired approval request and marks it expired', async () => {
+        mockPrisma.user.findUnique.mockResolvedValue(admin2);
+        mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+          id: 'approval-1',
+          requesterId: 'admin-1',
+          decision: null,
+          expiresAt: new Date(Date.now() - 60_000),
+        });
+
+        await expect(
+          service.reviewPayoutFenceRelease({
+            approvalId: 'approval-1',
+            approverId: 'admin-2',
+            approverRole: 'admin',
+            approverSessionId: 'session-2',
+            decision: 'approved',
+          }),
+        ).rejects.toThrow('expired');
+        expect(mockPrisma.payoutFenceReleaseApproval.update).toHaveBeenCalledWith({
+          where: { id: 'approval-1' },
+          data: { decision: 'expired' },
+        });
+      });
+
+      it('does not set approvedAt when the decision is rejected', async () => {
+        mockPrisma.user.findUnique.mockResolvedValue(admin2);
+        mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+          id: 'approval-1',
+          requesterId: 'admin-1',
+          decision: null,
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        await service.reviewPayoutFenceRelease({
+          approvalId: 'approval-1',
+          approverId: 'admin-2',
+          approverRole: 'admin',
+          approverSessionId: 'session-2',
+          decision: 'rejected',
+        });
+
+        expect(mockPrisma.payoutFenceReleaseApproval.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              decision: 'rejected',
+              approvedAt: null,
+            }),
+          }),
+        );
+      });
+
+      it('rejects replay of an already-reviewed approval (race / double-submit)', async () => {
+        mockPrisma.user.findUnique.mockResolvedValue(admin2);
+        mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+          id: 'approval-1',
+          requesterId: 'admin-1',
+          decision: 'approved',
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        await expect(
+          service.reviewPayoutFenceRelease({
+            approvalId: 'approval-1',
+            approverId: 'admin-2',
+            approverRole: 'admin',
+            approverSessionId: 'session-2',
+            decision: 'rejected',
+          }),
+        ).rejects.toThrow(/already/);
+      });
+    });
+
     it('surfaces associated active fraud flags and ledger allocations on fenced accounts (P1.11)', async () => {
       const account = {
         id: 'pa-1',

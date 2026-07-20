@@ -29,6 +29,8 @@ import {
   AdvertiserBalanceExhaustedError,
   advertiserCurrencyLockKey,
   BudgetExhaustedError,
+  classifyWaitState,
+  isVerifiedDetectorSource,
   mergeBlockedCategories,
   ServedAd,
 } from './extension.constants';
@@ -135,6 +137,21 @@ export class ExtensionAdTrait {
       waitStart.confidence < MINIMUM_WAIT_CONFIDENCE ||
       waitStart.isFalsePositive
     ) {
+      return { ad: null, reason: 'low_confidence_wait' };
+    }
+    // P0.1: Re-classify the stored wait state at request time using the
+    // current detector allowlist. A single forged `ai_generation` signal may
+    // still pass the ad-confidence gate above, but it must not reach payment
+    // without corroboration. We recompute here so policy changes (e.g. an
+    // updated allowlist) apply retroactively to existing wait-state rows.
+    const signals = ((waitStart.signals as unknown as WaitSignal[] | null) ?? []).filter(
+      (s): s is WaitSignal => s && typeof s === 'object' && 'type' in s,
+    );
+    const classification = classifyWaitState(
+      signals,
+      isVerifiedDetectorSource(waitStart.detectorVersion),
+    );
+    if (!classification.adEligible) {
       return { ad: null, reason: 'low_confidence_wait' };
     }
     const waitEnd = await this.prisma.waitStateEvent.findFirst({
@@ -604,8 +621,38 @@ export class ExtensionAdTrait {
       where: { userId: impression.userId },
     });
     const trustLevel = trustScore?.level || 'new';
+    // P0.1: Re-classify the original wait state to enforce the payment gate
+    // and apply longer holds for unverified detector sources.
+    const waitStartForImpression = await this.prisma.waitStateEvent.findFirst({
+      where: {
+        userId: impression.userId,
+        deviceId: impression.deviceId,
+        sessionId: impression.sessionId,
+        waitStateId: impression.waitStateId ?? '',
+        eventType: 'wait_state_start',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const waitSignals = (
+      (waitStartForImpression?.signals as unknown as WaitSignal[] | null) ?? []
+    ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
+    const classification = classifyWaitState(
+      waitSignals,
+      isVerifiedDetectorSource(waitStartForImpression?.detectorVersion),
+    );
+    if (!classification.paymentEligible) {
+      await this.invalidateImpressionAndReleaseReservation({
+        impressionId: impression.id,
+        campaignId: impression.campaignId,
+        bidType: impression.campaign.bidType,
+        bidAmountMinor: BigInt(impression.campaign.bidAmountMinor),
+        visibleDurationMs: effectiveDurationMs,
+        reason: 'uncorroborated_wait',
+      });
+      return { qualified: false, impressionId: impression.id, reason: 'uncorroborated_wait' };
+    }
     const split = this.ledger.calculateSplit(BigInt(impression.campaign.bidAmountMinor));
-    const holdDays = this.ledger.getHoldDays(trustLevel);
+    const holdDays = this.ledger.getHoldDays(trustLevel, classification.unverifiedSource);
     // RESTRICTED → holdDays = -1 (indefinite). A negative hold must never
     // produce an `availableAt` in the past (that would immediately mature the
     // earnings and make them payout-eligible, the opposite of the restricted

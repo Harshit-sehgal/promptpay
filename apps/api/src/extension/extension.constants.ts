@@ -29,13 +29,34 @@ export const SIGNAL_WEIGHTS: Record<string, number> = {
   inactivity: 0.05,
 };
 
-/** Minimum confidence for a wait state to be eligible for billing. */
+/** Minimum confidence for a wait state to be eligible for ad serving. */
 export const MINIMUM_WAIT_CONFIDENCE = 0.5;
+
+/** Minimum confidence / corroboration for a wait state to be eligible for payment. */
+export const PAYMENT_CONFIDENCE_THRESHOLD = 0.8;
 
 export interface WaitSignal {
   type: keyof typeof SIGNAL_WEIGHTS;
   details?: string;
 }
+
+export interface WaitClassification {
+  /** The wait state was recorded (any non-empty signal set). */
+  detected: boolean;
+  /** Sufficient confidence to serve a targeted ad. */
+  adEligible: boolean;
+  /** Sufficient corroboration + verified source to credit the developer. */
+  paymentEligible: boolean;
+  /** Max-weight signal score (diagnostic only). */
+  confidence: number;
+  /** The dominant signal type used for the score. */
+  reason: string;
+  /** True if the detector source is NOT on the verified allowlist. */
+  unverifiedSource: boolean;
+}
+
+/** Signals that can be the primary evidence a real productive wait occurred. */
+const PRIMARY_SIGNALS: readonly string[] = ['ai_generation', 'active_task', 'command_execution'];
 
 /**
  * Compute the wait-confidence from a set of signals. Returns the max-weight
@@ -59,6 +80,72 @@ export function computeWaitConfidence(signals: WaitSignal[]): {
     }
   }
   return { confidence: bestWeight, reason: best.type };
+}
+
+/**
+ * Classify a wait state into the three trusted-detection gates:
+ *   - detected: any non-empty signal set
+ *   - adEligible: max signal confidence >= MINIMUM_WAIT_CONFIDENCE
+ *   - paymentEligible: adEligible AND at least one primary signal is
+ *     corroborated by a second distinct signal category
+ *
+ * A modified client that forges a single `ai_generation` signal can still
+ * get an ad served (ad gate), but it cannot earn money because the payment
+ * gate requires corroboration from another signal category. This separates
+ * "detected wait", "eligible for ad", and "eligible for payment".
+ *
+ * @param isVerifiedSource - whether the detector version/source is on the
+ *   operator's verified allowlist. Unverified sources still serve ads if
+ *   confidence is high enough, but earnings are held longer.
+ */
+export function classifyWaitState(
+  signals: WaitSignal[],
+  isVerifiedSource: boolean,
+): WaitClassification {
+  const { confidence, reason } = computeWaitConfidence(signals);
+
+  if (!signals || signals.length === 0) {
+    return {
+      detected: false,
+      adEligible: false,
+      paymentEligible: false,
+      confidence: 0,
+      reason: 'no_signals',
+      unverifiedSource: !isVerifiedSource,
+    };
+  }
+
+  const uniqueTypes = new Set(signals.map((s) => s.type));
+  const hasPrimary = [...uniqueTypes].some((t) => PRIMARY_SIGNALS.includes(t));
+  const hasCorroboration = uniqueTypes.size >= 2;
+
+  const adEligible = hasPrimary && confidence >= MINIMUM_WAIT_CONFIDENCE;
+  const paymentEligible = adEligible && hasCorroboration;
+
+  return {
+    detected: true,
+    adEligible,
+    paymentEligible,
+    confidence,
+    reason,
+    unverifiedSource: !isVerifiedSource,
+  };
+}
+
+/**
+ * Attestation helper: a detector source is considered verified only if its
+ * version appears in the comma-separated `VERIFIED_DETECTOR_VERSIONS` env
+ * variable. The empty/missing default treats all sources as unverified, which
+ * is the safe fail-closed posture for an allowlist. Operators can enable a
+ * known-good version by setting e.g. `VERIFIED_DETECTOR_VERSIONS=1.0.0,1.1.0`.
+ */
+export function isVerifiedDetectorSource(detectorVersion: string | null | undefined): boolean {
+  if (!detectorVersion) return false;
+  const allowlist = (process.env.VERIFIED_DETECTOR_VERSIONS ?? '').split(',').map((v) => v.trim());
+  if (allowlist.length === 0 || (allowlist.length === 1 && allowlist[0] === '')) {
+    return false;
+  }
+  return allowlist.includes(detectorVersion);
 }
 
 export class BudgetExhaustedError extends Error {

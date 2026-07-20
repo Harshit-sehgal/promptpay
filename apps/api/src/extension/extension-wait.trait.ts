@@ -8,9 +8,12 @@ import {
 import { Prisma, ToolTypeEnum } from '@waitlayer/db';
 
 import { PrismaService } from '../config/prisma.service';
+import { FraudService } from '../fraud/fraud.service';
 import { AlertsService } from '../observability/alerts.service';
 import {
+  classifyWaitState,
   computeWaitConfidence,
+  isVerifiedDetectorSource,
   MINIMUM_WAIT_CONFIDENCE,
   SIGNAL_WEIGHTS,
   WAIT_STATE_DURATION_TOLERANCE_SECONDS,
@@ -24,7 +27,7 @@ import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 // now extension.constants.ts, which has no class/trait dependencies, so
 // modules like the health controller can import MINIMUM_WAIT_CONFIDENCE
 // without pulling in the trait class and its transitive NestJS/Prisma deps.
-export { computeWaitConfidence, MINIMUM_WAIT_CONFIDENCE, SIGNAL_WEIGHTS };
+export { classifyWaitState, computeWaitConfidence, MINIMUM_WAIT_CONFIDENCE, SIGNAL_WEIGHTS };
 export type { WaitSignal };
 
 // P1.25 alert spike tuning: how many false-positive reports within the trailing
@@ -35,6 +38,7 @@ const FP_SPIKE_THRESHOLD = 5;
 export class ExtensionWaitTrait {
   declare prisma: PrismaService;
   declare alerts?: AlertsService;
+  declare fraud?: FraudService;
 
   // ── Wait State Events ──
   async recordWaitStateStart(
@@ -107,10 +111,20 @@ export class ExtensionWaitTrait {
       }
       throw new ConflictException('A wait_state_start event already exists for this waitStateId.');
     }
-    const { confidence, reason } = computeWaitConfidence(dto.signals ?? []);
+    const classification = classifyWaitState(
+      dto.signals ?? [],
+      isVerifiedDetectorSource(dto.detectorVersion),
+    );
     // Persist only the signal categories, never the optional human-readable
     // details, so user code/PII never reaches the database.
     const sanitizedSignals = (dto.signals ?? []).map(({ type }) => ({ type }));
+    // Server-side behavioural verification: flag anomalous wait-state patterns
+    // (e.g. repeated identical single-signal submissions) for review. This is
+    // best-effort and non-blocking so a transient anomaly cannot break the
+    // event-recording path.
+    void this.checkAnomalousWaitState?.(userId, dto.deviceId, dto.signals ?? []).catch(
+      () => undefined,
+    );
     try {
       return await this.prisma.waitStateEvent.create({
         data: {
@@ -123,8 +137,8 @@ export class ExtensionWaitTrait {
           signature: dto.signature,
           idempotencyKey: dto.idempotencyKey,
           signals: sanitizedSignals as unknown as Prisma.InputJsonValue,
-          confidence,
-          reason,
+          confidence: classification.confidence,
+          reason: classification.reason,
           detectorVersion: dto.detectorVersion,
         },
       });
@@ -233,6 +247,22 @@ export class ExtensionWaitTrait {
         detectorVersion: start.detectorVersion,
       },
     });
+  }
+
+  /**
+   * Best-effort behavioural verification. Delegates to FraudService to
+   * detect modified clients that submit repeated, invariant signal patterns
+   * (e.g. the same single `ai_generation` signal with identical timing).
+   * This call is intentionally non-blocking: a failure here must not prevent
+   * legitimate wait-state recording.
+   */
+  async checkAnomalousWaitState(
+    userId: string,
+    deviceId: string,
+    signals: WaitSignal[],
+  ): Promise<void> {
+    if (!this.fraud) return;
+    await this.fraud.checkAnomalousWaitSignals(userId, deviceId, signals);
   }
 
   /**

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
+import { Prisma } from '@waitlayer/db';
 import { highValueFenceReleaseMinor } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
@@ -579,14 +580,23 @@ export class AdminPayoutsTrait {
   async reviewPayoutFenceRelease(options: {
     approvalId: string;
     approverId: string;
+    approverRole: string;
     approverSessionId: string;
     approverMfaAt?: Date;
     decision: 'approved' | 'rejected';
     reason?: string;
     evidence?: string;
   }) {
-    const { approvalId, approverId, approverSessionId, approverMfaAt, decision, reason, evidence } =
-      options;
+    const {
+      approvalId,
+      approverId,
+      approverRole,
+      approverSessionId,
+      approverMfaAt,
+      decision,
+      reason,
+      evidence,
+    } = options;
     // Approver must be an active admin.
     await this.requireActiveAdmin(approverId);
     const approval = await this.prisma.payoutFenceReleaseApproval.findUnique({
@@ -615,7 +625,7 @@ export class AdminPayoutsTrait {
         approverSessionId,
         approverMfaAt,
         decision,
-        approvedAt: new Date(),
+        approvedAt: decision === 'approved' ? new Date() : null,
         reason: reason ?? approval.reason,
         evidence: (evidence ??
           (approval.evidence as Prisma.InputJsonValue)) as Prisma.InputJsonValue,
@@ -630,7 +640,7 @@ export class AdminPayoutsTrait {
     const releaseResult = await this.releasePayoutFence({
       payoutAccountId: approval.payoutAccountId,
       reviewerId: approverId,
-      reviewerRole: 'admin',
+      reviewerRole: approverRole,
       reason: reason ?? approval.reason ?? 'approved via two-person release workflow',
       approvalId: approval.id,
     });
@@ -737,6 +747,11 @@ export class AdminPayoutsTrait {
         if (approval.requesterId === reviewerId) {
           throw new BadRequestException(
             'High-value fence release must be performed by the second approver, not the requester',
+          );
+        }
+        if (approval.approverId !== reviewerId) {
+          throw new BadRequestException(
+            'High-value fence release must be performed by the same administrator who approved the release request',
           );
         }
         effectiveApproverId = approval.approverId ?? null;

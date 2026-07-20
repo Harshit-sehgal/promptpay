@@ -475,8 +475,7 @@ export class ReleasePayoutFenceDto {
       'Durable approval request id required for high-value fence releases (P0.4). The request must be in approved state and not expired.',
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(255)
+  @IsUUID()
   approvalId?: string;
 }
 

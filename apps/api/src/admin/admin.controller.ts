@@ -388,7 +388,7 @@ export class AdminController {
     summary: 'Request approval to release a payout account provider-initiation fence',
   })
   @Post('payout-accounts/:id/request-fence-release')
-  @Roles('admin', 'support', 'super_admin')
+  @Roles('admin', 'super_admin')
   requestPayoutFenceRelease(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') requesterId: string,
@@ -407,10 +407,11 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Review a payout fence release approval (approve or reject)' })
   @Post('payout-fence-release-approvals/:id/review')
-  @Roles('admin', 'support', 'super_admin')
+  @Roles('admin', 'super_admin')
   reviewPayoutFenceRelease(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') approverId: string,
+    @CurrentUser('role') approverRole: string,
     @CurrentUser('jti') approverSessionId: string,
     @CurrentUser('mfaAt') approverMfaAt: number | undefined,
     @Body() dto: ApprovePayoutFenceReleaseDto,
@@ -418,6 +419,7 @@ export class AdminController {
     return this.service.reviewPayoutFenceRelease({
       approvalId: id,
       approverId,
+      approverRole,
       approverSessionId,
       approverMfaAt: approverMfaAt ? new Date(approverMfaAt * 1000) : undefined,
       decision: dto.decision,
@@ -428,7 +430,7 @@ export class AdminController {
 
   @ApiOperation({ summary: 'Release a payout account provider-initiation fence' })
   @Post('payout-accounts/:id/release-fence')
-  @Roles('admin', 'support', 'super_admin')
+  @Roles('admin', 'super_admin')
   releasePayoutFence(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') reviewerId: string,
