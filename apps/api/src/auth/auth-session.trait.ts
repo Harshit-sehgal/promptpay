@@ -131,7 +131,8 @@ export class AuthSessionTrait {
         algorithms: ['RS256'],
         issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
         audience: this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client'),
-        ignoreExpiration: true,
+        // Expiration is enforced: a stale or expired refresh token cannot be
+        // used to perform a logout, matching the refresh endpoint's contract.
       });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
@@ -144,10 +145,16 @@ export class AuthSessionTrait {
       select: { role: true },
     });
     await this.prisma.$transaction(async (tx) => {
-      await tx.session.updateMany({
-        where: { id: payload.jti!, userId: payload.sub },
+      // Fail-closed: only revoke a session that exists and is not already
+      // revoked. A missing or already-revoked session means the token is
+      // stale/replayed and must be rejected.
+      const result = await tx.session.updateMany({
+        where: { id: payload.jti!, userId: payload.sub, revoked: false },
         data: { revoked: true },
       });
+      if (result.count === 0) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
       await tx.auditLog.create({
         data: {
           actorId: payload.sub!,
