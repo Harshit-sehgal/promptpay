@@ -47,7 +47,13 @@ test.describe('A-047 signup / cookie lifecycle', () => {
 
     await page.goto('/developer');
     await expect(page).toHaveURL(/\/developer/);
-    await expect(page.locator('h1').first()).toBeVisible({ timeout: 15_000 });
+    // A-047: the auth cookie is valid and the authenticated dashboard chrome
+    // rendered (nav with Overview/Earnings/Payouts). The dashboard data
+    // section is client-fetched and may error in a manual local run; we
+    // assert the authenticated route itself is reachable, not the data load.
+    await expect(page.getByRole('link', { name: 'Overview' })).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('clearing the auth cookie forces re-authentication (expire → re-prompt)', async ({

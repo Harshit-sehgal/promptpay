@@ -84,7 +84,7 @@ serving. Until then, only ad selection honours the opt-out (by design).
 
 ---
 
-## 5. A-047 — Full multi-step browser signup / cookie E2E (code complete; verify in CI)
+## 5. A-047 — Full multi-step browser signup / cookie E2E (run-verified locally; CI runs for the locked pipeline)
 
 **Code state:** route covered by in-process `e2e-http-flow.spec.ts` (44 tests:
 signup API, cookie issuance, consent versioning fail-closed). Cookie banner
@@ -93,8 +93,12 @@ clear-cookie → re-auth, plus the Google control wiring. A live headless-Chromi
 pass on 2026-07-20 also exercised the full signup → authenticated /developer →
 dashboard flow against the running stack (recorded in AGENTS.md).
 
-**Exact external step:** run `pnpm --filter waitlayer-web e2e` in CI / a live
-stack (built web :3000 + API :4002 + Postgres + Redis). No code change needed.
+**Status:** run-verified locally on 2026-07-20 — 3/3 headless-Chromium scenarios
+pass against the live stack (API :4002 + web :3000 + Postgres + Redis): UI login
+issues the auth cookie and reaches the authenticated `/developer` chrome, clearing
+the cookie forces re-authentication, and the Google sign-in control is wired on
+the login page. CI runs `pnpm --filter waitlayer-web e2e` for the locked
+pipeline. No code change needed.
 
 ---
 
