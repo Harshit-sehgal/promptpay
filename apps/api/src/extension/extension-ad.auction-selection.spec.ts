@@ -101,7 +101,7 @@ function basePrisma(campaigns: any[]) {
       })),
     },
     user: { findUnique: vi.fn(async () => ({ country: null })) },
-    adImpression: { findMany: vi.fn(async () => []) },
+    adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
     campaign: { findMany: vi.fn(async () => campaigns) },
   } as any;
 }

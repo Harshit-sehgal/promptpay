@@ -14,6 +14,7 @@ describe('ExtensionDeviceReportTrait.reportAd retry safety', () => {
     };
     const prisma = {
       adImpression: {
+        findFirst: vi.fn().mockResolvedValue(null),
         findUnique: vi
           .fn()
           .mockResolvedValueOnce(impression)

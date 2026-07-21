@@ -20,6 +20,7 @@ import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { PLATFORM_BUCKETS } from '../ledger/ledger.constants';
 import { LedgerService } from '../ledger/ledger.service';
+import { MetricsService } from '../observability/metrics.service';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { AuctionService } from './auction.service';
 import { normalizeCountryCode } from './country-targeting';
@@ -45,10 +46,21 @@ import { formatHHMMInZone, isTimeInRange } from './quiet-hours';
  * or a rejected promise escape into the ad-serving critical path. These signals
  * are advisory (they create flags for review); a transient failure or an
  * incompletely-mocked collaborator must never prevent serving an ad or
- * recording an impression.
+ * recording an impression. Errors are logged and surfaced to metrics so a
+ * failing fraud check is observable rather than silently swallowed.
  */
-function nonBlocking(task: Promise<unknown> | undefined): void {
-  if (task) void task.catch(() => undefined);
+function nonBlocking(
+  task: Promise<unknown> | undefined,
+  logger: Logger,
+  metrics: MetricsService,
+  label: string,
+): void {
+  if (!task) return;
+  void task.catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn({ label, error: message }, 'Non-blocking fraud signal failed');
+    metrics.increment(`fraud_signal_error{label=${label}}`);
+  });
 }
 
 export class ExtensionAdTrait {
@@ -58,6 +70,7 @@ export class ExtensionAdTrait {
   declare fraud: FraudService;
   declare compliance: ComplianceService;
   declare runtimeConfig: RuntimeConfigService;
+  declare metrics: MetricsService;
   declare adCache: LRUCache<string, { ad: ServedAd }>;
   private auctionService?: AuctionService;
   declare logger: Logger;
@@ -141,6 +154,22 @@ export class ExtensionAdTrait {
     ) {
       return { ad: null, reason: 'low_confidence_wait' };
     }
+
+    // P1 durable idempotency: before serving a new ad, look for an prior
+    // response keyed by idempotencyKey or waitStateId. This runs after the
+    // wait-state gate so a replay still must be valid, but before the auction
+    // so we do not reserve budget twice.
+    const durable = await this.lookupDurableAdResponse(userId, dto);
+    if (durable) {
+      if (durable.status === 'conflict') {
+        throw new ConflictException(durable.reason);
+      }
+      this.adCache.set(adIdempotencyCacheKey(userId, dto.deviceId, dto.idempotencyKey), {
+        ad: durable.ad,
+      });
+      this.adCache.set(adCacheKey(userId, dto.deviceId, dto.waitStateId), { ad: durable.ad });
+      return { ad: durable.ad };
+    }
     // P0.1: Re-classify the stored wait state at request time using the
     // current detector allowlist. A single forged `ai_generation` signal may
     // still pass the ad-confidence gate above, but it must not reach payment
@@ -219,7 +248,12 @@ export class ExtensionAdTrait {
       return { ad: null, reason: 'country_blocked' };
     }
     // Non-blocking fraud signal: country-device mismatch detection
-    nonBlocking(this.fraud.checkCountryDeviceChange?.(userId, dto.deviceId, userCountry ?? null));
+    nonBlocking(
+      this.fraud.checkCountryDeviceChange?.(userId, dto.deviceId, userCountry ?? null),
+      this.logger,
+      this.metrics,
+      'checkCountryDeviceChange',
+    );
     // Idempotency: return same ad if we already served one for this
     // user/device/waitStateId. Keys are NAMESPACED by userId + deviceId so two
     // different users who collide on a client-generated waitStateId or
@@ -275,6 +309,87 @@ export class ExtensionAdTrait {
    * critical section: it's read-mostly and the authoritative cap gate lives
    * in claimImpression's transaction.
    */
+  /**
+   * Durable distributed idempotency lookup for ad responses.
+   *
+   * If an impression exists for this idempotency key or wait state and the
+   * stored request fields match the current request, reconstruct and return the
+   * original `ServedAd` (including the raw impression token). If the same key
+   * was used with a different request, return a conflict marker so the caller
+   * can throw 409. Returns `null` when no prior response exists.
+   */
+  private async lookupDurableAdResponse(
+    userId: string,
+    dto: {
+      deviceId: string;
+      sessionId: string;
+      waitStateId: string;
+      idempotencyKey: string;
+    },
+  ): Promise<{ status: 'ad'; ad: ServedAd } | { status: 'conflict'; reason: string } | null> {
+    const existing = await this.prisma.adImpression.findFirst({
+      where: {
+        userId,
+        OR: [{ idempotencyKey: dto.idempotencyKey }, { waitStateId: dto.waitStateId }],
+      },
+      include: {
+        campaign: { select: { id: true } },
+        creative: {
+          select: {
+            id: true,
+            title: true,
+            sponsoredMessage: true,
+            displayDomain: true,
+            destinationUrl: true,
+            ctaText: true,
+          },
+        },
+      },
+    });
+    if (!existing) return null;
+
+    const sameIdempotencyKey = existing.idempotencyKey === dto.idempotencyKey;
+    const sameWaitState = existing.waitStateId === dto.waitStateId;
+
+    if (sameIdempotencyKey) {
+      if (
+        existing.deviceId !== dto.deviceId ||
+        existing.sessionId !== dto.sessionId ||
+        existing.waitStateId !== dto.waitStateId
+      ) {
+        return {
+          status: 'conflict',
+          reason: 'Idempotency key already used with different request',
+        };
+      }
+    }
+
+    if (sameWaitState && existing.idempotencyKey !== dto.idempotencyKey) {
+      return {
+        status: 'conflict',
+        reason: 'Wait state already served with a different idempotency key',
+      };
+    }
+
+    if (!existing.impressionToken || !existing.creative) {
+      // Legacy rows without the stored token cannot be reconstructed.
+      return null;
+    }
+
+    const ad: ServedAd = {
+      impressionToken: existing.impressionToken,
+      campaignId: existing.campaignId,
+      creativeId: existing.creativeId,
+      title: existing.creative.title,
+      message: existing.creative.sponsoredMessage,
+      label: 'Sponsored',
+      displayDomain: existing.creative.displayDomain ?? '',
+      destinationUrl: existing.creative.destinationUrl,
+      ctaText: existing.creative.ctaText ?? null,
+    };
+    return { status: 'ad', ad };
+  }
+
   async recentBillableCampaignIds(userId: string, oneHourAgo: Date): Promise<string[]> {
     const recent = await this.prisma.adImpression.findMany({
       where: { userId, isBillable: true, createdAt: { gte: oneHourAgo } },
@@ -304,6 +419,7 @@ export class ExtensionAdTrait {
     idempotencyKey: string;
     campaignId: string;
     creativeId: string;
+    impressionToken: string;
     impressionTokenHash: string;
     bidType: BidType;
     bidAmountMinor: bigint;
@@ -385,6 +501,7 @@ export class ExtensionAdTrait {
             userId: args.userId,
             deviceId: args.deviceId,
             sessionId: args.sessionId,
+            impressionToken: args.impressionToken,
             impressionTokenHash: args.impressionTokenHash,
             waitStateId: args.waitStateId,
             idempotencyKey: args.idempotencyKey,
@@ -589,9 +706,24 @@ export class ExtensionAdTrait {
     // do not block the current impression (the rate-limit gate above is the
     // blocking check). Fire-and-forget so the ad-serving critical path is not
     // slowed by multi-query pattern analysis.
-    nonBlocking(this.fraud.checkImpossibleVolume?.(impression.userId));
-    nonBlocking(this.fraud.checkAutomatedPattern?.(impression.userId));
-    nonBlocking(this.fraud.checkRapidEarningSpike?.(impression.userId));
+    nonBlocking(
+      this.fraud.checkImpossibleVolume?.(impression.userId),
+      this.logger,
+      this.metrics,
+      'checkImpossibleVolume',
+    );
+    nonBlocking(
+      this.fraud.checkAutomatedPattern?.(impression.userId),
+      this.logger,
+      this.metrics,
+      'checkAutomatedPattern',
+    );
+    nonBlocking(
+      this.fraud.checkRapidEarningSpike?.(impression.userId),
+      this.logger,
+      this.metrics,
+      'checkRapidEarningSpike',
+    );
     const isBillable = rateCheck.allowed;
     if (!isBillable) {
       const reason = rateCheck.reason || 'fraud_detected';

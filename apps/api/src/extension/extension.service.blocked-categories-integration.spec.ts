@@ -139,7 +139,7 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
-      adImpression: { findMany: vi.fn(async () => []) },
+      adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: {
         findMany: vi.fn(async () => [financeCampaign, gamingCampaign]),
       },
@@ -185,7 +185,7 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
-      adImpression: { findMany: vi.fn(async () => []) },
+      adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: { findMany: vi.fn(async () => [gamingCampaign]) },
     } as any;
 
@@ -228,7 +228,7 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
-      adImpression: { findMany: vi.fn(async () => []) },
+      adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: { findMany: vi.fn(async () => [financeCampaign]) },
     } as any;
 
@@ -271,7 +271,7 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
-      adImpression: { findMany: vi.fn(async () => []) },
+      adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: { findMany: vi.fn(async () => [gamingCampaign]) },
     } as any;
     const { service, claimSpy } = buildService(prisma);

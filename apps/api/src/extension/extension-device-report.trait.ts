@@ -9,7 +9,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-import { Prisma, ToolTypeEnum } from '@waitlayer/db';
+import { ToolTypeEnum } from '@waitlayer/db';
 import { PROHIBITED_DATA_FIELDS, verifySignature } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
@@ -139,46 +139,46 @@ export class ExtensionDeviceReportTrait {
       });
       return { ...updated, eventSecret: rotatedSecret };
     }
-    // Cross-user instructions: the @@unique([fingerprintHash]) constraint at
-    // the schema level means two different users CANNOT register the same
-    // machine fingerprint concurrently — the second create hits P2002 (unique
-    // violation). We catch that and translate it into a "duplicate_device"
-    // fraud flag + audit entry. This is the DB-level TOCTOU guard that
-    // supersedes the prior JS-level check, which raced between two users
-    // simultaneously registering the same fingerprint.
+    // Cross-user fingerprint handling (P1). The global unique constraint on
+    // fingerprintHash has been removed. Instead of blocking registration, a
+    // cross-user collision is treated as a high-severity fraud signal, the
+    // new account's trust level is restricted, and the case is queued for
+    // manual review via the fraud flag. The device is still created so the
+    // legitimate (or attacker) flow is not hard-blocked at registration time.
+    const existingOwner = await this.prisma.device.findFirst({
+      where: { fingerprintHash: dto.fingerprintHash, NOT: { userId } },
+      select: { userId: true, id: true },
+    });
     const eventSecret = crypto.randomBytes(32).toString('hex');
-    let device;
-    try {
-      device = await this.prisma.device.create({
-        data: {
-          userId,
-          fingerprintHash: dto.fingerprintHash,
-          eventSecret,
-          toolType: dto.toolType as ToolTypeEnum,
-          extensionVersion: dto.extensionVersion,
-          platform: dto.platform,
-          publicKey: dto.publicKey,
-        },
+    const device = await this.prisma.device.create({
+      data: {
+        userId,
+        fingerprintHash: dto.fingerprintHash,
+        eventSecret,
+        toolType: dto.toolType as ToolTypeEnum,
+        extensionVersion: dto.extensionVersion,
+        platform: dto.platform,
+        publicKey: dto.publicKey,
+      },
+    });
+    if (existingOwner) {
+      // Flag the collision and restrict the new account's trust immediately.
+      // Fire-and-forget fraud/audit paths must not fail registration.
+      void this.fraud.checkDuplicateDevice(dto.fingerprintHash, userId).catch(() => undefined);
+      void this.prisma.user
+        .updateMany({
+          where: { id: userId, trustLevel: { not: 'restricted' } },
+          data: { trustLevel: 'restricted' },
+        })
+        .catch(() => undefined);
+      void this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'duplicate_device_allowed_restricted',
+        targetType: 'device',
+        targetId: device.id,
+        afterSnap: { fingerprintHash: dto.fingerprintHash, existingUserId: existingOwner.userId },
       });
-    } catch (err: unknown) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        // Look up the existing owner of this fingerprint to record fraud.
-        // Use the FraudService.createFlag path so the flag gets dedup locking,
-        // critical-severity earnings hold, and trust recompute.
-        await this.fraud.checkDuplicateDevice(dto.fingerprintHash, userId);
-        this.audit.log({
-          actorId: userId,
-          actorRole: 'developer',
-          action: 'duplicate_device_rejected',
-          targetType: 'device',
-          targetId: dto.fingerprintHash,
-          afterSnap: { fingerprintHash: dto.fingerprintHash },
-        });
-        throw new ForbiddenException(
-          'This device fingerprint is already registered to another account. Each device may only be linked to one WaitLayer account.',
-        );
-      }
-      throw err;
     }
     // Non-blocking fraud signals on successful device registration
     void this.fraud

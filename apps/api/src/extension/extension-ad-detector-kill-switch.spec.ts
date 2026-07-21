@@ -11,6 +11,9 @@ describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', 
       waitStateEvent: {
         findFirst: vi.fn(),
       },
+      adImpression: {
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
     };
     const compliance = {
       isConsented: vi.fn().mockResolvedValue(false),
@@ -30,6 +33,8 @@ describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', 
       runtimeConfig,
       enforcePrivacyOn: vi.fn(),
       verifyDeviceSignature: vi.fn().mockResolvedValue(true),
+      metrics: { increment: vi.fn() } as unknown as Record<string, unknown>,
+      logger: { warn: vi.fn(), log: vi.fn(), error: vi.fn() } as unknown as Record<string, unknown>,
       ...rest,
     });
     return { prisma, compliance, runtimeConfig, trait };

@@ -66,6 +66,7 @@ export interface ClaimImpressionArgs {
   idempotencyKey: string;
   campaignId: string;
   creativeId: string;
+  impressionToken: string;
   impressionTokenHash: string;
   bidType: BidType;
   bidAmountMinor: bigint;
@@ -334,6 +335,7 @@ export class AuctionService {
             idempotencyKey,
             campaignId: selected.id,
             creativeId: creative.id,
+            impressionToken,
             impressionTokenHash,
             bidType: selected.bidType,
             bidAmountMinor: BigInt(selected.bidAmountMinor),

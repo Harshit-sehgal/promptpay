@@ -38,6 +38,7 @@ function makeImpression(bidType: 'cpm' | 'cpc' = 'cpm') {
 function makePrisma() {
   const prisma: any = {
     adImpression: {
+      findFirst: vi.fn().mockResolvedValue(null),
       findUnique: vi.fn(),
       update: vi.fn(async (args: any) => args.data),
       updateMany: vi.fn(async () => ({ count: 1 })),

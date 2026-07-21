@@ -302,12 +302,11 @@ model Device {
   recoveryTokens  DeviceRecoveryToken[]
 
   @@unique([userId, fingerprintHash])
-  // Cross-user uniqueness — without this constraint two users could
-  // register the same physical machine's fingerprint simultaneously, and
-  // the JS-level duplicate check would race (TOCTOU). The DB-level
-  // constraint enforces it atomically: P2002 is caught and treated as a
-  // duplicate-detected fraud event.
-  @@unique([fingerprintHash])
+  // Cross-user fingerprint collisions are now handled as high-severity fraud
+  // signals with manual review rather than hard registration blocks. The
+  // global unique constraint on fingerprintHash was removed in migration
+  // 20260721130000; the code explicitly checks for other users with the same
+  // fingerprint, creates a fraud flag, and restricts the new account's trust.
   @@index([userId])
   @@map("devices")
 }
@@ -366,7 +365,7 @@ model UserSettings {
 model PayoutAccount {
   id                   String         @id @default(uuid())
   userId               String
-  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   provider             PayoutProvider
   destination          String
   currency             String         @default("USD")
@@ -571,9 +570,9 @@ model ToolIntegration {
 model WaitStateEvent {
   id                      String       @id @default(uuid())
   userId                  String
-  user                    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                    User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   deviceId                String
-  device                  Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  device                  Device       @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   sessionId               String
   eventType               EventType
   waitStateId             String
@@ -626,15 +625,19 @@ model AdImpression {
   creative            AdCreative @relation(fields: [creativeId], references: [id], onDelete: Restrict)
   userId              String
   // Soft-delete policy: the platform never hard-deletes User rows — the
-  // deleteAccount path sets status='deleted' and anonymizes PII. The
-  // Cascade here is the legacy schema's safety net for any future
-  // hard-delete, but the policy above makes it deliberately unreachable.
-  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // deleteAccount path sets status='deleted' and anonymizes PII.
+  // Impressions are an immutable audit trail, so RESTRICT prevents any
+  // future hard-delete path from silently removing them.
+  user                User       @relation(fields: [userId], references: [id], onDelete: Restrict)
   deviceId            String
-  device              Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  device              Device     @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   sessionId           String
   waitStateId         String?
   idempotencyKey      String?    @unique
+  // Raw impression token returned to the client. Stored so durable idempotency
+  // can reconstruct the original ad response on retry. Hashed variant below is
+  // the authoritative lookup for render/qualify/click endpoints.
+  impressionToken     String?    @unique @map("impression_token")
   impressionTokenHash String     @unique
   renderedAt          DateTime?
   qualifiedAt         DateTime?  @db.Timestamptz
@@ -667,11 +670,11 @@ model AdImpression {
 model AdClick {
   id                 String       @id @default(uuid())
   impressionId       String       @unique
-  impression         AdImpression @relation(fields: [impressionId], references: [id], onDelete: Cascade)
+  impression         AdImpression @relation(fields: [impressionId], references: [id], onDelete: Restrict)
   userId             String
-  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   deviceId           String
-  device             Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  device             Device       @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   sessionId          String
   // Click-level billing evidence — must not cascade-delete when the parent
   // Campaign or AdCreative is removed (keep audit trail). RESTRICT is explicit
@@ -705,7 +708,7 @@ model AdClick {
 model AdReport {
   id           String       @id @default(uuid())
   impressionId String
-  impression   AdImpression @relation(fields: [impressionId], references: [id], onDelete: Cascade)
+  impression   AdImpression @relation(fields: [impressionId], references: [id], onDelete: Restrict)
   creativeId   String
   // AdReports are user-generated complaints — keep audit trail intact when
   // the underlying creative is removed. RESTRICT prevents cascading a clean
@@ -713,7 +716,7 @@ model AdReport {
   // of what users reported against it.
   creative     AdCreative   @relation(fields: [creativeId], references: [id], onDelete: Restrict)
   userId       String
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   reason       String
   details      String?
   resolution   String?
@@ -737,7 +740,7 @@ model AdReport {
 model EarningsLedger {
   id             String          @id @default(uuid())
   userId         String
-  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User            @relation(fields: [userId], references: [id], onDelete: Restrict)
   campaignId     String?
   campaign       Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   impressionId   String?
@@ -783,7 +786,7 @@ model EarningsLedger {
 model AdvertiserLedger {
   id                    String          @id @default(uuid())
   advertiserId          String
-  advertiser            Advertiser      @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
+  advertiser            Advertiser      @relation(fields: [advertiserId], references: [id], onDelete: Restrict)
   campaignId            String?
   // FK to Campaign with `SetNull` — when a campaign is archived/deleted the
   // ledger row survives but its `campaignId` becomes NULL. The ledger is the
@@ -843,7 +846,7 @@ model PlatformLedger {
 model PayoutRequest {
   id                     String        @id @default(uuid())
   userId                 String
-  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   payoutAccountId        String
   payoutAccount          PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Restrict)
   status                 PayoutStatus  @default(draft)
@@ -889,7 +892,7 @@ model PayoutRequest {
 model PayoutAllocation {
   id              String         @id @default(uuid())
   payoutRequestId String
-  payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Restrict)
   earningsEntryId String
   earningsEntry   EarningsLedger @relation(fields: [earningsEntryId], references: [id], onDelete: Restrict)
   amountMinor     BigInt
@@ -906,7 +909,7 @@ model PayoutAllocation {
 model PayoutTransaction {
   id              String         @id @default(uuid())
   payoutRequestId String
-  payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Restrict)
   provider        PayoutProvider
   providerTxId    String?
   status          PayoutStatus   @default(processing)
@@ -931,9 +934,9 @@ model PayoutTransaction {
 model PayoutFenceReleaseApproval {
   id                   String        @id @default(uuid())
   payoutAccountId      String        @map("payout_account_id")
-  payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Cascade)
+  payoutAccount        PayoutAccount @relation(fields: [payoutAccountId], references: [id], onDelete: Restrict)
   payoutRequestId      String        @map("payout_request_id")
-  payoutRequest        PayoutRequest @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+  payoutRequest        PayoutRequest @relation(fields: [payoutRequestId], references: [id], onDelete: Restrict)
   requestedAmountMinor BigInt        @map("requested_amount_minor")
   currency             String
   // Admin A: the operator who initiated the release request.
@@ -1249,7 +1252,7 @@ model ReferralReward {
   referralId  String
   referral    Referral     @relation(fields: [referralId], references: [id], onDelete: Cascade)
   userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Restrict)
   amountMinor BigInt
   currency    String       @default("USD")
   status      LedgerStatus @default(estimated)
