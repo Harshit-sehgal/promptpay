@@ -100,11 +100,12 @@ Default shown where one exists.
 
 ## Payout security
 
-| Variable                            | Req | Default | Purpose                                                                          |
-| ----------------------------------- | --- | ------- | -------------------------------------------------------------------------------- |
-| `PAYOUT_REQUIRE_2FA`                | opt | —       | `true` requires MFA-enrolled account to request payouts.                         |
-| `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —       | If > 0, newly-added/changed payout destinations require MFA for that many hours. |
-| `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —       | Strict JSON provider -> `available`/`coming_soon` API gate.                      |
+| Variable                            | Req | Default | Purpose                                                                                                        |
+| ----------------------------------- | --- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| `PAYOUT_ENCRYPTION_KEY`             | opt | —       | Base64-encoded 32-byte AES-256-GCM key for encrypting payout destinations at rest. **Required in production.** |
+| `PAYOUT_REQUIRE_2FA`                | opt | —       | `true` requires MFA-enrolled account to request payouts.                                                       |
+| `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —       | If > 0, newly-added/changed payout destinations require MFA for that many hours.                               |
+| `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —       | Strict JSON provider -> `available`/`coming_soon` API gate.                                                    |
 
 ## Payout providers (payouts — later / dev stubs)
 

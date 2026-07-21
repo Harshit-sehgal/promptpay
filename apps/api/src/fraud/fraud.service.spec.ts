@@ -565,7 +565,13 @@ describe('FraudService', () => {
       mockPrisma.payoutRequest.count.mockResolvedValue(0);
       mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
 
-      await service.checkSharedPayoutDestination('u-1', 'shared@email.com');
+      const destHmac = 'deadbeef1234'; // deterministic HMAC of 'shared@email.com'
+      await service.checkSharedPayoutDestination('u-1', 'shared@email.com', destHmac);
+      expect(mockPrisma.payoutAccount.count).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ destinationHmac: destHmac }),
+        }),
+      );
       expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -578,7 +584,13 @@ describe('FraudService', () => {
 
     it('does not flag when the destination is unique to the user', async () => {
       mockPrisma.payoutAccount.count.mockResolvedValue(0);
-      await service.checkSharedPayoutDestination('u-1', 'unique@email.com');
+      await service.checkSharedPayoutDestination('u-1', 'unique@email.com', 'unique-hmac');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+
+    it('returns early when no destinationHmac is provided', async () => {
+      await service.checkSharedPayoutDestination('u-1', 'test@email.com');
+      expect(mockPrisma.payoutAccount.count).not.toHaveBeenCalled();
       expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
     });
   });

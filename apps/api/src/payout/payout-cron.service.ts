@@ -5,6 +5,10 @@ import { Prisma } from '@waitlayer/db';
 import { PayoutStatus } from '@waitlayer/shared';
 
 import { acquireCronLease } from '../common/utils/cron-lease';
+import {
+  decryptPayoutDestination,
+  isEncryptedDestination,
+} from '../common/utils/payout-encryption';
 import { providerBreaker, withTimeout } from '../common/utils/provider-resilience';
 import { PrismaService } from '../config/prisma.service';
 import { AlertsService } from '../observability/alerts.service';
@@ -235,7 +239,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
                   withTimeout(
                     () =>
                       refFn(payout.id, {
-                        destination: payout.payoutAccount.destination,
+                        destination: this.decryptDest(payout.payoutAccount.destination),
                       }),
                     `provider checkStatusByReference ${payout.payoutAccount.provider}`,
                   ),
@@ -306,7 +310,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
               withTimeout(
                 () =>
                   provider.checkStatus(providerTxId ?? payout.id, {
-                    destination: payout.payoutAccount.destination,
+                    destination: this.decryptDest(payout.payoutAccount.destination),
                     externalReference: payout.id,
                   }),
                 `provider checkStatus ${payout.payoutAccount.provider}`,
@@ -388,7 +392,6 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
       this.metrics.increment('payout_poll_checked', checked);
       this.metrics.increment('payout_poll_completed', completed);
       this.metrics.increment('payout_poll_failed', failedCount);
-
       return { checked, completed, failed: failedCount };
     } catch (err) {
       this.logger.error(`Payout polling cron failed: ${err instanceof Error ? err.message : err}`);
@@ -396,5 +399,15 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
     } finally {
       this.pollInFlight = false;
     }
+  }
+
+  /**
+   * Decrypt the stored payout destination. Legacy destinations stored before
+   * encryption was introduced have no 'v1:' prefix and are passed through as-is.
+   */
+  private decryptDest(destination: string): string {
+    return isEncryptedDestination(destination)
+      ? decryptPayoutDestination(destination)
+      : destination;
   }
 }

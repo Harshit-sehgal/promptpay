@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@waitlayer/db';
 import { PAYOUT, primaryCurrency } from '@waitlayer/shared';
 
+import { safeDisplayDestination } from '../common/utils/payout-encryption';
 import { PrismaService } from '../config/prisma.service';
 import {
   AVAILABLE_ENTRIES_DEFAULT_LIMIT,
@@ -150,7 +151,10 @@ export class PayoutSummaryTrait {
     // misleading `currency: 'USD'` / `$0` balance.
     const currency = primaryCurrency(availableBalanceByCurrency);
     return {
-      payoutAccounts: accounts,
+      payoutAccounts: (accounts as Array<Record<string, unknown>>).map((account) => ({
+        ...account,
+        destination: safeDisplayDestination(account.destination as string | null | undefined),
+      })),
       availableBalanceMinor: availableBalanceByCurrency[currency] ?? 0n,
       availableBalanceByCurrency,
       minimumThresholdMinor: BigInt(PAYOUT.MINIMUM_THRESHOLD_MINOR),

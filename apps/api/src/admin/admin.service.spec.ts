@@ -777,7 +777,7 @@ describe('AdminService', () => {
         'dev@example.com',
         expect.objectContaining({
           provider: 'wise',
-          destination: 'wise-dest',
+          destination: 'wis***',
           currency: 'USD',
           actorRole: 'admin',
           reason: 'suspected takeover',
@@ -1342,13 +1342,19 @@ describe('AdminService', () => {
           initiationPayoutId: 'payout-1',
           user: { id: 'u1', email: 'dev@example.com' },
         });
-        mockPrisma.user.findUnique.mockResolvedValue({ id: 'admin-1', role: 'admin', status: 'active' });
+        mockPrisma.user.findUnique.mockResolvedValue({
+          id: 'admin-1',
+          role: 'admin',
+          status: 'active',
+        });
         mockPrisma.payoutRequest.findUnique.mockResolvedValue({
           requestedAmountMinor: 50_000_00n,
           approvedAmountMinor: 50_000_00n,
           currency: 'USD',
         });
-        mockPrisma.payoutFenceReleaseApproval.findFirst.mockResolvedValue({ id: 'approval-existing' });
+        mockPrisma.payoutFenceReleaseApproval.findFirst.mockResolvedValue({
+          id: 'approval-existing',
+        });
 
         await expect(
           service.requestPayoutFenceRelease({

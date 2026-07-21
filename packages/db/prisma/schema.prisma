@@ -364,27 +364,31 @@ model UserSettings {
 // ══════════════════════════════════════════════════════════
 
 model PayoutAccount {
-  id                 String         @id @default(uuid())
-  userId             String
-  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider           PayoutProvider
-  destination        String
-  currency           String         @default("USD")
-  isVerified         Boolean        @default(false)
-  isActive           Boolean        @default(true)
+  id                   String         @id @default(uuid())
+  userId               String
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider             PayoutProvider
+  destination          String
+  currency             String         @default("USD")
+  isVerified           Boolean        @default(false)
+  isActive             Boolean        @default(true)
   // Deterministic HMAC of the destination for duplicate/fraud matching.
   // Computed server-side during addPayoutMethod. Used by
   // checkSharedPayoutDestination to detect shared destinations without
   // decrypting every account. Normalized to lowercase+trim before hashing.
-  destinationHmac    String?        @unique @map("destination_hmac")
+  destinationHmac      String?        @unique @map("destination_hmac")
   // Emergency freeze: operator-initiated block on a verified payout
   // destination. A frozen account cannot be used for payouts until an
   // admin explicitly unfreezes it, even if it remains verified and active.
-  isFrozen           Boolean        @default(false) @map("is_frozen")
+  isFrozen             Boolean        @default(false) @map("is_frozen")
   // Durable fence for an outbound provider call. It is cleared only after the
   // referenced payout reaches a reconciled outcome; there is intentionally no
   // automatic expiry for ambiguous money movement.
-  initiationPayoutId String?        @map("initiation_payout_id")
+  initiationPayoutId   String?        @map("initiation_payout_id")
+  // One-shot backfill tracker: set when a legacy plaintext destination has
+  // been encrypted. Null for new accounts (already encrypted) and unmigrated
+  // legacy accounts. Managed by scripts/encrypt-legacy-payout-destinations.mjs.
+  encryptionMigratedAt DateTime?      @map("encryption_migrated_at") @db.Timestamptz
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

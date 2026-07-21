@@ -1407,10 +1407,54 @@ completed it. All fixes verified against live Postgres (:5432/:5433) + Redis.
   `apps/web/src/instrumentation.ts` `register()` would make misconfig fail at
   boot, but changes runtime startup semantics — left as a deliberate
   follow-up, not a defect.
-- The `PayoutFenceReleaseApproval` table is schema-only for now (no API code
-  references it yet) — it is the persistence layer for the in-progress P1.11
-  upgrade from parameter-based `secondApproverId` to a durable two-person
-  approval-request workflow.
+
+## 2026-07-21 — Payout destination encryption at rest (P0.8)
+
+### What was implemented
+
+All payout destinations (email addresses, Stripe account IDs, manual refs) are
+now encrypted at rest using **AES-256-GCM** with a random IV. The encrypted
+format is `v1:base64(iv + ciphertext + authTag)`. A deterministic **HMAC** is
+stored in the new `destinationHmac` column for duplicate/fraud matching without
+decrypting every account. Audit snapshots and API responses return **masked**
+values (e.g. `dev***@example.com`, `acct_***stuv`) instead of the raw
+destination or the encrypted ciphertext.
+
+### Files changed (11 files, +129/-39)
+
+| File                                                  | Change                                                                                                    |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `apps/api/src/common/utils/payout-encryption.ts`      | NEW — AES-256-GCM encrypt/decrypt, HMAC, masking, `safeDisplayDestination`, `tryDecryptPayoutDestination` |
+| `apps/api/src/common/utils/payout-encryption.spec.ts` | NEW — 22 tests (round-trip, HMAC, masking, backward-compat, safe display)                                 |
+| `apps/api/src/payout/payout-method.trait.ts`          | Encrypts destination + computes HMAC on `addPayoutMethod` and `createStripeConnectOnboarding`             |
+| `apps/api/src/payout/payout-summary.trait.ts`         | `getPayoutInfo` returns masked destinations in API responses                                              |
+| `apps/api/src/payout/payout-request.trait.ts`         | Decrypts destination before `provider.initiate()` with legacy backward compat                             |
+| `apps/api/src/payout/payout-cron.service.ts`          | `decryptDest` uses `isEncryptedDestination`; decrypts before provider `checkStatus`                       |
+| `apps/api/src/fraud/fraud.service.ts`                 | `checkSharedPayoutDestination` queries by `destinationHmac`                                               |
+| `apps/api/src/fraud/fraud.service.spec.ts`            | Updated to pass `destinationHmac` to fraud check                                                          |
+| `apps/api/src/admin/admin-payouts.trait.ts`           | All 7 audit snapshot `destination` refs use `safeDisplayDestination`                                      |
+| `apps/api/src/admin/admin.service.spec.ts`            | Updated frozen-alert test to expect masked destination                                                    |
+| `packages/config/src/index.ts`                        | `PAYOUT_ENCRYPTION_KEY` added to Zod schema                                                               |
+| `docs/ENV_REFERENCE.md`                               | `PAYOUT_ENCRYPTION_KEY` documented in payout security section                                             |
+| `packages/db/prisma/schema.prisma`                    | Added `destinationHmac` + `encryptionMigratedAt` to `PayoutAccount`                                       |
+| `packages/db/prisma/migrations/20260721210000_*`      | NEW — backfill migration (adds `encryption_migrated_at` column + index)                                   |
+| `scripts/encrypt-legacy-payout-destinations.mjs`      | NEW — one-shot script to encrypt existing plaintext destinations                                          |
+
+### Quality gates (post-fix)
+
+| Gate                | Result     |
+| ------------------- | ---------- |
+| `pnpm typecheck`    | 14/14 ✅   |
+| Encryption tests    | 22/22 ✅   |
+| Payout tests        | 200/200 ✅ |
+| Fraud + Admin tests | 149/149 ✅ |
+
+### Operator action required
+
+- Set `PAYOUT_ENCRYPTION_KEY` in production to a base64-encoded 32-byte key
+  (generate with `openssl rand -base64 32`).
+- Run `node scripts/encrypt-legacy-payout-destinations.mjs` to encrypt any
+  existing plaintext destinations after deploying the code change.
 
 ## 2026-07-21 — Staging workflow CI fixes (P0 CI/staging repair)
 

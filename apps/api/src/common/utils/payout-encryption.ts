@@ -1,5 +1,20 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypto';
 
+// ═══════════════════════════════════════════════════════════════════
+// Payout destination encryption at rest (P0.8)
+//
+// All payout destinations (email addresses, Stripe account IDs, etc.)
+// are encrypted using AES-256-GCM with a random IV before storage.
+// The encrypted format is `v1:base64(iv + ciphertext + authTag)`.
+//
+// A deterministic HMAC is stored in `destinationHmac` for duplicate/
+// fraud matching without needing to decrypt every account.
+//
+// The encryption key is derived from PAYOUT_ENCRYPTION_KEY environment
+// variable. In production, this must be a base64-encoded 32-byte key.
+// In dev/test, a deterministic fallback is used.
+// ═══════════════════════════════════════════════════════════════════
+
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96 bits recommended for GCM
 const AUTH_TAG_LENGTH = 16;
@@ -80,7 +95,11 @@ export function decryptPayoutDestination(encrypted: string): string {
   const decipher = createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
 
-  let decrypted = decipher.update(ciphertext, undefined as unknown as Buffer, 'utf8');
+  let decrypted = decipher.update(
+    ciphertext as unknown as string,
+    undefined,
+    'utf8',
+  ) as unknown as string;
   decrypted += decipher.final('utf8');
   return decrypted;
 }
@@ -111,10 +130,11 @@ export function hmacPayoutDestination(destination: string): string {
  *   'acct_1AbCdEfGhIjK'    → 'acct_***IjK'
  *   'manual-dest-wallet-001' → 'manual-***001'
  */
-export function maskPayoutDestination(destination: string): string {
+export function maskPayoutDestination(destination: string | null | undefined): string {
   if (!destination) return '';
 
   const trimmed = destination.trim();
+  if (!trimmed) return '';
 
   // Email: prefix***@domain
   const atIndex = trimmed.indexOf('@');
@@ -139,7 +159,7 @@ export function maskPayoutDestination(destination: string): string {
   }
 
   // Short strings: show only first 3 chars
-  if (trimmed.length > 6) {
+  if (trimmed.length >= 6) {
     return `${trimmed.slice(0, 3)}***`;
   }
 
@@ -152,4 +172,31 @@ export function maskPayoutDestination(destination: string): string {
  */
 export function isEncryptedDestination(destination: string): boolean {
   return destination.startsWith('v1:');
+}
+
+/**
+ * Safely produce a masked display value for a payout destination.
+ * Decrypts encrypted destinations (v1: prefix), then masks them.
+ * Legacy plaintext destinations are masked directly.
+ * If decryption fails (wrong key, tampered data), returns '[encrypted]'.
+ */
+export function safeDisplayDestination(destination: string | null | undefined): string {
+  if (!destination) return '';
+  try {
+    const decrypted = isEncryptedDestination(destination)
+      ? decryptPayoutDestination(destination)
+      : destination;
+    return maskPayoutDestination(decrypted);
+  } catch {
+    // Cannot decrypt — likely wrong key or tampered ciphertext.
+    // Return a safe placeholder instead of the raw encrypted blob.
+    return '[encrypted]';
+  }
+}
+
+/**
+ * Decrypt a destination if encrypted; pass through legacy plaintext.
+ */
+export function tryDecryptPayoutDestination(destination: string): string {
+  return isEncryptedDestination(destination) ? decryptPayoutDestination(destination) : destination;
 }

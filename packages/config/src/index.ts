@@ -179,6 +179,10 @@ const envSchema = z
     // from silently repointing payouts to a fresh destination. Off (0) by
     // default so existing developer flows are unaffected until enabled.
     PAYOUT_DESTINATION_COOLDOWN_HOURS: z.coerce.number().int().min(0).max(720).default(0),
+    // AES-256-GCM encryption key for payout destinations stored at rest.
+    // Expected as a base64-encoded 32-byte (256-bit) key. Required in production
+    // so a database-only leak does not expose raw payout destinations.
+    PAYOUT_ENCRYPTION_KEY: z.string().optional(),
     ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     // A-030: server-side mirror of the web's NEXT_PUBLIC_WAITLAYER_PAYOUT_
     // PROVIDER_STATUS gate. JSON map provider -> 'available' | 'coming_soon'.

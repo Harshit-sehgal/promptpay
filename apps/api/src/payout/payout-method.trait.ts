@@ -283,11 +283,14 @@ export class PayoutMethodTrait {
         where: { userId, provider: 'stripe_connect', isActive: true },
         data: { isActive: false },
       });
+      const encryptedConnectDest = encryptPayoutDestination(accountId);
+      const connectDestHmac = hmacPayoutDestination(accountId);
       const created = await tx.payoutAccount.create({
         data: {
           userId,
           provider: 'stripe_connect',
-          destination: accountId,
+          destination: encryptedConnectDest,
+          destinationHmac: connectDestHmac,
           currency,
           isVerified: false,
         },

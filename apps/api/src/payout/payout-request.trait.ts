@@ -848,6 +848,15 @@ export class PayoutRequestTrait {
     let retainFenceForReconciliation = false;
     try {
       const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
+      // Decrypt the stored destination before passing it to the provider.
+      // Destinations are encrypted at rest using AES-256-GCM; the raw value
+      // is only decrypted in memory for the provider call. Legacy destinations
+      // stored before encryption was introduced have no 'v1:' prefix and are
+      // passed through as-is.
+      const rawDest = payout.payoutAccount.destination;
+      const decryptedDestination = rawDest.startsWith('v1:')
+        ? decryptPayoutDestination(rawDest)
+        : rawDest;
       let result: { providerTxId: string; status: string };
       try {
         result = await providerBreaker.call(`initiate:${payout.payoutAccount.provider}`, () =>
@@ -855,7 +864,7 @@ export class PayoutRequestTrait {
             () =>
               provider.initiate({
                 payoutRequestId: payout.id,
-                destination: payout.payoutAccount.destination,
+                destination: decryptedDestination,
                 amountMinor: expectedAmount,
                 currency: payout.currency,
               }),
