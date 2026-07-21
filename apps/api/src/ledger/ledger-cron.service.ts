@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from './ledger.service';
@@ -22,6 +23,7 @@ export class LedgerCronService implements OnApplicationBootstrap, OnModuleDestro
   ) {}
 
   async onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting earnings maturation cron service...');
     // Startup must not block application readiness.
     void this.runMaturation().catch((error: unknown) => {

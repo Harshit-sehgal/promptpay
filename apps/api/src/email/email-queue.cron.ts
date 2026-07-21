@@ -3,6 +3,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 
 import { Prisma } from '@waitlayer/db';
 
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
@@ -59,6 +60,7 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
   ) {}
 
   async onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting email queue processing cron...');
     // Fire-and-forget startup run, then poll every minute.
     void this.processQueue().catch((err: unknown) => {

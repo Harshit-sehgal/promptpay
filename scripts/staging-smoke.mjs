@@ -239,29 +239,40 @@ async function main() {
           fail('advertiser profile was not provisioned by campaign creation');
         } else {
           advertiserId = advProfile.id;
-          await prisma.advertiserLedger.create({
-            data: {
-              advertiserId,
-              currency: 'USD',
-              entryType: 'credit',
-              status: 'confirmed',
-              amountMinor: 100_000n,
-              idempotencyKey: `staging-smoke-fund-${Date.now()}`,
-              description: 'staging-smoke seed funding (replaces live Stripe until #38)',
-            },
+          // Use the staging-only admin faucet instead of writing directly to the
+          // advertiser ledger. This keeps the smoke test on the public API
+          // contract and avoids direct DB inserts for financial state.
+          // NOTE: the deployed staging API must have ENABLE_STAGING_FAUCET=true.
+          const faucetKey = `staging-smoke-fund-${crypto.randomUUID()}`;
+          const faucet = await api('POST', '/admin/staging/advertiser-credit', adminToken, {
+            userId: advertiser.id,
+            // BigInt cannot be serialized by JSON.stringify; send as a string.
+            amountMinor: '100000',
+            currency: 'USD',
+            idempotencyKey: faucetKey,
           });
-          ok('advertiser funded with confirmed staging credit (DB seed)');
+          if (faucet.status >= 400) {
+            fail(`advertiser faucet -> HTTP ${faucet.status}: ${faucet.text}`);
+          } else {
+            ok('advertiser funded with confirmed staging credit via admin faucet');
+          }
         }
       }
 
       // 5. Submit + approve; approval must ACTIVATE the funded campaign.
       if (campaignId) {
-        const submit = await api('POST', `/advertiser/campaigns/${campaignId}/submit`, advToken, {});
+        const submit = await api(
+          'POST',
+          `/advertiser/campaigns/${campaignId}/submit`,
+          advToken,
+          {},
+        );
         if (submit.status >= 400) fail(`submit campaign -> HTTP ${submit.status}: ${submit.text}`);
         const approve = await api('POST', `/admin/campaigns/${campaignId}/approve`, adminToken, {
           reason: 'staging smoke',
         });
-        if (approve.status >= 400) fail(`approve campaign -> HTTP ${approve.status}: ${approve.text}`);
+        if (approve.status >= 400)
+          fail(`approve campaign -> HTTP ${approve.status}: ${approve.text}`);
         const campaignRow = await prisma.campaign.findUnique({ where: { id: campaignId } });
         if (campaignRow?.status !== 'active' || !campaignRow.activatedAt) {
           fail(
@@ -313,8 +324,20 @@ async function main() {
         // same evidence flow that production clients produce.
         const now = Date.now();
         const rawEvidence = [
-          { type: 'active_task', sourceType: 'observed', adapterId: 'vscode.task', timestamp: now, correlationId: waitStateId },
-          { type: 'command_execution', sourceType: 'observed', adapterId: 'vscode.terminal', timestamp: now + 1, correlationId: waitStateId },
+          {
+            type: 'active_task',
+            sourceType: 'observed',
+            adapterId: 'vscode.task',
+            timestamp: now,
+            correlationId: waitStateId,
+          },
+          {
+            type: 'command_execution',
+            sourceType: 'observed',
+            adapterId: 'vscode.terminal',
+            timestamp: now + 1,
+            correlationId: waitStateId,
+          },
         ];
         const evidence = rawEvidence.map((item) => {
           const evidencePayload = { ...item, detectorVersion, waitStateId, sessionId };
@@ -365,7 +388,8 @@ async function main() {
           renderedAt: new Date().toISOString(),
           idempotencyKey: `staging-ren-${randomUUID()}`,
         });
-        if (rendered.status >= 400) fail(`ad rendered -> HTTP ${rendered.status}: ${rendered.text}`);
+        if (rendered.status >= 400)
+          fail(`ad rendered -> HTTP ${rendered.status}: ${rendered.text}`);
         else ok('rendered event recorded; waiting minimum visible duration');
         await new Promise((r) => setTimeout(r, 5_500));
 
@@ -437,7 +461,9 @@ async function main() {
           );
         }
         if (!hardFailures) {
-          ok(`ledger split verified (dev=${earnedMinor}, platform=${platformTotal}, debit=${advDebit?.amountMinor})`);
+          ok(
+            `ledger split verified (dev=${earnedMinor}, platform=${platformTotal}, debit=${advDebit?.amountMinor})`,
+          );
         }
       }
 
@@ -445,7 +471,12 @@ async function main() {
       // period is days/weeks; the payout path requires confirmed entries).
       if (earnedMinor > 0n) {
         const matured = await prisma.earningsLedger.updateMany({
-          where: { userId: developer.id, entryType: 'credit', currency: 'USD', status: { not: 'paid' } },
+          where: {
+            userId: developer.id,
+            entryType: 'credit',
+            currency: 'USD',
+            status: { not: 'paid' },
+          },
           data: { status: 'confirmed', availableAt: null },
         });
         if (matured.count === 0) fail('no earning row could be advanced to confirmed');
@@ -470,7 +501,12 @@ async function main() {
             fail(`request payout (${earnedMinor} minor) -> HTTP ${payout.status}: ${payout.text}`);
           } else {
             const payoutId = payout.json?.id;
-            const approvePayout = await api('POST', `/admin/payouts/${payoutId}/approve`, adminToken, {});
+            const approvePayout = await api(
+              'POST',
+              `/admin/payouts/${payoutId}/approve`,
+              adminToken,
+              {},
+            );
             if (approvePayout.status >= 400) {
               fail(`approve payout -> HTTP ${approvePayout.status}: ${approvePayout.text}`);
             }
@@ -496,7 +532,9 @@ async function main() {
               fail(`payout in unexpected state '${payoutRow?.status}' after process`);
             }
             if (!hardFailures) {
-              ok(`payout reconciliation verified (${allocations.length} allocation(s), state=${payoutRow?.status})`);
+              ok(
+                `payout reconciliation verified (${allocations.length} allocation(s), state=${payoutRow?.status})`,
+              );
             }
           }
         }
@@ -517,7 +555,9 @@ async function main() {
         'alert{event=payout_paid_without_provider_tx',
       ];
       const fired = critical.filter((c) => {
-        const m = text.match(new RegExp(`${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\{[^}]*\\}\\s+(\\d+)`));
+        const m = text.match(
+          new RegExp(`${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\{[^}]*\\}\\s+(\\d+)`),
+        );
         return m && Number(m[1]) > 0;
       });
       if (fired.length) fail(`critical alerts fired in staging: ${fired.join(', ')}`);
@@ -531,9 +571,7 @@ async function main() {
     console.error(`\nstaging-smoke FAILED with ${hardFailures} hard failure(s)`);
     process.exit(1);
   }
-  console.log(
-    `\nstaging-smoke PASSED (${softWarnings} warning(s), non-blocking)`,
-  );
+  console.log(`\nstaging-smoke PASSED (${softWarnings} warning(s), non-blocking)`);
 }
 
 main().catch((err) => {

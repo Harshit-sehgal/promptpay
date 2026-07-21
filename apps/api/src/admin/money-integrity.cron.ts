@@ -3,6 +3,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 import { ConfigService } from '@nestjs/config';
 
 import { AuditService } from '../audit/audit.service';
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
@@ -53,6 +54,7 @@ export class MoneyIntegrityCronService implements OnApplicationBootstrap, OnModu
   ) {}
 
   onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.intervalId = setInterval(() => void this.tick(), MoneyIntegrityCronService.INTERVAL_MS);
     // Run once shortly after boot so a fresh deploy surfaces any pre-existing
     // drift without waiting a full interval.

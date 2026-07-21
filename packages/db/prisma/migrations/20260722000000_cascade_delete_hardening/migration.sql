@@ -79,13 +79,13 @@ ALTER TABLE "payout_accounts" ADD CONSTRAINT "payout_accounts_userId_fkey"
   FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- payout_fence_release_approvals: payout audit trail
-ALTER TABLE "payout_fence_release_approvals" DROP CONSTRAINT IF EXISTS "payout_fence_release_approvals_payoutAccountId_fkey";
-ALTER TABLE "payout_fence_release_approvals" ADD CONSTRAINT "payout_fence_release_approvals_payoutAccountId_fkey"
-  FOREIGN KEY ("payoutAccountId") REFERENCES "payout_accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "payout_fence_release_approvals" DROP CONSTRAINT IF EXISTS "payout_fence_release_approvals_payout_account_id_fkey";
+ALTER TABLE "payout_fence_release_approvals" ADD CONSTRAINT "payout_fence_release_approvals_payout_account_id_fkey"
+  FOREIGN KEY ("payout_account_id") REFERENCES "payout_accounts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-ALTER TABLE "payout_fence_release_approvals" DROP CONSTRAINT IF EXISTS "payout_fence_release_approvals_payoutRequestId_fkey";
-ALTER TABLE "payout_fence_release_approvals" ADD CONSTRAINT "payout_fence_release_approvals_payoutRequestId_fkey"
-  FOREIGN KEY ("payoutRequestId") REFERENCES "payout_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "payout_fence_release_approvals" DROP CONSTRAINT IF EXISTS "payout_fence_release_approvals_payout_request_id_fkey";
+ALTER TABLE "payout_fence_release_approvals" ADD CONSTRAINT "payout_fence_release_approvals_payout_request_id_fkey"
+  FOREIGN KEY ("payout_request_id") REFERENCES "payout_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- referral_rewards: immutable referral money records
 ALTER TABLE "referral_rewards" DROP CONSTRAINT IF EXISTS "referral_rewards_userId_fkey";

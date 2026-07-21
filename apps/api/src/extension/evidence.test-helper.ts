@@ -35,8 +35,8 @@ export function makeTestEvidence(
 
 /**
  * Create signed billable evidence items for a specific wait state start,
- * signed with the provided device secret. Produces two distinct observed
- * primary evidence types (ai_generation + command_execution) so the
+ * signed with the provided device secret. Produces the two currently supported
+ * observed primary evidence types (active_task + command_execution) so the
  * server-side classifyWaitState returns paymentEligible: true.
  */
 export function createSignedBillableEvidence(
@@ -47,9 +47,9 @@ export function createSignedBillableEvidence(
   const now = Date.now();
   const items: Array<Omit<DetectorEvidence, 'signature'>> = [
     {
-      type: 'ai_generation' as EvidenceSignalType,
+      type: 'active_task' as EvidenceSignalType,
       sourceType: 'observed',
-      adapterId: 'test.adapter.ai',
+      adapterId: 'vscode.task',
       detectorVersion: DETECTOR_VERSION,
       timestamp: now - 100,
       waitStateId,
@@ -59,7 +59,7 @@ export function createSignedBillableEvidence(
     {
       type: 'command_execution' as EvidenceSignalType,
       sourceType: 'observed',
-      adapterId: 'test.adapter.cmd',
+      adapterId: 'vscode.terminal',
       detectorVersion: DETECTOR_VERSION,
       timestamp: now,
       waitStateId,

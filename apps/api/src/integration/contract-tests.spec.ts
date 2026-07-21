@@ -100,6 +100,13 @@ describe('API Contract Tests', () => {
     await app.init();
     prisma = app.get(PrismaService);
     await cleanDb(prisma);
+    // Contract coverage includes the billable response shape. Enable the
+    // otherwise fail-closed settlement gate only in this reset test database.
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'wait', target: 'earnings' } },
+      create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated contract test' },
+    });
 
     // Seed an admin directly in the DB. Public self-service signup rejects
     // privileged roles (SIGNUP_ALLOWED_ROLES = developer, advertiser); the

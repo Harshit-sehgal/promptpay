@@ -3,6 +3,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 
 import { AuditService } from '../audit/audit.service';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
 
@@ -42,6 +43,7 @@ export class CampaignSpendGuardCron implements OnApplicationBootstrap, OnModuleD
   ) {}
 
   onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting campaign spend guard cron...');
     this.intervalId = setInterval(() => {
       void this.tick();

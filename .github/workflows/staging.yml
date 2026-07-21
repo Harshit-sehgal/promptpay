@@ -55,6 +55,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
+    outputs:
+      api_digest: ${{ steps.staging-images.outputs.api_digest }}
+      web_digest: ${{ steps.staging-images.outputs.web_digest }}
     env:
       DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
       JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
@@ -73,6 +76,33 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
+      - name: Build workspace packages
+        # Smoke test imports built @waitlayer/shared and @waitlayer/db packages,
+        # so they must be compiled before the script runs.
+        run: pnpm run build
+      - name: Validate staging deployment configuration
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+          STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        run: |
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_HOST STAGING_USER STAGING_DEPLOY_KEY STAGING_KNOWN_HOSTS STAGING_DEPLOY_PATH; do
+            if [ -z "${!required}" ]; then
+              echo "$required secret is required for an actual staging release" >&2
+              exit 1
+            fi
+          done
+      - name: Log in to container registry
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+        run: echo "$REGISTRY_PASS" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
       - name: Build API + web images for staging
         run: docker compose -f docker-compose.yml build api web
         env:
@@ -80,31 +110,58 @@ jobs:
           # Never emit buildx provenance/SBOM attestations (they record
           # build-arg values) — P0.8 defense-in-depth.
           BUILDX_NO_DEFAULT_ATTESTATIONS: '1'
+          WAITLAYER_API_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-api:staging-${{ github.sha }}
+          WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:staging-${{ github.sha }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}/api/v1
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.STAGING_GOOGLE_CLIENT_ID }}
-      - name: Run staging smoke test
-        run: pnpm --filter waitlayer-api exec node scripts/staging-smoke.mjs
-
-      # Push images to registry so promote-production can pull them on a
-      # potentially different runner (GitHub Actions runners are ephemeral
-      # and images built here won't exist on a different machine).
       - name: Resolve and push staging images to registry
         id: staging-images
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
         run: |
-          API_IMG=$(docker compose -f docker-compose.yml config --images | grep -- '-api$' | head -1)
-          WEB_IMG=$(docker compose -f docker-compose.yml config --images | grep -- '-web$' | head -1)
-          test -n "$API_IMG" || { echo "API image name could not be resolved"; exit 1; }
-          test -n "$WEB_IMG" || { echo "Web image name could not be resolved"; exit 1; }
+          API_IMG="$REGISTRY/waitlayer-api:staging-$GITHUB_SHA"
+          WEB_IMG="$REGISTRY/waitlayer-web:staging-$GITHUB_SHA"
+          docker push "$API_IMG"
+          docker push "$WEB_IMG"
+          API_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$API_IMG")
+          WEB_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$WEB_IMG")
+          test -n "$API_DIGEST" || { echo "API image digest could not be resolved" >&2; exit 1; }
+          test -n "$WEB_DIGEST" || { echo "Web image digest could not be resolved" >&2; exit 1; }
           echo "api_image=$API_IMG" >> "$GITHUB_OUTPUT"
           echo "web_image=$WEB_IMG" >> "$GITHUB_OUTPUT"
-          echo "Staging images: $API_IMG, $WEB_IMG"
-          # Push to registry with staging tag:
-          # docker tag "$API_IMG" "$REGISTRY/waitlayer-api:staging-${GITHUB_SHA:0:12}"
-          # docker tag "$WEB_IMG" "$REGISTRY/waitlayer-web:staging-${GITHUB_SHA:0:12}"
-          # docker push "$REGISTRY/waitlayer-api:staging-${GITHUB_SHA:0:12}"
-          # docker push "$REGISTRY/waitlayer-web:staging-${GITHUB_SHA:0:12}"
-          echo "Registry push command (uncomment + configure in production):"
-          echo "  REGISTRY=\${{ secrets.CONTAINER_REGISTRY }}"
+          echo "api_digest=$API_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "web_digest=$WEB_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Pushed staging images by digest: $API_DIGEST, $WEB_DIGEST"
+      - name: Deploy exact staging image digests
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+          STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          API_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
+          WEB_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
+        run: |
+          KEY_FILE="$RUNNER_TEMP/staging_deploy_key"
+          KNOWN_HOSTS_FILE="$RUNNER_TEMP/staging_known_hosts"
+          printf '%s\n' "$STAGING_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$STAGING_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
+          printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
+            "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
+          ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
+            "set -e; cd '$STAGING_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export ENABLE_STAGING_FAUCET=true; docker compose pull && docker compose up -d --wait"
+      - name: Run staging smoke test against the deployed digest
+        run: node scripts/staging-smoke.mjs
+        env:
+          ENABLE_STAGING_FAUCET: 'true'
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
 
   # Final approval gate before production. Requires the `production` environment
   # to have required reviewers configured, so a second human sign-off is
@@ -126,42 +183,65 @@ jobs:
       - name: Promote production images (pull same digest as staging, tag, push, deploy)
         id: promote
         env:
-          # Uncomment and set these secrets in GitHub repo Settings > Secrets:
-          # REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
-          # Format: ghcr.io/your-org or your-registry.azurecr.io
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+          PROD_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PROD_USER: ${{ secrets.PRODUCTION_USER }}
+          PROD_DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+          PROD_KNOWN_HOSTS: ${{ secrets.PRODUCTION_KNOWN_HOSTS }}
+          PROD_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          STAGING_API_DIGEST: ${{ needs.staging-smoke.outputs.api_digest }}
+          STAGING_WEB_DIGEST: ${{ needs.staging-smoke.outputs.web_digest }}
         run: |
-          SHA="${GITHUB_SHA:0:12}"
-          # Images were pushed to the registry by staging-smoke with tag
-          # staging-<SHA>. Pull the exact same digest onto this runner.
-          # REGISTRY="${{ secrets.CONTAINER_REGISTRY }}"
-          # STAGING_API="$REGISTRY/waitlayer-api:staging-$SHA"
-          # STAGING_WEB="$REGISTRY/waitlayer-web:staging-$SHA"
-          # docker pull "$STAGING_API"
-          # docker pull "$STAGING_WEB"
-          # PROD_API="$REGISTRY/waitlayer-api:production-$SHA"
-          # PROD_WEB="$REGISTRY/waitlayer-web:production-$SHA"
-          # PROD_LATEST="$REGISTRY/waitlayer-api:production-latest"
-          # WEB_LATEST="$REGISTRY/waitlayer-web:production-latest"
-          # docker tag "$STAGING_API" "$PROD_API"
-          # docker tag "$STAGING_WEB" "$PROD_WEB"
-          # docker tag "$PROD_API" "$PROD_LATEST"
-          # docker tag "$PROD_WEB" "$WEB_LATEST"
-          # docker push "$PROD_API"
-          # docker push "$PROD_WEB"
-          # docker push "$PROD_LATEST"
-          # docker push "$WEB_LATEST"
-          echo "=== Production image promotion ==="
-          echo "Commit: $SHA"
-          echo "Uncomment the registry pull/tag/push steps above and configure"
-          echo "CONTAINER_REGISTRY secret. Then deploy with:"
-          echo "  kubectl set image deployment/waitlayer-api"
-          echo "  kubectl set image deployment/waitlayer-web"
-          echo "  helm upgrade waitlayer --set image.tag=production-$SHA"
+          SHA="$GITHUB_SHA"
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS PROD_HOST PROD_USER PROD_DEPLOY_KEY PROD_KNOWN_HOSTS PROD_DEPLOY_PATH STAGING_API_DIGEST STAGING_WEB_DIGEST; do
+            if [ -z "${!required}" ]; then
+              echo "$required secret or staging output is required for production promotion" >&2
+              exit 1
+            fi
+          done
+
+          PROD_API_TAG="$REGISTRY/waitlayer-api:production-$SHA"
+          PROD_WEB_TAG="$REGISTRY/waitlayer-web:production-$SHA"
+          PROD_API_LATEST="$REGISTRY/waitlayer-api:production-latest"
+          PROD_WEB_LATEST="$REGISTRY/waitlayer-web:production-latest"
+
+          echo "Logging in to container registry $REGISTRY ..."
+          echo "$REGISTRY_PASS" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+
+          echo "Pulling the exact staging digests and tagging for production ..."
+          docker pull "$STAGING_API_DIGEST"
+          docker pull "$STAGING_WEB_DIGEST"
+          docker tag "$STAGING_API_DIGEST" "$PROD_API_TAG"
+          docker tag "$STAGING_WEB_DIGEST" "$PROD_WEB_TAG"
+          docker tag "$PROD_API_TAG" "$PROD_API_LATEST"
+          docker tag "$PROD_WEB_TAG" "$PROD_WEB_LATEST"
+          docker push "$PROD_API_TAG"
+          docker push "$PROD_WEB_TAG"
+          docker push "$PROD_API_LATEST"
+          docker push "$PROD_WEB_LATEST"
+
+          echo "Deploying the smoke-tested digests to production host $PROD_HOST ..."
+          KEY_FILE="$RUNNER_TEMP/production_deploy_key"
+          KNOWN_HOSTS_FILE="$RUNNER_TEMP/production_known_hosts"
+          printf '%s\n' "$PROD_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$PROD_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
+          printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
+          ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "set -e; cd '$PROD_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$STAGING_API_DIGEST'; export WAITLAYER_WEB_IMAGE='$STAGING_WEB_DIGEST'; docker compose pull && docker compose up -d --wait"
+
+          echo "=== Production image promotion complete ==="
+          echo "Commit: ${SHA:0:12}"
+          echo "Deployed to: $PROD_USER@$PROD_HOST:$PROD_DEPLOY_PATH"
       - name: Post-deploy canary — verify production API is live
         run: |
           for i in $(seq 1 30); do
             HEALTH=$(curl --fail-with-body -s "${PRODUCTION_API_URL}/health/ready" 2>/dev/null || echo "{}")
-            STATUS=$(echo "$HEALTH" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+            STATUS=$(node -e "console.log(JSON.parse(process.argv[1]).status || 'unknown')" "$HEALTH" 2>/dev/null || echo "unknown")
             if [ "$STATUS" = "ok" ]; then
               echo "Production API is live (health/ready → status=ok)"; break
             fi
@@ -173,8 +253,8 @@ jobs:
       - name: Post-deploy canary — verify API version info (migrations up-to-date)
         run: |
           MIG_STATUS=$(curl -sf "${PRODUCTION_API_URL}/health/migrations" 2>/dev/null || echo '{"upToDate":false,"pendingCount":-1}')
-          UP_TO_DATE=$(echo "$MIG_STATUS" | jq -r '.upToDate // false' 2>/dev/null || echo "false")
-          PENDING=$(echo "$MIG_STATUS" | jq -r '.pendingCount // -1' 2>/dev/null || echo "-1")
+          UP_TO_DATE=$(node -e "const b = JSON.parse(process.argv[1]).upToDate; console.log(b === true ? 'true' : 'false')" "$MIG_STATUS" 2>/dev/null || echo "false")
+          PENDING=$(node -e "const n = JSON.parse(process.argv[1]).pendingCount; console.log(typeof n === 'number' ? n : -1)" "$MIG_STATUS" 2>/dev/null || echo "-1")
           if [ "$UP_TO_DATE" != "true" ]; then
             echo "Production API reports pending migrations: $PENDING"; exit 1
           fi

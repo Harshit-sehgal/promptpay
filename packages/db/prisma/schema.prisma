@@ -386,7 +386,7 @@ model PayoutAccount {
   initiationPayoutId   String?        @map("initiation_payout_id")
   // One-shot backfill tracker: set when a legacy plaintext destination has
   // been encrypted. Null for new accounts (already encrypted) and unmigrated
-  // legacy accounts. Managed by scripts/encrypt-legacy-payout-destinations.mjs.
+  // legacy accounts. Managed by scripts/encrypt-legacy-payout-destinations.ts.
   encryptionMigratedAt DateTime?      @map("encryption_migrated_at") @db.Timestamptz
 
   createdAt DateTime @default(now())
@@ -637,7 +637,7 @@ model AdImpression {
   // Raw impression token returned to the client. Stored so durable idempotency
   // can reconstruct the original ad response on retry. Hashed variant below is
   // the authoritative lookup for render/qualify/click endpoints.
-  impressionToken     String?    @unique @map("impression_token")
+  impressionToken     String?    @unique(map: "ad_impressions_impression_token_idx") @map("impression_token")
   impressionTokenHash String     @unique
   renderedAt          DateTime?
   qualifiedAt         DateTime?  @db.Timestamptz

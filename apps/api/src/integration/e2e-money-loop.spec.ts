@@ -809,11 +809,11 @@ describe('E2E Money Loop', () => {
             sessionId: SESSION_ID,
             waitStateId: WAIT_STATE_ID,
             eventType: 'wait_state_start',
-            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            signals: [{ type: 'active_task' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
             evidence: [
-              { type: 'ai_generation', sourceType: 'observed' },
-              { type: 'command_execution', sourceType: 'observed' },
+              { type: 'active_task', adapterId: 'vscode.task', sourceType: 'observed' },
+              { type: 'command_execution', adapterId: 'vscode.terminal', sourceType: 'observed' },
             ],
             createdAt: new Date(Date.now() - 1000),
           });
@@ -954,11 +954,11 @@ describe('E2E Money Loop', () => {
             sessionId: SESSION_ID,
             waitStateId: WAIT_STATE_ID,
             eventType: 'wait_state_start',
-            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            signals: [{ type: 'active_task' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
             evidence: [
-              { type: 'ai_generation', sourceType: 'observed' },
-              { type: 'command_execution', sourceType: 'observed' },
+              { type: 'active_task', adapterId: 'vscode.task', sourceType: 'observed' },
+              { type: 'command_execution', adapterId: 'vscode.terminal', sourceType: 'observed' },
             ],
             createdAt: new Date(Date.now() - 1000),
           });
@@ -1224,11 +1224,11 @@ describe('E2E Money Loop', () => {
         sessionId: uid('sess'),
         waitStateId: WAIT_STATE_ID,
         eventType: 'wait_state_start',
-        signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
         detectorVersion: '1.0.0',
         evidence: [
-          { type: 'ai_generation', sourceType: 'observed' },
-          { type: 'command_execution', sourceType: 'observed' },
+          { type: 'active_task', adapterId: 'vscode.task', sourceType: 'observed' },
+          { type: 'command_execution', adapterId: 'vscode.terminal', sourceType: 'observed' },
         ],
         createdAt: new Date(Date.now() - 1000),
       });
@@ -1490,11 +1490,11 @@ describe('E2E Money Loop', () => {
         sessionId: uid('sess'),
         waitStateId: WAIT_STATE_ID,
         eventType: 'wait_state_start',
-        signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
         detectorVersion: '1.0.0',
         evidence: [
-          { type: 'ai_generation', sourceType: 'observed' },
-          { type: 'command_execution', sourceType: 'observed' },
+          { type: 'active_task', adapterId: 'vscode.task', sourceType: 'observed' },
+          { type: 'command_execution', adapterId: 'vscode.terminal', sourceType: 'observed' },
         ],
         createdAt: new Date(Date.now() - 1000),
       });
@@ -1899,11 +1899,11 @@ describe('E2E Money Loop', () => {
             sessionId,
             waitStateId,
             eventType: 'wait_state_start',
-            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            signals: [{ type: 'active_task' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
             evidence: [
-              { type: 'ai_generation', sourceType: 'observed' },
-              { type: 'command_execution', sourceType: 'observed' },
+              { type: 'active_task', adapterId: 'vscode.task', sourceType: 'observed' },
+              { type: 'command_execution', adapterId: 'vscode.terminal', sourceType: 'observed' },
             ],
             createdAt: new Date(Date.now() - 1000),
           });
@@ -2902,11 +2902,11 @@ describe('E2E Money Loop', () => {
         sessionId: cpcSessionId,
         waitStateId: cpcWaitStateId,
         eventType: 'wait_state_start',
-        signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
         detectorVersion: '1.0.0',
         evidence: [
-          { type: 'ai_generation', sourceType: 'observed' },
-          { type: 'command_execution', sourceType: 'observed' },
+          { type: 'active_task', adapterId: 'vscode.task', sourceType: 'observed' },
+          { type: 'command_execution', adapterId: 'vscode.terminal', sourceType: 'observed' },
         ],
         createdAt: new Date(Date.now() - 1000),
       });
@@ -3093,11 +3093,11 @@ describe('E2E Money Loop', () => {
             sessionId: 'sess-1',
             waitStateId: 'wait-1',
             eventType: 'wait_state_start',
-            signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+            signals: [{ type: 'active_task' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
             evidence: [
-              { type: 'ai_generation', sourceType: 'observed' },
-              { type: 'command_execution', sourceType: 'observed' },
+              { type: 'active_task', adapterId: 'vscode.task', sourceType: 'observed' },
+              { type: 'command_execution', adapterId: 'vscode.terminal', sourceType: 'observed' },
             ],
             createdAt: new Date(Date.now() - 1000),
           });

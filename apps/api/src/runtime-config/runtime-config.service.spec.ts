@@ -59,6 +59,17 @@ describe('RuntimeConfigService', () => {
     });
   });
 
+  describe('isWaitEarningsEnabled', () => {
+    it('fails closed until the operator explicitly enables settlement', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+
+      await expect(service.isWaitEarningsEnabled()).resolves.toBe(false);
+      expect(mockPrisma.systemSetting.findUnique).toHaveBeenCalledWith({
+        where: { scope_target: { scope: 'wait', target: 'earnings' } },
+      });
+    });
+  });
+
   describe('setBoolean', () => {
     it('upserts the setting and audits the change', async () => {
       mockPrisma.systemSetting.upsert.mockResolvedValue({

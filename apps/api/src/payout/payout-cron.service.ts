@@ -4,6 +4,7 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 import { Prisma } from '@waitlayer/db';
 import { PayoutStatus } from '@waitlayer/shared';
 
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import {
   decryptPayoutDestination,
@@ -91,6 +92,7 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
   ) {}
 
   async onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting payout status polling cron...');
     // Fire-and-forget startup poll. Provider calls can be slow; application
     // readiness should not depend on an external payout status check.

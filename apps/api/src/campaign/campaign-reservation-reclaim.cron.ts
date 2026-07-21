@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
 
@@ -41,6 +42,7 @@ export class CampaignReservationReclaimCron implements OnApplicationBootstrap, O
   constructor(private readonly prisma: PrismaService) {}
 
   onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting campaign reservation reclaim cron...');
     this.intervalId = setInterval(() => {
       void this.tick();

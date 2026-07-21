@@ -72,6 +72,38 @@ function makePrisma() {
 }
 
 describe('Adversarial wait qualification (P0.1)', () => {
+  it('releases a CPM reservation rather than settling client-only wait evidence by default', async () => {
+    const prisma = makePrisma();
+    prisma.adImpression.findUnique.mockResolvedValue(makeImpression('cpm'));
+
+    const service = new ExtensionService(
+      prisma,
+      { log: vi.fn().mockResolvedValue(undefined) } as any,
+      {} as any,
+      { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,
+      {} as any,
+      {} as any,
+      createMockRuntimeConfig({ isWaitEarningsEnabled: vi.fn().mockResolvedValue(false) }),
+    );
+    (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
+
+    const result = await service.recordQualifiedImpression('user-1', {
+      impressionToken: 'tok-1',
+      qualifiedAt: new Date().toISOString(),
+      visibleDurationMs: 10_000,
+      idempotencyKey: 'idem-disabled',
+      signature: 'sig',
+    });
+
+    expect(result).toMatchObject({ qualified: false, reason: 'wait_earnings_disabled' });
+    expect(prisma.adImpression.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ invalidationReason: 'wait_earnings_disabled' }),
+      }),
+    );
+    expect(prisma.$transaction).toHaveBeenCalled();
+  });
+
   it('rejects a CPM qualification for a single forged ai_generation signal', async () => {
     const prisma = makePrisma();
     prisma.adImpression.findUnique.mockResolvedValue(makeImpression('cpm'));
@@ -150,6 +182,36 @@ describe('Adversarial wait qualification (P0.1)', () => {
     expect(result.reason).toBe('uncorroborated_wait');
     // No click should be created and no click-side transaction should run.
     expect(prisma.adClick.findUnique).toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not bill a previously qualified CPC impression after settlement is disabled', async () => {
+    const prisma = makePrisma();
+    prisma.adImpression.findUnique.mockResolvedValue({
+      ...makeImpression('cpc'),
+      qualifiedAt: new Date(),
+      adClick: [],
+    });
+
+    const service = new ExtensionService(
+      prisma,
+      { log: vi.fn().mockResolvedValue(undefined) } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      createMockRuntimeConfig({ isWaitEarningsEnabled: vi.fn().mockResolvedValue(false) }),
+    );
+    (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
+
+    const result = await service.recordClick('user-1', {
+      impressionToken: 'tok-1',
+      clickedAt: new Date().toISOString(),
+      idempotencyKey: 'idem-legacy-disabled',
+      signature: 'sig',
+    });
+
+    expect(result).toMatchObject({ clicked: false, reason: 'wait_earnings_disabled' });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

@@ -80,6 +80,12 @@ async function cleanupStripeWebhookSpecRows(prisma: PrismaService) {
   const userIds = users.map((user) => user.id);
   if (userIds.length === 0) return;
 
+  const advertisers = await prisma.advertiser.findMany({
+    where: { userId: { in: userIds } },
+    select: { id: true },
+  });
+  const advertiserIds = advertisers.map((advertiser) => advertiser.id);
+
   const [payoutRequests, earningsEntries] = await Promise.all([
     prisma.payoutRequest.findMany({
       where: { userId: { in: userIds } },
@@ -112,6 +118,10 @@ async function cleanupStripeWebhookSpecRows(prisma: PrismaService) {
   await prisma.payoutRequest.deleteMany({ where: { id: { in: payoutRequestIds } } });
   await prisma.payoutAccount.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.earningsLedger.deleteMany({ where: { id: { in: earningsEntryIds } } });
+  // The production migration deliberately restricts deletion of immutable
+  // advertiser-ledger history. This spec owns these deterministic fixtures, so
+  // remove their ledger rows before its user cascade removes the profile.
+  await prisma.advertiserLedger.deleteMany({ where: { advertiserId: { in: advertiserIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 }
 

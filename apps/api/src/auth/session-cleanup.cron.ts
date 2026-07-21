@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { PrismaService } from '../config/prisma.service';
 
 /**
@@ -35,6 +36,7 @@ export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestr
   constructor(private readonly prisma: PrismaService) {}
 
   async onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting session cleanup cron...');
     // Fire-and-forget the startup cleanup: awaiting it here would block
     // server readiness until the query completes (or the DB hangs), and the

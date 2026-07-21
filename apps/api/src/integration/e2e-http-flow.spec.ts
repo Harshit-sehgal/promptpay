@@ -1,10 +1,11 @@
 import * as bcrypt from 'bcryptjs';
+import { createHash } from 'crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { BidType, PayoutProvider, UserRole } from '@waitlayer/shared';
+import { BidType, MINIMUM_VISIBLE_DURATION_MS, PayoutProvider, UserRole } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
@@ -32,6 +33,23 @@ async function cleanDb(prisma: PrismaService) {
       "webhook_events", "audit_logs", "referrals", "referral_rewards"
     CASCADE;
   `);
+}
+
+/**
+ * The visible-duration threshold is server-time based. Move the persisted
+ * render timestamp rather than sleeping in a sequential HTTP flow: sleeps
+ * needlessly age auth sessions and make the money-path test timing-dependent.
+ */
+async function makeImpressionEligibleForQualification(
+  prisma: PrismaService,
+  impressionToken: string,
+) {
+  await prisma.adImpression.update({
+    where: {
+      impressionTokenHash: createHash('sha256').update(impressionToken).digest('hex'),
+    },
+    data: { renderedAt: new Date(Date.now() - MINIMUM_VISIBLE_DURATION_MS) },
+  });
 }
 
 describe('End-to-End HTTP Integration Flow', () => {
@@ -74,6 +92,13 @@ describe('End-to-End HTTP Integration Flow', () => {
     prisma = app.get(PrismaService);
     ledgerService = app.get(LedgerService);
     await cleanDb(prisma);
+    // The production default is fail-closed. This DB-isolated suite explicitly
+    // opens the switch to cover the CPM/CPC settlement paths it owns.
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'wait', target: 'earnings' } },
+      create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated HTTP money-loop test' },
+    });
 
     // Seed the admin user directly in the DB. Public self-service signup
     // correctly rejects the `admin` role (SIGNUP_ALLOWED_ROLES = developer,
@@ -692,9 +717,7 @@ describe('End-to-End HTTP Integration Flow', () => {
     });
 
     it('should record qualified impression (CPM), triggering ledger splits', async () => {
-      // Wait past the server-enforced minimum visible duration before
-      // qualifying (issue A-060). The ad was rendered in the previous test.
-      await new Promise((r) => setTimeout(r, 4000));
+      await makeImpressionEligibleForQualification(prisma, impressionToken);
       const impressionPayload = {
         impressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -819,8 +842,7 @@ describe('End-to-End HTTP Integration Flow', () => {
     });
 
     it('should qualify CPC impression (no CPM charge)', async () => {
-      // Wait past the server-enforced minimum visible duration (issue A-060).
-      await new Promise((r) => setTimeout(r, 4000));
+      await makeImpressionEligibleForQualification(prisma, cpcImpressionToken);
       const impressionPayload = {
         impressionToken: cpcImpressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -1089,8 +1111,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         .send({ ...rp, signature: signPayload(rp, deviceEventSecret) })
         .expect(200);
 
-      // Wait past the server-enforced minimum visible duration (issue A-060).
-      await new Promise((r) => setTimeout(r, 4000));
+      await makeImpressionEligibleForQualification(prisma, tok);
 
       const ip = {
         impressionToken: tok,

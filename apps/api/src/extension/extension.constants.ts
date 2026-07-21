@@ -105,6 +105,44 @@ export function computeWaitConfidence(signals: WaitSignal[]): {
  *   operator's verified allowlist. Unverified sources still serve ads if
  *   confidence is high enough, but earnings are held longer.
  */
+// Adapters the server trusts to report directly-observed events. Any adapter
+// not listed (or matching a listed prefix) is treated as inferred/shadow-only,
+// so unsupported integrations cannot authorize billing.
+const OBSERVED_ADAPTER_SIGNAL_TYPES: Readonly<Record<string, readonly EvidenceSignalType[]>> = {
+  // These are the only adapter/type pairs emitted from real VS Code lifecycle
+  // APIs today. AI tool-name matching and CLI marker files are heuristic, so
+  // they must remain shadow-only even when a modified client relabels them.
+  'vscode.task': ['active_task'],
+  'vscode.terminal': ['command_execution'],
+};
+
+// Adapters that are explicitly heuristic/inferred, regardless of what the
+// client claims. These may still drive ad confidence but never payment.
+const INFERRED_ADAPTER_PREFIXES = ['vscode.heuristic.', 'cli.heuristic.'];
+
+/**
+ * Return the server-authoritative source type for an evidence adapter.
+ * Unsupported adapters default to inferred, which keeps them shadow-only and
+ * non-billable (P0.1).
+ */
+export function authoritativeSourceType(
+  adapterId: string | undefined,
+  type?: EvidenceSignalType,
+): 'observed' | 'inferred' {
+  // Older rows and internal tests can predate adapter identifiers. They must
+  // never cause an exception or become billable by omission.
+  if (!adapterId) {
+    return 'inferred';
+  }
+  if (INFERRED_ADAPTER_PREFIXES.some((prefix) => adapterId.startsWith(prefix))) {
+    return 'inferred';
+  }
+  if (type && OBSERVED_ADAPTER_SIGNAL_TYPES[adapterId]?.includes(type)) {
+    return 'observed';
+  }
+  return 'inferred';
+}
+
 export function classifyWaitState(
   signals: WaitSignal[],
   isVerifiedSource: boolean,
@@ -157,7 +195,12 @@ export function classifyWaitState(
     const observedPrimaryTypes = new Set<EvidenceSignalType>();
     const observedPrimaryAdapters = new Set<string>();
     for (const item of evidence) {
-      if (isPrimaryEvidenceType(item.type) && item.sourceType === 'observed') {
+      // Authoritative source-of-record: the server decides whether an adapter
+      // represents a directly-observed event or a heuristic/inferred signal.
+      // Unsupported adapters default to inferred and are therefore shadow-only
+      // and non-billable (P0.1).
+      const sourceType = authoritativeSourceType(item.adapterId, item.type);
+      if (isPrimaryEvidenceType(item.type) && sourceType === 'observed') {
         observedPrimaryTypes.add(item.type);
         observedPrimaryAdapters.add(item.adapterId);
       }

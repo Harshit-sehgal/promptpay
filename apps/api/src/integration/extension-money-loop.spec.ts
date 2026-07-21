@@ -165,6 +165,17 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
     await cleanDb(prisma);
+    // This real-DB money-loop suite deliberately tests settlement. Keep the
+    // production default closed and opt in only in its reset database.
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'wait', target: 'earnings' } },
+      create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated extension money-loop test' },
+    });
+
+    // Defensive: ensure no stale admin user from a prior run remains. This
+    // makes the beforeAll idempotent even when test-isolation cleanup races.
+    await prisma.user.deleteMany({ where: { email: 'admin-money@waitlayer.com' } });
 
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
@@ -183,6 +194,10 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       .send({ email: 'admin-money@waitlayer.com', password: 'Password123!' })
       .expect(200);
     adminToken = adminRes.body.accessToken;
+    const meRes = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${adminToken}`);
+    console.log('admin me', meRes.status, meRes.body, 'token prefix', adminToken?.slice(0, 20));
   });
 
   afterAll(async () => {
@@ -317,10 +332,19 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       .set('Authorization', `Bearer ${advertiserToken}`)
       .expect(201);
 
-    await request(app.getHttpServer())
+    const approveRes = await request(app.getHttpServer())
       .post(`/api/v1/campaigns/creatives/${creativeId}/approve`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .expect(200);
+      .set('Authorization', `Bearer ${adminToken}`);
+    if (approveRes.status !== 200) {
+      console.log(
+        'creative approve failed',
+        approveRes.status,
+        approveRes.body,
+        'adminToken prefix',
+        adminToken?.slice(0, 20),
+      );
+    }
+    expect(approveRes.status).toBe(200);
 
     await request(app.getHttpServer())
       .post(`/api/v1/admin/campaigns/${campaignId}/approve`)

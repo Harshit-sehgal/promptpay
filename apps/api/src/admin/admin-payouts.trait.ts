@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
-import { highValueFenceReleaseMinor } from '@waitlayer/shared';
+import { highValueFenceReleaseMinor, isSupportedCurrency } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { safeDisplayDestination, safeDisplayEmail } from '../common/utils/payout-encryption';
@@ -874,14 +874,17 @@ export class AdminPayoutsTrait {
     if (!advertiser) {
       throw new NotFoundException('Advertiser profile not found for user');
     }
+    const currency = (dto.currency ?? 'USD').toUpperCase();
+    if (!isSupportedCurrency(currency)) {
+      throw new BadRequestException(`Unsupported currency: ${currency}`);
+    }
     const existing = await this.prisma.advertiserLedger.findFirst({
-      where: { idempotencyKey: dto.idempotencyKey },
+      where: { idempotencyKey: dto.idempotencyKey, advertiserId: advertiser.id },
       select: { id: true },
     });
     if (existing) {
       return { id: existing.id, alreadyCredited: true };
     }
-    const currency = (dto.currency ?? 'USD').toUpperCase();
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.advertiserLedger.create({
         data: {

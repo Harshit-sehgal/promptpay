@@ -56,6 +56,9 @@ services:
       retries: 5
 
   api:
+    # Production/staging deployments set WAITLAYER_API_IMAGE to an immutable
+    # registry digest. Local compose retains this predictable development tag.
+    image: ${WAITLAYER_API_IMAGE:-waitlayer-api:local}
     build:
       context: .
       target: api
@@ -67,8 +70,8 @@ services:
     ports:
       - '4002:4002'
     environment:
-      DATABASE_URL: postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: ${DATABASE_URL:-postgresql://waitlayer:waitlayer-dev@postgres:5432/waitlayer}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       # ── WARNING: Dev-only secrets ──
       # These are visible to anyone who can read this file. Production deploys
       # MUST override EVERY one of these via a .env file, Docker secrets, or
@@ -86,18 +89,19 @@ services:
       JWT_REFRESH_TTL: 30d
       API_PORT: '4002'
       GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
-      WEB_BASE_URL: http://localhost:3000
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       # docker-compose is a developer convenience — run with dev NODE_ENV so the
       # google-token verifier's mock path remains available. Production deploys
       # must override NODE_ENV=production AND set real secrets.
-      NODE_ENV: development
+      NODE_ENV: ${NODE_ENV:-development}
       # Enable the mock-google-token path so local dev can sign in without a
       # real Google account. The verifier requires BOTH NODE_ENV !== 'production'
       # AND an explicit flag — never set this in staging/production.
-      ALLOW_MOCK_GOOGLE: 'true'
-      EMAIL_DRIVER: console
-      EMAIL_FROM: noreply@waitlayer.local
-      STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
+      ALLOW_MOCK_GOOGLE: ${ALLOW_MOCK_GOOGLE:-true}
+      ENABLE_STAGING_FAUCET: ${ENABLE_STAGING_FAUCET:-false}
+      EMAIL_DRIVER: ${EMAIL_DRIVER:-console}
+      EMAIL_FROM: ${EMAIL_FROM:-noreply@waitlayer.local}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder}
       # Sentry — uncomment to enable error monitoring locally
       # SENTRY_DSN: https://your-dsn@o123456.ingest.sentry.io/654321
       # SENTRY_ENVIRONMENT: development
@@ -122,6 +126,8 @@ services:
       start_period: 30s
 
   web:
+    # See api.image: CI supplies a content-addressed image for release hosts.
+    image: ${WAITLAYER_WEB_IMAGE:-waitlayer-web:local}
     build:
       context: .
       target: web
@@ -144,9 +150,9 @@ services:
     ports:
       - '3000:3000'
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
-      API_INTERNAL_URL: http://api:4002/api/v1
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4002/api/v1}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com}
       JWT_SECRET: ${JWT_SECRET:-dev-only-docker-compose-jwt-secret-at-least-32-char}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
       JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
@@ -154,8 +160,8 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
       # Match the api service — dev convenience compose uses NODE_ENV=development
       # so the mock-google sign-in button remains available for local testing.
-      NODE_ENV: development
-      NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
+      NODE_ENV: ${NODE_ENV:-development}
+      NEXT_PUBLIC_ALLOW_MOCK_AUTH: ${NEXT_PUBLIC_ALLOW_MOCK_AUTH:-true}
     depends_on:
       api:
         condition: service_healthy

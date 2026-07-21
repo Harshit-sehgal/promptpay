@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
 import { AuditService } from './audit.service';
@@ -28,6 +29,7 @@ export class AuditOutboxCron implements OnApplicationBootstrap, OnModuleDestroy 
   ) {}
 
   onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting audit outbox drain cron...');
 
     // Fire-and-forget startup run, then poll every 30 seconds.

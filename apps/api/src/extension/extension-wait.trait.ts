@@ -13,6 +13,7 @@ import { FraudService } from '../fraud/fraud.service';
 import { AlertsService } from '../observability/alerts.service';
 import type { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import {
+  authoritativeSourceType,
   classifyWaitState,
   computeWaitConfidence,
   isVerifiedDetectorSource,
@@ -137,6 +138,10 @@ export class ExtensionWaitTrait {
         if (!verifyEvidence(item, deviceSecret)) {
           throw new ForbiddenException('Invalid evidence signature');
         }
+        // Normalize the source type to the server-authoritative value. A
+        // modified client cannot claim an inferred/unsupported adapter is
+        // observed to bypass the payment gate.
+        item.sourceType = authoritativeSourceType(item.adapterId, item.type);
       }
     }
     // P1.17: detector-version kill-switch. A disabled detector version must

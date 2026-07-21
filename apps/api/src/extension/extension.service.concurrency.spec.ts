@@ -107,8 +107,8 @@ function makePrisma() {
         signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
         evidence: makeTestEvidence(
           [
-            { type: 'ai_generation', adapterId: 'test.ai' },
-            { type: 'active_task', adapterId: 'test.task' },
+            { type: 'active_task', adapterId: 'vscode.task' },
+            { type: 'command_execution', adapterId: 'vscode.terminal' },
           ],
           { waitStateId: 'ws-1', sessionId: 's-1' },
         ),

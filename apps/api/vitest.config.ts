@@ -13,6 +13,9 @@ export default defineConfig({
     // mutate the same schema and their cleanup hooks can otherwise overlap
     // with the next suite's app instance.
     maxWorkers: 1,
+    // A few integration suites exercise async real-HTTP paths in the same
+    // file. Keep Vitest's task scheduler serial as well as its file worker.
+    maxConcurrency: 1,
     // The HTTP suites boot the full Nest app and truncate the local Docker
     // Postgres schema in hooks. The default 10s hook timeout is too tight on
     // slower developer disks even when the suite is healthy.

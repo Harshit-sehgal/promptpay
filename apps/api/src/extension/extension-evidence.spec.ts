@@ -33,8 +33,8 @@ function makeEvidence(
 describe('classifyWaitState with evidence (P0)', () => {
   it('requires observed evidence from distinct adapters for payment eligibility', () => {
     const evidence = [
-      makeEvidence({ type: 'ai_generation', adapterId: 'vscode.ai-hook' }),
       makeEvidence({ type: 'active_task', adapterId: 'vscode.task' }),
+      makeEvidence({ type: 'command_execution', adapterId: 'vscode.terminal' }),
     ];
     const result = classifyWaitState([], true, evidence);
     expect(result.adEligible).toBe(true);
@@ -77,11 +77,11 @@ describe('classifyWaitState with evidence (P0)', () => {
 
   it('requires at least two distinct adapters for payment eligibility', () => {
     const evidence = [
-      makeEvidence({ type: 'ai_generation', sourceType: 'observed', adapterId: 'vscode.ai-hook' }),
+      makeEvidence({ type: 'active_task', sourceType: 'observed', adapterId: 'vscode.task' }),
       makeEvidence({
-        type: 'active_task',
+        type: 'command_execution',
         sourceType: 'observed',
-        adapterId: 'vscode.task',
+        adapterId: 'vscode.terminal',
       }),
     ];
     const result = classifyWaitState([], true, evidence);
@@ -117,9 +117,9 @@ describe('classifyWaitState with evidence (P0)', () => {
     // future work.
     const evidence = [
       makeEvidence({
-        type: 'ai_generation',
+        type: 'active_task',
         sourceType: 'observed',
-        adapterId: 'vscode.ai-hook',
+        adapterId: 'vscode.task',
       }),
       makeEvidence({
         type: 'command_execution',
@@ -146,6 +146,16 @@ describe('classifyWaitState with evidence (P0)', () => {
       makeEvidence({ type: 'ai_generation', sourceType: 'observed' }),
       makeEvidence({ type: 'inactivity', sourceType: 'observed' }),
       makeEvidence({ type: 'lifecycle_event', sourceType: 'observed' }),
+    ];
+    const result = classifyWaitState([], true, evidence);
+    expect(result.adEligible).toBe(true);
+    expect(result.paymentEligible).toBe(false);
+  });
+
+  it('treats evidence from unknown adapters as inferred (shadow-only, non-billable)', () => {
+    const evidence = [
+      makeEvidence({ type: 'ai_generation', sourceType: 'observed', adapterId: 'shadow.tool' }),
+      makeEvidence({ type: 'active_task', sourceType: 'observed', adapterId: 'another.unknown' }),
     ];
     const result = classifyWaitState([], true, evidence);
     expect(result.adEligible).toBe(true);

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
+import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { ComplianceService } from './compliance.service';
 
 /**
@@ -24,6 +25,7 @@ export class RetentionCronService implements OnApplicationBootstrap, OnModuleDes
   constructor(private compliance: ComplianceService) {}
 
   async onApplicationBootstrap() {
+    if (!backgroundJobsEnabled()) return;
     this.logger.log('Starting data-retention cron...');
     await this.compliance.ensureRetentionDefaults().catch((err) => {
       this.logger.error(`Retention defaults seed failed: ${String(err)}`);

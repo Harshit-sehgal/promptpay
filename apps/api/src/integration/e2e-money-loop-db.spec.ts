@@ -14,12 +14,12 @@
  *
  * Every required variant from the P0.2 spec is exercised against real rows.
  */
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { ToolType } from '@waitlayer/shared';
+import { MINIMUM_VISIBLE_DURATION_MS, ToolType } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -109,6 +109,14 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
     vi.spyOn(runtimeConfig, 'isDetectorVersionEnabled').mockReturnValue(true);
 
     await cleanMoneyTables(prisma);
+    // Production deliberately defaults this switch off. This isolated money
+    // path suite enables it explicitly so it can exercise ledger settlement
+    // after the test has supplied its controlled detector evidence.
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'wait', target: 'earnings' } },
+      create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated money-loop test' },
+    });
 
     // ── Persistent identities ──
     const dev = await prisma.user.create({
@@ -272,13 +280,15 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       idempotencyKey: uid('ren'),
       signature: 'sig',
     });
-    // Server enforces a minimum visible duration (~3.5s grace-adjusted
-    // floor) before an impression may qualify (issue A-060). The render
-    // timestamp is server-authoritative, so we MUST wait real time
-    // after recordRendered before recordQualifiedImpression — an
-    // immediate qualify is rejected as minimum_duration_not_met and
-    // would credit no earnings.
-    await new Promise((r) => setTimeout(r, 5000));
+    // The server-side duration guard is covered independently. Backdate the
+    // server-owned render timestamp here so this money-path suite does not
+    // depend on wall-clock sleeps (which let unrelated app background work
+    // interfere with the open impression before qualification).
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    await prisma.adImpression.update({
+      where: { impressionTokenHash: tokenHash },
+      data: { renderedAt: new Date(Date.now() - MINIMUM_VISIBLE_DURATION_MS) },
+    });
 
     if (opts.endAfterAd) {
       await extension.recordWaitStateEnd(developerId, {

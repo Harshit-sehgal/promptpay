@@ -73,6 +73,12 @@ api` still fails at `corepack prepare pnpm@11.9.0 --activate` (registry
 >   product scope, GitHub settings). None are code defects. **A-047 full
 >   browser signup/login/dashboard E2E is now live-verified 2026-07-20** (see
 >   note below) — removed from the external list.
+>
+> **Superseded in part by the 2026-07-21 source-first residual-gap audit at the
+> end of this file.** Three code/release items were found after this snapshot:
+> independent wait attestation (P0.1), a real staging image deployment gate
+> (P1.23), and repair of the DB-backed money-loop test reproducibility. Do not
+> treat the older "only external" wording as current.
 
 ### Build — Web `next build` RESOLVED (2026-07-11): `NODE_ENV=development` env leak, not a framework regression
 
@@ -1438,7 +1444,7 @@ destination or the encrypted ciphertext.
 | `docs/ENV_REFERENCE.md`                               | `PAYOUT_ENCRYPTION_KEY` documented in payout security section                                             |
 | `packages/db/prisma/schema.prisma`                    | Added `destinationHmac` + `encryptionMigratedAt` to `PayoutAccount`                                       |
 | `packages/db/prisma/migrations/20260721210000_*`      | NEW — backfill migration (adds `encryption_migrated_at` column + index)                                   |
-| `scripts/encrypt-legacy-payout-destinations.mjs`      | NEW — one-shot script to encrypt existing plaintext destinations                                          |
+| `scripts/encrypt-legacy-payout-destinations.ts`       | NEW — one-shot script to encrypt existing plaintext destinations                                          |
 
 ### Quality gates (post-fix)
 
@@ -1453,7 +1459,7 @@ destination or the encrypted ciphertext.
 
 - Set `PAYOUT_ENCRYPTION_KEY` in production to a base64-encoded 32-byte key
   (generate with `openssl rand -base64 32`).
-- Run `node scripts/encrypt-legacy-payout-destinations.mjs` to encrypt any
+- Run `pnpm payout:encrypt-legacy` to encrypt any
   existing plaintext destinations after deploying the code change.
 
 ## 2026-07-21 — Staging workflow CI fixes (P0 CI/staging repair)
@@ -1546,3 +1552,92 @@ by declaring a single `ai_generation` signal and waiting five seconds.
 - `classifyWaitState()` re-fetch/parse logic is duplicated in `requestAd`,
   `recordQualifiedImpression`, and `recordClick`; a shared helper would
   reduce drift.
+
+## 2026-07-21 — Source-first residual-gap audit (current)
+
+The earlier broad "no unfinished code" claim was too strong. A fresh audit of
+the live source and local database found and closed several concrete
+schema/migration and test-isolation gaps, while identifying the remaining
+launch blockers below. This section is current as of 2026-07-21.
+
+### Closed in this audit
+
+- **Migration integrity:** local `waitlayer` is now at **70 migrations**;
+  `prisma migrate status` is up to date and
+  `prisma migrate diff --exit-code --from-config-datasource --to-schema` has
+  no difference. The cascade-delete hardening migration used Prisma field names
+  instead of the payout-fence table's snake_case columns, so it aborted on a
+  fresh database. Its two FK definitions now use `payout_account_id` and
+  `payout_request_id`. A follow-up migration removes the legacy global
+  `devices_fingerprintHash_key` index that the prior constraint-only removal
+  did not remove, while retaining per-user fingerprint uniqueness.
+- **Payout encryption backfill:** `payout:encrypt-legacy` now encrypts every
+  remaining plaintext destination, including partially migrated rows that
+  already have an HMAC, and writes `encryptionMigratedAt`. A selective raw-SQL
+  index migration tracks plaintext rows; the register/schema/operator command
+  now consistently use the shipped TypeScript script rather than the deleted
+  `.mjs` file.
+- **Trusted-wait policy:** the server now treats only the real VS Code
+  lifecycle pairs `vscode.task/active_task` and
+  `vscode.terminal/command_execution` as observed. Heuristic AI mappings, CLI
+  marker-file evidence, unknown adapters, and an otherwise valid adapter with
+  the wrong signal type are shadow-only/non-billable. Billable integration
+  fixtures now exercise those production pairs instead of test-only adapter
+  names.
+- **Fail-closed wait settlement:** client-held device HMACs and detector
+  telemetry are not independent proof of a real wait. The new audited
+  `wait.earnings` runtime switch therefore defaults to **off**. While off, CPM
+  qualification atomically invalidates the impression and releases its exact
+  reservation; CPC qualification and clicks cannot debit an advertiser or
+  credit a developer, including clicks on impressions qualified before the
+  switch changed. The isolated money-loop tests explicitly enable the switch
+  in their reset database so they continue to cover real settlement.
+- **Digest-bound staging and promotion:** the release workflow now fails fast
+  unless the registry and stage/production SSH configuration are present,
+  builds immutable `staging-$GITHUB_SHA` images, records their registry
+  digests, deploys those exact digests to staging, and only then runs the
+  smoke. Production pulls, tags, and deploys the same staging digests after
+  the production-environment approval. Compose now consumes
+  `WAITLAYER_API_IMAGE`/`WAITLAYER_WEB_IMAGE` and permits the deployment
+  host's real runtime configuration to override local-development defaults;
+  host keys are required rather than silently disabling SSH verification.
+- **Deterministic integration execution:** API tests now use the isolated test
+  database by default, reset it before each full-App integration file, suppress
+  background bootstrap jobs, and pin test JWT TTLs. The HTTP and DB money-loop
+  tests set persisted render timestamps rather than sleeping against a
+  server-time visibility threshold, so they cannot lose an auth session or race
+  an unrelated cron worker. The cascade-delete test cleanup also removes owned
+  advertiser-ledger rows before deleting its user.
+
+### Remaining external activation tasks (no unresolved source safety gap)
+
+- **Independent wait attestation is still required to turn earnings on:** a
+  modified client can sign its own device-HMAC evidence. The code now prevents
+  any real-money settlement by default, but an operator must not set
+  `wait.earnings` to enabled until an independently attestable integration (or
+  another server-verifiable source) exists and is reviewed. Do not describe
+  the current detector telemetry as cryptographic proof.
+- **Configure the release environment once:** before dispatching the workflow,
+  supply `CONTAINER_REGISTRY`, registry credentials, `STAGING_HOST`,
+  `STAGING_USER`, `STAGING_DEPLOY_KEY`, `STAGING_KNOWN_HOSTS`,
+  `STAGING_DEPLOY_PATH`, and the analogous `PRODUCTION_*` values. The remote
+  Compose directory must also have its production runtime `.env` values
+  (`NODE_ENV=production`, database/Redis URLs, JWT keys, public API URLs, and
+  mock-auth disabled). Missing values now fail the gate instead of producing a
+  green no-op deployment. This is credentials/operations work, not a source
+  defect.
+
+### Verification in this audit
+
+- `pnpm typecheck` — 14/14 packages ✅
+- `pnpm lint` — 9/9 packages ✅
+- `pnpm build` — 9/9 packages ✅
+- focused trusted-wait policy tests — 27/27 ✅
+- fail-closed settlement tests — CPM reservation release plus legacy CPC click
+  block ✅
+- release wiring checks — Compose config, workflow YAML/Prettier, and diff
+  whitespace checks ✅
+- Prisma generate + migrate deploy/status + drift check — ✅ (70 migrations)
+- `pnpm test` — ✅ root gate green (API: 1,168 unit tests plus all 18 isolated
+  integration files; shared/web/CLI/VS Code suites also pass; one intentionally
+  skipped VS Code live-client test remains credential/environment dependent).

@@ -24,8 +24,8 @@ describe('classifyWaitState (P0.1)', () => {
 
   it('makes a wait payment-eligible when corroborated by observed evidence from distinct adapters', () => {
     const evidence = makeTestEvidence([
-      { type: 'ai_generation', adapterId: 'vscode.ai-hook' },
-      { type: 'command_execution', adapterId: 'cli.runner' },
+      { type: 'active_task', adapterId: 'vscode.task' },
+      { type: 'command_execution', adapterId: 'vscode.terminal' },
     ]);
     const result = classifyWaitState([], false, evidence);
     expect(result.adEligible).toBe(true);

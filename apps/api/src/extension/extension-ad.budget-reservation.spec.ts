@@ -30,8 +30,8 @@ function makePrisma() {
         signals: BILLABLE_WAIT_SIGNALS,
         evidence: makeTestEvidence(
           [
-            { type: 'ai_generation', adapterId: 'test.ai' },
-            { type: 'command_execution', adapterId: 'test.runner' },
+            { type: 'active_task', adapterId: 'vscode.task' },
+            { type: 'command_execution', adapterId: 'vscode.terminal' },
           ],
           { waitStateId: 'ws-1', sessionId: 's-1' },
         ),
@@ -170,7 +170,10 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {} as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
 
     const result = await service.claimImpression(claimArgs());
@@ -194,7 +197,10 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {} as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
     await expect(duplicateService.claimImpression(claimArgs())).resolves.toEqual({
       status: 'duplicate',
@@ -209,7 +215,10 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {} as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
     await expect(cappedService.claimImpression(claimArgs())).resolves.toEqual({
       status: 'cap_reached',
@@ -226,7 +235,10 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {} as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
 
     await expect(service.claimImpression(claimArgs())).resolves.toEqual({
@@ -246,7 +258,10 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {} as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
 
     await expect(service.claimImpression(claimArgs())).rejects.toThrow('insert failed');
@@ -265,7 +280,10 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {} as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
 
     await expect(service.claimImpression(claimArgs({ bidType: BidType.cpc }))).resolves.toEqual({
@@ -289,7 +307,10 @@ describe('ExtensionAdTrait budget reservation', () => {
       { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
     prisma.adImpression.findUnique.mockResolvedValue({
@@ -336,7 +357,10 @@ describe('ExtensionAdTrait budget reservation', () => {
       } as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
     prisma.adImpression.findUnique.mockResolvedValue(makeImpression({ bidType: 'cpm' }));
@@ -391,7 +415,10 @@ describe('ExtensionAdTrait budget reservation', () => {
       } as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
     const dto = {
@@ -429,7 +456,10 @@ describe('ExtensionAdTrait budget reservation', () => {
       { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
     prisma.adImpression.findUnique.mockResolvedValue(makeImpression({ bidType: 'cpm' }));
@@ -465,7 +495,10 @@ describe('ExtensionAdTrait budget reservation', () => {
       { checkImpressionRateLimit: vi.fn().mockResolvedValue({ allowed: true }) } as any,
       {} as any,
       {} as any,
-      { getVerifiedDetectorVersions: vi.fn().mockReturnValue('') } as any,
+      {
+        getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+        isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+      } as any,
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
     prisma.adImpression.findUnique.mockResolvedValue(makeImpression({ bidType: 'cpc' }));

@@ -20,6 +20,7 @@
     "econ": "node scripts/advertiser-economics.calc.mjs",
     "start:api": "pnpm --filter waitlayer-api build && node apps/api/dist/apps/api/src/main.js",
     "start:web": "pnpm --filter waitlayer-web build && cd apps/web && next start",
+    "payout:encrypt-legacy": "pnpm exec tsx scripts/encrypt-legacy-payout-destinations.ts",
     "prepare": "husky"
   },
   "devDependencies": {

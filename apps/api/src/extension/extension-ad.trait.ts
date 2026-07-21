@@ -695,6 +695,23 @@ export class ExtensionAdTrait {
         actual: effectiveDurationMs,
       };
     }
+    // P0.1: client-held device HMACs and detector telemetry are useful fraud
+    // signals, but they are not independent proof that a real tool wait took
+    // place. Do not settle CPM/CPC money until an operator has deliberately
+    // enabled the separately reviewed attestation path. For CPM this also
+    // releases the exact reservation made when the ad was served; CPC has no
+    // reservation, but invalidating here prevents a later click from billing.
+    if (!(await this.runtimeConfig.isWaitEarningsEnabled())) {
+      await this.invalidateImpressionAndReleaseReservation({
+        impressionId: impression.id,
+        campaignId: impression.campaignId,
+        bidType: impression.campaign.bidType,
+        bidAmountMinor: BigInt(impression.campaign.bidAmountMinor),
+        visibleDurationMs: effectiveDurationMs,
+        reason: 'wait_earnings_disabled',
+      });
+      return { qualified: false, impressionId: impression.id, reason: 'wait_earnings_disabled' };
+    }
     if (impression.qualifiedAt)
       return { qualified: true, impressionId: impression.id, alreadyQualified: true };
     // Fraud check via rate limits
@@ -1017,6 +1034,16 @@ export class ExtensionAdTrait {
       return { clicked: true, clickId: existing.id, isDuplicate: true };
     }
     if (!impression.qualifiedAt) throw new BadRequestException('Impression not yet qualified');
+    // The same fail-closed settlement gate used by CPM qualification must also
+    // cover already-qualified CPC impressions. Otherwise an operator disabling
+    // the gate could still incur a fresh advertiser debit from a click on a
+    // legacy impression that qualified before the switch changed.
+    if (
+      impression.campaign.bidType === BidType.cpc &&
+      !(await this.runtimeConfig.isWaitEarningsEnabled())
+    ) {
+      return { clicked: false, impressionId: impression.id, reason: 'wait_earnings_disabled' };
+    }
     // Fraud checks: rate + self-click
     const clickPatterns = await this.fraud.checkClickPatterns(impression.userId, impression.id);
     if (!clickPatterns.allowed) {

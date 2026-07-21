@@ -13,6 +13,10 @@ export interface RuntimeConfigKey {
 
 export const RUNTIME_CONFIG_KEYS = {
   ADS_GLOBAL: { scope: 'ads', target: 'global' },
+  // Client-side wait evidence is not an independent attestation. Keep the
+  // money path closed until an operator deliberately enables it after an
+  // independently verifiable detector integration is in place.
+  WAIT_EARNINGS: { scope: 'wait', target: 'earnings' },
   DEPOSITS_GLOBAL: { scope: 'deposits', target: 'global' },
   PAYOUT_REQUESTS: { scope: 'payouts', target: 'requests' },
   PAYOUT_AUTO: { scope: 'payouts', target: 'auto' },
@@ -215,6 +219,18 @@ export class RuntimeConfigService {
 
   async isAdsEnabled(): Promise<boolean> {
     return this.getBoolean(RUNTIME_CONFIG_KEYS.ADS_GLOBAL, true);
+  }
+
+  /**
+   * Whether client wait events may settle real-money CPM/CPC earnings.
+   *
+   * This is intentionally fail-closed. Device HMACs prove possession of a
+   * client-held secret, not that a real developer-tool wait occurred, so a
+   * fresh deployment must not debit advertisers or credit developers until
+   * the operator has reviewed and enabled an independent attestation path.
+   */
+  async isWaitEarningsEnabled(): Promise<boolean> {
+    return this.getBoolean(RUNTIME_CONFIG_KEYS.WAIT_EARNINGS, false);
   }
 
   async isDepositsEnabled(): Promise<boolean> {
