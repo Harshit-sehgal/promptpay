@@ -139,6 +139,24 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         waitStateId,
         toolType: state.tool,
         sessionId,
+        evidence: [
+          {
+            type: 'command_execution',
+            sourceType: 'observed',
+            adapterId: 'cli.runner.command',
+            timestamp: state.startTime,
+            correlationId: sessionId,
+          },
+          {
+            type: 'active_task',
+            sourceType: 'observed',
+            adapterId: 'cli.runner.task',
+            timestamp: state.startTime + 1,
+            correlationId: sessionId,
+          },
+        ],
+        // waitStateId and sessionId are bound by the client before signing,
+        // preventing cross-wait replay of signed evidence items.
       });
 
       // A-040: Serve an ad during the wait state using the tested runAdFlow()

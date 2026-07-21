@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { DetectorEvidence } from '@waitlayer/shared';
+
+import { makeTestEvidence } from './evidence.test-helper';
 import {
   classifyWaitState,
   computeWaitConfidence,
@@ -21,11 +24,12 @@ describe('classifyWaitState (P0.1)', () => {
     expect(result.reason).toBe('ai_generation');
   });
 
-  it('makes a wait payment-eligible when a primary signal is corroborated by another primary signal', () => {
-    const result = classifyWaitState(
-      [{ type: 'ai_generation' }, { type: 'command_execution' }],
-      false,
-    );
+  it('makes a wait payment-eligible when corroborated by observed evidence from distinct adapters', () => {
+    const evidence = makeTestEvidence([
+      { type: 'ai_generation', adapterId: 'vscode.ai-hook' },
+      { type: 'command_execution', adapterId: 'cli.runner' },
+    ]);
+    const result = classifyWaitState([], false, evidence);
     expect(result.adEligible).toBe(true);
     expect(result.paymentEligible).toBe(true);
     expect(result.confidence).toBeGreaterThanOrEqual(MINIMUM_WAIT_CONFIDENCE);
@@ -66,11 +70,12 @@ describe('classifyWaitState (P0.1)', () => {
   });
 
   it('flags unverified detector sources', () => {
-    const verified = classifyWaitState([{ type: 'ai_generation' }, { type: 'active_task' }], true);
-    const unverified = classifyWaitState(
-      [{ type: 'ai_generation' }, { type: 'active_task' }],
-      false,
-    );
+    const evidence = makeTestEvidence([
+      { type: 'ai_generation', adapterId: 'vscode.ai-hook' },
+      { type: 'active_task', adapterId: 'vscode.task' },
+    ]);
+    const verified = classifyWaitState([], true, evidence);
+    const unverified = classifyWaitState([], false, evidence);
     expect(verified.unverifiedSource).toBe(false);
     expect(unverified.unverifiedSource).toBe(true);
   });

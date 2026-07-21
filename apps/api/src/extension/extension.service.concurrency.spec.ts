@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createMockRuntimeConfig } from '../runtime-config/runtime-config.test-helper';
+import { makeTestEvidence } from './evidence.test-helper';
 import { ExtensionService } from './extension.service';
 
 /**
@@ -104,6 +105,13 @@ function makePrisma() {
       findFirst: vi.fn().mockResolvedValue({
         id: 'ws-1',
         signals: [{ type: 'ai_generation' }, { type: 'active_task' }],
+        evidence: makeTestEvidence(
+          [
+            { type: 'ai_generation', adapterId: 'test.ai' },
+            { type: 'active_task', adapterId: 'test.task' },
+          ],
+          { waitStateId: 'ws-1', sessionId: 's-1' },
+        ),
         detectorVersion: '1.0.0',
       }),
     },

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { DETECTOR_VERSION, signEvidence } from '@waitlayer/shared';
+
 import { AlertsService } from '../observability/alerts.service';
 import { MetricsService } from '../observability/metrics.service';
 import {
@@ -332,5 +334,110 @@ describe('ExtensionWaitTrait.recordWaitStateStart — detector version kill-swit
     expect(runtimeConfig.isDetectorVersionEnabled).toHaveBeenCalledWith('1.0.0');
     expect(prisma.waitStateEvent.create).toHaveBeenCalledTimes(1);
     expect(result.detectorVersion).toBe('1.0.0');
+  });
+});
+
+describe('ExtensionWaitTrait.recordWaitStateStart — evidence verification (P0)', () => {
+  function makeTrait(overrides: Record<string, unknown> = {}) {
+    const prisma = {
+      device: { findUnique: vi.fn() },
+      waitStateEvent: {
+        findFirst: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+      },
+    };
+    const runtimeConfig = {
+      isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
+      getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
+      ...(overrides.runtimeConfig as Record<string, unknown>),
+    };
+    const { runtimeConfig: _ignored, ...rest } = overrides;
+    const trait = new ExtensionWaitTrait();
+    Object.assign(trait as unknown as Record<string, unknown>, {
+      prisma,
+      runtimeConfig,
+      enforcePrivacyOn: vi.fn(),
+      verifyDeviceSignature: vi.fn().mockResolvedValue(true),
+      ...rest,
+    });
+    return { prisma, runtimeConfig, trait };
+  }
+
+  const secret = 'device-secret-42';
+  const baseDto = {
+    deviceId: 'd1',
+    sessionId: 's1',
+    toolType: 'cursor',
+    waitStateId: 'ws1',
+    idempotencyKey: 'idk1',
+    detectorVersion: '1.0.0',
+    signature: 'sig',
+  };
+
+  function signedEvidence(type: 'ai_generation' | 'command_execution') {
+    return {
+      type,
+      sourceType: 'observed' as const,
+      adapterId: `test.${type}`,
+      detectorVersion: DETECTOR_VERSION,
+      timestamp: Date.now(),
+      waitStateId: baseDto.waitStateId,
+      sessionId: baseDto.sessionId,
+      correlationId: 'corr-1',
+      signature: '',
+    };
+  }
+
+  it('rejects evidence with an invalid signature', async () => {
+    const { prisma, trait } = makeTrait();
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1', eventSecret: secret });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+
+    const evidence = signedEvidence('ai_generation');
+    evidence.signature = 'bad-sig';
+
+    await expect(
+      trait.recordWaitStateStart('u1', { ...baseDto, evidence: [evidence] }),
+    ).rejects.toThrow('Invalid evidence signature');
+    expect(prisma.waitStateEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects evidence whose waitStateId does not match the request', async () => {
+    const { prisma, trait } = makeTrait();
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1', eventSecret: secret });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+
+    const item = signedEvidence('ai_generation');
+    item.signature = signEvidence(item, secret);
+    item.waitStateId = 'ws-other';
+
+    await expect(
+      trait.recordWaitStateStart('u1', { ...baseDto, evidence: [item] }),
+    ).rejects.toThrow('Evidence does not belong to this wait state');
+    expect(prisma.waitStateEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('records the wait state when evidence signatures are valid', async () => {
+    const { prisma, trait } = makeTrait();
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1', eventSecret: secret });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+    prisma.waitStateEvent.create.mockResolvedValue({
+      id: 'evt-1',
+      eventType: 'wait_state_start',
+      detectorVersion: '1.0.0',
+    });
+
+    const ai = signedEvidence('ai_generation');
+    ai.signature = signEvidence(ai, secret);
+    const cmd = signedEvidence('command_execution');
+    cmd.signature = signEvidence(cmd, secret);
+
+    const result = await trait.recordWaitStateStart('u1', { ...baseDto, evidence: [ai, cmd] });
+    expect(result.eventType).toBe('wait_state_start');
+    expect(prisma.waitStateEvent.create).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,5 +1,12 @@
 import * as crypto from 'crypto';
 
+import {
+  DetectorEvidence,
+  EvidenceSignalType,
+  evidenceToWaitSignal,
+  isPrimaryEvidenceType,
+} from '@waitlayer/shared';
+
 // ── Wait-detection confidence scoring ──
 //
 // These constants and the computeWaitConfidence function live here (rather
@@ -36,6 +43,8 @@ export interface WaitSignal {
   type: keyof typeof SIGNAL_WEIGHTS;
   details?: string;
 }
+
+export type { DetectorEvidence };
 
 export interface WaitClassification {
   /** The wait state was recorded (any non-empty signal set). */
@@ -99,10 +108,17 @@ export function computeWaitConfidence(signals: WaitSignal[]): {
 export function classifyWaitState(
   signals: WaitSignal[],
   isVerifiedSource: boolean,
+  evidence?: DetectorEvidence[],
 ): WaitClassification {
-  const { confidence, reason } = computeWaitConfidence(signals);
+  // When evidence is provided, use it as the authoritative source for both ad
+  // and payment classification. A client that supplies evidence cannot override
+  // it with legacy self-declared signals. Only fall back to signals when no
+  // evidence is present.
+  const evidenceSignals = (evidence ?? []).map(evidenceToWaitSignal);
+  const effectiveSignals = evidenceSignals.length > 0 ? evidenceSignals : signals;
+  const { confidence, reason } = computeWaitConfidence(effectiveSignals);
 
-  if (!signals || signals.length === 0) {
+  if (!effectiveSignals || effectiveSignals.length === 0) {
     return {
       detected: false,
       adEligible: false,
@@ -113,7 +129,7 @@ export function classifyWaitState(
     };
   }
 
-  const uniqueTypes = new Set(signals.map((s) => s.type));
+  const uniqueTypes = new Set(effectiveSignals.map((s) => s.type));
   // Corroboration must come from a second *primary* signal. Payment cannot be
   // authorized by client-declared `lifecycle_event` or `inactivity` signals
   // because both are cheap to forge. A modified client that declares
@@ -125,7 +141,23 @@ export function classifyWaitState(
   const hasCorroboration = primaryTypes.length >= 2;
 
   const adEligible = hasPrimary && confidence >= MINIMUM_WAIT_CONFIDENCE;
-  const paymentEligible = adEligible && hasCorroboration;
+
+  // Payment eligibility now REQUIRES signed evidence. Legacy self-declared
+  // signals can still serve ads (they drive ad confidence), but they cannot
+  // authorize billing. When evidence is present, only observed primary evidence
+  // counts; it must come from at least two distinct primary signal categories
+  // (e.g. ai_generation + command_execution). Inferred evidence (heuristics
+  // unsupported by a real integration) can serve ads but cannot authorize payment.
+  let paymentEligible = false;
+  if (evidence && evidence.length > 0) {
+    const observedPrimaryTypes = new Set<EvidenceSignalType>();
+    for (const item of evidence) {
+      if (isPrimaryEvidenceType(item.type) && item.sourceType === 'observed') {
+        observedPrimaryTypes.add(item.type);
+      }
+    }
+    paymentEligible = adEligible && observedPrimaryTypes.size >= 2;
+  }
 
   return {
     detected: true,

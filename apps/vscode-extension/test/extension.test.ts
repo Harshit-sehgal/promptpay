@@ -193,9 +193,13 @@ describe('extension wait lifecycle', () => {
       durationMs: 25,
       tool: 'task',
       waitStateId: 'short-task-wait',
+      signals: [{ type: 'active_task' }, { type: 'command_execution' }],
     };
 
-    mock.signalHandler?.({ type: 'wait_start', event: { ...event, durationMs: 0 } });
+    mock.signalHandler?.({
+      type: 'wait_start',
+      event: { ...event, durationMs: 0, signals: event.signals },
+    });
     await vi.waitFor(() => expect(mock.api.waitStateStart).toHaveBeenCalledTimes(1));
 
     mock.signalHandler?.({ type: 'wait_end', event });
@@ -232,6 +236,7 @@ describe('extension reportFalseWait command', () => {
       durationMs: 25,
       tool: 'task',
       waitStateId: 'fp-wait-1',
+      signals: [{ type: 'active_task' }, { type: 'command_execution' }],
     };
     mock.signalHandler?.({ type: 'wait_start', event });
 
@@ -257,7 +262,13 @@ describe('extension reportFalseWait command', () => {
     mock.showQuickPick.mockResolvedValue('Some reason');
     mock.signalHandler?.({
       type: 'wait_start',
-      event: { startTime: Date.now(), durationMs: 25, tool: 'task', waitStateId: 'fp-a' },
+      event: {
+        startTime: Date.now(),
+        durationMs: 25,
+        tool: 'task',
+        waitStateId: 'fp-a',
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
+      },
     });
     await mock.commands.get('waitlayer.reportFalseWait')?.();
     expect(mock.api.flagFalsePositive).toHaveBeenCalledTimes(1);
@@ -266,7 +277,13 @@ describe('extension reportFalseWait command', () => {
     mock.api.flagFalsePositive.mockClear();
     mock.signalHandler?.({
       type: 'wait_start',
-      event: { startTime: Date.now(), durationMs: 25, tool: 'task', waitStateId: 'fp-b' },
+      event: {
+        startTime: Date.now(),
+        durationMs: 25,
+        tool: 'task',
+        waitStateId: 'fp-b',
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
+      },
     });
     await mock.commands.get('waitlayer.reportFalseWait')?.();
 
@@ -281,6 +298,7 @@ describe('extension reportFalseWait command', () => {
       durationMs: 25,
       tool: 'task',
       waitStateId: 'fp-reason',
+      signals: [{ type: 'active_task' }, { type: 'command_execution' }],
     };
     mock.signalHandler?.({ type: 'wait_start', event });
 
@@ -297,6 +315,7 @@ describe('extension reportFalseWait command', () => {
       durationMs: 25,
       tool: 'task',
       waitStateId: 'fp-reason-unknown',
+      signals: [{ type: 'active_task' }, { type: 'command_execution' }],
     };
     mock.signalHandler?.({ type: 'wait_start', event });
 
@@ -412,7 +431,13 @@ describe('extension reportFalseWait — reason + suppression (P1.18)', () => {
     mock.showQuickPick.mockResolvedValue('I was actively working, not waiting on AI');
     mock.signalHandler?.({
       type: 'wait_start',
-      event: { startTime: Date.now(), durationMs: 25, tool: 'task', waitStateId: 'fp-pick' },
+      event: {
+        startTime: Date.now(),
+        durationMs: 25,
+        tool: 'task',
+        waitStateId: 'fp-pick',
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
+      },
     });
     await mock.commands.get('waitlayer.reportFalseWait')?.();
     expect(mock.showQuickPick).toHaveBeenCalled();
@@ -434,7 +459,13 @@ describe('extension reportFalseWait — reason + suppression (P1.18)', () => {
     mock.showQuickPick.mockResolvedValue('I was actively working, not waiting on AI');
     mock.signalHandler?.({
       type: 'wait_start',
-      event: { startTime: Date.now(), durationMs: 25, tool: 'task', waitStateId: 'notify-wait' },
+      event: {
+        startTime: Date.now(),
+        durationMs: 25,
+        tool: 'task',
+        waitStateId: 'notify-wait',
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
+      },
     });
     await vi.waitFor(() =>
       expect(mock.executeCommand).toHaveBeenCalledWith('waitlayer.reportFalseWait'),

@@ -3,7 +3,13 @@ import * as http from 'http';
 import * as https from 'https';
 import * as vscode from 'vscode';
 
-import { parseMinor, signPayload } from '@waitlayer/shared';
+import {
+  DETECTOR_VERSION,
+  type DetectorEvidence,
+  parseMinor,
+  signEvidence,
+  signPayload,
+} from '@waitlayer/shared';
 
 import { ConfigurationManager } from './config';
 import { requestHostnameForUrl, resolveCredentialSafeUrl } from './transport-policy';
@@ -228,7 +234,27 @@ export class ApiClient {
     idempotencyKey: string;
     signals: WaitSignal[];
     detectorVersion: string;
+    evidence?: Omit<
+      DetectorEvidence,
+      'signature' | 'detectorVersion' | 'waitStateId' | 'sessionId'
+    >[];
   }): Promise<void> {
+    const evidence: DetectorEvidence[] = [];
+    if (input.evidence) {
+      const secret = this.deviceEventSecret ?? (await this.config.getDeviceEventSecret());
+      if (!secret) {
+        throw new Error('WaitLayer device is not registered with an event secret.');
+      }
+      for (const item of input.evidence) {
+        const signed: Omit<DetectorEvidence, 'signature'> = {
+          ...item,
+          detectorVersion: DETECTOR_VERSION,
+          waitStateId: input.waitStateId,
+          sessionId: input.sessionId,
+        };
+        evidence.push({ ...signed, signature: signEvidence(signed, secret) });
+      }
+    }
     const payload = {
       deviceId: input.deviceId,
       sessionId: input.sessionId,
@@ -237,6 +263,7 @@ export class ApiClient {
       idempotencyKey: input.idempotencyKey,
       signals: input.signals,
       detectorVersion: input.detectorVersion,
+      ...(evidence.length > 0 ? { evidence } : {}),
     };
     await this.post('/extension/wait-state/start', {
       ...payload,

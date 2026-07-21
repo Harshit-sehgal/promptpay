@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 
 import { Prisma, ToolTypeEnum } from '@waitlayer/db';
+import { DetectorEvidence, verifyEvidence } from '@waitlayer/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
@@ -52,6 +53,7 @@ export class ExtensionWaitTrait {
       waitStateId: string;
       idempotencyKey: string;
       signals?: WaitSignal[];
+      evidence?: DetectorEvidence[];
       detectorVersion?: string;
       signature: string;
     },
@@ -66,6 +68,23 @@ export class ExtensionWaitTrait {
     const { signature: _, ...payload } = dto;
     if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
+    }
+    // Verify per-item evidence signatures if evidence is supplied. Evidence is
+    // signed with the device secret, so a modified client cannot inject fake
+    // corroboration without access to the per-device HMAC key.
+    if (dto.evidence && dto.evidence.length > 0) {
+      const deviceSecret = device.eventSecret;
+      if (!deviceSecret) {
+        throw new ForbiddenException('Device has no event secret; cannot verify evidence');
+      }
+      for (const item of dto.evidence) {
+        if (item.waitStateId !== dto.waitStateId || item.sessionId !== dto.sessionId) {
+          throw new ForbiddenException('Evidence does not belong to this wait state');
+        }
+        if (!verifyEvidence(item, deviceSecret)) {
+          throw new ForbiddenException('Invalid evidence signature');
+        }
+      }
     }
     // P1.17: detector-version kill-switch. A disabled detector version must
     // not record billable wait states, so operators can roll back a bad
@@ -117,10 +136,14 @@ export class ExtensionWaitTrait {
     const classification = classifyWaitState(
       dto.signals ?? [],
       isVerifiedDetectorSource(dto.detectorVersion, detectorAllowlist),
+      dto.evidence,
     );
     // Persist only the signal categories, never the optional human-readable
     // details, so user code/PII never reaches the database.
     const sanitizedSignals = (dto.signals ?? []).map(({ type }) => ({ type }));
+    // Persist the verified evidence payload. Signatures are not secret, and
+    // retaining them lets the server re-verify evidence later.
+    const sanitizedEvidence = dto.evidence;
     // Server-side behavioural verification: flag anomalous wait-state patterns
     // (e.g. repeated identical single-signal submissions) for review. This is
     // best-effort and non-blocking so a transient anomaly cannot break the
@@ -140,6 +163,7 @@ export class ExtensionWaitTrait {
           signature: dto.signature,
           idempotencyKey: dto.idempotencyKey,
           signals: sanitizedSignals as unknown as Prisma.InputJsonValue,
+          evidence: sanitizedEvidence as unknown as Prisma.InputJsonValue,
           confidence: classification.confidence,
           reason: classification.reason,
           detectorVersion: dto.detectorVersion,

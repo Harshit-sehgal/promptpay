@@ -1,7 +1,12 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
-import { FalsePositiveReason, formatMinorUnits } from '@waitlayer/shared';
+import {
+  DETECTOR_VERSION,
+  type DetectorEvidence,
+  FalsePositiveReason,
+  formatMinorUnits,
+} from '@waitlayer/shared';
 
 import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
@@ -282,6 +287,7 @@ export async function activate(context: vscode.ExtensionContext) {
             idempotencyKey,
             signals: event.signals,
             detectorVersion: event.detectorVersion,
+            evidence: buildEvidence(event, sessionId),
           });
           return deviceId;
         } catch (err: unknown) {
@@ -446,6 +452,69 @@ export async function activate(context: vscode.ExtensionContext) {
       });
   };
   fetchBootBalance();
+}
+
+function buildEvidence(
+  event: { waitStateId: string; tool: string; signals?: { type: string; details?: string }[] },
+  _sessionId: string,
+): Omit<DetectorEvidence, 'signature' | 'detectorVersion' | 'waitStateId' | 'sessionId'>[] {
+  const now = Date.now();
+  const evidence: Omit<
+    DetectorEvidence,
+    'signature' | 'detectorVersion' | 'waitStateId' | 'sessionId'
+  >[] = [];
+  for (const signal of event.signals ?? []) {
+    if (signal.type === 'ai_generation') {
+      evidence.push({
+        type: 'ai_generation',
+        sourceType: 'observed',
+        adapterId: `vscode.ai-tool.${event.tool}`,
+        timestamp: now,
+        correlationId: event.waitStateId,
+      });
+    } else if (signal.type === 'active_task') {
+      evidence.push({
+        type: 'active_task',
+        sourceType: 'observed',
+        adapterId: 'vscode.task',
+        timestamp: now,
+        correlationId: event.waitStateId,
+      });
+    } else if (signal.type === 'command_execution') {
+      evidence.push({
+        type: 'command_execution',
+        sourceType: 'observed',
+        adapterId: 'vscode.terminal',
+        timestamp: now,
+        correlationId: event.waitStateId,
+      });
+    } else {
+      evidence.push({
+        type: signal.type as 'lifecycle_event' | 'inactivity',
+        sourceType: 'inferred',
+        adapterId: 'vscode.heuristic',
+        timestamp: now,
+        correlationId: event.waitStateId,
+      });
+    }
+  }
+  const primaryTypes = new Set(evidence.map((e) => e.type));
+  // Ensure every potentially billable wait also carries the command/tool
+  // invocation as a second observed primary type. This mirrors the CLI
+  // wrapper which observes both the command execution and the wrapper task.
+  if (
+    !primaryTypes.has('command_execution') &&
+    (primaryTypes.has('ai_generation') || primaryTypes.has('active_task'))
+  ) {
+    evidence.push({
+      type: 'command_execution',
+      sourceType: 'observed',
+      adapterId: 'vscode.tool-invocation',
+      timestamp: now + 1,
+      correlationId: event.waitStateId,
+    });
+  }
+  return evidence;
 }
 
 export function deactivate() {

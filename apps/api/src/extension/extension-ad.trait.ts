@@ -30,6 +30,7 @@ import {
   advertiserCurrencyLockKey,
   BudgetExhaustedError,
   classifyWaitState,
+  DetectorEvidence,
   isVerifiedDetectorSource,
   mergeBlockedCategories,
   ServedAd,
@@ -148,10 +149,14 @@ export class ExtensionAdTrait {
     const signals = ((waitStart.signals as unknown as WaitSignal[] | null) ?? []).filter(
       (s): s is WaitSignal => s && typeof s === 'object' && 'type' in s,
     );
+    const evidence = ((waitStart.evidence as unknown as DetectorEvidence[] | null) ?? []).filter(
+      (e): e is DetectorEvidence => e && typeof e === 'object' && 'type' in e,
+    );
     const detectorAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
     const classification = classifyWaitState(
       signals,
       isVerifiedDetectorSource(waitStart.detectorVersion, detectorAllowlist),
+      evidence,
     );
     if (!classification.adEligible) {
       return { ad: null, reason: 'low_confidence_wait' };
@@ -638,10 +643,14 @@ export class ExtensionAdTrait {
     const waitSignals = (
       (waitStartForImpression?.signals as unknown as WaitSignal[] | null) ?? []
     ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
+    const waitEvidence = (
+      (waitStartForImpression?.evidence as unknown as DetectorEvidence[] | null) ?? []
+    ).filter((e): e is DetectorEvidence => e && typeof e === 'object' && 'type' in e);
     const detectorAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
     const classification = classifyWaitState(
       waitSignals,
       isVerifiedDetectorSource(waitStartForImpression?.detectorVersion, detectorAllowlist),
+      waitEvidence,
     );
     if (!classification.paymentEligible) {
       await this.invalidateImpressionAndReleaseReservation({
@@ -926,10 +935,14 @@ export class ExtensionAdTrait {
     const waitSignals = (
       (waitStartForClick?.signals as unknown as WaitSignal[] | null) ?? []
     ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
+    const waitEvidence = (
+      (waitStartForClick?.evidence as unknown as DetectorEvidence[] | null) ?? []
+    ).filter((e): e is DetectorEvidence => e && typeof e === 'object' && 'type' in e);
     const clickAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
     const clickClassification = classifyWaitState(
       waitSignals,
       isVerifiedDetectorSource(waitStartForClick?.detectorVersion, clickAllowlist),
+      waitEvidence,
     );
     if (isCpcBid && !clickClassification.paymentEligible) {
       return { clicked: false, reason: 'uncorroborated_wait' };

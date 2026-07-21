@@ -580,6 +580,10 @@ model WaitStateEvent {
   detectorVersion         String?      @map("detector_version")
   reason                  String?
   signals                 Json?        @default("[]")
+  // P0: verified detector evidence (signed, observed vs inferred). When
+  // present, the server uses evidence instead of the legacy flat signals
+  // to decide payment eligibility.
+  evidence                Json?
   isFalsePositive         Boolean      @default(false) @map("is_false_positive")
   // User-reported false-positive feedback metadata (P1 #16): normalized
   // reason code, optional bounded note, and report timestamp. Distinct from

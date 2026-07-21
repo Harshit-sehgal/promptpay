@@ -4,6 +4,8 @@ import * as http from 'http';
 import * as https from 'https';
 import * as os from 'os';
 
+import { DETECTOR_VERSION, DetectorEvidence, signEvidence } from '@waitlayer/shared';
+
 import {
   clearTokens,
   Credentials,
@@ -356,10 +358,34 @@ export class ApiClient {
     waitStateId: string;
     toolType: string;
     sessionId: string;
+    evidence?: Omit<
+      DetectorEvidence,
+      'signature' | 'detectorVersion' | 'waitStateId' | 'sessionId'
+    >[];
   }) {
     // Normalize tool name to a valid ToolType enum value.
     // Common tool names map to enum values; unrecognized ones default to 'terminal'.
     const normalizedTool = normalizeToolType(input.toolType);
+
+    // Sign any detector evidence with the per-device secret before sending.
+    // Evidence items without a valid signature are rejected by the API, so the
+    // client must produce them locally using the device secret.
+    const secret = this.deviceEventSecret ?? (await getDeviceEventSecret());
+    const evidence: DetectorEvidence[] = [];
+    if (secret && input.evidence) {
+      for (const item of input.evidence) {
+        const signedItem: Omit<DetectorEvidence, 'signature'> = {
+          ...item,
+          detectorVersion: DETECTOR_VERSION,
+          waitStateId: input.waitStateId,
+          sessionId: input.sessionId,
+        };
+        evidence.push({
+          ...signedItem,
+          signature: signEvidence(signedItem, secret),
+        });
+      }
+    }
 
     const payload = {
       deviceId: input.deviceId,
@@ -367,6 +393,7 @@ export class ApiClient {
       toolType: normalizedTool,
       sessionId: input.sessionId,
       idempotencyKey: 'cli-start-' + input.waitStateId,
+      ...(evidence.length > 0 ? { evidence } : {}),
     };
     const signature = await this.signEventPayload(payload);
     return this.raw('POST', '/extension/wait-state/start', {

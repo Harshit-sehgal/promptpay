@@ -5,6 +5,7 @@ export * from './currency';
 export * from './detector-quality';
 export * from './detector-quality.dataset';
 export * from './enums';
+export * from './evidence';
 export * from './feature-flags';
 export * from './money';
 export * from './parse';

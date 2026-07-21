@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BidType } from '@waitlayer/db';
 
+import { makeTestEvidence } from './evidence.test-helper';
 import { ExtensionService } from './extension.service';
 import { BILLABLE_WAIT_SIGNALS } from './test/wait-fixtures';
 
@@ -26,6 +27,13 @@ function makePrisma() {
       findFirst: vi.fn().mockResolvedValue({
         id: 'ws-1',
         signals: BILLABLE_WAIT_SIGNALS,
+        evidence: makeTestEvidence(
+          [
+            { type: 'ai_generation', adapterId: 'test.ai' },
+            { type: 'command_execution', adapterId: 'test.runner' },
+          ],
+          { waitStateId: 'ws-1', sessionId: 's-1' },
+        ),
         detectorVersion: '1.0.0',
       }),
     },
