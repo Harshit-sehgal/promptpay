@@ -134,6 +134,13 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
 
       const deviceId = await api.getOrRegisterDevice();
 
+      // P0.1: CLI marker-file evidence is user-controlled (the user writes the
+      // .waitlayer-wait file manually), NOT independently observed by the CLI.
+      // Using 'inferred' means the server's payment eligibility gate (requires
+      // ≥2 observed primary types) correctly classifies this as non-billable.
+      // A real CLI command wrapper (e.g. `waitlayer run -- claude ...`) that
+      // spawns and supervises the child process can later provide genuine
+      // observed evidence.
       await api.reportWaitState({
         deviceId,
         waitStateId,
@@ -142,14 +149,14 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         evidence: [
           {
             type: 'command_execution',
-            sourceType: 'observed',
+            sourceType: 'inferred',
             adapterId: 'cli.runner.command',
             timestamp: state.startTime,
             correlationId: sessionId,
           },
           {
             type: 'active_task',
-            sourceType: 'observed',
+            sourceType: 'inferred',
             adapterId: 'cli.runner.task',
             timestamp: state.startTime + 1,
             correlationId: sessionId,

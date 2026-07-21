@@ -499,14 +499,21 @@ function buildEvidence(
   >[] = [];
   for (const signal of event.signals ?? []) {
     if (signal.type === 'ai_generation') {
+      // P0.1: Heuristic AI-tool name mapping — NOT observed-by-integration.
+      // The detector adapters (detector-adapters.ts) explicitly state these
+      // are name-based heuristic mappings, not live lifecycle integrations.
+      // Using 'inferred' here means a single heuristic ai_generation signal
+      // cannot authorize payment (requires ≥2 observed primary types).
       evidence.push({
         type: 'ai_generation',
-        sourceType: 'observed',
-        adapterId: `vscode.ai-tool.${event.tool}`,
+        sourceType: 'inferred',
+        adapterId: `vscode.heuristic.${event.tool}`,
         timestamp: now,
         correlationId: event.waitStateId,
       });
     } else if (signal.type === 'active_task') {
+      // P0.1: VS Code's task API emits real onDidStartTask / onDidEndTask
+      // events, so active_task from 'vscode.task' is genuinely observed.
       evidence.push({
         type: 'active_task',
         sourceType: 'observed',
@@ -515,6 +522,7 @@ function buildEvidence(
         correlationId: event.waitStateId,
       });
     } else if (signal.type === 'command_execution') {
+      // P0.1: Terminal lifecycle detection is a genuine VS Code observation.
       evidence.push({
         type: 'command_execution',
         sourceType: 'observed',
@@ -532,22 +540,10 @@ function buildEvidence(
       });
     }
   }
-  const primaryTypes = new Set(evidence.map((e) => e.type));
-  // Ensure every potentially billable wait also carries the command/tool
-  // invocation as a second observed primary type. This mirrors the CLI
-  // wrapper which observes both the command execution and the wrapper task.
-  if (
-    !primaryTypes.has('command_execution') &&
-    (primaryTypes.has('ai_generation') || primaryTypes.has('active_task'))
-  ) {
-    evidence.push({
-      type: 'command_execution',
-      sourceType: 'observed',
-      adapterId: 'vscode.tool-invocation',
-      timestamp: now + 1,
-      correlationId: event.waitStateId,
-    });
-  }
+  // P0.1: NEVER auto-insert fabricated command_execution evidence. Payment
+  // eligibility requires ≥2 observed primary signal TYPES from genuinely
+  // independent sources. Without real terminal activity, a heuristic
+  // ai_generation cannot become billable by auto-adding a second signal.
   return evidence;
 }
 

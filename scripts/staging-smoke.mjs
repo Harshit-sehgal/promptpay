@@ -205,6 +205,8 @@ async function main() {
       const campaignRes = await api('POST', '/advertiser/campaigns', advToken, {
         name: `staging-smoke-${Date.now()}`,
         currency: 'USD',
+        category: 'technology',
+        bidType: 'CPC',
         budgetTotalMinor: 100_000,
         // CPC at $20/click so a single billed click credits the developer
         // >= the $10 payout minimum — CPM per-impression fractions cannot
@@ -218,7 +220,6 @@ async function main() {
           ctaText: 'Learn more',
         },
         targetingCountries: ['US'],
-        billingModel: 'CPC',
       });
       if (campaignRes.status >= 400) {
         fail(`create campaign -> HTTP ${campaignRes.status}: ${campaignRes.text}`);
@@ -292,12 +293,30 @@ async function main() {
         return api('POST', path, devToken, body);
       };
 
-      // 7. Signed wait start with CORROBORATED signals (P0.1: a single
-      // ai_generation signal is ad-eligible but NOT payment-eligible).
+      // 7. Signed wait start with signed EVIDENCE items (P0.1). Payment
+      // eligibility now requires ≥2 observed primary evidence types. Since
+      // heuristic ai_generation signals are 'inferred', the staging test
+      // must use a task+terminal combination (both 'observed' when the
+      // adapter provides real VS Code task/terminal lifecycle events).
+      // For the staging smoke test we mimic the extension's event-building
+      // code by creating evidence items and signing them with the device
+      // secret, matching exactly how the packaged client produces evidence.
       const waitStateId = `staging-ws-${randomUUID()}`;
       const sessionId = `staging-sess-${randomUUID()}`;
+      const detectorVersion = 'staging-smoke-1.0.0';
       const loopStart = Date.now();
       if (deviceId) {
+        // Build evidence items exactly like the VS Code extension's
+        // buildEvidence() — signs each with the device secret.
+        const now = Date.now();
+        const rawEvidence = [
+          { type: 'active_task', sourceType: 'observed', adapterId: 'vscode.task', timestamp: now, correlationId: waitStateId },
+          { type: 'command_execution', sourceType: 'observed', adapterId: 'vscode.terminal', timestamp: now + 1, correlationId: waitStateId },
+        ];
+        const evidence = rawEvidence.map((item) => {
+          const evidencePayload = { ...item, detectorVersion, waitStateId, sessionId };
+          return { ...evidencePayload, signature: signPayload(evidencePayload, deviceSecret) };
+        });
         const wsStart = await signedPost('/extension/wait-state/start', {
           deviceId,
           sessionId,
@@ -305,10 +324,11 @@ async function main() {
           waitStateId,
           idempotencyKey: `staging-ws-start-${randomUUID()}`,
           signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
-          detectorVersion: 'staging-smoke-1.0.0',
+          evidence,
+          detectorVersion,
         });
         if (wsStart.status >= 400) fail(`wait start -> HTTP ${wsStart.status}: ${wsStart.text}`);
-        else ok('signed wait start recorded (corroborated signals)');
+        else ok('signed wait start recorded (signed evidence items, payment-eligible)');
       }
 
       // 8. Ad request with the SAME device/session/wait IDs — must serve.
@@ -343,7 +363,7 @@ async function main() {
         await new Promise((r) => setTimeout(r, 5_500));
 
         // 10. Qualify the impression.
-        const qualified = await signedPost('/extension/qualified-impression', {
+        const qualified = await signedPost('/extension/impression-qualified', {
           impressionToken,
           qualifiedAt: new Date().toISOString(),
           visibleDurationMs: 5_500,
@@ -356,7 +376,7 @@ async function main() {
         }
 
         // 11. Click — the CPC billing trigger.
-        const click = await signedPost('/extension/ad-click', {
+        const click = await signedPost('/extension/click', {
           impressionToken,
           clickedAt: new Date().toISOString(),
           idempotencyKey: `staging-clk-${randomUUID()}`,

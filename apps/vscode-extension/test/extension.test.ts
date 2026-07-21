@@ -146,6 +146,8 @@ beforeEach(() => {
   mock.api.waitStateEnd.mockResolvedValue({});
   mock.api.requestAd.mockResolvedValue(null);
   mock.api.flagFalsePositive.mockResolvedValue(undefined);
+  mock.api.getDeveloperSettings.mockResolvedValue({ adsEnabled: false });
+  mock.api.updateAdsEnabled.mockResolvedValue(undefined);
   mock.config.adsEnabled.mockResolvedValue(false);
   mock.config.inQuietHours.mockResolvedValue(false);
   mock.config.getMaxAdsPerHour.mockResolvedValue(5);

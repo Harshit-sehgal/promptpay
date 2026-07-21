@@ -168,6 +168,28 @@ export function maskPayoutDestination(destination: string | null | undefined): s
 }
 
 /**
+ * Mask an email address for safe display in audit snapshots.
+ * Shows first 3 characters of the local part + domain, e.g.
+ * 'dev@example.com' → 'dev***@example.com'
+ * 'a@b.com' → 'a***@b.com'
+ */
+export function safeDisplayEmail(email: string | null | undefined): string {
+  if (!email) return '';
+  const trimmed = email.trim();
+  if (!trimmed) return '';
+  const atIndex = trimmed.indexOf('@');
+  if (atIndex > 0) {
+    const prefix = trimmed.slice(0, atIndex);
+    const domain = trimmed.slice(atIndex);
+    const visiblePrefix = prefix.length <= 3 ? prefix : prefix.slice(0, 3);
+    return `${visiblePrefix}***${domain}`;
+  }
+  // Not an email shape — mask generically
+  if (trimmed.length <= 3) return '***';
+  return `${trimmed.slice(0, 3)}***`;
+}
+
+/**
  * Check if a string looks like an encrypted destination (starts with "v1:base64").
  */
 export function isEncryptedDestination(destination: string): boolean {

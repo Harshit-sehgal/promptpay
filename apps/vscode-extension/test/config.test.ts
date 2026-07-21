@@ -66,10 +66,10 @@ describe('ConfigurationManager — settings parsing & validation', () => {
     expect(mgr.getApiUrl()).toBe('https://api.waitlayer.com/api/v1');
   });
 
-  it('reads adsEnabled as a boolean and defaults to enabled', async () => {
+  it('reads adsEnabled as a boolean and defaults to disabled (opt-in required)', async () => {
     const mgr = makeManager();
 
-    expect(await mgr.adsEnabled()).toBe(true);
+    expect(await mgr.adsEnabled()).toBe(false);
 
     mock.config['adsEnabled'] = false;
     expect(await mgr.adsEnabled()).toBe(false);
@@ -78,19 +78,21 @@ describe('ConfigurationManager — settings parsing & validation', () => {
     expect(await mgr.adsEnabled()).toBe(true);
   });
 
-  it('toggles ads off then on, persisting each value globally', async () => {
+  it('toggles ads on then off, persisting each value globally', async () => {
     const mgr = makeManager();
 
-    expect(await mgr.adsEnabled()).toBe(true); // default on
+    expect(await mgr.adsEnabled()).toBe(false); // default off (opt-in required)
 
-    const afterOff = await mgr.toggleAds();
-    expect(afterOff).toBe(false);
-    expect(await mgr.adsEnabled()).toBe(false);
-    expect(mock.config['adsEnabled']).toBe(false);
-
+    // First toggle: off → on (enabled)
     const afterOn = await mgr.toggleAds();
     expect(afterOn).toBe(true);
+    expect(await mgr.adsEnabled()).toBe(true);
     expect(mock.config['adsEnabled']).toBe(true);
+
+    // Second toggle: on → off (disabled)
+    const afterOff = await mgr.toggleAds();
+    expect(afterOff).toBe(false);
+    expect(mock.config['adsEnabled']).toBe(false);
   });
 
   it('reads maxAdsPerHour, defaulting to 6', async () => {

@@ -77,10 +77,54 @@ export class ExtensionWaitTrait {
       if (!deviceSecret) {
         throw new ForbiddenException('Device has no event secret; cannot verify evidence');
       }
+      // P0.2: Known adapter allowlist — reject evidence from unknown adapters.
+      const KNOWN_ADAPTERS = new Set([
+        'vscode.task',
+        'vscode.terminal',
+        'vscode.heuristic',
+        'cli.runner.command',
+        'cli.runner.task',
+        'cli.runner.market',
+      ]);
+      // Adapter prefix allowlist for dynamic adapter IDs (e.g. vscode.ai-tool.*, vscode.heuristic.*).
+      const KNOWN_ADAPTER_PREFIXES = ['vscode.ai-tool.', 'vscode.heuristic.', 'cli.runner.'];
+      // P0.2: Evidence freshness — reject evidence older than 60 seconds.
+      const now = Date.now();
+      const MAX_EVIDENCE_AGE_MS = 60_000;
       for (const item of dto.evidence) {
+        // Adapter allowlist check
+        const isKnown =
+          KNOWN_ADAPTERS.has(item.adapterId) ||
+          KNOWN_ADAPTER_PREFIXES.some((prefix) => item.adapterId.startsWith(prefix));
+        if (!isKnown) {
+          throw new BadRequestException(
+            `Unknown evidence adapter: ${item.adapterId}; this evidence item is rejected`,
+          );
+        }
+        // Wait state + session binding check
         if (item.waitStateId !== dto.waitStateId || item.sessionId !== dto.sessionId) {
           throw new ForbiddenException('Evidence does not belong to this wait state');
         }
+        // Evidence freshness check — reject stale evidence within a bounded window.
+        if (
+          item.timestamp &&
+          (now - item.timestamp > MAX_EVIDENCE_AGE_MS || item.timestamp > now + 5_000)
+        ) {
+          throw new BadRequestException(
+            `Evidence timestamp is outside the acceptable window (max ${MAX_EVIDENCE_AGE_MS}ms old, max 5s in future)`,
+          );
+        }
+        // Detector version consistency check
+        if (
+          dto.detectorVersion &&
+          item.detectorVersion &&
+          item.detectorVersion !== dto.detectorVersion
+        ) {
+          throw new BadRequestException(
+            `Evidence detector version (${item.detectorVersion}) does not match request detector version (${dto.detectorVersion})`,
+          );
+        }
+        // Signature verification
         if (!verifyEvidence(item, deviceSecret)) {
           throw new ForbiddenException('Invalid evidence signature');
         }

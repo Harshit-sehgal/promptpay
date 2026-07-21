@@ -9,7 +9,7 @@ import { Prisma } from '@waitlayer/db';
 import { highValueFenceReleaseMinor } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
-import { safeDisplayDestination } from '../common/utils/payout-encryption';
+import { safeDisplayDestination, safeDisplayEmail } from '../common/utils/payout-encryption';
 import { PrismaService } from '../config/prisma.service';
 import { EmailQueueService } from '../email/email-queue.service';
 import { PayoutService } from '../payout/payout.service';
@@ -268,7 +268,7 @@ export class AdminPayoutsTrait {
             isVerified: verified,
             provider: account.provider,
             destination: safeDisplayDestination(account.destination),
-            userEmail: account.user?.email ?? null,
+            userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
         },
@@ -350,13 +350,13 @@ export class AdminPayoutsTrait {
             isVerified: account.isVerified,
             provider: account.provider,
             destination: safeDisplayDestination(account.destination),
-            userEmail: account.user?.email ?? null,
+            userEmail: safeDisplayEmail(account.user?.email),
           },
           afterSnap: {
             isFrozen: true,
             provider: account.provider,
             destination: safeDisplayDestination(account.destination),
-            userEmail: account.user?.email ?? null,
+            userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
         },
@@ -803,14 +803,14 @@ export class AdminPayoutsTrait {
             initiationPayoutId: account.initiationPayoutId,
             provider: account.provider,
             destination: safeDisplayDestination(account.destination),
-            userEmail: account.user?.email ?? null,
+            userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
           afterSnap: {
             initiationPayoutId: null,
             provider: account.provider,
             destination: safeDisplayDestination(account.destination),
-            userEmail: account.user?.email ?? null,
+            userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
             observedPayoutStatus: fencedPayout.status,
             providerTxId: providerTxId ?? null,
@@ -870,13 +870,13 @@ export class AdminPayoutsTrait {
             isVerified: account.isVerified,
             provider: account.provider,
             destination: safeDisplayDestination(account.destination),
-            userEmail: account.user?.email ?? null,
+            userEmail: safeDisplayEmail(account.user?.email),
           },
           afterSnap: {
             isFrozen: false,
             provider: account.provider,
             destination: safeDisplayDestination(account.destination),
-            userEmail: account.user?.email ?? null,
+            userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
         },
