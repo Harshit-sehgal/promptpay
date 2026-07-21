@@ -555,6 +555,24 @@ export class AdminPayoutsTrait {
       throw new BadRequestException('Referenced payout no longer exists');
     }
     const requestedAmountMinor = payout.approvedAmountMinor ?? payout.requestedAmountMinor ?? 0n;
+    // One live request per account: an existing pending, unexpired request
+    // should be reviewed (or expire) before another is created — otherwise
+    // approvers see a queue of near-duplicate requests and every approval
+    // after the first fails against an already-cleared fence. The CAS on the
+    // review write keeps even a create-race benign (only one decision lands).
+    const existingPending = await this.prisma.payoutFenceReleaseApproval.findFirst({
+      where: {
+        payoutAccountId,
+        decision: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+    if (existingPending) {
+      throw new ConflictException(
+        `A pending fence release approval (${existingPending.id}) already exists for this account`,
+      );
+    }
     const expiresAt = new Date(Date.now() + FENCE_APPROVAL_EXPIRY_MINUTES * 60 * 1000);
     const approval = await this.prisma.payoutFenceReleaseApproval.create({
       data: {
@@ -607,9 +625,10 @@ export class AdminPayoutsTrait {
       throw new ConflictException(`Fence release approval is already ${approval.decision}`);
     }
     if (approval.expiresAt < new Date()) {
-      // Mark expired inline so the caller sees a clear state.
-      await this.prisma.payoutFenceReleaseApproval.update({
-        where: { id: approvalId },
+      // Mark expired inline so the caller sees a clear state. Guarded so a
+      // concurrent decision that already landed is never clobbered.
+      await this.prisma.payoutFenceReleaseApproval.updateMany({
+        where: { id: approvalId, decision: null },
         data: { decision: 'expired' },
       });
       throw new BadRequestException('Fence release approval request has expired');
@@ -617,9 +636,13 @@ export class AdminPayoutsTrait {
     if (approval.requesterId === approverId) {
       throw new ForbiddenException('Approver must be distinct from the requester');
     }
-    // Record the decision first. For rejections this is the final state.
-    const updated = await this.prisma.payoutFenceReleaseApproval.update({
-      where: { id: approvalId },
+    // Record the decision via a compare-and-swap: exactly one concurrent
+    // reviewer can win. Without the `decision: null` guard, two racing
+    // reviews would both pass the pending check above and the approval row
+    // would be last-write-wins (e.g. a rejected decision overwritten by a
+    // late approval, after which the fence release proceeds on a stale read).
+    const cas = await this.prisma.payoutFenceReleaseApproval.updateMany({
+      where: { id: approvalId, decision: null, expiresAt: { gt: new Date() } },
       data: {
         approverId,
         approverSessionId,
@@ -630,6 +653,14 @@ export class AdminPayoutsTrait {
         evidence: (evidence ??
           (approval.evidence as Prisma.InputJsonValue)) as Prisma.InputJsonValue,
       },
+    });
+    if (cas.count === 0) {
+      throw new ConflictException(
+        'Fence release approval was already decided by another reviewer or has expired',
+      );
+    }
+    const updated = await this.prisma.payoutFenceReleaseApproval.findUnique({
+      where: { id: approvalId },
     });
     if (decision === 'rejected') {
       return { approval: updated, released: false };

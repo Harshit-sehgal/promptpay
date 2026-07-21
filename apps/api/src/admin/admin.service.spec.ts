@@ -58,6 +58,7 @@ const mockPrisma: any = {
     create: vi.fn(),
     findUnique: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   $transaction: vi.fn(async (callback: any) => callback(mockPrisma)),
 };
@@ -1369,16 +1370,13 @@ describe('AdminService', () => {
           reason: 'provider confirmed paid',
           evidence: null,
         };
-        // First read in reviewPayoutFenceRelease sees the pending approval; the
-        // second read inside releasePayoutFence expects the persisted approved row.
+        // Reads: (1) initial pending read in reviewPayoutFenceRelease, (2)
+        // post-CAS re-read, (3) read inside releasePayoutFence — both later
+        // reads see the persisted approved row.
         mockPrisma.payoutFenceReleaseApproval.findUnique
           .mockResolvedValueOnce(approval)
-          .mockResolvedValueOnce({ ...approval, decision: 'approved', approverId: 'admin-2' });
-        mockPrisma.payoutFenceReleaseApproval.update.mockResolvedValue({
-          ...approval,
-          decision: 'approved',
-          approverId: 'admin-2',
-        });
+          .mockResolvedValue({ ...approval, decision: 'approved', approverId: 'admin-2' });
+        mockPrisma.payoutFenceReleaseApproval.updateMany.mockResolvedValue({ count: 1 });
         mockPrisma.payoutAccount.findUnique.mockResolvedValue({
           id: 'pa-1',
           provider: 'wise',
@@ -1409,8 +1407,9 @@ describe('AdminService', () => {
         })) as { released: boolean };
 
         expect(result.released).toBe(true);
-        expect(mockPrisma.payoutFenceReleaseApproval.update).toHaveBeenCalledWith(
+        expect(mockPrisma.payoutFenceReleaseApproval.updateMany).toHaveBeenCalledWith(
           expect.objectContaining({
+            where: expect.objectContaining({ id: 'approval-1', decision: null }),
             data: expect.objectContaining({
               approverId: 'admin-2',
               approverSessionId: 'session-2',
@@ -1482,8 +1481,8 @@ describe('AdminService', () => {
             decision: 'approved',
           }),
         ).rejects.toThrow('expired');
-        expect(mockPrisma.payoutFenceReleaseApproval.update).toHaveBeenCalledWith({
-          where: { id: 'approval-1' },
+        expect(mockPrisma.payoutFenceReleaseApproval.updateMany).toHaveBeenCalledWith({
+          where: { id: 'approval-1', decision: null },
           data: { decision: 'expired' },
         });
       });
@@ -1497,6 +1496,7 @@ describe('AdminService', () => {
           expiresAt: new Date(Date.now() + 60_000),
         });
 
+        mockPrisma.payoutFenceReleaseApproval.updateMany.mockResolvedValue({ count: 1 });
         await service.reviewPayoutFenceRelease({
           approvalId: 'approval-1',
           approverId: 'admin-2',
@@ -1505,14 +1505,40 @@ describe('AdminService', () => {
           decision: 'rejected',
         });
 
-        expect(mockPrisma.payoutFenceReleaseApproval.update).toHaveBeenCalledWith(
+        expect(mockPrisma.payoutFenceReleaseApproval.updateMany).toHaveBeenCalledWith(
           expect.objectContaining({
+            where: expect.objectContaining({ id: 'approval-1', decision: null }),
             data: expect.objectContaining({
               decision: 'rejected',
               approvedAt: null,
             }),
           }),
         );
+      });
+
+      it('rejects when the CAS decision write loses a concurrent-review race (P0.4)', async () => {
+        // Two reviewers race the same pending request: both pass the
+        // findUnique pending check, but the atomic updateMany guard lets
+        // exactly one win — the loser gets a 409 and NO release is attempted.
+        mockPrisma.user.findUnique.mockResolvedValue(admin2);
+        mockPrisma.payoutFenceReleaseApproval.findUnique.mockResolvedValue({
+          id: 'approval-1',
+          requesterId: 'admin-1',
+          decision: null,
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+        mockPrisma.payoutFenceReleaseApproval.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.reviewPayoutFenceRelease({
+            approvalId: 'approval-1',
+            approverId: 'admin-2',
+            approverRole: 'admin',
+            approverSessionId: 'session-2',
+            decision: 'approved',
+          }),
+        ).rejects.toThrow(/already decided|expired/);
+        expect(mockPrisma.payoutAccount.update).not.toHaveBeenCalled();
       });
 
       it('rejects replay of an already-reviewed approval (race / double-submit)', async () => {
