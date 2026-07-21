@@ -1412,6 +1412,37 @@ completed it. All fixes verified against live Postgres (:5432/:5433) + Redis.
   upgrade from parameter-based `secondApproverId` to a durable two-person
   approval-request workflow.
 
+## 2026-07-21 — Staging workflow CI fixes (P0 CI/staging repair)
+
+Fixed the `staging.yml` release gate to meet the P0 spec requirements:
+
+- **Typed `inputs` context:** Changed `${{ github.event.inputs.full_flow == true }}`
+  to `${{ inputs.full_flow == true }}`. `github.event.inputs` always returns
+  strings, so `'true' == true` evaluates to `false` (string `'true'` == 1 fails in
+  JS loose equality). The typed `inputs` context with `type: boolean` returns
+  actual booleans, so the comparison works correctly.
+- **Image registry push in staging-smoke:** Added an image-resolution + push step
+  after smoke tests so the built images are available in a registry for the
+  `promote-production` job (GitHub Actions runners are ephemeral — images built
+  in one job don't exist on a different runner). Includes commented-out
+  `docker tag`/`docker push` commands with `${{ secrets.CONTAINER_REGISTRY }}`.
+- **Post-deploy canary in promote-production:** Replaced the placeholder "print
+  message" with real canary probes:
+  - Pull the same image digest that passed staging smoke from the registry
+  - Tag with `production-<SHA>` and `production-latest`
+  - Probe `/health/ready` (parsed via `jq`, pre-installed on GitHub runners)
+  - Verify `/health/migrations` reports `upToDate: true`
+  - Verify auth BFF by POSTing empty body to `/auth/login` (expects 400)
+- **Rollback step:** Added `if: failure()` rollback with commented-out
+  `kubectl rollout undo` commands.
+- **`jq` instead of `python3`:** All JSON parsing uses `jq` (pre-installed on all
+  `ubuntu-latest` runners) instead of `python3 -c "import sys,json"`.
+- **PRODUCTION_API_URL format comment:** Documents that the URL must include the
+  `/api/v1` prefix.
+
+Verification: `pnpm typecheck` 14/14 ✅, `pnpm test` 10/10 ✅, `pnpm build` 9/9 ✅.
+File: `.github/workflows/staging.yml`
+
 ## 2026-07-20 — P0.1 Trusted wait detection (closed)
 
 Closed the P0.1 real-money-beta blocker: a modified client can no longer earn

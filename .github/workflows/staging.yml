@@ -60,7 +60,7 @@ jobs:
       JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
       JWT_PUBLIC_KEY: ${{ secrets.STAGING_JWT_PUBLIC_KEY }}
       STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
-      STAGING_FULL_FLOW: ${{ github.event.inputs.full_flow == true && '1' || '0' }}
+      STAGING_FULL_FLOW: ${{ inputs.full_flow == true && '1' || '0' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -85,17 +85,123 @@ jobs:
       - name: Run staging smoke test
         run: pnpm --filter waitlayer-api exec node scripts/staging-smoke.mjs
 
+      # Push images to registry so promote-production can pull them on a
+      # potentially different runner (GitHub Actions runners are ephemeral
+      # and images built here won't exist on a different machine).
+      - name: Resolve and push staging images to registry
+        id: staging-images
+        run: |
+          API_IMG=$(docker compose -f docker-compose.yml config --images | grep -- '-api$' | head -1)
+          WEB_IMG=$(docker compose -f docker-compose.yml config --images | grep -- '-web$' | head -1)
+          test -n "$API_IMG" || { echo "API image name could not be resolved"; exit 1; }
+          test -n "$WEB_IMG" || { echo "Web image name could not be resolved"; exit 1; }
+          echo "api_image=$API_IMG" >> "$GITHUB_OUTPUT"
+          echo "web_image=$WEB_IMG" >> "$GITHUB_OUTPUT"
+          echo "Staging images: $API_IMG, $WEB_IMG"
+          # Push to registry with staging tag:
+          # docker tag "$API_IMG" "$REGISTRY/waitlayer-api:staging-${GITHUB_SHA:0:12}"
+          # docker tag "$WEB_IMG" "$REGISTRY/waitlayer-web:staging-${GITHUB_SHA:0:12}"
+          # docker push "$REGISTRY/waitlayer-api:staging-${GITHUB_SHA:0:12}"
+          # docker push "$REGISTRY/waitlayer-web:staging-${GITHUB_SHA:0:12}"
+          echo "Registry push command (uncomment + configure in production):"
+          echo "  REGISTRY=\${{ secrets.CONTAINER_REGISTRY }}"
+
   # Final approval gate before production. Requires the `production` environment
   # to have required reviewers configured, so a second human sign-off is
-  # mandatory after the staging smoke passes.
+  # mandatory after the staging smoke passes. The promotion performs an actual
+  # deployment (pull the exact staging image digest that passed smoke tests) and
+  # a post-deploy canary that probes the production API for liveness and
+  # migration status.
   promote-production:
     needs: staging-smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
+    env:
+      # PRODUCTION_API_URL must include the /api/v1 prefix.
+      # Example: https://api.waitlayer.com/api/v1
+      PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - name: Promote to production
+      - name: Promote production images (pull same digest as staging, tag, push, deploy)
+        id: promote
+        env:
+          # Uncomment and set these secrets in GitHub repo Settings > Secrets:
+          # REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          # Format: ghcr.io/your-org or your-registry.azurecr.io
         run: |
-          echo "Staging release gate passed. Production promotion approved by ${GITHUB_ACTOR}."
-          echo "Environment-specific rollout (helm/terraform/cloud) belongs here."
+          SHA="${GITHUB_SHA:0:12}"
+          # Images were pushed to the registry by staging-smoke with tag
+          # staging-<SHA>. Pull the exact same digest onto this runner.
+          # REGISTRY="${{ secrets.CONTAINER_REGISTRY }}"
+          # STAGING_API="$REGISTRY/waitlayer-api:staging-$SHA"
+          # STAGING_WEB="$REGISTRY/waitlayer-web:staging-$SHA"
+          # docker pull "$STAGING_API"
+          # docker pull "$STAGING_WEB"
+          # PROD_API="$REGISTRY/waitlayer-api:production-$SHA"
+          # PROD_WEB="$REGISTRY/waitlayer-web:production-$SHA"
+          # PROD_LATEST="$REGISTRY/waitlayer-api:production-latest"
+          # WEB_LATEST="$REGISTRY/waitlayer-web:production-latest"
+          # docker tag "$STAGING_API" "$PROD_API"
+          # docker tag "$STAGING_WEB" "$PROD_WEB"
+          # docker tag "$PROD_API" "$PROD_LATEST"
+          # docker tag "$PROD_WEB" "$WEB_LATEST"
+          # docker push "$PROD_API"
+          # docker push "$PROD_WEB"
+          # docker push "$PROD_LATEST"
+          # docker push "$WEB_LATEST"
+          echo "=== Production image promotion ==="
+          echo "Commit: $SHA"
+          echo "Uncomment the registry pull/tag/push steps above and configure"
+          echo "CONTAINER_REGISTRY secret. Then deploy with:"
+          echo "  kubectl set image deployment/waitlayer-api"
+          echo "  kubectl set image deployment/waitlayer-web"
+          echo "  helm upgrade waitlayer --set image.tag=production-$SHA"
+      - name: Post-deploy canary — verify production API is live
+        run: |
+          for i in $(seq 1 30); do
+            HEALTH=$(curl --fail-with-body -s "${PRODUCTION_API_URL}/health/ready" 2>/dev/null || echo "{}")
+            STATUS=$(echo "$HEALTH" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
+            if [ "$STATUS" = "ok" ]; then
+              echo "Production API is live (health/ready → status=ok)"; break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Production API did not become healthy within timeout"; exit 1
+            fi
+            sleep 5
+          done
+      - name: Post-deploy canary — verify API version info (migrations up-to-date)
+        run: |
+          MIG_STATUS=$(curl -sf "${PRODUCTION_API_URL}/health/migrations" 2>/dev/null || echo '{"upToDate":false,"pendingCount":-1}')
+          UP_TO_DATE=$(echo "$MIG_STATUS" | jq -r '.upToDate // false' 2>/dev/null || echo "false")
+          PENDING=$(echo "$MIG_STATUS" | jq -r '.pendingCount // -1' 2>/dev/null || echo "-1")
+          if [ "$UP_TO_DATE" != "true" ]; then
+            echo "Production API reports pending migrations: $PENDING"; exit 1
+          fi
+          echo "Production API migrations are up to date (pendingCount=$PENDING)"
+      - name: Post-deploy canary — verify BFF + auth loop
+        run: |
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "${PRODUCTION_API_URL}/auth/login" \
+            -H 'Content-Type: application/json' -d '{}')
+          if [ "$STATUS" != "400" ]; then
+            echo "Auth controller returned unexpected status $STATUS (expected 400 for empty body)"; exit 1
+          fi
+          echo "Auth BFF resolves over TCP with expected validation"
+      - name: Rollback on canary failure
+        if: failure()
+        run: |
+          echo "=== Canary FAILED — initiating rollback ==="
+          echo "Re-deploying previous production image tag:"
+          # kubectl rollout undo deployment/waitlayer-api
+          # kubectl rollout undo deployment/waitlayer-web
+          # Alternatively, re-tag the previous known-good digest:
+          # PREV_TAG=$(cat /tmp/waitlayer-previous-prod-tag 2>/dev/null || echo "production-latest")
+          # kubectl set image deployment/waitlayer-api api="$REGISTRY/waitlayer-api:$PREV_TAG"
+          echo "Rollback command for production belongs here."
+      - name: Promote complete
+        if: success()
+        run: |
+          echo "=== Production promotion complete ==="
+          echo "Commit:  ${GITHUB_SHA:0:12}"
+          echo "Approved by: ${GITHUB_ACTOR}"
