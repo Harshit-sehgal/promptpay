@@ -57,6 +57,7 @@ const mockPrisma: any = {
   payoutFenceReleaseApproval: {
     create: vi.fn(),
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
     update: vi.fn(),
     updateMany: vi.fn(),
   },
@@ -1333,6 +1334,31 @@ describe('AdminService', () => {
             reason: 'no fence',
           }),
         ).rejects.toThrow('does not have an active initiation fence');
+      });
+
+      it('rejects a second pending approval request for the same account (P0.4)', async () => {
+        mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+          id: 'pa-1',
+          initiationPayoutId: 'payout-1',
+          user: { id: 'u1', email: 'dev@example.com' },
+        });
+        mockPrisma.user.findUnique.mockResolvedValue({ id: 'admin-1', role: 'admin', status: 'active' });
+        mockPrisma.payoutRequest.findUnique.mockResolvedValue({
+          requestedAmountMinor: 50_000_00n,
+          approvedAmountMinor: 50_000_00n,
+          currency: 'USD',
+        });
+        mockPrisma.payoutFenceReleaseApproval.findFirst.mockResolvedValue({ id: 'approval-existing' });
+
+        await expect(
+          service.requestPayoutFenceRelease({
+            payoutAccountId: 'pa-1',
+            requesterId: 'admin-1',
+            requesterSessionId: 'session-1',
+            reason: 'duplicate request',
+          }),
+        ).rejects.toThrow(/already exists/);
+        expect(mockPrisma.payoutFenceReleaseApproval.create).not.toHaveBeenCalled();
       });
 
       it('rejects an approval request from a non-admin user', async () => {

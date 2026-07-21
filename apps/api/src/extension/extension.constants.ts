@@ -114,7 +114,6 @@ export function classifyWaitState(
   }
 
   const uniqueTypes = new Set(signals.map((s) => s.type));
-  const hasPrimary = [...uniqueTypes].some((t) => PRIMARY_SIGNALS.includes(t));
   // Corroboration must come from a second *primary* signal. Payment cannot be
   // authorized by client-declared `lifecycle_event` or `inactivity` signals
   // because both are cheap to forge. A modified client that declares
@@ -122,6 +121,7 @@ export function classifyWaitState(
   // Two distinct primary signals (ai_generation, active_task, command_execution)
   // are required for payment eligibility.
   const primaryTypes = [...uniqueTypes].filter((t) => PRIMARY_SIGNALS.includes(t));
+  const hasPrimary = primaryTypes.length > 0;
   const hasCorroboration = primaryTypes.length >= 2;
 
   const adEligible = hasPrimary && confidence >= MINIMUM_WAIT_CONFIDENCE;
