@@ -372,6 +372,11 @@ model PayoutAccount {
   currency           String         @default("USD")
   isVerified         Boolean        @default(false)
   isActive           Boolean        @default(true)
+  // Deterministic HMAC of the destination for duplicate/fraud matching.
+  // Computed server-side during addPayoutMethod. Used by
+  // checkSharedPayoutDestination to detect shared destinations without
+  // decrypting every account. Normalized to lowercase+trim before hashing.
+  destinationHmac    String?        @unique @map("destination_hmac")
   // Emergency freeze: operator-initiated block on a verified payout
   // destination. A frozen account cannot be used for payouts until an
   // admin explicitly unfreezes it, even if it remains verified and active.
