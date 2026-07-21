@@ -183,6 +183,11 @@ const envSchema = z
     // Expected as a base64-encoded 32-byte (256-bit) key. Required in production
     // so a database-only leak does not expose raw payout destinations.
     PAYOUT_ENCRYPTION_KEY: z.string().optional(),
+    // P0.6: Separate HMAC key for payout destination duplicate/fraud matching.
+    // Independent of PAYOUT_ENCRYPTION_KEY so a compromise of one key does not
+    // reveal the other's output. Same format: base64-encoded 32-byte key.
+    // Required in production.
+    PAYOUT_HMAC_KEY: z.string().optional(),
     ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS: z.coerce.number().int().min(60).max(3_600).default(900),
     // A-030: server-side mirror of the web's NEXT_PUBLIC_WAITLAYER_PAYOUT_
     // PROVIDER_STATUS gate. JSON map provider -> 'available' | 'coming_soon'.
@@ -353,8 +358,24 @@ const envSchema = z
     },
     {
       message:
-        'PAYOUT_ENCRYPTION_KEY is required in production and must be at least 32 characters.',
+        'PAYOUT_ENCRYPTION_KEY is required in production and must be at least 32 characters (base64-encoded 256-bit key).',
       path: ['PAYOUT_ENCRYPTION_KEY'],
+    },
+  )
+  .refine(
+    (env) => {
+      if (
+        env.NODE_ENV === 'production' &&
+        (!env.PAYOUT_HMAC_KEY || env.PAYOUT_HMAC_KEY.length < 32)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        'PAYOUT_HMAC_KEY is required in production and must be at least 32 characters (base64-encoded 256-bit key). This is a separate key from PAYOUT_ENCRYPTION_KEY for HMAC destination matching.',
+      path: ['PAYOUT_HMAC_KEY'],
     },
   )
   .refine(

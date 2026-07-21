@@ -10,13 +10,7 @@ import {
 } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
-import {
-  decryptPayoutDestination,
-  encryptPayoutDestination,
-  hmacPayoutDestination,
-  isEncryptedDestination,
-  maskPayoutDestination,
-} from '../common/utils/payout-encryption';
+import { encryptPayoutDestination, hmacPayoutDestination } from '../common/utils/payout-encryption';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { RUNTIME_CONFIG_KEYS } from '../runtime-config/runtime-config.service';

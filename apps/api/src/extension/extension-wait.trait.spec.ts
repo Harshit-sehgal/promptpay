@@ -420,6 +420,54 @@ describe('ExtensionWaitTrait.recordWaitStateStart — evidence verification (P0)
     expect(prisma.waitStateEvent.create).not.toHaveBeenCalled();
   });
 
+  it('rejects evidence from an unknown adapter (P0.2 allowlist)', async () => {
+    const { prisma, trait } = makeTrait();
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1', eventSecret: secret });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+
+    const item = signedEvidence('ai_generation');
+    item.adapterId = 'malicious.adapter';  // Not in KNOWN_ADAPTERS or KNOWN_ADAPTER_PREFIXES
+    item.signature = signEvidence(item, secret);
+
+    await expect(
+      trait.recordWaitStateStart('u1', { ...baseDto, evidence: [item] }),
+    ).rejects.toThrow('Unknown evidence adapter');
+    expect(prisma.waitStateEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale evidence older than the freshness window (P0.2)', async () => {
+    const { prisma, trait } = makeTrait();
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1', eventSecret: secret });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+
+    const item = signedEvidence('ai_generation');
+    item.timestamp = Date.now() - 120_000; // 2 minutes old — exceeds 60s limit
+    item.signature = signEvidence(item, secret);
+
+    await expect(
+      trait.recordWaitStateStart('u1', { ...baseDto, evidence: [item] }),
+    ).rejects.toThrow('outside the acceptable window');
+    expect(prisma.waitStateEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects evidence whose detector version does not match the request (P0.2)', async () => {
+    const { prisma, trait } = makeTrait();
+    prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1', eventSecret: secret });
+    prisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    prisma.waitStateEvent.findUnique.mockResolvedValue(null);
+
+    const item = signedEvidence('ai_generation');
+    item.detectorVersion = '2.0.0'; // Mismatches request's '1.0.0'
+    item.signature = signEvidence(item, secret);
+
+    await expect(
+      trait.recordWaitStateStart('u1', { ...baseDto, evidence: [item] }),
+    ).rejects.toThrow('does not match request detector version');
+    expect(prisma.waitStateEvent.create).not.toHaveBeenCalled();
+  });
+
   it('records the wait state when evidence signatures are valid', async () => {
     const { prisma, trait } = makeTrait();
     prisma.device.findUnique.mockResolvedValue({ id: 'd1', userId: 'u1', eventSecret: secret });

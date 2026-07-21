@@ -10,9 +10,12 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypt
 // A deterministic HMAC is stored in `destinationHmac` for duplicate/
 // fraud matching without needing to decrypt every account.
 //
-// The encryption key is derived from PAYOUT_ENCRYPTION_KEY environment
-// variable. In production, this must be a base64-encoded 32-byte key.
-// In dev/test, a deterministic fallback is used.
+// P0.6: Encryption and HMAC use SEPARATE keys. The encryption key is
+// derived from PAYOUT_ENCRYPTION_KEY (AES-256-GCM cipher operations).
+// The HMAC key is derived from PAYOUT_HMAC_KEY (HMAC-SHA256 operations).
+// A compromise of one key does not reveal the other's output.
+// Both are expected as base64-encoded 32-byte keys in production.
+// In dev/test, deterministic fallbacks are used.
 // ═══════════════════════════════════════════════════════════════════
 
 const ALGORITHM = 'aes-256-gcm';
@@ -105,15 +108,52 @@ export function decryptPayoutDestination(encrypted: string): string {
 }
 
 /**
+ * Derive the HMAC key from the configured PAYOUT_HMAC_KEY.
+ * P0.6: Independent of the encryption key so a compromise of one key does
+ * not reveal the other's output. Same expected format as PAYOUT_ENCRYPTION_KEY:
+ * base64-encoded 32-byte key.
+ */
+function loadHmacKey(): Buffer {
+  const raw = process.env.PAYOUT_HMAC_KEY;
+  if (!raw || raw.length < 32) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'PAYOUT_HMAC_KEY must be set to a base64-encoded 256-bit key in production. This is a separate key from PAYOUT_ENCRYPTION_KEY.',
+      );
+    }
+    // Dev/test fallback — deterministic, never used in production
+    return Buffer.from(
+      createHmac('sha256', 'payout-hmac-dev-fallback')
+        .update('waitlayer-payout-hmac')
+        .digest('hex')
+        .slice(0, 32),
+      'utf8',
+    );
+  }
+  // Try base64 decode first; if it produces a valid 32-byte buffer, use it.
+  try {
+    const decoded = Buffer.from(raw, 'base64');
+    if (decoded.length === 32) return decoded;
+  } catch {
+    // Not valid base64 — try raw string
+  }
+  // Raw 32+ char string: hash it to get a deterministic 256-bit key.
+  return createHmac('sha256', 'payout-hmac-key-derivation').update(raw).digest();
+}
+
+/**
  * Compute a deterministic HMAC of a payout destination for duplicate/fraud
  * matching. This allows `checkSharedPayoutDestination` to detect shared
  * destinations without decrypting every account.
  *
  * The HMAC is stable (same input + same purpose → same output) so it can
  * be stored in the `destinationHmac` column and indexed.
+ *
+ * P0.6: Uses PAYOUT_HMAC_KEY (NOT PAYOUT_ENCRYPTION_KEY) so the HMAC key
+ * is cryptographically independent of the encryption key.
  */
 export function hmacPayoutDestination(destination: string): string {
-  const key = loadEncryptionKey();
+  const key = loadHmacKey();
   return createHmac('sha256', key)
     .update(`waitlayer-payout-dest:v1:${destination.toLowerCase().trim()}`)
     .digest('hex');

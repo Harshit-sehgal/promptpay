@@ -84,7 +84,9 @@ export class ExtensionWaitTrait {
         'vscode.heuristic',
         'cli.runner.command',
         'cli.runner.task',
-        'cli.runner.market',
+        // 'cli.runner.market' intentionally removed — no client produces this
+        // adapter ID. The 'cli.runner.' prefix below already covers future
+        // cli.runner.* adapters without an explicit entry.
       ]);
       // Adapter prefix allowlist for dynamic adapter IDs (e.g. vscode.ai-tool.*, vscode.heuristic.*).
       // Test adapters (test.*) are included so the evidence test helper can produce
