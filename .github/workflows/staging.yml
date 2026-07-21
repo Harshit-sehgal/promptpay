@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       full_flow:
-        description: 'Run campaign/ad/payout flow (requires seeded staging balance)'
+        description: 'Run the mandatory financial loop (P0 #7). Disabling it fails the gate.'
         required: false
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read

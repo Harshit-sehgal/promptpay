@@ -38,9 +38,13 @@ const jwtPkgPath = apiRequire.resolve('@nestjs/jwt/package.json');
 const jwtRequire = createRequire(jwtPkgPath);
 const jwt = jwtRequire('jsonwebtoken');
 const { PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
+const { signPayload } = apiRequire('@waitlayer/shared');
 
 const API_BASE_URL = process.env.STAGING_API_URL ?? 'http://localhost:4002';
-const FULL_FLOW = process.env.STAGING_FULL_FLOW === '1';
+// P0 #7: the financial loop is MANDATORY — opt out only for local debugging
+// (STAGING_FULL_FLOW=0), and even then the script hard-fails below so a
+// release gate can never pass on the short path.
+const FULL_FLOW = process.env.STAGING_FULL_FLOW !== '0';
 const STAGING_ADMIN_EMAIL = 'staging-smoke-admin@waitlayer.com';
 const STAGING_ADV_EMAIL = 'staging-smoke-advertiser@waitlayer.com';
 const STAGING_DEV_EMAIL = 'staging-smoke-developer@waitlayer.com';
@@ -185,14 +189,27 @@ async function main() {
     }
 
     if (!FULL_FLOW) {
-      ok('STAGING_FULL_FLOW not set — skipping campaign/ad/payout flow');
+      // P0 #7: the financial loop is the point of the staging gate. Skipping
+      // it is only ever a local-debug convenience — the workflow defaults
+      // STAGING_FULL_FLOW to '1', so a release cannot pass without it.
+      fail('STAGING_FULL_FLOW=0 set — the financial loop is mandatory for a staging release gate');
     } else {
-      // 2. Create + submit + approve a test campaign.
+      // 2. Developer opts into ads (privacy-by-default: server setting is
+      // authoritative; without this every ad request is rejected).
+      const settings = await api('PATCH', '/developer/settings', devToken, { adsEnabled: true });
+      if (settings.status >= 400) fail(`enable ads -> HTTP ${settings.status}: ${settings.text}`);
+      else ok('developer adsEnabled=true (server setting)');
+
+      // 3. Create campaign + inline creative via the real API (this also
+      // auto-provisions the advertiser profile).
       const campaignRes = await api('POST', '/advertiser/campaigns', advToken, {
         name: `staging-smoke-${Date.now()}`,
         currency: 'USD',
         budgetTotalMinor: 100_000,
-        bidAmountMinor: 1_000,
+        // CPC at $20/click so a single billed click credits the developer
+        // >= the $10 payout minimum — CPM per-impression fractions cannot
+        // fund a payout from one loop iteration.
+        bidAmountMinor: 2_000,
         creative: {
           title: 'Staging smoke creative',
           body: 'Verified, private, paid back to you.',
@@ -201,50 +218,259 @@ async function main() {
           ctaText: 'Learn more',
         },
         targetingCountries: ['US'],
-        billingModel: 'CPM',
+        billingModel: 'CPC',
       });
       if (campaignRes.status >= 400) {
-        warn(`create campaign -> HTTP ${campaignRes.status}: ${campaignRes.text}`);
-      } else {
-        const campaignId = campaignRes.json?.id;
-        ok(`campaign created (${campaignId})`);
-        await api('POST', `/advertiser/campaigns/${campaignId}/submit`, advToken, {});
-        const approve = await api('POST', `/admin/campaigns/${campaignId}/approve`, adminToken, {});
-        if (approve.status >= 400) warn(`approve campaign -> HTTP ${approve.status}`);
-        else ok('campaign submitted + admin-approved');
+        fail(`create campaign -> HTTP ${campaignRes.status}: ${campaignRes.text}`);
+      }
+      const campaignId = campaignRes.json?.id;
+      if (!campaignId) fail('campaign create returned no id');
+      else ok(`campaign created (${campaignId})`);
 
-        // 3. Extension -> ledger flow: request ads a few times to credit earnings.
-        let served = 0;
-        for (let i = 0; i < 5; i++) {
-          const ad = await api('POST', '/extension/ad-request', devToken, {
-            deviceId: randomUUID(),
-            country: 'US',
-            signals: ['ai_generation'],
+      // 4. Fund the advertiser. STAGING-ONLY: seeds a confirmed credit row
+      // directly (the live Stripe sandbox lifecycle is external item #38).
+      // Campaign approval checks the balance inside its transaction and
+      // activates only a funded campaign, so this must land BEFORE approve.
+      let advertiserId = null;
+      if (campaignId) {
+        const advProfile = await prisma.advertiser.findUnique({ where: { userId: advertiser.id } });
+        if (!advProfile) {
+          fail('advertiser profile was not provisioned by campaign creation');
+        } else {
+          advertiserId = advProfile.id;
+          await prisma.advertiserLedger.create({
+            data: {
+              advertiserId,
+              currency: 'USD',
+              entryType: 'credit',
+              status: 'confirmed',
+              amountMinor: 100_000n,
+              idempotencyKey: `staging-smoke-fund-${Date.now()}`,
+              description: 'staging-smoke seed funding (replaces live Stripe until #38)',
+            },
           });
-          if (ad.status < 400 && ad.json?.campaignId) served++;
+          ok('advertiser funded with confirmed staging credit (DB seed)');
         }
-        ok(`extension->ledger flow ran (${served}/5 ads served)`);
+      }
 
-        // 4. Sandbox payout lifecycle: register paypal_email method + request + process.
+      // 5. Submit + approve; approval must ACTIVATE the funded campaign.
+      if (campaignId) {
+        const submit = await api('POST', `/advertiser/campaigns/${campaignId}/submit`, advToken, {});
+        if (submit.status >= 400) fail(`submit campaign -> HTTP ${submit.status}: ${submit.text}`);
+        const approve = await api('POST', `/admin/campaigns/${campaignId}/approve`, adminToken, {
+          reason: 'staging smoke',
+        });
+        if (approve.status >= 400) fail(`approve campaign -> HTTP ${approve.status}: ${approve.text}`);
+        const campaignRow = await prisma.campaign.findUnique({ where: { id: campaignId } });
+        if (campaignRow?.status !== 'active' || !campaignRow.activatedAt) {
+          fail(
+            `campaign not active after approval (status=${campaignRow?.status}, activatedAt=${campaignRow?.activatedAt})`,
+          );
+        } else {
+          ok('campaign submitted, admin-approved, and ACTIVE (funded)');
+        }
+      }
+
+      // 6. Register a REAL device and retain its event secret for HMAC.
+      const deviceRes = await api('POST', '/extension/register-device', devToken, {
+        toolType: 'cursor',
+        fingerprintHash: `staging-smoke-${Date.now()}`,
+        extensionVersion: 'staging-smoke-1.0.0',
+        platform: 'linux',
+      });
+      if (deviceRes.status >= 400 || !deviceRes.json?.id || !deviceRes.json?.eventSecret) {
+        fail(`register device -> HTTP ${deviceRes.status}: ${deviceRes.text}`);
+      }
+      const deviceId = deviceRes.json?.id;
+      const deviceSecret = deviceRes.json?.eventSecret;
+      if (deviceId && deviceSecret) ok(`device registered (${deviceId}), secret retained`);
+
+      // Helper: sign a payload with the device secret exactly like the
+      // extension client (canonical JSON + HMAC), then POST it.
+      const signedPost = async (path, payload) => {
+        const body = { ...payload, signature: signPayload(payload, deviceSecret) };
+        return api('POST', path, devToken, body);
+      };
+
+      // 7. Signed wait start with CORROBORATED signals (P0.1: a single
+      // ai_generation signal is ad-eligible but NOT payment-eligible).
+      const waitStateId = `staging-ws-${randomUUID()}`;
+      const sessionId = `staging-sess-${randomUUID()}`;
+      const loopStart = Date.now();
+      if (deviceId) {
+        const wsStart = await signedPost('/extension/wait-state/start', {
+          deviceId,
+          sessionId,
+          toolType: 'cursor',
+          waitStateId,
+          idempotencyKey: `staging-ws-start-${randomUUID()}`,
+          signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
+          detectorVersion: 'staging-smoke-1.0.0',
+        });
+        if (wsStart.status >= 400) fail(`wait start -> HTTP ${wsStart.status}: ${wsStart.text}`);
+        else ok('signed wait start recorded (corroborated signals)');
+      }
+
+      // 8. Ad request with the SAME device/session/wait IDs — must serve.
+      let impressionToken = null;
+      if (deviceId) {
+        const adRes = await signedPost('/extension/ad-request', {
+          deviceId,
+          sessionId,
+          waitStateId,
+          toolType: 'cursor',
+          country: 'US',
+          idempotencyKey: `staging-ad-${randomUUID()}`,
+        });
+        impressionToken = adRes.json?.ad?.impressionToken ?? null;
+        if (adRes.status >= 400 || !impressionToken) {
+          fail(`ad request did not serve -> HTTP ${adRes.status}: ${adRes.text}`);
+        } else {
+          ok('ad served for the signed wait (impressionToken issued)');
+        }
+      }
+
+      // 9. Rendered event, then wait the server-enforced minimum visible
+      // duration (A-060 floor ~5s) before qualifying.
+      if (impressionToken) {
+        const rendered = await signedPost('/extension/ad-rendered', {
+          impressionToken,
+          renderedAt: new Date().toISOString(),
+          idempotencyKey: `staging-ren-${randomUUID()}`,
+        });
+        if (rendered.status >= 400) fail(`ad rendered -> HTTP ${rendered.status}: ${rendered.text}`);
+        else ok('rendered event recorded; waiting minimum visible duration');
+        await new Promise((r) => setTimeout(r, 5_500));
+
+        // 10. Qualify the impression.
+        const qualified = await signedPost('/extension/qualified-impression', {
+          impressionToken,
+          qualifiedAt: new Date().toISOString(),
+          visibleDurationMs: 5_500,
+          idempotencyKey: `staging-qual-${randomUUID()}`,
+        });
+        if (qualified.status >= 400) {
+          fail(`qualify impression -> HTTP ${qualified.status}: ${qualified.text}`);
+        } else {
+          ok('impression qualified');
+        }
+
+        // 11. Click — the CPC billing trigger.
+        const click = await signedPost('/extension/ad-click', {
+          impressionToken,
+          clickedAt: new Date().toISOString(),
+          idempotencyKey: `staging-clk-${randomUUID()}`,
+        });
+        if (click.status >= 400) fail(`ad click -> HTTP ${click.status}: ${click.text}`);
+        else ok('click recorded (CPC billable event)');
+
+        // 12. End the wait (duration must match server time within tolerance).
+        const elapsedSeconds = Math.floor((Date.now() - loopStart) / 1000);
+        const wsEnd = await signedPost('/extension/wait-state/end', {
+          waitStateId,
+          durationSeconds: String(elapsedSeconds),
+          idempotencyKey: `staging-ws-end-${randomUUID()}`,
+        });
+        if (wsEnd.status >= 400) fail(`wait end -> HTTP ${wsEnd.status}: ${wsEnd.text}`);
+        else ok(`wait ended (${elapsedSeconds}s)`);
+      }
+
+      // 13. Ledger assertions (DB): developer credit, advertiser debit,
+      // platform split — every missing row or currency/amount mismatch fails.
+      let earnedMinor = 0n;
+      if (impressionToken && advertiserId) {
+        const [earnings, advDebit, platformRows] = await Promise.all([
+          prisma.earningsLedger.findMany({ where: { userId: developer.id, currency: 'USD' } }),
+          prisma.advertiserLedger.findFirst({
+            where: { advertiserId, entryType: 'debit', currency: 'USD' },
+          }),
+          prisma.platformLedger.findMany({ where: { currency: 'USD' } }),
+        ]);
+        const earning = earnings.find((e) => e.entryType === 'credit');
+        if (!earning) {
+          fail('no developer earnings credit row after billed click');
+        } else {
+          earnedMinor = BigInt(earning.amountMinor);
+          if (earnedMinor <= 0n) fail(`developer credit is ${earnedMinor} (expected > 0)`);
+          if (earnedMinor >= 2_000n) fail(`developer credit ${earnedMinor} exceeds gross bid`);
+        }
+        if (!advDebit) fail('no advertiser debit row after billed click');
+        else if (BigInt(advDebit.amountMinor) !== 2_000n) {
+          fail(`advertiser debit ${advDebit.amountMinor} != gross bid 2000`);
+        }
+        const platformTotal = platformRows
+          .filter((r) => r.entryType === 'credit' || r.entryType === 'reserve')
+          .reduce((sum, r) => sum + BigInt(r.amountMinor), 0n);
+        if (platformRows.length === 0) fail('no platform ledger rows after billed click');
+        // Money conservation: developer net + platform split must be bounded
+        // by the advertiser debit (no money created) and non-trivial.
+        if (advDebit && earnedMinor + platformTotal > BigInt(advDebit.amountMinor)) {
+          fail(
+            `money conservation violated: dev ${earnedMinor} + platform ${platformTotal} > debit ${advDebit.amountMinor}`,
+          );
+        }
+        if (!hardFailures) {
+          ok(`ledger split verified (dev=${earnedMinor}, platform=${platformTotal}, debit=${advDebit?.amountMinor})`);
+        }
+      }
+
+      // 14. Mature the test earning explicitly (staging-only: the real hold
+      // period is days/weeks; the payout path requires confirmed entries).
+      if (earnedMinor > 0n) {
+        const matured = await prisma.earningsLedger.updateMany({
+          where: { userId: developer.id, entryType: 'credit', currency: 'USD', status: { not: 'paid' } },
+          data: { status: 'confirmed', availableAt: null },
+        });
+        if (matured.count === 0) fail('no earning row could be advanced to confirmed');
+        else ok(`test earning advanced to confirmed (${matured.count} row, staging-only)`);
+      }
+
+      // 15. Payout lifecycle: method -> request -> approve -> process, all
+      // fail-closed, for the FULL earned amount.
+      if (earnedMinor > 0n) {
         const method = await api('POST', '/payout/method', devToken, {
           provider: 'paypal_email',
           destination: 'staging-smoke@example.com',
         });
         if (method.status >= 400) {
-          warn(`add payout method -> HTTP ${method.status}: ${method.text}`);
+          fail(`add payout method -> HTTP ${method.status}: ${method.text}`);
         } else {
           const payout = await api('POST', '/payout/request', devToken, {
-            amountMinor: 1_000,
+            amountMinor: Number(earnedMinor),
             currency: 'USD',
           });
           if (payout.status >= 400) {
-            warn(`request payout -> HTTP ${payout.status} (likely insufficient balance in staging)`);
+            fail(`request payout (${earnedMinor} minor) -> HTTP ${payout.status}: ${payout.text}`);
           } else {
             const payoutId = payout.json?.id;
-            await api('POST', `/admin/payouts/${payoutId}/approve`, adminToken, {});
+            const approvePayout = await api('POST', `/admin/payouts/${payoutId}/approve`, adminToken, {});
+            if (approvePayout.status >= 400) {
+              fail(`approve payout -> HTTP ${approvePayout.status}: ${approvePayout.text}`);
+            }
             const proc = await api('POST', `/admin/payouts/${payoutId}/process`, adminToken, {});
-            if (proc.status >= 400) warn(`process payout -> HTTP ${proc.status}`);
-            else ok('sandbox payout approved + processed');
+            if (proc.status >= 400) fail(`process payout -> HTTP ${proc.status}: ${proc.text}`);
+            else ok(`payout ${payoutId} approved + processed (${earnedMinor} minor)`);
+
+            // 16. Reconciliation assertions: allocations reference the
+            // earning; the payout is in a valid post-process state.
+            const [allocations, payoutRow] = await Promise.all([
+              prisma.payoutAllocation.findMany({ where: { payoutRequestId: payoutId } }),
+              prisma.payoutRequest.findUnique({ where: { id: payoutId } }),
+            ]);
+            if (allocations.length === 0) {
+              fail('no payout allocations persisted for the processed payout');
+            }
+            const allocatedTotal = allocations.reduce((s, a) => s + BigInt(a.amountMinor), 0n);
+            if (allocatedTotal !== earnedMinor) {
+              fail(`allocations total ${allocatedTotal} != earned ${earnedMinor}`);
+            }
+            const validStates = ['processing', 'paid', 'failed'];
+            if (!payoutRow || !validStates.includes(payoutRow.status)) {
+              fail(`payout in unexpected state '${payoutRow?.status}' after process`);
+            }
+            if (!hardFailures) {
+              ok(`payout reconciliation verified (${allocations.length} allocation(s), state=${payoutRow?.status})`);
+            }
           }
         }
       }
