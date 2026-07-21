@@ -10,6 +10,13 @@ import {
 } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
+import {
+  decryptPayoutDestination,
+  encryptPayoutDestination,
+  hmacPayoutDestination,
+  isEncryptedDestination,
+  maskPayoutDestination,
+} from '../common/utils/payout-encryption';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { RUNTIME_CONFIG_KEYS } from '../runtime-config/runtime-config.service';
@@ -74,11 +81,17 @@ export class PayoutMethodTrait {
         where: { userId, provider, isActive: true },
         data: { isActive: false },
       });
+      // Encrypt the destination at rest using AES-256-GCM, and compute a
+      // deterministic HMAC so checkSharedPayoutDestination can detect shared
+      // destinations without decrypting every account.
+      const encryptedDest = encryptPayoutDestination(destination);
+      const destHmac = hmacPayoutDestination(destination);
       const created = await tx.payoutAccount.create({
         data: {
           userId,
           provider,
-          destination,
+          destination: encryptedDest,
+          destinationHmac: destHmac,
           currency,
         },
       });
@@ -99,9 +112,13 @@ export class PayoutMethodTrait {
       );
       return created;
     });
-    // Non-blocking fraud signal: shared payout destination across users
+    // Non-blocking fraud signal: shared payout destination across users.
+    // Uses the deterministic HMAC so the check works without decrypting every
+    // account's destination. Pre-compute the HMAC here and pass it so the
+    // fraud service can query by destinationHmac directly.
+    const destHmacForFraud = hmacPayoutDestination(destination);
     void this.fraudService
-      ?.checkSharedPayoutDestination(userId, destination)
+      ?.checkSharedPayoutDestination(userId, destination, destHmacForFraud)
       .catch(() => undefined);
     return method;
   }

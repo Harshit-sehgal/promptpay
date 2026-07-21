@@ -325,17 +325,26 @@ export class FraudService {
    * Detect a shared payout destination: the same destination (email/account)
    * registered by multiple users. This is a strong signal of a sock-puppet
    * farming operation.
+   *
+   * Uses the deterministic `destinationHmac` column so the check works without
+   * decrypting every account's destination. The HMAC is pre-computed by the
+   * caller (payout-method.trait.ts) and passed here for querying.
    */
-  async checkSharedPayoutDestination(userId: string, destination: string): Promise<void> {
+  async checkSharedPayoutDestination(
+    userId: string,
+    _destination: string,
+    destinationHmac?: string,
+  ): Promise<void> {
+    if (!destinationHmac) return;
     const otherAccounts = await this.prisma.payoutAccount.count({
-      where: { destination, userId: { not: userId }, isActive: true },
+      where: { destinationHmac, userId: { not: userId }, isActive: true },
     });
     if (otherAccounts > 0) {
       await this.createFlag({
         flagType: FraudFlagType.SHARED_PAYOUT_DESTINATION,
         severity: FraudSeverity.CRITICAL,
         userId,
-        evidence: { destination, sharedWithUserCount: otherAccounts },
+        evidence: { destinationHmac, sharedWithUserCount: otherAccounts },
       });
     }
   }

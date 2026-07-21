@@ -6,6 +6,7 @@ import { payoutMinimumMinor, payoutProviderLaunchStatus, PayoutStatus } from '@w
 
 import { AuditService } from '../audit/audit.service';
 import { isUniqueConstraintViolation } from '../common/utils/errors';
+import { decryptPayoutDestination } from '../common/utils/payout-encryption';
 import {
   CircuitBreakerOpenError,
   providerBreaker,
