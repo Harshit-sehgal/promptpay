@@ -681,3 +681,29 @@ export class ResolveDeadLetterDto {
   @MaxLength(500)
   reason!: string;
 }
+
+// ── Staging-only advertiser faucet (#38 stop-gap) ──
+
+export class StagingAdvertiserCreditDto {
+  @ApiProperty({ description: 'User id of the advertiser to credit.' })
+  @IsUUID()
+  userId!: string;
+
+  @ApiProperty({ description: 'Credit amount in minor units.' })
+  @IsBigInt()
+  @MinBigInt(1n)
+  @Transform(toBigIntOrOriginal)
+  amountMinor!: bigint;
+
+  @ApiProperty({ required: false, default: 'USD' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currency?: string;
+
+  @ApiProperty({ description: 'Idempotency key for the credit.' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  idempotencyKey!: string;
+}

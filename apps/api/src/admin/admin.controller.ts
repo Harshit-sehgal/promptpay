@@ -43,6 +43,7 @@ import {
   ResolveDeadLetterDto,
   ResolveFraudFlagDto,
   ResolveRecoveryDebtCaseDto,
+  StagingAdvertiserCreditDto,
   ToggleRuntimeConfigDto,
   ToggleToolIntegrationDto,
   UpdateRuntimeConfigDto,
@@ -512,6 +513,28 @@ export class AdminController {
     return this.service.confirmArchiveRefund({
       entryId: id,
       stripeRefundPaymentIntentId,
+    });
+  }
+
+  // ── Staging-only advertiser faucet (#38 stop-gap) ──
+
+  @ApiOperation({
+    summary: 'Staging-only: credit an advertiser ledger balance without a real payment',
+    description:
+      'Disabled in production. Requires ENABLE_STAGING_FAUCET=true. Used by scripts/staging-smoke.mjs to fund the test advertiser without direct DB inserts.',
+  })
+  @Post('staging/advertiser-credit')
+  @Roles('admin', 'super_admin')
+  creditAdvertiser(
+    @CurrentUser('id') reviewerId: string,
+    @CurrentUser('role') reviewerRole: string,
+    @Body() dto: StagingAdvertiserCreditDto,
+  ) {
+    return this.service.creditAdvertiser(reviewerId, reviewerRole, {
+      userId: dto.userId,
+      amountMinor: dto.amountMinor,
+      currency: dto.currency ?? 'USD',
+      idempotencyKey: dto.idempotencyKey,
     });
   }
 

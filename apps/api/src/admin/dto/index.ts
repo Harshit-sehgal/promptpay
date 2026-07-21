@@ -21,6 +21,7 @@ export {
   ResolveDeadLetterDto,
   ResolveFraudFlagDto,
   ResolveRecoveryDebtCaseDto,
+  StagingAdvertiserCreditDto,
   ToggleToolIntegrationDto,
   UsersQueryDto,
   WebhookEventsQueryDto,

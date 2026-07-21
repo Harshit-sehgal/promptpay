@@ -837,6 +837,84 @@ export class AdminPayoutsTrait {
   }
 
   /**
+   * Staging-only faucet: credit an advertiser's ledger balance without a real
+   * payment provider. This exists only to support the staging smoke test
+   * (`scripts/staging-smoke.mjs`) and local development until real provider
+   * sandbox credentials are available (P1.9). It is disabled in production
+   * regardless of env vars; in staging it additionally requires
+   * `ENABLE_STAGING_FAUCET=true` so a production-config mis-fire cannot mint
+   * money.
+   *
+   * The credit is written as a confirmed `advertiserLedger` row with an
+   * idempotency key, so repeated calls with the same key are idempotent and
+   * do not create duplicate balance.
+   */
+  async creditAdvertiser(
+    reviewerId: string,
+    reviewerRole: string,
+    dto: {
+      userId: string;
+      amountMinor: bigint;
+      currency: string;
+      idempotencyKey: string;
+    },
+  ) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ForbiddenException('Advertiser faucet is disabled in production');
+    }
+    if (process.env.ENABLE_STAGING_FAUCET !== 'true') {
+      throw new ForbiddenException(
+        'Advertiser faucet is disabled. Set ENABLE_STAGING_FAUCET=true to enable staging credits.',
+      );
+    }
+    const advertiser = await this.prisma.advertiser.findUnique({
+      where: { userId: dto.userId },
+      select: { id: true, user: { select: { id: true, email: true } } },
+    });
+    if (!advertiser) {
+      throw new NotFoundException('Advertiser profile not found for user');
+    }
+    const existing = await this.prisma.advertiserLedger.findFirst({
+      where: { idempotencyKey: dto.idempotencyKey },
+      select: { id: true },
+    });
+    if (existing) {
+      return { id: existing.id, alreadyCredited: true };
+    }
+    const currency = (dto.currency ?? 'USD').toUpperCase();
+    return this.prisma.$transaction(async (tx) => {
+      const row = await tx.advertiserLedger.create({
+        data: {
+          advertiserId: advertiser.id,
+          currency,
+          entryType: 'credit',
+          status: 'confirmed',
+          amountMinor: dto.amountMinor,
+          idempotencyKey: dto.idempotencyKey,
+          description: 'staging faucet credit',
+        },
+      });
+      await this.audit.logStrict(
+        {
+          actorId: reviewerId,
+          actorRole: reviewerRole,
+          action: 'advertiser_faucet_credit',
+          targetType: 'advertiser',
+          targetId: advertiser.id,
+          afterSnap: {
+            userId: dto.userId,
+            currency,
+            amountMinor: dto.amountMinor.toString(),
+            idempotencyKey: dto.idempotencyKey,
+          },
+        },
+        tx,
+      );
+      return { id: row.id, alreadyCredited: false };
+    });
+  }
+
+  /**
    * Remove the emergency freeze from a payout destination. The account must
    * still be verified and active to be used for payouts.
    */

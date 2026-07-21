@@ -141,21 +141,29 @@ export function classifyWaitState(
 
   const adEligible = hasPrimary && confidence >= MINIMUM_WAIT_CONFIDENCE;
 
-  // Payment eligibility now REQUIRES signed evidence. Legacy self-declared
-  // signals can still serve ads (they drive ad confidence), but they cannot
-  // authorize billing. When evidence is present, only observed primary evidence
-  // counts; it must come from at least two distinct primary signal categories
-  // (e.g. ai_generation + command_execution). Inferred evidence (heuristics
-  // unsupported by a real integration) can serve ads but cannot authorize payment.
+  // Payment eligibility now REQUIRES signed evidence from INDEPENDENT
+  // adapters. Legacy self-declared signals can still serve ads (they drive ad
+  // confidence), but they cannot authorize billing. When evidence is present,
+  // only observed primary evidence counts, and corroboration must come from at
+  // least two distinct primary signal categories (e.g. ai_generation +
+  // command_execution) AND from two distinct adapter identifiers. A modified
+  // client that holds the device secret can otherwise forge two signal types
+  // from the same adapter and claim payment. Distinct adapters raise the bar,
+  // but they are still client-declared strings and therefore not independent
+  // proof of genuine observation; the primary defense is the overall evidence
+  // + anomaly + hold policy.
   let paymentEligible = false;
   if (evidence && evidence.length > 0) {
     const observedPrimaryTypes = new Set<EvidenceSignalType>();
+    const observedPrimaryAdapters = new Set<string>();
     for (const item of evidence) {
       if (isPrimaryEvidenceType(item.type) && item.sourceType === 'observed') {
         observedPrimaryTypes.add(item.type);
+        observedPrimaryAdapters.add(item.adapterId);
       }
     }
-    paymentEligible = adEligible && observedPrimaryTypes.size >= 2;
+    paymentEligible =
+      adEligible && observedPrimaryTypes.size >= 2 && observedPrimaryAdapters.size >= 2;
   }
 
   return {
