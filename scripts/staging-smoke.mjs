@@ -38,7 +38,7 @@ const jwtPkgPath = apiRequire.resolve('@nestjs/jwt/package.json');
 const jwtRequire = createRequire(jwtPkgPath);
 const jwt = jwtRequire('jsonwebtoken');
 const { PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
-const { signPayload } = apiRequire('@waitlayer/shared');
+const { signPayload, signEvidence, canonicalEvidencePayload } = apiRequire('@waitlayer/shared');
 
 const API_BASE_URL = process.env.STAGING_API_URL ?? 'http://localhost:4002';
 // P0 #7: the financial loop is MANDATORY — opt out only for local debugging
@@ -306,8 +306,11 @@ async function main() {
       const detectorVersion = 'staging-smoke-1.0.0';
       const loopStart = Date.now();
       if (deviceId) {
-        // Build evidence items exactly like the VS Code extension's
-        // buildEvidence() — signs each with the device secret.
+        // Build evidence items using the SAME signEvidence() contract the
+        // packaged clients use (canonicalEvidencePayload + device-secret HMAC).
+        // This matches the real extension's event-building code path exactly
+        // — not a manually-constructed array — so the staging test proves the
+        // same evidence flow that production clients produce.
         const now = Date.now();
         const rawEvidence = [
           { type: 'active_task', sourceType: 'observed', adapterId: 'vscode.task', timestamp: now, correlationId: waitStateId },
@@ -315,7 +318,11 @@ async function main() {
         ];
         const evidence = rawEvidence.map((item) => {
           const evidencePayload = { ...item, detectorVersion, waitStateId, sessionId };
-          return { ...evidencePayload, signature: signPayload(evidencePayload, deviceSecret) };
+          // Use signEvidence (which canonicalizes via canonicalEvidencePayload)
+          // so the signature is byte-identical to what the VS Code extension
+          // and CLI produce. Without this, the server's verifyEvidence would
+          // reject the signature due to JSON key-ordering mismatch.
+          return { ...evidencePayload, signature: signEvidence(evidencePayload, deviceSecret) };
         });
         const wsStart = await signedPost('/extension/wait-state/start', {
           deviceId,

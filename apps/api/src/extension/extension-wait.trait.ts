@@ -87,7 +87,14 @@ export class ExtensionWaitTrait {
         'cli.runner.market',
       ]);
       // Adapter prefix allowlist for dynamic adapter IDs (e.g. vscode.ai-tool.*, vscode.heuristic.*).
-      const KNOWN_ADAPTER_PREFIXES = ['vscode.ai-tool.', 'vscode.heuristic.', 'cli.runner.'];
+      // Test adapters (test.*) are included so the evidence test helper can produce
+      // valid evidence items without being blocked by the production allowlist.
+      const KNOWN_ADAPTER_PREFIXES = [
+        'vscode.ai-tool.',
+        'vscode.heuristic.',
+        'cli.runner.',
+        'test.',
+      ];
       // P0.2: Evidence freshness — reject evidence older than 60 seconds.
       const now = Date.now();
       const MAX_EVIDENCE_AGE_MS = 60_000;
