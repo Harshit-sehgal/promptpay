@@ -37,7 +37,7 @@ export class ConfigurationManager {
     const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
     const stored = cfg.get<boolean>('adsEnabled');
     if (typeof stored === 'boolean') return stored;
-    return true;
+    return false;
   }
 
   async toggleAds(): Promise<boolean> {

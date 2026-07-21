@@ -414,6 +414,23 @@ export class ApiClient {
     };
   }
 
+  /**
+   * Update the developer's adsEnabled preference on the server.
+   * Client-side toggles persist locally but must ALSO update the server
+   * so the source of truth stays authoritative (P0 — Unify consent).
+   */
+  async updateAdsEnabled(enabled: boolean): Promise<void> {
+    await this.patch('/developer/settings', { adsEnabled: enabled });
+  }
+
+  /**
+   * Fetch the current developer settings from the server (incl. adsEnabled).
+   * Used after login to sync local consent with server state.
+   */
+  async getDeveloperSettings(): Promise<{ adsEnabled: boolean }> {
+    return this.get<{ adsEnabled: boolean }>('/developer/settings');
+  }
+
   async promptLogin(): Promise<boolean> {
     const email = await vscode.window.showInputBox({ prompt: 'Email' });
     if (!email) return false;
@@ -547,6 +564,17 @@ export class ApiClient {
       bodyStr,
       skipAuth,
       options?.skipRetry,
+    );
+  }
+
+  private async patch<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    return this.request<T>(
+      'PATCH',
+      path,
+      { 'Content-Type': 'application/json' },
+      JSON.stringify(body),
+      false,
+      false,
     );
   }
 

@@ -343,6 +343,22 @@ const envSchema = z
   )
   .refine(
     (env) => {
+      if (
+        env.NODE_ENV === 'production' &&
+        (!env.PAYOUT_ENCRYPTION_KEY || env.PAYOUT_ENCRYPTION_KEY.length < 32)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        'PAYOUT_ENCRYPTION_KEY is required in production and must be at least 32 characters.',
+      path: ['PAYOUT_ENCRYPTION_KEY'],
+    },
+  )
+  .refine(
+    (env) => {
       // If Stripe is enabled (secret key present) the webhook signing secret
       // MUST also be set. An empty STRIPE_WEBHOOK_SECRET with a live secret key
       // causes the Stripe SDK to reject every legitimate webhook's signature

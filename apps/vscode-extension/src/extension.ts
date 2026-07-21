@@ -142,6 +142,12 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('waitlayer.toggleAds', async () => {
       const enabled = await config.toggleAds();
+      // Sync the toggle to the server so the source of truth stays authoritative.
+      // Best-effort: if the server is unreachable, the local toggle still works.
+      api.updateAdsEnabled(enabled).catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`WaitLayer: failed to sync adsEnabled to server — ${msg}`);
+      });
       vscode.window.showInformationMessage(`WaitLayer: ads ${enabled ? 'enabled' : 'disabled'}`);
     }),
     vscode.commands.registerCommand('waitlayer.openDashboard', () => {
@@ -414,6 +420,39 @@ export async function activate(context: vscode.ExtensionContext) {
   detector.start(context);
 
   context.subscriptions.push(...commands);
+
+  // Fetch server-side adsEnabled after boot to sync local config with
+  // server consent state (P0 — Unify consent).
+  api
+    .getDeveloperSettings()
+    .then(async (settings) => {
+      // Override local adsEnabled with server value on first sync.
+      // This ensures that even if the extension has stale local preferences,
+      // the server's consent state takes effect after login.
+      if (typeof settings.adsEnabled === 'boolean') {
+        const current = await config.adsEnabled();
+        if (current !== settings.adsEnabled) {
+          // Toggle to match server state
+          await new Promise<void>((resolve) => {
+            const cfg = vscode.workspace.getConfiguration('waitlayer');
+            cfg.update('adsEnabled', settings.adsEnabled, vscode.ConfigurationTarget.Global).then(
+              () => resolve(),
+              (err: unknown) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.warn(
+                  `WaitLayer: failed to sync server adsEnabled to local config — ${msg}`,
+                );
+                resolve();
+              },
+            );
+          });
+        }
+      }
+    })
+    .catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`WaitLayer: failed to fetch developer settings — ${msg}`);
+    });
 
   // Boot balance fetch. On transient failure (network not up yet at
   // activation time, device not registered) retry once after 30s so the

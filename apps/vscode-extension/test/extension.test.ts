@@ -13,6 +13,8 @@ const mock = vi.hoisted(() => ({
     requestAd: vi.fn(),
     flagFalsePositive: vi.fn(),
     recordAdRendered: vi.fn(),
+    updateAdsEnabled: vi.fn(),
+    getDeveloperSettings: vi.fn(),
   },
   config: {
     getInactivityTimeoutMs: vi.fn(() => 15_000),
