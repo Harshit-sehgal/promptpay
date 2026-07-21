@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { DetectorEvidence } from '@waitlayer/shared';
-
 import { makeTestEvidence } from './evidence.test-helper';
 import {
   classifyWaitState,

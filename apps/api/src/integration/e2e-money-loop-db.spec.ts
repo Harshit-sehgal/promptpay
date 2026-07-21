@@ -26,6 +26,7 @@ import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
+import { createSignedBillableEvidence } from '../extension/evidence.test-helper';
 import { ExtensionService } from '../extension/extension.service';
 import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
@@ -249,6 +250,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signals: signals as never,
       detectorVersion: '1.0.0',
       signature: 'sig',
+      evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
 
     const adIdem = opts.adIdempotencyKey ?? uid('ad');
@@ -449,6 +451,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signals: BILLABLE_WAIT_SIGNALS as never,
       detectorVersion: '1.0.0',
       signature: 'sig',
+      evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
     const res = await extension.requestAd(developerId, {
       deviceId,
@@ -476,6 +479,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signals: BILLABLE_WAIT_SIGNALS as never,
       detectorVersion: '1.0.0',
       signature: 'sig',
+      evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
     const res = await extension.requestAd(developerId, {
       deviceId,
@@ -522,6 +526,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signals: BILLABLE_WAIT_SIGNALS as never,
       detectorVersion: '1.0.0',
       signature: 'sig',
+      evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
 
     const [r1, r2] = await Promise.allSettled([

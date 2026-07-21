@@ -138,7 +138,6 @@ export function classifyWaitState(
   // are required for payment eligibility.
   const primaryTypes = [...uniqueTypes].filter((t) => PRIMARY_SIGNALS.includes(t));
   const hasPrimary = primaryTypes.length > 0;
-  const hasCorroboration = primaryTypes.length >= 2;
 
   const adEligible = hasPrimary && confidence >= MINIMUM_WAIT_CONFIDENCE;
 

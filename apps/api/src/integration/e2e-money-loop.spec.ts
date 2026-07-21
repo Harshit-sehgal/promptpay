@@ -811,6 +811,10 @@ describe('E2E Money Loop', () => {
             eventType: 'wait_state_start',
             signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
+            evidence: [
+              { type: 'ai_generation', sourceType: 'observed' },
+              { type: 'command_execution', sourceType: 'observed' },
+            ],
             createdAt: new Date(Date.now() - 1000),
           });
         }
@@ -952,6 +956,10 @@ describe('E2E Money Loop', () => {
             eventType: 'wait_state_start',
             signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
+            evidence: [
+              { type: 'ai_generation', sourceType: 'observed' },
+              { type: 'command_execution', sourceType: 'observed' },
+            ],
             createdAt: new Date(Date.now() - 1000),
           });
         }
@@ -1218,6 +1226,10 @@ describe('E2E Money Loop', () => {
         eventType: 'wait_state_start',
         signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
         detectorVersion: '1.0.0',
+        evidence: [
+          { type: 'ai_generation', sourceType: 'observed' },
+          { type: 'command_execution', sourceType: 'observed' },
+        ],
         createdAt: new Date(Date.now() - 1000),
       });
     });
@@ -1480,6 +1492,10 @@ describe('E2E Money Loop', () => {
         eventType: 'wait_state_start',
         signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
         detectorVersion: '1.0.0',
+        evidence: [
+          { type: 'ai_generation', sourceType: 'observed' },
+          { type: 'command_execution', sourceType: 'observed' },
+        ],
         createdAt: new Date(Date.now() - 1000),
       });
 
@@ -1885,6 +1901,10 @@ describe('E2E Money Loop', () => {
             eventType: 'wait_state_start',
             signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
+            evidence: [
+              { type: 'ai_generation', sourceType: 'observed' },
+              { type: 'command_execution', sourceType: 'observed' },
+            ],
             createdAt: new Date(Date.now() - 1000),
           });
         }
@@ -2884,6 +2904,10 @@ describe('E2E Money Loop', () => {
         eventType: 'wait_state_start',
         signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
         detectorVersion: '1.0.0',
+        evidence: [
+          { type: 'ai_generation', sourceType: 'observed' },
+          { type: 'command_execution', sourceType: 'observed' },
+        ],
         createdAt: new Date(Date.now() - 1000),
       });
       mockPrisma.adImpression.findUnique.mockResolvedValue({
@@ -3071,6 +3095,10 @@ describe('E2E Money Loop', () => {
             eventType: 'wait_state_start',
             signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
             detectorVersion: '1.0.0',
+            evidence: [
+              { type: 'ai_generation', sourceType: 'observed' },
+              { type: 'command_execution', sourceType: 'observed' },
+            ],
             createdAt: new Date(Date.now() - 1000),
           });
         }

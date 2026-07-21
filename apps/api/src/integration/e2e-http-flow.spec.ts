@@ -12,6 +12,7 @@ import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
+import { createSignedBillableEvidence } from '../extension/evidence.test-helper';
 import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 import { LedgerService } from '../ledger/ledger.service';
 
@@ -635,6 +636,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId,
         idempotencyKey: `start-${waitStateId}`,
         signals: BILLABLE_WAIT_SIGNALS,
+        evidence: createSignedBillableEvidence(deviceEventSecret, waitStateId, sessionId),
       };
       const signature = signPayload(startPayload, deviceEventSecret);
 
@@ -767,6 +769,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         waitStateId: cpcWaitStateId,
         idempotencyKey: `start-${cpcWaitStateId}`,
         signals: BILLABLE_WAIT_SIGNALS,
+        evidence: createSignedBillableEvidence(deviceEventSecret, cpcWaitStateId, sessionId),
       };
       const signature = signPayload(startPayload, deviceEventSecret);
 
@@ -967,6 +970,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         toolType: 'vscode',
         idempotencyKey: 'dev2-wait-start',
         signals: BILLABLE_WAIT_SIGNALS,
+        evidence: createSignedBillableEvidence(dev2DeviceEventSecret, 'dev2-wait', 'dev2-session'),
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')
@@ -1050,6 +1054,7 @@ describe('End-to-End HTTP Integration Flow', () => {
         toolType: 'vscode',
         idempotencyKey: `start-${wsId}`,
         signals: BILLABLE_WAIT_SIGNALS,
+        evidence: createSignedBillableEvidence(deviceEventSecret, wsId, 'budget-sess'),
       };
       await request(app.getHttpServer())
         .post('/api/v1/extension/wait-state/start')

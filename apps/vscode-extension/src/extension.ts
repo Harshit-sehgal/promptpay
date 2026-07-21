@@ -1,12 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
-import {
-  DETECTOR_VERSION,
-  type DetectorEvidence,
-  FalsePositiveReason,
-  formatMinorUnits,
-} from '@waitlayer/shared';
+import { type DetectorEvidence, FalsePositiveReason, formatMinorUnits } from '@waitlayer/shared';
 
 import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';

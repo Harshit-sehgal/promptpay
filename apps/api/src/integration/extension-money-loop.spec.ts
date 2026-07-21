@@ -1,3 +1,4 @@
+import { createSignedBillableEvidence } from '../extension/evidence.test-helper';
 import { BILLABLE_WAIT_SIGNALS, FORGED_SINGLE_SIGNAL } from '../extension/test/wait-fixtures';
 /** Linear-delay helper (Promise.withResolvers, project rule). */
 function delay(ms: number): Promise<void> {
@@ -100,6 +101,8 @@ type LoopOpts = {
   secondWaitMode?: 'none' | 'no_ad';
   skipStart?: boolean;
   waitStateIdOverride?: string;
+  /** Set to false to skip adding evidence (for tests verifying non-evidence paths). */
+  withEvidence?: boolean;
 };
 
 type LoopResult = {
@@ -366,6 +369,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       secondWaitMode = 'none',
       skipStart = false,
       waitStateIdOverride = null,
+      withEvidence = true,
     } = opts;
     const { devToken, deviceId, sessionId, deviceEventSecret, category } = ctx;
     const tag = ctx.tag;
@@ -381,6 +385,9 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
         idempotencyKey: `start-${tag}`,
         signals,
         detectorVersion,
+        ...(withEvidence
+          ? { evidence: createSignedBillableEvidence(deviceEventSecret, waitStateId, sessionId) }
+          : {}),
       });
     }
 
@@ -486,6 +493,9 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
         idempotencyKey: `start2-${tag}`,
         signals,
         detectorVersion,
+        ...(withEvidence
+          ? { evidence: createSignedBillableEvidence(deviceEventSecret, ws2, sessionId) }
+          : {}),
       });
       adRes2 = await signed(AD, devToken, deviceEventSecret, {
         deviceId,
@@ -593,7 +603,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       advertiserDepositMinor: 100000,
     });
 
-    const res = await runMoneyLoop(ctx, { signals: FORGED_SINGLE_SIGNAL });
+    const res = await runMoneyLoop(ctx, { signals: FORGED_SINGLE_SIGNAL, withEvidence: false });
     expect(res.adRes.status).toBe(200);
     expect(res.adRes.body.ad).toBeDefined();
     expect(res.impressionToken).toBeDefined();
@@ -619,6 +629,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
 
     const res = await runMoneyLoop(ctx, {
       signals: [{ type: 'ai_generation' }, { type: 'inactivity' }],
+      withEvidence: false,
     });
     expect(res.adRes.status).toBe(200);
     expect(res.adRes.body.ad).toBeDefined();
@@ -704,7 +715,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       advertiserDepositMinor: 100000,
     });
 
-    const res = await runMoneyLoop(ctx, { signals: [{ type: 'inactivity' }] });
+    const res = await runMoneyLoop(ctx, { signals: [{ type: 'inactivity' }], withEvidence: false });
     expect(res.adRes.status).toBe(200);
     expect(res.adRes.body.ad).toBeNull();
     expect(res.adRes.body.reason).toBe('low_confidence_wait');
@@ -856,6 +867,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       idempotencyKey: `start-balexh`,
       signals: BILLABLE_WAIT_SIGNALS,
       detectorVersion: '1.0.0',
+      evidence: createSignedBillableEvidence(deviceEventSecret, ws1, sessionId),
     });
     expect(start1.status).toBe(200);
 
@@ -878,6 +890,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       idempotencyKey: `start2-balexh`,
       signals: BILLABLE_WAIT_SIGNALS,
       detectorVersion: '1.0.0',
+      evidence: createSignedBillableEvidence(deviceEventSecret, ws2, sessionId),
     });
     const ad2 = await signed(AD, devToken, deviceEventSecret, {
       deviceId,
@@ -964,6 +977,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       idempotencyKey: `start-retry`,
       signals: BILLABLE_WAIT_SIGNALS,
       detectorVersion: '1.0.0',
+      evidence: createSignedBillableEvidence(deviceEventSecret, waitStateId, sessionId),
     };
     const signature = signPayload(payload as Record<string, unknown>, deviceEventSecret);
     const body = { ...payload, signature };
