@@ -177,6 +177,15 @@ const mockPrisma = {
   waitAttestation: {
     findFirst: vi.fn(),
   },
+  // Attestation session consumed at ad-request time and rechecked at billing.
+  waitAttestationSession: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+  },
   // ── EarningsLedger ──
   earningsLedger: {
     findMany: vi.fn(),
@@ -280,9 +289,10 @@ const mockPrisma = {
     findUnique: vi.fn(),
   },
 
-  // Raw SQL — used for atomic budget guards. Default return = 1 (row updated).
+  // Raw SQL — used for atomic budget guards and fraud analytics. Default return = 1 (row updated).
   $executeRawUnsafe: vi.fn(async (_sql: string, ..._params: any[]) => 1),
   $executeRaw: vi.fn(async (_tpl: any, ..._vals: any[]) => 1),
+  $queryRaw: vi.fn(async (_tpl: any, ..._vals: any[]) => [{ count: 0 }]),
 
   // $transaction — mimic the real one: accepts either array or callback
   $transaction: vi.fn(async (arg: any) => {
@@ -451,6 +461,14 @@ describe('E2E Money Loop', () => {
     // into the duplicate check and throws ConflictException.
     mockPrisma.waitStateEvent.findFirst.mockResolvedValue(null);
     mockPrisma.waitAttestation.findFirst.mockResolvedValue({ id: 'verified-attestation' });
+    // Default: a fresh, unconsumed attestation session exists for any ad request.
+    mockPrisma.waitAttestationSession.findFirst.mockResolvedValue({ id: 'attestation-session-id' });
+    // Default: any user lookup sees an active account (billing/fraud gates).
+    mockPrisma.user.findUnique.mockResolvedValue({
+      status: 'active',
+      createdAt: new Date(),
+      fraudFlags: [],
+    });
 
     // Default mock for advertiser balance to prevent requestAd / billing checks failing.
     // The balance helper (getAdvertiserBalancesByCurrency / getAdvertiserBalance) groups
@@ -900,6 +918,9 @@ describe('E2E Money Loop', () => {
     });
 
     it('records wait-state-start', async () => {
+      // Telemetry consent
+      mockPrisma.userSettings.findUnique.mockResolvedValue({ waitTelemetryEnabled: true });
+
       // Device ownership check
       mockPrisma.device.findUnique.mockResolvedValue({
         id: DEVICE_ID,
@@ -1186,6 +1207,7 @@ describe('E2E Money Loop', () => {
         deviceId: DEVICE_ID,
         sessionId: uid('sess'),
         waitStateId: WAIT_STATE_ID,
+        attestationSessionId: 'attestation-session-id',
         impressionTokenHash: require('crypto')
           .createHash('sha256')
           .update(IMPRESSION_TOKEN)
@@ -1200,6 +1222,9 @@ describe('E2E Money Loop', () => {
           currency: 'USD',
           advertiserId: ADS_PROFILE_ID,
           bidType: 'cpm',
+          status: 'active',
+          budgetTotalMinor: 1_000_00n,
+          budgetSpentMinor: 0n,
         },
         user: { status: 'active' },
       });
@@ -1267,6 +1292,7 @@ describe('E2E Money Loop', () => {
       const signed = { ...payload, signature: hmacSign(payload) };
 
       const result = await svc.extension.recordQualifiedImpression(DEV_USER_ID, signed);
+      if (!result.qualified) console.log('DEBUG Phase 3 qual:', result);
       expect(result.qualified).toBe(true);
       expect(result.impressionId).toBe(IMPRESSION_ID);
 
@@ -1434,6 +1460,7 @@ describe('E2E Money Loop', () => {
         deviceId: uid('dev'),
         sessionId: uid('sess'),
         waitStateId: WAIT_STATE_ID,
+        attestationSessionId: 'attestation-session-id',
         impressionTokenHash: require('crypto')
           .createHash('sha256')
           .update(IMPRESSION_TOKEN)
@@ -1445,6 +1472,9 @@ describe('E2E Money Loop', () => {
           currency: 'USD',
           advertiserId: ADS_PROFILE_ID,
           bidType: 'cpc',
+          status: 'active',
+          budgetTotalMinor: 1_000_00n,
+          budgetSpentMinor: 0n,
         },
         user: { status: 'active' },
       });
