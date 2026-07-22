@@ -344,6 +344,11 @@ model UserSettings {
   userId            String   @unique
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   adsEnabled        Boolean  @default(false)
+  // Telemetry is a separate, explicit consent from ad display. No wait event
+  // or reward path may be accepted while this remains false.
+  waitTelemetryEnabled       Boolean   @default(false) @map("wait_telemetry_enabled")
+  waitTelemetryConsentAt     DateTime? @map("wait_telemetry_consent_at") @db.Timestamptz
+  waitTelemetryPolicyVersion String?   @map("wait_telemetry_policy_version")
   quietMode         Boolean  @default(false)
   quietModeStart    String   @default("22:00")
   quietModeEnd      String   @default("08:00")
@@ -629,14 +634,19 @@ model WaitAttestationSession {
   clientSessionId String  @map("client_session_id")
   provider       String
   nonceHash      String   @unique @map("nonce_hash")
-  expiresAt      DateTime @map("expires_at") @db.Timestamptz
+  // A nonce is only usable to start an operation briefly. Consumption may
+  // occur after the permitted wait duration, with a small network grace.
+  operationStartDeadline DateTime @map("expires_at") @db.Timestamptz
+  consumeDeadline        DateTime @map("consume_deadline") @db.Timestamptz
   consumedAt     DateTime? @map("consumed_at") @db.Timestamptz
   createdAt      DateTime @default(now()) @map("created_at")
 
   attestation WaitAttestation?
+  impressions AdImpression[]
 
   @@index([userId, deviceId, waitStateId])
-  @@index([expiresAt])
+  @@index([operationStartDeadline])
+  @@index([consumeDeadline, consumedAt])
   @@map("wait_attestation_sessions")
 }
 
@@ -690,6 +700,10 @@ model AdImpression {
   device              Device     @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   sessionId           String
   waitStateId         String?
+  // Every served reward-bearing ad is permanently linked to the independent
+  // attestation attempt that existed before the wait started.
+  attestationSessionId String? @map("attestation_session_id")
+  attestationSession   WaitAttestationSession? @relation(fields: [attestationSessionId], references: [id], onDelete: Restrict)
   idempotencyKey      String?    @unique
   // Raw impression token returned to the client. Stored so durable idempotency
   // can reconstruct the original ad response on retry. Hashed variant below is
@@ -698,9 +712,12 @@ model AdImpression {
   impressionTokenHash String     @unique
   renderedAt          DateTime?
   qualifiedAt         DateTime?  @db.Timestamptz
+  isQualified         Boolean    @default(false) @map("is_qualified")
+  billingAuthorizedAt DateTime?  @map("billing_authorized_at") @db.Timestamptz
   visibleDurationMs   Int?
   visibleSurface      Float?
   isBillable          Boolean    @default(false)
+  billedAt             DateTime?  @map("billed_at") @db.Timestamptz
   invalidationReason  String?
   invalidatedAt       DateTime?
   ipHash              String?
@@ -717,6 +734,7 @@ model AdImpression {
   @@index([deviceId, qualifiedAt])
   @@index([ipHash, qualifiedAt])
   @@index([isBillable, createdAt])
+  @@index([attestationSessionId])
   @@index([userId, sessionId])
   // FK back-reference scan: AdCreative.impressions 1:N — creativeId scan used
   // for creative-performance dashboard queries and re-render of same creative.

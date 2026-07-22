@@ -64,13 +64,15 @@ function makeService() {
     clientSessionId: 'client-session-1',
     provider: PROVIDER,
     nonceHash: createHash('sha256').update(nonce).digest('hex'),
-    expiresAt: new Date(now + 60_000),
+    operationStartDeadline: new Date(now + 60_000),
+    consumeDeadline: new Date(now + 31 * 60_000),
     consumedAt: null,
     // The nonce is issued before the server-recorded wait start.
     createdAt: new Date(now - 7_000),
   };
   const prisma = {
     device: { findUnique: vi.fn().mockResolvedValue({ userId: 'user-1' }) },
+    userSettings: { findUnique: vi.fn().mockResolvedValue({ waitTelemetryEnabled: true }) },
     waitAttestationSession: {
       create: vi.fn().mockImplementation(async ({ data }) => ({ id: 'new-session', ...data })),
       findUnique: vi.fn().mockResolvedValue(session),

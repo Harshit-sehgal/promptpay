@@ -141,22 +141,33 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('waitlayer.toggleAds', async () => {
-      const enabled = await config.toggleAds();
-      // Sync the toggle to the server so the source of truth stays authoritative.
-      // Best-effort: if the server is unreachable, the local toggle still works.
-      api.updateAdsEnabled(enabled).catch((err: unknown) => {
+      const enabled = !(await config.adsEnabled());
+      try {
+        await api.updateAdsEnabled(enabled);
+        await config.setAdsEnabled(enabled);
+        vscode.window.showInformationMessage(`WaitLayer: ads ${enabled ? 'enabled' : 'disabled'}`);
+      } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: failed to sync adsEnabled to server — ${msg}`);
-      });
-      vscode.window.showInformationMessage(`WaitLayer: ads ${enabled ? 'enabled' : 'disabled'}`);
+        console.warn(`WaitLayer: failed to update adsEnabled on server — ${msg}`);
+        vscode.window.showErrorMessage(`WaitLayer: ads were not changed — ${msg}`, 'Retry').then(
+          (choice) => choice === 'Retry' && vscode.commands.executeCommand('waitlayer.toggleAds'),
+        );
+      }
     }),
     vscode.commands.registerCommand('waitlayer.toggleWaitTelemetry', async () => {
-      const enabled = await config.toggleWaitTelemetry();
-      vscode.window.showInformationMessage(
-        enabled
-          ? 'WaitLayer: wait telemetry enabled. Detected waits may now be sent to WaitLayer.'
-          : 'WaitLayer: wait telemetry disabled. No detected waits will be sent to WaitLayer.',
-      );
+      const enabled = !(await config.waitTelemetryEnabled());
+      try {
+        await api.updateWaitTelemetryEnabled(enabled);
+        await config.setWaitTelemetryEnabled(enabled);
+        vscode.window.showInformationMessage(
+          enabled
+            ? 'WaitLayer: wait telemetry enabled. Detected waits may now be sent to WaitLayer.'
+            : 'WaitLayer: wait telemetry disabled. No detected waits will be sent to WaitLayer.',
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`WaitLayer: telemetry was not changed — ${msg}`);
+      }
     }),
     vscode.commands.registerCommand('waitlayer.openDashboard', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://waitlayer.com/developer'));
@@ -487,6 +498,9 @@ export async function activate(context: vscode.ExtensionContext) {
             );
           });
         }
+      }
+      if (typeof settings.waitTelemetryEnabled === 'boolean') {
+        await config.setWaitTelemetryEnabled(settings.waitTelemetryEnabled);
       }
     })
     .catch((err: unknown) => {

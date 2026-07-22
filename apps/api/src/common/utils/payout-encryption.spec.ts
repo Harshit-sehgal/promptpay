@@ -29,6 +29,21 @@ afterEach(() => {
 });
 
 describe('encryptPayoutDestination / decryptPayoutDestination', () => {
+  it('binds v2 ciphertext to its payout-account record with authenticated data', () => {
+    const binding = {
+      accountId: 'account-a',
+      userId: 'user-a',
+      provider: 'paypal_email',
+      currency: 'USD',
+    };
+    const encrypted = encryptPayoutDestination('dev@example.com', binding);
+    expect(encrypted.startsWith('v2:')).toBe(true);
+    expect(decryptPayoutDestination(encrypted, binding)).toBe('dev@example.com');
+    expect(() =>
+      decryptPayoutDestination(encrypted, { ...binding, accountId: 'account-b' }),
+    ).toThrow();
+  });
+
   it('round-trips an email destination', () => {
     const dest = 'dev@example.com';
     const encrypted = encryptPayoutDestination(dest);

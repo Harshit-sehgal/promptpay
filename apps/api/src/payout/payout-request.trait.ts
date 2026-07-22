@@ -6,7 +6,11 @@ import { payoutMinimumMinor, payoutProviderLaunchStatus, PayoutStatus } from '@w
 
 import { AuditService } from '../audit/audit.service';
 import { isUniqueConstraintViolation } from '../common/utils/errors';
-import { decryptPayoutDestination } from '../common/utils/payout-encryption';
+import {
+  decryptPayoutDestination,
+  hmacPayoutDestination,
+  isEncryptedDestination,
+} from '../common/utils/payout-encryption';
 import {
   CircuitBreakerOpenError,
   providerBreaker,
@@ -848,15 +852,32 @@ export class PayoutRequestTrait {
     let retainFenceForReconciliation = false;
     try {
       const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
-      // Decrypt the stored destination before passing it to the provider.
-      // Destinations are encrypted at rest using AES-256-GCM; the raw value
-      // is only decrypted in memory for the provider call. Legacy destinations
-      // stored before encryption was introduced have no 'v1:' prefix and are
-      // passed through as-is.
+      // Provider I/O is fail-closed in production. A legacy/plaintext or
+      // integrity-incomplete destination is never forwarded merely because a
+      // row survived an older migration.
       const rawDest = payout.payoutAccount.destination;
-      const decryptedDestination = rawDest.startsWith('v1:')
-        ? decryptPayoutDestination(rawDest)
+      if (
+        process.env.NODE_ENV === 'production' &&
+        (!isEncryptedDestination(rawDest) ||
+          !payout.payoutAccount.destinationHmac ||
+          !payout.payoutAccount.encryptionMigratedAt)
+      ) {
+        throw new Error('payout_destination_migration_required');
+      }
+      const decryptedDestination = isEncryptedDestination(rawDest)
+        ? decryptPayoutDestination(rawDest, {
+            accountId: payout.payoutAccount.id,
+            userId: payout.payoutAccount.userId,
+            provider: payout.payoutAccount.provider,
+            currency: payout.payoutAccount.currency,
+          })
         : rawDest;
+      if (
+        payout.payoutAccount.destinationHmac &&
+        hmacPayoutDestination(decryptedDestination) !== payout.payoutAccount.destinationHmac
+      ) {
+        throw new Error('payout_destination_migration_required');
+      }
       let result: { providerTxId: string; status: string };
       try {
         result = await providerBreaker.call(`initiate:${payout.payoutAccount.provider}`, () =>

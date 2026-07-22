@@ -40,11 +40,16 @@ export class ConfigurationManager {
     return false;
   }
 
-  async toggleAds(): Promise<boolean> {
+  async setAdsEnabled(enabled: boolean): Promise<void> {
     const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
-    const current = await this.adsEnabled();
-    await cfg.update('adsEnabled', !current, vscode.ConfigurationTarget.Global);
-    return !current;
+    await cfg.update('adsEnabled', enabled, vscode.ConfigurationTarget.Global);
+  }
+
+  /** @deprecated Commands use server-authoritative setAdsEnabled(). */
+  async toggleAds(): Promise<boolean> {
+    const enabled = !(await this.adsEnabled());
+    await this.setAdsEnabled(enabled);
+    return enabled;
   }
 
   /**
@@ -59,10 +64,15 @@ export class ConfigurationManager {
     return stored === true;
   }
 
-  async toggleWaitTelemetry(): Promise<boolean> {
+  async setWaitTelemetryEnabled(enabled: boolean): Promise<void> {
     const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
-    const enabled = !(await this.waitTelemetryEnabled());
     await cfg.update('waitTelemetryEnabled', enabled, vscode.ConfigurationTarget.Global);
+  }
+
+  /** @deprecated Commands use server-authoritative setWaitTelemetryEnabled(). */
+  async toggleWaitTelemetry(): Promise<boolean> {
+    const enabled = !(await this.waitTelemetryEnabled());
+    await this.setWaitTelemetryEnabled(enabled);
     return enabled;
   }
 

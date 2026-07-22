@@ -353,6 +353,24 @@ export class ApiClient {
     }>('PATCH', '/developer/settings', data);
   }
 
+  async createWaitAttestationSession(input: {
+    deviceId: string;
+    waitStateId: string;
+    sessionId: string;
+    provider: string;
+  }) {
+    return this.raw<{
+      attestationSessionId: string;
+      nonce: string;
+      operationStartDeadline: string;
+      consumeDeadline: string;
+    }>('POST', '/extension/wait-attestation/session', input);
+  }
+
+  async consumeWaitAttestation(input: { attestationSessionId: string; assertion: string }) {
+    return this.raw('POST', '/extension/wait-attestation/consume', input);
+  }
+
   async reportWaitState(input: {
     deviceId: string;
     waitStateId: string;

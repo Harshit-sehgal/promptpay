@@ -44,6 +44,16 @@ export class ExtensionWaitTrait {
   declare fraud: FraudService;
   declare runtimeConfig: RuntimeConfigService;
 
+  private async requireWaitTelemetryConsent(userId: string): Promise<void> {
+    const settings = await this.prisma.userSettings.findUnique({
+      where: { userId },
+      select: { waitTelemetryEnabled: true },
+    });
+    if (!settings?.waitTelemetryEnabled) {
+      throw new ForbiddenException('wait_telemetry_consent_required');
+    }
+  }
+
   // ── Wait State Events ──
   async recordWaitStateStart(
     userId: string,
@@ -60,6 +70,7 @@ export class ExtensionWaitTrait {
     },
   ) {
     this.enforcePrivacyOn(dto);
+    await this.requireWaitTelemetryConsent(userId);
     // Verify device belongs to this user
     const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
     if (!device || device.userId !== userId) {
@@ -151,6 +162,23 @@ export class ExtensionWaitTrait {
       throw new ForbiddenException(
         `Detector version "${dto.detectorVersion}" is currently disabled`,
       );
+    }
+    // A proof attempt must be established before the operation starts. This
+    // makes ad serving and later settlement incapable of silently upgrading an
+    // unattested wait into a reward-bearing one.
+    const attestationSession = await this.prisma.waitAttestationSession.findFirst({
+      where: {
+        userId,
+        deviceId: dto.deviceId,
+        clientSessionId: dto.sessionId,
+        waitStateId: dto.waitStateId,
+        consumedAt: null,
+        operationStartDeadline: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+    if (!attestationSession) {
+      throw new ForbiddenException('wait_attestation_session_required');
     }
     // Idempotency ordering (P1 #20): locate the idempotency key FIRST — only
     // after ownership/signature pass — so an exact retry returns the original
@@ -262,6 +290,7 @@ export class ExtensionWaitTrait {
     },
   ) {
     this.enforcePrivacyOn(dto);
+    await this.requireWaitTelemetryConsent(userId);
     // Resolve the start event FIRST so we can verify with the device's secret
     const start = await this.prisma.waitStateEvent.findFirst({
       where: { userId, waitStateId: dto.waitStateId, eventType: 'wait_state_start' },
@@ -366,6 +395,7 @@ export class ExtensionWaitTrait {
     waitStateId: string,
     feedback?: { reason?: string; note?: string },
   ) {
+    await this.requireWaitTelemetryConsent(userId);
     const start = await this.prisma.waitStateEvent.findFirst({
       where: { userId, waitStateId, eventType: 'wait_state_start' },
       orderBy: { createdAt: 'desc' },
@@ -387,14 +417,42 @@ export class ExtensionWaitTrait {
     if (burst >= FP_SPIKE_THRESHOLD) {
       this.alerts?.sendAlert('wait_false_positive_spike', 'global', { windowCount: burst });
     }
-    return this.prisma.waitStateEvent.update({
-      where: { id: start.id },
-      data: {
-        isFalsePositive: true,
-        falsePositiveReason: feedback?.reason ?? null,
-        falsePositiveNote: feedback?.note ?? null,
-        falsePositiveReportedAt: new Date(),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.waitStateEvent.update({
+        where: { id: start.id },
+        data: {
+          isFalsePositive: true,
+          falsePositiveReason: feedback?.reason ?? null,
+          falsePositiveNote: feedback?.note ?? null,
+          falsePositiveReportedAt: new Date(),
+        },
+      });
+      // A report arriving after ad serving must win the race against any
+      // not-yet-authorized settlement. Claim all non-billable impressions and
+      // release only their own CPM reservation; ledger-backed rows are never
+      // rewritten here and remain part of the financial audit trail.
+      const pending = await tx.adImpression.findMany({
+        where: { userId, waitStateId, isBillable: false, invalidatedAt: null },
+        include: { campaign: { select: { bidType: true, bidAmountMinor: true } } },
+      });
+      for (const impression of pending) {
+        const claimed = await tx.adImpression.updateMany({
+          where: { id: impression.id, isBillable: false, invalidatedAt: null },
+          data: {
+            invalidatedAt: new Date(),
+            invalidationReason: 'user_reported_false_positive',
+          },
+        });
+        if (claimed.count === 1 && impression.campaign.bidType === 'cpm') {
+          await tx.$executeRaw`
+            UPDATE "campaigns"
+            SET "budget_reserved_minor" = "budget_reserved_minor" - ${BigInt(impression.campaign.bidAmountMinor)}
+            WHERE "id" = ${impression.campaignId}
+              AND "budget_reserved_minor" >= ${BigInt(impression.campaign.bidAmountMinor)}
+          `;
+        }
+      }
+      return updated;
     });
   }
 }

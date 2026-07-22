@@ -63,6 +63,7 @@ export interface ClaimImpressionArgs {
   deviceId: string;
   sessionId: string;
   waitStateId: string;
+  attestationSessionId: string;
   idempotencyKey: string;
   campaignId: string;
   creativeId: string;
@@ -86,6 +87,7 @@ export interface RunAuctionParams {
   deviceId: string;
   sessionId: string;
   waitStateId: string;
+  attestationSessionId: string;
   idempotencyKey: string;
   maxPerHour: number;
   oneHourAgo: Date;
@@ -281,6 +283,7 @@ export class AuctionService {
       deviceId,
       sessionId,
       waitStateId,
+      attestationSessionId,
       idempotencyKey,
       maxPerHour,
       oneHourAgo,
@@ -332,6 +335,7 @@ export class AuctionService {
             deviceId,
             sessionId,
             waitStateId,
+            attestationSessionId,
             idempotencyKey,
             campaignId: selected.id,
             creativeId: creative.id,

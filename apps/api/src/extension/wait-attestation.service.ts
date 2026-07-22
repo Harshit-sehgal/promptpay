@@ -13,6 +13,10 @@ import { PrismaService } from '../config/prisma.service';
 import { ConsumeWaitAttestationDto, CreateWaitAttestationSessionDto } from './dto';
 
 const SESSION_TTL_MS = 5 * 60_000;
+// A completed wait may run for the configured thirty-minute maximum. The
+// independent assertion remains single-use, but can arrive after the start
+// nonce deadline with bounded network grace.
+const CONSUME_GRACE_MS = 2 * 60_000;
 const CLOCK_SKEW_MS = 60_000;
 const MAX_DURATION_MS = 30 * 60_000;
 const DURATION_TOLERANCE_MS = 1_000;
@@ -116,7 +120,18 @@ export class WaitAttestationService {
     }
   }
 
+  private async requireWaitTelemetryConsent(userId: string): Promise<void> {
+    const settings = await this.prisma.userSettings.findUnique({
+      where: { userId },
+      select: { waitTelemetryEnabled: true },
+    });
+    if (!settings?.waitTelemetryEnabled) {
+      throw new ForbiddenException('wait_telemetry_consent_required');
+    }
+  }
+
   async createSession(userId: string, dto: CreateWaitAttestationSessionDto) {
+    await this.requireWaitTelemetryConsent(userId);
     // Validate the configured issuer before issuing a nonce. A missing provider
     // configuration must not create a session that a client could mistake for
     // a billable capability.
@@ -130,7 +145,8 @@ export class WaitAttestationService {
     }
 
     const nonce = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+    const operationStartDeadline = new Date(Date.now() + SESSION_TTL_MS);
+    const consumeDeadline = new Date(Date.now() + MAX_DURATION_MS + CONSUME_GRACE_MS);
     const session = await this.prisma.waitAttestationSession.create({
       data: {
         userId,
@@ -139,7 +155,8 @@ export class WaitAttestationService {
         clientSessionId: dto.sessionId,
         provider: dto.provider,
         nonceHash: digest(nonce),
-        expiresAt,
+        operationStartDeadline,
+        consumeDeadline,
       },
     });
     await this.audit.logStrict({
@@ -151,20 +168,27 @@ export class WaitAttestationService {
       afterSnap: {
         provider: dto.provider,
         deviceId: dto.deviceId,
-        expiresAt: expiresAt.toISOString(),
+        operationStartDeadline: operationStartDeadline.toISOString(),
+        consumeDeadline: consumeDeadline.toISOString(),
       },
     });
-    return { attestationSessionId: session.id, nonce, expiresAt: expiresAt.toISOString() };
+    return {
+      attestationSessionId: session.id,
+      nonce,
+      operationStartDeadline: operationStartDeadline.toISOString(),
+      consumeDeadline: consumeDeadline.toISOString(),
+    };
   }
 
   async consume(userId: string, dto: ConsumeWaitAttestationDto) {
+    await this.requireWaitTelemetryConsent(userId);
     const session = await this.prisma.waitAttestationSession.findUnique({
       where: { id: dto.attestationSessionId },
     });
     if (!session || session.userId !== userId) {
       throw new ForbiddenException('Wait-attestation session is not available to this user');
     }
-    if (session.consumedAt || session.expiresAt <= new Date()) {
+    if (session.consumedAt || session.consumeDeadline <= new Date()) {
       throw new ConflictException('Wait-attestation session is expired or already consumed');
     }
 
@@ -280,7 +304,7 @@ export class WaitAttestationService {
     try {
       const accepted = await this.prisma.$transaction(async (tx) => {
         const claimed = await tx.waitAttestationSession.updateMany({
-          where: { id: session.id, consumedAt: null, expiresAt: { gt: new Date() } },
+          where: { id: session.id, consumedAt: null, consumeDeadline: { gt: new Date() } },
           data: { consumedAt: new Date() },
         });
         if (claimed.count !== 1) {

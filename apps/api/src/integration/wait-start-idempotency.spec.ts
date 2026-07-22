@@ -83,7 +83,7 @@ describe('wait-start idempotency ordering (P1 #20)', () => {
     await request(app.getHttpServer())
       .patch('/api/v1/developer/settings')
       .set('Authorization', `Bearer ${devToken}`)
-      .send({ adsEnabled: true })
+        .send({ adsEnabled: true, waitTelemetryEnabled: true })
       .expect(200);
 
     const device = await request(app.getHttpServer())

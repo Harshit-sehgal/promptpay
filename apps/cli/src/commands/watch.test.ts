@@ -8,6 +8,13 @@ import { runWatch } from './watch';
 const mocks = vi.hoisted(() => {
   const api = {
     getOrRegisterDevice: vi.fn().mockResolvedValue('dev_1'),
+    createWaitAttestationSession: vi.fn().mockResolvedValue({
+      attestationSessionId: 'att-1',
+      nonce: 'nonce',
+      operationStartDeadline: '2099-01-01T00:00:00.000Z',
+      consumeDeadline: '2099-01-01T00:30:00.000Z',
+    }),
+    consumeWaitAttestation: vi.fn().mockResolvedValue(undefined),
     reportWaitState: vi.fn().mockResolvedValue(undefined),
     endWaitState: vi.fn().mockResolvedValue(undefined),
     requestAd: vi.fn().mockResolvedValue({
@@ -45,12 +52,21 @@ vi.mock('../lib/credentials', () => ({
 vi.mock('../lib/api-client', () => ({
   ApiClient: class {
     getOrRegisterDevice = mocks.api.getOrRegisterDevice;
+    createWaitAttestationSession = mocks.api.createWaitAttestationSession;
+    consumeWaitAttestation = mocks.api.consumeWaitAttestation;
     reportWaitState = mocks.api.reportWaitState;
     endWaitState = mocks.api.endWaitState;
     requestAd = mocks.api.requestAd;
     recordAdRendered = mocks.api.recordAdRendered;
     recordImpressionQualified = mocks.api.recordImpressionQualified;
   },
+}));
+
+vi.mock('../lib/wait-attestation-provider', () => ({
+  createCliWaitAssertionProvider: () => ({
+    provider: 'test-provider',
+    obtainAssertion: vi.fn().mockResolvedValue('signed-test-assertion-that-is-long-enough'),
+  }),
 }));
 
 vi.mock('fs', async (importOriginal) => {

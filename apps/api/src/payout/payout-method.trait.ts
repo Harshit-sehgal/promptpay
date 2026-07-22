@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -78,15 +79,23 @@ export class PayoutMethodTrait {
       // Encrypt the destination at rest using AES-256-GCM, and compute a
       // deterministic HMAC so checkSharedPayoutDestination can detect shared
       // destinations without decrypting every account.
-      const encryptedDest = encryptPayoutDestination(destination);
+      const payoutAccountId = randomUUID();
+      const encryptedDest = encryptPayoutDestination(destination, {
+        accountId: payoutAccountId,
+        userId,
+        provider,
+        currency,
+      });
       const destHmac = hmacPayoutDestination(destination);
       const created = await tx.payoutAccount.create({
         data: {
+          id: payoutAccountId,
           userId,
           provider,
           destination: encryptedDest,
           destinationHmac: destHmac,
           currency,
+          encryptionMigratedAt: new Date(),
         },
       });
       // Audit INSIDE the transaction: a payout destination change is a
@@ -277,16 +286,24 @@ export class PayoutMethodTrait {
         where: { userId, provider: 'stripe_connect', isActive: true },
         data: { isActive: false },
       });
-      const encryptedConnectDest = encryptPayoutDestination(accountId);
+      const payoutAccountId = randomUUID();
+      const encryptedConnectDest = encryptPayoutDestination(accountId, {
+        accountId: payoutAccountId,
+        userId,
+        provider: 'stripe_connect',
+        currency,
+      });
       const connectDestHmac = hmacPayoutDestination(accountId);
       const created = await tx.payoutAccount.create({
         data: {
+          id: payoutAccountId,
           userId,
           provider: 'stripe_connect',
           destination: encryptedConnectDest,
           destinationHmac: connectDestHmac,
           currency,
           isVerified: false,
+          encryptionMigratedAt: new Date(),
         },
       });
       // Audit INSIDE the transaction so a Stripe Connect onboarding record is
@@ -297,7 +314,7 @@ export class PayoutMethodTrait {
           actorRole: 'developer',
           action: 'add_payout_method',
           targetType: 'payout_account',
-          targetId: accountId,
+          targetId: created.id,
           beforeSnap: { provider: 'stripe_connect', currency, pending: true },
         },
         tx,

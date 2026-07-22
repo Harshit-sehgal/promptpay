@@ -75,6 +75,16 @@ export class ExtensionAdTrait {
   private auctionService?: AuctionService;
   declare logger: Logger;
 
+  private async requireAdTelemetryConsent(userId: string): Promise<void> {
+    const settings = await this.prisma.userSettings.findUnique({
+      where: { userId },
+      select: { waitTelemetryEnabled: true },
+    });
+    if (!settings?.waitTelemetryEnabled) {
+      throw new ForbiddenException('wait_telemetry_consent_required');
+    }
+  }
+
   /** A provider/server-signed assertion is the money trust boundary. Device
    * HMACs and detector evidence can guide ad relevance but cannot settle an
    * earning without this durable, replay-protected binding. */
@@ -82,11 +92,13 @@ export class ExtensionAdTrait {
     userId: string;
     deviceId: string;
     waitStateId: string | null;
+    attestationSessionId?: string | null;
   }): Promise<boolean> {
-    if (!impression.waitStateId) return false;
+    if (!impression.waitStateId || !impression.attestationSessionId) return false;
     return Boolean(
       await this.prisma.waitAttestation.findFirst({
         where: {
+          sessionId: impression.attestationSessionId,
           userId: impression.userId,
           deviceId: impression.deviceId,
           waitStateId: impression.waitStateId,
@@ -94,6 +106,53 @@ export class ExtensionAdTrait {
         select: { id: true },
       }),
     );
+  }
+
+  /** Re-read mutable safety state just before a financial authorization. */
+  private async financialAuthorization(impression: {
+    userId: string;
+    deviceId: string;
+    sessionId: string;
+    waitStateId: string | null;
+    attestationSessionId?: string | null;
+  }): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+    if (!(await this.runtimeConfig.isWaitEarningsEnabled())) {
+      return { allowed: false, reason: 'wait_earnings_disabled' };
+    }
+    const [user, waitStart, attestation] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: impression.userId }, select: { status: true } }),
+      this.prisma.waitStateEvent.findFirst({
+        where: {
+          userId: impression.userId,
+          deviceId: impression.deviceId,
+          sessionId: impression.sessionId,
+          waitStateId: impression.waitStateId ?? '',
+          eventType: 'wait_state_start',
+        },
+        select: { isFalsePositive: true, detectorVersion: true },
+      }),
+      impression.attestationSessionId
+        ? this.prisma.waitAttestation.findFirst({
+            where: {
+              sessionId: impression.attestationSessionId,
+              userId: impression.userId,
+              deviceId: impression.deviceId,
+              waitStateId: impression.waitStateId ?? '',
+            },
+            select: { id: true },
+          })
+        : null,
+    ]);
+    if (!waitStart) return { allowed: false, reason: 'wait_state_missing' };
+    if (waitStart.isFalsePositive) return { allowed: false, reason: 'user_reported_false_positive' };
+    if (!user || !isActiveAccountStatus(user.status)) {
+      return { allowed: false, reason: 'account_not_active' };
+    }
+    if (!attestation) return { allowed: false, reason: 'unverified_wait_attestation' };
+    if (!(await this.runtimeConfig.isDetectorVersionEnabled(waitStart.detectorVersion))) {
+      return { allowed: false, reason: 'detector_version_disabled' };
+    }
+    return { allowed: true };
   }
 
   // ── Ad Serving ──
@@ -113,6 +172,7 @@ export class ExtensionAdTrait {
   ) {
     // Enforce privacy: reject payloads containing prohibited data fields
     this.enforcePrivacyOn(dto);
+    await this.requireAdTelemetryConsent(userId);
     // Verify device belongs to user
     const device = await this.prisma.device.findUnique({
       where: { id: dto.deviceId },
@@ -188,6 +248,26 @@ export class ExtensionAdTrait {
       waitStart.isFalsePositive
     ) {
       return { ad: null, reason: 'low_confidence_wait' };
+    }
+
+    // Serving is itself a reward-bearing commitment: require a still
+    // unconsumed attestation attempt that was issued before this wait began.
+    // Consumption intentionally happens after the operation; its durable
+    // result is rechecked again immediately before ledger writes.
+    const attestationSession = await this.prisma.waitAttestationSession.findFirst({
+      where: {
+        userId,
+        deviceId: dto.deviceId,
+        clientSessionId: dto.sessionId,
+        waitStateId: dto.waitStateId,
+        consumedAt: null,
+        operationStartDeadline: { gte: waitStart.createdAt },
+        consumeDeadline: { gt: new Date() },
+      },
+      select: { id: true },
+    });
+    if (!attestationSession) {
+      return { ad: null, reason: 'wait_attestation_session_required' };
     }
 
     // P1 durable idempotency: before serving a new ad, look for an prior
@@ -326,6 +406,7 @@ export class ExtensionAdTrait {
       deviceId: dto.deviceId,
       sessionId: dto.sessionId,
       waitStateId: dto.waitStateId,
+      attestationSessionId: attestationSession.id,
       idempotencyKey: dto.idempotencyKey,
       maxPerHour,
       oneHourAgo,
@@ -451,6 +532,7 @@ export class ExtensionAdTrait {
     deviceId: string;
     sessionId: string;
     waitStateId: string;
+    attestationSessionId: string;
     idempotencyKey: string;
     campaignId: string;
     creativeId: string;
@@ -539,6 +621,7 @@ export class ExtensionAdTrait {
             impressionToken: args.impressionToken,
             impressionTokenHash: args.impressionTokenHash,
             waitStateId: args.waitStateId,
+            attestationSessionId: args.attestationSessionId,
             idempotencyKey: args.idempotencyKey,
           },
           select: { id: true },
@@ -793,13 +876,28 @@ export class ExtensionAdTrait {
         reason,
       };
     }
+    const financialGate = await this.financialAuthorization(impression);
+    if (!financialGate.allowed) {
+      await this.invalidateImpressionAndReleaseReservation({
+        impressionId: impression.id,
+        campaignId: impression.campaignId,
+        bidType: impression.campaign.bidType,
+        bidAmountMinor: BigInt(impression.campaign.bidAmountMinor),
+        visibleDurationMs: effectiveDurationMs,
+        reason: financialGate.reason,
+      });
+      return { qualified: false, impressionId: impression.id, reason: financialGate.reason };
+    }
     if (impression.campaign.bidType === 'cpc') {
       const claim = await this.prisma.adImpression.updateMany({
         where: { id: impression.id, qualifiedAt: null },
         data: {
           qualifiedAt: new Date(),
           visibleDurationMs: effectiveDurationMs,
-          isBillable: true,
+          isQualified: true,
+          // A CPC render is only qualified. `isBillable` becomes true in the
+          // click transaction, at the same time as the ledger entries.
+          isBillable: false,
         },
       });
       if (claim.count === 0) {
@@ -839,7 +937,11 @@ export class ExtensionAdTrait {
     // The signed provider assertion is mandatory for settlement. Client HMAC
     // evidence alone must never become withdrawable money, even when it uses
     // an allowlisted adapter/version pair.
-    if (!classification.adEligible || !(await this.hasVerifiedWaitAttestation(impression))) {
+    if (
+      waitStartForImpression?.isFalsePositive ||
+      !classification.adEligible ||
+      !(await this.hasVerifiedWaitAttestation(impression))
+    ) {
       await this.invalidateImpressionAndReleaseReservation({
         impressionId: impression.id,
         campaignId: impression.campaignId,
@@ -891,9 +993,12 @@ export class ExtensionAdTrait {
         const claim = await tx.adImpression.updateMany({
           where: { id: impression.id, qualifiedAt: null, invalidatedAt: null },
           data: {
-            qualifiedAt: new Date(),
-            visibleDurationMs: effectiveDurationMs,
-            isBillable: true,
+          qualifiedAt: new Date(),
+          visibleDurationMs: effectiveDurationMs,
+          isQualified: true,
+          billingAuthorizedAt: new Date(),
+          isBillable: true,
+          billedAt: new Date(),
           },
         });
         if (claim.count === 0) {
@@ -1086,6 +1191,12 @@ export class ExtensionAdTrait {
     ) {
       return { clicked: false, impressionId: impression.id, reason: 'wait_earnings_disabled' };
     }
+    if (impression.campaign.bidType === BidType.cpc) {
+      const financialGate = await this.financialAuthorization(impression);
+      if (!financialGate.allowed) {
+        return { clicked: false, impressionId: impression.id, reason: financialGate.reason };
+      }
+    }
     // Fraud checks: rate + self-click
     const clickPatterns = await this.fraud.checkClickPatterns(impression.userId, impression.id);
     if (!clickPatterns.allowed) {
@@ -1268,6 +1379,18 @@ export class ExtensionAdTrait {
               referenceId: click.id,
               idempotencyKey: `${idempotencyBase}-res`,
               description: 'Fraud/payment reserve from ad click',
+            },
+          });
+          // `isBillable` is an accounting assertion, not a UI state: flip it
+          // only inside the transaction that wrote every corresponding ledger
+          // row. A rollback leaves the qualified CPC impression non-billable.
+          const billedAt = new Date();
+          await tx.adImpression.update({
+            where: { id: impression.id },
+            data: {
+              isBillable: true,
+              billingAuthorizedAt: billedAt,
+              billedAt,
             },
           });
         }

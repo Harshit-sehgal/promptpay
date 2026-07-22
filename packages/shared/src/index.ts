@@ -13,3 +13,4 @@ export * from './password-policy';
 export * from './payout-providers';
 export * from './signing';
 export * from './totp';
+export * from './wait-attestation';

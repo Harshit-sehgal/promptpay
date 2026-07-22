@@ -21,6 +21,9 @@ import { FraudService } from '../fraud/fraud.service';
 
 interface DeveloperSettingsUpdate {
   adsEnabled?: boolean;
+  waitTelemetryEnabled?: boolean;
+  waitTelemetryConsentAt?: Date;
+  waitTelemetryPolicyVersion?: string;
   quietMode?: boolean;
   quietModeStart?: string;
   quietModeEnd?: string;
@@ -277,6 +280,17 @@ export class DeveloperService {
     const data: DeveloperSettingsUpdate = {};
 
     if (dto.adsEnabled !== undefined) data.adsEnabled = dto.adsEnabled;
+    if (dto.waitTelemetryEnabled !== undefined) {
+      data.waitTelemetryEnabled = dto.waitTelemetryEnabled;
+      // Record consent time only for an affirmative, explicit update. Revoking
+      // consent keeps the audit timestamp while immediately disabling use.
+      if (dto.waitTelemetryEnabled) {
+        data.waitTelemetryConsentAt = new Date();
+      }
+    }
+    if (dto.waitTelemetryPolicyVersion !== undefined) {
+      data.waitTelemetryPolicyVersion = dto.waitTelemetryPolicyVersion;
+    }
     if (dto.quietMode !== undefined) data.quietMode = dto.quietMode;
     if (dto.quietModeStart !== undefined) data.quietModeStart = dto.quietModeStart;
     if (dto.quietModeEnd !== undefined) data.quietModeEnd = dto.quietModeEnd;

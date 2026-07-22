@@ -21,6 +21,18 @@ export class UpdateSettingsDto {
   @Type(() => Boolean)
   adsEnabled?: boolean;
 
+  @ApiProperty({ required: false, description: 'Explicit consent for minimized wait telemetry.' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  waitTelemetryEnabled?: boolean;
+
+  @ApiProperty({ required: false, maxLength: 64 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  waitTelemetryPolicyVersion?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsBoolean()

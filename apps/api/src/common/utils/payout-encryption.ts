@@ -21,8 +21,24 @@ import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypt
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96 bits recommended for GCM
 const AUTH_TAG_LENGTH = 16;
-const KEY_VERSION = 'v1';
-const CURRENT_VERSION_PREFIX = `${KEY_VERSION}:`;
+const LEGACY_KEY_VERSION = 'v1';
+const CURRENT_KEY_VERSION = 'v2';
+const LEGACY_VERSION_PREFIX = `${LEGACY_KEY_VERSION}:`;
+const CURRENT_VERSION_PREFIX = `${CURRENT_KEY_VERSION}:`;
+
+export interface PayoutDestinationBinding {
+  accountId: string;
+  userId: string;
+  provider: string;
+  currency: string;
+}
+
+export function payoutDestinationAad(binding: PayoutDestinationBinding): Buffer {
+  return Buffer.from(
+    `waitlayer:payout-account:${binding.accountId}:${binding.userId}:${binding.provider}:${binding.currency}`,
+    'utf8',
+  );
+}
 
 /**
  * Derive the encryption key from the configured PAYOUT_ENCRYPTION_KEY.
@@ -63,10 +79,11 @@ function loadEncryptionKey(): Buffer {
  *
  * Format: `v1:base64(iv + ciphertext + authTag)`
  */
-export function encryptPayoutDestination(plaintext: string): string {
+export function encryptPayoutDestination(plaintext: string, binding?: PayoutDestinationBinding): string {
   const key = loadEncryptionKey();
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
+  if (binding) cipher.setAAD(payoutDestinationAad(binding));
 
   let encrypted = cipher.update(plaintext, 'utf8', 'base64');
   encrypted += cipher.final('base64');
@@ -74,7 +91,9 @@ export function encryptPayoutDestination(plaintext: string): string {
 
   const combined = Buffer.concat([iv, Buffer.from(encrypted, 'base64'), authTag]);
 
-  return `${CURRENT_VERSION_PREFIX}${combined.toString('base64')}`;
+  // Existing migration scripts can still deliberately produce v1 while they
+  // are being upgraded. All application writes pass a binding and produce v2.
+  return `${binding ? CURRENT_VERSION_PREFIX : LEGACY_VERSION_PREFIX}${combined.toString('base64')}`;
 }
 
 /**
@@ -82,12 +101,15 @@ export function encryptPayoutDestination(plaintext: string): string {
  * plaintext. Supports key rotation by reading the version prefix and using
  * the appropriate key (currently only v1 is supported).
  */
-export function decryptPayoutDestination(encrypted: string): string {
+export function decryptPayoutDestination(encrypted: string, binding?: PayoutDestinationBinding): string {
   const version = encrypted.split(':')[0];
-  if (version !== 'v1') {
+  if (version !== LEGACY_KEY_VERSION && version !== CURRENT_KEY_VERSION) {
     throw new Error(`Unsupported payout encryption key version: ${version}`);
   }
-  const raw = encrypted.slice(CURRENT_VERSION_PREFIX.length);
+  if (version === CURRENT_KEY_VERSION && !binding) {
+    throw new Error('Payout destination v2 requires its account binding');
+  }
+  const raw = encrypted.slice(`${version}:`.length);
   const data = Buffer.from(raw, 'base64');
 
   const iv = data.subarray(0, IV_LENGTH);
@@ -96,6 +118,7 @@ export function decryptPayoutDestination(encrypted: string): string {
 
   const key = loadEncryptionKey();
   const decipher = createDecipheriv(ALGORITHM, key, iv);
+  if (version === CURRENT_KEY_VERSION && binding) decipher.setAAD(payoutDestinationAad(binding));
   decipher.setAuthTag(authTag);
 
   let decrypted = decipher.update(
@@ -209,7 +232,7 @@ export function safeDisplayEmail(email: string | null | undefined): string {
  * Check if a string looks like an encrypted destination (starts with "v1:base64").
  */
 export function isEncryptedDestination(destination: string): boolean {
-  return destination.startsWith('v1:');
+  return destination.startsWith('v1:') || destination.startsWith('v2:');
 }
 
 /**
@@ -235,6 +258,6 @@ export function safeDisplayDestination(destination: string | null | undefined): 
 /**
  * Decrypt a destination if encrypted; pass through legacy plaintext.
  */
-export function tryDecryptPayoutDestination(destination: string): string {
-  return isEncryptedDestination(destination) ? decryptPayoutDestination(destination) : destination;
+export function tryDecryptPayoutDestination(destination: string, binding?: PayoutDestinationBinding): string {
+  return isEncryptedDestination(destination) ? decryptPayoutDestination(destination, binding) : destination;
 }

@@ -427,12 +427,37 @@ export class ApiClient {
     await this.patch('/developer/settings', { adsEnabled: enabled });
   }
 
+  async updateWaitTelemetryEnabled(enabled: boolean): Promise<void> {
+    await this.patch('/developer/settings', {
+      waitTelemetryEnabled: enabled,
+      waitTelemetryPolicyVersion: 'extension-telemetry-v1',
+    });
+  }
+
+  async createWaitAttestationSession(input: {
+    deviceId: string;
+    waitStateId: string;
+    sessionId: string;
+    provider: string;
+  }): Promise<{
+    attestationSessionId: string;
+    nonce: string;
+    operationStartDeadline: string;
+    consumeDeadline: string;
+  }> {
+    return this.post('/extension/wait-attestation/session', input);
+  }
+
+  async consumeWaitAttestation(input: { attestationSessionId: string; assertion: string }): Promise<void> {
+    await this.post('/extension/wait-attestation/consume', input);
+  }
+
   /**
    * Fetch the current developer settings from the server (incl. adsEnabled).
    * Used after login to sync local consent with server state.
    */
-  async getDeveloperSettings(): Promise<{ adsEnabled: boolean }> {
-    return this.get<{ adsEnabled: boolean }>('/developer/settings');
+  async getDeveloperSettings(): Promise<{ adsEnabled: boolean; waitTelemetryEnabled: boolean }> {
+    return this.get<{ adsEnabled: boolean; waitTelemetryEnabled: boolean }>('/developer/settings');
   }
 
   async promptLogin(): Promise<boolean> {

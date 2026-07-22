@@ -26,6 +26,23 @@ function validVersionAllowlist(value: string): boolean {
   return value.split(',').every((v) => /^[A-Za-z0-9._-]+$/.test(v.trim()) && v.trim().length > 0);
 }
 
+function isCanonical256BitBase64(value: string | undefined): boolean {
+  if (!value || !/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0) return false;
+  try {
+    const decoded = Buffer.from(value, 'base64');
+    return decoded.length === 32 && decoded.toString('base64') === value;
+  } catch {
+    return false;
+  }
+}
+
+function isKnownDevelopmentKey(value: string): boolean {
+  return new Set([
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+  ]).has(value);
+}
+
 /** Validate only the shape of externally supplied attestation issuers. The
  * public keys themselves are validated by RS256 verification at use time. */
 function validWaitAttestationIssuers(value: string): boolean {
@@ -413,7 +430,8 @@ const envSchema = z
     (env) => {
       if (
         env.NODE_ENV === 'production' &&
-        (!env.PAYOUT_ENCRYPTION_KEY || env.PAYOUT_ENCRYPTION_KEY.length < 32)
+        (!isCanonical256BitBase64(env.PAYOUT_ENCRYPTION_KEY) ||
+          isKnownDevelopmentKey(env.PAYOUT_ENCRYPTION_KEY!))
       ) {
         return false;
       }
@@ -421,7 +439,7 @@ const envSchema = z
     },
     {
       message:
-        'PAYOUT_ENCRYPTION_KEY is required in production and must be at least 32 characters (base64-encoded 256-bit key).',
+        'PAYOUT_ENCRYPTION_KEY must be a canonical base64-encoded 32-byte key and not a development value in production.',
       path: ['PAYOUT_ENCRYPTION_KEY'],
     },
   )
@@ -429,7 +447,8 @@ const envSchema = z
     (env) => {
       if (
         env.NODE_ENV === 'production' &&
-        (!env.PAYOUT_HMAC_KEY || env.PAYOUT_HMAC_KEY.length < 32)
+        (!isCanonical256BitBase64(env.PAYOUT_HMAC_KEY) ||
+          isKnownDevelopmentKey(env.PAYOUT_HMAC_KEY!))
       ) {
         return false;
       }
@@ -437,7 +456,15 @@ const envSchema = z
     },
     {
       message:
-        'PAYOUT_HMAC_KEY is required in production and must be at least 32 characters (base64-encoded 256-bit key). This is a separate key from PAYOUT_ENCRYPTION_KEY for HMAC destination matching.',
+        'PAYOUT_HMAC_KEY must be a canonical base64-encoded 32-byte key and not a development value in production.',
+      path: ['PAYOUT_HMAC_KEY'],
+    },
+  )
+  .refine(
+    (env) =>
+      env.NODE_ENV !== 'production' || env.PAYOUT_ENCRYPTION_KEY !== env.PAYOUT_HMAC_KEY,
+    {
+      message: 'PAYOUT_ENCRYPTION_KEY and PAYOUT_HMAC_KEY must be different in production.',
       path: ['PAYOUT_HMAC_KEY'],
     },
   )

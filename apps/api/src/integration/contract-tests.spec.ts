@@ -258,7 +258,7 @@ describe('API Contract Tests', () => {
       await request(app.getHttpServer())
         .patch('/api/v1/developer/settings')
         .set('Authorization', `Bearer ${devToken}`)
-        .send({ adsEnabled: true })
+        .send({ adsEnabled: true, waitTelemetryEnabled: true })
         .expect(200);
     });
 

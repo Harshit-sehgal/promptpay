@@ -1,10 +1,13 @@
 import chalk from 'chalk';
 import * as fs from 'fs';
 
+import { WaitAttestationFlow } from '@waitlayer/shared';
+
 import { runAdFlow } from '../lib/ad-flow';
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
 import { getErrorCode, getErrorMessage } from '../lib/errors';
+import { createCliWaitAssertionProvider } from '../lib/wait-attestation-provider';
 
 const STATE_FILE = `${process.cwd()}/.waitlayer-wait`;
 
@@ -33,6 +36,8 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   }
 
   const api = new ApiClient(creds);
+  const attestationProvider = createCliWaitAssertionProvider();
+  const attestation = new WaitAttestationFlow(api);
   const serveAds = opts.ads ?? true;
 
   console.log(chalk.cyan('WaitLayer watch') + chalk.dim(` — watching ${STATE_FILE}`));
@@ -65,6 +70,15 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
       await api.endWaitState({ waitStateId: activeWaitStateId, durationSeconds });
     } catch (err: unknown) {
       console.error(chalk.red(`end wait-state error: ${getErrorMessage(err)}`));
+    }
+
+    // The assertion is consumed after the server-recorded end and before
+    // qualification, so neither CPM nor CPC can reach a money path without
+    // the provider's single-use proof.
+    try {
+      await attestation.consume(activeWaitStateId);
+    } catch (err: unknown) {
+      console.error(chalk.red(`wait attestation error: ${getErrorMessage(err)}`));
     }
 
     // A-040: Qualify the impression via runAdFlow's logic if the wait state
@@ -133,6 +147,20 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
       const sessionId = `cli-${waitStateId}`;
 
       const deviceId = await api.getOrRegisterDevice();
+      if (!attestationProvider) {
+        console.error(
+          chalk.red(
+            'No independent attestation provider is configured. Set WAITLAYER_ATTESTATION_PROVIDER and WAITLAYER_ATTESTATION_PROVIDER_URL before starting a wait.',
+          ),
+        );
+        return;
+      }
+      await attestation.begin({
+        deviceId,
+        sessionId,
+        waitStateId,
+        provider: attestationProvider,
+      });
 
       // P0.1: CLI marker-file evidence is user-controlled (the user writes the
       // .waitlayer-wait file manually), NOT independently observed by the CLI.
