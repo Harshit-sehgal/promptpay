@@ -29,7 +29,7 @@ jobs:
       JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
       JWT_PUBLIC_KEY: ${{ secrets.STAGING_JWT_PUBLIC_KEY }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 11.9.0
@@ -68,7 +68,7 @@ jobs:
       STAGING_WAIT_ATTESTATION_BRIDGE_URL: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_URL }}
       STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 11.9.0
@@ -188,7 +188,7 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 11.9.0
@@ -228,7 +228,7 @@ jobs:
       # Example: https://api.waitlayer.com/api/v1
       PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Promote production images (pull same digest as staging, tag, push, deploy)
         id: promote
         env:
