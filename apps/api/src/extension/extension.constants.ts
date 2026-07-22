@@ -92,8 +92,8 @@ export function computeWaitConfidence(signals: WaitSignal[]): {
  * Classify a wait state into the three trusted-detection gates:
  *   - detected: any non-empty signal set
  *   - adEligible: max signal confidence >= MINIMUM_WAIT_CONFIDENCE
- *   - paymentEligible: adEligible AND at least two distinct primary signals
- *     are present
+ *   - paymentEligible: a verified detector source, adEligible, and at least
+ *     two independently observed primary signals are present
  *
  * A modified client that forges a single `ai_generation` signal can still
  * get an ad served (ad gate), but it cannot earn money because the payment
@@ -102,8 +102,8 @@ export function computeWaitConfidence(signals: WaitSignal[]): {
  * prevents a single forged signal from authorizing billing.
  *
  * @param isVerifiedSource - whether the detector version/source is on the
- *   operator's verified allowlist. Unverified sources still serve ads if
- *   confidence is high enough, but earnings are held longer.
+ *   operator's verified allowlist. Unverified sources can still serve ads if
+ *   confidence is high enough, but can never authorize an earning.
  */
 // Adapters the server trusts to report directly-observed events. Any adapter
 // not listed (or matching a listed prefix) is treated as inferred/shadow-only,
@@ -205,8 +205,14 @@ export function classifyWaitState(
         observedPrimaryAdapters.add(item.adapterId);
       }
     }
+    // Detector-version attestation is a hard money gate. Evidence from an
+    // unknown or revoked build may remain useful for ad relevance and fraud
+    // analysis, but it must never create a billable impression or earning.
     paymentEligible =
-      adEligible && observedPrimaryTypes.size >= 2 && observedPrimaryAdapters.size >= 2;
+      isVerifiedSource &&
+      adEligible &&
+      observedPrimaryTypes.size >= 2 &&
+      observedPrimaryAdapters.size >= 2;
   }
 
   return {

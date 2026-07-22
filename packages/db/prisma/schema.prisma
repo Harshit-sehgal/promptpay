@@ -225,6 +225,7 @@ model User {
   fraudFlags                 FraudFlag[]
   adReports                  AdReport[]
   waitStateEvents            WaitStateEvent[]
+  waitAttestationSessions    WaitAttestationSession[]
   adImpressions              AdImpression[]
   adClicks                   AdClick[]
   deviceRecoveryTokens       DeviceRecoveryToken[] @relation("DeviceRecoveryUserTokens")
@@ -296,6 +297,7 @@ model Device {
   lastSeenAt DateTime @default(now())
 
   waitStateEvents WaitStateEvent[]
+  waitAttestationSessions WaitAttestationSession[]
   adImpressions   AdImpression[]
   adClicks        AdClick[]
   fraudFlags      FraudFlag[]
@@ -374,8 +376,10 @@ model PayoutAccount {
   // Deterministic HMAC of the destination for duplicate/fraud matching.
   // Computed server-side during addPayoutMethod. Used by
   // checkSharedPayoutDestination to detect shared destinations without
-  // decrypting every account. Normalized to lowercase+trim before hashing.
-  destinationHmac      String?        @unique @map("destination_hmac")
+  // decrypting every account. It is deliberately non-unique: a shared
+  // destination is a fraud signal that must be recorded and held for review,
+  // not rejected before the detector can observe it.
+  destinationHmac      String?        @map("destination_hmac")
   // Emergency freeze: operator-initiated block on a verified payout
   // destination. A frozen account cannot be used for payouts until an
   // admin explicitly unfreezes it, even if it remains verified and active.
@@ -396,6 +400,7 @@ model PayoutAccount {
   fenceReleaseApprovals PayoutFenceReleaseApproval[]
 
   @@index([userId, provider, isActive])
+  @@index([destinationHmac], map: "payout_accounts_destination_hmac_idx")
   @@index([initiationPayoutId], map: "payout_accounts_initiation_payout_id_idx")
   @@map("payout_accounts")
 }
@@ -609,6 +614,58 @@ model WaitStateEvent {
   @@index([confidence], map: "wait_state_events_confidence_idx")
   @@index([isFalsePositive], map: "wait_state_events_false_positive_idx")
   @@map("wait_state_events")
+}
+
+// A nonce issued by WaitLayer before an approved AI/provider operation. The
+// raw nonce is returned once to the client but only its digest is persisted.
+// A client-held device secret is never sufficient to consume this session.
+model WaitAttestationSession {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId       String
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  waitStateId    String   @map("wait_state_id")
+  clientSessionId String  @map("client_session_id")
+  provider       String
+  nonceHash      String   @unique @map("nonce_hash")
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz
+  consumedAt     DateTime? @map("consumed_at") @db.Timestamptz
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  attestation WaitAttestation?
+
+  @@index([userId, deviceId, waitStateId])
+  @@index([expiresAt])
+  @@map("wait_attestation_sessions")
+}
+
+// Metadata from a verified provider/server-signed wait assertion. Never store
+// prompt text, terminal output, or the raw assertion; its SHA-256 digest is
+// retained for audit correlation only. Provider event id and wait binding are
+// unique replay floors independent of client idempotency keys.
+model WaitAttestation {
+  id                String   @id @default(uuid())
+  sessionId         String   @unique @map("session_id")
+  session           WaitAttestationSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  userId            String   @map("user_id")
+  deviceId          String   @map("device_id")
+  waitStateId       String   @map("wait_state_id")
+  provider          String
+  issuer            String
+  keyId             String   @map("key_id")
+  attestationVersion String  @map("attestation_version")
+  providerEventId   String   @unique @map("provider_event_id")
+  assertionDigest   String   @map("assertion_digest")
+  startedAt         DateTime @map("started_at") @db.Timestamptz
+  endedAt           DateTime @map("ended_at") @db.Timestamptz
+  durationMs        Int      @map("duration_ms")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, deviceId, waitStateId])
+  @@index([provider, createdAt])
+  @@index([userId, deviceId, waitStateId])
+  @@map("wait_attestations")
 }
 
 model AdImpression {

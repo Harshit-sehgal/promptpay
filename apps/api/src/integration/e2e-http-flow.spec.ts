@@ -3,12 +3,14 @@ import { createHash } from 'crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { BidType, MINIMUM_VISIBLE_DURATION_MS, PayoutProvider, UserRole } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
+import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
@@ -16,6 +18,12 @@ import { PrismaService } from '../config/prisma.service';
 import { createSignedBillableEvidence } from '../extension/evidence.test-helper';
 import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 import { LedgerService } from '../ledger/ledger.service';
+
+const ATTESTATION_PROVIDER = 'http-flow-attestor';
+const ATTESTATION_ISSUER = 'https://http-flow-attestor.example.test';
+const ATTESTATION_AUDIENCE = 'waitlayer-http-flow';
+const ATTESTATION_KID = 'http-flow-attestor-key';
+const ATTESTATION_VERSION = 'http-flow-v1';
 
 async function cleanDb(prisma: PrismaService) {
   // Truncate tables to ensure a clean test run without foreign key violations
@@ -26,6 +34,7 @@ async function cleanDb(prisma: PrismaService) {
       "advertisers", "campaigns", "ad_creatives", "categories",
       "blocked_categories", "country_targeting", "tool_integrations",
       "wait_state_events", "ad_impressions", "ad_clicks", "ad_reports",
+      "wait_attestation_sessions", "wait_attestations",
       "earnings_ledger", "advertiser_ledger", "platform_ledger",
       "payout_requests", "payout_allocations", "payout_transactions",
       "recovery_debt_cases",
@@ -57,12 +66,25 @@ describe('End-to-End HTTP Integration Flow', () => {
   let prisma: PrismaService;
   let ledgerService: LedgerService;
   let previousRedisUrl: string | undefined;
+  let previousAttestationIssuers: string | undefined;
+  let previousAttestationVersions: string | undefined;
 
   beforeAll(async () => {
     // Keep repeated local E2E runs deterministic: production can use Redis,
     // but tests should not inherit Redis throttle counters from prior runs.
     previousRedisUrl = process.env.REDIS_URL;
     process.env.REDIS_URL = '';
+    previousAttestationIssuers = process.env.WAIT_ATTESTATION_ISSUERS;
+    previousAttestationVersions = process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS;
+    process.env.WAIT_ATTESTATION_ISSUERS = JSON.stringify([
+      {
+        provider: ATTESTATION_PROVIDER,
+        issuer: ATTESTATION_ISSUER,
+        audience: ATTESTATION_AUDIENCE,
+        publicKeys: { [ATTESTATION_KID]: TEST_JWT_PUBLIC_KEY.replace(/\n/g, '\\n') },
+      },
+    ]);
+    process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS = ATTESTATION_VERSION;
 
     // Override throttlers & brute force guards for rapid E2E testing
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -131,6 +153,16 @@ describe('End-to-End HTTP Integration Flow', () => {
     } else {
       process.env.REDIS_URL = previousRedisUrl;
     }
+    if (previousAttestationIssuers === undefined) {
+      delete process.env.WAIT_ATTESTATION_ISSUERS;
+    } else {
+      process.env.WAIT_ATTESTATION_ISSUERS = previousAttestationIssuers;
+    }
+    if (previousAttestationVersions === undefined) {
+      delete process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS;
+    } else {
+      process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS = previousAttestationVersions;
+    }
   });
 
   // Flow variables
@@ -151,6 +183,80 @@ describe('End-to-End HTTP Integration Flow', () => {
   let payoutAccountId: string;
   let earningEntryId: string;
   let payoutId: string;
+  let cpmAttestationSession: { attestationSessionId: string; nonce: string };
+  let cpcAttestationSession: { attestationSessionId: string; nonce: string };
+
+  async function createAttestationSession(args: {
+    token: string;
+    device: string;
+    sessionId: string;
+    waitStateId: string;
+  }) {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/extension/wait-attestation/session')
+      .set('Authorization', `Bearer ${args.token}`)
+      .send({
+        deviceId: args.device,
+        sessionId: args.sessionId,
+        waitStateId: args.waitStateId,
+        provider: ATTESTATION_PROVIDER,
+      })
+      .expect(200);
+    return response.body as { attestationSessionId: string; nonce: string };
+  }
+
+  async function endAndConsumeAttestation(args: {
+    token: string;
+    userId: string;
+    device: string;
+    deviceSecret: string;
+    sessionId: string;
+    waitStateId: string;
+    session: { attestationSessionId: string; nonce: string };
+    eventId: string;
+  }) {
+    const endPayload = {
+      waitStateId: args.waitStateId,
+      durationSeconds: '1',
+      idempotencyKey: `end-${args.waitStateId}`,
+    };
+    await request(app.getHttpServer())
+      .post('/api/v1/extension/wait-state/end')
+      .set('Authorization', `Bearer ${args.token}`)
+      .send({ ...endPayload, signature: signPayload(endPayload, args.deviceSecret) })
+      .expect(200);
+
+    const endedAtMs = Date.now();
+    const assertion = await new JwtService().signAsync(
+      {
+        sub: args.userId,
+        device_id: args.device,
+        nonce: args.session.nonce,
+        session_id: args.sessionId,
+        wait_state_id: args.waitStateId,
+        provider: ATTESTATION_PROVIDER,
+        event_id: args.eventId,
+        attestation_version: ATTESTATION_VERSION,
+        started_at_ms: endedAtMs - 1_000,
+        ended_at_ms: endedAtMs,
+        duration_ms: 1_000,
+      },
+      {
+        privateKey: TEST_JWT_PRIVATE_KEY,
+        algorithm: 'RS256',
+        keyid: ATTESTATION_KID,
+        issuer: ATTESTATION_ISSUER,
+        audience: ATTESTATION_AUDIENCE,
+        notBefore: '0s',
+        expiresIn: '5m',
+      },
+    );
+    await request(app.getHttpServer())
+      .post('/api/v1/extension/wait-attestation/consume')
+      .set('Authorization', `Bearer ${args.token}`)
+      .send({ attestationSessionId: args.session.attestationSessionId, assertion })
+      .expect(200);
+  }
 
   describe('1. Authentication & Onboarding', () => {
     it('should expose required consent versions without authentication (A-047)', async () => {
@@ -654,6 +760,12 @@ describe('End-to-End HTTP Integration Flow', () => {
     });
 
     it('should log a wait state start', async () => {
+      cpmAttestationSession = await createAttestationSession({
+        token: devToken,
+        device: deviceId,
+        sessionId,
+        waitStateId,
+      });
       const startPayload = {
         deviceId,
         sessionId,
@@ -718,6 +830,16 @@ describe('End-to-End HTTP Integration Flow', () => {
 
     it('should record qualified impression (CPM), triggering ledger splits', async () => {
       await makeImpressionEligibleForQualification(prisma, impressionToken);
+      await endAndConsumeAttestation({
+        token: devToken,
+        userId: devUserId,
+        device: deviceId,
+        deviceSecret: deviceEventSecret,
+        sessionId,
+        waitStateId,
+        session: cpmAttestationSession,
+        eventId: 'http-flow-cpm-attestation',
+      });
       const impressionPayload = {
         impressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -785,6 +907,12 @@ describe('End-to-End HTTP Integration Flow', () => {
     // ── CPC Campaign Flow ──
 
     it('should log a CPC wait state start', async () => {
+      cpcAttestationSession = await createAttestationSession({
+        token: devToken,
+        device: deviceId,
+        sessionId,
+        waitStateId: cpcWaitStateId,
+      });
       const startPayload = {
         deviceId,
         sessionId,
@@ -843,6 +971,16 @@ describe('End-to-End HTTP Integration Flow', () => {
 
     it('should qualify CPC impression (no CPM charge)', async () => {
       await makeImpressionEligibleForQualification(prisma, cpcImpressionToken);
+      await endAndConsumeAttestation({
+        token: devToken,
+        userId: devUserId,
+        device: deviceId,
+        deviceSecret: deviceEventSecret,
+        sessionId,
+        waitStateId: cpcWaitStateId,
+        session: cpcAttestationSession,
+        eventId: 'http-flow-cpc-attestation',
+      });
       const impressionPayload = {
         impressionToken: cpcImpressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -1069,6 +1207,12 @@ describe('End-to-End HTTP Integration Flow', () => {
       // The atomic guard (UPDATE with WHERE) is tested indirectly: if the
       // SQL guard fails, ledger writes are skipped and qualified=false.
       const wsId = 'budget-test-ws';
+      const budgetAttestationSession = await createAttestationSession({
+        token: devToken,
+        device: deviceId,
+        sessionId: 'budget-sess',
+        waitStateId: wsId,
+      });
       const waitStartPayload = {
         deviceId,
         sessionId: 'budget-sess',
@@ -1112,6 +1256,16 @@ describe('End-to-End HTTP Integration Flow', () => {
         .expect(200);
 
       await makeImpressionEligibleForQualification(prisma, tok);
+      await endAndConsumeAttestation({
+        token: devToken,
+        userId: devUserId,
+        device: deviceId,
+        deviceSecret: deviceEventSecret,
+        sessionId: 'budget-sess',
+        waitStateId: wsId,
+        session: budgetAttestationSession,
+        eventId: 'http-flow-budget-attestation',
+      });
 
       const ip = {
         impressionToken: tok,

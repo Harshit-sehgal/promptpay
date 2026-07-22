@@ -47,6 +47,25 @@ export class ConfigurationManager {
     return !current;
   }
 
+  /**
+   * Wait telemetry is intentionally separate from ad display. A user must
+   * explicitly opt in before the extension sends any detected wait state,
+   * evidence, or ad request to the API.
+   */
+  async waitTelemetryEnabled(): Promise<boolean> {
+    const stored = vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<boolean>('waitTelemetryEnabled');
+    return stored === true;
+  }
+
+  async toggleWaitTelemetry(): Promise<boolean> {
+    const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
+    const enabled = !(await this.waitTelemetryEnabled());
+    await cfg.update('waitTelemetryEnabled', enabled, vscode.ConfigurationTarget.Global);
+    return enabled;
+  }
+
   async inQuietHours(): Promise<boolean> {
     const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
     const enabled = cfg.get<boolean>('quietMode.enabled');

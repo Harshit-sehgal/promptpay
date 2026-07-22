@@ -39,6 +39,9 @@ function makePrisma() {
       }),
     },
     trustScore: { findUnique: vi.fn().mockResolvedValue(null) },
+    // Each billable fixture represents a provider-verified wait session; tests
+    // that exercise invalidation fail earlier than this lookup.
+    waitAttestation: { findFirst: vi.fn().mockResolvedValue({ id: 'attestation-1' }) },
     $executeRaw: vi.fn(async () => 1),
     $executeRawUnsafe: vi.fn(async () => 1),
   };
@@ -85,6 +88,8 @@ function makeImpression(
     id: 'imp-1',
     userId: 'user-1',
     deviceId: 'dev-1',
+    waitStateId: 'ws-1',
+    sessionId: 's-1',
     campaignId: 'camp-1',
     impressionTokenHash: 'hash-1',
     renderedAt: overrides.renderedAt ?? new Date(Date.now() - 10_000),

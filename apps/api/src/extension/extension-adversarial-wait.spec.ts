@@ -60,6 +60,10 @@ function makePrisma() {
       }),
     },
     trustScore: { findUnique: vi.fn().mockResolvedValue(null) },
+    // Settlement now requires a separately verified provider attestation. Keep
+    // this adversarial fixture absent so the test proves client evidence alone
+    // cannot earn.
+    waitAttestation: { findFirst: vi.fn().mockResolvedValue(null) },
     $executeRaw: vi.fn(async () => 1),
     $executeRawUnsafe: vi.fn(async () => 1),
   };
@@ -133,11 +137,11 @@ describe('Adversarial wait qualification (P0.1)', () => {
     });
 
     expect(result.qualified).toBe(false);
-    expect(result.reason).toBe('uncorroborated_wait');
+    expect(result.reason).toBe('unverified_wait_attestation');
     // The impression should be invalidated so it cannot be re-qualified.
     expect(prisma.adImpression.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ invalidationReason: 'uncorroborated_wait' }),
+        data: expect.objectContaining({ invalidationReason: 'unverified_wait_attestation' }),
       }),
     );
   });
@@ -179,7 +183,7 @@ describe('Adversarial wait qualification (P0.1)', () => {
     });
 
     expect(result.clicked).toBe(false);
-    expect(result.reason).toBe('uncorroborated_wait');
+    expect(result.reason).toBe('unverified_wait_attestation');
     // No click should be created and no click-side transaction should run.
     expect(prisma.adClick.findUnique).toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();

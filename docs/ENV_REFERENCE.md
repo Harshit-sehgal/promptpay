@@ -122,9 +122,11 @@ Default shown where one exists.
 
 ## Extension / wait-detection trust
 
-| Variable                     | Req | Default | Purpose                                                                                                                          |
-| ---------------------------- | --- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `VERIFIED_DETECTOR_VERSIONS` | opt | —       | Comma-separated allowlist of detector versions considered verified (e.g. `1.0.0,1.1.0`). Empty/missing = all sources unverified. |
+| Variable                             | Req | Default | Purpose                                                                                                                                          |
+| ------------------------------------ | --- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `VERIFIED_DETECTOR_VERSIONS`         | opt | —       | Comma-separated allowlist of detector versions considered verified (e.g. `1.0.0,1.1.0`). Empty/missing = all sources unverified.                 |
+| `WAIT_ATTESTATION_ISSUERS`           | opt | —       | JSON array of independently operated attestation issuers: `{provider, issuer, audience, publicKeys}`. Required to create an attestation session. |
+| `VERIFIED_WAIT_ATTESTATION_VERSIONS` | opt | —       | Comma-separated allowlist of signed provider assertion versions. This is intentionally separate from client detector versions.                   |
 
 ## Feature / behaviour toggles
 

@@ -75,6 +75,27 @@ export class ExtensionAdTrait {
   private auctionService?: AuctionService;
   declare logger: Logger;
 
+  /** A provider/server-signed assertion is the money trust boundary. Device
+   * HMACs and detector evidence can guide ad relevance but cannot settle an
+   * earning without this durable, replay-protected binding. */
+  private async hasVerifiedWaitAttestation(impression: {
+    userId: string;
+    deviceId: string;
+    waitStateId: string | null;
+  }): Promise<boolean> {
+    if (!impression.waitStateId) return false;
+    return Boolean(
+      await this.prisma.waitAttestation.findFirst({
+        where: {
+          userId: impression.userId,
+          deviceId: impression.deviceId,
+          waitStateId: impression.waitStateId,
+        },
+        select: { id: true },
+      }),
+    );
+  }
+
   // ── Ad Serving ──
   async requestAd(
     userId: string,
@@ -127,7 +148,7 @@ export class ExtensionAdTrait {
     // Launch-integrity gate: do not show a monetization surface when the
     // server cannot settle rewards. A client-held device secret is not an
     // independent proof of a productive wait, so the default launch mode is
-    // deliberately ads_only until an operator enables a reviewed attestation
+    // deliberately telemetry_only until an operator enables a reviewed attestation
     // path. Returning the explicit mode lets shipped clients explain the
     // state honestly instead of displaying an ad that will later be voided.
     const launchMode = await this.runtimeConfig.getWaitLaunchMode();
@@ -815,19 +836,26 @@ export class ExtensionAdTrait {
       isVerifiedDetectorSource(waitStartForImpression?.detectorVersion, detectorAllowlist),
       waitEvidence,
     );
-    if (!classification.paymentEligible) {
+    // The signed provider assertion is mandatory for settlement. Client HMAC
+    // evidence alone must never become withdrawable money, even when it uses
+    // an allowlisted adapter/version pair.
+    if (!classification.adEligible || !(await this.hasVerifiedWaitAttestation(impression))) {
       await this.invalidateImpressionAndReleaseReservation({
         impressionId: impression.id,
         campaignId: impression.campaignId,
         bidType: impression.campaign.bidType,
         bidAmountMinor: BigInt(impression.campaign.bidAmountMinor),
         visibleDurationMs: effectiveDurationMs,
-        reason: 'uncorroborated_wait',
+        reason: 'unverified_wait_attestation',
       });
-      return { qualified: false, impressionId: impression.id, reason: 'uncorroborated_wait' };
+      return {
+        qualified: false,
+        impressionId: impression.id,
+        reason: 'unverified_wait_attestation',
+      };
     }
     const split = this.ledger.calculateSplit(BigInt(impression.campaign.bidAmountMinor));
-    const holdDays = this.ledger.getHoldDays(trustLevel, classification.unverifiedSource);
+    const holdDays = this.ledger.getHoldDays(trustLevel, false);
     // RESTRICTED → holdDays = -1 (indefinite). A negative hold must never
     // produce an `availableAt` in the past (that would immediately mature the
     // earnings and make them payout-eligible, the opposite of the restricted
@@ -1117,10 +1145,13 @@ export class ExtensionAdTrait {
       isVerifiedDetectorSource(waitStartForClick?.detectorVersion, clickAllowlist),
       waitEvidence,
     );
-    if (isCpcBid && !clickClassification.paymentEligible) {
-      return { clicked: false, reason: 'uncorroborated_wait' };
+    if (
+      isCpcBid &&
+      (!clickClassification.adEligible || !(await this.hasVerifiedWaitAttestation(impression)))
+    ) {
+      return { clicked: false, reason: 'unverified_wait_attestation' };
     }
-    const holdDays = this.ledger.getHoldDays(trustLevel, clickClassification.unverifiedSource);
+    const holdDays = this.ledger.getHoldDays(trustLevel, false);
     // RESTRICTED → holdDays = -1 (indefinite). Never compute a past
     // `availableAt` for restricted users; null ⇒ never matures. See ledger.service.ts.
     const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);

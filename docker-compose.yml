@@ -99,6 +99,11 @@ services:
       # AND an explicit flag — never set this in staging/production.
       ALLOW_MOCK_GOOGLE: ${ALLOW_MOCK_GOOGLE:-true}
       ENABLE_STAGING_FAUCET: ${ENABLE_STAGING_FAUCET:-false}
+      VERIFIED_DETECTOR_VERSIONS: ${VERIFIED_DETECTOR_VERSIONS:-}
+      # Independently operated providers only. Their public keys and emitted
+      # versions are separate from client detector-version allowlists.
+      WAIT_ATTESTATION_ISSUERS: ${WAIT_ATTESTATION_ISSUERS:-}
+      VERIFIED_WAIT_ATTESTATION_VERSIONS: ${VERIFIED_WAIT_ATTESTATION_VERSIONS:-}
       EMAIL_DRIVER: ${EMAIL_DRIVER:-console}
       EMAIL_FROM: ${EMAIL_FROM:-noreply@waitlayer.local}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder}

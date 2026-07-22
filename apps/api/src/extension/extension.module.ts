@@ -7,10 +7,11 @@ import { LedgerModule } from '../ledger/ledger.module';
 import { RuntimeConfigModule } from '../runtime-config/runtime-config.module';
 import { ExtensionController } from './extension.controller';
 import { ExtensionService } from './extension.service';
+import { WaitAttestationService } from './wait-attestation.service';
 
 @Module({
   imports: [LedgerModule, FraudModule, AuthModule, ComplianceModule, RuntimeConfigModule],
   controllers: [ExtensionController],
-  providers: [ExtensionService],
+  providers: [ExtensionService, WaitAttestationService],
 })
 export class ExtensionModule {}

@@ -8,6 +8,8 @@ import {
   AdClickDto,
   AdRenderedDto,
   AdRequestDto,
+  ConsumeWaitAttestationDto,
+  CreateWaitAttestationSessionDto,
   FlagFalsePositiveDto,
   QualifiedImpressionDto,
   RegisterDeviceDto,
@@ -43,6 +45,26 @@ export class ExtensionController {
   @HttpCode(HttpStatus.OK)
   recordWaitStateEnd(@CurrentUser('id') userId: string, @Body() dto: WaitStateEndDto) {
     return this.service.recordWaitStateEnd(userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Create a single-use provider wait-attestation session' })
+  @Post('wait-attestation/session')
+  @HttpCode(HttpStatus.OK)
+  createWaitAttestationSession(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateWaitAttestationSessionDto,
+  ) {
+    return this.service.attestation!.createSession(userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Verify and consume a provider-signed wait attestation' })
+  @Post('wait-attestation/consume')
+  @HttpCode(HttpStatus.OK)
+  consumeWaitAttestation(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ConsumeWaitAttestationDto,
+  ) {
+    return this.service.attestation!.consume(userId, dto);
   }
 
   @ApiOperation({

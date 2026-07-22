@@ -1563,8 +1563,8 @@ launch blockers below. This section is current as of 2026-07-21.
 ### Closed in this audit
 
 - **Honest beta launch mode (2026-07-22):** `RuntimeConfigService` now
-  derives `paused` / `ads_only` / `earnings_enabled` from the global ad and
-  fail-closed settlement switches. In the default `ads_only` mode, the API
+  derives `paused` / `telemetry_only` / `earnings_enabled` from the global ad
+  and fail-closed settlement switches. In the default `telemetry_only` mode, the API
   returns no ad before an impression can be created; the VS Code extension
   shows “rewards unavailable” rather than a sponsor panel, and its status bar,
   public landing, comparison, FAQ, pricing, payout-policy, privacy, terms,
@@ -1671,7 +1671,10 @@ command>` now observes a real child-process lifecycle rather than a
   Vercel cache headers show an old deployment. Deploy the current web build to
   the linked Vercel project, provision/deploy the API at the configured HTTPS
   origin, set its DNS/TLS, then verify the web BFF and representative routes
-  against the same immutable release before any public announcement.
+  against the same immutable release before any public announcement. A final
+  refresh attempt from this sandbox timed out for `www.waitlayer.com`,
+  `/comparison`, and `api.waitlayer.com/health/ready`, so it cannot replace
+  the earlier external observations with a current live verdict.
 
 ### Verification in this audit
 
@@ -1687,3 +1690,121 @@ command>` now observes a real child-process lifecycle rather than a
 - `pnpm test` — ✅ root gate green (API: 1,168 unit tests plus all 18 isolated
   integration files; shared/web/CLI/VS Code suites also pass; one intentionally
   skipped VS Code live-client test remains credential/environment dependent).
+
+## 2026-07-22 — Production-readiness remediation follow-up (current)
+
+The follow-up source review closed four additional release-critical defects.
+These are code-complete and covered by the local gates; they do **not** remove
+the external attestation, provider, credentials, or live-deployment tasks above.
+
+- **Client detector versions are no longer a money authority:**
+  `classifyWaitState` retains the `VERIFIED_DETECTOR_VERSIONS` and distinct
+  observed-adapter policy for telemetry quality and non-money analysis, but
+  client-held HMAC evidence cannot settle an earning. Settlement additionally
+  requires the independent provider attestation described below; an
+  unverified client source may remain ad-eligible but is never sufficient to
+  credit a developer.
+- **VS Code wait telemetry and ads are explicit opt-ins:**
+  `waitlayer.adsEnabled` and the new `waitlayer.waitTelemetryEnabled` both
+  default to `false`. No wait start, evidence, device registration, ad request,
+  false-positive report, or wait end is sent before telemetry is enabled; the
+  `WaitLayer: Toggle Wait Telemetry` command provides the explicit user action.
+  Focused extension/config tests cover the no-consent network boundary.
+- **Staging and production release mechanics are executable:**
+  `scripts/staging-smoke.mjs` now uses the real campaign, creative, and country
+  targeting endpoints with their valid DTO contracts. It intentionally proves
+  only the deployed API/ledger contract and no longer modifies a pending earning
+  to fabricate a payout or calls fixture evidence packaged-client proof.
+  `.github/workflows/staging.yml` applies and validates production migrations
+  before promotion, captures running immutable API/web image references, and
+  redeploys those references on a canary failure instead of leaving a
+  comment-only rollback. The financial smoke now requires a configured,
+  independently operated attestation bridge rather than a fixture detector
+  version or handcrafted observed-evidence array.
+- **Payout destination controls are fail-closed:** production now accepts only
+  canonical base64-encoded 32-byte encryption and HMAC keys; arbitrary long
+  strings can no longer be silently hashed into production keys. A new migration
+  replaces the global unique `destination_hmac` index with a normal lookup
+  index, allowing duplicate destinations to persist only long enough for the
+  existing critical shared-destination fraud flag and payout hold workflow.
+
+### Verification for this follow-up
+
+- `pnpm --filter @waitlayer/db generate` ✅
+- focused detector/extension/payout/fraud suites ✅ (222 focused checks)
+- `pnpm typecheck` ✅ (14 packages)
+- `pnpm lint` ✅ (9 packages)
+- `pnpm test` ✅ — all 10 workspace test tasks passed after the operator
+  explicitly authorized resetting the isolated `waitlayer_test` database; API
+  units are 112 files / 1,188 tests and every reset-backed integration suite
+  passed against all 73 migrations.
+- `pnpm build` ✅ (9 packages)
+- workflow formatting, smoke-script syntax, `docker compose config --quiet`,
+  and `git diff --check` ✅
+
+## 2026-07-22 — Independent wait-attestation enforcement (current)
+
+The former remaining **source-level** trust gap is closed: a device HMAC and
+client-reported detector evidence can no longer settle an earning, even when
+the client presents forged adapter names or a locally allowlisted detector
+version.
+
+- **Server-enforced attestation boundary:**
+  `WaitAttestationService` issues a random, single-use nonce _before_ a wait
+  begins and accepts only RS256 assertions from an allowlisted external
+  `WAIT_ATTESTATION_ISSUERS` provider/key. The assertion is bound to user,
+  device, client session, wait id, provider, issuer, key id, event id,
+  allowlisted `VERIFIED_WAIT_ATTESTATION_VERSIONS` version, duration, and the
+  API's own completed wait start/end records. It persists only the nonce/JWT
+  digests and minimized metadata; raw assertion, nonce, prompts, terminal
+  data, and source contents are not retained. Atomic compare-and-set plus
+  unique session/provider-event/wait constraints reject replay.
+- **Settlement requires the durable attestation:** both CPM qualification and
+  CPC click settlement query `wait_attestations`; without a verified record the
+  CPM reservation is released and the result is
+  `unverified_wait_attestation`, while CPC creates no debit or credit. This is
+  independent of client-owned device secrets and detector claims.
+- **The launch toggle is configuration-aware:** setting `wait.earnings=true`
+  without both an issuer/key configuration and a non-empty attestation-version
+  allowlist still reports `telemetry_only` and suppresses the ad surface. A
+  runtime setting alone cannot accidentally create a reward-bearing launch.
+- **Staging is fail-closed:** the mandatory financial smoke creates its nonce
+  before the wait and calls `STAGING_WAIT_ATTESTATION_BRIDGE_URL` only after
+  the completed wait. It refuses to qualify/click without a bridge assertion.
+  The deploy job requires issuer/public-key/version/provider bridge secrets
+  and passes only the public verification configuration to the staging API.
+- **Database migration:**
+  `20260722030000_wait_attestation_sessions` creates the minimized session and
+  assertion records; forward-only
+  `20260722031000_wait_attestation_positive_duration` rejects zero-duration
+  assertions. Both were applied successfully to the isolated test database
+  (73/73 migrations) and `prisma migrate status` reports up to date.
+
+### Verification for independent attestation
+
+- `pnpm --filter @waitlayer/db generate` / `prisma validate` ✅
+- focused wait-attestation, adversarial, reservation, concurrency, runtime,
+  and full extension suites ✅ (171 extension tests; 29 runtime/attestation)
+- API unit suite ✅ (112 files, 1,188 tests); shared contract suite ✅ (80 tests,
+  including rejection of the misleading legacy `ads_only` mode)
+- VS Code consent suite ✅ (119 pass, 1 credential-dependent skip)
+- the real App + real Postgres money-loop suite ✅ traverses nonce issuance,
+  external-key assertion verification, durable consume, and settlement for
+  happy paths against a reset 73-migration database. Attacker variants
+  deliberately omit the assertion and assert rejection.
+
+### Remaining external activation tasks (still block a paid launch)
+
+- Operate and security-review a real attestation provider/bridge whose private
+  key is unavailable to WaitLayer clients; configure its issuer/audience/public
+  keys/version allowlist and prove rotation/revocation.
+- Ship a packaged VS Code (or other approved) client integration that obtains
+  a real provider assertion for an actual AI operation. The existing clients
+  remain opt-in telemetry/beta clients and cannot enable earnings by themselves.
+- Run the documented staging experiment with immutable image digest, real
+  bridge/provider event reference, ledger reconciliation, payout sandbox
+  callback, rollback/kill-switch rehearsal, and second-operator approval.
+- Supply the deployment, registry, DNS/TLS, payout-provider, and GitHub
+  environment credentials; run a green SHA and Docker image e2e from a runner
+  with npm-registry access. These are external/operator evidence, not source
+  edits.

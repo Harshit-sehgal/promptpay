@@ -72,9 +72,9 @@ describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', 
     expect(prisma.waitStateEvent.findFirst).toHaveBeenCalledTimes(1);
   });
 
-  it('suppresses the ad surface in ads_only mode before any impression can be created', async () => {
+  it('suppresses the ad surface in telemetry_only mode before any impression can be created', async () => {
     const { prisma, trait } = makeTrait({
-      runtimeConfig: { getWaitLaunchMode: vi.fn().mockResolvedValue('ads_only') },
+      runtimeConfig: { getWaitLaunchMode: vi.fn().mockResolvedValue('telemetry_only') },
     });
     prisma.device.findUnique.mockResolvedValue({
       id: 'd1',
@@ -85,7 +85,7 @@ describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', 
     await expect(trait.requestAd('u1', baseDto)).resolves.toEqual({
       ad: null,
       reason: 'earnings_not_available',
-      mode: 'ads_only',
+      mode: 'telemetry_only',
     });
     expect(prisma.waitStateEvent.findFirst).not.toHaveBeenCalled();
   });

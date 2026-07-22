@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   decryptPayoutDestination,
@@ -16,9 +16,16 @@ const TEST_KEY = Buffer.from(
   '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   'hex',
 ).toString('base64');
+const originalNodeEnv = process.env.NODE_ENV;
 
 beforeEach(() => {
+  process.env.NODE_ENV = 'test';
   process.env.PAYOUT_ENCRYPTION_KEY = TEST_KEY;
+  process.env.PAYOUT_HMAC_KEY = TEST_KEY;
+});
+
+afterEach(() => {
+  process.env.NODE_ENV = originalNodeEnv;
 });
 
 describe('encryptPayoutDestination / decryptPayoutDestination', () => {
@@ -65,6 +72,13 @@ describe('encryptPayoutDestination / decryptPayoutDestination', () => {
     const corrupted = bits[0] + ':' + bits[1].slice(0, -4) + 'AAAA';
     expect(() => decryptPayoutDestination(corrupted)).toThrow();
   });
+
+  it('rejects non-canonical encryption keys in production instead of hashing them', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.PAYOUT_ENCRYPTION_KEY = 'this-is-not-a-canonical-base64-256-bit-key';
+
+    expect(() => encryptPayoutDestination('dev@example.com')).toThrow('PAYOUT_ENCRYPTION_KEY');
+  });
 });
 
 describe('hmacPayoutDestination', () => {
@@ -83,6 +97,13 @@ describe('hmacPayoutDestination', () => {
 
   it('produces different values for different destinations', () => {
     expect(hmacPayoutDestination('a@b.com')).not.toBe(hmacPayoutDestination('b@c.com'));
+  });
+
+  it('rejects non-canonical HMAC keys in production instead of hashing them', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.PAYOUT_HMAC_KEY = 'this-is-not-a-canonical-base64-256-bit-key';
+
+    expect(() => hmacPayoutDestination('dev@example.com')).toThrow('PAYOUT_HMAC_KEY');
   });
 });
 

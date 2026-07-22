@@ -2,6 +2,7 @@ import * as bcrypt from 'bcryptjs';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import {
@@ -33,12 +34,19 @@ import {
 } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
+import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
 import { createSignedBillableEvidence } from '../extension/evidence.test-helper';
 import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
+
+const ATTESTATION_PROVIDER = 'contract-attestor';
+const ATTESTATION_ISSUER = 'https://contract-attestor.example.test';
+const ATTESTATION_AUDIENCE = 'waitlayer-contract';
+const ATTESTATION_KID = 'contract-attestor-key';
+const ATTESTATION_VERSION = 'contract-v1';
 // Resolve after `ms` milliseconds without nested Promise-executor callbacks.
 function delay(ms: number): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>();
@@ -67,6 +75,8 @@ describe('API Contract Tests', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let previousRedisUrl: string | undefined;
+  let previousAttestationIssuers: string | undefined;
+  let previousAttestationVersions: string | undefined;
 
   beforeAll(async () => {
     // Integration tests run many auth requests quickly and may be repeated
@@ -74,6 +84,17 @@ describe('API Contract Tests', () => {
     // verification does not inherit counters from a previous test run.
     previousRedisUrl = process.env.REDIS_URL;
     process.env.REDIS_URL = '';
+    previousAttestationIssuers = process.env.WAIT_ATTESTATION_ISSUERS;
+    previousAttestationVersions = process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS;
+    process.env.WAIT_ATTESTATION_ISSUERS = JSON.stringify([
+      {
+        provider: ATTESTATION_PROVIDER,
+        issuer: ATTESTATION_ISSUER,
+        audience: ATTESTATION_AUDIENCE,
+        publicKeys: { [ATTESTATION_KID]: TEST_JWT_PUBLIC_KEY.replace(/\n/g, '\\n') },
+      },
+    ]);
+    process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS = ATTESTATION_VERSION;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -133,10 +154,21 @@ describe('API Contract Tests', () => {
     } else {
       process.env.REDIS_URL = previousRedisUrl;
     }
+    if (previousAttestationIssuers === undefined) {
+      delete process.env.WAIT_ATTESTATION_ISSUERS;
+    } else {
+      process.env.WAIT_ATTESTATION_ISSUERS = previousAttestationIssuers;
+    }
+    if (previousAttestationVersions === undefined) {
+      delete process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS;
+    } else {
+      process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS = previousAttestationVersions;
+    }
   });
 
   // ── Shared state ──
   let devToken: string;
+  let devUserId: string;
   let advertiserToken: string;
   let adminToken: string;
   let campaignId: string;
@@ -144,6 +176,60 @@ describe('API Contract Tests', () => {
   let deviceId: string;
   let deviceEventSecret: string;
   let impressionToken: string;
+  let primaryAttestationSession: { attestationSessionId: string; nonce: string };
+
+  async function createAttestationSession(waitStateId: string, sessionId: string) {
+    const result = await request(app.getHttpServer())
+      .post('/api/v1/extension/wait-attestation/session')
+      .set('Authorization', `Bearer ${devToken}`)
+      .send({
+        deviceId,
+        sessionId,
+        waitStateId,
+        provider: ATTESTATION_PROVIDER,
+      })
+      .expect(200);
+    return result.body as { attestationSessionId: string; nonce: string };
+  }
+
+  async function consumeAttestation(args: {
+    attestationSessionId: string;
+    nonce: string;
+    waitStateId: string;
+    sessionId: string;
+    eventId: string;
+  }) {
+    const endedAtMs = Date.now();
+    const assertion = await new JwtService().signAsync(
+      {
+        sub: devUserId,
+        device_id: deviceId,
+        nonce: args.nonce,
+        session_id: args.sessionId,
+        wait_state_id: args.waitStateId,
+        provider: ATTESTATION_PROVIDER,
+        event_id: args.eventId,
+        attestation_version: ATTESTATION_VERSION,
+        started_at_ms: endedAtMs - 1_000,
+        ended_at_ms: endedAtMs,
+        duration_ms: 1_000,
+      },
+      {
+        privateKey: TEST_JWT_PRIVATE_KEY,
+        algorithm: 'RS256',
+        keyid: ATTESTATION_KID,
+        issuer: ATTESTATION_ISSUER,
+        audience: ATTESTATION_AUDIENCE,
+        notBefore: '0s',
+        expiresIn: '5m',
+      },
+    );
+    await request(app.getHttpServer())
+      .post('/api/v1/extension/wait-attestation/consume')
+      .set('Authorization', `Bearer ${devToken}`)
+      .send({ attestationSessionId: args.attestationSessionId, assertion })
+      .expect(200);
+  }
 
   // ══════════════════════════════════════════════════════
   // 1. Auth API Contracts
@@ -165,6 +251,7 @@ describe('API Contract Tests', () => {
         .expect(201);
       expect(() => SignupResponse.parse(res.body)).not.toThrow();
       devToken = res.body.accessToken;
+      devUserId = res.body.user.id;
 
       // Privacy-by-default: ads are off until the developer opts in. Enable
       // ads so the extension ad-serving contract flow can be exercised.
@@ -438,6 +525,10 @@ describe('API Contract Tests', () => {
 
     it('POST /extension/ad-request → matches AdRequestResponse schema', async () => {
       // Need a fresh wait-state start for each ad-request (ad-request validates active wait)
+      primaryAttestationSession = await createAttestationSession(
+        'contract-ad-ws',
+        'contract-session',
+      );
       const wsPayload = {
         deviceId,
         sessionId: 'contract-session',
@@ -498,6 +589,22 @@ describe('API Contract Tests', () => {
       // qualification (issue A-060). The ad-rendered test ran immediately
       // before this one, so wait past the threshold first.
       await delay(4000);
+      const endPayload = {
+        waitStateId: 'contract-ad-ws',
+        durationSeconds: '1',
+        idempotencyKey: 'contract-ad-ws-end',
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/end')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...endPayload, signature: signPayload(endPayload, deviceEventSecret) })
+        .expect(200);
+      await consumeAttestation({
+        ...primaryAttestationSession,
+        waitStateId: 'contract-ad-ws',
+        sessionId: 'contract-session',
+        eventId: 'contract-provider-event-primary',
+      });
       const payload = {
         impressionToken,
         qualifiedAt: new Date().toISOString(),
@@ -554,6 +661,10 @@ describe('API Contract Tests', () => {
         data: { isBillable: false },
       });
 
+      const concurrentAttestationSession = await createAttestationSession(
+        'concurrent-ws',
+        'contract-session-concurrent',
+      );
       const wsPayload = {
         deviceId,
         sessionId: 'contract-session-concurrent',
@@ -600,6 +711,22 @@ describe('API Contract Tests', () => {
 
       // Wait past the minimum visible duration before qualifying (issue A-060).
       await delay(4000);
+      const endPayload = {
+        waitStateId: 'concurrent-ws',
+        durationSeconds: '1',
+        idempotencyKey: 'concurrent-ws-end',
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/extension/wait-state/end')
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ ...endPayload, signature: signPayload(endPayload, deviceEventSecret) })
+        .expect(200);
+      await consumeAttestation({
+        ...concurrentAttestationSession,
+        waitStateId: 'concurrent-ws',
+        sessionId: 'contract-session-concurrent',
+        eventId: 'contract-provider-event-concurrent',
+      });
 
       const payload1 = {
         impressionToken: token,

@@ -71,7 +71,7 @@ describe('RuntimeConfigService', () => {
   });
 
   describe('getWaitLaunchMode', () => {
-    it('reports ads_only when advertising is enabled but settlement is fail-closed', async () => {
+    it('reports telemetry_only when advertising is enabled but settlement is fail-closed', async () => {
       mockPrisma.systemSetting.findUnique.mockImplementation(
         ({ where }: { where: { scope_target: { scope: string; target: string } } }) => {
           const { scope, target } = where.scope_target;
@@ -82,13 +82,40 @@ describe('RuntimeConfigService', () => {
         },
       );
 
-      await expect(service.getWaitLaunchMode()).resolves.toBe('ads_only');
+      await expect(service.getWaitLaunchMode()).resolves.toBe('telemetry_only');
     });
 
     it('reports paused before earnings state when ads are globally disabled', async () => {
       mockPrisma.systemSetting.findUnique.mockResolvedValue({ value: { enabled: false } });
 
       await expect(service.getWaitLaunchMode()).resolves.toBe('paused');
+    });
+
+    it('keeps the public mode telemetry_only when earnings is enabled without an attestation config', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue({ value: { enabled: true } });
+      vi.mocked(configService.get).mockReturnValue(undefined);
+
+      await expect(service.getWaitLaunchMode()).resolves.toBe('telemetry_only');
+    });
+
+    it('reports earnings_enabled only with an issuer and attestation-version allowlist', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue({ value: { enabled: true } });
+      vi.mocked(configService.get).mockImplementation((key: string) => {
+        if (key === 'VERIFIED_WAIT_ATTESTATION_VERSIONS') return 'provider-v1';
+        if (key === 'WAIT_ATTESTATION_ISSUERS') {
+          return JSON.stringify([
+            {
+              provider: 'provider',
+              issuer: 'https://attestor.example.test',
+              audience: 'waitlayer',
+              publicKeys: { kid: 'public-key' },
+            },
+          ]);
+        }
+        return undefined;
+      });
+
+      await expect(service.getWaitLaunchMode()).resolves.toBe('earnings_enabled');
     });
   });
 

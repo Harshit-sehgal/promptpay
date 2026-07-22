@@ -22,15 +22,27 @@ describe('classifyWaitState (P0.1)', () => {
     expect(result.reason).toBe('ai_generation');
   });
 
-  it('makes a wait payment-eligible when corroborated by observed evidence from distinct adapters', () => {
+  it('makes a wait payment-eligible only when verified and corroborated by observed evidence from distinct adapters', () => {
+    const evidence = makeTestEvidence([
+      { type: 'active_task', adapterId: 'vscode.task' },
+      { type: 'command_execution', adapterId: 'vscode.terminal' },
+    ]);
+    const result = classifyWaitState([], true, evidence);
+    expect(result.adEligible).toBe(true);
+    expect(result.paymentEligible).toBe(true);
+    expect(result.confidence).toBeGreaterThanOrEqual(MINIMUM_WAIT_CONFIDENCE);
+  });
+
+  it('keeps corroborated evidence non-billable when the detector version is not verified', () => {
     const evidence = makeTestEvidence([
       { type: 'active_task', adapterId: 'vscode.task' },
       { type: 'command_execution', adapterId: 'vscode.terminal' },
     ]);
     const result = classifyWaitState([], false, evidence);
+
     expect(result.adEligible).toBe(true);
-    expect(result.paymentEligible).toBe(true);
-    expect(result.confidence).toBeGreaterThanOrEqual(MINIMUM_WAIT_CONFIDENCE);
+    expect(result.paymentEligible).toBe(false);
+    expect(result.unverifiedSource).toBe(true);
   });
 
   it('rejects payment when a primary signal is only corroborated by a lifecycle event', () => {

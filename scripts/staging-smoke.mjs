@@ -5,16 +5,19 @@
  * Exercises the deployed staging API end-to-end before a human approves
  * promotion to production:
  *   1. Readiness probe (`/health/ready`).
- *   2. Create + submit + admin-approve a test campaign.
- *   3. Run the extension -> ledger flow (`/extension/ad-request` x N) so real
- *      earnings get credited through the financial core.
- *   4. Register a sandbox `paypal_email` payout method and request a payout,
- *      then admin-approve + process it (sandbox lifecycle).
- *   5. Pull Prometheus metrics and assert no critical alerts fired.
+ *   2. Create, target, submit, and admin-approve a test campaign through the
+ *      public API contract.
+ *   3. Exercise a signed extension API flow, then obtain a separately signed
+ *      wait assertion from the configured staging attestation bridge before
+ *      the deployed ledger can record an earning and advertiser debit.
+ *   4. Pull Prometheus metrics and assert no critical alerts fired.
  *
- * Auth reuses the same RS256 admin/role token shape the API's JwtStrategy
- * expects (see scripts/enforce-health-metrics.mjs). Ephemeral users are
- * upserted in the staging database so the run is repeatable and isolated.
+ * This is deliberately an API-contract smoke, not proof that a packaged
+ * extension observed a real wait or that a payout provider settled money.
+ * The attestation bridge must be separately operated and use a private signing
+ * key unavailable to the extension/API. Packaged-client and payout-provider
+ * launch evidence remain separate gates documented in
+ * docs/ops/wait-attestation-launch-gate.md.
  *
  * Usage:
  *   node scripts/staging-smoke.mjs
@@ -24,7 +27,11 @@
  *   JWT_PRIVATE_KEY         - RS256 private key (matches staging JWT_PUBLIC_KEY)
  *   STAGING_API_URL         - base URL of the deployed staging API
  *                            (default http://localhost:4002)
- *   STAGING_FULL_FLOW=1     - also run campaign/ad/payout flow (needs balance)
+ *   STAGING_FULL_FLOW=1     - also run the mandatory campaign/ad/ledger flow
+ *   STAGING_WAIT_ATTESTATION_PROVIDER - configured issuer provider id
+ *   STAGING_WAIT_ATTESTATION_BRIDGE_URL - independently operated signer URL
+ * Optional env:
+ *   STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN - bearer token for the bridge
  */
 
 import { createPublicKey, createHash, randomUUID } from 'crypto';
@@ -38,7 +45,7 @@ const jwtPkgPath = apiRequire.resolve('@nestjs/jwt/package.json');
 const jwtRequire = createRequire(jwtPkgPath);
 const jwt = jwtRequire('jsonwebtoken');
 const { PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
-const { signPayload, signEvidence, canonicalEvidencePayload } = apiRequire('@waitlayer/shared');
+const { signPayload } = apiRequire('@waitlayer/shared');
 
 const API_BASE_URL = process.env.STAGING_API_URL ?? 'http://localhost:4002';
 // P0 #7: the financial loop is MANDATORY — opt out only for local debugging
@@ -101,6 +108,43 @@ async function api(method, path, token, body) {
     /* non-JSON response */
   }
   return { status: res.status, json, text };
+}
+
+async function requestIndependentAttestation(payload) {
+  const url = process.env.STAGING_WAIT_ATTESTATION_BRIDGE_URL;
+  if (!url) {
+    fail('STAGING_WAIT_ATTESTATION_BRIDGE_URL is required for a billable staging smoke');
+    return null;
+  }
+  const token = process.env.STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN;
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    fail(
+      `attestation bridge request failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+  const text = await response.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    // A non-JSON response is never a valid attestation response.
+  }
+  if (!response.ok || typeof json?.assertion !== 'string' || json.assertion.length < 32) {
+    fail(`attestation bridge returned HTTP ${response.status}: ${text}`);
+    return null;
+  }
+  return json.assertion;
 }
 
 async function main() {
@@ -200,26 +244,19 @@ async function main() {
       if (settings.status >= 400) fail(`enable ads -> HTTP ${settings.status}: ${settings.text}`);
       else ok('developer adsEnabled=true (server setting)');
 
-      // 3. Create campaign + inline creative via the real API (this also
-      // auto-provisions the advertiser profile).
+      // 3. Create the campaign through its real API. Creatives and country
+      // targeting are separate resources; keeping the smoke payload aligned
+      // with the DTOs catches contract drift before production promotion.
       const campaignRes = await api('POST', '/advertiser/campaigns', advToken, {
         name: `staging-smoke-${Date.now()}`,
         currency: 'USD',
         category: 'technology',
-        bidType: 'CPC',
+        bidType: 'cpc',
         budgetTotalMinor: 100_000,
         // CPC at $20/click so a single billed click credits the developer
         // >= the $10 payout minimum — CPM per-impression fractions cannot
         // fund a payout from one loop iteration.
         bidAmountMinor: 2_000,
-        creative: {
-          title: 'Staging smoke creative',
-          body: 'Verified, private, paid back to you.',
-          destinationUrl: 'https://waitlayer.com',
-          category: 'technology',
-          ctaText: 'Learn more',
-        },
-        targetingCountries: ['US'],
       });
       if (campaignRes.status >= 400) {
         fail(`create campaign -> HTTP ${campaignRes.status}: ${campaignRes.text}`);
@@ -227,6 +264,35 @@ async function main() {
       const campaignId = campaignRes.json?.id;
       if (!campaignId) fail('campaign create returned no id');
       else ok(`campaign created (${campaignId})`);
+
+      let creativeId = null;
+      if (campaignId) {
+        const creative = await api('POST', `/campaigns/${campaignId}/creatives`, advToken, {
+          title: 'Staging smoke creative',
+          sponsoredMessage: 'A staging-only API-contract smoke creative.',
+          destinationUrl: 'https://waitlayer.com',
+          displayDomain: 'waitlayer.com',
+          ctaText: 'Learn more',
+        });
+        creativeId = creative.json?.id ?? null;
+        if (creative.status >= 400 || !creativeId) {
+          fail(`create creative -> HTTP ${creative.status}: ${creative.text}`);
+        } else {
+          ok(`creative created (${creativeId})`);
+        }
+
+        const targeting = await api(
+          'POST',
+          `/campaigns/${campaignId}/targeting/countries`,
+          advToken,
+          [{ countryCode: 'US', include: true }],
+        );
+        if (targeting.status >= 400) {
+          fail(`set country targeting -> HTTP ${targeting.status}: ${targeting.text}`);
+        } else {
+          ok('country targeting configured through campaign API');
+        }
+      }
 
       // 4. Fund the advertiser. STAGING-ONLY: seeds a confirmed credit row
       // directly (the live Stripe sandbox lifecycle is external item #38).
@@ -259,8 +325,9 @@ async function main() {
         }
       }
 
-      // 5. Submit + approve; approval must ACTIVATE the funded campaign.
-      if (campaignId) {
+      // 5. Submit + approve creative + approve campaign. Approval must
+      // activate the funded campaign, and the ordering matches the real API.
+      if (campaignId && creativeId) {
         const submit = await api(
           'POST',
           `/advertiser/campaigns/${campaignId}/submit`,
@@ -268,6 +335,17 @@ async function main() {
           {},
         );
         if (submit.status >= 400) fail(`submit campaign -> HTTP ${submit.status}: ${submit.text}`);
+        const approveCreative = await api(
+          'POST',
+          `/campaigns/creatives/${creativeId}/approve`,
+          adminToken,
+          {},
+        );
+        if (approveCreative.status >= 400) {
+          fail(`approve creative -> HTTP ${approveCreative.status}: ${approveCreative.text}`);
+        } else {
+          ok('creative approved');
+        }
         const approve = await api('POST', `/admin/campaigns/${campaignId}/approve`, adminToken, {
           reason: 'staging smoke',
         });
@@ -304,49 +382,36 @@ async function main() {
         return api('POST', path, devToken, body);
       };
 
-      // 7. Signed wait start with signed EVIDENCE items (P0.1). Payment
-      // eligibility now requires ≥2 observed primary evidence types. Since
-      // heuristic ai_generation signals are 'inferred', the staging test
-      // must use a task+terminal combination (both 'observed' when the
-      // adapter provides real VS Code task/terminal lifecycle events).
-      // For the staging smoke test we mimic the extension's event-building
-      // code by creating evidence items and signing them with the device
-      // secret, matching exactly how the packaged client produces evidence.
+      // 7. Create the single-use attestation session BEFORE the operation,
+      // then record an ordinary signed wait start. The smoke intentionally
+      // does not manufacture observed evidence arrays: only an independent
+      // provider signature may make this client flow billable.
       const waitStateId = `staging-ws-${randomUUID()}`;
       const sessionId = `staging-sess-${randomUUID()}`;
-      const detectorVersion = 'staging-smoke-1.0.0';
+      const attestationProvider = process.env.STAGING_WAIT_ATTESTATION_PROVIDER;
       const loopStart = Date.now();
+      let attestationSession = null;
       if (deviceId) {
-        // Build evidence items using the SAME signEvidence() contract the
-        // packaged clients use (canonicalEvidencePayload + device-secret HMAC).
-        // This matches the real extension's event-building code path exactly
-        // — not a manually-constructed array — so the staging test proves the
-        // same evidence flow that production clients produce.
-        const now = Date.now();
-        const rawEvidence = [
-          {
-            type: 'active_task',
-            sourceType: 'observed',
-            adapterId: 'vscode.task',
-            timestamp: now,
-            correlationId: waitStateId,
-          },
-          {
-            type: 'command_execution',
-            sourceType: 'observed',
-            adapterId: 'vscode.terminal',
-            timestamp: now + 1,
-            correlationId: waitStateId,
-          },
-        ];
-        const evidence = rawEvidence.map((item) => {
-          const evidencePayload = { ...item, detectorVersion, waitStateId, sessionId };
-          // Use signEvidence (which canonicalizes via canonicalEvidencePayload)
-          // so the signature is byte-identical to what the VS Code extension
-          // and CLI produce. Without this, the server's verifyEvidence would
-          // reject the signature due to JSON key-ordering mismatch.
-          return { ...evidencePayload, signature: signEvidence(evidencePayload, deviceSecret) };
-        });
+        if (!attestationProvider) {
+          fail('STAGING_WAIT_ATTESTATION_PROVIDER is required for a billable staging smoke');
+        } else {
+          const created = await api('POST', '/extension/wait-attestation/session', devToken, {
+            deviceId,
+            sessionId,
+            waitStateId,
+            provider: attestationProvider,
+          });
+          if (
+            created.status >= 400 ||
+            !created.json?.attestationSessionId ||
+            !created.json?.nonce
+          ) {
+            fail(`create wait-attestation session -> HTTP ${created.status}: ${created.text}`);
+          } else {
+            attestationSession = created.json;
+            ok('single-use wait-attestation nonce issued before wait start');
+          }
+        }
         const wsStart = await signedPost('/extension/wait-state/start', {
           deviceId,
           sessionId,
@@ -354,11 +419,9 @@ async function main() {
           waitStateId,
           idempotencyKey: `staging-ws-start-${randomUUID()}`,
           signals: [{ type: 'ai_generation' }, { type: 'command_execution' }],
-          evidence,
-          detectorVersion,
         });
         if (wsStart.status >= 400) fail(`wait start -> HTTP ${wsStart.status}: ${wsStart.text}`);
-        else ok('signed wait start recorded (signed evidence items, payment-eligible)');
+        else ok('signed wait start recorded (non-billable without independent attestation)');
       }
 
       // 8. Ad request with the SAME device/session/wait IDs — must serve.
@@ -393,29 +456,8 @@ async function main() {
         else ok('rendered event recorded; waiting minimum visible duration');
         await new Promise((r) => setTimeout(r, 5_500));
 
-        // 10. Qualify the impression.
-        const qualified = await signedPost('/extension/impression-qualified', {
-          impressionToken,
-          qualifiedAt: new Date().toISOString(),
-          visibleDurationMs: 5_500,
-          idempotencyKey: `staging-qual-${randomUUID()}`,
-        });
-        if (qualified.status >= 400) {
-          fail(`qualify impression -> HTTP ${qualified.status}: ${qualified.text}`);
-        } else {
-          ok('impression qualified');
-        }
-
-        // 11. Click — the CPC billing trigger.
-        const click = await signedPost('/extension/click', {
-          impressionToken,
-          clickedAt: new Date().toISOString(),
-          idempotencyKey: `staging-clk-${randomUUID()}`,
-        });
-        if (click.status >= 400) fail(`ad click -> HTTP ${click.status}: ${click.text}`);
-        else ok('click recorded (CPC billable event)');
-
-        // 12. End the wait (duration must match server time within tolerance).
+        // 10. End the wait (duration must match server time within tolerance)
+        // before asking the independently operated bridge to attest it.
         const elapsedSeconds = Math.floor((Date.now() - loopStart) / 1000);
         const wsEnd = await signedPost('/extension/wait-state/end', {
           waitStateId,
@@ -424,18 +466,72 @@ async function main() {
         });
         if (wsEnd.status >= 400) fail(`wait end -> HTTP ${wsEnd.status}: ${wsEnd.text}`);
         else ok(`wait ended (${elapsedSeconds}s)`);
+
+        // 11. The bridge owns a private key not available to this script or
+        // the API. It receives the server nonce and operation bindings and
+        // returns a signed assertion; the API independently verifies it.
+        let assertion = null;
+        if (attestationSession && attestationProvider) {
+          assertion = await requestIndependentAttestation({
+            attestationSessionId: attestationSession.attestationSessionId,
+            nonce: attestationSession.nonce,
+            userId: developer.id,
+            deviceId,
+            sessionId,
+            waitStateId,
+            provider: attestationProvider,
+          });
+        }
+        if (assertion && attestationSession) {
+          const consumed = await api('POST', '/extension/wait-attestation/consume', devToken, {
+            attestationSessionId: attestationSession.attestationSessionId,
+            assertion,
+          });
+          if (consumed.status >= 400) {
+            fail(`consume wait attestation -> HTTP ${consumed.status}: ${consumed.text}`);
+          } else {
+            ok('independent wait attestation consumed and bound to the completed server wait');
+          }
+        } else if (!hardFailures) {
+          fail('no independent wait assertion was returned; refusing to qualify the impression');
+        }
+
+        // 12. Qualify only after the server has verified the external proof.
+        const qualified = await signedPost('/extension/impression-qualified', {
+          impressionToken,
+          qualifiedAt: new Date().toISOString(),
+          visibleDurationMs: 5_500,
+          idempotencyKey: `staging-qual-${randomUUID()}`,
+        });
+        if (qualified.status >= 400 || !qualified.json?.qualified) {
+          fail(`qualify attested impression -> HTTP ${qualified.status}: ${qualified.text}`);
+        } else {
+          ok('attested impression qualified');
+        }
+
+        // 13. Click — the CPC billing trigger.
+        const click = await signedPost('/extension/click', {
+          impressionToken,
+          clickedAt: new Date().toISOString(),
+          idempotencyKey: `staging-clk-${randomUUID()}`,
+        });
+        if (click.status >= 400 || !click.json?.clicked)
+          fail(`click attested impression -> HTTP ${click.status}: ${click.text}`);
+        else ok('click recorded (CPC billable event)');
       }
 
-      // 13. Ledger assertions (DB): developer credit, advertiser debit,
-      // platform split — every missing row or currency/amount mismatch fails.
+      // 14. Ledger assertions (DB): tie every assertion to this campaign so
+      // old staging rows cannot make a new smoke falsely pass.
       let earnedMinor = 0n;
-      if (impressionToken && advertiserId) {
+      if (impressionToken && advertiserId && campaignId) {
         const [earnings, advDebit, platformRows] = await Promise.all([
-          prisma.earningsLedger.findMany({ where: { userId: developer.id, currency: 'USD' } }),
-          prisma.advertiserLedger.findFirst({
-            where: { advertiserId, entryType: 'debit', currency: 'USD' },
+          prisma.earningsLedger.findMany({
+            where: { userId: developer.id, campaignId, currency: 'USD' },
           }),
-          prisma.platformLedger.findMany({ where: { currency: 'USD' } }),
+          prisma.advertiserLedger.findFirst({
+            where: { advertiserId, campaignId, entryType: 'debit', currency: 'USD' },
+          }),
+          prisma.platformLedger.findMany({ where: { campaignId, currency: 'USD' } }),
         ]);
         const earning = earnings.find((e) => e.entryType === 'credit');
         if (!earning) {
@@ -467,77 +563,8 @@ async function main() {
         }
       }
 
-      // 14. Mature the test earning explicitly (staging-only: the real hold
-      // period is days/weeks; the payout path requires confirmed entries).
       if (earnedMinor > 0n) {
-        const matured = await prisma.earningsLedger.updateMany({
-          where: {
-            userId: developer.id,
-            entryType: 'credit',
-            currency: 'USD',
-            status: { not: 'paid' },
-          },
-          data: { status: 'confirmed', availableAt: null },
-        });
-        if (matured.count === 0) fail('no earning row could be advanced to confirmed');
-        else ok(`test earning advanced to confirmed (${matured.count} row, staging-only)`);
-      }
-
-      // 15. Payout lifecycle: method -> request -> approve -> process, all
-      // fail-closed, for the FULL earned amount.
-      if (earnedMinor > 0n) {
-        const method = await api('POST', '/payout/method', devToken, {
-          provider: 'paypal_email',
-          destination: 'staging-smoke@example.com',
-        });
-        if (method.status >= 400) {
-          fail(`add payout method -> HTTP ${method.status}: ${method.text}`);
-        } else {
-          const payout = await api('POST', '/payout/request', devToken, {
-            amountMinor: Number(earnedMinor),
-            currency: 'USD',
-          });
-          if (payout.status >= 400) {
-            fail(`request payout (${earnedMinor} minor) -> HTTP ${payout.status}: ${payout.text}`);
-          } else {
-            const payoutId = payout.json?.id;
-            const approvePayout = await api(
-              'POST',
-              `/admin/payouts/${payoutId}/approve`,
-              adminToken,
-              {},
-            );
-            if (approvePayout.status >= 400) {
-              fail(`approve payout -> HTTP ${approvePayout.status}: ${approvePayout.text}`);
-            }
-            const proc = await api('POST', `/admin/payouts/${payoutId}/process`, adminToken, {});
-            if (proc.status >= 400) fail(`process payout -> HTTP ${proc.status}: ${proc.text}`);
-            else ok(`payout ${payoutId} approved + processed (${earnedMinor} minor)`);
-
-            // 16. Reconciliation assertions: allocations reference the
-            // earning; the payout is in a valid post-process state.
-            const [allocations, payoutRow] = await Promise.all([
-              prisma.payoutAllocation.findMany({ where: { payoutRequestId: payoutId } }),
-              prisma.payoutRequest.findUnique({ where: { id: payoutId } }),
-            ]);
-            if (allocations.length === 0) {
-              fail('no payout allocations persisted for the processed payout');
-            }
-            const allocatedTotal = allocations.reduce((s, a) => s + BigInt(a.amountMinor), 0n);
-            if (allocatedTotal !== earnedMinor) {
-              fail(`allocations total ${allocatedTotal} != earned ${earnedMinor}`);
-            }
-            const validStates = ['processing', 'paid', 'failed'];
-            if (!payoutRow || !validStates.includes(payoutRow.status)) {
-              fail(`payout in unexpected state '${payoutRow?.status}' after process`);
-            }
-            if (!hardFailures) {
-              ok(
-                `payout reconciliation verified (${allocations.length} allocation(s), state=${payoutRow?.status})`,
-              );
-            }
-          }
-        }
+        ok('pending ledger split verified after an independently signed wait assertion');
       }
     }
 

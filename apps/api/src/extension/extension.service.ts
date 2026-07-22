@@ -14,6 +14,7 @@ import { ServedAd } from './extension.constants';
 import { ExtensionAdTrait } from './extension-ad.trait';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 import { ExtensionWaitTrait } from './extension-wait.trait';
+import { WaitAttestationService } from './wait-attestation.service';
 
 @Injectable()
 export class ExtensionService {
@@ -27,6 +28,7 @@ export class ExtensionService {
     public runtimeConfig: RuntimeConfigService,
     public metrics: MetricsService = new MetricsService(),
     public alerts?: AlertsService,
+    public readonly attestation?: WaitAttestationService,
   ) {}
   adCache: LRUCache<string, { ad: ServedAd }> = new LRUCache<
     string,

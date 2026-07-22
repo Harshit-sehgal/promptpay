@@ -150,10 +150,24 @@ export async function activate(context: vscode.ExtensionContext) {
       });
       vscode.window.showInformationMessage(`WaitLayer: ads ${enabled ? 'enabled' : 'disabled'}`);
     }),
+    vscode.commands.registerCommand('waitlayer.toggleWaitTelemetry', async () => {
+      const enabled = await config.toggleWaitTelemetry();
+      vscode.window.showInformationMessage(
+        enabled
+          ? 'WaitLayer: wait telemetry enabled. Detected waits may now be sent to WaitLayer.'
+          : 'WaitLayer: wait telemetry disabled. No detected waits will be sent to WaitLayer.',
+      );
+    }),
     vscode.commands.registerCommand('waitlayer.openDashboard', () => {
       vscode.env.openExternal(vscode.Uri.parse('https://waitlayer.com/developer'));
     }),
     vscode.commands.registerCommand('waitlayer.reportFalseWait', async (reason?: string) => {
+      if (!(await config.waitTelemetryEnabled())) {
+        vscode.window.showInformationMessage(
+          'WaitLayer: enable wait telemetry before reporting detection feedback.',
+        );
+        return;
+      }
       if (!activeWaitStateId) {
         vscode.window.showInformationMessage('WaitLayer: no active wait to report');
         return;
@@ -260,8 +274,19 @@ export async function activate(context: vscode.ExtensionContext) {
       // them locally for its own state machine.
       if (event.shadow) return;
 
+      // Establish local UI state synchronously so a user can immediately mark
+      // a detection as false. This does not send data anywhere; the network
+      // consent check below remains the boundary for all API activity.
       activeWaitStateId = event.waitStateId;
       flaggedWaitStateId = null;
+
+      // Privacy is a hard boundary: do not create an active server-side wait,
+      // build evidence, request ads, or contact the device endpoint until the
+      // user has explicitly opted into wait telemetry.
+      if (!(await config.waitTelemetryEnabled())) {
+        if (activeWaitStateId === event.waitStateId) activeWaitStateId = null;
+        return;
+      }
       // P1.18 #3 — richer in-wait notification explaining the detection and
       // offering a "Report false positive" action. Does not block the ad flow.
       const choice = await vscode.window.showInformationMessage(
@@ -339,9 +364,13 @@ export async function activate(context: vscode.ExtensionContext) {
         const ad = adResponse.ad;
 
         // The server is authoritative for launch mode. In the default
-        // fail-closed ads_only mode, do not open a sponsored panel that a
+        // fail-closed telemetry_only mode, do not open a sponsored panel that a
         // developer could reasonably interpret as a reward-bearing action.
-        if (!ad && adResponse.mode === 'ads_only' && activeWaitStateId === event.waitStateId) {
+        if (
+          !ad &&
+          adResponse.mode === 'telemetry_only' &&
+          activeWaitStateId === event.waitStateId
+        ) {
           status.showRewardsUnavailable();
           return;
         }
@@ -396,7 +425,9 @@ export async function activate(context: vscode.ExtensionContext) {
       if (activeWaitStateId === event.waitStateId) {
         activeWaitStateId = null;
         const startPromise = waitStartPromises.get(event.waitStateId);
-        const startRecorded = startPromise ? (await startPromise) !== null : true;
+        // A wait can end while the opt-in check or start request is in flight.
+        // With no start promise there is no server-side row to close.
+        const startRecorded = startPromise ? (await startPromise) !== null : false;
         if (!startRecorded) {
           if (activeWaitStateId === null) {
             panel.hide();

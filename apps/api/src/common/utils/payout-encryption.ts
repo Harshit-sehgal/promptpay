@@ -28,32 +28,32 @@ const CURRENT_VERSION_PREFIX = `${KEY_VERSION}:`;
  * Derive the encryption key from the configured PAYOUT_ENCRYPTION_KEY.
  * The key is expected as a base64-encoded 32-byte (256-bit) string.
  */
+function loadKey(
+  envName: 'PAYOUT_ENCRYPTION_KEY' | 'PAYOUT_HMAC_KEY',
+  fallbackPurpose: string,
+): Buffer {
+  const raw = process.env[envName]?.trim();
+  // Buffer.from(..., 'base64') is intentionally permissive: it silently
+  // accepts malformed or truncated input. Require canonical standard base64
+  // and exactly 32 decoded bytes before a production process can handle money.
+  const decoded =
+    raw && /^[A-Za-z0-9+/]+={0,2}$/.test(raw) && raw.length % 4 === 0
+      ? Buffer.from(raw, 'base64')
+      : null;
+  if (decoded && decoded.length === 32 && decoded.toString('base64') === raw) {
+    return decoded;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`${envName} must be a canonical base64-encoded 256-bit key in production`);
+  }
+  // Dev/test fallback — deterministic, never used in production.
+  return createHmac('sha256', `${fallbackPurpose}-dev-fallback`)
+    .update(`waitlayer-${fallbackPurpose}`)
+    .digest();
+}
+
 function loadEncryptionKey(): Buffer {
-  const raw = process.env.PAYOUT_ENCRYPTION_KEY;
-  if (!raw || raw.length < 32) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        'PAYOUT_ENCRYPTION_KEY must be set to a base64-encoded 256-bit key in production',
-      );
-    }
-    // Dev/test fallback — deterministic, never used in production
-    return Buffer.from(
-      createHmac('sha256', 'payout-encryption-dev-fallback')
-        .update('waitlayer-payout-encryption')
-        .digest('hex')
-        .slice(0, 32),
-      'utf8',
-    );
-  }
-  // Try base64 decode first; if it produces a valid 32-byte buffer, use it.
-  try {
-    const decoded = Buffer.from(raw, 'base64');
-    if (decoded.length === 32) return decoded;
-  } catch {
-    // Not valid base64 — try raw string
-  }
-  // Raw 32+ char string: hash it to get a deterministic 256-bit key.
-  return createHmac('sha256', 'payout-encryption-key-derivation').update(raw).digest();
+  return loadKey('PAYOUT_ENCRYPTION_KEY', 'payout-encryption');
 }
 
 /**
@@ -114,31 +114,7 @@ export function decryptPayoutDestination(encrypted: string): string {
  * base64-encoded 32-byte key.
  */
 function loadHmacKey(): Buffer {
-  const raw = process.env.PAYOUT_HMAC_KEY;
-  if (!raw || raw.length < 32) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        'PAYOUT_HMAC_KEY must be set to a base64-encoded 256-bit key in production. This is a separate key from PAYOUT_ENCRYPTION_KEY.',
-      );
-    }
-    // Dev/test fallback — deterministic, never used in production
-    return Buffer.from(
-      createHmac('sha256', 'payout-hmac-dev-fallback')
-        .update('waitlayer-payout-hmac')
-        .digest('hex')
-        .slice(0, 32),
-      'utf8',
-    );
-  }
-  // Try base64 decode first; if it produces a valid 32-byte buffer, use it.
-  try {
-    const decoded = Buffer.from(raw, 'base64');
-    if (decoded.length === 32) return decoded;
-  } catch {
-    // Not valid base64 — try raw string
-  }
-  // Raw 32+ char string: hash it to get a deterministic 256-bit key.
-  return createHmac('sha256', 'payout-hmac-key-derivation').update(raw).digest();
+  return loadKey('PAYOUT_HMAC_KEY', 'payout-hmac');
 }
 
 /**

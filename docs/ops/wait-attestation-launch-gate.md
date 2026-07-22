@@ -24,12 +24,12 @@ An accepted assertion must bind all of the following:
 - the expected WaitLayer audience/environment; and
 - the provider's signature/key id, issuer, expiry, and not-before claims.
 
-The API must reject an assertion if its issuer, audience, signature, key,
-nonce, user/device binding, duration, clock window, or event-id uniqueness is
-invalid. Persist the verified assertion metadata and a digest of the signed
-payload in the existing audit/evidence record; do not persist prompts, command
-arguments, terminal output, source code, or raw provider payloads unless a
-separate privacy review approves a minimized field.
+The API rejects an assertion if its issuer, audience, signature, key, nonce,
+user/device binding, server-recorded wait lifecycle, duration, clock window,
+or event-id uniqueness is invalid. It persists only minimized metadata plus a
+digest of the signed payload in `wait_attestations` and an audit row; it never
+persists prompts, command arguments, terminal output, source code, raw nonce,
+or raw provider payloads.
 
 ## Provider integration contract
 
@@ -39,15 +39,17 @@ separate privacy review approves a minimized field.
    provider, carrying that nonce only where the provider can attest it.
 3. The provider or a trusted server-side bridge signs an assertion when the
    operation completes. A local client must not sign this assertion.
-4. The API verifies and atomically consumes the assertion before marking its
-   wait as payment-eligible. Consumption must be idempotent and protected by a
-   unique provider-event constraint.
+4. The API verifies and atomically consumes the assertion through
+   `POST /extension/wait-attestation/consume` before allowing settlement. Its
+   compare-and-set session claim and unique provider-event/wait bindings make
+   consumption replay-safe.
 5. Normal impression qualification then uses the verified attestation plus the
    existing fraud, duration, campaign-budget, ledger, and payout controls.
 
-Use a separate adapter name and detector version for the integration. Do not
-promote an existing `vscode.*`, `cli.*`, or heuristic adapter to billable
-status merely because it has more client telemetry.
+Configure `WAIT_ATTESTATION_ISSUERS` (issuer/public-key JSON) and the separate
+`VERIFIED_WAIT_ATTESTATION_VERSIONS` allowlist. Do not treat a client detector
+version or an existing `vscode.*`, `cli.*`, or heuristic adapter as an
+attestation-provider version merely because it has more client telemetry.
 
 ## Mandatory launch experiment
 
@@ -78,6 +80,10 @@ for this experiment.
   schema.
 - Production/staging issuer, audience, key/JWKS, callback credentials, and
   timeouts are configured through the secret manager.
+- The staging release job has `STAGING_WAIT_ATTESTATION_PROVIDER`,
+  `STAGING_WAIT_ATTESTATION_ISSUERS`,
+  `STAGING_WAIT_ATTESTATION_VERSIONS`, and an independently operated
+  `STAGING_WAIT_ATTESTATION_BRIDGE_URL`; it must fail if any is absent.
 - Alerting exists for signature failures, replay attempts, provider callback
   failures, attestation-volume anomalies, and settlement reversals.
 - The deployment rollback and runtime kill switch are rehearsed with the

@@ -77,7 +77,7 @@ interface RawBalance {
   paidOut: RawAmountEntry;
 }
 
-export type WaitLaunchMode = 'paused' | 'ads_only' | 'earnings_enabled';
+export type WaitLaunchMode = 'paused' | 'telemetry_only' | 'earnings_enabled';
 
 export interface ServerAdResponse {
   ad: Ad | null;

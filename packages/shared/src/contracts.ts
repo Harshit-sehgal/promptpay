@@ -146,7 +146,7 @@ export const AdRequestResponse = z.object({
   // Present when the server intentionally suppresses the ad surface because
   // the launch cannot settle rewards. Optional preserves compatibility with
   // older API deployments and ordinary no-campaign responses.
-  mode: z.enum(['paused', 'ads_only', 'earnings_enabled']).optional(),
+  mode: z.enum(['paused', 'telemetry_only', 'earnings_enabled']).optional(),
   reason: z.string().optional(),
 });
 

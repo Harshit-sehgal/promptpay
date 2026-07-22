@@ -31,6 +31,7 @@ import type { Response } from 'supertest';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerStorage } from '@nestjs/throttler';
 
@@ -38,6 +39,7 @@ import { BidType, ToolType, UserRole } from '@waitlayer/shared';
 import { signPayload } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
+import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
@@ -50,6 +52,13 @@ const AD = `${BASE}/ad-request`;
 const RENDER = `${BASE}/ad-rendered`;
 const QUAL = `${BASE}/impression-qualified`;
 const CLICK = `${BASE}/click`;
+const ATTESTATION_SESSION = `${BASE}/wait-attestation/session`;
+const ATTESTATION_CONSUME = `${BASE}/wait-attestation/consume`;
+const ATTESTATION_PROVIDER = 'integration-attestor';
+const ATTESTATION_ISSUER = 'https://integration-attestor.example.test';
+const ATTESTATION_AUDIENCE = 'waitlayer-integration';
+const ATTESTATION_KID = 'integration-attestor-key';
+const ATTESTATION_VERSION = 'integration-v1';
 
 async function cleanDb(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(`
@@ -59,6 +68,7 @@ async function cleanDb(prisma: PrismaService) {
       "advertisers", "campaigns", "ad_creatives", "categories",
       "blocked_categories", "country_targeting", "tool_integrations",
       "wait_state_events", "ad_impressions", "ad_clicks", "ad_reports",
+      "wait_attestation_sessions", "wait_attestations",
       "earnings_ledger", "advertiser_ledger", "platform_ledger",
       "payout_requests", "payout_allocations", "payout_transactions",
       "recovery_debt_cases",
@@ -103,6 +113,10 @@ type LoopOpts = {
   waitStateIdOverride?: string;
   /** Set to false to skip adding evidence (for tests verifying non-evidence paths). */
   withEvidence?: boolean;
+  /** Default true: happy money paths must traverse the real attestation API. */
+  withAttestation?: boolean;
+  /** Pre-issued before a caller records its own wait start (retry scenarios). */
+  attestationSession?: { attestationSessionId: string; nonce: string };
 };
 
 type LoopResult = {
@@ -126,6 +140,15 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
 
   beforeAll(async () => {
     process.env.REDIS_URL = '';
+    process.env.WAIT_ATTESTATION_ISSUERS = JSON.stringify([
+      {
+        provider: ATTESTATION_PROVIDER,
+        issuer: ATTESTATION_ISSUER,
+        audience: ATTESTATION_AUDIENCE,
+        publicKeys: { [ATTESTATION_KID]: TEST_JWT_PUBLIC_KEY.replace(/\n/g, '\\n') },
+      },
+    ]);
+    process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS = ATTESTATION_VERSION;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -218,6 +241,41 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       .post(path)
       .set('Authorization', `Bearer ${devToken}`)
       .send({ ...payload, signature });
+  }
+
+  async function signAttestation(args: {
+    userId: string;
+    deviceId: string;
+    nonce: string;
+    sessionId: string;
+    waitStateId: string;
+    eventId: string;
+  }) {
+    const endedAtMs = Date.now();
+    return new JwtService().signAsync(
+      {
+        sub: args.userId,
+        device_id: args.deviceId,
+        nonce: args.nonce,
+        session_id: args.sessionId,
+        wait_state_id: args.waitStateId,
+        provider: ATTESTATION_PROVIDER,
+        event_id: args.eventId,
+        attestation_version: ATTESTATION_VERSION,
+        started_at_ms: endedAtMs - 1_000,
+        ended_at_ms: endedAtMs,
+        duration_ms: 1_000,
+      },
+      {
+        privateKey: TEST_JWT_PRIVATE_KEY,
+        algorithm: 'RS256',
+        keyid: ATTESTATION_KID,
+        issuer: ATTESTATION_ISSUER,
+        audience: ATTESTATION_AUDIENCE,
+        notBefore: '0s',
+        expiresIn: '5m',
+      },
+    );
   }
 
   async function seedMoneyLoop(tag: string, opts: SeedOpts): Promise<LoopCtx> {
@@ -394,10 +452,26 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       skipStart = false,
       waitStateIdOverride = null,
       withEvidence = true,
+      withAttestation = true,
+      attestationSession: suppliedAttestationSession,
     } = opts;
     const { devToken, deviceId, sessionId, deviceEventSecret, category } = ctx;
     const tag = ctx.tag;
     const waitStateId = waitStateIdOverride ?? `ws-${tag}`;
+
+    // The nonce must exist before the wait begins. The test attester uses a
+    // different private key from the client HMAC and calls the real consume
+    // endpoint after the server-recorded end event.
+    let attestationSession: { attestationSessionId: string; nonce: string } | null =
+      suppliedAttestationSession ?? null;
+    if (!attestationSession && !skipStart && withAttestation) {
+      const created = await request(app.getHttpServer())
+        .post(ATTESTATION_SESSION)
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ deviceId, sessionId, waitStateId, provider: ATTESTATION_PROVIDER })
+        .expect(200);
+      attestationSession = created.body;
+    }
 
     let startRes: LoopResult['startRes'] = undefined;
     if (!skipStart) {
@@ -478,6 +552,30 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     // Server enforces >= MINIMUM_VISIBLE_DURATION_MS between render and qualify.
     await delay(4000);
 
+    let endRes: LoopResult['endRes'];
+    if (withAttestation) {
+      endRes = await signed(END, devToken, deviceEventSecret, {
+        waitStateId,
+        durationSeconds: '30',
+        idempotencyKey: `end-${tag}`,
+      });
+      if (attestationSession) {
+        const assertion = await signAttestation({
+          userId: ctx.devUserId,
+          deviceId,
+          nonce: attestationSession.nonce,
+          sessionId,
+          waitStateId,
+          eventId: `provider-event-${tag}`,
+        });
+        await request(app.getHttpServer())
+          .post(ATTESTATION_CONSUME)
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ attestationSessionId: attestationSession.attestationSessionId, assertion })
+          .expect(200);
+      }
+    }
+
     const impPayload = {
       impressionToken,
       qualifiedAt: new Date().toISOString(),
@@ -500,11 +598,13 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       });
     }
 
-    const endRes = await signed(END, devToken, deviceEventSecret, {
-      waitStateId,
-      durationSeconds: '30',
-      idempotencyKey: `end-${tag}`,
-    });
+    if (!endRes) {
+      endRes = await signed(END, devToken, deviceEventSecret, {
+        waitStateId,
+        durationSeconds: '30',
+        idempotencyKey: `end-${tag}`,
+      });
+    }
 
     let adRes2: LoopResult['adRes2'];
     if (secondWaitMode === 'no_ad') {
@@ -627,13 +727,17 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       advertiserDepositMinor: 100000,
     });
 
-    const res = await runMoneyLoop(ctx, { signals: FORGED_SINGLE_SIGNAL, withEvidence: false });
+    const res = await runMoneyLoop(ctx, {
+      signals: FORGED_SINGLE_SIGNAL,
+      withEvidence: false,
+      withAttestation: false,
+    });
     expect(res.adRes.status).toBe(200);
     expect(res.adRes.body.ad).toBeDefined();
     expect(res.impressionToken).toBeDefined();
     expect(res.qualifyRes!.status).toBe(200);
     expect(res.qualifyRes!.body.qualified).toBe(false);
-    expect(res.qualifyRes!.body.reason).toBe('uncorroborated_wait');
+    expect(res.qualifyRes!.body.reason).toBe('unverified_wait_attestation');
 
     const earnings = await prisma.earningsLedger.findMany({
       where: { userId: ctx.devUserId, campaignId: ctx.campaignId },
@@ -654,13 +758,14 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     const res = await runMoneyLoop(ctx, {
       signals: [{ type: 'ai_generation' }, { type: 'inactivity' }],
       withEvidence: false,
+      withAttestation: false,
     });
     expect(res.adRes.status).toBe(200);
     expect(res.adRes.body.ad).toBeDefined();
     expect(res.impressionToken).toBeDefined();
     expect(res.qualifyRes!.status).toBe(200);
     expect(res.qualifyRes!.body.qualified).toBe(false);
-    expect(res.qualifyRes!.body.reason).toBe('uncorroborated_wait');
+    expect(res.qualifyRes!.body.reason).toBe('unverified_wait_attestation');
 
     const earnings = await prisma.earningsLedger.findMany({
       where: { userId: ctx.devUserId, campaignId: ctx.campaignId },
@@ -883,6 +988,16 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
 
     const ws1 = `ws-balexh`;
     const ws2 = `ws2-balexh`;
+    const [attestation1, attestation2] = await Promise.all(
+      [ws1, ws2].map(async (waitStateId) => {
+        const created = await request(app.getHttpServer())
+          .post(ATTESTATION_SESSION)
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ deviceId, sessionId, waitStateId, provider: ATTESTATION_PROVIDER })
+          .expect(200);
+        return created.body as { attestationSessionId: string; nonce: string };
+      }),
+    );
     const start1 = await signed(START, devToken, deviceEventSecret, {
       deviceId,
       sessionId,
@@ -941,6 +1056,33 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     });
 
     await delay(4000);
+
+    for (const [waitStateId, attestationSession, eventId] of [
+      [ws1, attestation1, 'provider-event-balexh-1'],
+      [ws2, attestation2, 'provider-event-balexh-2'],
+    ] as const) {
+      const endPayload = {
+        waitStateId,
+        durationSeconds: '1',
+        idempotencyKey: `end-${waitStateId}`,
+      };
+      await signed(END, devToken, deviceEventSecret, endPayload).then((res) =>
+        expect(res.status).toBe(200),
+      );
+      const assertion = await signAttestation({
+        userId: ctx.devUserId,
+        deviceId,
+        nonce: attestationSession.nonce,
+        sessionId,
+        waitStateId,
+        eventId,
+      });
+      await request(app.getHttpServer())
+        .post(ATTESTATION_CONSUME)
+        .set('Authorization', `Bearer ${devToken}`)
+        .send({ attestationSessionId: attestationSession.attestationSessionId, assertion })
+        .expect(200);
+    }
 
     const q1 = await signed(QUAL, devToken, deviceEventSecret, {
       impressionToken: token1,
@@ -1005,6 +1147,11 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     };
     const signature = signPayload(payload as Record<string, unknown>, deviceEventSecret);
     const body = { ...payload, signature };
+    const preissuedAttestation = await request(app.getHttpServer())
+      .post(ATTESTATION_SESSION)
+      .set('Authorization', `Bearer ${devToken}`)
+      .send({ deviceId, sessionId, waitStateId, provider: ATTESTATION_PROVIDER })
+      .expect(200);
 
     // First attempt hits a dead endpoint -> simulated transient connection error.
     let firstFailed = false;
@@ -1038,6 +1185,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
         waitStateIdOverride: waitStateId,
         signals: BILLABLE_WAIT_SIGNALS,
         detectorVersion: '1.0.0',
+        attestationSession: preissuedAttestation.body,
       },
     );
     expect(res.adRes.body.ad).toBeDefined();

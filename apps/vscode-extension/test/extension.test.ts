@@ -20,6 +20,8 @@ const mock = vi.hoisted(() => ({
     getInactivityTimeoutMs: vi.fn(() => 15_000),
     toggleAds: vi.fn(),
     adsEnabled: vi.fn(),
+    toggleWaitTelemetry: vi.fn(),
+    waitTelemetryEnabled: vi.fn(),
     inQuietHours: vi.fn(),
     getMaxAdsPerHour: vi.fn(),
     preferredDisplayCurrency: vi.fn(() => ''),
@@ -149,6 +151,9 @@ beforeEach(() => {
   mock.api.getDeveloperSettings.mockResolvedValue({ adsEnabled: false });
   mock.api.updateAdsEnabled.mockResolvedValue(undefined);
   mock.config.adsEnabled.mockResolvedValue(false);
+  // Existing lifecycle tests exercise the opted-in path. The dedicated test
+  // below locks the default privacy boundary.
+  mock.config.waitTelemetryEnabled.mockResolvedValue(true);
   mock.config.inQuietHours.mockResolvedValue(false);
   mock.config.getMaxAdsPerHour.mockResolvedValue(5);
   mock.signalHandler = undefined;
@@ -188,6 +193,27 @@ describe('extension auth commands', () => {
 });
 
 describe('extension wait lifecycle', () => {
+  it('sends no wait telemetry or ad request until the user explicitly opts in', async () => {
+    await activateAndClearBootState();
+    mock.config.waitTelemetryEnabled.mockResolvedValue(false);
+
+    mock.signalHandler?.({
+      type: 'wait_start',
+      event: {
+        startTime: Date.now(),
+        durationMs: 0,
+        tool: 'task',
+        waitStateId: 'no-consent-wait',
+        signals: [{ type: 'active_task' }, { type: 'command_execution' }],
+      },
+    });
+    await Promise.resolve();
+
+    expect(mock.api.getOrRegisterDevice).not.toHaveBeenCalled();
+    expect(mock.api.waitStateStart).not.toHaveBeenCalled();
+    expect(mock.api.requestAd).not.toHaveBeenCalled();
+  });
+
   it('records a short wait end only after its matching start and skips post-end ad work', async () => {
     await activateAndClearBootState();
     const startGate = Promise.withResolvers<void>();

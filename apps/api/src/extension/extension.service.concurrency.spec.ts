@@ -115,6 +115,7 @@ function makePrisma() {
         detectorVersion: '1.0.0',
       }),
     },
+    waitAttestation: { findFirst: vi.fn().mockResolvedValue({ id: 'attestation-1' }) },
     adImpression: {
       findFirst: vi.fn().mockResolvedValue(null),
       findUnique: vi.fn(),
@@ -164,6 +165,8 @@ function makeImpression(token: string, campaignId: string, bidAmountMinor = 100)
     id: `imp-${campaignId}`,
     userId: 'user-1',
     deviceId: 'dev-1',
+    waitStateId: 'ws-1',
+    sessionId: 's-1',
     impressionTokenHash: `hash-${token}`,
     renderedAt: new Date(Date.now() - 10_000), // beyond MINIMUM_VISIBLE_DURATION_MS
     qualifiedAt: null,

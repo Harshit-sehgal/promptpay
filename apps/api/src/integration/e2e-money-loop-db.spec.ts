@@ -22,6 +22,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MINIMUM_VISIBLE_DURATION_MS, ToolType } from '@waitlayer/shared';
 
 import { AppModule } from '../app.module';
+import { TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
@@ -32,6 +33,11 @@ import { BILLABLE_WAIT_SIGNALS } from '../extension/test/wait-fixtures';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 
 const DEV_SECRET = 'test-device-secret-e2e-money-loop';
+const ATTESTATION_PROVIDER = 'db-money-loop-attestor';
+const ATTESTATION_ISSUER = 'https://db-money-loop-attestor.example.test';
+const ATTESTATION_AUDIENCE = 'waitlayer-db-money-loop';
+const ATTESTATION_KID = 'db-money-loop-attestor-key';
+const ATTESTATION_VERSION = 'db-money-loop-v1';
 
 // Per-test unique id helper (avoids collisions across re-seeds).
 let uidCounter = 0;
@@ -49,6 +55,8 @@ async function cleanMoneyTables(prisma: PrismaService) {
       "advertiser_ledger",
       "platform_ledger",
       "wait_state_events",
+      "wait_attestation_sessions",
+      "wait_attestations",
       "ad_creatives",
       "campaigns"
     CASCADE;
@@ -59,6 +67,8 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let extension: ExtensionService;
+  let previousAttestationIssuers: string | undefined;
+  let previousAttestationVersions: string | undefined;
 
   let developerId: string;
   let deviceId: string;
@@ -68,6 +78,17 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   const TEST_BALANCE = 1_000_00n; // $1,000 USD confirmed credit
 
   beforeAll(async () => {
+    previousAttestationIssuers = process.env.WAIT_ATTESTATION_ISSUERS;
+    previousAttestationVersions = process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS;
+    process.env.WAIT_ATTESTATION_ISSUERS = JSON.stringify([
+      {
+        provider: ATTESTATION_PROVIDER,
+        issuer: ATTESTATION_ISSUER,
+        audience: ATTESTATION_AUDIENCE,
+        publicKeys: { [ATTESTATION_KID]: TEST_JWT_PUBLIC_KEY.replace(/\n/g, '\\n') },
+      },
+    ]);
+    process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS = ATTESTATION_VERSION;
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -166,6 +187,16 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   afterAll(async () => {
     if (prisma) await cleanMoneyTables(prisma);
     if (app) await app.close();
+    if (previousAttestationIssuers === undefined) {
+      delete process.env.WAIT_ATTESTATION_ISSUERS;
+    } else {
+      process.env.WAIT_ATTESTATION_ISSUERS = previousAttestationIssuers;
+    }
+    if (previousAttestationVersions === undefined) {
+      delete process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS;
+    } else {
+      process.env.VERIFIED_WAIT_ATTESTATION_VERSIONS = previousAttestationVersions;
+    }
   });
 
   /** Seed an active campaign + approved creative + advertiser balance. */
@@ -242,6 +273,45 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
     adIdempotencyKey?: string;
   }
 
+  /**
+   * This service-level suite deliberately bypasses the HTTP attestation
+   * verifier (covered in contract-tests and e2e-http-flow) but never bypasses
+   * the settlement gate: it provides the durable, already-verified record
+   * that the real verifier would have created.
+   */
+  async function seedVerifiedWaitAttestation(waitStateId: string, sessionId: string) {
+    const now = new Date();
+    const session = await prisma.waitAttestationSession.create({
+      data: {
+        userId: developerId,
+        deviceId,
+        waitStateId,
+        clientSessionId: sessionId,
+        provider: ATTESTATION_PROVIDER,
+        nonceHash: createHash('sha256').update(uid('attestation-nonce')).digest('hex'),
+        expiresAt: new Date(now.getTime() + 60_000),
+        consumedAt: now,
+      },
+    });
+    await prisma.waitAttestation.create({
+      data: {
+        sessionId: session.id,
+        userId: developerId,
+        deviceId,
+        waitStateId,
+        provider: ATTESTATION_PROVIDER,
+        issuer: ATTESTATION_ISSUER,
+        keyId: ATTESTATION_KID,
+        attestationVersion: ATTESTATION_VERSION,
+        providerEventId: uid('attestation-event'),
+        assertionDigest: createHash('sha256').update(uid('assertion')).digest('hex'),
+        startedAt: new Date(now.getTime() - 1_000),
+        endedAt: now,
+        durationMs: 1_000,
+      },
+    });
+  }
+
   async function runLoop(
     signals: { type: string }[],
     opts: LoopOptions = {},
@@ -290,14 +360,17 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       data: { renderedAt: new Date(Date.now() - MINIMUM_VISIBLE_DURATION_MS) },
     });
 
-    if (opts.endAfterAd) {
-      await extension.recordWaitStateEnd(developerId, {
-        waitStateId,
-        durationSeconds: 5,
-        idempotencyKey: uid('end'),
-        signature: 'sig',
-      });
-    }
+    // A completed wait and verified attestation are required before any money
+    // can settle. The verifier's cryptographic HTTP boundary is exercised in
+    // the dedicated end-to-end suites; this one uses the resulting durable
+    // record while keeping the real database/ledger path under test.
+    await extension.recordWaitStateEnd(developerId, {
+      waitStateId,
+      durationSeconds: opts.endAfterAd ? 5 : 1,
+      idempotencyKey: uid('end'),
+      signature: 'sig',
+    });
+    await seedVerifiedWaitAttestation(waitStateId, sessionId);
 
     await extension.recordQualifiedImpression(developerId, {
       impressionToken: token,

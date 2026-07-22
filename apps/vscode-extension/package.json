@@ -21,6 +21,7 @@
     "onCommand:waitlayer.logout",
     "onCommand:waitlayer.showEarnings",
     "onCommand:waitlayer.toggleAds",
+    "onCommand:waitlayer.toggleWaitTelemetry",
     "onCommand:waitlayer.openDashboard",
     "onCommand:waitlayer.reportFalseWait",
     "onCommand:waitlayer.showExperimentAssignment",
@@ -44,6 +45,10 @@
       {
         "command": "waitlayer.toggleAds",
         "title": "WaitLayer: Toggle Ads"
+      },
+      {
+        "command": "waitlayer.toggleWaitTelemetry",
+        "title": "WaitLayer: Toggle Wait Telemetry"
       },
       {
         "command": "waitlayer.openDashboard",
@@ -71,8 +76,13 @@
       "properties": {
         "waitlayer.adsEnabled": {
           "type": "boolean",
-          "default": true,
-          "description": "Enable ads during AI wait states"
+          "default": false,
+          "description": "Show ads during opted-in AI wait telemetry"
+        },
+        "waitlayer.waitTelemetryEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Send detected AI wait-state telemetry to WaitLayer. Disabled by default; enable only after reviewing the privacy notice."
         },
         "waitlayer.maxAdsPerHour": {
           "type": "number",

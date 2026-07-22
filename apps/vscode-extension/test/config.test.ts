@@ -95,6 +95,16 @@ describe('ConfigurationManager — settings parsing & validation', () => {
     expect(mock.config['adsEnabled']).toBe(false);
   });
 
+  it('keeps wait telemetry opt-in only and persists an explicit toggle', async () => {
+    const mgr = makeManager();
+
+    expect(await mgr.waitTelemetryEnabled()).toBe(false);
+    expect(await mgr.toggleWaitTelemetry()).toBe(true);
+    expect(await mgr.waitTelemetryEnabled()).toBe(true);
+    expect(mock.config['waitTelemetryEnabled']).toBe(true);
+    expect(await mgr.toggleWaitTelemetry()).toBe(false);
+  });
+
   it('reads maxAdsPerHour, defaulting to 6', async () => {
     const mgr = makeManager();
 

@@ -26,6 +26,49 @@ function validVersionAllowlist(value: string): boolean {
   return value.split(',').every((v) => /^[A-Za-z0-9._-]+$/.test(v.trim()) && v.trim().length > 0);
 }
 
+/** Validate only the shape of externally supplied attestation issuers. The
+ * public keys themselves are validated by RS256 verification at use time. */
+function validWaitAttestationIssuers(value: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed) || parsed.length === 0) return false;
+    const providers = new Set<string>();
+    return parsed.every((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+      const candidate = entry as Record<string, unknown>;
+      const hasValidShape =
+        typeof candidate.provider === 'string' &&
+        /^[A-Za-z0-9._-]{1,64}$/.test(candidate.provider) &&
+        typeof candidate.issuer === 'string' &&
+        /^https:\/\/[^\s/?#]+(?:\/[^\s?#]*)?$/.test(candidate.issuer) &&
+        typeof candidate.audience === 'string' &&
+        candidate.audience.length >= 1 &&
+        candidate.audience.length <= 256 &&
+        !!candidate.publicKeys &&
+        typeof candidate.publicKeys === 'object' &&
+        !Array.isArray(candidate.publicKeys) &&
+        Object.keys(candidate.publicKeys as Record<string, unknown>).length > 0 &&
+        Object.entries(candidate.publicKeys as Record<string, unknown>).every(
+          ([kid, pem]) =>
+            /^[A-Za-z0-9._-]{1,128}$/.test(kid) &&
+            typeof pem === 'string' &&
+            pem.length > 64 &&
+            pem.replace(/\\n/g, '\n').includes('-----BEGIN PUBLIC KEY-----') &&
+            pem.replace(/\\n/g, '\n').includes('-----END PUBLIC KEY-----'),
+        );
+      if (!hasValidShape) {
+        return false;
+      }
+      const provider = candidate.provider as string;
+      if (providers.has(provider)) return false;
+      providers.add(provider);
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+
 function isProductionOrigin(value: string): boolean {
   try {
     const url = new URL(value);
@@ -130,6 +173,26 @@ const envSchema = z
       .refine(
         validVersionAllowlist,
         'must be a comma-separated list of version tokens (a-z,0-9,.,_,-)',
+      )
+      .optional(),
+
+    // JSON array of independently operated wait-attestation issuers. Each
+    // entry is { provider, issuer, audience, publicKeys: { kid: PEM } }.
+    // This remains optional while wait.earnings is disabled; enabling real
+    // money without it is blocked independently by the runtime settlement gate.
+    WAIT_ATTESTATION_ISSUERS: z
+      .string()
+      .refine(validWaitAttestationIssuers, 'must be a valid wait-attestation issuer array')
+      .optional(),
+
+    // Versions emitted by the separately operated attestation provider. This
+    // is intentionally distinct from client detector versions: promoting a
+    // packaged detector build must not implicitly trust an attester build.
+    VERIFIED_WAIT_ATTESTATION_VERSIONS: z
+      .string()
+      .refine(
+        validVersionAllowlist,
+        'must be a comma-separated allowlist of wait-attestation versions',
       )
       .optional(),
 

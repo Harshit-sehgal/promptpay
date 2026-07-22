@@ -16,7 +16,7 @@ export interface RuntimeConfigKey {
  * describes what a developer can receive *now*, rather than what an operator
  * may intend to enable later.
  */
-export type WaitLaunchMode = 'paused' | 'ads_only' | 'earnings_enabled';
+export type WaitLaunchMode = 'paused' | 'telemetry_only' | 'earnings_enabled';
 
 export const RUNTIME_CONFIG_KEYS = {
   ADS_GLOBAL: { scope: 'ads', target: 'global' },
@@ -241,6 +241,41 @@ export class RuntimeConfigService {
   }
 
   /**
+   * A runtime toggle alone must never expose a reward-bearing ad surface.
+   * The API configuration is intentionally checked here (rather than trusting
+   * the client) so an operator cannot enable settlement before a real
+   * attestation issuer and its version allowlist are installed.
+   */
+  isWaitAttestationConfigured(): boolean {
+    const rawIssuers = this.config.get<string>('WAIT_ATTESTATION_ISSUERS');
+    const versions = (this.config.get<string>('VERIFIED_WAIT_ATTESTATION_VERSIONS') ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!rawIssuers || versions.length === 0) return false;
+    try {
+      const issuers = JSON.parse(rawIssuers) as unknown;
+      return (
+        Array.isArray(issuers) &&
+        issuers.length > 0 &&
+        issuers.every(
+          (issuer) =>
+            !!issuer &&
+            typeof issuer === 'object' &&
+            typeof (issuer as { provider?: unknown }).provider === 'string' &&
+            typeof (issuer as { issuer?: unknown }).issuer === 'string' &&
+            typeof (issuer as { audience?: unknown }).audience === 'string' &&
+            !!(issuer as { publicKeys?: unknown }).publicKeys &&
+            typeof (issuer as { publicKeys?: unknown }).publicKeys === 'object' &&
+            Object.keys((issuer as { publicKeys: Record<string, unknown> }).publicKeys).length > 0,
+        )
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Resolve the externally observable wait-loop mode from the two independent
    * safety switches.  Ads are never represented as rewards while settlement is
    * closed: callers can use this to suppress a misleading ad surface.
@@ -251,7 +286,9 @@ export class RuntimeConfigService {
       this.isWaitEarningsEnabled(),
     ]);
     if (!adsEnabled) return 'paused';
-    return earningsEnabled ? 'earnings_enabled' : 'ads_only';
+    return earningsEnabled && this.isWaitAttestationConfigured()
+      ? 'earnings_enabled'
+      : 'telemetry_only';
   }
 
   async isDepositsEnabled(): Promise<boolean> {

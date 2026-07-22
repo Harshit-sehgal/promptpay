@@ -64,6 +64,9 @@ jobs:
       JWT_PUBLIC_KEY: ${{ secrets.STAGING_JWT_PUBLIC_KEY }}
       STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
       STAGING_FULL_FLOW: ${{ inputs.full_flow == true && '1' || '0' }}
+      STAGING_WAIT_ATTESTATION_PROVIDER: ${{ secrets.STAGING_WAIT_ATTESTATION_PROVIDER }}
+      STAGING_WAIT_ATTESTATION_BRIDGE_URL: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_URL }}
+      STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -90,8 +93,12 @@ jobs:
           STAGING_DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
           STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
           STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          STAGING_WAIT_ATTESTATION_PROVIDER: ${{ secrets.STAGING_WAIT_ATTESTATION_PROVIDER }}
+          STAGING_WAIT_ATTESTATION_BRIDGE_URL: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_URL }}
+          STAGING_WAIT_ATTESTATION_ISSUERS: ${{ secrets.STAGING_WAIT_ATTESTATION_ISSUERS }}
+          STAGING_WAIT_ATTESTATION_VERSIONS: ${{ secrets.STAGING_WAIT_ATTESTATION_VERSIONS }}
         run: |
-          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_HOST STAGING_USER STAGING_DEPLOY_KEY STAGING_KNOWN_HOSTS STAGING_DEPLOY_PATH; do
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_HOST STAGING_USER STAGING_DEPLOY_KEY STAGING_KNOWN_HOSTS STAGING_DEPLOY_PATH STAGING_WAIT_ATTESTATION_PROVIDER STAGING_WAIT_ATTESTATION_BRIDGE_URL STAGING_WAIT_ATTESTATION_ISSUERS STAGING_WAIT_ATTESTATION_VERSIONS; do
             if [ -z "${!required}" ]; then
               echo "$required secret is required for an actual staging release" >&2
               exit 1
@@ -142,6 +149,8 @@ jobs:
           STAGING_DEPLOY_KEY: ${{ secrets.STAGING_DEPLOY_KEY }}
           STAGING_KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
           STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          STAGING_WAIT_ATTESTATION_ISSUERS: ${{ secrets.STAGING_WAIT_ATTESTATION_ISSUERS }}
+          STAGING_WAIT_ATTESTATION_VERSIONS: ${{ secrets.STAGING_WAIT_ATTESTATION_VERSIONS }}
           API_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
           WEB_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
         run: |
@@ -153,8 +162,10 @@ jobs:
           SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
           printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
             "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
+          ATTESTATION_ISSUERS_B64=$(printf '%s' "$STAGING_WAIT_ATTESTATION_ISSUERS" | base64 -w0)
+          ATTESTATION_VERSIONS_B64=$(printf '%s' "$STAGING_WAIT_ATTESTATION_VERSIONS" | base64 -w0)
           ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
-            "set -e; cd '$STAGING_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export ENABLE_STAGING_FAUCET=true; docker compose pull && docker compose up -d --wait"
+            "set -e; cd '$STAGING_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export ENABLE_STAGING_FAUCET=true; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose pull && docker compose up -d --wait"
       - name: Run staging smoke test against the deployed digest
         run: node scripts/staging-smoke.mjs
         env:
@@ -162,6 +173,44 @@ jobs:
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
           JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
           STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+          STAGING_WAIT_ATTESTATION_PROVIDER: ${{ secrets.STAGING_WAIT_ATTESTATION_PROVIDER }}
+          STAGING_WAIT_ATTESTATION_BRIDGE_URL: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_URL }}
+          STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN }}
+
+  # Apply and validate production migrations BEFORE any image is allowed to
+  # replace the live service. This is intentionally its own environment-gated
+  # job so the database transition has an auditable approval boundary.
+  migrate-production:
+    needs: staging-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate production migration configuration
+        run: |
+          test -n "$DATABASE_URL" || {
+            echo "PRODUCTION_DATABASE_URL is required before production promotion" >&2
+            exit 1
+          }
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Apply migrations to production before deploy
+        run: pnpm --filter @waitlayer/db migrate:deploy
+      - name: Assert production has no pending migrations or drift
+        run: |
+          pnpm --filter @waitlayer/db migrate:status
+          pnpm --filter @waitlayer/db migrate:drift
 
   # Final approval gate before production. Requires the `production` environment
   # to have required reviewers configured, so a second human sign-off is
@@ -170,7 +219,7 @@ jobs:
   # a post-deploy canary that probes the production API for liveness and
   # migration status.
   promote-production:
-    needs: staging-smoke
+    needs: [staging-smoke, migrate-production]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
@@ -231,6 +280,19 @@ jobs:
           SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
           printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
             "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
+          # Capture the running immutable image references before changing
+          # anything. A promotion without a known predecessor is not
+          # recoverable, so fail before deployment rather than leaving a
+          # comment-only rollback plan.
+          PREVIOUS_API_IMAGE=$(ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "set -e; cd '$PROD_DEPLOY_PATH'; cid=\$(docker compose ps -q api); test -n \"\$cid\"; docker inspect --format '{{.Config.Image}}' \"\$cid\"")
+          PREVIOUS_WEB_IMAGE=$(ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "set -e; cd '$PROD_DEPLOY_PATH'; cid=\$(docker compose ps -q web); test -n \"\$cid\"; docker inspect --format '{{.Config.Image}}' \"\$cid\"")
+          test -n "$PREVIOUS_API_IMAGE" || { echo "No previous API image found; refusing non-recoverable promotion" >&2; exit 1; }
+          test -n "$PREVIOUS_WEB_IMAGE" || { echo "No previous web image found; refusing non-recoverable promotion" >&2; exit 1; }
+          echo "previous_api_image=$PREVIOUS_API_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "previous_web_image=$PREVIOUS_WEB_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Captured rollback images: $PREVIOUS_API_IMAGE, $PREVIOUS_WEB_IMAGE"
           ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
             "set -e; cd '$PROD_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$STAGING_API_DIGEST'; export WAITLAYER_WEB_IMAGE='$STAGING_WEB_DIGEST'; docker compose pull && docker compose up -d --wait"
 
@@ -270,15 +332,36 @@ jobs:
           echo "Auth BFF resolves over TCP with expected validation"
       - name: Rollback on canary failure
         if: failure()
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+          PROD_HOST: ${{ secrets.PRODUCTION_HOST }}
+          PROD_USER: ${{ secrets.PRODUCTION_USER }}
+          PROD_DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+          PROD_KNOWN_HOSTS: ${{ secrets.PRODUCTION_KNOWN_HOSTS }}
+          PROD_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+          PREVIOUS_API_IMAGE: ${{ steps.promote.outputs.previous_api_image }}
+          PREVIOUS_WEB_IMAGE: ${{ steps.promote.outputs.previous_web_image }}
         run: |
           echo "=== Canary FAILED — initiating rollback ==="
-          echo "Re-deploying previous production image tag:"
-          # kubectl rollout undo deployment/waitlayer-api
-          # kubectl rollout undo deployment/waitlayer-web
-          # Alternatively, re-tag the previous known-good digest:
-          # PREV_TAG=$(cat /tmp/waitlayer-previous-prod-tag 2>/dev/null || echo "production-latest")
-          # kubectl set image deployment/waitlayer-api api="$REGISTRY/waitlayer-api:$PREV_TAG"
-          echo "Rollback command for production belongs here."
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS PROD_HOST PROD_USER PROD_DEPLOY_KEY PROD_KNOWN_HOSTS PROD_DEPLOY_PATH PREVIOUS_API_IMAGE PREVIOUS_WEB_IMAGE; do
+            if [ -z "${!required}" ]; then
+              echo "$required is required for rollback; refusing to claim recovery succeeded" >&2
+              exit 1
+            fi
+          done
+          KEY_FILE="$RUNNER_TEMP/production_rollback_key"
+          KNOWN_HOSTS_FILE="$RUNNER_TEMP/production_rollback_known_hosts"
+          printf '%s\n' "$PROD_DEPLOY_KEY" > "$KEY_FILE"
+          printf '%s\n' "$PROD_KNOWN_HOSTS" > "$KNOWN_HOSTS_FILE"
+          chmod 600 "$KEY_FILE"
+          SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
+          printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
+          ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
+            "set -e; cd '$PROD_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$PREVIOUS_API_IMAGE'; export WAITLAYER_WEB_IMAGE='$PREVIOUS_WEB_IMAGE'; docker compose pull && docker compose up -d --wait"
+          echo "Rollback completed with the captured predecessor images."
       - name: Promote complete
         if: success()
         run: |

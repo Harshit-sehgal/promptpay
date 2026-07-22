@@ -172,6 +172,11 @@ const mockPrisma = {
     create: vi.fn(),
     groupBy: vi.fn(),
   },
+  // Settlement tests model the already-verified provider assertion. The
+  // cryptographic verifier is exercised by the HTTP integration suites.
+  waitAttestation: {
+    findFirst: vi.fn(),
+  },
   // ── EarningsLedger ──
   earningsLedger: {
     findMany: vi.fn(),
@@ -445,6 +450,7 @@ describe('E2E Money Loop', () => {
     // duplicate, otherwise a stale implementation from an earlier test leaks
     // into the duplicate check and throws ConflictException.
     mockPrisma.waitStateEvent.findFirst.mockResolvedValue(null);
+    mockPrisma.waitAttestation.findFirst.mockResolvedValue({ id: 'verified-attestation' });
 
     // Default mock for advertiser balance to prevent requestAd / billing checks failing.
     // The balance helper (getAdvertiserBalancesByCurrency / getAdvertiserBalance) groups
