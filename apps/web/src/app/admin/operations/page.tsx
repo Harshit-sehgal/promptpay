@@ -179,7 +179,7 @@ export default function AdminOperationsPage() {
       <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">Operations</h1>
-          <p className="text-ink-300 text-sm">
+          <p className="text-ink-200 text-sm">
             Money integrity, integrations, and webhook processing
           </p>
         </div>
@@ -244,7 +244,7 @@ export default function AdminOperationsPage() {
                 {campaignDiscrepancies.map((d) => (
                   <div key={d.campaignId} className="text-sm text-ink-200">
                     <span className="text-white">{d.campaignName}</span>
-                    <span className="text-ink-400">
+                    <span className="text-ink-300">
                       {' '}
                       · budget spent {formatCurrency(d.budgetSpentMinor, d.currency)} · ledger{' '}
                       {formatCurrency(d.ledgerDebits, d.currency)} · diff{' '}
@@ -255,7 +255,7 @@ export default function AdminOperationsPage() {
                 {negativeBalances.map((b) => (
                   <div key={b.userId} className="text-sm text-ink-200">
                     <span className="text-white">{b.email}</span>
-                    <span className="text-ink-400"> · negative confirmed balance </span>
+                    <span className="text-ink-300"> · negative confirmed balance </span>
                     <span className="text-red-300">
                       {formatCurrency(b.balanceMinor, b.currency || 'USD')}
                     </span>
@@ -271,15 +271,15 @@ export default function AdminOperationsPage() {
         <div className="flex items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="text-white font-semibold">Legacy archive refund rows</h2>
-            <p className="text-ink-400 text-xs">
+            <p className="text-ink-300 text-xs">
               Read-only anomalies; reconcile against Stripe and webhook ledgers
             </p>
           </div>
-          <span className="text-ink-400 text-xs">{refunds.length} pending</span>
+          <span className="text-ink-300 text-xs">{refunds.length} pending</span>
         </div>
 
         {refunds.length === 0 ? (
-          <p className="text-ink-400 text-sm">No legacy archive refund rows require review.</p>
+          <p className="text-ink-300 text-sm">No legacy archive refund rows require review.</p>
         ) : (
           <div className="space-y-3">
             {refunds.map((refund) => (
@@ -294,7 +294,7 @@ export default function AdminOperationsPage() {
                         {formatCurrency(refund.amountMinor, refund.currency)}
                       </span>
                     </div>
-                    <p className="text-ink-400 text-xs mt-1 truncate">
+                    <p className="text-ink-300 text-xs mt-1 truncate">
                       {refund.advertiser?.companyName || refund.advertiserId}
                       {refund.advertiser?.billingEmail
                         ? ` · ${refund.advertiser.billingEmail}`
@@ -307,7 +307,7 @@ export default function AdminOperationsPage() {
                         : ''}
                     </p>
                     {refund.description && (
-                      <p className="text-ink-400 text-xs mt-2 line-clamp-2">{refund.description}</p>
+                      <p className="text-ink-300 text-xs mt-2 line-clamp-2">{refund.description}</p>
                     )}
                   </div>
 
@@ -326,10 +326,10 @@ export default function AdminOperationsPage() {
         <section className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-semibold">Tool integrations</h2>
-            <span className="text-ink-400 text-xs">{tools.length} configured</span>
+            <span className="text-ink-300 text-xs">{tools.length} configured</span>
           </div>
           {tools.length === 0 ? (
-            <p className="text-ink-400 text-sm">No tool integrations configured.</p>
+            <p className="text-ink-300 text-sm">No tool integrations configured.</p>
           ) : (
             <div className="space-y-3">
               {tools.map((tool) => (
@@ -341,7 +341,7 @@ export default function AdminOperationsPage() {
                     <p className="text-white text-sm font-medium truncate">
                       {tool.name || tool.slug}
                     </p>
-                    <p className="text-ink-400 text-xs truncate">{tool.type || tool.slug}</p>
+                    <p className="text-ink-300 text-xs truncate">{tool.type || tool.slug}</p>
                   </div>
                   <button
                     onClick={() => toggleTool(tool)}
@@ -349,7 +349,7 @@ export default function AdminOperationsPage() {
                     className={`text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50 ${
                       tool.isActive
                         ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                        : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
+                        : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
                     }`}
                   >
                     {busyTool === tool.slug ? 'Saving...' : tool.isActive ? 'Active' : 'Inactive'}
@@ -364,19 +364,19 @@ export default function AdminOperationsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
               <h2 className="text-white font-semibold">Webhook events</h2>
-              <p className="text-ink-400 text-xs">{webhooks?.total ?? 0} total matching events</p>
+              <p className="text-ink-300 text-xs">{webhooks?.total ?? 0} total matching events</p>
             </div>
             <div className="flex gap-2">
               <input
                 value={webhookProvider}
                 onChange={(e) => setWebhookProvider(e.target.value)}
                 placeholder="provider"
-                className="w-28 bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-xs text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="w-28 bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-xs text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
               <select
                 value={webhookStatus}
                 onChange={(e) => setWebhookStatus(e.target.value)}
-                className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+                className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               >
                 <option value="">All</option>
                 <option value="pending">Pending</option>
@@ -387,7 +387,7 @@ export default function AdminOperationsPage() {
           </div>
 
           {webhookEvents.length === 0 ? (
-            <p className="text-ink-400 text-sm">No webhook events match the current filters.</p>
+            <p className="text-ink-300 text-sm">No webhook events match the current filters.</p>
           ) : (
             <div className="space-y-3">
               {webhookEvents.map((event) => (
@@ -395,7 +395,7 @@ export default function AdminOperationsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-white text-sm font-medium truncate">{event.eventType}</p>
-                      <p className="text-ink-400 text-xs truncate">
+                      <p className="text-ink-300 text-xs truncate">
                         {event.provider} · {event.eventId}
                       </p>
                     </div>

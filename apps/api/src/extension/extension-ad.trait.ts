@@ -144,7 +144,8 @@ export class ExtensionAdTrait {
         : null,
     ]);
     if (!waitStart) return { allowed: false, reason: 'wait_state_missing' };
-    if (waitStart.isFalsePositive) return { allowed: false, reason: 'user_reported_false_positive' };
+    if (waitStart.isFalsePositive)
+      return { allowed: false, reason: 'user_reported_false_positive' };
     if (!user || !isActiveAccountStatus(user.status)) {
       return { allowed: false, reason: 'account_not_active' };
     }
@@ -629,7 +630,13 @@ export class ExtensionAdTrait {
         });
         return { status: 'claimed' as const, impressionId: created.id };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 10000 },
+      // ReadCommitted + advisory lock: the lock serializes concurrent
+      // requests for the same user. With Serializable, the second transaction
+      // would read from a snapshot taken before it acquired the lock, blinding
+      // it to the first transaction's insert and causing duplicate impressions.
+      // ReadCommitted refreshes the snapshot after lock acquisition so the
+      // duplicate check inside the critical section is authoritative.
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 10000 },
     );
   }
 
@@ -994,12 +1001,12 @@ export class ExtensionAdTrait {
         const claim = await tx.adImpression.updateMany({
           where: { id: impression.id, qualifiedAt: null, invalidatedAt: null },
           data: {
-          qualifiedAt: new Date(),
-          visibleDurationMs: effectiveDurationMs,
-          isQualified: true,
-          billingAuthorizedAt: new Date(),
-          isBillable: true,
-          billedAt: new Date(),
+            qualifiedAt: new Date(),
+            visibleDurationMs: effectiveDurationMs,
+            isQualified: true,
+            billingAuthorizedAt: new Date(),
+            isBillable: true,
+            billedAt: new Date(),
           },
         });
         if (claim.count === 0) {

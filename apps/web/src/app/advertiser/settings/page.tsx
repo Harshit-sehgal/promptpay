@@ -92,7 +92,7 @@ export default function AdvertiserSettingsPage() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Settings</h1>
-        <p className="text-surface-500 text-[15px]">Manage your advertiser data and account</p>
+        <p className="text-surface-500 text-sm">Manage your advertiser data and account</p>
       </div>
 
       {exportError && (
@@ -119,7 +119,7 @@ export default function AdvertiserSettingsPage() {
             type="button"
             onClick={handleExport}
             disabled={exportBusy}
-            className="bg-surface-50 border border-surface-200 text-surface-600 hover:bg-surface-100/50 hover:text-surface-900 font-medium px-6 py-2.5 rounded-xl text-[14px] transition-colors"
+            className="bg-surface-50 border border-surface-200 text-surface-600 hover:bg-surface-100/50 hover:text-surface-900 font-medium px-6 py-2.5 rounded-xl text-sm transition-colors"
           >
             {exportBusy ? 'Preparing…' : 'Export my data'}
           </button>
@@ -154,20 +154,20 @@ export default function AdvertiserSettingsPage() {
               onChange={(e) => setCurrentPassword(e.target.value)}
               placeholder="Current password (required for deletion)"
               autoComplete="current-password"
-              className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 mb-3 focus:outline-none focus:border-rose-400"
+              className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 mb-3 focus:outline-none focus:ring-2 focus:ring-rose-400/20 focus:border-rose-400"
             />
           )}
           <input
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder="Type DELETE_MY_ACCOUNT"
-            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 mb-3 focus:outline-none focus:border-rose-400"
+            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 mb-3 focus:outline-none focus:ring-2 focus:ring-rose-400/20 focus:border-rose-400"
           />
           <button
             type="button"
             onClick={handleDelete}
             disabled={deleteBusy || confirmText !== 'DELETE_MY_ACCOUNT' || isGoogleOnlyAccount}
-            className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-[14px] transition-colors"
+            className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-sm transition-colors"
           >
             {deleteBusy ? 'Deleting…' : 'Delete my account'}
           </button>

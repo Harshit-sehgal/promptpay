@@ -81,15 +81,15 @@ export default function PrivacyPage() {
   return (
     <main id="main-content" tabIndex={-1} className="min-h-screen bg-surface-50">
       <div className="mx-auto max-w-3xl px-6 py-16">
-        <Link href="/" className="text-brand-500 hover:text-brand-600 text-[13px] font-medium">
+        <Link href="/" className="text-brand-500 hover:text-brand-600 text-xs font-medium">
           ← Back
         </Link>
         <h1 className="text-3xl font-bold text-surface-900 mt-4 mb-2 tracking-tight">
           Privacy Policy
         </h1>
-        <p className="text-surface-500 text-[14px] mb-10">Last updated: 2026-07-01</p>
+        <p className="text-surface-500 text-sm mb-10">Last updated: 2026-07-01</p>
 
-        <section className="space-y-4 text-surface-600 text-[14px] leading-relaxed">
+        <section className="space-y-4 text-surface-600 text-sm leading-relaxed">
           <p>
             WaitLayer is a privacy-first private beta for AI coding assistant wait-state
             verification. Rewards and advertiser billing are disabled while independent attestation
@@ -114,13 +114,13 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-semibold text-surface-900 mb-2">
             Your California Privacy Rights (CCPA)
           </h2>
-          <p className="text-surface-600 text-[14px] leading-relaxed mb-4">
+          <p className="text-surface-600 text-sm leading-relaxed mb-4">
             Under the California Consumer Privacy Act you may opt out of the &ldquo;sale&rdquo; or
             sharing of your personal information. Toggle the switch below to record your &ldquo;Do
             Not Sell or Share My Personal Information&rdquo; preference on this device.
           </p>
           <div className="flex items-center justify-between">
-            <span className="text-surface-700 text-[14px] font-medium">
+            <span className="text-surface-700 text-sm font-medium">
               Do not sell or share my personal information
             </span>
             <button

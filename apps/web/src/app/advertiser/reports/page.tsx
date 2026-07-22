@@ -187,14 +187,14 @@ export default function AdvertiserReportsPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white mb-1">Reports</h1>
-        <p className="text-ink-300 text-sm">
+        <p className="text-ink-200 text-sm">
           Campaign performance, daily trends, and spend breakdown
         </p>
       </div>
 
       {/* Period selector */}
       <div className="flex flex-wrap items-center gap-2 mb-6">
-        <span className="text-ink-400 text-sm mr-1">Period:</span>
+        <span className="text-ink-300 text-sm mr-1">Period:</span>
         {PRESETS.map((p) => (
           <button
             key={p.key}
@@ -202,7 +202,7 @@ export default function AdvertiserReportsPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               period === p.key
                 ? 'bg-brand-500 text-white'
-                : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
+                : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
             }`}
           >
             {p.label}
@@ -213,7 +213,7 @@ export default function AdvertiserReportsPage() {
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             period === 'custom'
               ? 'bg-brand-500 text-white'
-              : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
+              : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
           }`}
         >
           Custom
@@ -225,14 +225,14 @@ export default function AdvertiserReportsPage() {
               type="date"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
-              className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500"
+              className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
             />
-            <span className="text-ink-400 text-xs">to</span>
+            <span className="text-ink-300 text-xs">to</span>
             <input
               type="date"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
-              className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500"
+              className="bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
             />
           </div>
         )}
@@ -240,11 +240,11 @@ export default function AdvertiserReportsPage() {
 
       {/* Campaign filter */}
       <div className="mb-6 flex items-center gap-2">
-        <span className="text-ink-400 text-xs">Campaign:</span>
+        <span className="text-ink-300 text-xs">Campaign:</span>
         <select
           value={campaignFilter}
           onChange={(e) => setCampaignFilter(e.target.value)}
-          className="bg-ink-700 border border-ink-600/50 rounded-lg px-2.5 py-1.5 text-xs text-ink-200 focus:outline-none focus:border-brand-500"
+          className="bg-ink-700 border border-ink-600/50 rounded-lg px-2.5 py-1.5 text-xs text-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
         >
           <option value="">All campaigns</option>
           {data?.rows.map((r) => (
@@ -268,8 +268,8 @@ export default function AdvertiserReportsPage() {
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
           <p className="text-red-400 text-sm">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-300 text-xs underline mt-1">
-            Dismiss
+          <button onClick={fetchReports} className="text-red-300 text-xs underline mt-1">
+            Retry
           </button>
         </div>
       )}
@@ -297,7 +297,7 @@ export default function AdvertiserReportsPage() {
               <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
                 <h3 className="text-white text-sm font-semibold mb-3">
                   Daily impressions{' '}
-                  <span className="text-ink-400 font-normal">({data.dailyTrend.length} days)</span>
+                  <span className="text-ink-300 font-normal">({data.dailyTrend.length} days)</span>
                 </h3>
                 <div className="flex items-end gap-1 h-20 mb-2">
                   <MiniBar
@@ -306,7 +306,7 @@ export default function AdvertiserReportsPage() {
                     color="bg-brand-500"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-[10px]">
+                <div className="flex justify-between text-ink-500 text-xs">
                   <span>{formatDateShort(data.dailyTrend[0].date)}</span>
                   <span>{formatDateShort(data.dailyTrend[data.dailyTrend.length - 1].date)}</span>
                 </div>
@@ -314,7 +314,7 @@ export default function AdvertiserReportsPage() {
               <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
                 <h3 className="text-white text-sm font-semibold mb-3">
                   Daily clicks{' '}
-                  <span className="text-ink-400 font-normal">({data.dailyTrend.length} days)</span>
+                  <span className="text-ink-300 font-normal">({data.dailyTrend.length} days)</span>
                 </h3>
                 <div className="flex items-end gap-1 h-20 mb-2">
                   <MiniBar
@@ -323,7 +323,7 @@ export default function AdvertiserReportsPage() {
                     color="bg-emerald-500"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-[10px]">
+                <div className="flex justify-between text-ink-500 text-xs">
                   <span>{formatDateShort(data.dailyTrend[0].date)}</span>
                   <span>{formatDateShort(data.dailyTrend[data.dailyTrend.length - 1].date)}</span>
                 </div>
@@ -336,20 +336,20 @@ export default function AdvertiserReportsPage() {
             <div className="px-6 py-4 border-b border-ink-600/30 flex items-center justify-between">
               <h2 className="text-white font-semibold">Campaign breakdown</h2>
               {data.rows.length > 0 && (
-                <span className="text-ink-400 text-xs">
+                <span className="text-ink-300 text-xs">
                   {data.rows.length} campaign{data.rows.length !== 1 ? 's' : ''}
                 </span>
               )}
             </div>
 
             {data.rows.length === 0 ? (
-              <div className="text-ink-400 text-sm py-12 text-center">
+              <div className="text-ink-300 text-sm py-12 text-center">
                 No data for this period. Campaigns need to be active to generate reports.
               </div>
             ) : (
               <>
                 {/* Table header */}
-                <div className="hidden md:grid grid-cols-12 gap-2 px-6 py-3 bg-ink-700/30 border-b border-ink-600/20 text-ink-400 text-xs font-medium uppercase tracking-wider">
+                <div className="hidden md:grid grid-cols-12 gap-2 px-6 py-3 bg-ink-700/30 border-b border-ink-600/20 text-ink-300 text-xs font-medium uppercase tracking-wider">
                   <div className="col-span-3">Campaign</div>
                   <div className="col-span-2 text-right">Impressions</div>
                   <div className="col-span-2 text-right">Clicks</div>
@@ -377,7 +377,7 @@ export default function AdvertiserReportsPage() {
                       {/* Metrics */}
                       <div className="grid grid-cols-2 md:col-span-7 md:grid-cols-4 gap-2">
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                          <span className="md:hidden text-ink-300 text-xs uppercase block">
                             Impressions
                           </span>
                           <span className="text-white font-mono text-sm">
@@ -391,25 +391,25 @@ export default function AdvertiserReportsPage() {
                           </div>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                          <span className="md:hidden text-ink-300 text-xs uppercase block">
                             Clicks
                           </span>
-                          <span className="text-ink-300 font-mono text-sm">
+                          <span className="text-ink-200 font-mono text-sm">
                             {formatNumber(row.clicks)}
                           </span>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                          <span className="md:hidden text-ink-300 text-xs uppercase block">
                             CTR
                           </span>
                           <span
-                            className={`font-mono text-sm ${row.ctr > 1 ? 'text-emerald-400' : 'text-ink-300'}`}
+                            className={`font-mono text-sm ${row.ctr > 1 ? 'text-emerald-400' : 'text-ink-200'}`}
                           >
                             {formatPercent(row.ctr * 100)}
                           </span>
                         </div>
                         <div>
-                          <span className="md:hidden text-ink-400 text-[10px] uppercase block">
+                          <span className="md:hidden text-ink-300 text-xs uppercase block">
                             Spend
                           </span>
                           <span className="text-white font-mono text-sm">
@@ -421,14 +421,14 @@ export default function AdvertiserReportsPage() {
                       {/* Status */}
                       <div className="md:col-span-2 flex items-center justify-end">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider ${
+                          className={`px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wider ${
                             row.status === 'active'
                               ? 'bg-emerald-500/20 text-emerald-400'
                               : row.status === 'paused'
                                 ? 'bg-amber-500/20 text-amber-400'
                                 : row.status === 'archived'
-                                  ? 'bg-ink-600 text-ink-400'
-                                  : 'bg-ink-600 text-ink-300'
+                                  ? 'bg-ink-600 text-ink-300'
+                                  : 'bg-ink-600 text-ink-200'
                           }`}
                         >
                           {row.status}
@@ -457,10 +457,10 @@ export default function AdvertiserReportsPage() {
                     <span className="text-white font-mono text-sm font-semibold">
                       {formatNumber(data.summary.totalImpressions)}
                     </span>
-                    <span className="text-ink-300 font-mono text-sm">
+                    <span className="text-ink-200 font-mono text-sm">
                       {formatNumber(data.summary.totalClicks)}
                     </span>
-                    <span className="text-ink-300 font-mono text-sm">
+                    <span className="text-ink-200 font-mono text-sm">
                       {formatPercent(data.summary.avgCtr * 100)}
                     </span>
                     <span className="text-white font-mono text-sm font-semibold">

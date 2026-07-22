@@ -12,13 +12,11 @@ export default function SecurityPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-              WaitLayer
-            </span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
           </Link>
           <Link
             href="/"
-            className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
+            className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
           >
             ← Back to Home
           </Link>

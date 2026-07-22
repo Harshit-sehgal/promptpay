@@ -163,6 +163,15 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
     });
     deviceId = device.id;
 
+    // The money-loop path requires both telemetry consent and ad display to
+    // be enabled for the developer. Production defaults these to false; enable
+    // them explicitly for this isolated test.
+    await prisma.userSettings.upsert({
+      where: { userId: developerId },
+      create: { userId: developerId, waitTelemetryEnabled: true, adsEnabled: true },
+      update: { waitTelemetryEnabled: true, adsEnabled: true },
+    });
+
     const adv = await prisma.user.create({
       data: {
         email: `adv-${randomUUID()}@waitlayer.test`,
@@ -274,14 +283,15 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   }
 
   /**
-   * This service-level suite deliberately bypasses the HTTP attestation
-   * verifier (covered in contract-tests and e2e-http-flow) but never bypasses
-   * the settlement gate: it provides the durable, already-verified record
-   * that the real verifier would have created.
+   * Create the unconsumed wait-attestation session that `requestAd` requires.
+   * The session must exist before the ad is requested and must not be consumed
+   * until after the wait ends. This service-level suite deliberately bypasses
+   * the HTTP attestation verifier (covered in contract-tests and e2e-http-flow)
+   * but never bypasses the settlement gate.
    */
-  async function seedVerifiedWaitAttestation(waitStateId: string, sessionId: string) {
+  async function seedWaitAttestationSession(waitStateId: string, sessionId: string) {
     const now = new Date();
-    const session = await prisma.waitAttestationSession.create({
+    return prisma.waitAttestationSession.create({
       data: {
         userId: developerId,
         deviceId,
@@ -289,9 +299,22 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
         clientSessionId: sessionId,
         provider: ATTESTATION_PROVIDER,
         nonceHash: createHash('sha256').update(uid('attestation-nonce')).digest('hex'),
-        expiresAt: new Date(now.getTime() + 60_000),
-        consumedAt: now,
+        operationStartDeadline: new Date(now.getTime() + 60_000),
+        consumeDeadline: new Date(now.getTime() + 5 * 60_000),
       },
+    });
+  }
+
+  /**
+   * Convert an unconsumed wait-attestation session into a verified attestation
+   * record after the wait has ended. This is the durable, already-verified
+   * record that the real verifier would have created.
+   */
+  async function seedVerifiedWaitAttestation(sessionId: string, waitStateId: string) {
+    const now = new Date();
+    const session = await prisma.waitAttestationSession.update({
+      where: { id: sessionId },
+      data: { consumedAt: now },
     });
     await prisma.waitAttestation.create({
       data: {
@@ -330,6 +353,10 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signature: 'sig',
       evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
+
+    // The ad request requires an unconsumed wait-attestation session that was
+    // issued before the wait began.
+    const attestationSession = await seedWaitAttestationSession(waitStateId, sessionId);
 
     const adIdem = opts.adIdempotencyKey ?? uid('ad');
     const adRes = await extension.requestAd(developerId, {
@@ -370,7 +397,9 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       idempotencyKey: uid('end'),
       signature: 'sig',
     });
-    await seedVerifiedWaitAttestation(waitStateId, sessionId);
+    // Mark the session created for this wait as consumed and persist the
+    // verified attestation record.
+    await seedVerifiedWaitAttestation(attestationSession.id, waitStateId);
 
     await extension.recordQualifiedImpression(developerId, {
       impressionToken: token,
@@ -536,6 +565,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signature: 'sig',
       evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
+    await seedWaitAttestationSession(waitStateId, sessionId);
     const res = await extension.requestAd(developerId, {
       deviceId,
       sessionId,
@@ -564,6 +594,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signature: 'sig',
       evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
+    await seedWaitAttestationSession(waitStateId, sessionId);
     const res = await extension.requestAd(developerId, {
       deviceId,
       sessionId,
@@ -611,6 +642,8 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signature: 'sig',
       evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
+    // Both concurrent requests share the same unconsumed attestation session.
+    await seedWaitAttestationSession(waitStateId, sessionId);
 
     const [r1, r2] = await Promise.allSettled([
       extension.requestAd(developerId, {

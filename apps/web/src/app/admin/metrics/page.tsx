@@ -149,14 +149,14 @@ export default function AdminMetricsPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white mb-1">Operational Metrics</h1>
-        <p className="text-ink-300 text-sm">
+        <p className="text-ink-200 text-sm">
           Platform health, growth trends, and revenue breakdown
         </p>
       </div>
 
       {/* Period selector */}
       <div className="flex flex-wrap items-center gap-2 mb-6">
-        <span className="text-ink-400 text-sm mr-1">Period:</span>
+        <span className="text-ink-300 text-sm mr-1">Period:</span>
         {PERIOD_PRESETS.map((p) => (
           <button
             key={p.key}
@@ -164,7 +164,7 @@ export default function AdminMetricsPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               selectedDays === p.days
                 ? 'bg-brand-500 text-white'
-                : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
+                : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
             }`}
           >
             {p.label}
@@ -179,11 +179,11 @@ export default function AdminMetricsPage() {
           metrics were previously hard-filtered to USD. Selecting a
           currency re-queries that currency's revenue/spend. */}
       <div className="flex flex-wrap items-center gap-2 mb-6">
-        <span className="text-ink-400 text-sm mr-1">Currency:</span>
+        <span className="text-ink-300 text-sm mr-1">Currency:</span>
         <select
           value={selectedCurrency}
           onChange={(e) => setSelectedCurrency(e.target.value)}
-          className="bg-ink-700 text-ink-100 text-xs rounded-lg px-2 py-1.5 border border-ink-600 focus:outline-none focus:border-brand-400"
+          className="bg-ink-700 text-ink-100 text-xs rounded-lg px-2 py-1.5 border border-ink-600 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
         >
           {Object.keys(CURRENCY_POLICY).map((code) => (
             <option key={code} value={code}>
@@ -265,9 +265,9 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily impressions{' '}
-                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
+                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
                   </h3>
-                  <span className="text-ink-400 text-xs">
+                  <span className="text-ink-300 text-xs">
                     {formatNumber(data.totals.impressions)} total
                   </span>
                 </div>
@@ -278,7 +278,7 @@ export default function AdminMetricsPage() {
                     color="bg-brand-500"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-[10px]">
+                <div className="flex justify-between text-ink-500 text-xs">
                   <span>{formatDateShort(data.daily[0].date)}</span>
                   <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
                 </div>
@@ -289,9 +289,9 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily signups{' '}
-                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
+                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
                   </h3>
-                  <span className="text-ink-400 text-xs">
+                  <span className="text-ink-300 text-xs">
                     {formatNumber(data.totals.signups)} total
                   </span>
                 </div>
@@ -302,7 +302,7 @@ export default function AdminMetricsPage() {
                     color="bg-emerald-500"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-[10px]">
+                <div className="flex justify-between text-ink-500 text-xs">
                   <span>{formatDateShort(data.daily[0].date)}</span>
                   <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
                 </div>
@@ -313,9 +313,9 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily earnings (estimated){' '}
-                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
+                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
                   </h3>
-                  <span className="text-ink-400 text-xs">
+                  <span className="text-ink-300 text-xs">
                     {formatCurrency(data.totals.estimatedRevenueMinor, reportingCurrency)}
                   </span>
                 </div>
@@ -326,7 +326,7 @@ export default function AdminMetricsPage() {
                     color="bg-violet-500"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-[10px]">
+                <div className="flex justify-between text-ink-500 text-xs">
                   <span>{formatDateShort(data.daily[0].date)}</span>
                   <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
                 </div>
@@ -337,9 +337,9 @@ export default function AdminMetricsPage() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-white text-sm font-semibold">
                     Daily advertiser spend{' '}
-                    <span className="text-ink-400 font-normal">({data.daily.length} days)</span>
+                    <span className="text-ink-300 font-normal">({data.daily.length} days)</span>
                   </h3>
-                  <span className="text-ink-400 text-xs">
+                  <span className="text-ink-300 text-xs">
                     {formatCurrency(data.totals.advertiserSpendMinor, reportingCurrency)}
                   </span>
                 </div>
@@ -350,7 +350,7 @@ export default function AdminMetricsPage() {
                     color="bg-amber-500"
                   />
                 </div>
-                <div className="flex justify-between text-ink-500 text-[10px]">
+                <div className="flex justify-between text-ink-500 text-xs">
                   <span>{formatDateShort(data.daily[0].date)}</span>
                   <span>{formatDateShort(data.daily[data.daily.length - 1].date)}</span>
                 </div>
@@ -407,7 +407,7 @@ export default function AdminMetricsPage() {
                     <div key={s.status} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <span className={`w-2 h-2 rounded-full ${dot}`} />
-                        <span className="text-ink-300 capitalize">{s.status}</span>
+                        <span className="text-ink-200 capitalize">{s.status}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-white font-mono">{formatNumber(s.count)}</span>
@@ -440,7 +440,7 @@ export default function AdminMetricsPage() {
                 ).map(({ label, count, color }) => (
                   <div key={label}>
                     <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-ink-300">{label}</span>
+                      <span className="text-ink-200">{label}</span>
                       <span className="text-white font-mono">{formatNumber(count)}</span>
                     </div>
                     <div className="h-1.5 bg-ink-700 rounded-full overflow-hidden">
@@ -455,7 +455,7 @@ export default function AdminMetricsPage() {
                 ))}
               </div>
               <div className="mt-4 pt-4 border-t border-ink-600/20 flex items-center justify-between">
-                <span className="text-ink-400 text-sm">Total</span>
+                <span className="text-ink-300 text-sm">Total</span>
                 <span className="text-white font-mono text-lg font-semibold">
                   {formatNumber(data.activeUsers.total)}
                 </span>
@@ -467,13 +467,13 @@ export default function AdminMetricsPage() {
               <h3 className="text-white text-sm font-semibold mb-4">Platform revenue</h3>
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm py-2 border-b border-ink-600/10">
-                  <span className="text-ink-300">Platform fees</span>
+                  <span className="text-ink-200">Platform fees</span>
                   <span className="text-white font-mono">
                     {formatCurrency(data.platformRevenue.platformFeeMinor, reportingCurrency)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm py-2 border-b border-ink-600/10">
-                  <span className="text-ink-300">Fraud reserve</span>
+                  <span className="text-ink-200">Fraud reserve</span>
                   <span className="text-white font-mono">
                     {formatCurrency(data.platformRevenue.fraudReserveMinor, reportingCurrency)}
                   </span>
@@ -487,14 +487,14 @@ export default function AdminMetricsPage() {
               </div>
               <div className="mt-4 pt-4 border-t border-ink-600/20">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-ink-400">Paid out to developers</span>
+                  <span className="text-ink-300">Paid out to developers</span>
                   <span className="text-white font-mono">
                     {formatCurrency(data.payouts.totalPaidMinor, reportingCurrency)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm mt-2">
-                  <span className="text-ink-400">Total payouts processed</span>
-                  <span className="text-ink-300 font-mono">{formatNumber(data.payouts.total)}</span>
+                  <span className="text-ink-300">Total payouts processed</span>
+                  <span className="text-ink-200 font-mono">{formatNumber(data.payouts.total)}</span>
                 </div>
               </div>
             </div>
@@ -508,7 +508,7 @@ export default function AdminMetricsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="bg-ink-700/30 text-ink-400 font-medium uppercase tracking-wider">
+                  <tr className="bg-ink-700/30 text-ink-300 font-medium uppercase tracking-wider">
                     <th className="text-left px-4 py-2">Date</th>
                     <th className="text-right px-4 py-2">Impressions</th>
                     <th className="text-right px-4 py-2">Billable</th>
@@ -525,22 +525,22 @@ export default function AdminMetricsPage() {
                       key={d.date}
                       className="border-t border-ink-600/10 hover:bg-ink-700/20 transition-colors"
                     >
-                      <td className="px-4 py-2 text-ink-300 font-medium">
+                      <td className="px-4 py-2 text-ink-200 font-medium">
                         {formatDateShort(d.date)}
                       </td>
                       <td className="px-4 py-2 text-white font-mono text-right">
                         {formatNumber(d.impressions)}
                       </td>
-                      <td className="px-4 py-2 text-ink-300 font-mono text-right">
+                      <td className="px-4 py-2 text-ink-200 font-mono text-right">
                         {formatNumber(d.billableImpressions)}
                       </td>
                       <td className="px-4 py-2 text-white font-mono text-right">
                         {formatNumber(d.signups)}
                       </td>
-                      <td className="px-4 py-2 text-ink-300 font-mono text-right">
+                      <td className="px-4 py-2 text-ink-200 font-mono text-right">
                         {formatNumber(d.developerSignups)}
                       </td>
-                      <td className="px-4 py-2 text-ink-300 font-mono text-right">
+                      <td className="px-4 py-2 text-ink-200 font-mono text-right">
                         {formatNumber(d.advertiserSignups)}
                       </td>
                       <td className="px-4 py-2 text-violet-400 font-mono text-right">

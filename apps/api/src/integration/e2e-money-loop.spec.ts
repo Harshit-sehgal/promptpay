@@ -798,6 +798,7 @@ describe('E2E Money Loop', () => {
       mockPrisma.userSettings.findUnique.mockResolvedValue({
         userId: DEV_USER_ID,
         adsEnabled: true,
+        waitTelemetryEnabled: true,
       });
 
       mockPrisma.device.findUnique.mockResolvedValue({
@@ -942,6 +943,7 @@ describe('E2E Money Loop', () => {
       mockPrisma.userSettings.findUnique.mockResolvedValue({
         userId: DEV_USER_ID,
         adsEnabled: true,
+        waitTelemetryEnabled: true,
       });
 
       // Device ownership
@@ -1884,7 +1886,11 @@ describe('E2E Money Loop', () => {
           _sum: { amountMinor: 10000_00n },
         },
       ]);
-      mockPrisma.userSettings.findUnique.mockResolvedValue({ userId: devUserId, adsEnabled: true });
+      mockPrisma.userSettings.findUnique.mockResolvedValue({
+        userId: devUserId,
+        adsEnabled: true,
+        waitTelemetryEnabled: true,
+      });
       mockPrisma.device.findUnique.mockResolvedValue({
         id: deviceId,
         userId: devUserId,
@@ -3090,7 +3096,10 @@ describe('E2E Money Loop', () => {
         eventSecret: DEVICE_EVENT_SECRET,
         user: { status: 'active' },
       });
-      mockPrisma.userSettings.findUnique.mockResolvedValue({ adsEnabled: true });
+      mockPrisma.userSettings.findUnique.mockResolvedValue({
+        adsEnabled: true,
+        waitTelemetryEnabled: true,
+      });
       mockPrisma.waitStateEvent.findFirst.mockImplementation(({ where }: any) => {
         if (where.eventType === 'wait_state_start') {
           return Promise.resolve({

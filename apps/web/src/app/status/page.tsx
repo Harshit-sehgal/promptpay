@@ -59,13 +59,11 @@ export default function StatusPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-              WaitLayer
-            </span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
           </Link>
           <Link
             href="/"
-            className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
+            className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
           >
             ← Back to Home
           </Link>
@@ -129,9 +127,7 @@ export default function StatusPage() {
               {/* Database Status */}
               <div className="bg-white border border-surface-200 rounded-2xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-surface-900 font-semibold text-[14px]">
-                    Primary Database
-                  </span>
+                  <span className="text-surface-900 font-semibold text-sm">Primary Database</span>
                   <span
                     className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
                       dbConnected
@@ -150,7 +146,7 @@ export default function StatusPage() {
               {/* Redis Cache & Rate Limiting Status */}
               <div className="bg-white border border-surface-200 rounded-2xl p-6 shadow-sm hover:border-brand-300 transition-colors duration-250">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-surface-900 font-semibold text-[14px]">
+                  <span className="text-surface-900 font-semibold text-sm">
                     Redis Cache & Rate Limiter
                   </span>
                   <span

@@ -54,7 +54,7 @@ export default function ReferralPage() {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Referrals</h1>
-        <p className="text-surface-500 text-[15px] font-normal">
+        <p className="text-surface-500 text-sm font-normal">
           Invite developers now; referral rewards begin only after the independently attested
           earnings launch.
         </p>
@@ -105,17 +105,17 @@ export default function ReferralPage() {
             <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
               <h2 className="text-surface-900 font-bold text-[16px] mb-4">Your referral link</h2>
               <div className="flex items-center gap-3">
-                <code className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-700 text-[14px] break-all font-mono">
+                <code className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-700 text-sm break-all font-mono">
                   {data.referralLink}
                 </code>
                 <button
                   onClick={handleCopy}
-                  className="px-5 py-3 bg-brand-500 hover:bg-brand-600 text-white text-[14px] font-medium rounded-xl shadow-sm shadow-brand-500/10 transition-colors shrink-0"
+                  className="px-5 py-3 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-xl shadow-sm shadow-brand-500/10 transition-colors shrink-0"
                 >
                   {copied ? 'Copied' : 'Copy link'}
                 </button>
               </div>
-              <p className="text-surface-500 text-[13px] mt-3 font-normal leading-relaxed">
+              <p className="text-surface-500 text-xs mt-3 font-normal leading-relaxed">
                 Share this link to grow the beta. After rewards launch, a first qualifying payout (
                 {'$10+'}) earns a <span className="text-emerald-600 font-medium">$5</span> referral
                 reward.

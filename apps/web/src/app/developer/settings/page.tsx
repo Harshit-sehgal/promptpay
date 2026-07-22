@@ -332,9 +332,7 @@ export default function DevSettingsPage() {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Settings</h1>
-        <p className="text-surface-500 text-[15px]">
-          Control ad display, quiet hours, and data export
-        </p>
+        <p className="text-surface-500 text-sm">Control ad display, quiet hours, and data export</p>
       </div>
 
       {loading && (
@@ -363,9 +361,7 @@ export default function DevSettingsPage() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-surface-900 font-semibold text-[14px]">
-                    Show ads while waiting
-                  </p>
+                  <p className="text-surface-900 font-semibold text-sm">Show ads while waiting</p>
                   <p className="text-surface-500 text-xs mt-0.5">
                     Turn off to stop earning — no ads will appear in your IDE
                   </p>
@@ -389,7 +385,7 @@ export default function DevSettingsPage() {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-surface-900 font-semibold text-[14px]">Quiet mode</p>
+                  <p className="text-surface-900 font-semibold text-sm">Quiet mode</p>
                   <p className="text-surface-500 text-xs mt-0.5">Suppress ads during set hours</p>
                 </div>
                 <button
@@ -420,7 +416,7 @@ export default function DevSettingsPage() {
                         type="time"
                         value={quietModeStart}
                         onChange={(e) => setQuietModeStart(e.target.value)}
-                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
                       />
                     </div>
                     <div>
@@ -431,7 +427,7 @@ export default function DevSettingsPage() {
                         type="time"
                         value={quietModeEnd}
                         onChange={(e) => setQuietModeEnd(e.target.value)}
-                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                        className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
                       />
                     </div>
                   </div>
@@ -445,7 +441,7 @@ export default function DevSettingsPage() {
                     <select
                       value={timezone}
                       onChange={(e) => setTimezone(e.target.value)}
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
                     >
                       <option value="">UTC (default)</option>
                       {[...buildTimezoneOptions(COMMON_TIMEZONES)].map((tz) => (
@@ -506,7 +502,7 @@ export default function DevSettingsPage() {
                       .filter(Boolean);
                     setBlockedCategories(slugs);
                   }}
-                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:border-brand-400"
+                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
                 />
                 {blockedCategories.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
@@ -533,7 +529,7 @@ export default function DevSettingsPage() {
                   <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
                     Email
                   </p>
-                  <p className="text-surface-900 font-medium text-[15px]">{settings.email}</p>
+                  <p className="text-surface-900 font-medium text-sm">{settings.email}</p>
                 </div>
                 <div>
                   <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
@@ -565,9 +561,7 @@ export default function DevSettingsPage() {
                     <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
                       Name
                     </p>
-                    <p className="text-surface-900 font-medium text-[15px]">
-                      {settings.displayName}
-                    </p>
+                    <p className="text-surface-900 font-medium text-sm">{settings.displayName}</p>
                   </div>
                 )}
               </div>
@@ -577,7 +571,7 @@ export default function DevSettingsPage() {
                     <p className="text-surface-500 text-xs font-semibold uppercase tracking-wider mb-1.5">
                       Referral code
                     </p>
-                    <p className="text-surface-900 font-mono font-bold text-[15px] tracking-wider">
+                    <p className="text-surface-900 font-mono font-bold text-sm tracking-wider">
                       {settings.referralCode}
                     </p>
                   </div>
@@ -619,7 +613,7 @@ export default function DevSettingsPage() {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-surface-900 font-semibold text-[14px]">
+                  <p className="text-surface-900 font-semibold text-sm">
                     Status: {twoFactorEnabled ? 'Enabled' : 'Disabled'}
                   </p>
                   <p className="text-surface-500 text-xs mt-0.5">
@@ -631,7 +625,7 @@ export default function DevSettingsPage() {
                     type="button"
                     onClick={handleStart2faSetup}
                     disabled={twoFactorBusy}
-                    className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+                    className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
                   >
                     Enable 2FA
                   </button>
@@ -640,7 +634,7 @@ export default function DevSettingsPage() {
                   <button
                     type="button"
                     onClick={() => setShow2faSetup(true)}
-                    className="text-rose-600 hover:text-rose-700 font-medium text-[13px]"
+                    className="text-rose-600 hover:text-rose-700 font-medium text-xs"
                   >
                     Disable 2FA
                   </button>
@@ -652,7 +646,7 @@ export default function DevSettingsPage() {
                 <div className="border-t border-surface-100 pt-5 mt-5 space-y-5">
                   {!twoFactorEnabled ? (
                     <>
-                      <p className="text-surface-900 font-semibold text-[14px]">
+                      <p className="text-surface-900 font-semibold text-sm">
                         Set up Authenticator app
                       </p>
                       <ol className="list-decimal pl-5 text-surface-600 text-xs space-y-2">
@@ -716,7 +710,7 @@ export default function DevSettingsPage() {
                             pattern="[0-9]{6}"
                             value={verificationCode}
                             onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:border-brand-400"
+                            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
                           />
                           <button
                             type="button"
@@ -731,7 +725,7 @@ export default function DevSettingsPage() {
                     </>
                   ) : (
                     <div className="max-w-xs space-y-3">
-                      <p className="text-surface-900 font-semibold text-[14px]">
+                      <p className="text-surface-900 font-semibold text-sm">
                         Confirm Disabling 2FA
                       </p>
                       <p className="text-surface-500 text-xs">
@@ -754,7 +748,7 @@ export default function DevSettingsPage() {
                           pattern="[0-9]{6}"
                           value={verificationCode}
                           onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                          className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:border-brand-400"
+                          className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
                         />
                         <button
                           type="button"
@@ -800,7 +794,7 @@ export default function DevSettingsPage() {
                 type="button"
                 onClick={handleCreateApiKey}
                 disabled={apiKeyBusy}
-                className="bg-surface-900 hover:bg-surface-800 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+                className="bg-surface-900 hover:bg-surface-800 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
               >
                 {apiKeyBusy ? 'Working...' : 'New ledger key'}
               </button>
@@ -901,14 +895,14 @@ export default function DevSettingsPage() {
             <button
               type="submit"
               disabled={saving}
-              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-colors"
+              className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-xl text-sm shadow-sm shadow-brand-500/10 transition-colors"
             >
               {saving ? 'Saving...' : 'Save settings'}
             </button>
             <button
               type="button"
               onClick={handleExport}
-              className="bg-surface-50 border border-surface-200 text-surface-600 hover:bg-surface-100/50 hover:text-surface-900 font-medium px-6 py-2.5 rounded-xl text-[14px] transition-colors"
+              className="bg-surface-50 border border-surface-200 text-surface-600 hover:bg-surface-100/50 hover:text-surface-900 font-medium px-6 py-2.5 rounded-xl text-sm transition-colors"
             >
               Export my data
             </button>

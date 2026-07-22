@@ -66,7 +66,7 @@ function caseBadgeClass(status?: RecoveryDebtCaseStatus) {
     case 'closed':
       return 'bg-blue-500/10 text-blue-300 border-blue-500/20';
     default:
-      return 'bg-ink-700 text-ink-300 border-ink-600';
+      return 'bg-ink-700 text-ink-200 border-ink-600';
   }
 }
 
@@ -157,7 +157,7 @@ export default function AdminRecoveryDebtPage() {
     <>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-1">Recovery debt</h1>
-        <p className="text-ink-300 text-sm">
+        <p className="text-ink-200 text-sm">
           Track paid-fraud recovery debt that has not been netted from future earnings.
         </p>
       </div>
@@ -165,22 +165,22 @@ export default function AdminRecoveryDebtPage() {
       <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <p className="text-ink-400 text-xs uppercase tracking-wider">Rows shown</p>
+            <p className="text-ink-300 text-xs uppercase tracking-wider">Rows shown</p>
             <p className="text-3xl font-bold text-white">{items.length}</p>
           </div>
           <div>
-            <p className="text-ink-400 text-xs uppercase tracking-wider">Total matching</p>
+            <p className="text-ink-300 text-xs uppercase tracking-wider">Total matching</p>
             <p className="text-3xl font-bold text-white">{data?.total ?? 0}</p>
           </div>
           <div>
-            <p className="text-ink-400 text-xs uppercase tracking-wider">Shown outstanding</p>
+            <p className="text-ink-300 text-xs uppercase tracking-wider">Shown outstanding</p>
             <p className="text-2xl sm:text-3xl font-bold text-red-300 font-mono break-words">
               {formatCurrencyBreakdown(outstandingByCurrency)}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-ink-400 text-xs uppercase tracking-wider">Min cents</span>
+              <span className="text-ink-300 text-xs uppercase tracking-wider">Min cents</span>
               <input
                 value={minAmountMinor}
                 onChange={(e) => {
@@ -188,11 +188,11 @@ export default function AdminRecoveryDebtPage() {
                   setMinAmountMinor(e.target.value);
                 }}
                 inputMode="numeric"
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500"
+                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
             </label>
             <label className="block">
-              <span className="text-ink-400 text-xs uppercase tracking-wider">Currency</span>
+              <span className="text-ink-300 text-xs uppercase tracking-wider">Currency</span>
               <input
                 value={currency}
                 onChange={(e) => {
@@ -201,7 +201,7 @@ export default function AdminRecoveryDebtPage() {
                 }}
                 maxLength={3}
                 placeholder="ALL"
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm uppercase focus:outline-none focus:border-brand-500"
+                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-3 py-2 text-white text-sm uppercase focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
             </label>
           </div>
@@ -217,7 +217,7 @@ export default function AdminRecoveryDebtPage() {
 
       {!loading && items.length === 0 ? (
         <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-400 text-sm">
+          <p className="text-ink-300 text-sm">
             No outstanding recovery debt matches these filters.
           </p>
         </div>
@@ -242,9 +242,9 @@ export default function AdminRecoveryDebtPage() {
                       >
                         {formatStatus(latestCase?.status)}
                       </span>
-                      <span className="text-ink-400 text-xs uppercase">{row.currency}</span>
+                      <span className="text-ink-300 text-xs uppercase">{row.currency}</span>
                     </div>
-                    <p className="text-ink-400 text-xs">
+                    <p className="text-ink-300 text-xs">
                       {row.recoveryDebitEntryCount} recovery debit entries
                       <span className="mx-2">·</span>
                       User status {row.user?.status || 'unknown'}
@@ -351,7 +351,7 @@ export default function AdminRecoveryDebtPage() {
           >
             Previous
           </button>
-          <p className="text-ink-400 text-sm">
+          <p className="text-ink-300 text-sm">
             Page {page} of {totalPages}
           </p>
           <button
@@ -372,29 +372,29 @@ export default function AdminRecoveryDebtPage() {
                 ? `${formatStatus(action.status)} case`
                 : `${formatStatus(action.status)} case`}
             </h3>
-            <p className="text-ink-400 text-sm mb-4">
+            <p className="text-ink-300 text-sm mb-4">
               {action.row.user?.email || action.row.userId} ·{' '}
               {formatCurrency(action.row.outstandingDebtMinor, action.row.currency)} outstanding
             </p>
             <label className="block mb-3">
-              <span className="text-ink-400 text-xs uppercase tracking-wider">
+              <span className="text-ink-300 text-xs uppercase tracking-wider">
                 External reference
               </span>
               <input
                 value={externalReference}
                 onChange={(e) => setExternalReference(e.target.value)}
                 maxLength={255}
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
             </label>
             <label className="block mb-5">
-              <span className="text-ink-400 text-xs uppercase tracking-wider">Note</span>
+              <span className="text-ink-300 text-xs uppercase tracking-wider">Note</span>
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 maxLength={1000}
                 rows={4}
-                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="mt-2 w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
             </label>
             <div className="flex items-center gap-3 justify-end">

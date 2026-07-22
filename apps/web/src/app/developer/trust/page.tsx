@@ -34,7 +34,6 @@ interface TrustInfo {
   }>;
 }
 
-
 export default function DevTrustPage() {
   const [data, setData] = useState<TrustInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -65,7 +64,7 @@ export default function DevTrustPage() {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Trust & fraud</h1>
-        <p className="text-surface-500 text-[15px] font-normal">
+        <p className="text-surface-500 text-sm font-normal">
           How your account is scored for fraud-risk. Higher trust leads to faster payouts.
         </p>
       </div>
@@ -84,7 +83,9 @@ export default function DevTrustPage() {
 
       {!loading && !error && !data && (
         <div className="bg-white border border-surface-200/80 rounded-lg p-8 text-center shadow-sm">
-          <p className="text-surface-500 text-sm font-normal">Trust details are not available yet.</p>
+          <p className="text-surface-500 text-sm font-normal">
+            Trust details are not available yet.
+          </p>
         </div>
       )}
 
@@ -153,7 +154,7 @@ export default function DevTrustPage() {
                     className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-lg p-5 border-l-2 border-l-amber-500"
                   >
                     <div>
-                      <p className="text-surface-900 font-medium text-[14px]">{flag.reason}</p>
+                      <p className="text-surface-900 font-medium text-sm">{flag.reason}</p>
                       <p className="text-surface-500 text-xs mt-0.5 font-normal">
                         Detected {formatRelativeTime(flag.createdAt)}
                       </p>
@@ -175,9 +176,12 @@ export default function DevTrustPage() {
             ) : (
               <div className="space-y-3">
                 {data.recentPenalties.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-lg p-5">
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between bg-slate-50/30 border border-slate-100/80 rounded-lg p-5"
+                  >
                     <div>
-                      <p className="text-surface-900 font-medium text-[14px]">{p.description}</p>
+                      <p className="text-surface-900 font-medium text-sm">{p.description}</p>
                       <p className="text-surface-500 text-xs mt-0.5 font-normal">
                         {formatRelativeTime(p.appliedAt)}
                       </p>

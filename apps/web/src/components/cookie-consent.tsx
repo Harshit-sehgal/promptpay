@@ -135,13 +135,13 @@ export default function CookieConsent() {
       aria-label="Cookie consent"
       className="fixed bottom-0 inset-x-0 z-50 px-4 pb-4 sm:px-6 sm:pb-6"
     >
-      <div className="mx-auto max-w-3xl bg-white border border-surface-200 rounded-2xl shadow-lg shadow-surface-300/30 p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-        <p className="text-surface-600 text-[13px] leading-relaxed flex-1">
+      <div className="mx-auto max-w-3xl bg-white border border-surface-200 rounded-2xl shadow-lg shadow-surface-300/30 p-5 flex flex-col sm:flex-row sm:items-center gap-4 motion-reduce:shadow-none">
+        <p className="text-surface-700 text-[13px] leading-relaxed flex-1">
           We use essential cookies to keep you signed in and optional analytics cookies to improve
           WaitLayer. See our{' '}
           <Link
             href="/privacy"
-            className="text-brand-500 hover:text-brand-600 font-medium underline underline-offset-2"
+            className="text-brand-700 hover:text-brand-800 font-medium underline underline-offset-2 focus-visible:rounded-sm"
           >
             Privacy Policy
           </Link>{' '}
@@ -167,7 +167,7 @@ export default function CookieConsent() {
             type="button"
             onClick={decline}
             disabled={!marketingVersion || versionLoading}
-            className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-surface-600 hover:bg-surface-100 transition-colors"
+            className="px-4 py-2.5 rounded-xl text-[13px] font-medium text-surface-700 hover:bg-surface-100 transition-colors focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             Decline
           </button>
@@ -175,7 +175,7 @@ export default function CookieConsent() {
             type="button"
             onClick={accept}
             disabled={!marketingVersion || versionLoading}
-            className="px-4 py-2.5 rounded-xl text-[13px] font-medium bg-brand-500 hover:bg-brand-600 text-white transition-colors"
+            className="px-4 py-2.5 rounded-xl text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white transition-colors focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             Accept
           </button>

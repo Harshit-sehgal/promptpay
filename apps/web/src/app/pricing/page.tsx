@@ -64,23 +64,21 @@ export default function PricingPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-              WaitLayer
-            </span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
-            <Link href="/pricing" className="text-surface-900 font-medium text-[14px]">
+            <Link href="/pricing" className="text-surface-900 font-medium text-sm">
               Pricing
             </Link>
             <Link
               href="/comparison"
-              className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
+              className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
             >
               Comparison
             </Link>
             <Link
               href="/#how-it-works"
-              className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
+              className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
             >
               How it works
             </Link>
@@ -89,13 +87,13 @@ export default function PricingPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/auth/login"
-              className="text-surface-600 hover:text-surface-900 text-[14px] font-medium transition-colors px-3 py-1.5"
+              className="text-surface-600 hover:text-surface-900 text-sm font-medium transition-colors px-3 py-1.5"
             >
               Log in
             </Link>
             <Link
               href="/auth/signup?role=developer"
-              className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors"
+              className="bg-surface-900 hover:bg-surface-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
               Join beta
             </Link>
@@ -127,10 +125,10 @@ export default function PricingPage() {
                 For developers
               </div>
               <p className="text-5xl font-bold text-surface-900 mb-2">Free</p>
-              <p className="text-surface-400 text-[14px] mb-8">Always. No credit card needed.</p>
+              <p className="text-surface-400 text-sm mb-8">Always. No credit card needed.</p>
               <Link
                 href="/auth/signup?role=developer"
-                className="block w-full text-center bg-surface-900 hover:bg-surface-700 text-white font-medium px-6 py-3 rounded-xl text-[15px] transition-colors mb-8"
+                className="block w-full text-center bg-surface-900 hover:bg-surface-700 text-white font-medium px-6 py-3 rounded-xl text-sm transition-colors mb-8"
               >
                 Join beta →
               </Link>
@@ -138,7 +136,7 @@ export default function PricingPage() {
                 {PLAN_FEATURES.map((f) => (
                   <li
                     key={f.label}
-                    className={`flex items-center gap-3 text-[14px] ${f.dev ? 'text-surface-700' : 'text-surface-400'}`}
+                    className={`flex items-center gap-3 text-sm ${f.dev ? 'text-surface-700' : 'text-surface-400'}`}
                   >
                     <span
                       className={f.dev ? 'text-emerald-500 shrink-0' : 'text-surface-300 shrink-0'}
@@ -161,12 +159,12 @@ export default function PricingPage() {
               <p className="text-5xl font-bold text-white mb-2">
                 No spend<span className="text-lg text-white/50 font-normal"> during beta</span>
               </p>
-              <p className="text-white/50 text-[14px] mb-8">
+              <p className="text-white/50 text-sm mb-8">
                 Campaign tooling can be evaluated, but billing is disabled.
               </p>
               <Link
                 href="/auth/signup?role=advertiser"
-                className="block w-full text-center bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-3 rounded-xl text-[15px] transition-colors mb-8"
+                className="block w-full text-center bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-3 rounded-xl text-sm transition-colors mb-8 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:outline-none"
               >
                 Join advertiser waitlist →
               </Link>
@@ -174,7 +172,7 @@ export default function PricingPage() {
                 {PLAN_FEATURES.map((f) => (
                   <li
                     key={f.label}
-                    className={`flex items-center gap-3 text-[14px] ${f.adv ? 'text-white' : 'text-white/30'}`}
+                    className={`flex items-center gap-3 text-sm ${f.adv ? 'text-white' : 'text-white/30'}`}
                   >
                     <span
                       className={f.adv ? 'text-emerald-400 shrink-0' : 'text-white/20 shrink-0'}
@@ -205,27 +203,27 @@ export default function PricingPage() {
                 <p className="text-surface-900 font-semibold mb-2">
                   Planned developer revenue share
                 </p>
-                <p className="text-surface-500 text-[14px]">
+                <p className="text-surface-500 text-sm">
                   The intended launch policy gives developers the majority of qualified revenue.
                 </p>
               </div>
               <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
                 <p className="text-5xl font-bold text-surface-900 mb-2">30%</p>
                 <p className="text-surface-900 font-semibold mb-2">Planned platform fee</p>
-                <p className="text-surface-500 text-[14px]">
+                <p className="text-surface-500 text-sm">
                   Infrastructure, fraud detection, payment processing, and support.
                 </p>
               </div>
               <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
                 <p className="text-5xl font-bold text-surface-400 mb-2">10%</p>
                 <p className="text-surface-900 font-semibold mb-2">Planned reserve fund</p>
-                <p className="text-surface-500 text-[14px]">
+                <p className="text-surface-500 text-sm">
                   Fraud reserve, payment failures, and disputed charges buffer.
                 </p>
               </div>
             </div>
             <div className="mt-10 text-center">
-              <p className="text-surface-400 text-[14px]">
+              <p className="text-surface-400 text-sm">
                 These economics are not active in beta. A reviewed launch campaign may use a
                 promotional split (e.g. <strong className="text-surface-600">80/10/10</strong>); the
                 intended standard is 60/30/10.
@@ -245,7 +243,7 @@ export default function PricingPage() {
               a reviewed rewards launch.
             </p>
             <div className="overflow-hidden rounded-2xl border border-surface-200/80">
-              <table className="w-full text-[14px]">
+              <table className="w-full text-sm">
                 <thead className="bg-surface-100">
                   <tr>
                     <th className="text-left px-6 py-4 text-surface-600 font-medium">
@@ -294,7 +292,7 @@ export default function PricingPage() {
                   <p className="text-surface-400 text-[12px] uppercase tracking-wider mb-1">
                     {item.label}
                   </p>
-                  <p className="text-surface-900 font-semibold text-[15px]">{item.value}</p>
+                  <p className="text-surface-900 font-semibold text-sm">{item.value}</p>
                 </div>
               ))}
             </div>
@@ -307,7 +305,7 @@ export default function PricingPage() {
             <h2 className="text-2xl font-bold text-surface-900 tracking-tight text-center mb-3">
               Payment providers
             </h2>
-            <p className="text-surface-500 text-center text-[15px] mb-12">
+            <p className="text-surface-500 text-center text-sm mb-12">
               We start with PayPal and expand from there.
             </p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -337,7 +335,7 @@ export default function PricingPage() {
                   key={p.name}
                   className="bg-white border border-surface-200/80 rounded-xl p-5 text-center"
                 >
-                  <p className="text-surface-900 font-semibold text-[15px] mb-2">{p.name}</p>
+                  <p className="text-surface-900 font-semibold text-base mb-2">{p.name}</p>
                   <span
                     className={`inline-block text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${p.color}`}
                   >
@@ -355,26 +353,26 @@ export default function PricingPage() {
             <h2 className="text-3xl font-bold text-surface-900 tracking-tight mb-4">
               Ready to get started?
             </h2>
-            <p className="text-surface-500 text-[15px] mb-8 max-w-sm mx-auto">
+            <p className="text-surface-500 text-sm mb-8 max-w-sm mx-auto">
               Join developers earning from AI wait time, or advertisers reaching them while they
               build.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Link
                 href="/auth/signup?role=developer"
-                className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20"
+                className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-sm transition-colors shadow-sm shadow-brand-500/20"
               >
                 Join beta →
               </Link>
               <Link
                 href="/auth/signup?role=advertiser"
-                className="bg-surface-900 hover:bg-surface-700 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors"
+                className="bg-surface-900 hover:bg-surface-700 text-white font-medium px-7 py-3 rounded-xl text-sm transition-colors"
               >
                 Start advertising →
               </Link>
               <Link
                 href="/comparison"
-                className="text-surface-500 hover:text-surface-700 font-medium px-5 py-3 text-[15px] transition-colors"
+                className="text-surface-500 hover:text-surface-700 font-medium px-5 py-3 text-sm transition-colors"
               >
                 Compare tools
               </Link>
@@ -390,64 +388,64 @@ export default function PricingPage() {
           <div className="flex flex-col md:flex-row items-start justify-between gap-10">
             <div>
               <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-6 h-6 rounded bg-brand-500 flex items-center justify-center text-white font-bold text-[10px]">
+                <div className="w-6 h-6 rounded bg-brand-500 flex items-center justify-center text-white font-bold text-xs">
                   W
                 </div>
-                <span className="text-surface-900 font-semibold text-[14px]">WaitLayer</span>
+                <span className="text-surface-900 font-semibold text-sm">WaitLayer</span>
               </div>
-              <p className="text-surface-400 text-[14px] max-w-xs leading-relaxed">
+              <p className="text-surface-400 text-sm max-w-xs leading-relaxed">
                 Private beta for AI wait-state verification. Rewards and advertiser billing are not
                 yet enabled.
               </p>
             </div>
             <div className="flex gap-16">
               <div>
-                <h4 className="text-surface-900 font-semibold text-[13px] mb-3">Product</h4>
+                <h4 className="text-surface-900 font-semibold text-xs mb-3">Product</h4>
                 <div className="flex flex-col gap-2">
                   <Link
                     href="/pricing"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
                   >
                     Pricing
                   </Link>
                   <Link
                     href="/comparison"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
                   >
                     Comparison
                   </Link>
                   <Link
                     href="/#how-it-works"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
                   >
                     How it works
                   </Link>
                 </div>
               </div>
               <div>
-                <h4 className="text-surface-900 font-semibold text-[13px] mb-3">Legal</h4>
+                <h4 className="text-surface-900 font-semibold text-xs mb-3">Legal</h4>
                 <div className="flex flex-col gap-2">
                   <Link
                     href="/privacy"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
                   >
                     Privacy
                   </Link>
                   <Link
                     href="/terms"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
                   >
                     Terms
                   </Link>
                   <Link
                     href="/advertiser-policy"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
                   >
                     Advertiser Policy
                   </Link>
                   <Link
                     href="/payout-policy"
-                    className="text-surface-500 hover:text-surface-700 text-[14px] transition-colors"
+                    className="text-surface-500 hover:text-surface-700 text-sm transition-colors"
                   >
                     Payout Policy
                   </Link>
@@ -455,7 +453,7 @@ export default function PricingPage() {
               </div>
             </div>
           </div>
-          <div className="mt-12 pt-6 border-t border-surface-100 text-surface-400 text-[13px]">
+          <div className="mt-12 pt-6 border-t border-surface-100 text-surface-400 text-xs">
             © 2026 WaitLayer. All rights reserved.
           </div>
         </div>

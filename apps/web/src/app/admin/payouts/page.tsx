@@ -256,18 +256,18 @@ export default function AdminPayoutsPage() {
     <>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-1">Payout requests</h1>
-        <p className="text-ink-300 text-sm">Approve or reject pending developer payouts</p>
+        <p className="text-ink-200 text-sm">Approve or reject pending developer payouts</p>
       </div>
 
       {/* Summary */}
       <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-6">
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-ink-400 text-xs uppercase tracking-wider">Pending payouts</p>
+            <p className="text-ink-300 text-xs uppercase tracking-wider">Pending payouts</p>
             <p className="text-3xl font-bold text-white">{payouts.length}</p>
           </div>
           <div>
-            <p className="text-ink-400 text-xs uppercase tracking-wider">Total amount</p>
+            <p className="text-ink-300 text-xs uppercase tracking-wider">Total amount</p>
             <p className="text-2xl sm:text-3xl font-bold text-brand-500 font-mono break-words">
               {totalSummary}
             </p>
@@ -284,7 +284,7 @@ export default function AdminPayoutsPage() {
 
       {payouts.length === 0 && !loading ? (
         <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-400 text-sm">No pending payouts. Queue clear.</p>
+          <p className="text-ink-300 text-sm">No pending payouts. Queue clear.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -295,7 +295,7 @@ export default function AdminPayoutsPage() {
                   <p className="text-3xl font-bold text-white font-mono">
                     {formatCurrency(p.requestedAmountMinor, p.currency)}
                   </p>
-                  <p className="text-ink-400 text-xs mt-1">
+                  <p className="text-ink-300 text-xs mt-1">
                     via {p.payoutAccount.provider} — {p.payoutAccount.destination}
                     {p.payoutAccount.isVerified === false && (
                       <span className="ml-2 text-amber-400">· unverified</span>
@@ -424,7 +424,7 @@ export default function AdminPayoutsPage() {
                 ? 'Freeze payout account'
                 : 'Unfreeze payout account'}
             </h3>
-            <p className="text-ink-400 text-sm mb-1">
+            <p className="text-ink-300 text-sm mb-1">
               {accountAction.payout.payoutAccount.provider} —{' '}
               {accountAction.payout.payoutAccount.destination}
             </p>
@@ -433,7 +433,7 @@ export default function AdminPayoutsPage() {
             </p>
             <label
               htmlFor="payout-account-action-reason"
-              className="text-ink-300 text-xs block mb-1"
+              className="text-ink-200 text-xs block mb-1"
             >
               Operator reason
             </label>
@@ -446,7 +446,7 @@ export default function AdminPayoutsPage() {
               maxLength={500}
               required
               autoFocus
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
             />
             <div className="flex items-center gap-3 justify-end">
               <button
@@ -483,7 +483,7 @@ export default function AdminPayoutsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
           <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-white font-semibold mb-2">Reject payout</h3>
-            <p className="text-ink-400 text-sm mb-4">
+            <p className="text-ink-300 text-sm mb-4">
               Reject{' '}
               <span className="text-white">
                 {formatCurrency(rejectModalFor.requestedAmountMinor, rejectModalFor.currency)}
@@ -496,7 +496,7 @@ export default function AdminPayoutsPage() {
               placeholder="Reason — visible to developer"
               rows={3}
               required
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
             />
             <div className="flex items-center gap-3 justify-end">
               <button
@@ -525,7 +525,7 @@ export default function AdminPayoutsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
           <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-white font-semibold mb-2">Approve payout</h3>
-            <p className="text-ink-400 text-sm mb-4">
+            <p className="text-ink-300 text-sm mb-4">
               Requested{' '}
               <span className="text-white">
                 {formatCurrency(approveModalFor.requestedAmountMinor, approveModalFor.currency)}
@@ -533,7 +533,7 @@ export default function AdminPayoutsPage() {
               . Leave the amount blank to approve the full requested amount, or enter a lower amount
               for a partial approval.
             </p>
-            <label className="text-ink-300 text-xs block mb-1">
+            <label className="text-ink-200 text-xs block mb-1">
               Approved amount ({approveModalFor.currency})
             </label>
             <input
@@ -546,7 +546,7 @@ export default function AdminPayoutsPage() {
               )}
               value={approveAmount}
               onChange={(e) => setApproveAmount(e.target.value)}
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
             />
             <div className="flex items-center gap-3 justify-end">
               <button
@@ -575,7 +575,7 @@ export default function AdminPayoutsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
           <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-white font-semibold mb-2">Manual reconciliation</h3>
-            <p className="text-ink-400 text-sm mb-4">
+            <p className="text-ink-300 text-sm mb-4">
               Record an external provider payment for{' '}
               <span className="text-white">
                 {formatCurrency(reconcileModalFor.requestedAmountMinor, reconcileModalFor.currency)}
@@ -584,16 +584,16 @@ export default function AdminPayoutsPage() {
             </p>
             <div className="space-y-3 mb-4">
               <div>
-                <label className="text-ink-300 text-xs block mb-1">Provider transaction id</label>
+                <label className="text-ink-200 text-xs block mb-1">Provider transaction id</label>
                 <input
                   value={reconcileProviderTxId}
                   onChange={(e) => setReconcileProviderTxId(e.target.value)}
                   placeholder="txn_..."
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
               <div>
-                <label className="text-ink-300 text-xs block mb-1">
+                <label className="text-ink-200 text-xs block mb-1">
                   Paid amount ({reconcileModalFor.currency})
                 </label>
                 <input
@@ -606,16 +606,16 @@ export default function AdminPayoutsPage() {
                   )}
                   value={reconcileAmount}
                   onChange={(e) => setReconcileAmount(e.target.value)}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
               <div>
-                <label className="text-ink-300 text-xs block mb-1">Paid at</label>
+                <label className="text-ink-200 text-xs block mb-1">Paid at</label>
                 <input
                   type="datetime-local"
                   value={reconcilePaidAt}
                   onChange={(e) => setReconcilePaidAt(e.target.value)}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
             </div>

@@ -20,9 +20,7 @@ export default function PayoutPolicyPage() {
             <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-              WaitLayer
-            </span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
           </Link>
         </div>
       </nav>

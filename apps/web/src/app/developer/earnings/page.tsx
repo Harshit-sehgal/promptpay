@@ -58,7 +58,7 @@ export default function DevEarningsPage() {
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Earnings ledger</h1>
-        <p className="text-surface-500 text-[15px] font-normal">
+        <p className="text-surface-500 text-sm font-normal">
           Every earning entry with status and availability date
         </p>
       </div>

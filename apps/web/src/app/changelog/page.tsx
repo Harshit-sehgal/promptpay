@@ -37,7 +37,7 @@ export default function ChangelogPage() {
       <div className="max-w-3xl mx-auto">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-surface-500 hover:text-surface-700 text-[14px] font-medium mb-8 transition-colors"
+          className="inline-flex items-center gap-2 text-surface-500 hover:text-surface-700 text-sm font-medium mb-8 transition-colors"
         >
           ← Back to home
         </Link>

@@ -52,13 +52,11 @@ export default function FAQPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-              WaitLayer
-            </span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
           </Link>
           <Link
             href="/"
-            className="text-surface-500 hover:text-surface-900 text-[14px] transition-colors"
+            className="text-surface-500 hover:text-surface-900 text-sm transition-colors"
           >
             ← Back to Home
           </Link>
@@ -89,7 +87,7 @@ export default function FAQPage() {
                   onClick={() => toggleIndex(index)}
                   className="w-full text-left px-6 py-5 flex items-center justify-between gap-4 font-semibold text-surface-900 hover:bg-surface-50/50 transition-colors"
                 >
-                  <span className="text-[15px]">{item.question}</span>
+                  <span className="text-sm">{item.question}</span>
                   <span className="text-surface-400 shrink-0 select-none">
                     {isOpen ? '−' : '+'}
                   </span>

@@ -14,7 +14,7 @@ export default function ReportsError({
           <span className="text-red-400 text-xl font-bold">!</span>
         </div>
         <h2 className="text-white text-lg font-semibold mb-2">Failed to load reports</h2>
-        <p className="text-ink-300 text-sm mb-6">
+        <p className="text-ink-200 text-sm mb-6">
           {error.message || 'An unexpected error occurred while loading report data.'}
         </p>
         <button

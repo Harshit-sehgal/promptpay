@@ -38,17 +38,15 @@ function VerifyEmailContent() {
 
   return (
     <>
-      {state === 'verifying' && (
-        <p className="text-surface-500 text-[14px]">Verifying your email...</p>
-      )}
+      {state === 'verifying' && <p className="text-surface-500 text-sm">Verifying your email...</p>}
       {state === 'success' && (
         <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
-          <p className="text-emerald-700 text-[14px]">{message}</p>
+          <p className="text-emerald-700 text-sm">{message}</p>
         </div>
       )}
       {state === 'error' && (
         <div className="bg-red-50 border border-red-200/60 rounded-xl p-4">
-          <p className="text-red-600 text-[14px]">{message}</p>
+          <p className="text-red-600 text-sm">{message}</p>
         </div>
       )}
     </>
@@ -67,9 +65,7 @@ export default function VerifyEmailPage() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-            WaitLayer
-          </span>
+          <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
@@ -77,11 +73,11 @@ export default function VerifyEmailPage() {
             Email verification
           </h1>
 
-          <Suspense fallback={<p className="text-surface-500 text-[14px]">Loading...</p>}>
+          <Suspense fallback={<p className="text-surface-500 text-sm">Loading...</p>}>
             <VerifyEmailContent />
           </Suspense>
 
-          <p className="text-surface-500 text-[14px] text-center mt-7">
+          <p className="text-surface-500 text-sm text-center mt-7">
             <Link
               href="/auth/login"
               className="text-brand-500 hover:text-brand-600 font-medium transition-colors"

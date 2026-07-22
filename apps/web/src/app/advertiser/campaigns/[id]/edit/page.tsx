@@ -311,7 +311,7 @@ export default function EditCampaignPage() {
                   required
                   placeholder="My developer tool campaign"
                   autoComplete="off"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
               {status === 'draft' && (
@@ -322,7 +322,7 @@ export default function EditCampaignPage() {
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand-500"
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                   >
                     {fundedCurrencies.map((c) => (
                       <option key={c} value={c}>
@@ -358,7 +358,7 @@ export default function EditCampaignPage() {
                     onChange={(e) => setBidAmount(e.target.value)}
                     required
                     inputMode="decimal"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                   />
                 </div>
               </div>
@@ -376,7 +376,7 @@ export default function EditCampaignPage() {
                     onChange={(e) => setBudgetTotal(e.target.value)}
                     required
                     inputMode="decimal"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                   />
                   <p className="text-ink-500 text-xs mt-1">
                     Minimum {moneyPolicy.minimumBudgetLabel}
@@ -406,7 +406,7 @@ export default function EditCampaignPage() {
                     onChange={(e) => setFreqCapPerHour(e.target.value)}
                     placeholder="Leave unchanged"
                     inputMode="numeric"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                   />
                   <p className="text-ink-500 text-xs mt-1">
                     1-30. Blank leaves the current cap unchanged.
@@ -425,7 +425,7 @@ export default function EditCampaignPage() {
                     onChange={(e) => setFreqCapPerDay(e.target.value)}
                     placeholder="Leave unchanged"
                     inputMode="numeric"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                   />
                   <p className="text-ink-500 text-xs mt-1">
                     1-100. Blank leaves the current cap unchanged.
@@ -448,7 +448,7 @@ export default function EditCampaignPage() {
                   required
                   maxLength={50}
                   placeholder="Short, attention-grabbing headline"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
                 <p className="text-ink-500 text-xs mt-1">{headline.length}/50 characters</p>
               </div>
@@ -462,7 +462,7 @@ export default function EditCampaignPage() {
                   maxLength={80}
                   rows={2}
                   placeholder="Max 80 chars — shown during wait states"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
                 <p className="text-ink-500 text-xs mt-1">{message.length}/80 characters</p>
               </div>
@@ -477,7 +477,7 @@ export default function EditCampaignPage() {
                     required
                     maxLength={25}
                     placeholder="Learn more"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                   />
                 </div>
                 <div>
@@ -487,7 +487,7 @@ export default function EditCampaignPage() {
                     value={ctaUrl}
                     onChange={(e) => setCtaUrl(e.target.value)}
                     placeholder="https://your-product.com"
-                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                    className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                   />
                 </div>
               </div>
@@ -519,7 +519,7 @@ export default function EditCampaignPage() {
                 value={targetCountries}
                 onChange={(e) => setTargetCountries(e.target.value)}
                 placeholder="US, GB, DE (leave empty to keep current targeting)"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
               <p className="text-ink-500 text-xs mt-1">
                 Empty = leave current targeting unchanged. Use 2-letter ISO codes (US, GB, DE, IN,

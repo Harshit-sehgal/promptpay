@@ -1,5 +1,6 @@
 'use client';
 
+import { AlertTriangle, BarChart3, DollarSign, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
@@ -22,16 +23,25 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadOverview = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await adminApi.getOverview();
+      setData(res.data);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load admin overview'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    adminApi.getOverview()
-      .then((res: { data: AdminOverview }) => setData(res.data))
-      .catch((err: unknown) => {
-        setError(getErrorMessage(err, 'Failed to load admin overview'));
-      })
-      .finally(() => setLoading(false));
+    loadOverview();
   }, []);
 
-  const payoutTotals = data?.totalPayoutsByCurrency ?? (data ? { USD: data.totalPayoutsMinor } : {});
+  const payoutTotals =
+    data?.totalPayoutsByCurrency ?? (data ? { USD: data.totalPayoutsMinor } : {});
   const payoutCurrencies = Object.keys(payoutTotals)
     .filter((currency) => (payoutTotals[currency] ?? 0) !== 0)
     .sort();
@@ -40,14 +50,24 @@ export default function AdminDashboard() {
     <>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-1">Platform overview</h1>
-        <p className="text-ink-300 text-sm">System health and key metrics</p>
+        <p className="text-ink-200 text-sm">System health and key metrics</p>
       </div>
 
-      {loading && <LoadingSpinner />}
+      {loading && (
+        <div className="flex items-center justify-center py-24">
+          <LoadingSpinner />
+        </div>
+      )}
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 mb-6 flex items-center justify-between">
+          <p className="text-red-300 text-sm">{error}</p>
+          <button
+            onClick={() => void loadOverview()}
+            className="text-xs font-medium text-red-300 transition-colors hover:text-white"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -57,92 +77,91 @@ export default function AdminDashboard() {
             <StatCard
               label="Active users"
               value={formatNumber(data.activeUsers)}
+              variant="dark"
+              valueColor="text-white"
+              icon={<Users className="h-5 w-5 text-ink-300" />}
             />
             <StatCard
               label="Active campaigns"
               value={formatNumber(data.activeCampaigns)}
+              variant="dark"
+              valueColor="text-white"
+              icon={<BarChart3 className="h-5 w-5 text-ink-300" />}
             />
             <StatCard
               label="Billable impressions"
               value={formatNumber(data.totalBillableImpressions)}
+              variant="dark"
+              valueColor="text-white"
+              icon={<DollarSign className="h-5 w-5 text-ink-300" />}
             />
             <StatCard
               label="Open fraud flags"
               value={formatNumber(data.openFraudFlags)}
               valueColor="text-red-400"
+              variant="dark"
+              icon={<AlertTriangle className="h-5 w-5 text-red-400" />}
             />
           </div>
 
           <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
             <h2 className="text-white font-semibold mb-4">Pending actions</h2>
             <div className="space-y-3">
-              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                <div>
-                  <p className="text-white font-medium">Campaign approvals</p>
-                  <p className="text-ink-400 text-xs">Pending review by admin</p>
-                </div>
-                <button
-                  onClick={() => router.push('/admin/campaigns')}
-                  className="text-brand-500 hover:text-brand-400 text-sm"
+              {[
+                {
+                  title: 'Campaign approvals',
+                  detail: 'Pending review by admin',
+                  href: '/admin/campaigns',
+                },
+                { title: 'Payout requests', detail: 'Awaiting approval', href: '/admin/payouts' },
+                {
+                  title: 'Recovery debt',
+                  detail: 'Paid-fraud debt not netted from future earnings',
+                  href: '/admin/recovery-debt',
+                },
+                {
+                  title: 'Fraud flags',
+                  detail: 'Suspicious activity detected',
+                  href: '/admin/fraud',
+                },
+              ].map((item) => (
+                <div
+                  key={item.href}
+                  className="flex items-center justify-between rounded-lg bg-ink-700/50 p-4 transition-colors hover:bg-ink-700"
                 >
-                  Review →
-                </button>
-              </div>
-              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                <div>
-                  <p className="text-white font-medium">Payout requests</p>
-                  <p className="text-ink-400 text-xs">Awaiting approval</p>
+                  <div>
+                    <p className="text-white font-medium">{item.title}</p>
+                    <p className="text-ink-300 text-xs">{item.detail}</p>
+                  </div>
+                  <button
+                    onClick={() => router.push(item.href)}
+                    className="text-brand-400 hover:text-brand-300 text-sm font-medium transition-colors"
+                  >
+                    Review →
+                  </button>
                 </div>
-                <button
-                  onClick={() => router.push('/admin/payouts')}
-                  className="text-brand-500 hover:text-brand-400 text-sm"
-                >
-                  Review →
-                </button>
-              </div>
-              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                <div>
-                  <p className="text-white font-medium">Recovery debt</p>
-                  <p className="text-ink-400 text-xs">Paid-fraud debt not netted from future earnings</p>
-                </div>
-                <button
-                  onClick={() => router.push('/admin/recovery-debt')}
-                  className="text-brand-500 hover:text-brand-400 text-sm"
-                >
-                  Review →
-                </button>
-              </div>
-              <div className="flex items-center justify-between bg-ink-700/50 rounded-lg p-4">
-                <div>
-                  <p className="text-white font-medium">Fraud flags</p>
-                  <p className="text-ink-400 text-xs">Suspicious activity detected</p>
-                </div>
-                <button
-                  onClick={() => router.push('/admin/fraud')}
-                  className="text-brand-500 hover:text-brand-400 text-sm"
-                >
-                  Review →
-                </button>
-              </div>
+              ))}
             </div>
           </div>
 
           <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6">
             <h2 className="text-white font-semibold mb-4">Platform revenue</h2>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <p className="text-ink-400 text-xs uppercase tracking-wider">Total payouts</p>
-                <p className="text-white font-mono text-lg">{formatCurrencyBreakdown(payoutTotals)}</p>
+                <p className="text-ink-300 text-xs uppercase tracking-wider">Total payouts</p>
+                <p className="text-white font-mono text-lg">
+                  {formatCurrencyBreakdown(payoutTotals)}
+                </p>
               </div>
               <div>
-                <p className="text-ink-400 text-xs uppercase tracking-wider">Payout currencies</p>
+                <p className="text-ink-300 text-xs uppercase tracking-wider">Payout currencies</p>
                 <p className="text-white font-mono text-lg">
                   {payoutCurrencies.length > 0 ? payoutCurrencies.join(', ') : 'USD'}
                 </p>
               </div>
               <div>
-                <p className="text-ink-400 text-xs uppercase tracking-wider">Currency notes</p>
-                <p className="text-ink-300 text-xs">Grouped by paid earnings ledger currency.</p>
+                <p className="text-ink-300 text-xs uppercase tracking-wider">Currency notes</p>
+                <p className="text-ink-200 text-xs">Grouped by paid earnings ledger currency.</p>
               </div>
             </div>
           </div>

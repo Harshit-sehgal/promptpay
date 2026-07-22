@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
+import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
@@ -145,7 +146,7 @@ export default function AdvertiserBillingPage() {
     <>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-1">Billing</h1>
-        <p className="text-ink-300 text-sm">Deposit history, charges, and account balance</p>
+        <p className="text-ink-200 text-sm">Deposit history, charges, and account balance</p>
       </div>
 
       {loading && !data && <LoadingSpinner />}
@@ -175,12 +176,12 @@ export default function AdvertiserBillingPage() {
             <StatCard
               label="Total refunds"
               value={formatCurrency(data.totalRefundsMinor ?? 0, data.currency)}
-              valueColor={data.totalRefundsMinor ? 'text-amber-400' : 'text-ink-300'}
+              valueColor={data.totalRefundsMinor ? 'text-amber-400' : 'text-ink-200'}
             />
           </div>
           {data.balances && data.balances.length > 1 && (
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4 mb-8">
-              <p className="text-ink-300 text-xs uppercase tracking-wide mb-3">
+              <p className="text-ink-200 text-xs uppercase tracking-wide mb-3">
                 Balances by currency
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -189,7 +190,7 @@ export default function AdvertiserBillingPage() {
                     key={balance.currency}
                     className="flex items-center justify-between bg-ink-700/50 rounded-lg px-3 py-2"
                   >
-                    <span className="text-ink-300 text-sm">{balance.currency}</span>
+                    <span className="text-ink-200 text-sm">{balance.currency}</span>
                     <span className="text-white font-mono text-sm">
                       {formatCurrency(balance.balanceMinor, balance.currency)}
                     </span>
@@ -202,14 +203,14 @@ export default function AdvertiserBillingPage() {
           {/* Deposit card */}
           <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
             <h2 className="text-white font-semibold mb-2">Deposit funds</h2>
-            <p className="text-ink-300 text-sm mb-5">
+            <p className="text-ink-200 text-sm mb-5">
               Add funds to your account via Stripe. Your balance is used to run ad campaigns.
             </p>
 
             <div className="mb-4">
               <label
                 htmlFor="deposit-currency"
-                className="block text-ink-400 text-xs uppercase tracking-wide mb-1.5"
+                className="block text-ink-200 text-xs uppercase tracking-wide mb-1.5"
               >
                 Deposit currency
               </label>
@@ -274,7 +275,7 @@ export default function AdvertiserBillingPage() {
             {showCustom && (
               <div className="mb-4">
                 <div className="relative max-w-[200px]">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-300 text-sm font-medium">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-200 text-sm font-medium">
                     {displayDepositCurrency}
                   </span>
                   <input
@@ -296,7 +297,7 @@ export default function AdvertiserBillingPage() {
                     autoComplete="off"
                   />
                 </div>
-                <p className="text-ink-400 text-xs mt-1.5">
+                <p className="text-ink-200 text-xs mt-1.5">
                   Minimum deposit:{' '}
                   {formatCurrency(depositInputPolicy.minimumMinor, displayDepositCurrency)}
                 </p>
@@ -304,40 +305,18 @@ export default function AdvertiserBillingPage() {
             )}
 
             {/* Deposit button */}
-            <button
+            <Button
               onClick={handleDeposit}
               disabled={!canDeposit}
-              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 font-medium px-6 py-3 rounded-lg text-sm transition-all ${
-                canDeposit
-                  ? 'bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/25 hover:shadow-brand-500/30'
-                  : 'bg-ink-700 text-ink-400 cursor-not-allowed'
-              }`}
+              isLoading={depositing}
+              variant="brand"
+              size="md"
+              className="w-full sm:w-auto"
             >
-              {depositing ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  Opening Stripe Checkout…
-                </>
-              ) : validAmount ? (
-                <>Deposit {formatCurrency(validAmount, displayDepositCurrency)} via Stripe</>
-              ) : (
-                'Select an amount to deposit'
-              )}
-            </button>
+              {validAmount
+                ? `Deposit ${formatCurrency(validAmount, displayDepositCurrency)} via Stripe`
+                : 'Select an amount to deposit'}
+            </Button>
 
             {depositError && (
               <div className="mt-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
@@ -345,7 +324,7 @@ export default function AdvertiserBillingPage() {
               </div>
             )}
 
-            <div className="mt-4 flex items-center gap-2 text-ink-400 text-xs">
+            <div className="mt-4 flex items-center gap-2 text-ink-200 text-xs">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
                   strokeLinecap="round"
@@ -366,23 +345,23 @@ export default function AdvertiserBillingPage() {
               <h2 className="text-white font-semibold">Transaction history</h2>
             </div>
             {data.entries.length === 0 ? (
-              <div className="text-ink-400 text-sm py-12 text-center">
+              <div className="text-ink-200 text-sm py-12 text-center">
                 No transactions yet. Add funds to start running campaigns.
               </div>
             ) : (
               <table className="w-full text-sm">
                 <thead className="bg-ink-700/50 border-b border-ink-600/30">
                   <tr>
-                    <th className="text-left px-4 py-3 text-ink-300 font-medium">Date</th>
-                    <th className="text-left px-4 py-3 text-ink-300 font-medium">Description</th>
-                    <th className="text-left px-4 py-3 text-ink-300 font-medium">Type</th>
-                    <th className="text-right px-4 py-3 text-ink-300 font-medium">Amount</th>
+                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Date</th>
+                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Description</th>
+                    <th className="text-left px-4 py-3 text-ink-200 font-medium">Type</th>
+                    <th className="text-right px-4 py-3 text-ink-200 font-medium">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-ink-600/20">
                   {data.entries.map((entry) => (
                     <tr key={entry.id} className="hover:bg-ink-700/30 transition-colors">
-                      <td className="px-4 py-3 text-ink-300 text-xs">
+                      <td className="px-4 py-3 text-ink-200 text-xs">
                         {formatRelativeTime(entry.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-white">
@@ -409,7 +388,7 @@ export default function AdvertiserBillingPage() {
                             ? 'text-emerald-400'
                             : entry.entryType === 'debit'
                               ? 'text-red-400'
-                              : 'text-ink-300'
+                              : 'text-ink-200'
                         }`}
                       >
                         {entry.entryType === 'credit' ? '+' : '−'}

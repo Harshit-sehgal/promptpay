@@ -275,7 +275,7 @@ export default function DevPayoutsPage() {
       {isAuthenticated && !user?.emailVerified && (
         <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-amber-800 font-semibold text-[14px]">
+            <p className="text-amber-800 font-semibold text-sm">
               Verify your email to request payouts
             </p>
             <p className="text-amber-700 text-xs mt-0.5">
@@ -287,7 +287,7 @@ export default function DevPayoutsPage() {
             type="button"
             onClick={handleRequestVerification}
             disabled={verifyBusy}
-            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
           >
             {verifyBusy ? 'Sending…' : 'Resend verification email'}
           </button>
@@ -296,16 +296,14 @@ export default function DevPayoutsPage() {
       {info && requestBlockedByTwoFactor && (
         <div className="bg-amber-50 border border-amber-200/60 rounded-2xl p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-amber-800 font-semibold text-[14px]">
-              Enable 2FA to request payouts
-            </p>
+            <p className="text-amber-800 font-semibold text-sm">Enable 2FA to request payouts</p>
             <p className="text-amber-700 text-xs mt-0.5">
               Your operator requires two-factor authentication before money can leave your account.
             </p>
           </div>
           <Link
             href="/developer/settings"
-            className="bg-amber-600 hover:bg-amber-700 text-white font-medium px-4 py-2 rounded-lg text-[13px] transition-colors"
+            className="bg-amber-600 hover:bg-amber-700 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
           >
             Enable 2FA
           </Link>
@@ -313,7 +311,7 @@ export default function DevPayoutsPage() {
       )}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Payouts</h1>
-        <p className="text-surface-500 text-[15px] font-normal">
+        <p className="text-surface-500 text-sm font-normal">
           Available earnings, payout methods, and history
         </p>
       </div>
@@ -363,12 +361,12 @@ export default function DevPayoutsPage() {
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Request payout</h2>
 
             {requestBlockedByTwoFactor ? (
-              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
+              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-sm font-normal">
                 Two-factor authentication is required before requesting a payout. Enable 2FA in
                 settings, then return here.
               </div>
             ) : !hasPayoutableBalance ? (
-              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-[14px] font-normal">
+              <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-sm font-normal">
                 You need at least{' '}
                 <span className="font-semibold">
                   {formatCurrency(info.minimumThresholdMinor, selectedCurrency)}
@@ -383,14 +381,14 @@ export default function DevPayoutsPage() {
               <form onSubmit={handleRequestPayout} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
                       Payout method
                     </label>
                     <select
                       value={selectedAccountId}
                       onChange={(e) => setSelectedAccountId(e.target.value)}
                       required
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
+                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
                     >
                       <option value="">Select method...</option>
                       {info.payoutAccounts.map((acc) => (
@@ -403,7 +401,7 @@ export default function DevPayoutsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
                       Amount ({selectedCurrency})
                     </label>
                     <input
@@ -418,7 +416,7 @@ export default function DevPayoutsPage() {
                         info.minimumThresholdMinor,
                         selectedCurrency,
                       )}
-                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
+                      className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3.5 text-surface-900 text-sm placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all font-normal"
                     />
                   </div>
                 </div>
@@ -426,7 +424,7 @@ export default function DevPayoutsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-all"
+                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-6 py-2.5 rounded-xl text-sm shadow-sm shadow-brand-500/10 transition-all"
                 >
                   {submitting ? 'Requesting…' : 'Request payout'}
                 </button>
@@ -456,7 +454,7 @@ export default function DevPayoutsPage() {
               >
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
-                    <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
                       Provider
                     </label>
                     <select
@@ -465,7 +463,7 @@ export default function DevPayoutsPage() {
                         setProvider(e.target.value);
                         setSuccessMsg(null);
                       }}
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] font-normal"
+                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-sm font-normal"
                     >
                       <option value="">Select provider...</option>
                       {AVAILABLE_PAYOUT_PROVIDERS.map((p) => (
@@ -495,7 +493,7 @@ export default function DevPayoutsPage() {
                   </div>
                   {provider !== 'stripe_connect' && (
                     <div className="md:col-span-2">
-                      <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                      <label className="text-surface-700 text-sm font-medium mb-1.5 block">
                         {provider === 'paypal_email' ? 'PayPal email' : 'Account details'}
                       </label>
                       <input
@@ -506,18 +504,18 @@ export default function DevPayoutsPage() {
                         placeholder={provider === 'paypal_email' ? 'you@example.com' : 'Account ID'}
                         autoComplete={provider === 'paypal_email' ? 'email' : 'off'}
                         inputMode={provider === 'paypal_email' ? 'email' : 'text'}
-                        className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 transition-all font-normal"
+                        className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-sm placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400 transition-all font-normal"
                       />
                     </div>
                   )}
                   <div className={provider === 'stripe_connect' ? 'md:col-span-2' : ''}>
-                    <label className="text-surface-700 text-[14px] font-medium mb-1.5 block">
+                    <label className="text-surface-700 text-sm font-medium mb-1.5 block">
                       Currency
                     </label>
                     <select
                       value={methodCurrency}
                       onChange={(e) => setMethodCurrency(e.target.value)}
-                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] font-normal"
+                      className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-sm font-normal"
                     >
                       {supportedMethodCurrencies.map((code) => (
                         <option key={code} value={code}>
@@ -530,7 +528,7 @@ export default function DevPayoutsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-xl text-[14px] shadow-sm shadow-brand-500/10 transition-all"
+                  className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-xl text-sm shadow-sm shadow-brand-500/10 transition-all"
                 >
                   {submitting
                     ? provider === 'stripe_connect'
@@ -556,7 +554,7 @@ export default function DevPayoutsPage() {
                     className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5"
                   >
                     <div>
-                      <p className="text-surface-900 font-medium capitalize text-[14px]">
+                      <p className="text-surface-900 font-medium capitalize text-sm">
                         {acc.provider === 'paypal_email'
                           ? 'PayPal'
                           : acc.provider.replace('_', ' ')}
@@ -590,7 +588,7 @@ export default function DevPayoutsPage() {
                     className="flex items-center justify-between bg-slate-50/50 border border-slate-100/80 rounded-xl p-4.5"
                   >
                     <div>
-                      <p className="text-surface-900 font-mono font-semibold text-[15px]">
+                      <p className="text-surface-900 font-mono font-semibold text-sm">
                         {formatCurrency(req.requestedAmountMinor, req.currency)}
                       </p>
                       <p className="text-surface-500 text-xs mt-0.5 font-normal">

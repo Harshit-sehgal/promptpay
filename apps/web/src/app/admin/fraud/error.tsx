@@ -14,8 +14,9 @@ export default function AdminFraudError({
           <span className="text-red-400 text-xl font-bold">!</span>
         </div>
         <h2 className="text-white text-lg font-semibold mb-2">Failed to load fraud dashboard</h2>
-        <p className="text-ink-300 text-sm mb-6">
-          {error.message || 'An unexpected error occurred while loading fraud data. Please try again.'}
+        <p className="text-ink-200 text-sm mb-6">
+          {error.message ||
+            'An unexpected error occurred while loading fraud data. Please try again.'}
         </p>
         <button
           onClick={reset}

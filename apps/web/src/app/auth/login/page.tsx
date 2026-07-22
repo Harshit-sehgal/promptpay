@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
 import { resolvePostLoginPath } from '@/lib/auth-routing';
@@ -198,16 +199,14 @@ export default function LoginPage() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-            WaitLayer
-          </span>
+          <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
           <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
             Welcome back
           </h1>
-          <p className="text-surface-500 text-[14px] mb-8">Sign in to your account</p>
+          <p className="text-surface-500 text-sm mb-8">Sign in to your account</p>
 
           {error && (
             <div
@@ -215,7 +214,7 @@ export default function LoginPage() {
               role="alert"
               aria-live="polite"
             >
-              <p className="text-red-600 text-[14px]">{error}</p>
+              <p className="text-red-600 text-sm">{error}</p>
             </div>
           )}
 
@@ -223,7 +222,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="login-email"
-                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                className="text-surface-700 text-sm font-medium mb-1.5 block"
               >
                 Email
               </label>
@@ -236,20 +235,21 @@ export default function LoginPage() {
                 required
                 autoComplete="email"
                 inputMode="email"
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label
                   htmlFor="login-password"
-                  className="text-surface-700 text-[14px] font-medium block"
+                  className="text-surface-700 text-sm font-medium block"
                 >
                   Password
                 </label>
                 <Link
                   href="/auth/forgot-password"
-                  className="text-brand-500 hover:text-brand-600 text-[13px] font-medium transition-colors"
+                  className="text-brand-500 hover:text-brand-600 text-xs font-medium transition-colors"
                 >
                   Forgot password?
                 </Link>
@@ -262,13 +262,14 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 required
                 autoComplete="current-password"
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
             <div>
               <label
                 htmlFor="login-two-factor"
-                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                className="text-surface-700 text-sm font-medium mb-1.5 block"
               >
                 2FA code
               </label>
@@ -282,17 +283,20 @@ export default function LoginPage() {
                 autoComplete="one-time-code"
                 pattern="[0-9]{6}"
                 maxLength={6}
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
-            <button
+            <Button
               type="submit"
+              variant="brand"
+              size="lg"
+              isLoading={loading}
               disabled={loading}
-              aria-busy={loading}
-              className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
+              className="w-full rounded-xl text-sm"
             >
               {loading ? 'Signing in...' : 'Sign in'}
-            </button>
+            </Button>
           </form>
 
           <div className="flex items-center gap-3 my-6">
@@ -314,11 +318,11 @@ export default function LoginPage() {
             <button
               disabled
               type="button"
-              className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-400 font-medium py-3 rounded-xl text-[14px] opacity-75 cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-400 font-medium py-3 rounded-xl text-sm opacity-75 cursor-not-allowed"
             >
               <GoogleG size={18} />
               <span>Continue with Google</span>
-              <span className="text-[10px] text-surface-300 font-normal">
+              <span className="text-xs text-surface-300 font-normal">
                 (disabled: client ID missing)
               </span>
             </button>
@@ -328,14 +332,14 @@ export default function LoginPage() {
             <button
               onClick={handleMockGoogleLogin}
               type="button"
-              className="w-full flex items-center justify-center gap-3 bg-surface-50 hover:bg-surface-100/80 border border-surface-200 text-surface-700 font-semibold py-3 rounded-xl text-[14px] mt-3 transition-all"
+              className="w-full flex items-center justify-center gap-3 bg-surface-50 hover:bg-surface-100/80 border border-surface-200 text-surface-700 font-semibold py-3 rounded-xl text-sm mt-3 transition-all"
             >
               <GoogleG size={18} />
               <span>Continue with Mock Google</span>
             </button>
           )}
 
-          <p className="text-surface-500 text-[14px] text-center mt-7">
+          <p className="text-surface-500 text-sm text-center mt-7">
             Don't have an account?{' '}
             <Link
               href="/auth/signup"

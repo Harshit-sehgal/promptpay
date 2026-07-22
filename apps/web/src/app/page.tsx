@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { BackendStatus } from '@/components/backend-status';
 import { EarningsCalculator } from '@/components/earnings-calculator';
 import { useAuth } from '@/lib/auth-context';
 import { getDashboardPath } from '@/lib/auth-routing';
@@ -104,77 +105,56 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-white text-[#0a0a0a] antialiased selection:bg-[#0a0a0a] selection:text-white">
       {/* ── Navigation Header ── */}
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-          background: 'rgba(255,255,255,.82)',
-          backdropFilter: 'saturate(180%) blur(14px)',
-          borderBottom: '1px solid #ececec',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: '1180px',
-            margin: '0 auto',
-            padding: '0 32px',
-            height: '64px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <header className="sticky top-0 z-50 border-b border-surface-200/80 bg-white/80 backdrop-blur-md saturate-150">
+        <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between px-6 lg:px-8">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+          >
             <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true">
               <rect x="0" y="1.5" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
               <rect x="0" y="6.8" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
               <rect x="0" y="12.1" width="11" height="2.4" rx="0.4" fill="var(--accent,#16a34a)" />
             </svg>
-            <span style={{ fontSize: '16.5px', fontWeight: 600, letterSpacing: '-.01em' }}>
+            <span className="text-base font-semibold tracking-tight text-surface-900">
               WaitLayer
             </span>
           </Link>
-          <nav
-            className="wl-nav-links"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '34px',
-              fontSize: '14.5px',
-              color: '#444',
-            }}
-          >
-            <a href="#developers" className="wl-link-u" style={{ opacity: 0.85 }}>
+          <nav className="hidden items-center gap-8 text-sm text-surface-700 md:flex">
+            <a
+              href="#developers"
+              className="wl-link-u py-1 transition-colors hover:text-surface-900 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+            >
               Developers
             </a>
-            <a href="#sponsors" className="wl-link-u" style={{ opacity: 0.85 }}>
+            <a
+              href="#sponsors"
+              className="wl-link-u py-1 transition-colors hover:text-surface-900 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+            >
               Sponsors
             </a>
-            <Link href="/pricing" className="wl-link-u" style={{ opacity: 0.85 }}>
+            <Link
+              href="/pricing"
+              className="wl-link-u py-1 transition-colors hover:text-surface-900 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+            >
               Pricing
             </Link>
-            <a href="#trust" className="wl-link-u" style={{ opacity: 0.85 }}>
+            <a
+              href="#trust"
+              className="wl-link-u py-1 transition-colors hover:text-surface-900 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+            >
               Trust
             </a>
-            <Link href="/comparison" className="wl-link-u" style={{ opacity: 0.85 }}>
+            <Link
+              href="/comparison"
+              className="wl-link-u py-1 transition-colors hover:text-surface-900 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+            >
               Roadmap
             </Link>
           </nav>
           <Link
             href={isAuthenticated ? dashboardPath : '/auth/signup?role=developer'}
-            className="wlh-btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              height: '38px',
-              padding: '0 18px',
-              background: '#0a0a0a',
-              color: '#fff',
-              fontSize: '14px',
-              fontWeight: 500,
-              borderRadius: '7px',
-            }}
+            className="inline-flex h-9 items-center rounded-lg bg-surface-900 px-4 text-sm font-medium text-white transition-colors hover:bg-surface-800 active:bg-surface-950 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 motion-reduce:transition-none"
           >
             {isAuthenticated ? 'Dashboard' : 'Join beta'}
           </Link>
@@ -196,58 +176,27 @@ export default function HomePage() {
             >
               <div style={{ minWidth: 0 }}>
                 <div
-                  className="wlh-in"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '9px',
-                    fontFamily: "'IBM Plex Mono', monospace",
-                    fontSize: '11.5px',
-                    letterSpacing: '.12em',
-                    textTransform: 'uppercase',
-                    color: '#666',
-                    border: '1px solid #e2e2e2',
-                    borderRadius: '100px',
-                    padding: '6px 13px',
-                    marginBottom: '26px',
-                  }}
+                  className="wlh-in inline-flex flex-wrap items-center gap-3"
+                  style={{ marginBottom: '26px' }}
                 >
-                  <span
-                    className="wl-dot"
-                    style={{
-                      width: '6px',
-                      height: '6px',
-                      borderRadius: '50%',
-                      background: 'var(--accent,#16a34a)',
-                      display: 'inline-block',
-                    }}
-                  ></span>
-                  Private beta · rewards not yet enabled
+                  <span className="inline-flex items-center gap-2 rounded-full border border-surface-200 bg-white px-3 py-1.5 font-mono text-[11.5px] font-medium uppercase tracking-wider text-surface-700">
+                    <span className="wl-dot inline-block h-1.5 w-1.5 rounded-full bg-brand-600" />
+                    Private beta · rewards not yet enabled
+                  </span>
+                  <BackendStatus />
                 </div>
                 <h1
-                  className="wlh-in"
+                  className="wlh-in font-serif font-normal leading-[1.08] tracking-tight text-surface-950 text-balance"
                   style={{
-                    fontFamily: "'Instrument Serif', Georgia, serif",
-                    fontWeight: 400,
                     fontSize: 'clamp(40px, 5.2vw, 64px)',
-                    lineHeight: 1.02,
-                    letterSpacing: '-.02em',
-                    margin: '0 0 24px',
-                    color: '#0a0a0a',
-                    textWrap: 'balance',
                     animationDelay: '70ms',
                   }}
                 >
                   Help validate AI wait states without giving up your privacy.
                 </h1>
                 <p
-                  className="wlh-in"
+                  className="wlh-in max-w-lg text-lg leading-relaxed text-surface-700 text-pretty"
                   style={{
-                    maxWidth: '480px',
-                    fontSize: '18.5px',
-                    lineHeight: 1.6,
-                    color: '#555',
-                    margin: '0 0 30px',
                     animationDelay: '140ms',
                   }}
                 >

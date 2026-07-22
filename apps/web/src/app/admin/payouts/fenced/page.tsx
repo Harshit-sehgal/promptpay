@@ -256,7 +256,7 @@ export default function AdminFencedPayoutAccountsPage() {
                     setLimit(Number(e.target.value));
                     setPage(1);
                   }}
-                  className="bg-ink-700 border border-ink-600/50 rounded-lg px-2 py-1 text-ink-200 focus:outline-none focus:border-brand-500"
+                  className="bg-ink-700 border border-ink-600/50 rounded-lg px-2 py-1 text-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 >
                   {PAGE_SIZE_OPTIONS.map((opt) => (
                     <option key={opt} value={opt}>
@@ -323,7 +323,7 @@ export default function AdminFencedPayoutAccountsPage() {
               maxLength={500}
               required
               autoFocus
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
             />
 
             <div className="space-y-3 mb-4">
@@ -337,7 +337,7 @@ export default function AdminFencedPayoutAccountsPage() {
                   onChange={(e) => setProviderTxId(e.target.value)}
                   maxLength={255}
                   placeholder="txn_..."
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
               <div>
@@ -351,7 +351,7 @@ export default function AdminFencedPayoutAccountsPage() {
                   placeholder="e.g. paid, failed, cancelled"
                   rows={2}
                   maxLength={500}
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
               <div>
@@ -367,7 +367,7 @@ export default function AdminFencedPayoutAccountsPage() {
                   onChange={(e) => setSecondApproverId(e.target.value)}
                   maxLength={255}
                   placeholder="operator id"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
                 <p className="text-ink-500 text-xs mt-1">
                   High-value releases (exposure ≥ per-currency threshold) require a distinct second

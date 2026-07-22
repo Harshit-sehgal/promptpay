@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi } from '@/lib/api/services';
 
@@ -36,16 +37,14 @@ export default function ForgotPasswordPage() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-            WaitLayer
-          </span>
+          <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
           <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
             Reset your password
           </h1>
-          <p className="text-surface-500 text-[14px] mb-8">
+          <p className="text-surface-500 text-sm mb-8">
             Enter your account email and we&apos;ll send you a reset link.
           </p>
 
@@ -55,13 +54,13 @@ export default function ForgotPasswordPage() {
               role="alert"
               aria-live="polite"
             >
-              <p className="text-red-600 text-[14px]">{error}</p>
+              <p className="text-red-600 text-sm">{error}</p>
             </div>
           )}
 
           {sent ? (
             <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
-              <p className="text-emerald-700 text-[14px]">
+              <p className="text-emerald-700 text-sm">
                 If an account exists for <span className="font-medium">{email}</span>, a password
                 reset link has been sent. The link is valid for 1 hour.
               </p>
@@ -76,7 +75,7 @@ export default function ForgotPasswordPage() {
               <div>
                 <label
                   htmlFor="forgot-password-email"
-                  className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                  className="text-surface-700 text-sm font-medium mb-1.5 block"
                 >
                   Email
                 </label>
@@ -89,21 +88,24 @@ export default function ForgotPasswordPage() {
                   required
                   autoComplete="email"
                   inputMode="email"
-                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                  className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                 />
               </div>
-              <button
+              <Button
                 type="submit"
+                variant="brand"
+                size="lg"
+                isLoading={loading}
                 disabled={loading}
-                aria-busy={loading}
-                className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
+                className="w-full rounded-xl text-sm"
               >
                 {loading ? 'Sending...' : 'Send reset link'}
-              </button>
+              </Button>
             </form>
           )}
 
-          <p className="text-surface-500 text-[14px] text-center mt-7">
+          <p className="text-surface-500 text-sm text-center mt-7">
             Remembered it?{' '}
             <Link
               href="/auth/login"

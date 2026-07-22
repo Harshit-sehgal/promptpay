@@ -152,14 +152,25 @@ export default function DeveloperDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [dashboardRes, referralRes] = await Promise.all([
+        developerApi.getDashboard(),
+        referralApi.getInfo(),
+      ]);
+      setData(dashboardRes.data);
+      setReferral(referralRes.data);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load dashboard'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    Promise.all([developerApi.getDashboard(), referralApi.getInfo()])
-      .then(([dashboardRes, referralRes]) => {
-        setData(dashboardRes.data);
-        setReferral(referralRes.data);
-      })
-      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load dashboard')))
-      .finally(() => setLoading(false));
+    loadDashboard();
   }, []);
 
   const trust = data ? trustConfig(data.trustLevel) : trustConfig('new');
@@ -251,12 +262,20 @@ export default function DeveloperDashboard() {
       {error && (
         <div className="mb-8 flex items-center justify-between rounded-lg border border-red-200/70 bg-red-50 p-4">
           <p className="text-sm font-normal text-red-600">{error}</p>
-          <button
-            onClick={() => setError(null)}
-            className="text-xs font-medium text-red-500 transition-colors hover:text-red-700"
-          >
-            Dismiss
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void loadDashboard()}
+              className="text-xs font-medium text-red-600 transition-colors hover:text-red-800"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => setError(null)}
+              className="text-xs font-medium text-red-500 transition-colors hover:text-red-700"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import * as Sentry from '@sentry/nextjs';
 
 export default function Error({
@@ -23,12 +24,9 @@ export default function Error({
       <div className="max-w-md text-center">
         <h2 className="text-2xl font-bold text-surface-900 mb-2">Something went wrong</h2>
         <p className="text-surface-500 mb-6">An unexpected error occurred. Please try again.</p>
-        <button
-          onClick={reset}
-          className="bg-brand-500 hover:bg-brand-600 text-white font-medium py-2.5 px-6 rounded-xl text-[14px] transition-colors"
-        >
+        <Button variant="brand" onClick={reset} rounded="xl">
           Try again
-        </button>
+        </Button>
       </div>
     </div>
   );

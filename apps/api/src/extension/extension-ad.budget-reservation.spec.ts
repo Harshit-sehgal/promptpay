@@ -191,7 +191,7 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
     expect(rootExecuteRaw).not.toHaveBeenCalled();
     expect(txExecuteRaw.mock.calls[1][0].join(' ')).toContain('"budget_reserved_minor"');
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
-      isolationLevel: 'Serializable',
+      isolationLevel: 'ReadCommitted',
       timeout: 10000,
     });
   });

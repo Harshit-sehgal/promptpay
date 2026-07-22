@@ -150,7 +150,7 @@ export default function AdvertiserCampaignsPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">Campaigns</h1>
-          <p className="text-ink-300 text-sm">Manage and review your ad campaigns</p>
+          <p className="text-ink-200 text-sm">Manage and review your ad campaigns</p>
         </div>
         <Link
           href="/advertiser/campaigns/new"
@@ -186,7 +186,7 @@ export default function AdvertiserCampaignsPage() {
 
           {/* Filter */}
           <div className="mb-6 flex items-center gap-2">
-            <span className="text-ink-400 text-sm">Status:</span>
+            <span className="text-ink-300 text-sm">Status:</span>
             {['', 'draft', 'submitted', 'approved', 'active', 'paused', 'rejected', 'archived'].map(
               (status) => (
                 <button
@@ -198,7 +198,7 @@ export default function AdvertiserCampaignsPage() {
                   className={`px-3 py-1 rounded-lg text-xs transition-colors ${
                     statusFilter === status
                       ? 'bg-brand-500 text-white'
-                      : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
+                      : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
                   }`}
                 >
                   {status || 'All'}
@@ -210,7 +210,7 @@ export default function AdvertiserCampaignsPage() {
           {/* Campaign list */}
           {data.campaigns.length === 0 ? (
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-              <p className="text-ink-400 text-sm mb-4">No campaigns found.</p>
+              <p className="text-ink-300 text-sm mb-4">No campaigns found.</p>
               <Link
                 href="/advertiser/campaigns/new"
                 className="bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
@@ -338,7 +338,7 @@ export default function AdvertiserCampaignsPage() {
                     </div>
                     <div>
                       <p className="text-ink-500 text-xs">Created</p>
-                      <p className="text-ink-300 text-xs">
+                      <p className="text-ink-200 text-xs">
                         {formatRelativeTime(campaign.createdAt)}
                       </p>
                     </div>
@@ -358,7 +358,7 @@ export default function AdvertiserCampaignsPage() {
               >
                 Previous
               </button>
-              <span className="text-ink-400 text-sm">
+              <span className="text-ink-300 text-sm">
                 Page {page} of {Math.max(1, Math.ceil(data.total / limit))}
               </span>
               <button

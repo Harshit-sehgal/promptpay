@@ -24,7 +24,7 @@ export default function BillingError({
           />
         </svg>
         <h2 className="text-white font-semibold mb-2">Failed to load billing</h2>
-        <p className="text-ink-300 text-sm mb-6">
+        <p className="text-ink-200 text-sm mb-6">
           {error.message || 'Something went wrong. Please try again.'}
         </p>
         <button

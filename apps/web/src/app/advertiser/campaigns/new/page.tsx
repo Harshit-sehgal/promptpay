@@ -220,7 +220,7 @@ export default function NewCampaignPage() {
                 required
                 placeholder="My developer tool campaign"
                 autoComplete="off"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
             </div>
             <div>
@@ -289,7 +289,7 @@ export default function NewCampaignPage() {
                   onChange={(e) => setBidAmount(e.target.value)}
                   required
                   inputMode="decimal"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
             </div>
@@ -313,7 +313,7 @@ export default function NewCampaignPage() {
                   onChange={(e) => setBudgetTotal(e.target.value)}
                   required
                   inputMode="decimal"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
                 <p className="text-ink-500 text-xs mt-1">
                   Minimum {moneyPolicy.minimumBudgetLabel}
@@ -359,7 +359,7 @@ export default function NewCampaignPage() {
                 placeholder="https://your-product.com"
                 autoComplete="url"
                 inputMode="url"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
             </div>
           </div>
@@ -386,7 +386,7 @@ export default function NewCampaignPage() {
                 required
                 maxLength={50}
                 placeholder="Short, attention-grabbing headline"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
               <p className="text-ink-500 text-xs mt-1">{headline.length}/50 characters</p>
             </div>
@@ -408,7 +408,7 @@ export default function NewCampaignPage() {
                 maxLength={80}
                 rows={2}
                 placeholder="Max 80 chars — shown during wait states"
-                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
               />
               <p className="text-ink-500 text-xs mt-1">{message.length}/80 characters</p>
             </div>
@@ -430,7 +430,7 @@ export default function NewCampaignPage() {
                   required
                   maxLength={25}
                   placeholder="Learn more"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
               <div>
@@ -447,7 +447,7 @@ export default function NewCampaignPage() {
                   value={ctaUrl}
                   onChange={(e) => setCtaUrl(e.target.value)}
                   placeholder="Defaults to landing URL"
-                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+                  className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
                 />
               </div>
             </div>
@@ -486,7 +486,7 @@ export default function NewCampaignPage() {
               value={targetCountries}
               onChange={(e) => setTargetCountries(e.target.value)}
               placeholder="US, GB, DE (leave empty for all)"
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
             />
             <p className="text-ink-500 text-xs mt-1">
               Empty = worldwide. Use 2-letter ISO codes (US, GB, DE, IN, etc.)

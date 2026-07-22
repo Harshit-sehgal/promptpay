@@ -30,8 +30,10 @@ export default function SiteFooter() {
           style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '40px' }}
         >
           <div>
+            {' '}
             <Link
               href="/"
+              className="focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
               style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}
             >
               <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true">
@@ -88,27 +90,42 @@ export default function SiteFooter() {
               }}
             >
               <li>
-                <Link href="/#developers" className="wl-link-u">
+                <Link
+                  href="//#developers"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Developers
                 </Link>
               </li>
               <li>
-                <Link href="/#sponsors" className="wl-link-u">
+                <Link
+                  href="/#sponsors"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Sponsors
                 </Link>
               </li>
               <li>
-                <Link href="/pricing" className="wl-link-u">
+                <Link
+                  href="/pricing"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Pricing
                 </Link>
               </li>
               <li>
-                <Link href="/#trust" className="wl-link-u">
+                <Link
+                  href="/#trust"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Trust
                 </Link>
               </li>
               <li>
-                <Link href="/comparison" className="wl-link-u">
+                <Link
+                  href="/comparison"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Roadmap
                 </Link>
               </li>
@@ -141,48 +158,77 @@ export default function SiteFooter() {
             >
               {docsUrl && (
                 <li>
-                  <a href={docsUrl} className="wl-link-u" target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={docsUrl}
+                    className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     API docs
                   </a>
                 </li>
               )}
               <li>
-                <Link href="/status" className="wl-link-u">
+                <Link
+                  href="/status"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   System status
                 </Link>
               </li>
               <li>
-                <Link href="/privacy" className="wl-link-u">
+                <Link
+                  href="/privacy"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="wl-link-u">
+                <Link
+                  href="/terms"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Terms
                 </Link>
               </li>
               <li>
-                <Link href="/payout-policy" className="wl-link-u">
+                <Link
+                  href="/payout-policy"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Payout Policy
                 </Link>
               </li>
               <li>
-                <Link href="/advertiser-policy" className="wl-link-u">
+                <Link
+                  href="/advertiser-policy"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Advertiser Policy
                 </Link>
               </li>
               <li>
-                <Link href="/legal/cookie-policy" className="wl-link-u">
+                <Link
+                  href="/legal/cookie-policy"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Cookie Policy
                 </Link>
               </li>
               <li>
-                <Link href="/legal/data-retention" className="wl-link-u">
+                <Link
+                  href="/legal/data-retention"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Data retention
                 </Link>
               </li>
               <li>
-                <Link href="/privacy#ccpa" className="wl-link-u">
+                <Link
+                  href="/privacy#ccpa"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Do Not Sell or Share My Personal Information
                 </Link>
               </li>
@@ -195,7 +241,7 @@ export default function SiteFooter() {
                 fontSize: '11px',
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
-                color: '#6b6b6b',
+                color: '#525252',
                 marginBottom: '16px',
               }}
             >
@@ -210,21 +256,30 @@ export default function SiteFooter() {
                 flexDirection: 'column',
                 gap: '11px',
                 fontSize: '14px',
-                color: '#555',
+                color: '#404040',
               }}
             >
               <li>
-                <Link href="/manifesto" className="wl-link-u">
+                <Link
+                  href="/manifesto"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Manifesto
                 </Link>
               </li>
               <li>
-                <Link href="/changelog" className="wl-link-u">
+                <Link
+                  href="/changelog"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Changelog
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="wl-link-u">
+                <Link
+                  href="/contact"
+                  className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
+                >
                   Contact
                 </Link>
               </li>

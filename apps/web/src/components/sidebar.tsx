@@ -45,11 +45,7 @@ export function Sidebar({
         >
           {brandLetter}
         </div>
-        <span
-          className={`font-semibold ${
-            isLight ? 'text-surface-900' : 'text-white'
-          }`}
-        >
+        <span className={`font-semibold ${isLight ? 'text-surface-900' : 'text-white'}`}>
           {brand}
         </span>
       </div>
@@ -60,14 +56,14 @@ export function Sidebar({
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14px] transition-all duration-150 ${
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[14px] transition-all duration-150 focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
                 isActive
                   ? isLight
-                    ? 'bg-brand-50 border border-brand-200/60 text-brand-600 font-medium'
+                    ? 'bg-brand-50 border border-brand-200/60 text-brand-700 font-medium'
                     : 'bg-ink-700 text-white'
                   : isLight
-                  ? 'text-surface-500 hover:text-surface-900 hover:bg-surface-100/50'
-                  : 'text-ink-300 hover:text-white hover:bg-ink-700/50'
+                    ? 'text-surface-600 hover:text-surface-900 hover:bg-surface-100/50'
+                    : 'text-ink-200 hover:text-white hover:bg-ink-700/50'
               } shrink-0 whitespace-nowrap lg:w-full`}
             >
               {item.label}
@@ -82,8 +78,8 @@ export function Sidebar({
       >
         <Link
           href={backHref}
-          className={`text-sm transition-colors ${
-            isLight ? 'text-surface-400 hover:text-surface-900' : 'text-ink-400 hover:text-white'
+          className={`text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded ${
+            isLight ? 'text-surface-500 hover:text-surface-900' : 'text-ink-300 hover:text-white'
           }`}
         >
           {backLabel}

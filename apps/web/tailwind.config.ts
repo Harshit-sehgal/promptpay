@@ -49,7 +49,10 @@ const config: Config = {
         'fade-in': 'fadeIn 0.6s ease-out forwards',
         'fade-in-up': 'fadeInUp 0.6s ease-out forwards',
         'slide-in': 'slideIn 0.3s ease-out forwards',
-        'float': 'float 6s ease-in-out infinite',
+        float: 'float 6s ease-in-out infinite',
+      },
+      transitionTimingFunction: {
+        spring: 'cubic-bezier(0.2, 0.7, 0.3, 1)',
       },
       keyframes: {
         fadeIn: {

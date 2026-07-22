@@ -133,7 +133,7 @@ export default function AdminCampaignsPage() {
     <>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-1">Campaign approvals</h1>
-        <p className="text-ink-300 text-sm">
+        <p className="text-ink-200 text-sm">
           Review campaigns and their creatives before activation
         </p>
       </div>
@@ -150,7 +150,7 @@ export default function AdminCampaignsPage() {
 
       {campaigns.length === 0 && !loading ? (
         <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-400 text-sm">No campaigns awaiting review.</p>
+          <p className="text-ink-300 text-sm">No campaigns awaiting review.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -204,7 +204,7 @@ export default function AdminCampaignsPage() {
                 </div>
                 <div>
                   <p className="text-ink-500 text-xs">Submitted</p>
-                  <p className="text-ink-300 text-xs">
+                  <p className="text-ink-200 text-xs">
                     {formatRelativeTime(c.submittedAt || c.createdAt)}
                   </p>
                 </div>
@@ -235,7 +235,7 @@ export default function AdminCampaignsPage() {
                           <div className="flex-1 min-w-0 mr-4">
                             <div className="flex items-center gap-2 mb-1">
                               <StatusBadge status={cr.status} />
-                              <span className="text-ink-300 text-xs truncate">
+                              <span className="text-ink-200 text-xs truncate">
                                 {cr.displayDomain}
                               </span>
                             </div>
@@ -295,7 +295,7 @@ export default function AdminCampaignsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
           <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-white font-semibold mb-2">Reject campaign</h3>
-            <p className="text-ink-400 text-sm mb-4">
+            <p className="text-ink-300 text-sm mb-4">
               <span className="text-white">{rejectModalFor.title || rejectModalFor.name}</span>
             </p>
             <textarea
@@ -304,7 +304,7 @@ export default function AdminCampaignsPage() {
               placeholder="Reason (required) — visible to advertiser"
               rows={3}
               required
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
             />
             <div className="flex items-center gap-3 justify-end">
               <button
@@ -333,7 +333,7 @@ export default function AdminCampaignsPage() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
           <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-white font-semibold mb-2">Reject creative</h3>
-            <p className="text-ink-400 text-sm mb-4">
+            <p className="text-ink-300 text-sm mb-4">
               Domain: <span className="text-white">{creativeRejectFor.displayDomain}</span>
             </p>
             <p className="text-white text-xs mb-4 truncate">{creativeRejectFor.sponsoredMessage}</p>
@@ -343,7 +343,7 @@ export default function AdminCampaignsPage() {
               placeholder="Reason (required) — visible to advertiser"
               rows={3}
               required
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4"
             />
             <div className="flex items-center gap-3 justify-end">
               <button
@@ -378,7 +378,7 @@ export default function AdminCampaignsPage() {
           >
             Previous
           </button>
-          <span className="text-ink-400 text-sm">
+          <span className="text-ink-300 text-sm">
             Page {page} of {Math.max(1, Math.ceil(total / limit))}
           </span>
           <button

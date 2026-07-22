@@ -13,14 +13,14 @@ export default function TermsPage() {
       <div className="max-w-3xl mx-auto">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-surface-500 hover:text-surface-700 text-[14px] font-medium mb-8 transition-colors"
+          className="inline-flex items-center gap-2 text-surface-500 hover:text-surface-700 text-sm font-medium mb-8 transition-colors"
         >
           ← Back to home
         </Link>
         <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-10">
           Terms of Service
         </h1>
-        <div className="text-surface-600 text-[15px] leading-relaxed space-y-6">
+        <div className="text-surface-600 text-sm leading-relaxed space-y-6">
           <p>
             <strong className="text-surface-900">Last updated:</strong> July 2026
           </p>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
+import { Button } from '@/components/ui/button';
 import api from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
@@ -282,16 +283,14 @@ export default function SignupPage() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-            WaitLayer
-          </span>
+          <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
           <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
             Create your account
           </h1>
-          <p className="text-surface-500 text-[14px] mb-8">Join the private AI wait-state beta</p>
+          <p className="text-surface-500 text-sm mb-8">Join the private AI wait-state beta</p>
 
           {/* Role toggle — Notion-style segmented control */}
           <fieldset
@@ -299,7 +298,7 @@ export default function SignupPage() {
             aria-label="Account type"
           >
             <label
-              className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-[14px] font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
+              className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-sm font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
                 role === 'developer'
                   ? 'bg-white text-surface-900 shadow-sm'
                   : 'text-surface-500 hover:text-surface-700'
@@ -311,12 +310,12 @@ export default function SignupPage() {
                 value="developer"
                 checked={role === 'developer'}
                 onChange={() => setRole('developer')}
-                className="sr-only"
+                className="sr-only focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
               />
               Developer
             </label>
             <label
-              className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-[14px] font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
+              className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-sm font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
                 role === 'advertiser'
                   ? 'bg-white text-surface-900 shadow-sm'
                   : 'text-surface-500 hover:text-surface-700'
@@ -328,7 +327,7 @@ export default function SignupPage() {
                 value="advertiser"
                 checked={role === 'advertiser'}
                 onChange={() => setRole('advertiser')}
-                className="sr-only"
+                className="sr-only focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
               />
               Advertiser
             </label>
@@ -340,7 +339,7 @@ export default function SignupPage() {
               role="alert"
               aria-live="polite"
             >
-              <p className="text-red-600 text-[14px]">{error}</p>
+              <p className="text-red-600 text-sm">{error}</p>
             </div>
           )}
 
@@ -349,7 +348,7 @@ export default function SignupPage() {
               <div>
                 <label
                   htmlFor="signup-company-name"
-                  className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                  className="text-surface-700 text-sm font-medium mb-1.5 block"
                 >
                   Company name
                 </label>
@@ -360,14 +359,15 @@ export default function SignupPage() {
                   onChange={(e) => setName(e.target.value)}
                   placeholder="My Company"
                   autoComplete="organization"
-                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                  className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                 />
               </div>
             )}
             <div>
               <label
                 htmlFor="signup-email"
-                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                className="text-surface-700 text-sm font-medium mb-1.5 block"
               >
                 Email
               </label>
@@ -380,13 +380,14 @@ export default function SignupPage() {
                 required
                 autoComplete="email"
                 inputMode="email"
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
             <div>
               <label
                 htmlFor="signup-password"
-                className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                className="text-surface-700 text-sm font-medium mb-1.5 block"
               >
                 Password
               </label>
@@ -399,14 +400,15 @@ export default function SignupPage() {
                 required
                 autoComplete="new-password"
                 minLength={8}
-                className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               />
             </div>
             {role === 'developer' && (
               <div>
                 <label
                   htmlFor="signup-referral-code"
-                  className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+                  className="text-surface-700 text-sm font-medium mb-1.5 block"
                 >
                   Referral code <span className="text-surface-400 font-normal">(optional)</span>
                 </label>
@@ -417,20 +419,21 @@ export default function SignupPage() {
                   onChange={(e) => setReferrerCode(e.target.value)}
                   placeholder="Got an invite code?"
                   autoComplete="off"
-                  className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+                  className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
                 />
               </div>
             )}
             <label
               htmlFor="signup-age-confirmation"
-              className="flex items-start gap-2.5 text-surface-600 text-[13px] leading-relaxed cursor-pointer"
+              className="flex items-start gap-2.5 text-surface-600 text-xs leading-relaxed cursor-pointer"
             >
               <input
                 id="signup-age-confirmation"
                 type="checkbox"
                 checked={ageConfirmed}
                 onChange={(e) => setAgeConfirmed(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-surface-300 text-brand-500 focus:ring-brand-400/20"
+                className="mt-0.5 h-4 w-4 rounded border-surface-300 text-brand-500 focus:ring-2 focus:ring-brand-500/30"
                 required
               />
               <span>
@@ -452,14 +455,16 @@ export default function SignupPage() {
               </span>
             </label>
 
-            <button
+            <Button
               type="submit"
+              variant="brand"
+              size="lg"
+              isLoading={loading}
               disabled={loading || !ageConfirmed || !policyVersion}
-              aria-busy={loading}
-              className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
+              className="w-full rounded-xl text-sm"
             >
               {loading ? 'Creating account...' : 'Create account'}
-            </button>
+            </Button>
           </form>
 
           <div className="flex items-center gap-3 my-6">
@@ -477,7 +482,7 @@ export default function SignupPage() {
             <button
               disabled
               type="button"
-              className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-400 font-medium py-3 rounded-xl text-[14px] opacity-75 cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-400 font-medium py-3 rounded-xl text-sm opacity-75 cursor-not-allowed"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path
@@ -498,7 +503,7 @@ export default function SignupPage() {
                 />
               </svg>
               <span>Continue with Google</span>
-              <span className="text-[10px] text-surface-300 font-normal">
+              <span className="text-xs text-surface-300 font-normal">
                 (disabled: client ID missing)
               </span>
             </button>
@@ -508,7 +513,7 @@ export default function SignupPage() {
             <button
               onClick={handleMockGoogleSignup}
               type="button"
-              className="w-full flex items-center justify-center gap-3 bg-surface-50 hover:bg-surface-100/80 border border-surface-200 text-surface-700 font-semibold py-3 rounded-xl text-[14px] mt-3 transition-all"
+              className="w-full flex items-center justify-center gap-3 bg-surface-50 hover:bg-surface-100/80 border border-surface-200 text-surface-700 font-semibold py-3 rounded-xl text-sm mt-3 transition-all"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path
@@ -532,7 +537,7 @@ export default function SignupPage() {
             </button>
           )}
 
-          <p className="text-surface-500 text-[14px] text-center mt-7">
+          <p className="text-surface-500 text-sm text-center mt-7">
             Already have an account?{' '}
             <Link
               href="/auth/login"

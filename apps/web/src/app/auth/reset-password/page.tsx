@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi } from '@/lib/api/services';
 
@@ -45,7 +46,7 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <div className="bg-red-50 border border-red-200/60 rounded-xl p-4">
-        <p className="text-red-600 text-[14px]">
+        <p className="text-red-600 text-sm">
           Missing reset token. Please use the link from your email, or{' '}
           <Link href="/auth/forgot-password" className="font-medium underline">
             request a new one
@@ -59,7 +60,7 @@ function ResetPasswordForm() {
   if (done) {
     return (
       <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
-        <p className="text-emerald-700 text-[14px]">
+        <p className="text-emerald-700 text-sm">
           Password reset successfully. All sessions were signed out — redirecting you to sign in...
         </p>
       </div>
@@ -74,7 +75,7 @@ function ResetPasswordForm() {
           role="alert"
           aria-live="polite"
         >
-          <p className="text-red-600 text-[14px]">{error}</p>
+          <p className="text-red-600 text-sm">{error}</p>
         </div>
       )}
 
@@ -87,7 +88,7 @@ function ResetPasswordForm() {
         <div>
           <label
             htmlFor="reset-password-new"
-            className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+            className="text-surface-700 text-sm font-medium mb-1.5 block"
           >
             New password
           </label>
@@ -100,13 +101,14 @@ function ResetPasswordForm() {
             required
             minLength={8}
             autoComplete="new-password"
-            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+            className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
           />
         </div>
         <div>
           <label
             htmlFor="reset-password-confirm"
-            className="text-surface-700 text-[14px] font-medium mb-1.5 block"
+            className="text-surface-700 text-sm font-medium mb-1.5 block"
           >
             Confirm new password
           </label>
@@ -119,17 +121,20 @@ function ResetPasswordForm() {
             required
             minLength={8}
             autoComplete="new-password"
-            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-[14px] placeholder:text-surface-400 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/20 transition-all"
+
+            className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
           />
         </div>
-        <button
+        <Button
           type="submit"
+          variant="brand"
+          size="lg"
+          isLoading={loading}
           disabled={loading}
-          aria-busy={loading}
-          className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium py-3 rounded-xl text-[14px] transition-colors shadow-sm shadow-brand-500/20"
+          className="w-full rounded-xl text-sm"
         >
           {loading ? 'Resetting...' : 'Reset password'}
-        </button>
+        </Button>
       </form>
     </>
   );
@@ -147,22 +152,20 @@ export default function ResetPasswordPage() {
           <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
             W
           </div>
-          <span className="text-surface-900 font-semibold text-[15px] tracking-tight">
-            WaitLayer
-          </span>
+          <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
         </div>
 
         <div className="bg-white border border-surface-200/80 rounded-2xl p-8 shadow-sm shadow-surface-200/40">
           <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
             Choose a new password
           </h1>
-          <p className="text-surface-500 text-[14px] mb-8">Minimum 8 characters.</p>
+          <p className="text-surface-500 text-sm mb-8">Minimum 8 characters.</p>
 
-          <Suspense fallback={<p className="text-surface-500 text-[14px]">Loading...</p>}>
+          <Suspense fallback={<p className="text-surface-500 text-sm">Loading...</p>}>
             <ResetPasswordForm />
           </Suspense>
 
-          <p className="text-surface-500 text-[14px] text-center mt-7">
+          <p className="text-surface-500 text-sm text-center mt-7">
             <Link
               href="/auth/login"
               className="text-brand-500 hover:text-brand-600 font-medium transition-colors"

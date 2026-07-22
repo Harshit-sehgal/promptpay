@@ -127,13 +127,13 @@ function trustLevelColor(level: string | null): string {
     case 'low_trust':
       return 'text-amber-400';
     case 'new':
-      return 'text-ink-400';
+      return 'text-ink-300';
     case 'restricted':
       return 'text-red-400';
     case 'banned':
       return 'text-red-600';
     default:
-      return 'text-ink-400';
+      return 'text-ink-300';
   }
 }
 
@@ -280,7 +280,7 @@ export default function AdminFraudPage() {
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white mb-1">Fraud review dashboard</h1>
-        <p className="text-ink-300 text-sm">
+        <p className="text-ink-200 text-sm">
           Investigate flagged activity, resolve cases, and monitor trust scores
         </p>
       </div>
@@ -291,35 +291,35 @@ export default function AdminFraudPage() {
           {/* Main stat cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
-              <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Open</p>
+              <p className="text-ink-300 text-xs uppercase tracking-wider mb-1">Open</p>
               <p className="text-2xl font-bold text-white">
                 {formatNumber(statsSummary.byStatus.open)}
               </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
-              <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Reviewing</p>
+              <p className="text-ink-300 text-xs uppercase tracking-wider mb-1">Reviewing</p>
               <p className="text-2xl font-bold text-amber-400">
                 {formatNumber(statsSummary.byStatus.reviewing)}
               </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
-              <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Escalated</p>
+              <p className="text-ink-300 text-xs uppercase tracking-wider mb-1">Escalated</p>
               <p className="text-2xl font-bold text-red-400">
                 {formatNumber(statsSummary.byStatus.escalated)}
               </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
-              <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Resolved (7d)</p>
+              <p className="text-ink-300 text-xs uppercase tracking-wider mb-1">Resolved (7d)</p>
               <p className="text-2xl font-bold text-emerald-400">
                 {formatNumber(statsSummary.resolvedLast7d)}
               </p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
-              <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Escalation rate</p>
+              <p className="text-ink-300 text-xs uppercase tracking-wider mb-1">Escalation rate</p>
               <p className="text-2xl font-bold text-white">{statsSummary.escalationRate}%</p>
             </div>
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-4">
-              <p className="text-ink-400 text-xs uppercase tracking-wider mb-1">Avg resolution</p>
+              <p className="text-ink-300 text-xs uppercase tracking-wider mb-1">Avg resolution</p>
               <p className="text-2xl font-bold text-white">
                 {statsSummary.avgResolutionMinutes < 60
                   ? `${statsSummary.avgResolutionMinutes}m`
@@ -341,7 +341,7 @@ export default function AdminFraudPage() {
                   const info = SEVERITY_LABELS[sev];
                   return (
                     <div key={sev} className="flex items-center gap-3">
-                      <span className="text-ink-300 text-xs w-14 capitalize">{info.label}</span>
+                      <span className="text-ink-200 text-xs w-14 capitalize">{info.label}</span>
                       <div className="flex-1 bg-ink-700 rounded-full h-2.5 overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${info.color}`}
@@ -359,7 +359,7 @@ export default function AdminFraudPage() {
             <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-5">
               <h3 className="text-white text-sm font-semibold mb-3">Flag type breakdown</h3>
               {stats && stats.byFlagType.length === 0 ? (
-                <p className="text-ink-400 text-xs">No active flags</p>
+                <p className="text-ink-300 text-xs">No active flags</p>
               ) : stats ? (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                   {stats.byFlagType
@@ -370,7 +370,7 @@ export default function AdminFraudPage() {
                       const pct = (t.count / maxFt) * 100;
                       return (
                         <div key={t.type} className="flex items-center gap-2">
-                          <span className="text-ink-300 text-xs flex-1 truncate">
+                          <span className="text-ink-200 text-xs flex-1 truncate">
                             {flagTypeLabel(t.type)}
                           </span>
                           <div className="w-24 bg-ink-700 rounded-full h-2 overflow-hidden">
@@ -399,7 +399,7 @@ export default function AdminFraudPage() {
           <button
             onClick={() => setTab('open')}
             className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              tab === 'open' ? 'bg-brand-500 text-white' : 'text-ink-300 hover:text-white'
+              tab === 'open' ? 'bg-brand-500 text-white' : 'text-ink-200 hover:text-white'
             }`}
           >
             Active flags {activeCount > 0 && `(${activeCount})`}
@@ -407,7 +407,7 @@ export default function AdminFraudPage() {
           <button
             onClick={() => setTab('resolved')}
             className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              tab === 'resolved' ? 'bg-brand-500 text-white' : 'text-ink-300 hover:text-white'
+              tab === 'resolved' ? 'bg-brand-500 text-white' : 'text-ink-200 hover:text-white'
             }`}
           >
             Resolved history
@@ -418,7 +418,7 @@ export default function AdminFraudPage() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Severity filter */}
           <div className="flex items-center gap-1">
-            <span className="text-ink-400 text-xs mr-1">Severity:</span>
+            <span className="text-ink-300 text-xs mr-1">Severity:</span>
             {['', 'critical', 'high', 'medium', 'low'].map((s) => (
               <button
                 key={s || 'all'}
@@ -426,7 +426,7 @@ export default function AdminFraudPage() {
                 className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
                   severityFilter === s
                     ? 'bg-brand-500 text-white'
-                    : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
+                    : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
                 }`}
               >
                 {s || 'All'}
@@ -438,7 +438,7 @@ export default function AdminFraudPage() {
           <select
             value={flagTypeFilter}
             onChange={(e) => setFlagTypeFilter(e.target.value)}
-            className="bg-ink-700 border border-ink-600/50 rounded-lg px-2.5 py-1 text-xs text-ink-200 focus:outline-none focus:border-brand-500"
+            className="bg-ink-700 border border-ink-600/50 rounded-lg px-2.5 py-1 text-xs text-ink-200 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
           >
             <option value="">All types</option>
             {FLAG_TYPES.map((ft) => (
@@ -455,12 +455,12 @@ export default function AdminFraudPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by user email..."
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg pl-3 pr-8 py-1.5 text-xs text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 hover:text-white"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-300 hover:text-white"
               >
                 ✕
               </button>
@@ -485,7 +485,7 @@ export default function AdminFraudPage() {
 
       {!loading && flags.length === 0 ? (
         <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-12 text-center">
-          <p className="text-ink-400 text-sm">
+          <p className="text-ink-300 text-sm">
             {tab === 'open'
               ? 'No active fraud flags. The queue is clean.'
               : 'No resolved flags found matching your filters.'}
@@ -520,7 +520,7 @@ export default function AdminFraudPage() {
                           className={`w-2 h-2 rounded-full shrink-0 ${severityDot(flag.severity)}`}
                         />
                         <StatusBadge status={flag.severity} />
-                        <span className="text-ink-300 text-xs capitalize truncate">
+                        <span className="text-ink-200 text-xs capitalize truncate">
                           {flagTypeLabel(flag.flagType)}
                         </span>
                         {flag.status !== 'open' && flag.status !== 'reviewing' && (
@@ -566,8 +566,8 @@ export default function AdminFraudPage() {
                       {/* Evidence */}
                       {flag.evidence && Object.keys(flag.evidence).length > 0 && (
                         <div>
-                          <p className="text-ink-400 text-xs font-medium mb-1">Evidence</p>
-                          <pre className="bg-ink-700/50 rounded-lg p-3 text-xs text-ink-300 overflow-x-auto max-h-40 overflow-y-auto">
+                          <p className="text-ink-300 text-xs font-medium mb-1">Evidence</p>
+                          <pre className="bg-ink-700/50 rounded-lg p-3 text-xs text-ink-200 overflow-x-auto max-h-40 overflow-y-auto">
                             {JSON.stringify(flag.evidence, null, 2)}
                           </pre>
                         </div>
@@ -577,26 +577,26 @@ export default function AdminFraudPage() {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                         <div>
                           <p className="text-ink-500">Flag ID</p>
-                          <p className="text-ink-300 font-mono truncate">
+                          <p className="text-ink-200 font-mono truncate">
                             {flag.id.slice(0, 12)}...
                           </p>
                         </div>
                         <div>
                           <p className="text-ink-500">User ID</p>
-                          <p className="text-ink-300 font-mono truncate">
+                          <p className="text-ink-200 font-mono truncate">
                             {flag.userId.slice(0, 12)}...
                           </p>
                         </div>
                         <div>
                           <p className="text-ink-500">Created</p>
-                          <p className="text-ink-300">
+                          <p className="text-ink-200">
                             {new Date(flag.createdAt).toLocaleString()}
                           </p>
                         </div>
                         {flag.resolvedAt && (
                           <div>
                             <p className="text-ink-500">Resolved</p>
-                            <p className="text-ink-300">
+                            <p className="text-ink-200">
                               {new Date(flag.resolvedAt).toLocaleString()}
                             </p>
                           </div>
@@ -606,8 +606,8 @@ export default function AdminFraudPage() {
                       {/* Review note */}
                       {flag.reviewNote && (
                         <div>
-                          <p className="text-ink-400 text-xs font-medium mb-1">Review note</p>
-                          <p className="text-ink-300 text-xs bg-ink-700/50 rounded-lg p-2">
+                          <p className="text-ink-300 text-xs font-medium mb-1">Review note</p>
+                          <p className="text-ink-200 text-xs bg-ink-700/50 rounded-lg p-2">
                             {flag.reviewNote}
                           </p>
                         </div>
@@ -645,7 +645,7 @@ export default function AdminFraudPage() {
                         <button
                           onClick={() => handleRecomputeTrust(flag.userId)}
                           disabled={recomputeUserId === flag.userId}
-                          className="bg-ink-700 hover:bg-ink-600 text-ink-300 text-xs font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ml-auto"
+                          className="bg-ink-700 hover:bg-ink-600 text-ink-200 text-xs font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ml-auto"
                         >
                           {recomputeUserId === flag.userId ? 'Recomputing...' : 'Recompute trust'}
                         </button>
@@ -660,7 +660,7 @@ export default function AdminFraudPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-6 pt-4 border-t border-ink-600/30">
-              <p className="text-ink-400 text-xs">
+              <p className="text-ink-300 text-xs">
                 Showing {(page - 1) * 25 + 1}–{Math.min(page * 25, total)} of {total} flags
               </p>
               <div className="flex items-center gap-2">
@@ -682,7 +682,7 @@ export default function AdminFraudPage() {
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                         p === page
                           ? 'bg-brand-500 text-white'
-                          : 'bg-ink-700 text-ink-300 hover:bg-ink-600'
+                          : 'bg-ink-700 text-ink-200 hover:bg-ink-600'
                       }`}
                     >
                       {p}
@@ -709,7 +709,7 @@ export default function AdminFraudPage() {
             <h3 className="text-white font-semibold mb-2">
               {noteModal.decision === 'confirmed' ? 'Confirm fraud' : 'Mark as invalid'}
             </h3>
-            <p className="text-ink-400 text-sm mb-4">
+            <p className="text-ink-300 text-sm mb-4">
               {noteModal.decision === 'confirmed'
                 ? "This will reverse the associated earnings and penalize the user's trust score."
                 : "This will release any held earnings and restore the user's trust score."}
@@ -720,7 +720,7 @@ export default function AdminFraudPage() {
               placeholder="Optional note — internal review notes (not visible to user)"
               rows={3}
               maxLength={500}
-              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-400 focus:outline-none focus:border-brand-500 mb-4 text-sm"
+              className="w-full bg-ink-700 border border-ink-600/50 rounded-lg px-4 py-3 text-white placeholder:text-ink-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:ring-offset-2 focus:ring-offset-ink-900 focus:border-brand-500 mb-4 text-sm"
             />
             <div className="flex items-center gap-3 justify-end">
               <button
