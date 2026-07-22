@@ -639,6 +639,9 @@ model WaitAttestationSession {
   operationStartDeadline DateTime @map("expires_at") @db.Timestamptz
   consumeDeadline        DateTime @map("consume_deadline") @db.Timestamptz
   consumedAt     DateTime? @map("consumed_at") @db.Timestamptz
+  // Expired, unconsumed sessions are retained as audit records. Hard deletion
+  // can be blocked by a served AdImpression's restrictive foreign key.
+  expiredAt      DateTime? @map("expired_at") @db.Timestamptz
   createdAt      DateTime @default(now()) @map("created_at")
 
   attestation WaitAttestation?
@@ -646,7 +649,7 @@ model WaitAttestationSession {
 
   @@index([userId, deviceId, waitStateId])
   @@index([operationStartDeadline])
-  @@index([consumeDeadline, consumedAt])
+  @@index([consumeDeadline, consumedAt, expiredAt])
   @@map("wait_attestation_sessions")
 }
 

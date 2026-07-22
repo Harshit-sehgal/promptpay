@@ -3,8 +3,9 @@ import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@ne
 import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { PrismaService } from '../config/prisma.service';
 
-/** Removes only expired, unconsumed nonce sessions. Consumed sessions and their
- * attestation records remain under the financial retention policy. */
+/** Archives only expired, unconsumed nonce sessions. A served impression may
+ * restrict deletion of its session, so archival is both reliable and keeps an
+ * audit trail without ever treating the nonce as consumed. */
 @Injectable()
 export class WaitAttestationCleanupCron implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(WaitAttestationCleanupCron.name);
@@ -23,11 +24,14 @@ export class WaitAttestationCleanupCron implements OnApplicationBootstrap, OnMod
     if (this.running) return 0;
     this.running = true;
     try {
-      const removed = await this.prisma.waitAttestationSession.deleteMany({
-        where: { consumedAt: null, consumeDeadline: { lt: new Date() } },
+      const archived = await this.prisma.waitAttestationSession.updateMany({
+        where: { consumedAt: null, expiredAt: null, consumeDeadline: { lt: new Date() } },
+        data: { expiredAt: new Date() },
       });
-      if (removed.count) this.logger.log(`Pruned ${removed.count} expired unconsumed wait attestations`);
-      return removed.count;
+      if (archived.count) {
+        this.logger.log(`Archived ${archived.count} expired unconsumed wait attestations`);
+      }
+      return archived.count;
     } catch (error) {
       this.logger.error('Wait-attestation cleanup failed', error instanceof Error ? error.stack : String(error));
       return 0;

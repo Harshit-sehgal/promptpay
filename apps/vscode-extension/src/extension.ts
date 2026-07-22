@@ -1,7 +1,12 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
-import { type DetectorEvidence, FalsePositiveReason, formatMinorUnits } from '@waitlayer/shared';
+import {
+  type DetectorEvidence,
+  FalsePositiveReason,
+  formatMinorUnits,
+  WaitAttestationFlow,
+} from '@waitlayer/shared';
 
 import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
@@ -12,6 +17,7 @@ import { computeSuppressUntil, KNOWN_DETECTOR_SOURCES } from './detector-policy'
 import { DetectorState } from './detector-state';
 import { formatBreakdown, parseByCurrency, resolveDisplayCurrency } from './earnings';
 import { StatusBar } from './status-bar';
+import { createVsCodeWaitAssertionProvider } from './wait-attestation-provider';
 import { WaitStateDetector } from './wait-detector';
 
 /**
@@ -79,6 +85,38 @@ export async function activate(context: vscode.ExtensionContext) {
   let activeWaitStateId: string | null = null;
   let flaggedWaitStateId: string | null = null;
   const waitStartPromises = new Map<string, Promise<string | null>>();
+  const attestation = new WaitAttestationFlow(api);
+  const attestationBegunWaits = new Set<string>();
+  const attestedWaits = new Set<string>();
+  const pendingInteractions = new Map<
+    string,
+    { impressionToken: string; visibleDurationMs: number; clicked: boolean }
+  >();
+
+  const settleInteraction = async (
+    waitStateId: string,
+    interaction: { impressionToken: string; visibleDurationMs: number; clicked: boolean },
+  ) => {
+    if (!attestedWaits.has(waitStateId)) {
+      pendingInteractions.set(waitStateId, interaction);
+      return;
+    }
+    await api.recordImpressionEnd(interaction.impressionToken, interaction.visibleDurationMs);
+    if (interaction.clicked) await api.recordClick(interaction.impressionToken);
+  };
+
+  // Consent is server-authoritative. Refresh it both at activation and after
+  // login, because activation can happen before credentials exist or after a
+  // user changed their choices on another client.
+  const syncServerConsent = async () => {
+    const settings = await api.getDeveloperSettings();
+    if (typeof settings.adsEnabled === 'boolean' && (await config.adsEnabled()) !== settings.adsEnabled) {
+      await config.setAdsEnabled(settings.adsEnabled);
+    }
+    if (typeof settings.waitTelemetryEnabled === 'boolean') {
+      await config.setWaitTelemetryEnabled(settings.waitTelemetryEnabled);
+    }
+  };
 
   // Register all commands
   const commands: vscode.Disposable[] = [
@@ -90,6 +128,7 @@ export async function activate(context: vscode.ExtensionContext) {
       // Login after credentials have been persisted.
       status.setLoggedIn();
       try {
+        await syncServerConsent();
         const bal = await api.getBalance();
         const { amountMinor, currency } = displayAmountForEntry(
           bal.available,
@@ -210,6 +249,9 @@ export async function activate(context: vscode.ExtensionContext) {
       const finalReason = typeof picked === 'string' ? picked : picked.value;
       try {
         await api.flagFalsePositive(activeWaitStateId, finalReason);
+        attestation.cancel(activeWaitStateId);
+        attestationBegunWaits.delete(activeWaitStateId);
+        pendingInteractions.delete(activeWaitStateId);
         flaggedWaitStateId = activeWaitStateId;
         // P1.18 #2 — temporarily suppress NEW waits for the configured window
         // so the user isn't immediately re-prompted after a false positive.
@@ -315,6 +357,23 @@ export async function activate(context: vscode.ExtensionContext) {
           const deviceId = await api.getOrRegisterDevice();
           const idempotencyKey = `ws-start-${event.waitStateId}`;
 
+          // An earning attempt starts its independent proof before the
+          // operation. Telemetry-only waits remain valid without an attester.
+          if (await config.adsEnabled()) {
+            const provider = createVsCodeWaitAssertionProvider();
+            if (provider) {
+              await attestation.begin({
+                deviceId,
+                sessionId,
+                waitStateId: event.waitStateId,
+                provider,
+              });
+              attestationBegunWaits.add(event.waitStateId);
+            } else {
+              status.showRewardsUnavailable();
+            }
+          }
+
           // 2. Register wait state start with API
           await api.waitStateStart({
             deviceId,
@@ -328,6 +387,8 @@ export async function activate(context: vscode.ExtensionContext) {
           });
           return deviceId;
         } catch (err: unknown) {
+          attestation.cancel(event.waitStateId);
+          attestationBegunWaits.delete(event.waitStateId);
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`WaitLayer: failed to record wait state start — ${msg}`);
           return null;
@@ -352,6 +413,7 @@ export async function activate(context: vscode.ExtensionContext) {
       // Decouple ad request and display from wait start recording
       try {
         if (!(await config.adsEnabled()) || activeWaitStateId !== event.waitStateId) return;
+        if (!attestationBegunWaits.has(event.waitStateId)) return;
         if ((await config.inQuietHours()) || activeWaitStateId !== event.waitStateId) return;
 
         // Enforce frequency cap
@@ -410,12 +472,15 @@ export async function activate(context: vscode.ExtensionContext) {
             },
             async (clicked) => {
               try {
-                // Always qualify first — CPM bills here; CPC uses qualifiedAt as a gate.
                 const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
-                await api.recordImpressionEnd(ad.impressionToken, visibleDurationMs);
-                if (clicked) {
-                  await api.recordClick(ad.impressionToken);
-                }
+                // The panel may close before the tool operation ends. Hold the
+                // interaction in memory until the independent assertion is
+                // consumed; never qualify a reward-bearing impression first.
+                await settleInteraction(event.waitStateId, {
+                  impressionToken: ad.impressionToken,
+                  visibleDurationMs,
+                  clicked,
+                });
               } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : String(err);
                 console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
@@ -452,7 +517,20 @@ export async function activate(context: vscode.ExtensionContext) {
             durationSeconds: Math.floor(event.durationMs / 1000),
             idempotencyKey: `ws-end-${event.waitStateId}`,
           });
+          if (attestationBegunWaits.has(event.waitStateId)) {
+            await attestation.consume(event.waitStateId);
+            attestationBegunWaits.delete(event.waitStateId);
+            attestedWaits.add(event.waitStateId);
+            const interaction = pendingInteractions.get(event.waitStateId);
+            if (interaction) {
+              pendingInteractions.delete(event.waitStateId);
+              await settleInteraction(event.waitStateId, interaction);
+            }
+          }
         } catch (err: unknown) {
+          attestation.cancel(event.waitStateId);
+          attestationBegunWaits.delete(event.waitStateId);
+          pendingInteractions.delete(event.waitStateId);
           const msg = err instanceof Error ? err.message : String(err);
           console.warn(`WaitLayer: failed to record wait state end — ${msg}`);
         } finally {
@@ -470,39 +548,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
   detector.start(context);
 
-  context.subscriptions.push(...commands);
+  const attestationCleanup: vscode.Disposable = {
+    dispose: () => {
+      for (const waitStateId of attestationBegunWaits) attestation.cancel(waitStateId);
+      attestationBegunWaits.clear();
+      pendingInteractions.clear();
+    },
+  };
+  context.subscriptions.push(...commands, attestationCleanup);
 
-  // Fetch server-side adsEnabled after boot to sync local config with
-  // server consent state (P0 — Unify consent).
-  api
-    .getDeveloperSettings()
-    .then(async (settings) => {
-      // Override local adsEnabled with server value on first sync.
-      // This ensures that even if the extension has stale local preferences,
-      // the server's consent state takes effect after login.
-      if (typeof settings.adsEnabled === 'boolean') {
-        const current = await config.adsEnabled();
-        if (current !== settings.adsEnabled) {
-          // Toggle to match server state
-          await new Promise<void>((resolve) => {
-            const cfg = vscode.workspace.getConfiguration('waitlayer');
-            cfg.update('adsEnabled', settings.adsEnabled, vscode.ConfigurationTarget.Global).then(
-              () => resolve(),
-              (err: unknown) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                console.warn(
-                  `WaitLayer: failed to sync server adsEnabled to local config — ${msg}`,
-                );
-                resolve();
-              },
-            );
-          });
-        }
-      }
-      if (typeof settings.waitTelemetryEnabled === 'boolean') {
-        await config.setWaitTelemetryEnabled(settings.waitTelemetryEnabled);
-      }
-    })
+  // Fetch server-side consent after boot. A failed initial sync is non-fatal:
+  // no local state is changed, and successful login retries this exact path.
+  void syncServerConsent()
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`WaitLayer: failed to fetch developer settings — ${msg}`);

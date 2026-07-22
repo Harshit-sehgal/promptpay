@@ -54,12 +54,15 @@ describe('computeWaitConfidence', () => {
 describe('ExtensionWaitTrait.flagFalsePositive', () => {
   function makeTrait(overrides: Record<string, unknown> = {}) {
     const prisma = {
+      userSettings: { findUnique: vi.fn().mockResolvedValue({ waitTelemetryEnabled: true }) },
       waitStateEvent: {
         findFirst: vi.fn(),
         update: vi.fn(),
       },
+      adImpression: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
       ...overrides,
     };
+    (prisma as any).$transaction = vi.fn((callback: (tx: typeof prisma) => unknown) => callback(prisma));
     const trait = new ExtensionWaitTrait();
     (trait as unknown as { prisma: typeof prisma }).prisma = prisma as never;
     return { prisma, trait };
@@ -270,6 +273,7 @@ describe('wait-detection evaluation fixtures', () => {
 describe('ExtensionWaitTrait.recordWaitStateStart — detector version kill-switch (P1.17)', () => {
   function makeTrait(overrides: Record<string, unknown> = {}) {
     const prisma = {
+      userSettings: { findUnique: vi.fn().mockResolvedValue({ waitTelemetryEnabled: true }) },
       device: { findUnique: vi.fn() },
       waitStateEvent: {
         findFirst: vi.fn(),
@@ -340,6 +344,7 @@ describe('ExtensionWaitTrait.recordWaitStateStart — detector version kill-swit
 describe('ExtensionWaitTrait.recordWaitStateStart — evidence verification (P0)', () => {
   function makeTrait(overrides: Record<string, unknown> = {}) {
     const prisma = {
+      userSettings: { findUnique: vi.fn().mockResolvedValue({ waitTelemetryEnabled: true }) },
       device: { findUnique: vi.fn() },
       waitStateEvent: {
         findFirst: vi.fn(),

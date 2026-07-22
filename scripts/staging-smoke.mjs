@@ -238,11 +238,26 @@ async function main() {
       // STAGING_FULL_FLOW to '1', so a release cannot pass without it.
       fail('STAGING_FULL_FLOW=0 set — the financial loop is mandatory for a staging release gate');
     } else {
-      // 2. Developer opts into ads (privacy-by-default: server setting is
-      // authoritative; without this every ad request is rejected).
-      const settings = await api('PATCH', '/developer/settings', devToken, { adsEnabled: true });
+      // 2. Consent is deliberately split: ads do not imply permission to send
+      // minimized wait telemetry. A billable smoke must explicitly grant both
+      // and prove the server persisted the policy audit fields.
+      const telemetryPolicyVersion = 'staging-smoke-v1';
+      const settings = await api('PATCH', '/developer/settings', devToken, {
+        adsEnabled: true,
+        waitTelemetryEnabled: true,
+        waitTelemetryPolicyVersion: telemetryPolicyVersion,
+      });
       if (settings.status >= 400) fail(`enable ads -> HTTP ${settings.status}: ${settings.text}`);
-      else ok('developer adsEnabled=true (server setting)');
+      else if (
+        settings.json?.adsEnabled !== true ||
+        settings.json?.waitTelemetryEnabled !== true ||
+        !settings.json?.waitTelemetryConsentAt ||
+        settings.json?.waitTelemetryPolicyVersion !== telemetryPolicyVersion
+      ) {
+        fail('developer consent fields were not persisted exactly as requested');
+      } else {
+        ok('developer ads + telemetry consent persisted with policy version');
+      }
 
       // 3. Create the campaign through its real API. Creatives and country
       // targeting are separate resources; keeping the smoke payload aligned

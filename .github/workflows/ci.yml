@@ -263,8 +263,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Build CLI
-        run: pnpm --filter waitlayer-cli build
+      - name: Build CLI with workspace dependencies
+        run: pnpm --filter "waitlayer-cli..." build
       - name: Verify CLI bin artifacts
         run: pnpm --filter waitlayer-cli pack:check
       - name: Pack CLI artifact
@@ -276,8 +276,8 @@ jobs:
           npm install --global ./artifacts/cli/*.tgz
           WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --version
           WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --help
-      - name: Build VS Code extension
-        run: pnpm --filter waitlayer-vscode build
+      - name: Build VS Code extension with workspace dependencies
+        run: pnpm --filter "waitlayer-vscode..." build
       - name: Package VS Code extension (no publish)
         run: |
           mkdir -p artifacts/vscode

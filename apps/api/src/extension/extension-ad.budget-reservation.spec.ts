@@ -39,6 +39,7 @@ function makePrisma() {
       }),
     },
     trustScore: { findUnique: vi.fn().mockResolvedValue(null) },
+    user: { findUnique: vi.fn().mockResolvedValue({ status: 'active' }) },
     // Each billable fixture represents a provider-verified wait session; tests
     // that exercise invalidation fail earlier than this lookup.
     waitAttestation: { findFirst: vi.fn().mockResolvedValue({ id: 'attestation-1' }) },
@@ -89,6 +90,7 @@ function makeImpression(
     userId: 'user-1',
     deviceId: 'dev-1',
     waitStateId: 'ws-1',
+    attestationSessionId: 'attestation-session-1',
     sessionId: 's-1',
     campaignId: 'camp-1',
     impressionTokenHash: 'hash-1',
@@ -178,6 +180,7 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {
         getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
         isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+        isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       } as any,
     );
 
@@ -205,6 +208,7 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {
         getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
         isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+        isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       } as any,
     );
     await expect(duplicateService.claimImpression(claimArgs())).resolves.toEqual({
@@ -223,6 +227,7 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {
         getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
         isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+        isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       } as any,
     );
     await expect(cappedService.claimImpression(claimArgs())).resolves.toEqual({
@@ -243,6 +248,7 @@ describe('ExtensionAdTrait atomic reservation claim', () => {
       {
         getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
         isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+        isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       } as any,
     );
 
@@ -464,6 +470,7 @@ describe('ExtensionAdTrait budget reservation', () => {
       {
         getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
         isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+        isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       } as any,
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);
@@ -503,6 +510,7 @@ describe('ExtensionAdTrait budget reservation', () => {
       {
         getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
         isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+        isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       } as any,
     );
     (service as any).verifyDeviceSignature = vi.fn().mockResolvedValue(true);

@@ -60,6 +60,7 @@ function makePrisma() {
       }),
     },
     trustScore: { findUnique: vi.fn().mockResolvedValue(null) },
+    user: { findUnique: vi.fn().mockResolvedValue({ status: 'active' }) },
     // Settlement now requires a separately verified provider attestation. Keep
     // this adversarial fixture absent so the test proves client evidence alone
     // cannot earn.

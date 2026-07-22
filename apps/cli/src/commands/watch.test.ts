@@ -84,6 +84,7 @@ describe('runWatch CLI ad-flow loop (A-040)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(T0));
     mocks.api.getOrRegisterDevice.mockClear();
+    mocks.api.consumeWaitAttestation.mockReset().mockResolvedValue(undefined);
     mocks.api.reportWaitState.mockClear();
     mocks.api.endWaitState.mockClear();
     mocks.api.requestAd.mockClear();
@@ -168,5 +169,21 @@ describe('runWatch CLI ad-flow loop (A-040)', () => {
 
     expect(mocks.api.recordAdRendered).toHaveBeenCalledOnce();
     expect(mocks.api.recordImpressionQualified).toHaveBeenCalledOnce();
+  });
+
+  it('never qualifies an impression when independent attestation consumption fails', async () => {
+    mocks.api.consumeWaitAttestation.mockRejectedValueOnce(new Error('assertion rejected'));
+    const poll = await startWatchAndCapture();
+
+    mocks.setFileContents(waitState());
+    vi.setSystemTime(new Date(T0 + 2000));
+    await poll();
+
+    mocks.setFileContents('');
+    vi.setSystemTime(new Date(T0 + 6000));
+    await poll();
+
+    expect(mocks.api.consumeWaitAttestation).toHaveBeenCalledOnce();
+    expect(mocks.api.recordImpressionQualified).not.toHaveBeenCalled();
   });
 });

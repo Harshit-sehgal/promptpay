@@ -134,11 +134,13 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         findUnique: vi.fn(async () => ({
           blockedCategories: ['finance'],
           adsEnabled: true,
+          waitTelemetryEnabled: true,
           quietMode: false,
           timezone: 'UTC',
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
+      waitAttestationSession: { findFirst: vi.fn(async () => ({ id: 'attestation-session-1' })) },
       adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: {
         findMany: vi.fn(async () => [financeCampaign, gamingCampaign]),
@@ -180,11 +182,13 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         findUnique: vi.fn(async () => ({
           blockedCategories: ['finance'],
           adsEnabled: true,
+          waitTelemetryEnabled: true,
           quietMode: false,
           timezone: 'UTC',
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
+      waitAttestationSession: { findFirst: vi.fn(async () => ({ id: 'attestation-session-1' })) },
       adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: { findMany: vi.fn(async () => [gamingCampaign]) },
     } as any;
@@ -223,11 +227,13 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         findUnique: vi.fn(async () => ({
           blockedCategories: ['finance'],
           adsEnabled: true,
+          waitTelemetryEnabled: true,
           quietMode: false,
           timezone: 'UTC',
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
+      waitAttestationSession: { findFirst: vi.fn(async () => ({ id: 'attestation-session-1' })) },
       adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: { findMany: vi.fn(async () => [financeCampaign]) },
     } as any;
@@ -266,11 +272,13 @@ describe('requestAd persisted blocked-category enforcement (A-057)', () => {
         findUnique: vi.fn(async () => ({
           blockedCategories: [],
           adsEnabled: true,
+          waitTelemetryEnabled: true,
           quietMode: false,
           timezone: 'UTC',
         })),
       },
       user: { findUnique: vi.fn(async () => ({ country: null })) },
+      waitAttestationSession: { findFirst: vi.fn(async () => ({ id: 'attestation-session-1' })) },
       adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
       campaign: { findMany: vi.fn(async () => [gamingCampaign]) },
     } as any;

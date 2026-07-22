@@ -52,10 +52,12 @@ function makePrisma(existingImpression: Record<string, unknown> | null = null) {
       findUnique: vi.fn().mockResolvedValue({
         blockedCategories: [],
         adsEnabled: true,
+        waitTelemetryEnabled: true,
         quietMode: false,
         timezone: 'UTC',
       }),
     },
+    waitAttestationSession: { findFirst: vi.fn().mockResolvedValue({ id: 'attestation-session-1' }) },
     user: { findUnique: vi.fn().mockResolvedValue({ country: null }) },
     campaign: { findMany: vi.fn().mockResolvedValue([]) },
   };

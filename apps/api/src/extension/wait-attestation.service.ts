@@ -188,7 +188,7 @@ export class WaitAttestationService {
     if (!session || session.userId !== userId) {
       throw new ForbiddenException('Wait-attestation session is not available to this user');
     }
-    if (session.consumedAt || session.consumeDeadline <= new Date()) {
+    if (session.consumedAt || session.expiredAt || session.consumeDeadline <= new Date()) {
       throw new ConflictException('Wait-attestation session is expired or already consumed');
     }
 

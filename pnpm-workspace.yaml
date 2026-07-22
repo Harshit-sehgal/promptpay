@@ -3,8 +3,12 @@ packages:
   - 'packages/*'
 
 overrides:
+  # Security floors for transitive Next/Sentry and AJV dependency paths.
+  # Keep these explicit until the direct packages raise their own lower bounds.
+  fast-uri: 3.1.4
   multer: 2.2.0
   postcss: 8.5.16
+  sharp: 0.35.0
 
 allowBuilds:
   '@prisma/client': true

@@ -261,6 +261,7 @@ export class ExtensionAdTrait {
         clientSessionId: dto.sessionId,
         waitStateId: dto.waitStateId,
         consumedAt: null,
+        expiredAt: null,
         operationStartDeadline: { gte: waitStart.createdAt },
         consumeDeadline: { gt: new Date() },
       },

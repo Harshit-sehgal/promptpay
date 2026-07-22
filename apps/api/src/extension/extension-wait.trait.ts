@@ -163,23 +163,6 @@ export class ExtensionWaitTrait {
         `Detector version "${dto.detectorVersion}" is currently disabled`,
       );
     }
-    // A proof attempt must be established before the operation starts. This
-    // makes ad serving and later settlement incapable of silently upgrading an
-    // unattested wait into a reward-bearing one.
-    const attestationSession = await this.prisma.waitAttestationSession.findFirst({
-      where: {
-        userId,
-        deviceId: dto.deviceId,
-        clientSessionId: dto.sessionId,
-        waitStateId: dto.waitStateId,
-        consumedAt: null,
-        operationStartDeadline: { gt: new Date() },
-      },
-      select: { id: true },
-    });
-    if (!attestationSession) {
-      throw new ForbiddenException('wait_attestation_session_required');
-    }
     // Idempotency ordering (P1 #20): locate the idempotency key FIRST — only
     // after ownership/signature pass — so an exact retry returns the original
     // row instead of a spurious 409 from the duplicate-waitStateId guard.

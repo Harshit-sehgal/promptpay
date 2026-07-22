@@ -84,6 +84,16 @@
           "default": false,
           "description": "Send detected AI wait-state telemetry to WaitLayer. Disabled by default; enable only after reviewing the privacy notice."
         },
+        "waitlayer.attestationProvider": {
+          "type": "string",
+          "default": "",
+          "description": "Independent wait-attestation provider identifier. Required only for earning-enabled waits."
+        },
+        "waitlayer.attestationProviderUrl": {
+          "type": "string",
+          "default": "",
+          "description": "HTTPS endpoint for the independently operated wait-attestation provider."
+        },
         "waitlayer.maxAdsPerHour": {
           "type": "number",
           "default": 6,

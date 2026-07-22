@@ -75,8 +75,10 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
     // The assertion is consumed after the server-recorded end and before
     // qualification, so neither CPM nor CPC can reach a money path without
     // the provider's single-use proof.
+    let attestationConsumed = false;
     try {
       await attestation.consume(activeWaitStateId);
+      attestationConsumed = true;
     } catch (err: unknown) {
       console.error(chalk.red(`wait attestation error: ${getErrorMessage(err)}`));
     }
@@ -84,7 +86,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
     // A-040: Qualify the impression via runAdFlow's logic if the wait state
     // lasted long enough.  We preserve the original order (endWaitState first,
     // qualify second) to minimize behavioral changes from the refactoring.
-    if (activeImpressionToken && durationMs >= 5000) {
+    if (activeImpressionToken && durationMs >= 5000 && attestationConsumed) {
       try {
         await api.recordImpressionQualified({
           impressionToken: activeImpressionToken,
@@ -95,6 +97,8 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
       } catch (err: unknown) {
         console.error(chalk.red(`ad qualify error: ${getErrorMessage(err)}`));
       }
+    } else if (activeImpressionToken && durationMs >= 5000) {
+      console.warn(chalk.yellow('Skipping ad qualification: independent wait attestation was not consumed.'));
     }
 
     activeWaitStateId = null;

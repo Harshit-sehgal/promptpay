@@ -97,6 +97,7 @@ function makePrisma() {
 
   const prisma: any = {
     store,
+    user: { findUnique: vi.fn().mockResolvedValue({ status: 'active' }) },
     advertiserLedger,
     earningsLedger: { create: vi.fn(async (args: any) => args.data) },
     platformLedger: { create: vi.fn(async (args: any) => args.data) },
@@ -113,6 +114,7 @@ function makePrisma() {
           { waitStateId: 'ws-1', sessionId: 's-1' },
         ),
         detectorVersion: '1.0.0',
+        isFalsePositive: false,
       }),
     },
     waitAttestation: { findFirst: vi.fn().mockResolvedValue({ id: 'attestation-1' }) },
@@ -166,6 +168,7 @@ function makeImpression(token: string, campaignId: string, bidAmountMinor = 100)
     userId: 'user-1',
     deviceId: 'dev-1',
     waitStateId: 'ws-1',
+    attestationSessionId: 'attestation-session-1',
     sessionId: 's-1',
     impressionTokenHash: `hash-${token}`,
     renderedAt: new Date(Date.now() - 10_000), // beyond MINIMUM_VISIBLE_DURATION_MS

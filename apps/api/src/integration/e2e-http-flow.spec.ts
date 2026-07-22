@@ -1105,7 +1105,11 @@ describe('End-to-End HTTP Integration Flow', () => {
       await request(app.getHttpServer())
         .patch('/api/v1/developer/settings')
         .set('Authorization', `Bearer ${dev2Token}`)
-        .send({ adsEnabled: true })
+        .send({
+          adsEnabled: true,
+          waitTelemetryEnabled: true,
+          waitTelemetryPolicyVersion: 'http-flow-test-v1',
+        })
         .expect(200);
     });
 
@@ -1122,6 +1126,16 @@ describe('End-to-End HTTP Integration Flow', () => {
         .expect(200);
       dev2DeviceId = devRes.body.id;
       dev2DeviceEventSecret = devRes.body.eventSecret;
+
+      // A reward-bearing ad requires the independent proof attempt to exist
+      // before the server-recorded wait begins, even though this block only
+      // exercises cross-user ownership (not settlement).
+      await createAttestationSession({
+        token: dev2Token,
+        device: dev2DeviceId,
+        sessionId: 'dev2-session',
+        waitStateId: 'dev2-wait',
+      });
 
       const waitStartPayload = {
         deviceId: dev2DeviceId,

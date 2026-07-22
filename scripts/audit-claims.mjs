@@ -86,8 +86,8 @@ check(
     /'@scarf\/scarf':\s*false\b/.test(workspaceConfig),
 );
 check(
-  'audited Hono server override stays pinned',
-  /'@hono\/node-server':\s*1\.19\.13\b/.test(workspaceConfig),
+  'stale audited Hono server override remains removed after the dependency upgrade',
+  !workspaceConfig.includes('@hono/node-server'),
 );
 
 // AGENTS.md reflects the CI-guarded correction (narrative tied to the guard).

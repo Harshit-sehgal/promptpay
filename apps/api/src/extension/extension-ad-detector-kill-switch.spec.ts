@@ -5,6 +5,9 @@ import { ExtensionAdTrait } from './extension-ad.trait';
 describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', () => {
   function makeTrait(overrides: Record<string, unknown> = {}) {
     const prisma = {
+      userSettings: {
+        findUnique: vi.fn().mockResolvedValue({ waitTelemetryEnabled: true }),
+      },
       device: {
         findUnique: vi.fn(),
       },

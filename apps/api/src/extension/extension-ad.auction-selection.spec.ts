@@ -94,11 +94,15 @@ function basePrisma(campaigns: any[]) {
     },
     userSettings: {
       findUnique: vi.fn(async () => ({
+        waitTelemetryEnabled: true,
         blockedCategories: [],
         adsEnabled: true,
         quietMode: false,
         timezone: 'UTC',
       })),
+    },
+    waitAttestationSession: {
+      findFirst: vi.fn(async () => ({ id: 'attestation-session-1' })),
     },
     user: { findUnique: vi.fn(async () => ({ country: null })) },
     adImpression: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
