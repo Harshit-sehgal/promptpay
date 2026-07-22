@@ -55,7 +55,8 @@ export default function ReferralPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-surface-900 tracking-tight mb-2">Referrals</h1>
         <p className="text-surface-500 text-[15px] font-normal">
-          Invite developers and earn rewards when they get their first payout
+          Invite developers now; referral rewards begin only after the independently attested
+          earnings launch.
         </p>
       </div>
 
@@ -115,8 +116,9 @@ export default function ReferralPage() {
                 </button>
               </div>
               <p className="text-surface-500 text-[13px] mt-3 font-normal leading-relaxed">
-                Share this link — when someone signs up and gets their first payout ($10+), you earn{' '}
-                <span className="text-emerald-600 font-medium">$5</span>.
+                Share this link to grow the beta. After rewards launch, a first qualifying payout (
+                {'$10+'}) earns a <span className="text-emerald-600 font-medium">$5</span> referral
+                reward.
               </p>
             </div>
           )}
@@ -126,7 +128,7 @@ export default function ReferralPage() {
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Referral history</h2>
             {data.referrals.length === 0 ? (
               <p className="text-surface-400 text-sm py-8 text-center font-normal">
-                No referrals yet. Share your link to start earning.
+                No referrals yet. Share your link to grow the beta.
               </p>
             ) : (
               <div className="overflow-x-auto">

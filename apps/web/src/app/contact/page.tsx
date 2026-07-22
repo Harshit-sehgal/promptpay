@@ -31,7 +31,7 @@ export default function ContactPage() {
               href="/auth/signup?role=developer"
               className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              Start earning
+              Join beta
             </Link>
           </div>
         </div>

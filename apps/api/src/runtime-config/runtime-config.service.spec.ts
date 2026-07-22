@@ -70,6 +70,28 @@ describe('RuntimeConfigService', () => {
     });
   });
 
+  describe('getWaitLaunchMode', () => {
+    it('reports ads_only when advertising is enabled but settlement is fail-closed', async () => {
+      mockPrisma.systemSetting.findUnique.mockImplementation(
+        ({ where }: { where: { scope_target: { scope: string; target: string } } }) => {
+          const { scope, target } = where.scope_target;
+          if (scope === 'ads' && target === 'global')
+            return Promise.resolve({ value: { enabled: true } });
+          if (scope === 'wait' && target === 'earnings') return Promise.resolve(null);
+          return Promise.resolve(null);
+        },
+      );
+
+      await expect(service.getWaitLaunchMode()).resolves.toBe('ads_only');
+    });
+
+    it('reports paused before earnings state when ads are globally disabled', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue({ value: { enabled: false } });
+
+      await expect(service.getWaitLaunchMode()).resolves.toBe('paused');
+    });
+  });
+
   describe('setBoolean', () => {
     it('upserts the setting and audits the change', async () => {
       mockPrisma.systemSetting.upsert.mockResolvedValue({

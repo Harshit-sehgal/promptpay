@@ -195,7 +195,7 @@ export default function HomePage() {
                       display: 'inline-block',
                     }}
                   ></span>
-                  Verified attention for AI agents
+                  Private beta · rewards not yet enabled
                 </div>
                 <h1
                   className="wlh-in animate-fadeIn"
@@ -211,7 +211,7 @@ export default function HomePage() {
                     animationDelay: '70ms',
                   }}
                 >
-                  Earn from the time you spend waiting on AI.
+                  Help validate AI wait states without giving up your privacy.
                 </h1>
                 <p
                   className="wlh-in"
@@ -224,8 +224,8 @@ export default function HomePage() {
                     animationDelay: '140ms',
                   }}
                 >
-                  Your coding agent works; you wait. WaitLayer turns that wait into one clearly
-                  labeled sponsor line — verified, private, and paid back to you.
+                  Your coding agent works; you wait. WaitLayer is validating a private,
+                  independently attestable wait signal before it opens sponsor-funded rewards.
                 </p>
                 <div
                   className="wlh-in"
@@ -567,7 +567,7 @@ export default function HomePage() {
                           }}
                           className="wl-dot"
                         ></span>
-                        verified · +$0.014 earned
+                        beta telemetry · rewards unavailable
                       </span>
                     </div>
                   </div>
@@ -682,10 +682,11 @@ export default function HomePage() {
                     marginBottom: '7px',
                   }}
                 >
-                  You earn
+                  Rewards launch after verification
                 </div>
                 <p style={{ fontSize: '14.5px', lineHeight: 1.55, color: '#666', margin: 0 }}>
-                  It clears verification, and you keep 60% of the media spend.
+                  Beta signals are reviewed first. Sponsor-funded rewards remain disabled until the
+                  production attestation path is independently verified.
                 </p>
               </div>
             </div>
@@ -1610,7 +1611,7 @@ export default function HomePage() {
                     textWrap: 'balance',
                   }}
                 >
-                  Earn back what you spend on AI.
+                  Join the rewards beta with clear expectations.
                 </h2>
                 <p
                   style={{
@@ -1621,8 +1622,8 @@ export default function HomePage() {
                     maxWidth: '440px',
                   }}
                 >
-                  Active AI-agent users earn from real wait time and offset the tools they already
-                  pay for — without changing how they work.
+                  Active AI-agent users help validate real wait signals without changing how they
+                  work. Rewards are not currently accruing in beta.
                 </p>
                 <ul
                   style={{
@@ -1635,9 +1636,9 @@ export default function HomePage() {
                   }}
                 >
                   {[
-                    'Earn from real wait time',
-                    '60% of verified media spend',
-                    'Cash, USDC, or compute credits',
+                    'Private wait-signal beta',
+                    'No rewards until attestation is enabled',
+                    'Clear status before every sponsor surface',
                     'Stay in your terminal — no workflow change',
                   ].map((li) => (
                     <li
@@ -1695,7 +1696,7 @@ export default function HomePage() {
                     }}
                     href="/pricing"
                   >
-                    How earning works →
+                    Beta details →
                   </Link>
                 </div>
               </div>
@@ -1836,9 +1837,9 @@ export default function HomePage() {
                       </span>
                     </div>
                     <p style={{ margin: 0, fontSize: '13px', lineHeight: 1.62, color: '#6b5e3a' }}>
-                      No guaranteed earnings yet. During beta you help verify the first supply of
-                      AI-agent wait states — cashable earnings begin when verified impressions match
-                      sponsor-funded campaigns.
+                      Rewards are disabled during beta. You help validate AI-agent wait states;
+                      sponsor-funded rewards can begin only after an independently verifiable
+                      attestation integration is enabled.
                     </p>
                   </div>
                 </div>
@@ -2666,7 +2667,7 @@ export default function HomePage() {
                   maxWidth: '480px',
                 }}
               >
-                Join the founding beta and earn from the time you already spend waiting on AI.
+                Join the founding beta and help validate the wait signals you already experience.
               </p>
 
               <div

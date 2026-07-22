@@ -291,7 +291,7 @@ export default function SignupPage() {
           <h1 className="text-2xl font-bold text-surface-900 mb-1.5 tracking-tight">
             Create your account
           </h1>
-          <p className="text-surface-500 text-[14px] mb-8">Start earning from AI wait time</p>
+          <p className="text-surface-500 text-[14px] mb-8">Join the private AI wait-state beta</p>
 
           {/* Role toggle — Notion-style segmented control */}
           <fieldset

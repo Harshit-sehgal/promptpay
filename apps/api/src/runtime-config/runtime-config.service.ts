@@ -11,6 +11,13 @@ export interface RuntimeConfigKey {
   target: string;
 }
 
+/**
+ * User-visible operating state for the wait/rewards loop.  This deliberately
+ * describes what a developer can receive *now*, rather than what an operator
+ * may intend to enable later.
+ */
+export type WaitLaunchMode = 'paused' | 'ads_only' | 'earnings_enabled';
+
 export const RUNTIME_CONFIG_KEYS = {
   ADS_GLOBAL: { scope: 'ads', target: 'global' },
   // Client-side wait evidence is not an independent attestation. Keep the
@@ -231,6 +238,20 @@ export class RuntimeConfigService {
    */
   async isWaitEarningsEnabled(): Promise<boolean> {
     return this.getBoolean(RUNTIME_CONFIG_KEYS.WAIT_EARNINGS, false);
+  }
+
+  /**
+   * Resolve the externally observable wait-loop mode from the two independent
+   * safety switches.  Ads are never represented as rewards while settlement is
+   * closed: callers can use this to suppress a misleading ad surface.
+   */
+  async getWaitLaunchMode(): Promise<WaitLaunchMode> {
+    const [adsEnabled, earningsEnabled] = await Promise.all([
+      this.isAdsEnabled(),
+      this.isWaitEarningsEnabled(),
+    ]);
+    if (!adsEnabled) return 'paused';
+    return earningsEnabled ? 'earnings_enabled' : 'ads_only';
   }
 
   async isDepositsEnabled(): Promise<boolean> {

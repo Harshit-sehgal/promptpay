@@ -4,6 +4,7 @@
  */
 export function normalizeToolType(raw: string): string {
   const TOOL_MAP: Record<string, string> = {
+    claude: 'claude_code',
     claude_code: 'claude_code',
     'claude-code': 'claude_code',
     codex_cli: 'codex_cli',

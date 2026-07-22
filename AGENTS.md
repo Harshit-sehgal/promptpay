@@ -1562,6 +1562,36 @@ launch blockers below. This section is current as of 2026-07-21.
 
 ### Closed in this audit
 
+- **Honest beta launch mode (2026-07-22):** `RuntimeConfigService` now
+  derives `paused` / `ads_only` / `earnings_enabled` from the global ad and
+  fail-closed settlement switches. In the default `ads_only` mode, the API
+  returns no ad before an impression can be created; the VS Code extension
+  shows “rewards unavailable” rather than a sponsor panel, and its status bar,
+  public landing, comparison, FAQ, pricing, payout-policy, privacy, terms,
+  referral copy, CLI onboarding, package metadata, and social metadata all say
+  rewards are disabled pending independent attestation. This closes the
+  misleading-UX gap without weakening the payment gate.
+- **Ledger maturation lease (2026-07-22):** `LedgerCronService` now takes a
+  two-interval (minimum 60-second) cross-replica lease and renews it every
+  third of its TTL while a maturation batch runs. The renewal is owner-bound,
+  cannot steal another replica's lease, and is cleared when the batch ends;
+  this closes the prior lease-expiry overlap risk for long ledger batches.
+- **Supervised CLI beta telemetry (2026-07-22):** `waitlayer run -- <AI
+command>` now observes a real child-process lifecycle rather than a
+  marker-file claim. It sends only normalized tool type and timing (never
+  command arguments or output), labels its `cli.runner.*` evidence as inferred,
+  and is regression-locked as non-billable by the API. This improves pilot
+  evidence without pretending to solve independent attestation; it must not be
+  used to enable `wait.earnings`. The command waits for Node's definitive
+  `spawn` event before it sends telemetry, so a missing executable cannot leave
+  a synthetic wait state behind.
+- **Production dependency audit (2026-07-22):** upgraded the Prisma database
+  toolchain (`@prisma/client`, `@prisma/adapter-pg`, and `prisma`) from 7.8.0
+  to 7.9.0 and removed the stale override that pinned
+  `@hono/node-server@1.19.13`. The upgrade removes the audited moderate Windows
+  path-traversal advisory from the production dependency graph; `pnpm audit
+--prod --audit-level moderate` now reports no known vulnerabilities.
+
 - **Migration integrity:** local `waitlayer` is now at **70 migrations**;
   `prisma migrate status` is up to date and
   `prisma migrate diff --exit-code --from-config-datasource --to-schema` has
@@ -1609,14 +1639,16 @@ launch blockers below. This section is current as of 2026-07-21.
   an unrelated cron worker. The cascade-delete test cleanup also removes owned
   advertiser-ledger rows before deleting its user.
 
-### Remaining external activation tasks (no unresolved source safety gap)
+### Remaining external activation tasks (rewards launch remains blocked)
 
 - **Independent wait attestation is still required to turn earnings on:** a
   modified client can sign its own device-HMAC evidence. The code now prevents
   any real-money settlement by default, but an operator must not set
   `wait.earnings` to enabled until an independently attestable integration (or
   another server-verifiable source) exists and is reviewed. Do not describe
-  the current detector telemetry as cryptographic proof.
+  the current detector telemetry as cryptographic proof. The required trust
+  boundary, replay/privacy controls, and staged real-money experiment are
+  specified in `docs/ops/wait-attestation-launch-gate.md`.
 - **Configure the release environment once:** before dispatching the workflow,
   supply `CONTAINER_REGISTRY`, registry credentials, `STAGING_HOST`,
   `STAGING_USER`, `STAGING_DEPLOY_KEY`, `STAGING_KNOWN_HOSTS`,
@@ -1626,6 +1658,20 @@ launch blockers below. This section is current as of 2026-07-21.
   mock-auth disabled). Missing values now fail the gate instead of producing a
   green no-op deployment. This is credentials/operations work, not a source
   defect.
+- **Docker image e2e needs a reachable npm registry:** re-tested locally on
+  2026-07-22. `docker compose build api` reaches the pinned Node 22 Alpine base
+  image but fails at `corepack prepare pnpm@11.9.0 --activate` because the
+  container cannot fetch `https://registry.npmjs.org/pnpm/-/pnpm-11.9.0.tgz`.
+  Keep the pinned package-manager version; run the Docker CI job from a runner
+  with npm-registry access before promoting a release.
+- **Public deployment is not launch-ready:** re-checked 2026-07-22. The
+  `waitlayer.com` apex redirects to `www.waitlayer.com`, but the public API
+  hostname `api.waitlayer.com` does not resolve. The `www` site returns 200 for
+  `/` and `/faq`, while the shipped `/comparison` route returns 404 and the
+  Vercel cache headers show an old deployment. Deploy the current web build to
+  the linked Vercel project, provision/deploy the API at the configured HTTPS
+  origin, set its DNS/TLS, then verify the web BFF and representative routes
+  against the same immutable release before any public announcement.
 
 ### Verification in this audit
 

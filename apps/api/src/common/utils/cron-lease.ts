@@ -24,3 +24,22 @@ export async function acquireCronLease(
   `);
   return rows.length === 1;
 }
+
+/** Renew an already-held lease without ever taking it from another replica. */
+export async function renewCronLease(
+  prisma: PrismaService,
+  key: string,
+  ownerId: string,
+  ttlMs: number,
+): Promise<boolean> {
+  const expiresAt = new Date(Date.now() + ttlMs);
+  const rows = await prisma.$queryRaw<Array<{ key: string }>>(Prisma.sql`
+    UPDATE "cron_leases"
+    SET "expiresAt" = ${expiresAt}, "updatedAt" = NOW()
+    WHERE "key" = ${key}
+      AND "ownerId" = ${ownerId}
+      AND "expiresAt" > NOW()
+    RETURNING "key"
+  `);
+  return rows.length === 1;
+}

@@ -1,7 +1,7 @@
 {
   "name": "waitlayer",
   "private": true,
-  "description": "Privacy-first reward marketplace for AI wait time and developer attention",
+  "description": "Privacy-first beta for independently verifiable AI wait time and developer attention",
   "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22.0.0"

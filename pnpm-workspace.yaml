@@ -1,9 +1,8 @@
 packages:
-  - "apps/*"
-  - "packages/*"
+  - 'apps/*'
+  - 'packages/*'
 
 overrides:
-  '@hono/node-server': 1.19.13
   multer: 2.2.0
   postcss: 8.5.16
 

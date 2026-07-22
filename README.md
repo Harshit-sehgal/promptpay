@@ -1,8 +1,8 @@
 # WaitLayer
 
-Privacy-first reward marketplace for AI wait time and developer attention.
+Privacy-first beta for independently verifiable AI wait time and developer attention.
 
-Developers earn rewards by viewing sponsored content during AI tool wait states (compilation, analysis, code generation). Advertisers bid for attention in a fraud-mitigated, ledger-backed marketplace.
+The beta validates wait-state detection without awarding rewards. Settlement stays fail-closed until an independently verifiable attestation integration is deployed and reviewed; advertisers are not billed for beta waits.
 
 ## Architecture
 
@@ -63,6 +63,18 @@ pnpm audit --prod    # production dependency vulnerability audit
 > `JWT_SECRET` (≥32 chars), and other required env vars are set via `.env` or
 > the shell. See [Environment Reference](docs/ENV_REFERENCE.md) for the full list.
 
+## Private beta wait telemetry
+
+Use `waitlayer run -- <AI command> [arguments...]` to let the CLI supervise a
+real local AI-tool process lifecycle, for example `waitlayer run -- claude
+--version`. It sends only a normalized tool type and lifecycle timing—never the
+command arguments, prompt, or command output.
+
+This is pilot telemetry, not settlement proof. The current device-held signing
+key cannot independently prove an unmodified client observed a wait, so these
+events remain non-billable and rewards are disabled until an independently
+attestable integration is deployed and reviewed.
+
 ## Core Features
 
 - **Auth**: Email/password signup, Google OAuth, JWT refresh rotation + reuse detection, password reset, TOTP 2FA with encrypted secrets
@@ -96,4 +108,5 @@ pnpm audit --prod    # production dependency vulnerability audit
 - [Architecture Overview](docs/16-architecture-overview.md)
 - [API Changelog](docs/17-api-changelog.md)
 - [Architecture Decision Records](docs/adr/0001-record-architecture-decisions.md)
+- [Wait-attestation Launch Gate](docs/ops/wait-attestation-launch-gate.md)
 - [Foundation Status](FOUNDATION_STATUS.md)

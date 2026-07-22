@@ -18,6 +18,14 @@ export class StatusBar {
     }
   }
 
+  showRewardsUnavailable() {
+    if (this.bar) {
+      this.bar.text = '$(info) WaitLayer: rewards unavailable';
+      this.bar.tooltip = 'Wait detected. Rewards are not enabled in this launch mode.';
+      this.bar.command = 'waitlayer.showEarnings';
+    }
+  }
+
   showIdle() {
     this.setLoggedIn();
   }

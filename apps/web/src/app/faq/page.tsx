@@ -10,24 +10,24 @@ interface FAQItem {
 
 const FAQS: FAQItem[] = [
   {
-    question: 'How do I start earning with WaitLayer?',
+    question: 'What can I do in the WaitLayer beta?',
     answer:
-      'Simply sign up as a developer, install our VS Code extension or lightweight CLI, and authenticate. Once active, sponsored messages will appear during the short compilation, test execution, or deployment wait states in your editor or terminal.',
+      'Sign up as a developer, install the VS Code extension or CLI, and authenticate to help validate wait-state detection. Rewards are currently disabled while WaitLayer completes its independently verifiable attestation integration; the client tells you when rewards are unavailable.',
   },
   {
     question: 'What payout methods are supported?',
     answer:
-      'WaitLayer currently supports PayPal-first payouts. We are actively building integrations for Stripe, Wise, and other global payout methods to accommodate developers around the world.',
+      'No rewards or payouts are available during the beta. For a future launch, the safe defaults are operator-processed manual and PayPal email payouts; automated provider rails remain disabled until their credentials and operational reviews are complete.',
   },
   {
     question: 'How does the revenue split work?',
     answer:
-      'By default, the revenue split is 60% to the developer, 30% to the platform, and 10% held in a fraud and payment reserve. During special early-adopter launch phases, campaigns configured with the launch incentive yield an 80% user, 10% platform, 10% reserve split.',
+      'If sponsor-funded rewards launch, the standard split will be 60% to the developer, 30% to the platform, and 10% held in a fraud and payment reserve. A reviewed early-adopter launch campaign may use an 80% user, 10% platform, 10% reserve split.',
   },
   {
     question: 'Will WaitLayer collect my code or private information?',
     answer:
-      'No. WaitLayer is privacy-first by design. We only track visible sponsored message duration and interactions to calculate rewards. We never read, transmit, or store your code, prompts, completions, or file names.',
+      'No. WaitLayer is privacy-first by design. Beta telemetry is limited to the information needed to validate wait-state detection; we never read, transmit, or store your code, prompts, completions, or file names.',
   },
   {
     question: 'Can I choose what ads are shown to me?',
@@ -72,7 +72,7 @@ export default function FAQPage() {
             Frequently Asked Questions
           </h1>
           <p className="text-surface-500 text-sm">
-            Everything you need to know about earning from AI wait time.
+            Everything you need to know about the WaitLayer beta and future rewards launch.
           </p>
         </div>
 

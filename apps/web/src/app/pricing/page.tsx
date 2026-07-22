@@ -6,7 +6,7 @@ import { CURRENCY_POLICY, depositMinimumMinor, formatMinorUnits } from '@waitlay
 export const metadata: Metadata = {
   title: 'Pricing — WaitLayer',
   description:
-    'WaitLayer pricing — free for developers, transparent CPM/CPC for advertisers. No hidden fees.',
+    'WaitLayer private beta — free wait-state verification. Rewards, advertiser billing, and payouts are not yet enabled.',
 };
 
 const IconCheck = () => (
@@ -39,8 +39,8 @@ const IconMinus = () => (
 
 const PLAN_FEATURES = [
   { label: 'Installation & setup', dev: true, adv: true },
-  { label: 'Earn from wait states', dev: true, adv: false },
-  { label: 'PayPal payouts', dev: true, adv: false },
+  { label: 'Wait-state verification beta', dev: true, adv: false },
+  { label: 'Rewards launch waitlist', dev: true, adv: false },
   { label: 'Trust score & fraud protection', dev: true, adv: true },
   { label: 'Ad frequency & quiet mode controls', dev: true, adv: false },
   { label: 'Campaign creation & management', dev: false, adv: true },
@@ -97,7 +97,7 @@ export default function PricingPage() {
               href="/auth/signup?role=developer"
               className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              Start earning
+              Join beta
             </Link>
           </div>
         </div>
@@ -108,10 +108,11 @@ export default function PricingPage() {
         <section className="pt-36 pb-16 px-6">
           <div className="mx-auto max-w-3xl text-center">
             <h1 className="text-4xl md:text-5xl font-bold text-surface-900 tracking-tight mb-5">
-              Simple, transparent pricing
+              Private beta, not commercial pricing
             </h1>
             <p className="text-surface-500 text-lg max-w-xl mx-auto">
-              Free for developers. Performance-based CPM/CPC for advertisers. No surprise fees.
+              Beta wait-state verification is free. Rewards, advertiser billing, and payouts remain
+              disabled pending independent attestation.
             </p>
           </div>
         </section>
@@ -131,7 +132,7 @@ export default function PricingPage() {
                 href="/auth/signup?role=developer"
                 className="block w-full text-center bg-surface-900 hover:bg-surface-700 text-white font-medium px-6 py-3 rounded-xl text-[15px] transition-colors mb-8"
               >
-                Start earning →
+                Join beta →
               </Link>
               <ul className="space-y-4">
                 {PLAN_FEATURES.map((f) => (
@@ -158,16 +159,16 @@ export default function PricingPage() {
                 For advertisers
               </div>
               <p className="text-5xl font-bold text-white mb-2">
-                $0.50<span className="text-lg text-white/50 font-normal"> minimum bid</span>
+                No spend<span className="text-lg text-white/50 font-normal"> during beta</span>
               </p>
               <p className="text-white/50 text-[14px] mb-8">
-                CPM or CPC bidding. Only pay for valid traffic.
+                Campaign tooling can be evaluated, but billing is disabled.
               </p>
               <Link
                 href="/auth/signup?role=advertiser"
                 className="block w-full text-center bg-brand-500 hover:bg-brand-600 text-white font-medium px-6 py-3 rounded-xl text-[15px] transition-colors mb-8"
               >
-                Start advertising →
+                Join advertiser waitlist →
               </Link>
               <ul className="space-y-4">
                 {PLAN_FEATURES.map((f) => (
@@ -192,29 +193,32 @@ export default function PricingPage() {
         <section className="py-24 px-6 bg-surface-50/60">
           <div className="mx-auto max-w-4xl">
             <h2 className="text-3xl font-bold text-surface-900 tracking-tight text-center mb-5">
-              Where your money goes
+              Planned launch economics
             </h2>
             <p className="text-surface-500 text-center max-w-lg mx-auto mb-16">
-              Every dollar from advertiser spend is split transparently.
+              If sponsor-funded rewards launch, every qualified advertiser dollar will be split
+              transparently.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
                 <p className="text-5xl font-bold text-brand-500 mb-2">60%</p>
-                <p className="text-surface-900 font-semibold mb-2">Developer revenue share</p>
+                <p className="text-surface-900 font-semibold mb-2">
+                  Planned developer revenue share
+                </p>
                 <p className="text-surface-500 text-[14px]">
-                  The developer earns the majority. Their attention drives the marketplace.
+                  The intended launch policy gives developers the majority of qualified revenue.
                 </p>
               </div>
               <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
                 <p className="text-5xl font-bold text-surface-900 mb-2">30%</p>
-                <p className="text-surface-900 font-semibold mb-2">Platform fee</p>
+                <p className="text-surface-900 font-semibold mb-2">Planned platform fee</p>
                 <p className="text-surface-500 text-[14px]">
                   Infrastructure, fraud detection, payment processing, and support.
                 </p>
               </div>
               <div className="bg-white border border-surface-200/80 rounded-2xl p-8 text-center">
                 <p className="text-5xl font-bold text-surface-400 mb-2">10%</p>
-                <p className="text-surface-900 font-semibold mb-2">Reserve fund</p>
+                <p className="text-surface-900 font-semibold mb-2">Planned reserve fund</p>
                 <p className="text-surface-500 text-[14px]">
                   Fraud reserve, payment failures, and disputed charges buffer.
                 </p>
@@ -222,8 +226,9 @@ export default function PricingPage() {
             </div>
             <div className="mt-10 text-center">
               <p className="text-surface-400 text-[14px]">
-                Promotional splits (e.g. <strong className="text-surface-600">80/10/10</strong>) may
-                apply during operator-enabled launch windows; the standard 60/30/10 otherwise.
+                These economics are not active in beta. A reviewed launch campaign may use a
+                promotional split (e.g. <strong className="text-surface-600">80/10/10</strong>); the
+                intended standard is 60/30/10.
               </p>
             </div>
           </div>
@@ -233,10 +238,11 @@ export default function PricingPage() {
         <section className="py-24 px-6">
           <div className="mx-auto max-w-4xl">
             <h2 className="text-3xl font-bold text-surface-900 tracking-tight text-center mb-5">
-              Payout schedules
+              Planned payout schedule
             </h2>
             <p className="text-surface-500 text-center max-w-lg mx-auto mb-16">
-              Payment speed depends on your trust level. Higher trust = faster payouts.
+              No payouts are available in beta. The following holds and thresholds apply only after
+              a reviewed rewards launch.
             </p>
             <div className="overflow-hidden rounded-2xl border border-surface-200/80">
               <table className="w-full text-[14px]">
@@ -358,7 +364,7 @@ export default function PricingPage() {
                 href="/auth/signup?role=developer"
                 className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-7 py-3 rounded-xl text-[15px] transition-colors shadow-sm shadow-brand-500/20"
               >
-                Start earning →
+                Join beta →
               </Link>
               <Link
                 href="/auth/signup?role=advertiser"
@@ -390,7 +396,8 @@ export default function PricingPage() {
                 <span className="text-surface-900 font-semibold text-[14px]">WaitLayer</span>
               </div>
               <p className="text-surface-400 text-[14px] max-w-xs leading-relaxed">
-                Privacy-first reward marketplace for AI coding assistant wait states.
+                Private beta for AI wait-state verification. Rewards and advertiser billing are not
+                yet enabled.
               </p>
             </div>
             <div className="flex gap-16">

@@ -118,7 +118,7 @@ async function handleSignup(email: string, _opts: { email?: string }) {
 
   console.log();
   console.log(chalk.dim('Select account type:'));
-  console.log(`  1) ${chalk.bold('Developer')} — Earn from AI wait states`);
+  console.log(`  1) ${chalk.bold('Developer')} — Join the AI wait-state beta`);
   console.log(`  2) ${chalk.bold('Advertiser')} — Run ad campaigns`);
   const roleChoice = await prompt('Choice (1-2) [1]:');
   const role = roleChoice?.trim() === '2' ? 'advertiser' : 'developer';

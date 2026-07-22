@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { backgroundJobsEnabled } from '../common/utils/background-jobs';
-import { acquireCronLease } from '../common/utils/cron-lease';
+import { acquireCronLease, renewCronLease } from '../common/utils/cron-lease';
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from './ledger.service';
 
@@ -16,6 +16,10 @@ export class LedgerCronService implements OnApplicationBootstrap, OnModuleDestro
     Math.max(Number(process.env.LEDGER_MATURATION_INTERVAL_MS) || 600_000, 10_000),
     86_400_000,
   );
+  // A maturation batch may legitimately outlive its scheduling interval on a
+  // large ledger. Keep its cross-replica lease alive while it runs instead of
+  // letting another replica start the same job after intervalMs - 1s.
+  private readonly leaseTtlMs = Math.max(this.intervalMs * 2, 60_000);
 
   constructor(
     private readonly ledgerService: LedgerService,
@@ -45,19 +49,33 @@ export class LedgerCronService implements OnApplicationBootstrap, OnModuleDestro
     this.running = true;
     try {
       if (
-        !(await acquireCronLease(
-          this.prisma,
-          'ledger-maturation',
-          this.ownerId,
-          this.intervalMs - 1_000,
-        ))
+        !(await acquireCronLease(this.prisma, 'ledger-maturation', this.ownerId, this.leaseTtlMs))
       ) {
         return;
       }
+      const heartbeat = setInterval(
+        () => {
+          void renewCronLease(this.prisma, 'ledger-maturation', this.ownerId, this.leaseTtlMs).then(
+            (renewed) => {
+              if (!renewed) {
+                this.logger.error('Lost earnings-maturation lease; another replica may take over');
+              }
+            },
+            (error: unknown) =>
+              this.logger.error('Failed to renew earnings-maturation lease', error),
+          );
+        },
+        Math.max(Math.floor(this.leaseTtlMs / 3), 10_000),
+      );
+      heartbeat.unref?.();
       this.logger.log('Running estimated earnings maturation...');
-      const result = await this.ledgerService.matureEarnings();
-      if (result.matured > 0) {
-        this.logger.log(`Successfully matured ${result.matured} earnings entries.`);
+      try {
+        const result = await this.ledgerService.matureEarnings();
+        if (result.matured > 0) {
+          this.logger.log(`Successfully matured ${result.matured} earnings entries.`);
+        }
+      } finally {
+        clearInterval(heartbeat);
       }
     } catch (error) {
       this.logger.error('Failed to mature estimated earnings:', error);

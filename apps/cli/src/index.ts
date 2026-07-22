@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import { runAuth } from './commands/auth';
 import { runConfig } from './commands/config';
 import { runLogout } from './commands/logout';
+import { runSupervisedCommand } from './commands/run';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
 import { resolveApiBaseUrl } from './lib/api-client';
@@ -30,7 +31,7 @@ if (IS_LOOPBACK) {
 const program = new Command();
 program
   .name('waitlayer')
-  .description('WaitLayer CLI — track AI wait states and earn rewards')
+  .description('WaitLayer CLI — track AI wait states for the private beta')
   .version('0.0.1');
 
 program
@@ -51,6 +52,19 @@ program
   .option('--once', 'Report existing wait state once and exit (test mode)')
   .option('--no-ads', 'Disable ad serving during wait states')
   .action((opts) => runWatch(opts));
+
+program
+  .command('run <command...>')
+  .description('Supervise an AI command and record a real local wait lifecycle (beta)')
+  .allowUnknownOption(true)
+  .action(async (command: string[]) => {
+    try {
+      process.exitCode = await runSupervisedCommand(command);
+    } catch (error: unknown) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  });
 
 program
   .command('logout')

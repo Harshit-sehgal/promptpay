@@ -77,8 +77,12 @@ interface RawBalance {
   paidOut: RawAmountEntry;
 }
 
-interface ServerAdResponse {
+export type WaitLaunchMode = 'paused' | 'ads_only' | 'earnings_enabled';
+
+export interface ServerAdResponse {
   ad: Ad | null;
+  mode?: WaitLaunchMode;
+  reason?: string;
 }
 
 interface RegisterDeviceResponse {
@@ -310,7 +314,7 @@ export class ApiClient {
     toolType: string;
     idempotencyKey: string;
     country?: string;
-  }): Promise<Ad | null> {
+  }): Promise<ServerAdResponse> {
     // A-056: include a best-effort country code for privacy-safe country
     // targeting. The server falls back to the profile country when omitted.
     const country = input.country ?? detectCountryCode();
@@ -326,7 +330,7 @@ export class ApiClient {
       ...payload,
       signature: await this.signEventPayload(payload),
     });
-    return res?.ad ?? null;
+    return res ?? { ad: null };
   }
 
   async recordAdRendered(input: {

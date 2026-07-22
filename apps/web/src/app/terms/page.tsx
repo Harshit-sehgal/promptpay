@@ -35,9 +35,10 @@ export default function TermsPage() {
             2. Service description
           </h2>
           <p>
-            WaitLayer is a privacy-first reward marketplace that connects AI tool wait time with
-            developer attention. Developers earn from validated ad impressions; advertisers reach a
-            high-intent developer audience.
+            WaitLayer is currently a privacy-first private beta for AI tool wait-state verification.
+            Rewards and advertiser billing are disabled during the beta. Once independently
+            attestable rewards are enabled, developers may earn from validated ad impressions and
+            advertisers may reach a high-intent developer audience.
           </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">

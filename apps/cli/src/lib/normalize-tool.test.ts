@@ -5,6 +5,7 @@ import { normalizeToolType } from './tool-types';
 
 describe('normalizeToolType', () => {
   it('maps known tool names to their enum values', () => {
+    expect(normalizeToolType('claude')).toBe('claude_code');
     expect(normalizeToolType('claude_code')).toBe('claude_code');
     expect(normalizeToolType('codex_cli')).toBe('codex_cli');
     expect(normalizeToolType('cursor')).toBe('cursor');

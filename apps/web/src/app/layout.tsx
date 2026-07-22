@@ -30,9 +30,9 @@ const jetbrainsMono = localFont({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_WEB_URL ?? 'https://waitlayer.com'),
-  title: 'WaitLayer — Earn from AI wait time',
+  title: 'WaitLayer — private beta for AI wait-state verification',
   description:
-    'Privacy-first reward marketplace for AI coding assistant wait states. PayPal-first payouts. Transparent earnings. No code tracking.',
+    'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation. No code tracking.',
   keywords: [
     'AI wait time',
     'developer earnings',
@@ -43,16 +43,16 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'WaitLayer',
-    title: 'WaitLayer — Earn from AI wait time',
+    title: 'WaitLayer — private beta for AI wait-state verification',
     description:
-      'Privacy-first reward marketplace for AI coding assistant wait states. Transparent earnings, PayPal-first payouts.',
+      'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation.',
     url: '/',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'WaitLayer — Earn from AI wait time',
+    title: 'WaitLayer — private beta for AI wait-state verification',
     description:
-      'Privacy-first reward marketplace for AI coding assistant wait states. Transparent earnings, PayPal-first payouts.',
+      'Privacy-first beta for AI wait-state verification. Rewards and advertiser billing remain disabled pending independent attestation.',
   },
   icons: {
     icon: '/favicon.svg',

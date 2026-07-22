@@ -329,13 +329,22 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         // 3. Request an ad
-        const ad = await api.requestAd({
+        const adResponse = await api.requestAd({
           deviceId,
           sessionId,
           waitStateId: event.waitStateId,
           toolType: 'vscode',
           idempotencyKey: `ad-req-${event.waitStateId}`,
         });
+        const ad = adResponse.ad;
+
+        // The server is authoritative for launch mode. In the default
+        // fail-closed ads_only mode, do not open a sponsored panel that a
+        // developer could reasonably interpret as a reward-bearing action.
+        if (!ad && adResponse.mode === 'ads_only' && activeWaitStateId === event.waitStateId) {
+          status.showRewardsUnavailable();
+          return;
+        }
 
         if (ad && activeWaitStateId === event.waitStateId) {
           adTimestamps.push(now);

@@ -91,10 +91,11 @@ export default function PrivacyPage() {
 
         <section className="space-y-4 text-surface-600 text-[14px] leading-relaxed">
           <p>
-            WaitLayer is a privacy-first reward marketplace for AI coding assistant wait states. We
-            never read your source code or prompts. We collect only the data needed to operate the
-            service: your account email, payout details you provide, ad interaction events (hashed),
-            and consent records.
+            WaitLayer is a privacy-first private beta for AI coding assistant wait-state
+            verification. Rewards and advertiser billing are disabled while independent attestation
+            is completed. We never read your source code or prompts. We collect only the data needed
+            to operate the service: your account email, payout details you provide, ad interaction
+            events (hashed), and consent records.
           </p>
           <p>
             You can export a copy of your data at any time from your developer dashboard, and you

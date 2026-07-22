@@ -6,7 +6,7 @@ import { CURRENCY_POLICY, formatMinorUnits, payoutMinimumMinor } from '@waitlaye
 export const metadata: Metadata = {
   title: 'Payout Policy — WaitLayer',
   description:
-    'WaitLayer payout policy — earnings release, payout methods, minimum payout, and revenue split details.',
+    'WaitLayer planned payout policy for the future independently attested rewards launch.',
 };
 
 export default function PayoutPolicyPage() {
@@ -30,43 +30,52 @@ export default function PayoutPolicyPage() {
       <main id="main-content" tabIndex={-1} className="max-w-4xl mx-auto px-6 py-16">
         <h1 className="text-3xl font-bold text-surface-900 mb-8 tracking-tight">Payout Policy</h1>
 
+        <div className="mb-10 rounded-xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+          <p className="font-semibold">Planned launch policy — not active in beta</p>
+          <p className="mt-1 text-sm leading-relaxed">
+            Rewards, advertiser billing, and payouts are disabled until WaitLayer completes an
+            independently attestable rewards integration and its production review.
+          </p>
+        </div>
+
         <div className="prose prose-surface max-w-none">
           <section className="mb-10">
             <h2 className="text-xl font-semibold text-surface-900 mb-4">1. Earnings Release</h2>
             <p className="text-surface-600 leading-relaxed mb-4">
-              Developer earnings are categorized in three states: estimated, confirmed, and held.
-              Earnings become available for payout after passing a hold period (3 days for new
-              accounts, longer for higher trust levels). Held earnings are released after fraud
-              investigation completes.
+              At launch, developer earnings will be categorized in three states: estimated,
+              confirmed, and held. Earnings will become available for payout after passing a hold
+              period (3 days for new accounts, longer for higher trust levels). Held earnings will
+              be released after fraud investigation completes.
             </p>
           </section>
 
           <section className="mb-10">
             <h2 className="text-xl font-semibold text-surface-900 mb-4">2. Payout Methods</h2>
             <p className="text-surface-600 leading-relaxed mb-4">
-              Payouts are processed via PayPal (manual, supported today) and additional methods are
-              planned for launch. Each user can register one payout account per provider. Inactive
-              accounts can be reactivated through account settings.
+              After rewards launch, payout requests may use operator-processed manual or PayPal
+              email methods. Automated providers remain unavailable until their credentials and
+              operational controls are approved. Each user can register one payout account per
+              provider; inactive accounts can be reactivated through account settings.
             </p>
           </section>
 
           <section className="mb-10">
             <h2 className="text-xl font-semibold text-surface-900 mb-4">3. Minimum Payout</h2>
             <p className="text-surface-600 leading-relaxed mb-4">
-              Minimum payout threshold is {minPayout} (or currency equivalent) in confirmed
-              earnings. Payouts are supported in multiple currencies (
-              {supportedCurrencies.join(', ')}); amounts below the threshold remain in your balance
-              and aggregate with future earnings.
+              The planned minimum payout threshold is {minPayout} (or currency equivalent) in
+              confirmed earnings. Supported launch currencies are ({supportedCurrencies.join(', ')}
+              ); amounts below the threshold remain in your balance and aggregate with future
+              earnings.
             </p>
           </section>
 
           <section className="mb-10">
             <h2 className="text-xl font-semibold text-surface-900 mb-4">4. Revenue Split</h2>
             <p className="text-surface-600 leading-relaxed mb-4">
-              Standard revenue split is 60% to the developer, 30% to the platform, and 10% to the
-              fraud and payment reserve. A promotional launch split (e.g. 80/10/10) may apply only
-              when explicitly enabled by the operator; the standard split applies otherwise. All
-              splits are calculated automatically per qualified impression or click.
+              The planned standard revenue split is 60% to the developer, 30% to the platform, and
+              10% to the fraud and payment reserve. A promotional launch split (e.g. 80/10/10) may
+              apply only when explicitly enabled by the operator; the standard split applies
+              otherwise. Once active, splits are calculated per qualified impression or click.
             </p>
           </section>
 

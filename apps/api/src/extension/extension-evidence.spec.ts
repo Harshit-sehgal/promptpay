@@ -107,6 +107,28 @@ describe('classifyWaitState with evidence (P0)', () => {
     expect(result.paymentEligible).toBe(false);
   });
 
+  it('keeps supervised local CLI process telemetry non-billable', () => {
+    // `waitlayer run` does observe the spawned child process, but its device
+    // signature is still produced by the client. The server must classify this
+    // new beta telemetry as inferred until an independent attestation source is
+    // available, even if a modified client labels it observed.
+    const evidence = [
+      makeEvidence({
+        type: 'command_execution',
+        sourceType: 'observed',
+        adapterId: 'cli.runner.supervisor',
+      }),
+      makeEvidence({
+        type: 'active_task',
+        sourceType: 'observed',
+        adapterId: 'cli.runner.child_process',
+      }),
+    ];
+    const result = classifyWaitState([], true, evidence);
+    expect(result.adEligible).toBe(true);
+    expect(result.paymentEligible).toBe(false);
+  });
+
   it('documents that a device-secret-bearing attacker can still forge two adapters', () => {
     // This test captures the honest-reviewer's concern: the HMAC is produced
     // with the device secret, so a modified client that holds that secret can

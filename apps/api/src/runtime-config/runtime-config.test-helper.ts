@@ -13,6 +13,7 @@ export function createMockRuntimeConfig(
   const mock = {
     isAdsEnabled: vi.fn().mockResolvedValue(true),
     isWaitEarningsEnabled: vi.fn().mockResolvedValue(true),
+    getWaitLaunchMode: vi.fn().mockResolvedValue('earnings_enabled'),
     isDepositsEnabled: vi.fn().mockResolvedValue(true),
     isPayoutRequestsEnabled: vi.fn().mockResolvedValue(true),
     isAutoPayoutProcessingEnabled: vi.fn().mockResolvedValue(true),

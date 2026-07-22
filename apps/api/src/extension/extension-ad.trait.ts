@@ -124,6 +124,20 @@ export class ExtensionAdTrait {
     if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
     }
+    // Launch-integrity gate: do not show a monetization surface when the
+    // server cannot settle rewards. A client-held device secret is not an
+    // independent proof of a productive wait, so the default launch mode is
+    // deliberately ads_only until an operator enables a reviewed attestation
+    // path. Returning the explicit mode lets shipped clients explain the
+    // state honestly instead of displaying an ad that will later be voided.
+    const launchMode = await this.runtimeConfig.getWaitLaunchMode();
+    if (launchMode !== 'earnings_enabled') {
+      return {
+        ad: null,
+        reason: launchMode === 'paused' ? 'platform_ads_paused' : 'earnings_not_available',
+        mode: launchMode,
+      };
+    }
     // Ad requests must happen during an authenticated user's active wait state.
     const waitStart = await this.prisma.waitStateEvent.findFirst({
       where: {

@@ -143,6 +143,11 @@ export const AdRequestResponse = z.object({
       ctaText: z.string().nullable().optional(),
     })
     .nullable(),
+  // Present when the server intentionally suppresses the ad surface because
+  // the launch cannot settle rewards. Optional preserves compatibility with
+  // older API deployments and ordinary no-campaign responses.
+  mode: z.enum(['paused', 'ads_only', 'earnings_enabled']).optional(),
+  reason: z.string().optional(),
 });
 
 /** POST /api/v1/extension/ad-rendered response */

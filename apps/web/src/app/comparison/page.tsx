@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Tool Comparison — WaitLayer',
   description:
-    'WaitLayer supports VS Code, Cursor, Windsurf, Cline, Claude Code, and terminal. Compare features across platforms.',
+    'Compare WaitLayer beta telemetry clients and planned reward-marketplace capabilities across platforms.',
 };
 
 const IconCheck = () => (
@@ -62,7 +62,7 @@ const TOOL_FEATURES = [
     terminal: true,
   },
   {
-    label: 'Ad display during waits',
+    label: 'Non-billable beta telemetry',
     vscode: true,
     cursor: true,
     windsurf: true,
@@ -71,22 +71,22 @@ const TOOL_FEATURES = [
     terminal: true,
   },
   {
-    label: 'Opt-in ad clicks',
-    vscode: true,
-    cursor: true,
-    windsurf: true,
-    cline: true,
-    claude: true,
-    terminal: true,
+    label: 'Sponsor ad display (planned)',
+    vscode: false,
+    cursor: false,
+    windsurf: false,
+    cline: false,
+    claude: false,
+    terminal: false,
   },
   {
-    label: 'Earnings tracking',
-    vscode: true,
-    cursor: true,
-    windsurf: true,
-    cline: true,
-    claude: true,
-    terminal: true,
+    label: 'Verified rewards (planned)',
+    vscode: false,
+    cursor: false,
+    windsurf: false,
+    cline: false,
+    claude: false,
+    terminal: false,
   },
   {
     label: 'Quiet mode scheduling',
@@ -117,15 +117,15 @@ const PLATFORM_COMPARE = [
     google: false,
   },
   {
-    feature: 'Developer-targeted ad network',
-    waitlayer: true,
+    feature: 'Developer-targeted ad network (planned)',
+    waitlayer: false,
     carbon: true,
     braze: false,
     google: false,
   },
   {
-    feature: 'AI wait state monetization',
-    waitlayer: true,
+    feature: 'AI wait-state monetization (planned)',
+    waitlayer: false,
     carbon: false,
     braze: false,
     google: false,
@@ -138,15 +138,15 @@ const PLATFORM_COMPARE = [
     google: false,
   },
   {
-    feature: 'Transparent revenue split (60% dev)',
-    waitlayer: true,
+    feature: 'Transparent revenue split (planned)',
+    waitlayer: false,
     carbon: false,
     braze: false,
     google: false,
   },
   {
-    feature: 'PayPal-first global payouts',
-    waitlayer: true,
+    feature: 'PayPal-first payouts (planned)',
+    waitlayer: false,
     carbon: true,
     braze: false,
     google: false,
@@ -218,7 +218,7 @@ export default function ComparisonPage() {
               href="/auth/signup?role=developer"
               className="bg-surface-900 hover:bg-surface-700 text-white text-[14px] font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              Start earning
+              Join beta
             </Link>
           </div>
         </div>
@@ -368,7 +368,7 @@ export default function ComparisonPage() {
         <section className="py-24 px-6 bg-brand-500">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold text-white tracking-tight mb-4">
-              Start earning with WaitLayer
+              Join the WaitLayer beta
             </h2>
             <p className="text-white/80 text-[15px] mb-8 max-w-sm mx-auto">
               Install the extension or CLI in under 2 minutes. No credit card required.
@@ -404,7 +404,8 @@ export default function ComparisonPage() {
                 <span className="text-surface-900 font-semibold text-[14px]">WaitLayer</span>
               </div>
               <p className="text-surface-400 text-[14px] max-w-xs leading-relaxed">
-                Privacy-first reward marketplace for AI coding assistant wait states.
+                Private beta for AI wait-state verification. Rewards and advertiser billing are not
+                yet enabled.
               </p>
             </div>
             <div className="flex gap-16">

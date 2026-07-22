@@ -7,8 +7,8 @@ type Mode = 'developer' | 'advertiser';
 /**
  * Homepage value-proposition calculator.
  *
- * Lets a visitor model earnings (developer mode) or campaign reach (advertiser
- * mode) from a few sliders. The slider accessible names are fixed and consumed
+ * Lets a visitor model beta signal volume (developer mode) or future campaign
+ * reach (advertiser mode) from a few sliders. The slider accessible names are fixed and consumed
  * by the a11y E2E (`/ has no serious or critical WCAG 2.1 AA violations` and the
  * "homepage calculator sliders have accessible names in both modes" test), so
  * they must not change without updating that test.
@@ -26,13 +26,12 @@ export function EarningsCalculator() {
 
   const toggle = () => setMode((m) => (m === 'developer' ? 'advertiser' : 'developer'));
 
-  const developerEarnings = (dailyQueries * adFrequency * avgCpm) / 1000;
   const advertiserImpressions = Math.round((campaignBudget / targetCpm) * 1000);
   const advertiserClicks = Math.round((advertiserImpressions * ctr) / 100);
 
   return (
     <section
-      aria-label="Earnings calculator"
+      aria-label="Beta planning calculator"
       style={{
         maxWidth: '1180px',
         margin: '56px auto 0',
@@ -53,7 +52,7 @@ export function EarningsCalculator() {
         }}
       >
         <h3 style={{ margin: 0, fontSize: '18px', color: '#0a0a0a' }}>
-          Model your {mode === 'developer' ? 'earnings' : 'campaign reach'}
+          Plan beta {mode === 'developer' ? 'signal volume' : 'campaign reach'}
         </h3>
         <button
           type="button"
@@ -111,7 +110,7 @@ export function EarningsCalculator() {
             />
           </label>
           <p style={{ margin: '4px 0 0', fontSize: '15px', color: '#0a0a0a' }}>
-            Estimated daily earnings: <strong>${developerEarnings.toFixed(2)}</strong>
+            Rewards are not estimated or accrued while beta settlement is disabled.
           </p>
         </div>
       ) : (

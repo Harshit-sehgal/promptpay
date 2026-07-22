@@ -21,6 +21,7 @@ describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', 
     const runtimeConfig = {
       isDetectorVersionEnabled: vi.fn().mockResolvedValue(true),
       isAdsEnabled: vi.fn().mockResolvedValue(true),
+      getWaitLaunchMode: vi.fn().mockResolvedValue('earnings_enabled'),
       isCountryAllowed: vi.fn().mockResolvedValue(true),
       getVerifiedDetectorVersions: vi.fn().mockReturnValue(''),
       ...(overrides.runtimeConfig as Record<string, unknown>),
@@ -69,5 +70,23 @@ describe('ExtensionAdTrait.requestAd — detector version kill-switch (P1.17)', 
     expect(runtimeConfig.isDetectorVersionEnabled).toHaveBeenCalledWith('1.0.0');
     // The gate returns before the (second) wait-state-end lookup.
     expect(prisma.waitStateEvent.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppresses the ad surface in ads_only mode before any impression can be created', async () => {
+    const { prisma, trait } = makeTrait({
+      runtimeConfig: { getWaitLaunchMode: vi.fn().mockResolvedValue('ads_only') },
+    });
+    prisma.device.findUnique.mockResolvedValue({
+      id: 'd1',
+      userId: 'u1',
+      user: { status: 'active' },
+    });
+
+    await expect(trait.requestAd('u1', baseDto)).resolves.toEqual({
+      ad: null,
+      reason: 'earnings_not_available',
+      mode: 'ads_only',
+    });
+    expect(prisma.waitStateEvent.findFirst).not.toHaveBeenCalled();
   });
 });
