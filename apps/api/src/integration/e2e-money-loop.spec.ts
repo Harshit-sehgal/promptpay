@@ -1875,6 +1875,7 @@ describe('E2E Money Loop', () => {
       });
 
       // ── Step 8: Wait-state-start ──
+      mockPrisma.userSettings.findUnique.mockResolvedValue({ waitTelemetryEnabled: true });
       mockPrisma.device.findUnique.mockResolvedValue({
         id: deviceId,
         userId: devUserId,
@@ -2056,6 +2057,7 @@ describe('E2E Money Loop', () => {
         deviceId,
         sessionId,
         waitStateId,
+        attestationSessionId: 'attestation-session-id',
         impressionTokenHash: require('crypto')
           .createHash('sha256')
           .update(impressionToken)
@@ -2960,6 +2962,7 @@ describe('E2E Money Loop', () => {
         deviceId: cpcDeviceId,
         sessionId: cpcSessionId,
         waitStateId: cpcWaitStateId,
+        attestationSessionId: 'attestation-session-id',
         impressionTokenHash: hash,
         renderedAt: new Date(Date.now() - 6000),
         campaign: {
@@ -3025,6 +3028,7 @@ describe('E2E Money Loop', () => {
         deviceId: cpcDeviceId,
         sessionId: cpcSessionId,
         waitStateId: cpcWaitStateId,
+        attestationSessionId: 'attestation-session-id',
         impressionTokenHash: hash,
         qualifiedAt: new Date(), // Now qualified!
         campaign: {

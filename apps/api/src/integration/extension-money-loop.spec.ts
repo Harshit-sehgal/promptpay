@@ -609,6 +609,13 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     let adRes2: LoopResult['adRes2'];
     if (secondWaitMode === 'no_ad') {
       const ws2 = `ws2-${tag}`;
+      if (withAttestation) {
+        await request(app.getHttpServer())
+          .post(ATTESTATION_SESSION)
+          .set('Authorization', `Bearer ${devToken}`)
+          .send({ deviceId, sessionId, waitStateId: ws2, provider: ATTESTATION_PROVIDER })
+          .expect(200);
+      }
       await signed(START, devToken, deviceEventSecret, {
         deviceId,
         sessionId,
@@ -727,10 +734,22 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       advertiserDepositMinor: 100000,
     });
 
+    const preissued = await request(app.getHttpServer())
+      .post(ATTESTATION_SESSION)
+      .set('Authorization', `Bearer ${ctx.devToken}`)
+      .send({
+        deviceId: ctx.deviceId,
+        sessionId: ctx.sessionId,
+        waitStateId: `ws-${ctx.tag}`,
+        provider: ATTESTATION_PROVIDER,
+      })
+      .expect(200);
+
     const res = await runMoneyLoop(ctx, {
       signals: FORGED_SINGLE_SIGNAL,
       withEvidence: false,
       withAttestation: false,
+      attestationSession: preissued.body,
     });
     expect(res.adRes.status).toBe(200);
     expect(res.adRes.body.ad).toBeDefined();
@@ -755,10 +774,22 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       advertiserDepositMinor: 100000,
     });
 
+    const preissued = await request(app.getHttpServer())
+      .post(ATTESTATION_SESSION)
+      .set('Authorization', `Bearer ${ctx.devToken}`)
+      .send({
+        deviceId: ctx.deviceId,
+        sessionId: ctx.sessionId,
+        waitStateId: `ws-${ctx.tag}`,
+        provider: ATTESTATION_PROVIDER,
+      })
+      .expect(200);
+
     const res = await runMoneyLoop(ctx, {
       signals: [{ type: 'ai_generation' }, { type: 'inactivity' }],
       withEvidence: false,
       withAttestation: false,
+      attestationSession: preissued.body,
     });
     expect(res.adRes.status).toBe(200);
     expect(res.adRes.body.ad).toBeDefined();

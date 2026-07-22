@@ -241,7 +241,10 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
                   withTimeout(
                     () =>
                       refFn(payout.id, {
-                        destination: this.decryptDest(payout.payoutAccount.destination),
+                        destination: this.decryptDest(
+                          payout.payoutAccount.destination,
+                          payout.payoutAccount,
+                        ),
                       }),
                     `provider checkStatusByReference ${payout.payoutAccount.provider}`,
                   ),
@@ -312,7 +315,10 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
               withTimeout(
                 () =>
                   provider.checkStatus(providerTxId ?? payout.id, {
-                    destination: this.decryptDest(payout.payoutAccount.destination),
+                    destination: this.decryptDest(
+                      payout.payoutAccount.destination,
+                      payout.payoutAccount,
+                    ),
                     externalReference: payout.id,
                   }),
                 `provider checkStatus ${payout.payoutAccount.provider}`,
@@ -407,9 +413,17 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
    * Decrypt the stored payout destination. Legacy destinations stored before
    * encryption was introduced have no 'v1:' prefix and are passed through as-is.
    */
-  private decryptDest(destination: string): string {
+  private decryptDest(
+    destination: string,
+    account: { id: string; userId: string; provider: string; currency: string },
+  ): string {
     return isEncryptedDestination(destination)
-      ? decryptPayoutDestination(destination)
+      ? decryptPayoutDestination(destination, {
+          accountId: account.id,
+          userId: account.userId,
+          provider: account.provider,
+          currency: account.currency,
+        })
       : destination;
   }
 }
