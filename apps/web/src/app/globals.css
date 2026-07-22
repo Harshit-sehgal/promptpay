@@ -17,6 +17,11 @@ a {
   --surface: 250 250 250;
 
   --accent: #16a34a;
+  --accent-strong: #087443;
+  --ink: #12160f;
+  --ink-muted: #4b5563;
+  --line: #d8ddd4;
+  --canvas: #fbfcfa;
   --term-shadow: 0 0 0 1px hsla(0, 0%, 100%, 0.03), 0 40px 90px -45px rgba(0, 0, 0, 0.7);
   --num-display: inline-block;
 }
@@ -37,6 +42,20 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #d8f3df;
+  color: #101610;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid rgba(8, 116, 67, 0.42);
+  outline-offset: 3px;
+}
+
+:where(h1, h2, h3, p) {
+  text-wrap: pretty;
 }
 
 /* Custom CSS Classes from waitlayer.com */
@@ -69,6 +88,19 @@ body {
 .wl-link-u:hover {
   background-size: 100% 1px;
   opacity: 1;
+}
+
+.wl-eyebrow {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.wl-muted-copy {
+  color: var(--ink-muted);
 }
 
 @property --wlms {
@@ -240,6 +272,12 @@ body {
   }
 }
 
+@media (max-width: 680px) {
+  .wl-nav-links {
+    display: none !important;
+  }
+}
+
 /* Card hover scaling and transitions */
 .wlh-card {
   transition:
@@ -273,17 +311,32 @@ body {
 
 @media (prefers-reduced-motion: no-preference) {
   .wlh-in {
-    animation: wlh-in 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    animation: wlh-in 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both;
   }
   @keyframes wlh-in {
     0% {
-      opacity: 0;
-      transform: translateY(14px);
+      opacity: 0.92;
+      transform: translateY(10px);
     }
     to {
       opacity: 1;
       transform: none;
     }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

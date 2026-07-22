@@ -1,0 +1,25 @@
+# Local dependencies and build/cache products are rebuilt by Vercel. Keeping
+# them out of the upload makes deployments deterministic and prevents the
+# monorepo's multi-gigabyte workspace cache from becoming a release artifact.
+node_modules
+.turbo
+dist
+apps/*/dist
+apps/*/.next
+apps/*/out
+coverage
+playwright-report
+test-results
+
+# Runtime secrets belong in Vercel project environment variables, never in a
+# source upload. Keep the public template for build/documentation tooling.
+.env
+.env.*
+!.env.example
+
+# Local-only tooling state and generated test credentials.
+.aider*
+.commandcode
+.e2e
+.certs
+*.log

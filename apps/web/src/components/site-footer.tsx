@@ -3,7 +3,22 @@
 import Link from 'next/link';
 import { openCookieSettings } from '@/components/cookie-consent';
 
+function apiDocsUrl(): string | null {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!apiUrl) return null;
+
+  try {
+    const url = new URL(apiUrl);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/docs`;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export default function SiteFooter() {
+  const docsUrl = apiDocsUrl();
+
   return (
     <footer
       id="faq"
@@ -44,7 +59,7 @@ export default function SiteFooter() {
                 margin: 0,
               }}
             >
-              The verified attention network for AI coding agents.
+              Privacy-first wait-signal validation for AI coding agents.
             </p>
           </div>
           <div>
@@ -124,14 +139,16 @@ export default function SiteFooter() {
                 color: '#555',
               }}
             >
+              {docsUrl && (
+                <li>
+                  <a href={docsUrl} className="wl-link-u" target="_blank" rel="noopener noreferrer">
+                    API docs
+                  </a>
+                </li>
+              )}
               <li>
-                <Link
-                  href="http://localhost:4002/api/v1/docs"
-                  className="wl-link-u"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Docs
+                <Link href="/status" className="wl-link-u">
+                  System status
                 </Link>
               </li>
               <li>

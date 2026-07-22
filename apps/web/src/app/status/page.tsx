@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { getErrorMessage } from '@/lib/api/errors';
 import { systemApi } from '@/lib/api/services';
 
 interface HealthData {
-  status: string;
+  status: 'ok' | 'unavailable' | string;
   timestamp: string;
-  uptimeSeconds: number;
-  database: string | { status: string; error: string };
+  uptimeSeconds?: number;
+  database?: string | { status: string; error: string };
   redis?: {
     status: 'connected' | 'error' | 'not_configured';
     latencyMs?: number;
@@ -20,21 +21,22 @@ export default function StatusPage() {
   const [data, setData] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
-  const fetchHealth = () => {
+  const fetchHealth = async () => {
     setLoading(true);
-    systemApi
-      .getHealth()
-      .then((res) => {
-        setData(res.data);
-        setError(null);
-      })
-      .catch(() => {
-        setError('Failed to query system status. The gateway might be offline.');
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    try {
+      const res = await systemApi.getHealth();
+      setData(res.data as HealthData);
+      setLastUpdatedAt(new Date());
+      setError(null);
+    } catch (requestError) {
+      setError(
+        getErrorMessage(requestError, 'The public gateway cannot reach the platform backend.'),
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -45,7 +47,8 @@ export default function StatusPage() {
 
   const dbConnected = data?.database === 'connected';
   const redisConnected = data?.redis?.status === 'connected';
-  const overallHealthy = dbConnected && (!data?.redis || redisConnected);
+  const overallHealthy = data?.status === 'ok' && dbConnected && (!data.redis || redisConnected);
+  const displayTime = lastUpdatedAt ?? (data ? new Date(data.timestamp) : null);
 
   return (
     <div className="min-h-screen bg-white">
@@ -72,9 +75,11 @@ export default function StatusPage() {
       {/* Main content */}
       <main id="main-content" tabIndex={-1} className="pt-32 pb-24 px-6 mx-auto max-w-3xl">
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">System Status</h1>
-          <p className="text-surface-500 text-sm">
-            Live health checks of the WaitLayer reward engine and backend systems.
+          <p className="wl-eyebrow mb-3">Live platform check</p>
+          <h1 className="text-4xl font-bold text-surface-900 tracking-tight mb-4">System status</h1>
+          <p className="text-surface-600 text-sm max-w-xl mx-auto leading-6">
+            The web app checks the platform API directly. This page reports availability, not
+            account, campaign, or payout status.
           </p>
         </div>
 
@@ -85,7 +90,8 @@ export default function StatusPage() {
           </div>
         ) : error ? (
           <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center">
-            <p className="text-rose-600 font-semibold text-sm mb-2">{error}</p>
+            <p className="text-rose-800 font-semibold text-sm mb-2">Backend status unavailable</p>
+            <p className="text-rose-700 text-sm mb-4">{error}</p>
             <button
               onClick={fetchHealth}
               className="text-rose-700 hover:text-rose-800 text-xs font-semibold underline"
@@ -113,7 +119,7 @@ export default function StatusPage() {
                   {overallHealthy ? 'All Systems Operational' : 'Degraded Performance'}
                 </p>
                 <p className="text-xs opacity-80 mt-0.5">
-                  Last checked: {data ? new Date(data.timestamp).toLocaleTimeString() : 'Unknown'}
+                  Last checked: {displayTime ? displayTime.toLocaleTimeString() : 'Unknown'}
                 </p>
               </div>
             </div>
@@ -133,11 +139,11 @@ export default function StatusPage() {
                         : 'bg-rose-50 text-rose-700 border border-rose-200/50'
                     }`}
                   >
-                    {dbConnected ? 'Online' : 'Offline'}
+                    {dbConnected ? 'Online' : 'Unavailable'}
                   </span>
                 </div>
                 <p className="text-surface-500 text-xs leading-relaxed">
-                  PostgreSQL cluster storing ledger tables, referral chains, and configurations.
+                  PostgreSQL supports platform records, including campaign and ledger data.
                 </p>
               </div>
 
@@ -154,12 +160,15 @@ export default function StatusPage() {
                         : 'bg-rose-50 text-rose-700 border border-rose-200/50'
                     }`}
                   >
-                    {redisConnected ? 'Online' : 'Offline'}
+                    {redisConnected
+                      ? 'Online'
+                      : data?.redis?.status === 'not_configured'
+                        ? 'Not configured'
+                        : 'Unavailable'}
                   </span>
                 </div>
                 <p className="text-surface-500 text-xs leading-relaxed">
-                  Memory backing store for brute-force tracking, request throttling, and session
-                  tokens.
+                  Redis supports request throttling and abuse controls.
                   {data?.redis?.latencyMs !== undefined && ` Latency: ${data.redis.latencyMs}ms`}
                 </p>
               </div>
@@ -172,16 +181,16 @@ export default function StatusPage() {
               </h3>
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div>
-                  <p className="text-surface-400">Uptime</p>
+                  <p className="text-surface-500">API uptime</p>
                   <p className="text-surface-800 font-medium mt-0.5">
                     {data
-                      ? `${Math.floor(data.uptimeSeconds / 3600)}h ${Math.floor((data.uptimeSeconds % 3600) / 60)}m`
+                      ? `${Math.floor((data.uptimeSeconds ?? 0) / 3600)}h ${Math.floor(((data.uptimeSeconds ?? 0) % 3600) / 60)}m`
                       : 'Unknown'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-surface-400">Environment</p>
-                  <p className="text-surface-800 font-medium mt-0.5">Production Nodes</p>
+                  <p className="text-surface-500">Response source</p>
+                  <p className="text-surface-800 font-medium mt-0.5">Platform API</p>
                 </div>
               </div>
             </div>

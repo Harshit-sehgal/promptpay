@@ -6,21 +6,37 @@ import { EarningsCalculator } from '@/components/earnings-calculator';
 import { useAuth } from '@/lib/auth-context';
 import { getDashboardPath } from '@/lib/auth-routing';
 
+const SPONSORS = [
+  { name: 'Railway', desc: 'Deploy from your terminal in minutes', color: '#13111a' },
+  { name: 'Neon', desc: 'Serverless Postgres for AI-native apps', color: '#00a86b' },
+  { name: 'Sentry', desc: 'Find production bugs before users do', color: '#362d59' },
+  { name: 'Clerk', desc: 'Authentication built for modern apps', color: '#6c47ff' },
+] as const;
+
 export default function HomePage() {
   const { isAuthenticated, user } = useAuth();
   const dashboardPath = user ? getDashboardPath(user.role) : '/developer';
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updatePreference = () => setPrefersReducedMotion(media.matches);
+
+    updatePreference();
+    media.addEventListener('change', updatePreference);
+    return () => media.removeEventListener('change', updatePreference);
+  }, []);
 
   /* ── Terminal Simulator Animation State ── */
   const [termStep, setTermStep] = useState(0);
   const [sponsorIndex, setSponsorIndex] = useState(0);
-  const sponsorsList = [
-    { name: 'Railway', desc: 'Deploy from your terminal in minutes', color: '#13111a' },
-    { name: 'Neon', desc: 'Serverless Postgres for AI-native apps', color: '#00e599' },
-    { name: 'Sentry', desc: 'Find production bugs before users do', color: '#362d59' },
-    { name: 'Clerk', desc: 'Authentication built for modern apps', color: '#6c47ff' },
-  ];
 
   useEffect(() => {
+    if (prefersReducedMotion) {
+      setTermStep(4);
+      return;
+    }
+
     const timer = setInterval(() => {
       setTermStep((prev) => {
         if (prev >= 4) {
@@ -28,15 +44,15 @@ export default function HomePage() {
         }
         const next = prev + 1;
         if (next === 1) {
-          setSponsorIndex((idx) => (idx + 1) % sponsorsList.length);
+          setSponsorIndex((idx) => (idx + 1) % SPONSORS.length);
         }
         return next;
       });
     }, 2500);
     return () => clearInterval(timer);
-  }, [sponsorsList.length]);
+  }, [prefersReducedMotion]);
 
-  const activeSponsor = sponsorsList[sponsorIndex];
+  const activeSponsor = SPONSORS[sponsorIndex];
 
   /* ── Verification Pipeline State ── */
   const [verifyStep, setVerifyStep] = useState(0);
@@ -45,6 +61,11 @@ export default function HomePage() {
   const verifyRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    if (prefersReducedMotion) {
+      setVerifyStarted(true);
+      return;
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -58,10 +79,16 @@ export default function HomePage() {
       observer.observe(verifyRef.current);
     }
     return () => observer.disconnect();
-  }, []);
+  }, [prefersReducedMotion]);
 
   useEffect(() => {
     if (!verifyStarted) return;
+    if (prefersReducedMotion) {
+      setVerifyStep(5);
+      setVerifiedCount(1285);
+      return;
+    }
+
     let currentStep = 0;
     const interval = setInterval(() => {
       currentStep++;
@@ -72,7 +99,7 @@ export default function HomePage() {
       }
     }, 500);
     return () => clearInterval(interval);
-  }, [verifyStarted]);
+  }, [prefersReducedMotion, verifyStarted]);
 
   return (
     <div className="min-h-screen bg-white text-[#0a0a0a] antialiased selection:bg-[#0a0a0a] selection:text-white">
@@ -198,7 +225,7 @@ export default function HomePage() {
                   Private beta · rewards not yet enabled
                 </div>
                 <h1
-                  className="wlh-in animate-fadeIn"
+                  className="wlh-in"
                   style={{
                     fontFamily: "'Instrument Serif', Georgia, serif",
                     fontWeight: 400,
@@ -281,7 +308,7 @@ export default function HomePage() {
                   }}
                 >
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
-                    <span>Built for Claude Code, Cursor, and your terminal</span>
+                    <span>Designed for Claude Code, Cursor, and your terminal</span>
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
                     <span style={{ color: '#6b6b6b' }}>/</span>
@@ -289,7 +316,7 @@ export default function HomePage() {
                   </span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '16px' }}>
                     <span style={{ color: '#6b6b6b' }}>/</span>
-                    <span>60% to you</span>
+                    <span>60% share after verified settlement launches</span>
                   </span>
                 </div>
               </div>
@@ -345,7 +372,7 @@ export default function HomePage() {
                       }}
                     ></span>
                     <span style={{ marginLeft: '8px', color: '#a8a8a8', fontSize: '11.5px' }}>
-                      claude — ~/projects/waitlayer
+                      illustrative Claude session — waitlayer
                     </span>
                   </div>
                   <div
@@ -435,7 +462,7 @@ export default function HomePage() {
                           textTransform: 'uppercase',
                         }}
                       >
-                        Sponsored
+                        Example sponsor line
                       </span>
                       <span style={{ color: '#e8e8e8', flex: 'none' }}>{activeSponsor.name}</span>
                       <span style={{ color: '#3a3a3a' }}>·</span>
@@ -567,7 +594,7 @@ export default function HomePage() {
                           }}
                           className="wl-dot"
                         ></span>
-                        beta telemetry · rewards unavailable
+                        beta telemetry validation · rewards disabled
                       </span>
                     </div>
                   </div>

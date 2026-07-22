@@ -259,5 +259,5 @@ export const campaignApi = {
 };
 
 export const systemApi = {
-  getHealth: () => api.get('/health'),
+  getHealth: () => api.get('/platform-health'),
 };

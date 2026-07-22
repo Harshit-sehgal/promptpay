@@ -24,9 +24,9 @@ export function StatCard({
       }`}
     >
       <p className={`text-sm mb-1 ${isLight ? 'text-surface-500' : 'text-ink-300'}`}>{label}</p>
-      <p className={`text-3xl font-bold font-mono ${defaultValColor}`}>{value}</p>
+      <p className={`text-3xl font-bold font-mono tabular-nums ${defaultValColor}`}>{value}</p>
       {subtitle && (
-        <p className={`text-xs mt-1.5 ${isLight ? 'text-surface-400' : 'text-ink-400'}`}>
+        <p className={`text-xs mt-1.5 ${isLight ? 'text-surface-500' : 'text-ink-400'}`}>
           {subtitle}
         </p>
       )}
