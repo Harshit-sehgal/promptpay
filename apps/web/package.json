@@ -18,18 +18,18 @@
     "e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
-    "@sentry/nextjs": "^10.65.0",
-    "@tailwindcss/postcss": "^4.3.2",
+    "@sentry/nextjs": "^10.67.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@waitlayer/shared": "workspace:*",
     "@waitlayer/ui": "workspace:*",
     "axios": "^1.18.1",
     "jose": "^6.2.3",
-    "lucide-react": "^1.24.0",
+    "lucide-react": "^1.25.0",
     "next": "^16.2.10",
     "qrcode": "^1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tailwindcss": "^4.3.2",
+    "tailwindcss": "^4.3.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -42,7 +42,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@waitlayer/eslint-config": "workspace:*",
-    "autoprefixer": "^10.4.0",
+    "autoprefixer": "^10.5.4",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.19",
     "typescript": "^5.9.2",
