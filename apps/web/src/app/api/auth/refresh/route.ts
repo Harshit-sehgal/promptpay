@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 import {
   apiBaseUrl,
@@ -64,10 +65,7 @@ export async function POST(req: NextRequest) {
       req.headers,
     );
   } catch (err: unknown) {
-    console.error(
-      'Token Refresh Route Handler error:',
-      err instanceof Error ? err.message : String(err),
-    );
+    logger.fromError('Token refresh route handler failed', err);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 import { apiBaseUrl } from '../_lib/cookies';
 
@@ -28,7 +29,7 @@ export async function GET() {
   } catch (err: unknown) {
     // Degrade gracefully — the client treats a failed discovery as
     // "Google sign-in unavailable" and falls back to email/password.
-    console.error('Auth Config Route Handler error:', err instanceof Error ? err.message : String(err));
+    logger.fromError('Auth config route handler failed', err);
     return NextResponse.json(
       { message: 'Auth config unavailable', googleClientId: null },
       { status: 502 },

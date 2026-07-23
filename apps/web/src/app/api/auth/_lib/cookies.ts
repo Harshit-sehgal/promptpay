@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 /**
  * Cookie names for the httpOnly auth flow.
@@ -228,10 +229,10 @@ export function isSecure(headers: Headers): boolean {
   // signal. Real HTTPS deploys should not set this override.
   if (process.env.COOKIE_SECURE === 'false') {
     if (process.env.NODE_ENV === 'production') {
-      console.warn(
-        '[waitlayer] COOKIE_SECURE=false: issuing non-Secure auth cookies because NODE_ENV=production ' +
-          'but the override is set. Only safe if the web is served over plain HTTP (e.g. an internal ' +
-          'staging host or CI). For any internet-facing deploy, terminate TLS and remove this override.',
+      logger.warn(
+        'Issuing non-Secure auth cookies in production because COOKIE_SECURE=false is set. ' +
+          'Only safe if the web is served over plain HTTP (e.g. an internal staging host or CI). ' +
+          'For any internet-facing deploy, terminate TLS and remove this override.',
       );
     }
     return false;

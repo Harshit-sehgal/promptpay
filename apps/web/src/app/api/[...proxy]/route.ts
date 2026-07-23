@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 import {
   apiBaseUrl,
@@ -209,10 +210,9 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
           body = JSON.stringify({ refreshToken });
         }
       } catch (parseErr) {
-        console.warn(
-          '[WaitLayer] Proxy body parse failed:',
-          parseErr instanceof Error ? parseErr.message : String(parseErr),
-        );
+        logger.warn('Proxy body parse failed', {
+          error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+        });
         body = undefined;
       }
     }
@@ -264,10 +264,7 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
       req.headers,
     );
   } catch (proxyErr) {
-    console.error(
-      '[WaitLayer] Proxy error:',
-      proxyErr instanceof Error ? proxyErr.message : String(proxyErr),
-    );
+    logger.fromError('Proxy request failed', proxyErr);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

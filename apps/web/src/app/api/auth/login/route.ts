@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 import {
   apiBaseUrl,
@@ -51,14 +52,16 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Set httpOnly cookies + return user (NOT tokens) to browser
-    const response = NextResponse.json(stripAuthTokens({ ...loginData, user: fullUser }), { status: 200 });
+    const response = NextResponse.json(stripAuthTokens({ ...loginData, user: fullUser }), {
+      status: 200,
+    });
     return applyRateLimitIdentity(
       applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers }),
       identity,
       req.headers,
     );
   } catch (err: unknown) {
-    console.error('Login Route Handler error:', err instanceof Error ? err.message : String(err));
+    logger.fromError('Login route handler failed', err);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }

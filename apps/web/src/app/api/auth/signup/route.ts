@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 import {
   apiBaseUrl,
@@ -48,14 +49,16 @@ export async function POST(req: NextRequest) {
       fullUser = { ...(user as Record<string, unknown>), ...(meData as Record<string, unknown>) };
     }
 
-    const response = NextResponse.json(stripAuthTokens({ ...signupData, user: fullUser }), { status: 201 });
+    const response = NextResponse.json(stripAuthTokens({ ...signupData, user: fullUser }), {
+      status: 201,
+    });
     return applyRateLimitIdentity(
       applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers }),
       identity,
       req.headers,
     );
   } catch (err: unknown) {
-    console.error('Signup Route Handler error:', err instanceof Error ? err.message : String(err));
+    logger.fromError('Signup route handler failed', err);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
   }
 }
