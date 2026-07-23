@@ -1,3 +1,4 @@
+import type { StringValue } from 'ms';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -37,7 +38,9 @@ import { JwtStrategy } from './strategies/jwt.strategy';
           signOptions: {
             algorithm: 'RS256',
             keyid: kid,
-            expiresIn: accessTtl as unknown as number,
+            // `accessTtl` is a string like '15m'; jsonwebtoken accepts it, but
+            // the @nestjs/jwt typing expects the narrower `StringValue` union.
+            expiresIn: accessTtl as StringValue,
           },
           verifyOptions: {
             algorithms: ['RS256'],
