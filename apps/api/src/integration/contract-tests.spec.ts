@@ -576,9 +576,6 @@ describe('API Contract Tests', () => {
         .post('/api/v1/extension/ad-rendered')
         .set('Authorization', `Bearer ${devToken}`)
         .send({ ...payload, signature: sig });
-      if (res.status !== 200) {
-        console.error('ad-rendered error body:', res.body);
-      }
       expect(res.status).toBe(200);
       expect(() => AdRenderedResponse.parse(res.body)).not.toThrow();
     });

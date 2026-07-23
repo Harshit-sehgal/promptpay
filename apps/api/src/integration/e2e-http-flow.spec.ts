@@ -630,9 +630,6 @@ describe('End-to-End HTTP Integration Flow', () => {
           .post(`/api/v1/advertiser/campaigns/${id}/submit`)
           .set('Authorization', `Bearer ${advertiserToken}`);
 
-        if (res.status !== 201) {
-          console.error('submitCampaign failed with body:', res.body);
-        }
         expect(res.status).toBe(201);
         expect(res.body.status).toBe('submitted');
       }
@@ -649,9 +646,6 @@ describe('End-to-End HTTP Integration Flow', () => {
         const crApprove = await request(app.getHttpServer())
           .post(`/api/v1/campaigns/creatives/${id}/approve`)
           .set('Authorization', `Bearer ${adminToken}`);
-        if (crApprove.status !== 200) {
-          console.error('approveCreative failed with body:', crApprove.body);
-        }
         expect(crApprove.status).toBe(200);
       }
 
@@ -661,9 +655,6 @@ describe('End-to-End HTTP Integration Flow', () => {
           .set('Authorization', `Bearer ${adminToken}`)
           .send({ reason: 'Good content' });
 
-        if (approveRes.status !== 201) {
-          console.error('approveCampaign failed with body:', approveRes.body);
-        }
         expect(approveRes.status).toBe(201);
       }
 
