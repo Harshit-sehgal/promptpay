@@ -422,6 +422,9 @@ importers:
 
   tools/wait-attestation-bridge:
     dependencies:
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       jose:
         specifier: ^6.0.10
         version: 6.2.3

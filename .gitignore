@@ -58,3 +58,4 @@ credentials-snapshot.json
 apps/vscode-extension/*.vsix
 .aider*
 .vercel
+start-bridge.sh

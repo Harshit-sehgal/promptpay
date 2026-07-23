@@ -155,6 +155,8 @@ async function main() {
   if (hardFailures) process.exit(1);
 
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(databaseUrl) });
+  // Tracks campaigns paused in step 7b so they can be restored in finally.
+  let pausedCampaignIds = [];
   try {
     // 1. Readiness probe (no auth).
     const ready = await fetch(`${API_BASE_URL}/api/v1/health/ready`);
@@ -238,6 +240,19 @@ async function main() {
       // STAGING_FULL_FLOW to '1', so a release cannot pass without it.
       fail('STAGING_FULL_FLOW=0 set — the financial loop is mandatory for a staging release gate');
     } else {
+      // 1b. Clean up prior ad impressions/clicks for this test developer so
+      // repeated smoke runs do not trigger fraud rules (e.g. suspicious CTR)
+      // or leave stale state that hides real issues.
+      const deletedClicks = await prisma.adClick.deleteMany({
+        where: { userId: developer.id },
+      });
+      const deletedImpressions = await prisma.adImpression.deleteMany({
+        where: { userId: developer.id },
+      });
+      if (deletedClicks.count > 0 || deletedImpressions.count > 0) {
+        ok(`cleaned up ${deletedImpressions.count} impressions and ${deletedClicks.count} clicks from prior runs`);
+      }
+
       // 2. Consent is deliberately split: ads do not imply permission to send
       // minimized wait telemetry. A billable smoke must explicitly grant both
       // and prove the server persisted the policy audit fields.
@@ -257,6 +272,18 @@ async function main() {
         fail('developer consent fields were not persisted exactly as requested');
       } else {
         ok('developer ads + telemetry consent persisted with policy version');
+      }
+
+      // 2b. Enable the wait-earnings runtime switch so the billable ad surface
+      // is exposed while an independent attestation issuer is configured.
+      const earningsToggle = await api('POST', '/admin/settings/wait/earnings/toggle', adminToken, {
+        enabled: true,
+        reason: 'staging smoke',
+      });
+      if (earningsToggle.status >= 400) {
+        fail(`enable wait earnings -> HTTP ${earningsToggle.status}: ${earningsToggle.text}`);
+      } else {
+        ok('wait earnings runtime switch enabled');
       }
 
       // 3. Create the campaign through its real API. Creatives and country
@@ -439,6 +466,22 @@ async function main() {
         else ok('signed wait start recorded (non-billable without independent attestation)');
       }
 
+      // 7b. Pause any other active campaigns so the smoke test's campaign
+      // wins the auction. This avoids ledger assertions flaking because a
+      // concurrently active campaign served the impression instead.
+      const otherActive = await prisma.campaign.findMany({
+        where: { status: 'active', id: { not: campaignId } },
+        select: { id: true },
+      });
+      if (otherActive.length > 0) {
+        pausedCampaignIds = otherActive.map((c) => c.id);
+        await prisma.campaign.updateMany({
+          where: { id: { in: pausedCampaignIds } },
+          data: { status: 'paused' },
+        });
+        ok(`paused ${pausedCampaignIds.length} other active campaign(s)`);
+      }
+
       // 8. Ad request with the SAME device/session/wait IDs — must serve.
       let impressionToken = null;
       if (deviceId) {
@@ -606,6 +649,15 @@ async function main() {
       else ok('no critical alerts fired in staging');
     }
   } finally {
+    // Best-effort restore of campaigns paused in step 7b. This keeps the
+    // smoke test from leaving staging permanently altered if other campaigns
+    // were active before it ran.
+    if (pausedCampaignIds.length > 0) {
+      await prisma.campaign.updateMany({
+        where: { id: { in: pausedCampaignIds } },
+        data: { status: 'active' },
+      });
+    }
     await prisma.$disconnect();
   }
 

@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 import { startBridge } from './server.js';
 
 startBridge().catch((error) => {
