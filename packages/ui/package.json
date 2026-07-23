@@ -15,12 +15,12 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/react": "^19.1.0",
-    "react": "^19.1.0",
+    "react": "^19.2.8",
     "@waitlayer/eslint-config": "workspace:*",
     "typescript": "^5.9.2"
   },
   "peerDependencies": {
-    "react": "^19.1.0"
+    "react": "^19.2.8"
   },
   "dependencies": {
     "clsx": "^2.1.1",
