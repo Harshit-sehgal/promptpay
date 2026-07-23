@@ -220,7 +220,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     const meRes = await request(app.getHttpServer())
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${adminToken}`);
-    console.log('admin me', meRes.status, meRes.body, 'token prefix', adminToken?.slice(0, 20));
+    expect(meRes.status).toBe(200);
   });
 
   afterAll(async () => {
@@ -393,15 +393,6 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
     const approveRes = await request(app.getHttpServer())
       .post(`/api/v1/campaigns/creatives/${creativeId}/approve`)
       .set('Authorization', `Bearer ${adminToken}`);
-    if (approveRes.status !== 200) {
-      console.log(
-        'creative approve failed',
-        approveRes.status,
-        approveRes.body,
-        'adminToken prefix',
-        adminToken?.slice(0, 20),
-      );
-    }
     expect(approveRes.status).toBe(200);
 
     await request(app.getHttpServer())

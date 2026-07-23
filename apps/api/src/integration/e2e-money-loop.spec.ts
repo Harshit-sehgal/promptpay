@@ -1292,7 +1292,6 @@ describe('E2E Money Loop', () => {
       const signed = { ...payload, signature: hmacSign(payload) };
 
       const result = await svc.extension.recordQualifiedImpression(DEV_USER_ID, signed);
-      if (!result.qualified) console.log('DEBUG Phase 3 qual:', result);
       expect(result.qualified).toBe(true);
       expect(result.impressionId).toBe(IMPRESSION_ID);
 
