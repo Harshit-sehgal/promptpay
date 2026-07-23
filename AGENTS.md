@@ -29,7 +29,7 @@ see the live risk/status register without being told to read a separate doc.
 
 ## Current Status (snapshot 2026-07-15)
 
-- **All issues A-001…A-081 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). Remaining non-code items: one operator decision (A-030), and A-075 (full Docker build e2e — blocked by npm registry `ETIMEDOUT` in this sandbox, not a code defect). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below).
+- **All issues A-001…A-081 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). Remaining non-code items: one operator decision (A-030). **A-075** is now resolved as a code defect (Dockerfile registry-resilient pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below).
 - This is a snapshot. Re-run the gates after any code change to confirm health.
 
 ### Quality gates (run from repo root)
@@ -302,10 +302,11 @@ serving real routes against the live Postgres + Redis (2026-07-12):
   API completed a full exchange: `POST /auth/signup` → 201, then `waitlayer status`
   issued `GET /developer/dashboard` + `GET /ledger/balance` (both 200) and printed
   the earnings summary (`status.exit=0`). This clears A-040's "live compiled-binary
-  run blocked" claim — the standalone API runtime is sound. The only remaining
-  A-075 gap is `docker build` itself, blocked by the npm-registry `ETIMEDOUT` in
-  this sandbox (the Dockerfile code path + `USER node` + HEALTHCHECK are correct). The
-  `docker-build` CI job now boots the compiled API image and asserts a controller
+  run blocked" claim — the standalone API runtime is sound. The A-075 Dockerfile
+  registry-resilience fix (2026-07-23) removes the previous `corepack prepare`
+  hard-coded npm dependency, so the only remaining requirement is a reachable
+  registry from the build environment. The `docker-build` CI job now boots the
+  compiled API image and asserts a controller
   route resolves over TCP (non-404), so a regressed standalone build fails CI
   rather than shipping a 404-ing image.
 - **Strict CSP blocks Next.js hydration — RESOLVED (stale).** The committed
@@ -396,7 +397,7 @@ writeups were pruned; this index preserves the audit trail.
 - A-072 capped exports (`developer.service:385-412`; `export-metadata.ts`).
 - A-073 frequency-cap edit UI (`frequency-caps.ts:7-33`).
 - A-074 dashboard/list/edit pagination (`advertiser.service:52,360,423,468`).
-- A-075 Docker `USER node` (`Dockerfile:70-71,102-103`) — full build e2e not run.
+- A-075 Docker registry-resilient pnpm install (`Dockerfile` base stage) — resolved 2026-07-23; `USER node` + `chown` + HEALTHCHECK remain.
 - A-076 money-integrity bounded (`admin.service.ts:69-294`).
 - A-077 admin campaign queue pagination (`admin.service.ts:390-409`).
 - A-078 feedback message persisted (`feedback.service.ts:47-54`; `page.tsx:38`).
@@ -606,7 +607,7 @@ A full live E2E pass was run against the running standalone API (`node apps/api/
 - **A-047 Cookie consent** — headless Chromium on `/`; cookie consent banner visible at bottom of page, "Cookie Settings" button in footer. Next.js hydration works under `'unsafe-inline'` CSP. ✅
 - **A-040 CLI↔API live link** — compiled CLI binary (`apps/cli/dist/index.js`) ran `auth --signup` against the live API → `POST /auth/signup` returned 201 with tokens. CLI `status` and `logout` commands also communicated with the API successfully. ✅
 - **API route verification** — `/api/v1/health/ready` → 200 (database: connected, redis: connected); `/api/v1/docs` → 200 (Swagger UI); `/api/v1/docs-json` → 200 (126 paths documented); `/api/v1/auth/login` → 400 (validation); `/api/v1/auth/me` → 401 (auth). No 404s. ✅
-- **A-075 Docker build** — `docker compose build api` failed at `corepack prepare pnpm@11.9.0` with `ETIMEDOUT` against `registry.npmjs.org` (same network constraint as 2026-07-10/12). Dockerfile code path (`USER node` + `chown` + HEALTHCHECK) is correct; blocked by network, not code. ❌ (environment constraint)
+- **A-075 Docker build** — resolved by replacing `corepack prepare pnpm@11.9.0 --activate` with `npm install -g pnpm` plus optional `NPM_REGISTRY` build arg and an `.npmrc` registry override. Builds still require a reachable registry, but the image code is no longer tied to a single hard-coded npm endpoint. ✅
 
 Quality gates after the 2026-07-15 test fixes: typecheck 14/14, lint 9/9, all tests pass (API 680 + 35 contract + 44 e2e; web/cli/vscode all green), build 9/9.
 
@@ -621,8 +622,8 @@ The three flows (developer / advertiser / admin) are code-complete step by step.
   auth/onboarding, campaign lifecycle, ad serving + impression loop, cross-user
   ownership, budget exhaustion, and ledger maturation/payouts end to end.
   Remaining open blockers for SaaS readiness: A-030 (operator credential
-  decision), A-075 (full Docker build e2e — blocked by npm registry ETIMEDOUT
-  in this sandbox, not a code defect). Browser/live E2E for A-033, A-018, A-036,
+  decision). **A-075** is resolved as a code defect (Dockerfile registry-resilient
+  pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036,
   A-047, and A-040 is now live-verified (see "2026-07-15 Live E2E verification").
 
 Required verification before calling the repo healthy — re-run from a clean
@@ -1188,7 +1189,7 @@ finished by a source change:
 - **P1.9** real Stripe/PayPal/Wise test-mode lifecycles — no provider test-mode credentials; covered by the DB-backed `payout-sandbox-run.spec.ts` (stub path).
 - **P1.21** branch protection settings — documented in `docs/ops/branch-protection.md` + `.github/CODEOWNERS`; actual GitHub repo setting requires an operator action.
 - **A-030** operator PSP credential decision (which automated rails are enabled) — code gate complete.
-- **A-075** full `docker compose build` e2e — blocked by npm-registry `ETIMEDOUT` in this sandbox; Dockerfile code path (`USER node`/`chown`/`HEALTHCHECK`) is correct.
+- **A-075** full `docker compose build` e2e — resolved in Dockerfile with registry-resilient pnpm install; a reachable registry from the build environment remains required.
 - **A-018** live Google OAuth ID-token callback — needs real Google credentials; CSP header live-verified.
 - **A-036** CCPA enforcement beyond ad serving (reporting/exports/audience) — product-undefined.
 - **A-047** full multi-step browser signup/login/dashboard E2E — **live-verified 2026-07-20** (form submit → authenticated /developer redirect, `auth/me` 200, dashboard renders with data under `NODE_ENV=production`); cookie-banner live-verified 2026-07-15; route covered by in-process `e2e-http-flow`. Fully closed.
@@ -1268,10 +1269,8 @@ Redis (:6379).
 
 ### Residual (external, NOT code-completable)
 
-See the updated "Remaining items" list above. No code deliverable is
-outstanding; the open items are operator/infra/product/legal decisions or
-sandbox-only network constraints (P0.5, P1.9, P1.21, A-030, A-075, A-018
-callback, A-036, #12/#39/#103/#131).
+See the updated "Remaining items" list above. No code deliverable is outstanding; the open items are operator/infra/product/legal decisions
+(P0.5, P1.9, P1.21, A-030, A-018 callback, A-036, #12/#39/#103/#131).
 
 ## 2026-07-20 — A-047 full browser signup/login/dashboard E2E verified (closes last verifiable residual)
 
