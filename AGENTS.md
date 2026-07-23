@@ -27,9 +27,10 @@ see the live risk/status register without being told to read a separate doc.
   with the date and the verification command/manual test that proves it.
 - Do not mark an item complete just because a narrow unit test passes.
 
-## Current Status (snapshot 2026-07-15)
+## Current Status (snapshot 2026-07-23)
 
-- **All issues A-001…A-081 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). Remaining non-code items: one operator decision (A-030). **A-075** is now resolved as a code defect (Dockerfile registry-resilient pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below).
+- **All source-fixable issues A-001…A-086 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). **A-075** is now resolved as a code defect (Dockerfile registry-resilient pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below).
+- **Source closure notice:** no further source edits can close the remaining items. They are external operator/infra/product/legal tasks, including: A-030 (real payout-provider credentials / `WAITLAYER_PAYOUT_PROVIDER_STATUS`), P1.21 (GitHub branch-protection toggles), P0.5 (CI run on SHA from a runner with registry access), and the independent wait-attestation provider/bridge plus paid-launch staging experiment. See "Remaining external activation tasks" below and the per-item notes in this file.
 - This is a snapshot. Re-run the gates after any code change to confirm health.
 
 ### Quality gates (run from repo root)
