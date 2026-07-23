@@ -188,7 +188,7 @@
     "@waitlayer/eslint-config": "workspace:*",
     "@waitlayer/shared": "workspace:*",
     "esbuild": "^0.28.1",
-    "typescript": "^5.9.2",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
 }
