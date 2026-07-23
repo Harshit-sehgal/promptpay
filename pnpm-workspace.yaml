@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  - 'tools/*'
 
 overrides:
   # Security floors for transitive Next/Sentry and AJV dependency paths.

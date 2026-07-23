@@ -15,7 +15,10 @@ export interface WaitAttestationApi {
     operationStartDeadline: string;
     consumeDeadline: string;
   }>;
-  consumeWaitAttestation(input: { attestationSessionId: string; assertion: string }): Promise<unknown>;
+  consumeWaitAttestation(input: {
+    attestationSessionId: string;
+    assertion: string;
+  }): Promise<unknown>;
 }
 
 export interface WaitAssertionProvider {
@@ -23,6 +26,7 @@ export interface WaitAssertionProvider {
   obtainAssertion(input: {
     nonce: string;
     attestationSessionId: string;
+    userId?: string;
     deviceId: string;
     sessionId: string;
     waitStateId: string;
@@ -34,6 +38,7 @@ export interface WaitAssertionProvider {
 interface PendingAttestation {
   attestationSessionId: string;
   nonce: string;
+  userId?: string;
   deviceId: string;
   sessionId: string;
   waitStateId: string;
@@ -52,6 +57,7 @@ export class WaitAttestationFlow {
     sessionId: string;
     waitStateId: string;
     provider: WaitAssertionProvider;
+    userId?: string;
   }): Promise<void> {
     // A retry before the operation starts shares the in-memory attempt and
     // never generates a second nonce for the same wait.
@@ -75,6 +81,7 @@ export class WaitAttestationFlow {
       const assertion = await pending.provider.obtainAssertion({
         nonce: pending.nonce,
         attestationSessionId: pending.attestationSessionId,
+        userId: pending.userId,
         deviceId: pending.deviceId,
         sessionId: pending.sessionId,
         waitStateId: pending.waitStateId,

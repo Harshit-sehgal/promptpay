@@ -1,0 +1,30 @@
+{
+  "name": "@waitlayer/wait-attestation-bridge",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Reference/stub independent wait-attestation provider bridge for local and staging development.",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jose": "^6.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@waitlayer/eslint-config": "workspace:*",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.2",
+    "vitest": "4.1.10"
+  }
+}

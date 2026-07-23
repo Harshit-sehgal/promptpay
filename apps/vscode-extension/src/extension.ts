@@ -110,7 +110,10 @@ export async function activate(context: vscode.ExtensionContext) {
   // user changed their choices on another client.
   const syncServerConsent = async () => {
     const settings = await api.getDeveloperSettings();
-    if (typeof settings.adsEnabled === 'boolean' && (await config.adsEnabled()) !== settings.adsEnabled) {
+    if (
+      typeof settings.adsEnabled === 'boolean' &&
+      (await config.adsEnabled()) !== settings.adsEnabled
+    ) {
       await config.setAdsEnabled(settings.adsEnabled);
     }
     if (typeof settings.waitTelemetryEnabled === 'boolean') {
@@ -188,9 +191,11 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`WaitLayer: failed to update adsEnabled on server — ${msg}`);
-        vscode.window.showErrorMessage(`WaitLayer: ads were not changed — ${msg}`, 'Retry').then(
-          (choice) => choice === 'Retry' && vscode.commands.executeCommand('waitlayer.toggleAds'),
-        );
+        vscode.window
+          .showErrorMessage(`WaitLayer: ads were not changed — ${msg}`, 'Retry')
+          .then(
+            (choice) => choice === 'Retry' && vscode.commands.executeCommand('waitlayer.toggleAds'),
+          );
       }
     }),
     vscode.commands.registerCommand('waitlayer.toggleWaitTelemetry', async () => {
@@ -362,11 +367,13 @@ export async function activate(context: vscode.ExtensionContext) {
           if (await config.adsEnabled()) {
             const provider = createVsCodeWaitAssertionProvider();
             if (provider) {
+              const userId = (await config.getDeviceUserId()) ?? undefined;
               await attestation.begin({
                 deviceId,
                 sessionId,
                 waitStateId: event.waitStateId,
                 provider,
+                userId,
               });
               attestationBegunWaits.add(event.waitStateId);
             } else {
@@ -559,11 +566,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Fetch server-side consent after boot. A failed initial sync is non-fatal:
   // no local state is changed, and successful login retries this exact path.
-  void syncServerConsent()
-    .catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`WaitLayer: failed to fetch developer settings — ${msg}`);
-    });
+  void syncServerConsent().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`WaitLayer: failed to fetch developer settings — ${msg}`);
+  });
 
   // Boot balance fetch. On transient failure (network not up yet at
   // activation time, device not registered) retry once after 30s so the

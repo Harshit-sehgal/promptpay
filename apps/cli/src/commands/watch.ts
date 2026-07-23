@@ -98,7 +98,9 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         console.error(chalk.red(`ad qualify error: ${getErrorMessage(err)}`));
       }
     } else if (activeImpressionToken && durationMs >= 5000) {
-      console.warn(chalk.yellow('Skipping ad qualification: independent wait attestation was not consumed.'));
+      console.warn(
+        chalk.yellow('Skipping ad qualification: independent wait attestation was not consumed.'),
+      );
     }
 
     activeWaitStateId = null;
@@ -164,6 +166,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         sessionId,
         waitStateId,
         provider: attestationProvider,
+        userId: creds.userId,
       });
 
       // P0.1: CLI marker-file evidence is user-controlled (the user writes the

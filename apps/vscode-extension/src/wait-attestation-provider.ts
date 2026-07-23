@@ -18,9 +18,10 @@ export function createVsCodeWaitAssertionProvider(): WaitAssertionProvider | nul
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, provider }),
       });
-      if (!response.ok) throw new Error(`Wait attestation provider rejected the operation (${response.status})`);
+      if (!response.ok)
+        throw new Error(`Wait attestation provider rejected the operation (${response.status})`);
       const responseBody = (await response.json()) as { assertion?: unknown };
       if (typeof responseBody.assertion !== 'string' || responseBody.assertion.length < 32) {
         throw new Error('Wait attestation provider returned no usable assertion');

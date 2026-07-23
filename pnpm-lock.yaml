@@ -420,6 +420,28 @@ importers:
         specifier: ^5.9.2
         version: 5.9.3
 
+  tools/wait-attestation-bridge:
+    dependencies:
+      jose:
+        specifier: ^6.0.10
+        version: 6.2.3
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      '@waitlayer/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.0
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.1.0(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.0)(yaml@2.9.0))
+
 packages:
   '@alloc/quick-lru@5.2.0':
     resolution:
@@ -14737,7 +14759,6 @@ snapshots:
       esbuild: 0.28.1
     optionalDependencies:
       fsevents: 2.3.3
-    optional: true
 
   tunnel-agent@0.6.0:
     dependencies:

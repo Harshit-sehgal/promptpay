@@ -20,9 +20,10 @@ export function createCliWaitAssertionProvider(
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, provider }),
       });
-      if (!response.ok) throw new Error(`Attestation provider rejected the wait (${response.status})`);
+      if (!response.ok)
+        throw new Error(`Attestation provider rejected the wait (${response.status})`);
       const body = (await response.json()) as { assertion?: unknown };
       if (typeof body.assertion !== 'string' || body.assertion.length < 32) {
         throw new Error('Attestation provider returned no usable assertion');
