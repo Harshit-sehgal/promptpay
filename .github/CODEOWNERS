@@ -1,30 +1,32 @@
 # CODEOWNERS (P1.21)
 #
 # PRs that change the paths below require review from the named owners before
-# merge. Replace `@promptpay1` with the real GitHub team/org for this project
-# (the repository is hosted on GitHub as `Harshit-sehgal/promptpay`; the product
-# is branded WaitLayer). Enforce via "Require review from Code Owners" in GitHub
-# repo Settings → Branches (see docs/ops/branch-protection.md).
+# merge. The repository is hosted on GitHub as `Harshit-sehgal/promptpay`; the
+# product is branded WaitLayer. Branch protection must still be enabled in
+# GitHub repo Settings → Branches (see docs/ops/branch-protection.md).
+#
+# To keep ownership explicit, the default owner is the repository owner.
+# Replace with a GitHub team (e.g., @waitlayer/money-team) once the org exists.
 
 # Authentication & identity
-/apps/api/src/auth/          @promptpay1
-/apps/api/src/common/guards/ @promptpay1
+/apps/api/src/auth/          @Harshit-sehgal
+/apps/api/src/common/guards/ @Harshit-sehgal
 
 # Ledger, ad serving, campaign (money-critical)
-/apps/api/src/ledger/        @promptpay1
-/apps/api/src/extension/     @promptpay1
-/apps/api/src/campaign/      @promptpay1
+/apps/api/src/ledger/        @Harshit-sehgal
+/apps/api/src/extension/     @Harshit-sehgal
+/apps/api/src/campaign/      @Harshit-sehgal
 
 # Payouts
-/apps/api/src/payout/        @promptpay1
+/apps/api/src/payout/        @Harshit-sehgal
 
 # Migrations & schema
-/packages/db/prisma/         @promptpay1
+/packages/db/prisma/         @Harshit-sehgal
 
 # CI / deployment
-/.github/                    @promptpay1
-/Dockerfile                  @promptpay1
-/docker-compose.yml          @promptpay1
+/.github/                    @Harshit-sehgal
+/Dockerfile                  @Harshit-sehgal
+/docker-compose.yml          @Harshit-sehgal
 
 # Default owners
-*                            @promptpay1
+*                            @Harshit-sehgal

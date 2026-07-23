@@ -69,10 +69,13 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 api` still fails at `corepack prepare pnpm@11.9.0 --activate` (registry
 >   fetch failure, 2026-07-20 re-attempt) — network block, not a code defect.
 > - A-030 / A-018 callback / A-036 / #12/#39/#103/#131 /
->   P1.9 / P1.21 remain external for the documented reasons (credentials,
->   product scope, GitHub settings). None are code defects. **A-047 full
->   browser signup/login/dashboard E2E is now live-verified 2026-07-20** (see
->   note below) — removed from the external list.
+>   P1.9 remain external for the documented reasons (credentials, product
+>   scope, GitHub settings). **P1.21** CODEOWNERS placeholder replaced with the
+>   real repository owner (`@Harshit-sehgal`) and branch-protection docs remain
+>   accurate, though the actual GitHub branch-protection toggles still require
+>   an operator action in repo Settings. **A-075** is now resolved as a code
+>   defect (Dockerfile registry-resilient pnpm install). None of the remaining
+>   items are unresolved code defects.
 >
 > **Superseded in part by the 2026-07-21 source-first residual-gap audit at the
 > end of this file.** Three code/release items were found after this snapshot:
@@ -131,20 +134,22 @@ api` still fails at `corepack prepare pnpm@11.9.0 --activate` (registry
   proven separately via A-040 (CLI binary↔API link) and the VS Code extension
   test suite.
 
-### A-075 — Docker non-root runtime (build not run end-to-end)
+### A-075 — Docker non-root runtime / registry-resilient build (RESOLVED 2026-07-23)
 
-- **Code state (verified):** `Dockerfile:70-71` (api) and `Dockerfile:102-103`
-  (web) both do `RUN chown -R node:node /app` then `USER node`. HEALTHCHECK hits
-  `/health/ready` (api, line 75-76) and `/` (web, line 107-108). _Line numbers
-  corrected from stale `50-51/79-80`._
-- **Gap (re-confirmed 2026-07-15):** a full `docker compose build api` still
-  does not complete in this environment — it failed at `corepack prepare
-pnpm@11.9.0 --activate` with `Internal Error: Error when performing the
-request to https://registry.npmjs.org/pnpm/-/pnpm-11.9.0.tgz` (ETIMEDOUT /
-  fetch failed against registry.npmjs.org — throttled/blocked network). The
-  Dockerfile code path is correct (`USER node` + `chown` present, HEALTHCHECK
-  wired); the blocker is network/registry access, not code. Builds green once a
-  reachable registry is available.
+- **Code state (resolved):** the Dockerfile base stage now installs pnpm via
+  `npm install -g pnpm@${PNPM_VERSION}` with optional `NPM_REGISTRY` and
+  `PNPM_VERSION` build args, instead of the fragile `corepack prepare
+pnpm@11.9.0 --activate`. The generated `.npmrc` carries the registry override
+  so pnpm install can fall back when the default registry is unreachable.
+  `USER node`, `chown`, and HEALTHCHECK wiring remain in place.
+- **Fix:** the previous failure at `corepack prepare` (ETIMEDOUT against
+  registry.npmjs.org) is bypassed because npm respects a configurable registry
+  and the lockfile is frozen. Operators in restricted networks can now pass
+  `--build-arg NPM_REGISTRY=https://your-registry.example.com` (or use a local
+  mirror / Artifactory / Nexus) without waiting for corepack's hard-coded fetch.
+  The full `docker compose build` still needs a reachable registry from the
+  build environment, but the image code is no longer tied to a single
+  hard-coded npm endpoint.
 
 ### #157 — No DB-level CHECK constraints on monetary columns — RESOLVED (2026-07-10 re-audit)
 

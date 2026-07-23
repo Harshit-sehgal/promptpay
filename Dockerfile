@@ -1,6 +1,16 @@
 # ── Base Stage: pnpm + dependencies ──
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
+# A-075 resilience: install pnpm via npm instead of `corepack prepare` so the
+# build respects an optional NPM_REGISTRY build arg and works in networks
+# where corepack's hard-coded fetch (registry.npmjs.org) times out. The
+# packageManager field in package.json still pins the version; npm installs the
+# same pnpm release.
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG PNPM_VERSION=11.9.0
+RUN npm config set registry "$NPM_REGISTRY" \
+  && npm install -g pnpm@${PNPM_VERSION} \
+  && pnpm --version
+
 WORKDIR /app
 ENV CI=true
 
@@ -16,9 +26,11 @@ COPY apps/cli/package.json apps/cli/
 COPY apps/vscode-extension/package.json apps/vscode-extension/
 
 # pnpm 11 blocks packages not in onlyBuiltDependencies from running install
-# scripts. The .npmrc config approves esbuild and Prisma packages.
+# scripts. The .npmrc config approves esbuild and Prisma packages and carries
+# the optional registry override so pnpm install can fall back when the
+# default registry is unreachable.
 # HUSKY=0 prevents the husky prepare script from failing (no .git in Docker).
-RUN printf 'only-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-pg\nconfirm-modules-purge=false\n' > .npmrc \
+RUN printf 'registry=%s\nonly-built-dependencies=esbuild,@prisma/client,prisma,@prisma/adapter-pg\nconfirm-modules-purge=false\n' "${NPM_REGISTRY%/}" > .npmrc \
   && HUSKY=0 pnpm install --frozen-lockfile
 
 # ── Build Stage: turbo build all packages ──
@@ -87,7 +99,9 @@ COPY --from=build /app/package.json ./
 # Install the Prisma CLI globally. It is needed both to (re)generate the
 # production Prisma client and to run migrations in the entrypoint. Installing
 # it globally keeps it out of node_modules (which is pruned of all dev deps).
-RUN npm install -g prisma@7.8.0
+# A-075: carry the registry override into this stage too.
+ARG NPM_REGISTRY=https://registry.npmjs.org
+RUN npm config set registry "$NPM_REGISTRY" && npm install -g prisma@7.8.0
 
 # Drop devDependencies from the runtime image. `pnpm prune` does NOT prune a
 # workspace, so we reinstall production-only from the pnpm store inherited from
