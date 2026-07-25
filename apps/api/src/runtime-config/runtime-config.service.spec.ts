@@ -70,6 +70,18 @@ describe('RuntimeConfigService', () => {
     });
   });
 
+  describe('fresh-production money defaults', () => {
+    it('fails closed for every money-related switch when rows are absent', async () => {
+      mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+
+      await expect(service.isAdsEnabled()).resolves.toBe(false);
+      await expect(service.isWaitEarningsEnabled()).resolves.toBe(false);
+      await expect(service.isDepositsEnabled()).resolves.toBe(false);
+      await expect(service.isPayoutRequestsEnabled()).resolves.toBe(false);
+      await expect(service.isAutoPayoutProcessingEnabled()).resolves.toBe(false);
+    });
+  });
+
   describe('getWaitLaunchMode', () => {
     it('reports telemetry_only when advertising is enabled but settlement is fail-closed', async () => {
       mockPrisma.systemSetting.findUnique.mockImplementation(
@@ -130,8 +142,14 @@ describe('RuntimeConfigService', () => {
       await service.setBoolean(RUNTIME_CONFIG_KEYS.ADS_GLOBAL, false, 'admin-1', 'emergency');
       expect(mockPrisma.systemSetting.upsert).toHaveBeenCalledWith({
         where: { scope_target: { scope: 'ads', target: 'global' } },
-        create: { scope: 'ads', target: 'global', value: { enabled: false } },
-        update: { value: { enabled: false }, reason: 'emergency' },
+        create: {
+          scope: 'ads',
+          target: 'global',
+          value: { enabled: false },
+          reason: 'emergency',
+          updatedBy: 'admin-1',
+        },
+        update: { value: { enabled: false }, reason: 'emergency', updatedBy: 'admin-1' },
       });
       expect(mockAudit.log).toHaveBeenCalled();
     });
@@ -203,6 +221,22 @@ describe('RuntimeConfigService', () => {
       const result = await service.isExtensionVersionAllowed('1.2.3');
       expect(result).toBe(true);
     });
+
+    it.each(['', 'foo', '1.x', '1.2beta', '1.2.3.4'])(
+      'rejects malformed or missing version %j when a minimum is configured',
+      async (version) => {
+        mockPrisma.systemSetting.findUnique.mockImplementation(
+          (args: { where: { scope_target: { scope: string; target: string } } }) => {
+            if (args.where.scope_target.target === 'min_version') {
+              return Promise.resolve({ value: { value: '1.0.0' } });
+            }
+            return Promise.resolve({ value: { values: [] } });
+          },
+        );
+
+        await expect(service.isExtensionVersionAllowed(version)).resolves.toBe(false);
+      },
+    );
   });
 
   describe('getAll', () => {

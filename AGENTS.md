@@ -32,6 +32,48 @@ see the live risk/status register without being told to read a separate doc.
 - **All source-fixable issues A-001…A-086 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). **A-075** is now resolved as a code defect (Dockerfile registry-resilient pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below). - **Source closure notice:** no further source edits can close the remaining items. They are external operator/infra/product/legal tasks, including: A-030 (real payout-provider credentials / `WAITLAYER_PAYOUT_PROVIDER_STATUS`), P1.21 (GitHub branch-protection toggles), P0.5 (CI run on SHA from a runner with registry access), and the paid-launch staging experiment. A reference/stub independent wait-attestation provider bridge now exists under `tools/wait-attestation-bridge/` and is wired into the CLI/VSCode client flow; only operating and security-reviewing a real provider instance remains external. See "Remaining external activation tasks" below and the per-item notes in this file.
 - This is a snapshot. Re-run the gates after any code change to confirm health.
 
+### 2026-07-24 Public-launch review pass — source fixes applied
+
+The pasted public-launch review was re-checked against the live tree. The
+following active source gaps were fixed in this pass:
+
+- Fresh databases now seed `ads.global`, `wait.earnings`, `deposits.global`,
+  `payouts.requests`, and `payouts.auto` as disabled; missing-row runtime
+  lookups also fail closed. Admin setting writes now persist `updatedBy`.
+- Global and tool-specific extension minimum-version checks use strict npm
+  semver ordering and reject missing/malformed versions when a minimum is
+  configured, including prerelease-vs-stable comparisons.
+- Cross-user duplicate-device registration now creates the device, restricts
+  the account, records the durable fraud flag, and queues the audit outbox row
+  inside one transaction guarded by a fingerprint advisory lock.
+- Production configuration now requires `BFF_TRUST_PROXY_HOPS`, requires a
+  non-zero payout-destination cooldown (at least 24 hours), and rejects
+  `COOKIE_SECURE=false` in the web environment and deployment preflight.
+- The staging release workflow re-runs the complete reusable CI workflow on the
+  exact manually selected SHA before migrations/smoke/promotion. The smoke no
+  longer deletes prior financial evidence or pauses unrelated campaigns; it
+  fails unless its staging tenant/auction is isolated.
+
+The review also identified items that remain operator or product/legal work:
+branch-protection settings, independent attestation operation/security review,
+provider lifecycle validation and credentials, launch countries/currencies and
+KYC/tax policy, legal documents, production alert/on-call operation, signed
+image attestations, and the final deployment-topology/brand/license decisions.
+The staging/reference bridge remains prohibited for public rewards, and the
+money paths must remain disabled until those external gates are satisfied.
+
+Verification on 2026-07-24: `pnpm typecheck`, `pnpm lint`, and `pnpm build`
+pass; API unit tests pass (114 files / 1,199 tests), web/CLI/VS Code tests pass
+(196 / 55 / 119 tests), the money-loop integration test passes (49 tests), and
+the duplicate-device transaction contract passes (2 tests). The test database
+has all 76 migrations applied, `migrate:status` is current, `migrate:drift`
+reports no difference, and `pnpm audit --audit-level low` reports no known
+vulnerabilities. The repository-level `pnpm test` runner's final integration
+reset phase was not allowed to run in this agent session because Prisma guards
+the destructive `migrate reset` operation without explicit user consent;
+individual integration coverage was run against the migrated test database
+instead.
+
 ### Quality gates (run from repo root)
 
 ```bash

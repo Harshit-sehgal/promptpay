@@ -1,3 +1,4 @@
+import semver from 'semver';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -95,8 +96,14 @@ export class RuntimeConfigService {
   ): Promise<Prisma.SystemSettingGetPayload<{}>> {
     const upserted = await this.prisma.systemSetting.upsert({
       where: { scope_target: { scope: key.scope, target: key.target } },
-      create: { scope: key.scope, target: key.target, value: { enabled } },
-      update: { value: { enabled }, reason },
+      create: {
+        scope: key.scope,
+        target: key.target,
+        value: { enabled },
+        reason,
+        updatedBy: actorId,
+      },
+      update: { value: { enabled }, reason, updatedBy: actorId },
     });
     this.setCached(key.scope, key.target, enabled);
     await this.audit.log({
@@ -130,8 +137,14 @@ export class RuntimeConfigService {
   ): Promise<Prisma.SystemSettingGetPayload<{}>> {
     const upserted = await this.prisma.systemSetting.upsert({
       where: { scope_target: { scope: key.scope, target: key.target } },
-      create: { scope: key.scope, target: key.target, value: { values } },
-      update: { value: { values }, reason },
+      create: {
+        scope: key.scope,
+        target: key.target,
+        value: { values },
+        reason,
+        updatedBy: actorId,
+      },
+      update: { value: { values }, reason, updatedBy: actorId },
     });
     this.setCached(key.scope, key.target, values);
     await this.audit.log({
@@ -168,8 +181,14 @@ export class RuntimeConfigService {
   ): Promise<Prisma.SystemSettingGetPayload<{}>> {
     const upserted = await this.prisma.systemSetting.upsert({
       where: { scope_target: { scope: key.scope, target: key.target } },
-      create: { scope: key.scope, target: key.target, value: { value } },
-      update: { value: { value }, reason },
+      create: {
+        scope: key.scope,
+        target: key.target,
+        value: { value },
+        reason,
+        updatedBy: actorId,
+      },
+      update: { value: { value }, reason, updatedBy: actorId },
     });
     this.setCached(key.scope, key.target, value);
     await this.audit.log({
@@ -207,8 +226,8 @@ export class RuntimeConfigService {
     }
     const upserted = await this.prisma.systemSetting.upsert({
       where: { scope_target: { scope, target } },
-      create: { scope, target, value },
-      update: { value, reason: reason ?? null },
+      create: { scope, target, value, reason: reason ?? null, updatedBy: actorId },
+      update: { value, reason: reason ?? null, updatedBy: actorId },
     });
     this.invalidate(scope, target);
     await this.audit.log({
@@ -225,7 +244,7 @@ export class RuntimeConfigService {
   // ── Convenience helpers ──
 
   async isAdsEnabled(): Promise<boolean> {
-    return this.getBoolean(RUNTIME_CONFIG_KEYS.ADS_GLOBAL, true);
+    return this.getBoolean(RUNTIME_CONFIG_KEYS.ADS_GLOBAL, false);
   }
 
   /**
@@ -292,15 +311,15 @@ export class RuntimeConfigService {
   }
 
   async isDepositsEnabled(): Promise<boolean> {
-    return this.getBoolean(RUNTIME_CONFIG_KEYS.DEPOSITS_GLOBAL, true);
+    return this.getBoolean(RUNTIME_CONFIG_KEYS.DEPOSITS_GLOBAL, false);
   }
 
   async isPayoutRequestsEnabled(): Promise<boolean> {
-    return this.getBoolean(RUNTIME_CONFIG_KEYS.PAYOUT_REQUESTS, true);
+    return this.getBoolean(RUNTIME_CONFIG_KEYS.PAYOUT_REQUESTS, false);
   }
 
   async isAutoPayoutProcessingEnabled(): Promise<boolean> {
-    return this.getBoolean(RUNTIME_CONFIG_KEYS.PAYOUT_AUTO, true);
+    return this.getBoolean(RUNTIME_CONFIG_KEYS.PAYOUT_AUTO, false);
   }
 
   async isProviderEnabled(provider: string): Promise<boolean> {
@@ -326,12 +345,20 @@ export class RuntimeConfigService {
   }
 
   async isExtensionVersionAllowed(version: string | null | undefined): Promise<boolean> {
-    if (!version) return true;
+    const normalizedVersion = version?.trim();
     const blocked = await this.getStringArray(RUNTIME_CONFIG_KEYS.BLOCKED_EXTENSION_VERSIONS, []);
-    if (blocked.includes(version)) return false;
+    if (normalizedVersion && blocked.includes(normalizedVersion)) return false;
     const minVersion = await this.getString(RUNTIME_CONFIG_KEYS.EXTENSION_MIN_VERSION, null);
-    if (!minVersion) return true;
-    return this.compareVersions(version, minVersion) >= 0;
+    if (!minVersion) return !normalizedVersion || semver.valid(normalizedVersion) !== null;
+    const normalizedMinimum = minVersion.trim();
+    if (
+      !normalizedVersion ||
+      !semver.valid(normalizedVersion) ||
+      !semver.valid(normalizedMinimum)
+    ) {
+      return false;
+    }
+    return semver.gte(normalizedVersion, normalizedMinimum);
   }
 
   /**
@@ -386,23 +413,5 @@ export class RuntimeConfigService {
       if (typeof v === 'string') return v;
     }
     return defaultValue;
-  }
-
-  private compareVersions(a: string, b: string): number {
-    const parse = (v: string) =>
-      v
-        .split('.')
-        .map((part) => parseInt(part.replace(/[^\d].*$/, ''), 10))
-        .filter((n) => !Number.isNaN(n));
-    const aParts = parse(a);
-    const bParts = parse(b);
-    const len = Math.max(aParts.length, bParts.length);
-    for (let i = 0; i < len; i++) {
-      const av = aParts[i] ?? 0;
-      const bv = bParts[i] ?? 0;
-      if (av > bv) return 1;
-      if (av < bv) return -1;
-    }
-    return 0;
   }
 }

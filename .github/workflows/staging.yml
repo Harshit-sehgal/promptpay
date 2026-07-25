@@ -17,10 +17,20 @@ permissions:
   contents: read
 
 jobs:
+  # Re-run the complete CI/security/financial gate on the exact SHA selected
+  # by this manual dispatch. A staging approval must never promote a commit
+  # whose check set was only inferred from a different main-branch run.
+  ci-gate:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    secrets: inherit
+
   # Apply migrations to the staging database (A-012 release gate) and prove the
   # schema is fully migrated with no drift. Gated by the `staging` environment
   # so no staging mutation happens without approval.
   migrate-staging:
+    needs: [ci-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging
@@ -51,7 +61,7 @@ jobs:
   # run migrations, create a test campaign, run extension->ledger flow, process
   # a sandbox payout, verify alerts). Gated by `staging` approval.
   staging-smoke:
-    needs: migrate-staging
+    needs: [ci-gate, migrate-staging]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging

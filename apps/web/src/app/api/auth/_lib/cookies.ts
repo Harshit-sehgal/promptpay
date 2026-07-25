@@ -1,6 +1,5 @@
 import { createHmac, randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
-import { logger } from '@/lib/logger';
 
 /**
  * Cookie names for the httpOnly auth flow.
@@ -175,8 +174,8 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  * for the dev host.
  *
  * Decision order:
- *   1. COOKIE_SECURE='true'/'false' → honour explicit override FIRST (even in
- *      production). Operator escape hatch for staging-over-HTTP deploys.
+ *   1. COOKIE_SECURE='true' → force Secure. COOKIE_SECURE='false' is honored
+ *      only outside production for local/staging-over-HTTP compatibility.
  *   2. NODE_ENV=production → always Secure (canonical deploy path).
  *   3. X-Forwarded-Proto header (if present) → Secure if it contains 'https'.
  *      This is the correct signal when a reverse proxy/LB terminates TLS
@@ -191,19 +190,14 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  *      X-Forwarded-Proto upstream).
  */
 export function isSecure(headers: Headers): boolean {
-  // Decision order — explicit env override wins over the NODE_ENV default:
-  //   1. `COOKIE_SECURE=true|false` — honour the explicit operator override
-  //      first, including in production. A staging host running with
-  //      `NODE_ENV=production` over plain HTTP (a common choice for code-path
-  //      parity) has no other way to disable `Secure` cookies, and without
-  //      this escape hatch the browser silently drops them and login fails
-  //      with no signal. The override must come first to be a real kill switch.
+  // Decision order:
+  //   1. `COOKIE_SECURE=true` → force Secure. `COOKIE_SECURE=false` is allowed
+  //      only outside production for local/staging-over-HTTP compatibility.
   //   2. `NODE_ENV=production` → assume HTTPS by default (the canonical deploy
   //      path). If a production deploy runs over HTTP without setting
   //      X-Forwarded-Proto, the cookie is marked Secure and the browser drops
   //      it — a visible login failure that's debuggable, vs. an insecure
-  //      cookie slipping through. Operators can set `COOKIE_SECURE=false` to
-  //      recover (case 1).
+  //      cookie slipping through.
   //   3. X-Forwarded-Proto header (if present) → Secure if it contains 'https'.
   //      This is the correct signal when a reverse proxy/LB terminates TLS
   //      and the Node process itself sees only HTTP. Reading the actual Host
@@ -216,24 +210,15 @@ export function isSecure(headers: Headers): boolean {
   //      to the wrong protocol; if the deploy is HTTPS the proxy will set
   //      X-Forwarded-Proto upstream).
   // Production fails closed on the insecure override. A misconfigured
-  // production deploy (NODE_ENV=production running over plain HTTP) is
-  // surfaced as a clear login failure ("Set-Cookie with Secure flag was
-  // rejected by the browser") rather than silently shipping 30-day
-  // refresh tokens over cleartext — that's the highest-leverage mistake
-  // the previous decision order enabled.
+  // production deploy is surfaced as a clear login failure rather than
+  // silently shipping 30-day refresh tokens over cleartext.
   if (process.env.COOKIE_SECURE === 'true') return true;
-  // Honour COOKIE_SECURE=false in ALL environments, including production. This
-  // is the documented operator escape hatch for staging/CI hosts served over
-  // plain HTTP (NODE_ENV=production but no TLS terminus). Without it the
-  // browser silently drops Secure cookies over HTTP and login fails with no
-  // signal. Real HTTPS deploys should not set this override.
+  // Never permit a production deployment to downgrade long-lived auth cookies
+  // to plaintext transport. Isolated non-production HTTP environments can
+  // still set COOKIE_SECURE=false for local/staging browser compatibility.
   if (process.env.COOKIE_SECURE === 'false') {
     if (process.env.NODE_ENV === 'production') {
-      logger.warn(
-        'Issuing non-Secure auth cookies in production because COOKIE_SECURE=false is set. ' +
-          'Only safe if the web is served over plain HTTP (e.g. an internal staging host or CI). ' +
-          'For any internet-facing deploy, terminate TLS and remove this override.',
-      );
+      throw new Error('COOKIE_SECURE=false is not permitted in production');
     }
     return false;
   }

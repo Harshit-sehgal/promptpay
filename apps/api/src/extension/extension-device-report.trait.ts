@@ -1,6 +1,7 @@
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { LRUCache } from 'lru-cache';
+import semver from 'semver';
 import {
   BadRequestException,
   ForbiddenException,
@@ -145,41 +146,70 @@ export class ExtensionDeviceReportTrait {
     // new account's trust level is restricted, and the case is queued for
     // manual review via the fraud flag. The device is still created so the
     // legitimate (or attacker) flow is not hard-blocked at registration time.
-    const existingOwner = await this.prisma.device.findFirst({
-      where: { fingerprintHash: dto.fingerprintHash, NOT: { userId } },
-      select: { userId: true, id: true },
-    });
-    const eventSecret = crypto.randomBytes(32).toString('hex');
-    const device = await this.prisma.device.create({
-      data: {
-        userId,
-        fingerprintHash: dto.fingerprintHash,
-        eventSecret,
-        toolType: dto.toolType as ToolTypeEnum,
-        extensionVersion: dto.extensionVersion,
-        platform: dto.platform,
-        publicKey: dto.publicKey,
-      },
-    });
-    if (existingOwner) {
-      // Flag the collision and restrict the new account's trust immediately.
-      // Fire-and-forget fraud/audit paths must not fail registration.
-      void this.fraud.checkDuplicateDevice(dto.fingerprintHash, userId).catch(() => undefined);
-      void this.prisma.user
-        .updateMany({
+    // Device creation, duplicate-device restriction, durable fraud evidence,
+    // and its audit outbox entry must commit or roll back together. A duplicate
+    // device is a financial-control signal; allowing the device to become
+    // active while any of the protective writes are still in flight creates a
+    // bypass when the process or database fails between those steps.
+    const { device } = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`device-fingerprint:${dto.fingerprintHash}`}))`;
+      const owner = await tx.device.findFirst({
+        where: { fingerprintHash: dto.fingerprintHash, NOT: { userId } },
+        select: { userId: true, id: true },
+      });
+      const eventSecret = crypto.randomBytes(32).toString('hex');
+      const createdDevice = await tx.device.create({
+        data: {
+          userId,
+          fingerprintHash: dto.fingerprintHash,
+          eventSecret,
+          toolType: dto.toolType as ToolTypeEnum,
+          extensionVersion: dto.extensionVersion,
+          platform: dto.platform,
+          publicKey: dto.publicKey,
+        },
+      });
+      if (owner) {
+        await tx.user.updateMany({
           where: { id: userId, trustLevel: { not: 'restricted' } },
           data: { trustLevel: 'restricted' },
-        })
-        .catch(() => undefined);
-      void this.audit.log({
-        actorId: userId,
-        actorRole: 'developer',
-        action: 'duplicate_device_allowed_restricted',
-        targetType: 'device',
-        targetId: device.id,
-        afterSnap: { fingerprintHash: dto.fingerprintHash, existingUserId: existingOwner.userId },
-      });
-    }
+        });
+        const existingFlag = await tx.fraudFlag.findFirst({
+          where: {
+            userId,
+            flagType: 'duplicate_device',
+            status: { in: ['open', 'reviewing', 'escalated'] },
+          },
+          select: { id: true },
+        });
+        if (!existingFlag) {
+          await tx.fraudFlag.create({
+            data: {
+              userId,
+              deviceId: owner.id,
+              flagType: 'duplicate_device',
+              severity: 'high',
+              evidence: {
+                fingerprintHash: dto.fingerprintHash,
+                existingUserId: owner.userId,
+              },
+            },
+          });
+        }
+        await tx.auditOutbox.create({
+          data: {
+            actorId: userId,
+            actorRole: 'developer',
+            action: 'duplicate_device_allowed_restricted',
+            targetType: 'device',
+            targetId: createdDevice.id,
+            afterSnap: { fingerprintHash: dto.fingerprintHash, existingUserId: owner.userId },
+            nextRetryAt: new Date(),
+          },
+        });
+      }
+      return { device: createdDevice };
+    });
     // Non-blocking fraud signals on successful device registration
     void this.fraud
       .checkVpnProxyPattern(userId, device.id, dto.platform ?? null)
@@ -188,7 +218,7 @@ export class ExtensionDeviceReportTrait {
       .checkEmulatorVmPattern(userId, device.id, dto.platform ?? null)
       .catch(() => undefined);
     void this.fraud.checkDuplicateAccount(userId).catch(() => undefined);
-    return { ...device, eventSecret };
+    return { ...device };
   }
 
   async assertDeviceRecoveryProof(
@@ -630,25 +660,13 @@ export class ExtensionDeviceReportTrait {
   }
 
   /**
-   * Compare two dotted version strings (e.g. "1.2.3"). Returns true if
-   * `provided` is greater than or equal to `required`. Non-numeric segments
-   * and pre-release suffixes are ignored for simplicity.
+   * Compare strict semantic versions. Prereleases follow npm semver ordering,
+   * so `1.2.3-alpha` does not satisfy a stable `1.2.3` minimum.
    */
   isVersionAtLeast(provided: string, required: string): boolean {
-    const parse = (v: string) =>
-      v
-        .split('.')
-        .map((part) => parseInt(part.replace(/[^\d].*$/, ''), 10))
-        .filter((n) => !Number.isNaN(n));
-    const p = parse(provided);
-    const r = parse(required);
-    const maxLen = Math.max(p.length, r.length);
-    for (let i = 0; i < maxLen; i++) {
-      const a = p[i] ?? 0;
-      const b = r[i] ?? 0;
-      if (a > b) return true;
-      if (a < b) return false;
-    }
-    return true;
+    const normalizedProvided = provided.trim();
+    const normalizedRequired = required.trim();
+    if (!semver.valid(normalizedProvided) || !semver.valid(normalizedRequired)) return false;
+    return semver.gte(normalizedProvided, normalizedRequired);
   }
 }

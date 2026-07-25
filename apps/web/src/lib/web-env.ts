@@ -64,6 +64,13 @@ const webEnvSchema = z
         message: 'production HMAC secret required for BFF identity signing',
       });
     }
+    if (env.NODE_ENV === 'production' && env.COOKIE_SECURE === 'false') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['COOKIE_SECURE'],
+        message: 'COOKIE_SECURE=false is not permitted in production',
+      });
+    }
     if (
       env.NODE_ENV === 'production' &&
       env.NEXT_PUBLIC_API_URL &&

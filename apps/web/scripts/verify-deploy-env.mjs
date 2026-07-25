@@ -60,6 +60,12 @@ if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) {
 if (process.env.NEXT_PUBLIC_ALLOW_MOCK_AUTH === 'true') {
   errors.push('NEXT_PUBLIC_ALLOW_MOCK_AUTH must not be enabled in a deployment');
 }
+if (process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE === 'false') {
+  errors.push('COOKIE_SECURE=false is not permitted in production');
+}
+if (process.env.NODE_ENV === 'production' && !process.env.BFF_TRUST_PROXY_HOPS) {
+  errors.push('BFF_TRUST_PROXY_HOPS is required in production');
+}
 
 if (errors.length > 0) {
   console.error('Deployment environment preflight failed:');

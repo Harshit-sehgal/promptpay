@@ -155,8 +155,6 @@ async function main() {
   if (hardFailures) process.exit(1);
 
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(databaseUrl) });
-  // Tracks campaigns paused in step 7b so they can be restored in finally.
-  let pausedCampaignIds = [];
   try {
     // 1. Readiness probe (no auth).
     const ready = await fetch(`${API_BASE_URL}/api/v1/health/ready`);
@@ -240,17 +238,17 @@ async function main() {
       // STAGING_FULL_FLOW to '1', so a release cannot pass without it.
       fail('STAGING_FULL_FLOW=0 set — the financial loop is mandatory for a staging release gate');
     } else {
-      // 1b. Clean up prior ad impressions/clicks for this test developer so
-      // repeated smoke runs do not trigger fraud rules (e.g. suspicious CTR)
-      // or leave stale state that hides real issues.
-      const deletedClicks = await prisma.adClick.deleteMany({
-        where: { userId: developer.id },
-      });
-      const deletedImpressions = await prisma.adImpression.deleteMany({
-        where: { userId: developer.id },
-      });
-      if (deletedClicks.count > 0 || deletedImpressions.count > 0) {
-        ok(`cleaned up ${deletedImpressions.count} impressions and ${deletedClicks.count} clicks from prior runs`);
+      // The smoke must run against an isolated staging tenant/database. Never
+      // delete historical financial evidence to make a repeat run pass.
+      const [priorClicks, priorImpressions] = await Promise.all([
+        prisma.adClick.count({ where: { userId: developer.id } }),
+        prisma.adImpression.count({ where: { userId: developer.id } }),
+      ]);
+      if (priorClicks > 0 || priorImpressions > 0) {
+        throw new Error(
+          `staging smoke tenant is not clean (${priorImpressions} impressions, ${priorClicks} clicks); ` +
+            'use a fresh isolated staging database/tenant instead of deleting evidence',
+        );
       }
 
       // 2. Consent is deliberately split: ads do not imply permission to send
@@ -466,20 +464,18 @@ async function main() {
         else ok('signed wait start recorded (non-billable without independent attestation)');
       }
 
-      // 7b. Pause any other active campaigns so the smoke test's campaign
-      // wins the auction. This avoids ledger assertions flaking because a
-      // concurrently active campaign served the impression instead.
+      // 7b. The smoke must not pause unrelated campaigns. Require an isolated
+      // staging auction namespace/tenant so concurrent production-like data
+      // cannot change which campaign wins the test request.
       const otherActive = await prisma.campaign.findMany({
         where: { status: 'active', id: { not: campaignId } },
         select: { id: true },
       });
       if (otherActive.length > 0) {
-        pausedCampaignIds = otherActive.map((c) => c.id);
-        await prisma.campaign.updateMany({
-          where: { id: { in: pausedCampaignIds } },
-          data: { status: 'paused' },
-        });
-        ok(`paused ${pausedCampaignIds.length} other active campaign(s)`);
+        throw new Error(
+          `staging auction is not isolated (${otherActive.length} unrelated active campaigns); ` +
+            'run the smoke in a dedicated staging tenant/database',
+        );
       }
 
       // 8. Ad request with the SAME device/session/wait IDs — must serve.
@@ -649,15 +645,6 @@ async function main() {
       else ok('no critical alerts fired in staging');
     }
   } finally {
-    // Best-effort restore of campaigns paused in step 7b. This keeps the
-    // smoke test from leaving staging permanently altered if other campaigns
-    // were active before it ran.
-    if (pausedCampaignIds.length > 0) {
-      await prisma.campaign.updateMany({
-        where: { id: { in: pausedCampaignIds } },
-        data: { status: 'active' },
-      });
-    }
     await prisma.$disconnect();
   }
 

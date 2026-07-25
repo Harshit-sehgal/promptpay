@@ -42,16 +42,17 @@ Default shown where one exists.
 
 ## Web
 
-| Variable                                       | Req | Default | Purpose                                                        |
-| ---------------------------------------------- | --- | ------- | -------------------------------------------------------------- |
-| `WEB_PORT`                                     | opt | `3000`  | Next.js port.                                                  |
-| `NEXT_PUBLIC_API_URL`                          | opt | —       | Public API URL; required by the Vercel deployment preflight.   |
-| `API_INTERNAL_URL`                             | opt | —       | Server-only API URL preferred by BFF handlers.                 |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`                 | opt | —       | Google OAuth client id; required by Vercel preflight.          |
-| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`                  | opt | —       | Shows mock-auth UI in local development only.                  |
-| `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` | opt | —       | JSON provider launch-status map baked into the web build.      |
-| `BFF_TRUST_PROXY_HOPS`                         | opt | `1`     | Trusted forwarding hops for BFF network identity (1-3).        |
-| `COOKIE_SECURE`                                | opt | —       | Explicit secure-cookie override; production HTTPS is inferred. |
+| Variable                                       | Req         | Default | Purpose                                                                                     |
+| ---------------------------------------------- | ----------- | ------- | ------------------------------------------------------------------------------------------- |
+| `WEB_PORT`                                     | opt         | `3000`  | Next.js port.                                                                               |
+| `NEXT_PUBLIC_API_URL`                          | opt         | —       | Public API URL; required by the Vercel deployment preflight.                                |
+| `API_INTERNAL_URL`                             | opt         | —       | Server-only API URL preferred by BFF handlers.                                              |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`                 | opt         | —       | Google OAuth client id; required by Vercel preflight.                                       |
+| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`                  | opt         | —       | Shows mock-auth UI in local development only.                                               |
+| `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` | opt         | —       | JSON provider launch-status map baked into the web build.                                   |
+| `BFF_TRUST_PROXY_HOPS`                         | opt         | `1`     | Trusted forwarding hops for BFF network identity (1-3).                                     |
+| `COOKIE_SECURE`                                | opt         | —       | Explicit secure-cookie override for non-production only; `false` is rejected in production. |
+| `BFF_TRUST_PROXY_HOPS`                         | req in prod | `1` dev | Forwarded-proxy hops trusted by the web BFF; keep aligned with the public edge topology.    |
 
 ## Auth
 

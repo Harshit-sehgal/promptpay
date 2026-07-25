@@ -134,6 +134,9 @@ const envSchema = z
     // (b) over-trusts client-supplied X-Forwarded-For (IP spoofing). Must be a
     // non-negative integer; 0 is valid for direct exposure, default 1.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(3).default(1),
+    // Keep the web BFF proxy chain in the shared production configuration so
+    // client-IP derivation cannot silently diverge between web and API.
+    BFF_TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(3).optional(),
 
     // Auth
     // NOTE: min(32) catches length, but a 32-char placeholder (e.g.
@@ -373,6 +376,14 @@ const envSchema = z
     message: 'PAYOUT_REQUIRE_2FA=true is required in production.',
     path: ['PAYOUT_REQUIRE_2FA'],
   })
+  .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.BFF_TRUST_PROXY_HOPS), {
+    message: 'BFF_TRUST_PROXY_HOPS is required in production for consistent client-IP derivation.',
+    path: ['BFF_TRUST_PROXY_HOPS'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || env.PAYOUT_DESTINATION_COOLDOWN_HOURS >= 24, {
+    message: 'PAYOUT_DESTINATION_COOLDOWN_HOURS must be at least 24 hours in production.',
+    path: ['PAYOUT_DESTINATION_COOLDOWN_HOURS'],
+  })
   .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.PRIVACY_HASH_KEY), {
     message: 'PRIVACY_HASH_KEY is required in production and must be at least 32 characters.',
     path: ['PRIVACY_HASH_KEY'],
@@ -461,8 +472,7 @@ const envSchema = z
     },
   )
   .refine(
-    (env) =>
-      env.NODE_ENV !== 'production' || env.PAYOUT_ENCRYPTION_KEY !== env.PAYOUT_HMAC_KEY,
+    (env) => env.NODE_ENV !== 'production' || env.PAYOUT_ENCRYPTION_KEY !== env.PAYOUT_HMAC_KEY,
     {
       message: 'PAYOUT_ENCRYPTION_KEY and PAYOUT_HMAC_KEY must be different in production.',
       path: ['PAYOUT_HMAC_KEY'],
