@@ -8,8 +8,10 @@ function makeTrait(overrides: Record<string, unknown> = {}) {
   const tx = {
     $executeRaw: vi.fn().mockResolvedValue(1),
     device: {
+      findUnique: vi.fn().mockResolvedValue(null),
       findFirst: vi.fn().mockResolvedValue(owner),
       create: vi.fn().mockResolvedValue(device),
+      update: vi.fn().mockResolvedValue({ ...device, eventSecret: 'rotated-secret' }),
     },
     user: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
     fraudFlag: {
@@ -19,7 +21,10 @@ function makeTrait(overrides: Record<string, unknown> = {}) {
     auditOutbox: { create: vi.fn().mockResolvedValue({ id: 'outbox-1' }) },
   };
   const prisma = {
-    device: { findUnique: vi.fn().mockResolvedValue(null) },
+    device: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({ ...device, eventSecret: 'rotated-secret' }),
+    },
     toolIntegration: { findUnique: vi.fn().mockResolvedValue(null) },
     $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
   };
@@ -93,5 +98,28 @@ describe('ExtensionDeviceReportTrait.registerDevice duplicate-device safety', ()
         extensionVersion: '1.2.3',
       }),
     ).rejects.toThrow('outbox unavailable');
+  });
+
+  it('rechecks same-user ownership after locking and rotates instead of racing into a unique error', async () => {
+    const { trait, prisma, tx } = makeTrait();
+    prisma.device.findUnique.mockResolvedValueOnce(null);
+    prisma.device.update.mockResolvedValueOnce({
+      id: 'existing-device-1',
+      eventSecret: 'rotated-secret',
+    });
+    tx.device.findUnique.mockImplementation(async () => {
+      return { id: 'existing-device-1', eventSecret: 'secret' };
+    });
+
+    const result = await trait.registerDevice('new-user-1', {
+      toolType: 'vscode',
+      fingerprintHash: 'fingerprint-1',
+      extensionVersion: '1.2.3',
+      existingEventSecret: 'secret',
+    });
+    expect(result).toMatchObject({ id: 'existing-device-1', eventSecret: expect.any(String) });
+    expect(result.eventSecret).not.toBe('secret');
+    expect(tx.device.create).not.toHaveBeenCalled();
+    expect(tx.device.update).not.toHaveBeenCalled();
   });
 });

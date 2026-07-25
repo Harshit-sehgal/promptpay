@@ -24,7 +24,8 @@ const dockerfile = read('Dockerfile');
 check('Dockerfile runs as non-root (USER node)', /^\s*USER node\b/m.test(dockerfile));
 check(
   'Docker build tools are exact-version pinned and JWT signing secrets are not build args',
-  dockerfile.includes('pnpm@11.9.0') &&
+  dockerfile.includes('ARG PNPM_VERSION=11.9.0') &&
+    dockerfile.includes('pnpm@${PNPM_VERSION}') &&
     dockerfile.includes('prisma@7.8.0') &&
     !dockerfile.includes('ARG JWT_SECRET') &&
     !dockerfile.includes('ENV JWT_SECRET='),
@@ -33,7 +34,7 @@ check(
 // A-018: web CSP allows the Google Identity frame-src.
 const nextConfig = read('apps/web/next.config.js');
 check(
-  "web CSP frame-src allows accounts.google.com (A-018)",
+  'web CSP frame-src allows accounts.google.com (A-018)',
   nextConfig.includes("frame-src 'self' https://accounts.google.com"),
 );
 
@@ -59,7 +60,7 @@ check(
 const ci = read('.github/workflows/ci.yml');
 check(
   'CI docker-build requires the compiled login route to return validation status 400',
-  ci.includes("if [ \"$STATUS\" != \"400\" ]") &&
+  ci.includes('if [ "$STATUS" != "400" ]') &&
     ci.includes('Unexpected login validation status') &&
     ci.includes('/api/v1/auth/login'),
 );
@@ -94,7 +95,7 @@ check(
 const agents = read('AGENTS.md');
 check(
   'AGENTS.md documents the CI controller-route guard',
-  agents.includes('CI job now boots the compiled API image'),
+  agents.includes('`docker-build` CI job now boots') && agents.includes('compiled API image'),
 );
 
 let failed = 0;

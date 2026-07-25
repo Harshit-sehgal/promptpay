@@ -1,5 +1,6 @@
+import { createClient, RedisClientType } from 'redis';
 import semver from 'semver';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { Prisma } from '@waitlayer/db';
@@ -37,21 +38,96 @@ export const RUNTIME_CONFIG_KEYS = {
   DETECTOR_VERSION: { scope: 'detector', target: '1.0.0' },
 } as const satisfies Record<string, RuntimeConfigKey>;
 
+const RUNTIME_CONFIG_INVALIDATION_CHANNEL = 'waitlayer:runtime-config:invalidate';
+
 interface CacheEntry<T> {
   value: T;
   expiresAt: number;
 }
 
+function parseCodeAllowlist(value: string | undefined, pattern: RegExp): Set<string> | null {
+  if (!value?.trim()) return null;
+  const entries = value
+    .split(',')
+    .map((entry) => entry.trim().toUpperCase())
+    .filter(Boolean);
+  return entries.every((entry) => pattern.test(entry)) ? new Set(entries) : new Set();
+}
+
 @Injectable()
-export class RuntimeConfigService {
+export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
   private readonly ttlMs = 30_000;
   private readonly cache = new Map<string, CacheEntry<unknown>>();
+  private readonly logger = new Logger(RuntimeConfigService.name);
+  private readonly redisUrl: string | undefined;
+  private readonly allowedCountries: Set<string> | null;
+  private readonly allowedCurrencies: Set<string> | null;
+  private redisPublisher: RedisClientType | null = null;
+  private redisSubscriber: RedisClientType | null = null;
 
   constructor(
     private prisma: PrismaService,
     private audit: AuditService,
     private config: ConfigService,
-  ) {}
+  ) {
+    this.redisUrl = this.config.get<string>('REDIS_URL');
+    this.allowedCountries = parseCodeAllowlist(
+      this.config.get<string>('ALLOWED_COUNTRIES'),
+      /^[A-Z]{2}$/,
+    );
+    this.allowedCurrencies = parseCodeAllowlist(
+      this.config.get<string>('ALLOWED_CURRENCIES'),
+      /^[A-Z]{3}$/,
+    );
+  }
+
+  /**
+   * The local TTL remains a resilience fallback, but a kill-switch change must
+   * invalidate other API replicas promptly. Redis pub/sub carries only the
+   * cache key; the database remains the source of truth.
+   */
+  async onModuleInit(): Promise<void> {
+    if (!this.redisUrl) return;
+    const publisher = createClient({ url: this.redisUrl });
+    const subscriber = createClient({ url: this.redisUrl });
+    const onRedisError = (error: unknown) => {
+      this.logger.warn(`Runtime-config cache invalidation Redis error: ${String(error)}`);
+    };
+    publisher.on('error', onRedisError);
+    subscriber.on('error', onRedisError);
+    try {
+      await Promise.all([publisher.connect(), subscriber.connect()]);
+      await subscriber.subscribe(RUNTIME_CONFIG_INVALIDATION_CHANNEL, (message) => {
+        try {
+          const parsed = JSON.parse(message) as { scope?: unknown; target?: unknown };
+          if (typeof parsed.scope === 'string' && typeof parsed.target === 'string') {
+            this.invalidate(parsed.scope, parsed.target);
+          }
+        } catch {
+          this.logger.warn('Ignored malformed runtime-config cache invalidation message');
+        }
+      });
+      this.redisPublisher = publisher;
+      this.redisSubscriber = subscriber;
+    } catch (error) {
+      await Promise.all([
+        publisher.quit().catch(() => undefined),
+        subscriber.quit().catch(() => undefined),
+      ]);
+      this.logger.warn(`Runtime-config cache invalidation unavailable: ${String(error)}`);
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    const publisher = this.redisPublisher;
+    const subscriber = this.redisSubscriber;
+    this.redisPublisher = null;
+    this.redisSubscriber = null;
+    await Promise.all([
+      publisher?.quit().catch(() => undefined),
+      subscriber?.quit().catch(() => undefined),
+    ]);
+  }
 
   private cacheKey(scope: string, target: string): string {
     return `${scope}:${target}`;
@@ -72,6 +148,21 @@ export class RuntimeConfigService {
 
   private invalidate(scope: string, target: string): void {
     this.cache.delete(this.cacheKey(scope, target));
+  }
+
+  private async publishInvalidation(scope: string, target: string): Promise<void> {
+    const publisher = this.redisPublisher;
+    if (!publisher?.isReady) return;
+    try {
+      await publisher.publish(
+        RUNTIME_CONFIG_INVALIDATION_CHANNEL,
+        JSON.stringify({ scope, target }),
+      );
+    } catch (error) {
+      // The database write has already succeeded. Keep the TTL fallback and do
+      // not turn a cache-notification outage into a failed operator action.
+      this.logger.warn(`Runtime-config cache invalidation publish failed: ${String(error)}`);
+    }
   }
 
   // ── Generic primitives ──
@@ -106,6 +197,7 @@ export class RuntimeConfigService {
       update: { value: { enabled }, reason, updatedBy: actorId },
     });
     this.setCached(key.scope, key.target, enabled);
+    await this.publishInvalidation(key.scope, key.target);
     await this.audit.log({
       actorId,
       actorRole: 'admin',
@@ -147,6 +239,7 @@ export class RuntimeConfigService {
       update: { value: { values }, reason, updatedBy: actorId },
     });
     this.setCached(key.scope, key.target, values);
+    await this.publishInvalidation(key.scope, key.target);
     await this.audit.log({
       actorId,
       actorRole: 'admin',
@@ -191,6 +284,7 @@ export class RuntimeConfigService {
       update: { value: { value }, reason, updatedBy: actorId },
     });
     this.setCached(key.scope, key.target, value);
+    await this.publishInvalidation(key.scope, key.target);
     await this.audit.log({
       actorId,
       actorRole: 'admin',
@@ -230,6 +324,7 @@ export class RuntimeConfigService {
       update: { value, reason: reason ?? null, updatedBy: actorId },
     });
     this.invalidate(scope, target);
+    await this.publishInvalidation(scope, target);
     await this.audit.log({
       actorId,
       actorRole: 'admin',
@@ -333,12 +428,18 @@ export class RuntimeConfigService {
   }
 
   async isCountryAllowed(country: string | null | undefined): Promise<boolean> {
+    if (this.allowedCountries) {
+      return !!country && this.allowedCountries.has(country.trim().toUpperCase());
+    }
     if (!country) return true;
     const blocked = await this.getStringArray(RUNTIME_CONFIG_KEYS.BLOCKED_COUNTRIES, []);
     return !blocked.includes(country.toUpperCase());
   }
 
   async isCurrencyAllowed(currency: string | null | undefined): Promise<boolean> {
+    if (this.allowedCurrencies) {
+      return !!currency && this.allowedCurrencies.has(currency.trim().toUpperCase());
+    }
     if (!currency) return true;
     const blocked = await this.getStringArray(RUNTIME_CONFIG_KEYS.BLOCKED_CURRENCIES, []);
     return !blocked.includes(currency.toUpperCase());

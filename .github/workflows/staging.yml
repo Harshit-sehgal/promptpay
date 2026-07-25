@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   # Re-run the complete CI/security/financial gate on the exact SHA selected
@@ -24,18 +25,48 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
+      actions: read
+      security-events: write
     secrets: inherit
+
+  # Every release gate gets a fresh schema. The static STAGING_DATABASE_URL is
+  # only the connection template; no prior smoke evidence is reused.
+  provision-staging-schema:
+    needs: [ci-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+    outputs:
+      schema: ${{ steps.provision.outputs.schema }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Provision isolated staging schema
+        id: provision
+        run: node scripts/staging-database.mjs provision
 
   # Apply migrations to the staging database (A-012 release gate) and prove the
   # schema is fully migrated with no drift. Gated by the `staging` environment
   # so no staging mutation happens without approval.
   migrate-staging:
-    needs: [ci-gate]
+    needs: [ci-gate, provision-staging-schema]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging
     env:
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      STAGING_DATABASE_SCHEMA: ${{ needs.provision-staging-schema.outputs.schema }}
       JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
       JWT_PUBLIC_KEY: ${{ secrets.STAGING_JWT_PUBLIC_KEY }}
     steps:
@@ -48,6 +79,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Resolve isolated staging schema URL
+        run: echo "DATABASE_URL=$(node scripts/staging-database.mjs url)" >> "$GITHUB_ENV"
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
       - name: Apply migrations to staging
@@ -61,7 +94,7 @@ jobs:
   # run migrations, create a test campaign, run extension->ledger flow, process
   # a sandbox payout, verify alerts). Gated by `staging` approval.
   staging-smoke:
-    needs: [ci-gate, migrate-staging]
+    needs: [ci-gate, migrate-staging, provision-staging-schema]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
@@ -69,7 +102,8 @@ jobs:
       api_digest: ${{ steps.staging-images.outputs.api_digest }}
       web_digest: ${{ steps.staging-images.outputs.web_digest }}
     env:
-      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      STAGING_DATABASE_SCHEMA: ${{ needs.provision-staging-schema.outputs.schema }}
       JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
       JWT_PUBLIC_KEY: ${{ secrets.STAGING_JWT_PUBLIC_KEY }}
       STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
@@ -77,6 +111,9 @@ jobs:
       STAGING_WAIT_ATTESTATION_PROVIDER: ${{ secrets.STAGING_WAIT_ATTESTATION_PROVIDER }}
       STAGING_WAIT_ATTESTATION_BRIDGE_URL: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_URL }}
       STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN }}
+      STAGING_ALLOWED_COUNTRIES: ${{ secrets.STAGING_ALLOWED_COUNTRIES }}
+      STAGING_ALLOWED_CURRENCIES: ${{ secrets.STAGING_ALLOWED_CURRENCIES }}
+      STAGING_EVIDENCE_FILE: staging-smoke-evidence.json
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -87,6 +124,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Resolve isolated staging schema URL
+        run: echo "DATABASE_URL=$(node scripts/staging-database.mjs url)" >> "$GITHUB_ENV"
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
       - name: Build workspace packages
@@ -107,8 +146,11 @@ jobs:
           STAGING_WAIT_ATTESTATION_BRIDGE_URL: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_URL }}
           STAGING_WAIT_ATTESTATION_ISSUERS: ${{ secrets.STAGING_WAIT_ATTESTATION_ISSUERS }}
           STAGING_WAIT_ATTESTATION_VERSIONS: ${{ secrets.STAGING_WAIT_ATTESTATION_VERSIONS }}
+          STAGING_ALLOWED_COUNTRIES: ${{ secrets.STAGING_ALLOWED_COUNTRIES }}
+          STAGING_ALLOWED_CURRENCIES: ${{ secrets.STAGING_ALLOWED_CURRENCIES }}
+          STAGING_DATABASE_SCHEMA: ${{ needs.provision-staging-schema.outputs.schema }}
         run: |
-          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_HOST STAGING_USER STAGING_DEPLOY_KEY STAGING_KNOWN_HOSTS STAGING_DEPLOY_PATH STAGING_WAIT_ATTESTATION_PROVIDER STAGING_WAIT_ATTESTATION_BRIDGE_URL STAGING_WAIT_ATTESTATION_ISSUERS STAGING_WAIT_ATTESTATION_VERSIONS; do
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_HOST STAGING_USER STAGING_DEPLOY_KEY STAGING_KNOWN_HOSTS STAGING_DEPLOY_PATH STAGING_WAIT_ATTESTATION_PROVIDER STAGING_WAIT_ATTESTATION_BRIDGE_URL STAGING_WAIT_ATTESTATION_ISSUERS STAGING_WAIT_ATTESTATION_VERSIONS STAGING_ALLOWED_COUNTRIES STAGING_ALLOWED_CURRENCIES STAGING_DATABASE_SCHEMA; do
             if [ -z "${!required}" ]; then
               echo "$required secret is required for an actual staging release" >&2
               exit 1
@@ -124,9 +166,8 @@ jobs:
         run: docker compose -f docker-compose.yml build api web
         env:
           # JWT_SECRET is a runtime-only secret; never pass it to docker build.
-          # Never emit buildx provenance/SBOM attestations (they record
-          # build-arg values) — P0.8 defense-in-depth.
-          BUILDX_NO_DEFAULT_ATTESTATIONS: '1'
+          # Compose emits provenance/SBOM attestations for these images; every
+          # build argument below is public configuration or a public key.
           WAITLAYER_API_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-api:staging-${{ github.sha }}
           WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:staging-${{ github.sha }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}/api/v1
@@ -149,6 +190,16 @@ jobs:
           echo "api_digest=$API_DIGEST" >> "$GITHUB_OUTPUT"
           echo "web_digest=$WEB_DIGEST" >> "$GITHUB_OUTPUT"
           echo "Pushed staging images by digest: $API_DIGEST, $WEB_DIGEST"
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Sign staging image digests with GitHub OIDC
+        env:
+          API_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
+          WEB_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
+        run: |
+          for image in "$API_DIGEST" "$WEB_DIGEST"; do
+            test -n "$image" || { echo "Cannot sign an empty image digest" >&2; exit 1; }
+            cosign sign --yes "$image"
+          done
       - name: Deploy exact staging image digests
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
@@ -161,6 +212,8 @@ jobs:
           STAGING_DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
           STAGING_WAIT_ATTESTATION_ISSUERS: ${{ secrets.STAGING_WAIT_ATTESTATION_ISSUERS }}
           STAGING_WAIT_ATTESTATION_VERSIONS: ${{ secrets.STAGING_WAIT_ATTESTATION_VERSIONS }}
+          STAGING_ALLOWED_COUNTRIES: ${{ secrets.STAGING_ALLOWED_COUNTRIES }}
+          STAGING_ALLOWED_CURRENCIES: ${{ secrets.STAGING_ALLOWED_CURRENCIES }}
           API_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
           WEB_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
         run: |
@@ -174,18 +227,60 @@ jobs:
             "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
           ATTESTATION_ISSUERS_B64=$(printf '%s' "$STAGING_WAIT_ATTESTATION_ISSUERS" | base64 -w0)
           ATTESTATION_VERSIONS_B64=$(printf '%s' "$STAGING_WAIT_ATTESTATION_VERSIONS" | base64 -w0)
+          DATABASE_URL_B64=$(printf '%s' "$DATABASE_URL" | base64 -w0)
           ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
-            "set -e; cd '$STAGING_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export ENABLE_STAGING_FAUCET=true; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose pull && docker compose up -d --wait"
+            "set -e; cd '$STAGING_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export DATABASE_URL=\"\$(printf '%s' '$DATABASE_URL_B64' | base64 -d)\"; export ENABLE_STAGING_FAUCET=true; export ALLOWED_COUNTRIES='$STAGING_ALLOWED_COUNTRIES'; export ALLOWED_CURRENCIES='$STAGING_ALLOWED_CURRENCIES'; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose pull && docker compose up -d --wait"
       - name: Run staging smoke test against the deployed digest
         run: node scripts/staging-smoke.mjs
         env:
           ENABLE_STAGING_FAUCET: 'true'
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_ALLOWED_COUNTRIES: ${{ secrets.STAGING_ALLOWED_COUNTRIES }}
+          STAGING_ALLOWED_CURRENCIES: ${{ secrets.STAGING_ALLOWED_CURRENCIES }}
           JWT_PRIVATE_KEY: ${{ secrets.STAGING_JWT_PRIVATE_KEY }}
           STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
           STAGING_WAIT_ATTESTATION_PROVIDER: ${{ secrets.STAGING_WAIT_ATTESTATION_PROVIDER }}
           STAGING_WAIT_ATTESTATION_BRIDGE_URL: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_URL }}
           STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN: ${{ secrets.STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN }}
+          STAGING_API_IMAGE_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
+          STAGING_WEB_IMAGE_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
+      - name: Upload immutable staging smoke evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: staging-smoke-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: staging-smoke-evidence.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  # Cleanup is independent of promotion and always runs after the isolated
+  # schema has been used. It never drops the shared public schema or any prior
+  # staging run's data.
+  cleanup-staging-schema:
+    needs: [provision-staging-schema, migrate-staging, staging-smoke]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      STAGING_DATABASE_SCHEMA: ${{ needs.provision-staging-schema.outputs.schema }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Destroy isolated staging schema
+        run: |
+          if [ -z "$STAGING_DATABASE_SCHEMA" ]; then
+            echo "No staging schema was provisioned; nothing to clean up."
+            exit 0
+          fi
+          node scripts/staging-database.mjs destroy
 
   # Apply and validate production migrations BEFORE any image is allowed to
   # replace the live service. This is intentionally its own environment-gated
@@ -239,6 +334,29 @@ jobs:
       PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Verify staging image signatures before promotion
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+          STAGING_API_DIGEST: ${{ needs.staging-smoke.outputs.api_digest }}
+          STAGING_WEB_DIGEST: ${{ needs.staging-smoke.outputs.web_digest }}
+        run: |
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_API_DIGEST STAGING_WEB_DIGEST; do
+            if [ -z "${!required}" ]; then
+              echo "$required is required before signature verification" >&2
+              exit 1
+            fi
+          done
+          echo "$REGISTRY_PASS" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          EXPECTED_IDENTITY="https://github.com/$GITHUB_WORKFLOW_REF"
+          for image in "$STAGING_API_DIGEST" "$STAGING_WEB_DIGEST"; do
+            cosign verify \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "$EXPECTED_IDENTITY" \
+              "$image"
+          done
       - name: Promote production images (pull same digest as staging, tag, push, deploy)
         id: promote
         env:

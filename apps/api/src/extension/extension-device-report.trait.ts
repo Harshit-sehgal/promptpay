@@ -58,11 +58,11 @@ export class ExtensionDeviceReportTrait {
     }
     // Enforce minimum extension version for the requested tool.
     await this.assertMinimumExtensionVersion(dto.toolType, dto.extensionVersion);
-    // Check for duplicate device (same user + same fingerprint = re-registration).
-    const existingDevice = await this.prisma.device.findUnique({
-      where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
-    });
-    if (existingDevice) {
+
+    const reregisterExistingDevice = async (existingDevice: {
+      id: string;
+      eventSecret: string | null;
+    }) => {
       if (!existingDevice.eventSecret) {
         // Legacy rows created before per-device secrets cannot authenticate
         // event payloads anymore. Issue a one-time secret to the authenticated
@@ -139,7 +139,13 @@ export class ExtensionDeviceReportTrait {
         afterSnap: { recoveryMode },
       });
       return { ...updated, eventSecret: rotatedSecret };
-    }
+    };
+
+    // Check for duplicate device (same user + same fingerprint = re-registration).
+    const existingDevice = await this.prisma.device.findUnique({
+      where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
+    });
+    if (existingDevice) return reregisterExistingDevice(existingDevice);
     // Cross-user fingerprint handling (P1). The global unique constraint on
     // fingerprintHash has been removed. Instead of blocking registration, a
     // cross-user collision is treated as a high-severity fraud signal, the
@@ -151,8 +157,16 @@ export class ExtensionDeviceReportTrait {
     // device is a financial-control signal; allowing the device to become
     // active while any of the protective writes are still in flight creates a
     // bypass when the process or database fails between those steps.
-    const { device } = await this.prisma.$transaction(async (tx) => {
+    const registration = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`device-fingerprint:${dto.fingerprintHash}`}))`;
+      // The initial same-user lookup happened before the transaction for the
+      // common re-registration path. Recheck after taking the lock so two
+      // first-time registrations cannot race into a raw composite-unique error.
+      const sameUserDevice = await tx.device.findUnique({
+        where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
+        select: { id: true, eventSecret: true },
+      });
+      if (sameUserDevice) return { device: null, existingDevice: sameUserDevice };
       const owner = await tx.device.findFirst({
         where: { fingerprintHash: dto.fingerprintHash, NOT: { userId } },
         select: { userId: true, id: true },
@@ -208,8 +222,11 @@ export class ExtensionDeviceReportTrait {
           },
         });
       }
-      return { device: createdDevice };
+      return { device: createdDevice, existingDevice: null };
     });
+    if (registration.existingDevice) return reregisterExistingDevice(registration.existingDevice);
+    const device = registration.device;
+    if (!device) throw new Error('Device registration transaction returned no device');
     // Non-blocking fraud signals on successful device registration
     void this.fraud
       .checkVpnProxyPattern(userId, device.id, dto.platform ?? null)

@@ -187,6 +187,37 @@ describe('RuntimeConfigService', () => {
       const result = await service.isCountryAllowed('us');
       expect(result).toBe(false);
     });
+
+    it('uses the configured positive country allowlist and rejects missing countries', async () => {
+      const allowlisted = new RuntimeConfigService(
+        mockPrisma as never,
+        mockAudit as never,
+        {
+          get: vi.fn((key: string) => (key === 'ALLOWED_COUNTRIES' ? 'US,ca' : undefined)),
+        } as never,
+      );
+
+      await expect(allowlisted.isCountryAllowed('us')).resolves.toBe(true);
+      await expect(allowlisted.isCountryAllowed('GB')).resolves.toBe(false);
+      await expect(allowlisted.isCountryAllowed(null)).resolves.toBe(false);
+      expect(mockPrisma.systemSetting.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('positive currency allowlist', () => {
+    it('rejects currencies outside the configured settlement policy', async () => {
+      const allowlisted = new RuntimeConfigService(
+        mockPrisma as never,
+        mockAudit as never,
+        {
+          get: vi.fn((key: string) => (key === 'ALLOWED_CURRENCIES' ? 'USD,eur' : undefined)),
+        } as never,
+      );
+
+      await expect(allowlisted.isCurrencyAllowed('usd')).resolves.toBe(true);
+      await expect(allowlisted.isCurrencyAllowed('JPY')).resolves.toBe(false);
+      await expect(allowlisted.isCurrencyAllowed(undefined)).resolves.toBe(false);
+    });
   });
 
   describe('isExtensionVersionAllowed', () => {

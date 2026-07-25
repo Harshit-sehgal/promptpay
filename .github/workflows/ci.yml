@@ -126,8 +126,10 @@ jobs:
             printf '%s\n' "$PUBLIC_KEY"
             echo 'WAITLAYER_PUBLIC_KEY_EOF'
           } >> "$GITHUB_ENV"
-      - name: Audit dependencies
-        run: pnpm audit --audit-level moderate
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level moderate
+      - name: Audit development dependency quarantine
+        run: node scripts/audit-dependencies.mjs
       - name: Apply migrations
         run: pnpm --filter @waitlayer/db migrate:deploy
       - name: Assert no pending migrations
@@ -301,12 +303,6 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      # P0.8 defense-in-depth: never emit buildx provenance/SBOM attestations.
-      # Provenance records build-arg values; no signing secrets are build args
-      # today, and this keeps that true even if a future build path switches
-      # to `docker buildx build` (which emits attestations by default).
-      BUILDX_NO_DEFAULT_ATTESTATIONS: '1'
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6

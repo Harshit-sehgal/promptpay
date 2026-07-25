@@ -26,6 +26,12 @@ function validVersionAllowlist(value: string): boolean {
   return value.split(',').every((v) => /^[A-Za-z0-9._-]+$/.test(v.trim()) && v.trim().length > 0);
 }
 
+function validCodeAllowlist(value: string, pattern: RegExp): boolean {
+  if (value.trim() === '') return true;
+  const entries = value.split(',').map((entry) => entry.trim());
+  return entries.length > 0 && entries.every((entry) => pattern.test(entry));
+}
+
 function isCanonical256BitBase64(value: string | undefined): boolean {
   if (!value || !/^[A-Za-z0-9+/]+={0,2}$/.test(value) || value.length % 4 !== 0) return false;
   try {
@@ -137,6 +143,23 @@ const envSchema = z
     // Keep the web BFF proxy chain in the shared production configuration so
     // client-IP derivation cannot silently diverge between web and API.
     BFF_TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(3).optional(),
+
+    // Paid-launch policy. These are intentionally explicit deployment inputs:
+    // an empty list is useful for telemetry-only development, but production
+    // must choose its launch jurisdictions and settlement currency instead of
+    // inheriting an open-ended negative blocklist.
+    ALLOWED_COUNTRIES: z
+      .string()
+      .default('')
+      .refine((value) => validCodeAllowlist(value, /^[A-Za-z]{2}$/), {
+        message: 'ALLOWED_COUNTRIES must be a comma-separated ISO alpha-2 allowlist',
+      }),
+    ALLOWED_CURRENCIES: z
+      .string()
+      .default('')
+      .refine((value) => validCodeAllowlist(value, /^[A-Za-z]{3}$/), {
+        message: 'ALLOWED_CURRENCIES must be a comma-separated ISO 4217 allowlist',
+      }),
 
     // Auth
     // NOTE: min(32) catches length, but a 32-char placeholder (e.g.
@@ -379,6 +402,14 @@ const envSchema = z
   .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.BFF_TRUST_PROXY_HOPS), {
     message: 'BFF_TRUST_PROXY_HOPS is required in production for consistent client-IP derivation.',
     path: ['BFF_TRUST_PROXY_HOPS'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || env.ALLOWED_COUNTRIES.trim() !== '', {
+    message: 'ALLOWED_COUNTRIES is required in production for explicit launch geography.',
+    path: ['ALLOWED_COUNTRIES'],
+  })
+  .refine((env) => env.NODE_ENV !== 'production' || env.ALLOWED_CURRENCIES.trim() !== '', {
+    message: 'ALLOWED_CURRENCIES is required in production for explicit settlement policy.',
+    path: ['ALLOWED_CURRENCIES'],
   })
   .refine((env) => env.NODE_ENV !== 'production' || env.PAYOUT_DESTINATION_COOLDOWN_HOURS >= 24, {
     message: 'PAYOUT_DESTINATION_COOLDOWN_HOURS must be at least 24 hours in production.',

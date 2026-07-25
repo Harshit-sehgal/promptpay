@@ -108,6 +108,13 @@ Default shown where one exists.
 | `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —       | If > 0, newly-added/changed payout destinations require MFA for that many hours.                               |
 | `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —       | Strict JSON provider -> `available`/`coming_soon` API gate.                                                    |
 
+## Paid-launch policy
+
+| Variable             | Req in production | Default | Purpose                                                                                                   |
+| -------------------- | ----------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `ALLOWED_COUNTRIES`  | yes               | —       | Comma-separated ISO-3166 alpha-2 positive allowlist. Missing user countries are rejected when configured. |
+| `ALLOWED_CURRENCIES` | yes               | —       | Comma-separated ISO-4217 positive settlement allowlist. Missing/unsupported currencies are rejected.      |
+
 ## Payout providers (payouts — later / dev stubs)
 
 | Variable                         | Req | Default   | Purpose                                                     |

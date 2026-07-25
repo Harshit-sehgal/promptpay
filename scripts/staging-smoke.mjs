@@ -30,11 +30,14 @@
  *   STAGING_FULL_FLOW=1     - also run the mandatory campaign/ad/ledger flow
  *   STAGING_WAIT_ATTESTATION_PROVIDER - configured issuer provider id
  *   STAGING_WAIT_ATTESTATION_BRIDGE_URL - independently operated signer URL
+ *   STAGING_ALLOWED_COUNTRIES     - comma-separated launch-country allowlist
+ *   STAGING_ALLOWED_CURRENCIES    - comma-separated settlement-currency allowlist
  * Optional env:
  *   STAGING_WAIT_ATTESTATION_BRIDGE_TOKEN - bearer token for the bridge
  */
 
 import { createPublicKey, createHash, randomUUID } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createRequire } from 'module';
@@ -55,6 +58,16 @@ const FULL_FLOW = process.env.STAGING_FULL_FLOW !== '0';
 const STAGING_ADMIN_EMAIL = 'staging-smoke-admin@waitlayer.com';
 const STAGING_ADV_EMAIL = 'staging-smoke-advertiser@waitlayer.com';
 const STAGING_DEV_EMAIL = 'staging-smoke-developer@waitlayer.com';
+const STAGING_COUNTRY = (process.env.STAGING_ALLOWED_COUNTRIES ?? 'US')
+  .split(',')[0]
+  .trim()
+  .toUpperCase();
+const STAGING_CURRENCY = (process.env.STAGING_ALLOWED_CURRENCIES ?? 'USD')
+  .split(',')[0]
+  .trim()
+  .toUpperCase();
+const EVIDENCE_FILE =
+  process.env.STAGING_EVIDENCE_FILE ?? join(process.cwd(), 'staging-smoke-evidence.json');
 
 function deriveKid(privateKeyPem) {
   const pubPem =
@@ -147,14 +160,44 @@ async function requestIndependentAttestation(payload) {
   return json.assertion;
 }
 
+async function persistEvidence(evidence) {
+  await mkdir(dirname(EVIDENCE_FILE), { recursive: true });
+  await writeFile(`${EVIDENCE_FILE}`, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+}
+
 async function main() {
   const privateKey = process.env.JWT_PRIVATE_KEY;
   const databaseUrl = process.env.DATABASE_URL;
+  if (!/^[A-Z]{2}$/.test(STAGING_COUNTRY)) {
+    fail('STAGING_ALLOWED_COUNTRIES must begin with an ISO alpha-2 country code');
+  }
+  if (!/^[A-Z]{3}$/.test(STAGING_CURRENCY)) {
+    fail('STAGING_ALLOWED_CURRENCIES must begin with an ISO 4217 currency code');
+  }
   if (!privateKey) fail('JWT_PRIVATE_KEY is required');
   if (!databaseUrl) fail('DATABASE_URL is required');
   if (hardFailures) process.exit(1);
 
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(databaseUrl) });
+  const evidence = {
+    format: 'waitlayer-staging-smoke-v1',
+    commit: process.env.GITHUB_SHA ?? null,
+    runId: process.env.GITHUB_RUN_ID ?? null,
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
+    apiBaseUrl: API_BASE_URL,
+    stagingSchema: process.env.STAGING_DATABASE_SCHEMA ?? null,
+    country: STAGING_COUNTRY,
+    currency: STAGING_CURRENCY,
+    apiImageDigest: process.env.STAGING_API_IMAGE_DIGEST ?? null,
+    webImageDigest: process.env.STAGING_WEB_IMAGE_DIGEST ?? null,
+    startedAt: new Date().toISOString(),
+    identifiers: {},
+    ledger: null,
+    runtimeSwitchesRestored: false,
+  };
+  let restoreAdminToken = null;
+  let runtimeSwitchesToRestore = [];
+  let restorationFailures = false;
   try {
     // 1. Readiness probe (no auth).
     const ready = await fetch(`${API_BASE_URL}/api/v1/health/ready`);
@@ -215,6 +258,7 @@ async function main() {
     }
 
     const adminToken = signToken(admin, privateKey, adminSessionId);
+    restoreAdminToken = adminToken;
     const advToken = signToken(advertiser, privateKey, advSessionId);
     const devToken = signToken(developer, privateKey, devSessionId);
 
@@ -272,16 +316,38 @@ async function main() {
         ok('developer ads + telemetry consent persisted with policy version');
       }
 
-      // 2b. Enable the wait-earnings runtime switch so the billable ad surface
-      // is exposed while an independent attestation issuer is configured.
-      const earningsToggle = await api('POST', '/admin/settings/wait/earnings/toggle', adminToken, {
-        enabled: true,
-        reason: 'staging smoke',
+      // 2b. Enable both switches required by the billable ad surface. Preserve
+      // the prior operator decisions so a successful or failed smoke never
+      // leaves a shared staging environment more permissive than it found it.
+      const currentSettings = await api('GET', '/admin/settings', adminToken);
+      const switchKeys = [
+        { scope: 'ads', target: 'global', label: 'global ads' },
+        { scope: 'wait', target: 'earnings', label: 'wait earnings' },
+      ];
+      if (currentSettings.status >= 400 || !Array.isArray(currentSettings.json)) {
+        fail(`read runtime switches -> HTTP ${currentSettings.status}: ${currentSettings.text}`);
+        throw new Error('staging runtime switch state could not be read safely');
+      }
+      runtimeSwitchesToRestore = switchKeys.map(({ scope, target, label }) => {
+        const row = currentSettings.json.find(
+          (setting) => setting.scope === scope && setting.target === target,
+        );
+        const enabled = row?.value && typeof row.value === 'object' ? row.value.enabled : undefined;
+        if (typeof enabled !== 'boolean') {
+          throw new Error(`runtime switch ${scope}.${target} is missing or malformed`);
+        }
+        return { scope, target, label, enabled };
       });
-      if (earningsToggle.status >= 400) {
-        fail(`enable wait earnings -> HTTP ${earningsToggle.status}: ${earningsToggle.text}`);
-      } else {
-        ok('wait earnings runtime switch enabled');
+      for (const { scope, target, label } of switchKeys) {
+        const toggle = await api('POST', `/admin/settings/${scope}/${target}/toggle`, adminToken, {
+          enabled: true,
+          reason: 'staging smoke',
+        });
+        if (toggle.status >= 400) {
+          fail(`enable ${label} -> HTTP ${toggle.status}: ${toggle.text}`);
+        } else {
+          ok(`${label} runtime switch enabled`);
+        }
       }
 
       // 3. Create the campaign through its real API. Creatives and country
@@ -289,7 +355,7 @@ async function main() {
       // with the DTOs catches contract drift before production promotion.
       const campaignRes = await api('POST', '/advertiser/campaigns', advToken, {
         name: `staging-smoke-${Date.now()}`,
-        currency: 'USD',
+        currency: STAGING_CURRENCY,
         category: 'technology',
         bidType: 'cpc',
         budgetTotalMinor: 100_000,
@@ -302,6 +368,7 @@ async function main() {
         fail(`create campaign -> HTTP ${campaignRes.status}: ${campaignRes.text}`);
       }
       const campaignId = campaignRes.json?.id;
+      evidence.identifiers.campaignId = campaignId ?? null;
       if (!campaignId) fail('campaign create returned no id');
       else ok(`campaign created (${campaignId})`);
 
@@ -315,6 +382,7 @@ async function main() {
           ctaText: 'Learn more',
         });
         creativeId = creative.json?.id ?? null;
+        evidence.identifiers.creativeId = creativeId;
         if (creative.status >= 400 || !creativeId) {
           fail(`create creative -> HTTP ${creative.status}: ${creative.text}`);
         } else {
@@ -325,7 +393,7 @@ async function main() {
           'POST',
           `/campaigns/${campaignId}/targeting/countries`,
           advToken,
-          [{ countryCode: 'US', include: true }],
+          [{ countryCode: STAGING_COUNTRY, include: true }],
         );
         if (targeting.status >= 400) {
           fail(`set country targeting -> HTTP ${targeting.status}: ${targeting.text}`);
@@ -354,7 +422,7 @@ async function main() {
             userId: advertiser.id,
             // BigInt cannot be serialized by JSON.stringify; send as a string.
             amountMinor: '100000',
-            currency: 'USD',
+            currency: STAGING_CURRENCY,
             idempotencyKey: faucetKey,
           });
           if (faucet.status >= 400) {
@@ -405,7 +473,7 @@ async function main() {
       const deviceRes = await api('POST', '/extension/register-device', devToken, {
         toolType: 'cursor',
         fingerprintHash: `staging-smoke-${Date.now()}`,
-        extensionVersion: 'staging-smoke-1.0.0',
+        extensionVersion: '1.0.0-staging.1',
         platform: 'linux',
       });
       if (deviceRes.status >= 400 || !deviceRes.json?.id || !deviceRes.json?.eventSecret) {
@@ -413,6 +481,7 @@ async function main() {
       }
       const deviceId = deviceRes.json?.id;
       const deviceSecret = deviceRes.json?.eventSecret;
+      evidence.identifiers.deviceId = deviceId ?? null;
       if (deviceId && deviceSecret) ok(`device registered (${deviceId}), secret retained`);
 
       // Helper: sign a payload with the device secret exactly like the
@@ -449,6 +518,7 @@ async function main() {
             fail(`create wait-attestation session -> HTTP ${created.status}: ${created.text}`);
           } else {
             attestationSession = created.json;
+            evidence.identifiers.attestationSessionId = attestationSession.attestationSessionId;
             ok('single-use wait-attestation nonce issued before wait start');
           }
         }
@@ -486,7 +556,7 @@ async function main() {
           sessionId,
           waitStateId,
           toolType: 'cursor',
-          country: 'US',
+          country: STAGING_COUNTRY,
           idempotencyKey: `staging-ad-${randomUUID()}`,
         });
         impressionToken = adRes.json?.ad?.impressionToken ?? null;
@@ -580,12 +650,12 @@ async function main() {
       if (impressionToken && advertiserId && campaignId) {
         const [earnings, advDebit, platformRows] = await Promise.all([
           prisma.earningsLedger.findMany({
-            where: { userId: developer.id, campaignId, currency: 'USD' },
+            where: { userId: developer.id, campaignId, currency: STAGING_CURRENCY },
           }),
           prisma.advertiserLedger.findFirst({
-            where: { advertiserId, campaignId, entryType: 'debit', currency: 'USD' },
+            where: { advertiserId, campaignId, entryType: 'debit', currency: STAGING_CURRENCY },
           }),
-          prisma.platformLedger.findMany({ where: { campaignId, currency: 'USD' } }),
+          prisma.platformLedger.findMany({ where: { campaignId, currency: STAGING_CURRENCY } }),
         ]);
         const earning = earnings.find((e) => e.entryType === 'credit');
         if (!earning) {
@@ -615,6 +685,11 @@ async function main() {
             `ledger split verified (dev=${earnedMinor}, platform=${platformTotal}, debit=${advDebit?.amountMinor})`,
           );
         }
+        evidence.ledger = {
+          developerCreditMinor: earnedMinor.toString(),
+          advertiserDebitMinor: advDebit?.amountMinor?.toString() ?? null,
+          platformTotalMinor: platformTotal.toString(),
+        };
       }
 
       if (earnedMinor > 0n) {
@@ -645,7 +720,49 @@ async function main() {
       else ok('no critical alerts fired in staging');
     }
   } finally {
+    for (const { scope, target, label, enabled } of runtimeSwitchesToRestore.toReversed()) {
+      if (!restoreAdminToken) continue;
+      try {
+        const restored = await api(
+          'POST',
+          `/admin/settings/${scope}/${target}/toggle`,
+          restoreAdminToken,
+          {
+            enabled,
+            reason: 'restore after staging smoke',
+          },
+        );
+        if (restored.status >= 400) {
+          hardFailures++;
+          restorationFailures = true;
+          console.error(
+            `[HARD FAIL] restore ${label} runtime switch -> HTTP ${restored.status}: ${restored.text}`,
+          );
+        } else {
+          ok(`restored ${label} runtime switch to ${enabled}`);
+        }
+      } catch (error) {
+        hardFailures++;
+        restorationFailures = true;
+        console.error(`[HARD FAIL] restore ${label} runtime switch failed: ${error}`);
+      }
+    }
+    evidence.runtimeSwitchesRestored = runtimeSwitchesToRestore.length > 0 && !restorationFailures;
     await prisma.$disconnect();
+  }
+
+  evidence.finishedAt = new Date().toISOString();
+  evidence.status = hardFailures ? 'failed' : 'passed';
+  evidence.hardFailures = hardFailures;
+  evidence.softWarnings = softWarnings;
+  try {
+    await persistEvidence(evidence);
+    ok(`staging evidence persisted to ${EVIDENCE_FILE}`);
+  } catch (error) {
+    hardFailures++;
+    console.error(
+      `[HARD FAIL] could not persist staging evidence: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   if (hardFailures) {

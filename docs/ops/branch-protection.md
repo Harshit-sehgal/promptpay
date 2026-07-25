@@ -38,8 +38,15 @@ a file. Apply these settings to `main` (and any release branches):
   sbom-action) already uses a full commit SHA with a `# vN` comment. Keep all
   new actions pinned to full SHAs.
 - **Dependency updates:** require human review of dependency-bump MRs; do not
-  auto-merge large upgrades. `pnpm audit` runs in CI and fails the
-  `build-and-test` job on moderate-and-above advisories.
+  auto-merge large upgrades. CI hard-fails on moderate-and-above production
+  advisories and has a narrow, reviewed quarantine for the one known
+  dev-only Nest CLI advisory; any new or differently scoped advisory fails.
+- **Image signing:** the staging release gate signs the immutable API and web
+  digests with GitHub OIDC using Cosign, then verifies both signatures before
+  production promotion. Keep the workflow's `id-token: write` permission and
+  the pinned `sigstore/cosign-installer` SHA. Do not replace digest promotion
+  with mutable tags or disable signature verification to accommodate a private
+  registry.
 
 ## Notes
 

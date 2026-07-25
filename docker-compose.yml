@@ -62,6 +62,8 @@ services:
     build:
       context: .
       target: api
+      provenance: true
+      sbom: true
       args:
         JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
         JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
@@ -99,6 +101,8 @@ services:
       # AND an explicit flag — never set this in staging/production.
       ALLOW_MOCK_GOOGLE: ${ALLOW_MOCK_GOOGLE:-true}
       ENABLE_STAGING_FAUCET: ${ENABLE_STAGING_FAUCET:-false}
+      ALLOWED_COUNTRIES: ${ALLOWED_COUNTRIES:-}
+      ALLOWED_CURRENCIES: ${ALLOWED_CURRENCIES:-}
       VERIFIED_DETECTOR_VERSIONS: ${VERIFIED_DETECTOR_VERSIONS:-}
       # Independently operated providers only. Their public keys and emitted
       # versions are separate from client detector-version allowlists.
@@ -136,6 +140,8 @@ services:
     build:
       context: .
       target: web
+      provenance: true
+      sbom: true
       # Next.js inlines these at *build* time — runtime `environment:` below
       # does NOT reach the Edge middleware or the client bundle (A-083). Pass
       # real production values here; the ${VAR:-default} fallbacks match the

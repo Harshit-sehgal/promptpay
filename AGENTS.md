@@ -63,16 +63,107 @@ The staging/reference bridge remains prohibited for public rewards, and the
 money paths must remain disabled until those external gates are satisfied.
 
 Verification on 2026-07-24: `pnpm typecheck`, `pnpm lint`, and `pnpm build`
-pass; API unit tests pass (114 files / 1,199 tests), web/CLI/VS Code tests pass
+pass; API unit tests pass (114 files / 1,200 tests), web/CLI/VS Code tests pass
 (196 / 55 / 119 tests), the money-loop integration test passes (49 tests), and
 the duplicate-device transaction contract passes (2 tests). The test database
 has all 76 migrations applied, `migrate:status` is current, `migrate:drift`
-reports no difference, and `pnpm audit --audit-level low` reports no known
-vulnerabilities. The repository-level `pnpm test` runner's final integration
+reports no difference. The production-only audit remains clean; the full
+`pnpm audit --audit-level low` now reports one high transitive
+`brace-expansion` advisory through legacy minimatch consumers. The
+repository-level `pnpm test` runner's final integration
 reset phase was not allowed to run in this agent session because Prisma guards
 the destructive `migrate reset` operation without explicit user consent;
 individual integration coverage was run against the migrated test database
-instead.
+instead. The duplicate-device registration contract now covers 3 cases,
+including the same-user post-lock recheck. The later dependency audit finding
+is recorded in the 2026-07-25 continuation below.
+
+### 2026-07-25 Updated recheck — P0 regressions corrected
+
+The recheck of commit `418c7ca2326518954a52c491d93a79b80ef95ce2` found and
+closed these release-gate regressions:
+
+- `scripts/staging-smoke.mjs` now registers `1.0.0-staging.1`, explicitly
+  enables both `ads.global` and `wait.earnings` through authenticated admin
+  endpoints, and restores both prior operator states in `finally`.
+- The staging `ci-gate` caller now grants the reusable CI workflow
+  `contents: read`, `actions: read`, and `security-events: write`, matching the
+  CodeQL job’s required permissions.
+- Device registration rechecks same-user ownership after the fingerprint
+  advisory lock and routes a race winner through the existing authenticated
+  rotation path instead of surfacing a composite-unique database error.
+- Runtime-setting cache invalidation now uses Redis pub/sub between API
+  replicas, with the existing 30-second TTL retained as an outage fallback.
+- Docker Compose API/web builds now emit BuildKit provenance and SBOM
+  attestations. Build arguments are limited to public configuration/public
+  verification keys; signing secrets remain runtime-only.
+- The current dependency audit still reports one high transitive
+  `brace-expansion` finding through legacy `minimatch@3` consumers
+  (`@eslint/eslintrc` and Nest’s fork checker). The patched `5.0.8` branch is
+  present, but forcing it onto `minimatch@3` would be API-incompatible; parent
+  upgrades or a reviewed compatibility patch remain required.
+
+Still external or intentionally undecided: the reported red Vercel deployment
+(the sandbox could not reach the public endpoint or GitHub CLI), the actual
+country/currency values selected by product/legal, independent attestation
+operation, provider evidence, legal/KYC, branch protection, and production
+monitoring/on-call ownership.
+
+### 2026-07-25 Continued launch hardening — policy and staging isolation
+
+The active launch goal exposed additional source-level gaps, now closed:
+
+- Production configuration requires non-empty `ALLOWED_COUNTRIES` and
+  `ALLOWED_CURRENCIES` positive allowlists. Runtime country/currency checks use
+  those lists when configured and reject missing values; development/telemetry
+  mode retains the existing open behavior until an operator selects a policy.
+  Compose, `.env.example`, the environment reference, and staging secrets are
+  wired to the same controls.
+- The staging workflow provisions a unique PostgreSQL schema per run with
+  `scripts/staging-database.mjs`, derives the schema-qualified URL for
+  migrations/API/smoke, deploys the exact URL to the remote Compose host, and
+  always drops the generated schema in `cleanup-staging-schema`. No historical
+  staging evidence is reused.
+- `apps/api/src/integration/device-registration-atomic.spec.ts` exercises real
+  PostgreSQL cross-account commit, trigger-forced transaction rollback, and
+  same-user concurrent first registration. This supplements the mocked unit
+  contract and proves the advisory-lock/unique-index behavior against the real
+  database.
+- Staging now signs the exact pushed API/web image digests with GitHub OIDC and
+  the production promotion job verifies both Cosign certificates against the
+  staging workflow identity before pulling or deploying them. The smoke also
+  writes a minimized, non-secret evidence JSON file that the workflow retains
+  as an artifact before its disposable schema cleanup.
+- CI now hard-gates production dependency advisories and runs
+  `scripts/audit-dependencies.mjs` for development dependencies. That script
+  permits only the reviewed Nest CLI → fork checker → minimatch →
+  `brace-expansion` advisory and fails on any new advisory or scope change.
+
+The dependency audit still reports one high `brace-expansion` advisory through
+legacy `minimatch@3` consumers. No incompatible major override was added; a
+parent upgrade or reviewed compatibility patch remains required.
+
+The live GitHub commit-status API still reports the Vercel deployment for
+`418c7ca2326518954a52c491d93a79b80ef95ce2` as failed. The local `origin` remote
+was sanitized after detecting an embedded GitHub credential; the credential
+must be revoked/rotated by the repository operator because local cleanup cannot
+invalidate it.
+
+### 2026-07-25 Blocker closure pass
+
+- The CI audit gate now passes production dependencies with
+  `pnpm audit --prod --audit-level moderate` and explicitly quarantines only
+  the reviewed dev-only advisory through `scripts/audit-dependencies.mjs`.
+- A synthetic production Vercel environment containing an RSA public key,
+  credential-free HTTPS API URL, OAuth client id, secure cookies, and
+  `BFF_TRUST_PROXY_HOPS=1` passes `apps/web/scripts/verify-deploy-env.mjs`.
+  This proves the committed preflight is satisfiable; it does not create the
+  missing Vercel project secrets.
+- The Vercel deployment log remains unavailable from this environment because
+  the CLI has no authenticated Vercel session and the deployment page cannot be
+  reached through the available network path. The live commit status remains a
+  Vercel failure and requires the project owner to configure the documented
+  values, inspect the deployment log, and rerun the deployment.
 
 ### Quality gates (run from repo root)
 

@@ -14,8 +14,19 @@ Run through this before and after every production deploy.
 - [ ] `JWT_SECRET` is a real ≥32-char secret (not a placeholder).
 - [ ] `REDIS_URL` set (required in production).
 - [ ] `NODE_ENV=production`; `ALLOW_MOCK_GOOGLE` / `MOCK_GOOGLE_ENABLED` unset.
-- [ ] `TOTP_SECRET_ENCRYPTION_KEY` set if MFA/payouts are live.
+- [ ] `TOTP_SECRET_ENCRYPTION_KEY` set in production before MFA/payouts are live.
 - [ ] `TRUST_PROXY_HOPS` matches the LB/ingress topology.
+- [ ] `BFF_TRUST_PROXY_HOPS` matches the public web proxy topology and is set
+      in Vercel; `COOKIE_SECURE` is not `false`.
+- [ ] Vercel build variables are configured: `JWT_PUBLIC_KEY`, `JWT_SECRET`,
+      `NEXT_PUBLIC_API_URL` or `API_INTERNAL_URL`,
+      `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `JWT_ISSUER`, and `JWT_AUDIENCE`.
+- [ ] Production positive `ALLOWED_COUNTRIES` and `ALLOWED_CURRENCIES` are
+      selected by product/legal and configured in the API secret manager.
+- [ ] `WAIT_ATTESTATION_ISSUERS` and
+      `VERIFIED_WAIT_ATTESTATION_VERSIONS` reference an independently operated
+      provider; `wait.earnings` remains disabled until its launch experiment is
+      evidenced.
 - [ ] Sentry `SENTRY_DSN` + `SENTRY_ENVIRONMENT` configured; source maps upload
       verified in CI.
 

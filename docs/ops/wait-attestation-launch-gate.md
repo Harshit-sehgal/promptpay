@@ -84,6 +84,10 @@ for this experiment.
   `STAGING_WAIT_ATTESTATION_ISSUERS`,
   `STAGING_WAIT_ATTESTATION_VERSIONS`, and an independently operated
   `STAGING_WAIT_ATTESTATION_BRIDGE_URL`; it must fail if any is absent.
+- The staging release job signs the exact image digests used by the smoke test,
+  retains minimized smoke evidence as a GitHub artifact, and verifies Cosign
+  signatures before production promotion. The artifact is a release reference,
+  not a substitute for the provider experiment below.
 - Alerting exists for signature failures, replay attempts, provider callback
   failures, attestation-volume anomalies, and settlement reversals.
 - The deployment rollback and runtime kill switch are rehearsed with the

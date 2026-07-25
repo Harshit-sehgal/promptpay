@@ -44,6 +44,8 @@ function baseProdEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv 
     EMAIL_FROM: 'security@waitlayer.com',
     RESEND_API_KEY: 'resend-production-key',
     PAYOUT_REQUIRE_2FA: 'true',
+    ALLOWED_COUNTRIES: 'US',
+    ALLOWED_CURRENCIES: 'USD',
     ...overrides,
   } as NodeJS.ProcessEnv;
 }
@@ -59,6 +61,16 @@ describe('env validation (config module)', () => {
     void REDIS_URL;
     const result = envSchema.safeParse(env);
     expect(result.success).toBe(false);
+  });
+
+  it('rejects production without explicit country and currency allowlists', () => {
+    expect(envSchema.safeParse(baseProdEnv({ ALLOWED_COUNTRIES: '' })).success).toBe(false);
+    expect(envSchema.safeParse(baseProdEnv({ ALLOWED_CURRENCIES: '' })).success).toBe(false);
+  });
+
+  it('rejects malformed positive launch allowlists', () => {
+    expect(envSchema.safeParse(baseDevEnv({ ALLOWED_COUNTRIES: 'USA' })).success).toBe(false);
+    expect(envSchema.safeParse(baseDevEnv({ ALLOWED_CURRENCIES: 'US' })).success).toBe(false);
   });
 
   it('rejects NODE_ENV=production without TOTP_SECRET_ENCRYPTION_KEY', () => {
