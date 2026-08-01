@@ -66,6 +66,7 @@ const mockPrisma = {
   },
   waitStateEvent: {
     groupBy: vi.fn(),
+    findMany: vi.fn(),
   },
   earningsLedger: {
     aggregate: vi.fn(),
@@ -647,6 +648,106 @@ describe('FraudService', () => {
     it('does not flag for low click counts', async () => {
       mockPrisma.adClick.count.mockResolvedValue(2);
       await service.checkRepeatedClickAbuse('u-1', 'camp-1');
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkAnomalousWaitSignals', () => {
+    const startRow = (signals: unknown[]) => ({ signals });
+    const endRow = (duration: number | null) => ({ duration });
+
+    beforeEach(() => {
+      mockPrisma.fraudFlag.findFirst.mockResolvedValue(null);
+      mockPrisma.fraudFlag.create.mockResolvedValue({ id: 'flag-anom' });
+      mockPrisma.user.findUnique.mockResolvedValue(mockUserWithFlags());
+      mockPrisma.device.count.mockResolvedValue(0);
+      mockPrisma.payoutRequest.count.mockResolvedValue(0);
+      mockPrisma.trustScore.upsert.mockResolvedValue({ score: 40 });
+    });
+
+    it('flags repeated identical single-signal payloads', async () => {
+      mockPrisma.waitStateEvent.findMany
+        .mockResolvedValueOnce([
+          startRow([{ type: 'ai_generation' }]),
+          startRow([{ type: 'ai_generation' }]),
+          startRow([{ type: 'ai_generation' }]),
+          startRow([{ type: 'ai_generation' }]),
+          startRow([{ type: 'ai_generation' }]),
+        ])
+        .mockResolvedValueOnce([]);
+      await service.checkAnomalousWaitSignals('u-1', 'd-1', [{ type: 'ai_generation' }]);
+      expect(mockPrisma.fraudFlag.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            flagType: 'automated_pattern',
+            severity: 'high',
+            evidence: expect.objectContaining({ reason: 'repeated_identical_wait_signals' }),
+          }),
+        }),
+      );
+    });
+
+    it('flags a burst of alternating single-primary signals (evasion via type variation)', async () => {
+      // Each individual payload differs from the others, so the identical-
+      // payload check alone would miss this scripted client.
+      const types = ['ai_generation', 'active_task', 'command_execution'];
+      mockPrisma.waitStateEvent.findMany
+        .mockResolvedValueOnce(
+          Array.from({ length: 6 }, (_, i) => startRow([{ type: types[i % 3] }])),
+        )
+        .mockResolvedValueOnce([]);
+      await service.checkAnomalousWaitSignals('u-1', 'd-1', [{ type: 'ai_generation' }]);
+      const calls = mockPrisma.fraudFlag.create.mock.calls;
+      expect(
+        calls.some(([arg]) => arg.data.evidence.reason === 'single_primary_signal_burst'),
+      ).toBe(true);
+    });
+
+    it('flags near-identical wait durations across end events', async () => {
+      mockPrisma.waitStateEvent.findMany
+        .mockResolvedValueOnce([
+          startRow([{ type: 'ai_generation' }, { type: 'active_task' }]),
+          startRow([{ type: 'ai_generation' }, { type: 'active_task' }]),
+          startRow([{ type: 'ai_generation' }, { type: 'active_task' }]),
+          startRow([{ type: 'ai_generation' }, { type: 'active_task' }]),
+          startRow([{ type: 'ai_generation' }, { type: 'active_task' }]),
+        ])
+        .mockResolvedValueOnce([
+          endRow(5),
+          endRow(5),
+          endRow(5),
+          endRow(4), // within the 2s bucket
+          endRow(5),
+        ]);
+      await service.checkAnomalousWaitSignals('u-1', 'd-1', [
+        { type: 'ai_generation' },
+        { type: 'active_task' },
+      ]);
+      const calls = mockPrisma.fraudFlag.create.mock.calls;
+      expect(
+        calls.some(([arg]) => arg.data.evidence.reason === 'repeated_identical_wait_duration'),
+      ).toBe(true);
+    });
+
+    it('does not flag a healthy varied pattern', async () => {
+      mockPrisma.waitStateEvent.findMany
+        .mockResolvedValueOnce([
+          startRow([{ type: 'ai_generation' }, { type: 'active_task' }]),
+          startRow([{ type: 'command_execution' }]),
+          startRow([{ type: 'ai_generation' }, { type: 'lifecycle_event' }]),
+          startRow([{ type: 'active_task' }, { type: 'command_execution' }]),
+          startRow([{ type: 'ai_generation' }]),
+        ])
+        .mockResolvedValueOnce([endRow(42), endRow(17), endRow(93), endRow(61), endRow(28)]);
+      await service.checkAnomalousWaitSignals('u-1', 'd-1', [{ type: 'active_task' }]);
+      expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
+    });
+
+    it('does not flag when fewer than the minimum events', async () => {
+      mockPrisma.waitStateEvent.findMany
+        .mockResolvedValueOnce([startRow([{ type: 'ai_generation' }])])
+        .mockResolvedValueOnce([]);
+      await service.checkAnomalousWaitSignals('u-1', 'd-1', [{ type: 'ai_generation' }]);
       expect(mockPrisma.fraudFlag.create).not.toHaveBeenCalled();
     });
   });

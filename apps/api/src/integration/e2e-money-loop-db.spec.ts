@@ -138,6 +138,11 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
       update: { value: { enabled: true }, reason: 'isolated money-loop test' },
     });
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'ads', target: 'global' } },
+      create: { scope: 'ads', target: 'global', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated money-loop test' },
+    });
 
     // ── Persistent identities ──
     const dev = await prisma.user.create({

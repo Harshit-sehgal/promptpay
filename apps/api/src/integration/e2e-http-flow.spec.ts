@@ -121,6 +121,16 @@ describe('End-to-End HTTP Integration Flow', () => {
       create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
       update: { value: { enabled: true }, reason: 'isolated HTTP money-loop test' },
     });
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'ads', target: 'global' } },
+      create: { scope: 'ads', target: 'global', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated HTTP money-loop test' },
+    });
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'payouts', target: 'requests' } },
+      create: { scope: 'payouts', target: 'requests', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated HTTP money-loop test' },
+    });
 
     // Seed the admin user directly in the DB. Public self-service signup
     // correctly rejects the `admin` role (SIGNUP_ALLOWED_ROLES = developer,

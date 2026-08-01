@@ -31,6 +31,12 @@ const CTR_SPIKE_THRESHOLD = 5;
 // P0.1: anomaly thresholds for behavioural verification of wait-state signals.
 const ANOMALY_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const ANOMALY_MIN_EVENTS = 5; // need at least this many events before flagging
+// Evasion-resistant heuristics: a modified client can vary signal types or
+// details to defeat the identical-payload check, but it still tends to emit
+// either a burst of single-signal waits or near-identical durations.
+const ANOMALY_SINGLE_SIGNAL_MIN = 5; // burst of single-signal waits to flag
+const ANOMALY_DURATION_BUCKET_SECONDS = 2; // duration-match tolerance bucket
+const ANOMALY_PRIMARY_SIGNALS = new Set(['ai_generation', 'active_task', 'command_execution']);
 
 function fraudSeverityRank(severity: string): number {
   return { low: 0, medium: 1, high: 2, critical: 3 }[severity] ?? -1;
@@ -478,31 +484,55 @@ export class FraudService {
     signals: { type: string; details?: string }[],
   ): Promise<void> {
     const oneHourAgo = new Date(Date.now() - ANOMALY_WINDOW_MS);
-    const recent = await this.prisma.waitStateEvent.findMany({
-      where: {
-        userId,
-        deviceId,
-        eventType: 'wait_state_start',
-        createdAt: { gte: oneHourAgo },
-      },
-      select: { signals: true, duration: true },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
+    const [recentStarts, recentEnds] = await Promise.all([
+      this.prisma.waitStateEvent.findMany({
+        where: {
+          userId,
+          deviceId,
+          eventType: 'wait_state_start',
+          createdAt: { gte: oneHourAgo },
+        },
+        select: { signals: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      this.prisma.waitStateEvent.findMany({
+        where: {
+          userId,
+          deviceId,
+          eventType: 'wait_state_end',
+          createdAt: { gte: oneHourAgo },
+        },
+        select: { duration: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
 
-    if (recent.length < ANOMALY_MIN_EVENTS) return;
+    if (recentStarts.length < ANOMALY_MIN_EVENTS) return;
 
-    // Normalize the incoming signal set for comparison.
+    // Normalize the incoming signal set for comparison (ignores details and
+    // order so a client that shuffles or renames detail text cannot evade).
     const signalKey = (s: { type: string }[]) =>
       [...new Set(s.map((x) => x.type).sort())].join(',');
     const currentKey = signalKey(signals);
 
-    // Count identical signal payloads in the trailing window.
+    // Count identical signal payloads AND single-primary-signal bursts in the
+    // trailing window. A client that alternates between `ai_generation` and
+    // `active_task` avoids the identical-payload match but still trips the
+    // single-signal burst heuristic.
     let identicalPayloadCount = 0;
-    for (const row of recent) {
+    let singlePrimaryCount = 0;
+    for (const row of recentStarts) {
       const rowSignals = (row.signals as unknown as { type: string }[]) ?? [];
       if (signalKey(rowSignals) === currentKey) {
         identicalPayloadCount++;
+      }
+      if (
+        rowSignals.length === 1 &&
+        ANOMALY_PRIMARY_SIGNALS.has(rowSignals[0]?.type ?? '')
+      ) {
+        singlePrimaryCount++;
       }
     }
 
@@ -521,6 +551,51 @@ export class FraudService {
           reason: 'repeated_identical_wait_signals',
         },
       });
+    }
+
+    // A burst of single-primary-signal waits indicates scripting even when
+    // the exact payload varies between events.
+    if (singlePrimaryCount >= ANOMALY_SINGLE_SIGNAL_MIN) {
+      await this.createFlag({
+        flagType: FraudFlagType.AUTOMATED_PATTERN,
+        severity: FraudSeverity.MEDIUM,
+        userId,
+        deviceId,
+        evidence: {
+          singlePrimaryCount,
+          windowMs: ANOMALY_WINDOW_MS,
+          reason: 'single_primary_signal_burst',
+        },
+      });
+    }
+
+    // Near-identical wait durations across many end events indicate a
+    // scripted timer rather than genuine AI operation waits. Durations are
+    // bucketed to tolerate sub-second jitter.
+    if (recentEnds.length >= ANOMALY_MIN_EVENTS) {
+      const durationBuckets = new Map<number, number>();
+      for (const row of recentEnds) {
+        if (typeof row.duration !== 'number' || row.duration <= 0) continue;
+        const bucket = Math.floor(row.duration / ANOMALY_DURATION_BUCKET_SECONDS);
+        durationBuckets.set(bucket, (durationBuckets.get(bucket) ?? 0) + 1);
+      }
+      const [peakBucket, peakCount] = [...durationBuckets.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0] ?? [0, 0];
+      if (peakCount >= ANOMALY_MIN_EVENTS) {
+        await this.createFlag({
+          flagType: FraudFlagType.AUTOMATED_PATTERN,
+          severity: FraudSeverity.MEDIUM,
+          userId,
+          deviceId,
+          evidence: {
+            identicalDurationCount: peakCount,
+            durationBucketSeconds: peakBucket * ANOMALY_DURATION_BUCKET_SECONDS,
+            windowMs: ANOMALY_WINDOW_MS,
+            reason: 'repeated_identical_wait_duration',
+          },
+        });
+      }
     }
   }
 

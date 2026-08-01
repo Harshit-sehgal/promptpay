@@ -256,8 +256,8 @@ export default function ComparisonPage() {
                     <span
                       className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
                         tool.status === 'live'
-                          ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
-                          : 'text-amber-600 bg-amber-50 border-amber-200'
+                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          : 'text-amber-700 bg-amber-50 border-amber-200'
                       }`}
                     >
                       {tool.badge}
@@ -331,7 +331,7 @@ export default function ComparisonPage() {
                     <th className="text-left px-5 py-4 text-surface-600 font-medium w-1/3">
                       Feature
                     </th>
-                    <th className="text-center px-3 py-4 text-brand-600 font-semibold">
+                    <th className="text-center px-3 py-4 text-brand-700 font-semibold">
                       WaitLayer
                     </th>
                     <th className="text-center px-3 py-4 text-surface-400 font-medium">
@@ -368,7 +368,7 @@ export default function ComparisonPage() {
             <h2 className="text-3xl font-bold text-white tracking-tight mb-4">
               Join the WaitLayer beta
             </h2>
-            <p className="text-white/80 text-sm mb-8 max-w-sm mx-auto">
+            <p className="text-white text-sm mb-8 max-w-sm mx-auto">
               Install the extension or CLI in under 2 minutes. No credit card required.
             </p>
             <div className="flex items-center justify-center gap-3">

@@ -70,6 +70,13 @@ describe('Payout fence lifecycle (DB-backed)', () => {
     prisma = app.get(PrismaService);
     payoutService = app.get(PayoutService);
     await cleanDb(prisma);
+    // Production defaults the payout-request switch fail-closed; this isolated
+    // fence suite drives real request/approve/process flows in its reset DB.
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'payouts', target: 'requests' } },
+      create: { scope: 'payouts', target: 'requests', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated fence lifecycle test' },
+    });
 
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({

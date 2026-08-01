@@ -115,6 +115,7 @@ enum PayoutProvider {
   payoneer
   wise
   razorpay
+  dodo_payments
 }
 
 enum PayoutStatus {

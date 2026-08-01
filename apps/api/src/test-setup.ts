@@ -24,6 +24,10 @@ process.env.BACKGROUND_JOBS_ENABLED = 'false';
 // environment so the suite is deterministic regardless of the parent shell
 // (which may export NODE_ENV=production from a prior `next build`).
 process.env.NODE_ENV = 'test';
+// Keep the suite on the encrypted production code path without relying on the
+// deliberate fallback key. This is a test-only value; production still fails
+// configuration validation when the real secret is absent or too short.
+process.env.TOTP_SECRET_ENCRYPTION_KEY = 'test-totp-encryption-key-not-for-production-32+';
 
 // BigInt values cannot be serialized by JSON.stringify by default. Every
 // monetary column in the schema is stored as BigInt, so without this polyfill

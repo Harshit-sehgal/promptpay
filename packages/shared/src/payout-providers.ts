@@ -70,6 +70,12 @@ export const PAYOUT_PROVIDERS: PayoutProviderInfo[] = [
     status: 'coming_soon',
     note: 'Coming soon — Razorpay integration not yet available',
   },
+  {
+    provider: 'dodo_payments',
+    label: 'Dodo Payments',
+    status: 'coming_soon',
+    note: 'Coming soon — Dodo Payments integration not yet available',
+  },
 ];
 
 const VALID_LAUNCH_STATUSES: PayoutProviderLaunchStatus[] = ['available', 'coming_soon'];

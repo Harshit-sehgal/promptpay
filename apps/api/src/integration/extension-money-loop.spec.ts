@@ -195,6 +195,11 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
       update: { value: { enabled: true }, reason: 'isolated extension money-loop test' },
     });
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'ads', target: 'global' } },
+      create: { scope: 'ads', target: 'global', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated extension money-loop test' },
+    });
 
     // Defensive: ensure no stale admin user from a prior run remains. This
     // makes the beforeAll idempotent even when test-isolation cleanup races.

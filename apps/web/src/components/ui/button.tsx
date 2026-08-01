@@ -26,7 +26,7 @@ const roundedClasses: Record<ButtonRounded, string> = {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'bg-surface-900 text-white hover:bg-surface-800 active:bg-surface-950 shadow-sm',
-  secondary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 shadow-sm',
+  secondary: 'bg-brand-700 text-white hover:bg-brand-800 active:bg-brand-900 shadow-sm',
   brand:
     'bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700 shadow-sm shadow-brand-500/20',
   outline:

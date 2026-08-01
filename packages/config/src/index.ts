@@ -92,6 +92,38 @@ function validWaitAttestationIssuers(value: string): boolean {
   }
 }
 
+/**
+ * The repository includes a deliberately non-independent bridge for local and
+ * staging development. Its identity is part of the public sample
+ * configuration, so reject it by name rather than relying on an operator to
+ * remember that it must never be promoted to a real-money deployment.
+ */
+function containsReferenceWaitAttestationStub(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const issuers: unknown = JSON.parse(value);
+    return (
+      Array.isArray(issuers) &&
+      issuers.some(
+        (issuer) =>
+          !!issuer &&
+          typeof issuer === 'object' &&
+          (issuer as { provider?: unknown }).provider === 'waitlayer-stub-bridge',
+      )
+    );
+  } catch {
+    // Shape validation reports malformed JSON separately.
+    return false;
+  }
+}
+
+function containsReferenceWaitAttestationVersion(value: string | undefined): boolean {
+  return (value ?? '')
+    .split(',')
+    .map((version) => version.trim())
+    .includes('stub-v1');
+}
+
 function isProductionOrigin(value: string): boolean {
   try {
     const url = new URL(value);
@@ -143,6 +175,16 @@ const envSchema = z
     // Keep the web BFF proxy chain in the shared production configuration so
     // client-IP derivation cannot silently diverge between web and API.
     BFF_TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(3).optional(),
+
+    // Rate-limit buckets (requests per TTL). These are operator overrides for
+    // the defaults in `apps/api/src/app.module.ts`; production should keep the
+    // tight defaults and only raise them for controlled test/CI environments
+    // (e.g. an isolated e2e API that must complete many auth calls quickly).
+    // A raised limit must never be deployed to a public production API.
+    THROTTLE_AUTH_SHORT_LIMIT: z.coerce.number().int().min(1).optional(),
+    THROTTLE_AUTH_LONG_LIMIT: z.coerce.number().int().min(1).optional(),
+    THROTTLE_EXTENSION_LIMIT: z.coerce.number().int().min(1).optional(),
+    THROTTLE_DEFAULT_LIMIT: z.coerce.number().int().min(1).optional(),
 
     // Paid-launch policy. These are intentionally explicit deployment inputs:
     // an empty list is useful for telemetry-only development, but production
@@ -427,6 +469,17 @@ const envSchema = z
     message: 'OPS_ALERT_EMAIL is required in production for financial and security alerts.',
     path: ['OPS_ALERT_EMAIL'],
   })
+  .refine(
+    (env) =>
+      env.NODE_ENV !== 'production' ||
+      (!containsReferenceWaitAttestationStub(env.WAIT_ATTESTATION_ISSUERS) &&
+        !containsReferenceWaitAttestationVersion(env.VERIFIED_WAIT_ATTESTATION_VERSIONS)),
+    {
+      message:
+        'The reference waitlayer-stub-bridge / stub-v1 attester is local/staging-only and is forbidden in production.',
+      path: ['WAIT_ATTESTATION_ISSUERS'],
+    },
+  )
   .refine(
     (env) =>
       env.NODE_ENV !== 'production' ||

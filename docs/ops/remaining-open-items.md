@@ -12,6 +12,15 @@ cannot be finished by a source change. Each entry gives the current code state
 > `pnpm test` 10/10 tasks (API integration ran fresh), all gates green. See
 > `scripts/ci-local.sh` to reproduce the CI gate set locally.
 
+> **Secrets bootstrap (2026-07-31):** `scripts/generate-secrets.mjs` generates
+> every deployment secret referenced below (RS256 JWT key pair,
+> `JWT_SECRET`, `TOTP_SECRET_ENCRYPTION_KEY`, `EMAIL_QUEUE_SECRET`,
+> `PAYOUT_ENCRYPTION_KEY`, `PAYOUT_HMAC_KEY`) in the exact format the
+> production validation rules accept. Run `node scripts/generate-secrets.mjs`
+> and paste the output into your secret store; `--json` for scripted use and
+> `--check` for a self-validation exit code. Covered by
+> `scripts/generate-secrets.test.mjs` in the `test:release-gates` gate.
+
 ---
 
 ## 1. A-030 — Payout provider launch availability (operator decision)

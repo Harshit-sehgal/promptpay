@@ -30,7 +30,15 @@ test.describe('Landing page', () => {
     await page.goto('/');
     await expect(page).toHaveTitle(/WaitLayer/i);
     await expect(page.locator('h1').first()).toBeVisible();
-    await expect(page.locator('nav').first()).toBeVisible();
+    const nav = page.locator('nav').first();
+    await expect(nav).toHaveCount(1);
+    // The primary nav is hidden below the md breakpoint (no mobile menu yet).
+    const width = page.viewportSize()?.width ?? 0;
+    if (width >= 768) {
+      await expect(nav).toBeVisible();
+    } else {
+      await expect(nav).toBeHidden();
+    }
   });
 
   test('has no console errors', async ({ page }) => {

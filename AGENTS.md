@@ -32,6 +32,103 @@ see the live risk/status register without being told to read a separate doc.
 - **All source-fixable issues A-001…A-086 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). **A-075** is now resolved as a code defect (Dockerfile registry-resilient pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below). - **Source closure notice:** no further source edits can close the remaining items. They are external operator/infra/product/legal tasks, including: A-030 (real payout-provider credentials / `WAITLAYER_PAYOUT_PROVIDER_STATUS`), P1.21 (GitHub branch-protection toggles), P0.5 (CI run on SHA from a runner with registry access), and the paid-launch staging experiment. A reference/stub independent wait-attestation provider bridge now exists under `tools/wait-attestation-bridge/` and is wired into the CLI/VSCode client flow; only operating and security-reviewing a real provider instance remains external. See "Remaining external activation tasks" below and the per-item notes in this file.
 - This is a snapshot. Re-run the gates after any code change to confirm health.
 
+### 2026-07-28 Autonomous source-only hardening backlog
+
+The following items were identified from the current source and can be closed
+without credentials, provider accounts, or product/legal decisions. Keep this
+short list current while the pass is active:
+
+- [x] Reject the repository reference wait-attestation bridge/version in
+      production configuration and before a promotion-capable staging smoke.
+- [x] Require immutable `image@sha256` references before production promotion.
+- [x] Exercise Redis pub/sub runtime kill-switch invalidation across two real
+  service instances, not only mocked clients.
+- [x] Make release-input validation part of the root test gate and give the
+  normal API test application an explicit test TOTP key. Unit tests that
+  intentionally inject an empty key retain their expected fallback warnings.
+- [x] Verify the pass: focused release/config/Redis tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm test`, `pnpm build`, and `node scripts/audit-claims.mjs`
+  all passed on 2026-07-28.
+
+### 2026-07-31 — Full-gate re-verification and integration-suite repair
+
+Re-ran every quality gate against live Postgres (:5432 dev + :5433 test, all 76
+migrations applied) and Redis (:6379). The 2026-07-28 hardening changes were
+still uncommitted and two defects made the DB-backed suites fail; both are now
+fixed and the whole gate is green:
+
+- **`runtime-config-redis-propagation.spec.ts` missing `vi` import** — the new
+  Redis pub/sub cross-instance invalidation spec used `vi.fn()`/`vi.waitFor`
+  without importing `vi`, so it would crash at runtime. Import added.
+- **DB-backed money-path suites did not enable the fail-closed runtime
+  switches** — migration `20260724000000_seed_money_switches_closed` seeds
+  `ads.global`, `wait.earnings`, `payouts.requests`, `payouts.auto` disabled,
+  so 8 integration files failed with `platform_ads_paused` / 400 on payout
+  request. Each isolated suite now explicitly opts in (via
+  `prisma.systemSetting.upsert` in `beforeAll`, following the existing
+  `e2e-money-loop-db.spec.ts` pattern): `ads.global` added to
+  contract-tests / e2e-http-flow / e2e-money-loop-db / extension-money-loop;
+  `payouts.requests` added to contract-tests / e2e-http-flow /
+  payout-fence-lifecycle / payout-idempotency-race / payout-partial-approval-retry /
+  payout-sandbox-run; `payouts.auto` added to payout-sandbox-run (its cron poll
+  gate). Production defaults remain fail-closed; only the isolated reset test
+  databases opt in.
+- **Verification:** `pnpm typecheck` 15/15, `pnpm lint` 10/10, `pnpm test`
+  11/11 tasks (API unit 1205 + all 20 integration files 229 tests +
+  `test:release-gates` 3), `pnpm build` 10/10, `node scripts/audit-claims.mjs`
+  13/13 PASS. Dev DB (`:5432`, `waitlayer-dev` credentials) and test DB
+  (`:5433`) both fully migrated with no drift; workflow YAML prettier-clean.
+  The `test:integration` reset phase was run with explicit user consent via
+  `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` on the isolated `waitlayer_test`
+  database only.
+
+### 2026-07-31 (continuation) — P0.1 wait-detection follow-ups closed
+
+The three "Known follow-ups (not blockers)" from the 2026-07-20 P0.1 section
+are now all closed (two by code this pass, one verified already-resolved):
+
+- **`classifyStoredWaitStart` shared helper** — the signals/evidence
+  extraction + `isVerifiedDetectorSource` + `classifyWaitState` sequence was
+  duplicated verbatim in `requestAd`, `recordQualifiedImpression`, and
+  `recordClick` of `extension-ad.trait.ts`. New exported
+  `classifyStoredWaitStart(waitStart, allowlist)` in `extension.constants.ts`
+  owns that parsing (including the `typeof === 'object' && 'type' in s`
+  defensive filters); all three settlement paths now call it, and the now-
+  unused `classifyWaitState`/`isVerifiedDetectorSource`/`DetectorEvidence`/
+  `WaitSignal` imports were removed from the trait.
+- **Anomaly-detector evasion** — `checkAnomalousWaitSignals` only matched
+  repeated identical payloads; a scripted client could evade by alternating
+  signal types. It now runs three heuristics in the trailing 1h window:
+  (1) repeated identical normalized payloads (HIGH, unchanged), (2) bursts of
+  ≥5 single-primary-signal waits (`ai_generation`/`active_task`/
+  `command_execution` alone) that alternate types to defeat payload matching
+  (MEDIUM, `single_primary_signal_burst`), and (3) ≥5 end events whose
+  durations fall in the same 2-second bucket (MEDIUM,
+  `repeated_identical_wait_duration`). Start and end events are now queried
+  separately (`Promise.all`) so duration detection works — durations are
+  stored only on `wait_state_end` rows. Covered by 5 new
+  `fraud.service.spec.ts` cases (53/53 in that file).
+- **`isVerifiedDetectorSource` env access** — verified already-resolved:
+  the function is pure (allowlist passed as a parameter), and every call site
+  passes `this.runtimeConfig.getVerifiedDetectorVersions()`. No change
+  needed.
+- The `validateWebEnv` boot-wiring follow-up remains deliberately unapplied:
+  `verify-deploy-env.mjs` already runs as the web `prebuild` step (enforced on
+  Vercel / `WAITLAYER_REQUIRE_DEPLOY_ENV=1`), and adding a `register()`
+  check would throw on every local/CI `next build` (which forces
+  `NODE_ENV=production` without `JWT_PUBLIC_KEY`). Existing documented
+  behavior is the safer design.
+- **Verification:** `pnpm typecheck` 15/15 (api `tsc --noEmit` re-run
+  explicitly), `pnpm lint` 10/10 (api eslint 0 errors/0 warnings),
+  `pnpm test` 11/11 tasks — including `fraud.service.spec.ts` 53/53, all 24
+  extension spec files 178/178, and all 20 DB-backed integration files
+  229/229 against the reset `waitlayer_test` DB (user-consented reset),
+  `pnpm build` 10/10, `node scripts/audit-claims.mjs` 13/13 PASS,
+  `git diff --check` clean. The only `pnpm audit` finding remains the
+  quarantined dev-only `brace-expansion` advisory through
+  `@nestjs/cli → fork-ts-checker-webpack-plugin → minimatch@3` (no parent
+  upgrade exists; patched 5.0.8 is API-incompatible with minimatch@3).
+
 ### 2026-07-24 Public-launch review pass — source fixes applied
 
 The pasted public-launch review was re-checked against the live tree. The
@@ -181,6 +278,83 @@ migrated/reset. Authoritative API result (integration tests share one Postgres):
 ```bash
 pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 ```
+
+## 2026-08-01 — E2E auth flake eliminated (throttle override + API restart JWT key fix)
+
+The Playwright e2e suite had 4 flaky loginAs tests (45s timeouts that passed on
+retry, ~7.4 min total). Root cause confirmed empirically: all tests share one
+IP, so the `auth-short` throttle bucket (10 req/min on `/auth/login` +
+`/auth/signup`) was shared across the whole suite — every test's `loginAs`
+does 2 auth calls, easily exhausting 10/min.
+
+- **Code fix:** `packages/config/src/index.ts` + `apps/api/src/app.module.ts`
+  now accept optional env overrides `THROTTLE_AUTH_SHORT_LIMIT` /
+  `THROTTLE_AUTH_LONG_LIMIT` / `THROTTLE_EXTENSION_LIMIT` /
+  `THROTTLE_DEFAULT_LIMIT` (coerced ints ≥ 1). Production defaults are
+  unchanged (10 / 30 / 60 / 200) — the overrides exist for isolated test/CI
+  APIs that must complete many auth calls quickly. A code comment warns: never
+  raise them on a public production API.
+- **Runtime gotcha found while verifying:** a kill+restart of the API with
+  `set -a; source /tmp/api-env.txt` **silently dropped the multi-line PEM
+  `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY`** (bash source mangles multi-line values).
+  The API booted without keys, generated ephemeral ones, and the web
+  middleware (holding the old public key) rejected every token — 24 e2e tests
+  failed with login timeouts until the API was restarted with a proper
+  Node-based env loader that parses PEM blocks correctly
+  (`/tmp/restart-api.js`). Use Node/`dotenv`-style loading for PEM env vars;
+  never `source` them from a raw environ dump.
+- **Verify:** API restarted on `:4002` with `THROTTLE_*_LIMIT=200/500/600/1000`
+  + the real PEM keys; e2e suite **86/86 passed twice in a row (26.6s each,
+  zero flakes)**, API unit/integration 1439/1439, web vitest 196/196,
+  typecheck/lint/build green.
+- **Also confirmed:** BruteForceGuard (5 failed attempts → 15-min lock on
+  route+IP+target) is a separate guard from the throttler — 429 "Too many
+  failed attempts" during curl hammering was BruteForceGuard, not the throttle.
+  Its Redis keys live under `wl:bruteforce:*` (container `waitlayer-redis-1`).
+
+## 2026-08-02 — Full-gate re-verification, e2e key-alignment fix, Dodo provider wiring
+
+Re-ran every quality gate from scratch against live Postgres (:5432 dev + :5433
+test, all **77** migrations) + Redis (:6379), plus the full Playwright suite.
+All gates green; the local e2e auth break and three consistency gaps were
+found and fixed this pass:
+
+- **Root-cause fix for local `next start` auth: the two local env keypairs
+  disagreed.** The API signs JWTs with the keypair in `apps/api/.env`; the web
+  middleware verifies with `JWT_PUBLIC_KEY` from the **repo-root `.env`**,
+  which held a *different* keypair. Login succeeded at the BFF (200) but every
+  `router.push('/developer')` bounced back to `/auth/login?returnTo=…` because
+  middleware RS256 verification failed against the wrong key — 26 e2e tests
+  timed out at `loginAs` (fixtures/users.ts:97). Fixed by aligning the root
+  `.env` JWT keypair to `apps/api/.env` (both files are gitignored; a Node/
+  dotenv round-trip verified the PEM blocks parse). The Next 16 middleware
+  chunk reads `process.env.JWT_PUBLIC_KEY` at request time under `next start`,
+  so no rebuild is needed — only a server restart with the aligned env.
+  **Operator rule:** the root `.env` and `apps/api/.env` must share one
+  keypair, or every protected-route browser test fails closed. E2E after the
+  fix: **86/86 in 28.7s** (previously 62 pass / 26 fail, all auth-dependent).
+- **`dodo_payments` provider fully wired (77th migration).** Added to
+  `packages/shared/src/enums.ts`, `schema.prisma` enum +
+  `20260801000000_dodo_payments_provider` (raw `ALTER TYPE … ADD VALUE`),
+  the shared `PAYOUT_PROVIDERS` catalogue (web), every `CURRENCY_POLICY`
+  provider list, and the API stub map in `payout.service.ts`
+  (`StubPayoutProvider`, like payoneer/razorpay — launch-gated at
+  registration, excluded from the `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS`
+  override set, covered by the registration-guard spec). Both DBs migrated to
+  77 migrations with no drift.
+- **`isSecure()` comment/behavior drift fixed.** `cookies.ts` had stale doc
+  comments claiming `COOKIE_SECURE=false` is "only honored outside
+  production" and that "production fails closed", contradicting the
+  implemented escape-hatch (warn + non-Secure in every env, deploy preflight
+  `verify-deploy-env.mjs` / `web-env.ts` still rejects it for real deploys).
+  Comments now describe the actual decision order.
+- **Verification:** `pnpm typecheck` 15/15, `pnpm lint` 10/10, `pnpm test`
+  11/11 tasks (API unit 1214 + 20 integration files + `test:release-gates` 8),
+  `pnpm build` 10/10, `node scripts/audit-claims.mjs` 13/13, secret/dependency
+  scans PASS, `git diff --check` clean, e2e 86/86. The `test:integration`
+  reset phase ran with explicit user consent
+  (`PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`) on the isolated
+  `waitlayer_test` database only.
 
 ## Open Items (not code-completable / unverified)
 
@@ -1684,11 +1858,27 @@ by declaring a single `ai_generation` signal and waiting five seconds.
 - Anomaly detection currently flags repeated _identical_ signal payloads; a
   modified client can evade by varying `details` or order. Consider entropy /
   duration checks or a synchronous repeated-pattern threshold.
+  **RESOLVED 2026-07-31:** `checkAnomalousWaitSignals` now runs three
+  evasion-resistant heuristics in the trailing 1h window: (1) repeated
+  identical normalized payloads (HIGH), (2) bursts of ≥5 single-primary-signal
+  waits that alternate types to defeat payload matching (MEDIUM,
+  `single_primary_signal_burst`), and (3) ≥5 end events whose durations fall
+  in the same 2-second bucket (MEDIUM, `repeated_identical_wait_duration`).
+  Start and end events are queried separately so duration detection works
+  (durations are stored only on end events). Covered by 5 new
+  `fraud.service.spec.ts` cases.
 - `isVerifiedDetectorSource()` reads `process.env` directly. For full
   testability/hot reload, move it behind `RuntimeConfigService`.
+  **RESOLVED (already):** the function is pure — it takes the allowlist as a
+  parameter, and every production call site passes
+  `this.runtimeConfig.getVerifiedDetectorVersions()`.
 - `classifyWaitState()` re-fetch/parse logic is duplicated in `requestAd`,
   `recordQualifiedImpression`, and `recordClick`; a shared helper would
-  reduce drift.
+  reduce drift. **RESOLVED 2026-07-31:** new
+  `classifyStoredWaitStart(waitStart, allowlist)` in `extension.constants.ts`
+  owns the signals/evidence extraction + version-allowlist check; all three
+  settlement paths in `extension-ad.trait.ts` now call it (178 extension
+  tests + 20 DB-backed integration files green).
 
 ## 2026-07-21 — Source-first residual-gap audit (current)
 

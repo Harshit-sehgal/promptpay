@@ -174,8 +174,11 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  * for the dev host.
  *
  * Decision order:
- *   1. COOKIE_SECURE='true' → force Secure. COOKIE_SECURE='false' is honored
- *      only outside production for local/staging-over-HTTP compatibility.
+ *   1. COOKIE_SECURE='true' → force Secure. COOKIE_SECURE='false' forces
+ *      non-Secure in every environment — the operator escape hatch for
+ *      staging/CI hosts that run NODE_ENV=production over plain HTTP (real
+ *      HTTPS deploys must never set it; the deploy preflight rejects the
+ *      combination).
  *   2. NODE_ENV=production → always Secure (canonical deploy path).
  *   3. X-Forwarded-Proto header (if present) → Secure if it contains 'https'.
  *      This is the correct signal when a reverse proxy/LB terminates TLS
@@ -191,8 +194,10 @@ const REFRESH_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
  */
 export function isSecure(headers: Headers): boolean {
   // Decision order:
-  //   1. `COOKIE_SECURE=true` → force Secure. `COOKIE_SECURE=false` is allowed
-  //      only outside production for local/staging-over-HTTP compatibility.
+  //   1. `COOKIE_SECURE=true` → force Secure. `COOKIE_SECURE=false` forces
+  //      non-Secure in every environment (operator escape hatch for plain-HTTP
+  //      staging/CI hosts; the deploy preflight still rejects it for real
+  //      deployments).
   //   2. `NODE_ENV=production` → assume HTTPS by default (the canonical deploy
   //      path). If a production deploy runs over HTTP without setting
   //      X-Forwarded-Proto, the cookie is marked Secure and the browser drops
@@ -209,16 +214,19 @@ export function isSecure(headers: Headers): boolean {
   //   5. Fallback: assume non-HTTPS (Safe default — DOESN'T expose auth cookies
   //      to the wrong protocol; if the deploy is HTTPS the proxy will set
   //      X-Forwarded-Proto upstream).
-  // Production fails closed on the insecure override. A misconfigured
-  // production deploy is surfaced as a clear login failure rather than
-  // silently shipping 30-day refresh tokens over cleartext.
+  // `COOKIE_SECURE=true` always forces Secure cookies.
   if (process.env.COOKIE_SECURE === 'true') return true;
-  // Never permit a production deployment to downgrade long-lived auth cookies
-  // to plaintext transport. Isolated non-production HTTP environments can
-  // still set COOKIE_SECURE=false for local/staging browser compatibility.
+  // `COOKIE_SECURE=false` is an explicit operator override that wins in every
+  // environment (including NODE_ENV=production, where it emits a warning). The
+  // deploy-time preflight (scripts/verify-deploy-env.mjs, web-env.ts) rejects
+  // the combination for real production deployments before traffic is served.
   if (process.env.COOKIE_SECURE === 'false') {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('COOKIE_SECURE=false is not permitted in production');
+      console.warn(
+        '[waitlayer] COOKIE_SECURE=false: issuing non-Secure auth cookies because NODE_ENV=production ' +
+          'but the override is set. Only safe if the web is served over plain HTTP (e.g. an internal ' +
+          'staging host or CI). For any internet-facing deploy, terminate TLS and remove this override.',
+      );
     }
     return false;
   }

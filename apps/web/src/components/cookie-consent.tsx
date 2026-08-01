@@ -155,7 +155,7 @@ export default function CookieConsent() {
               <button
                 type="button"
                 onClick={() => void loadRequiredVersion()}
-                className="text-brand-600 hover:text-brand-700 text-[12px] font-semibold underline underline-offset-2"
+                className="text-brand-700 hover:text-brand-800 text-[12px] font-semibold underline underline-offset-2"
               >
                 Retry
               </button>
@@ -175,7 +175,7 @@ export default function CookieConsent() {
             type="button"
             onClick={accept}
             disabled={!marketingVersion || versionLoading}
-            className="px-4 py-2.5 rounded-xl text-[13px] font-medium bg-brand-600 hover:bg-brand-700 text-white transition-colors focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            className="px-4 py-2.5 rounded-xl text-[13px] font-medium bg-brand-700 hover:bg-brand-800 text-white transition-colors focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             Accept
           </button>

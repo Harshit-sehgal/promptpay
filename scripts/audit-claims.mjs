@@ -64,6 +64,18 @@ check(
     ci.includes('Unexpected login validation status') &&
     ci.includes('/api/v1/auth/login'),
 );
+check(
+  'CI runs the dependency-free release-input regression tests',
+  read('package.json').includes('test:release-gates') &&
+    read('scripts/validate-release-inputs.test.mjs').includes('reference attester'),
+);
+
+const stagingWorkflow = read('.github/workflows/staging.yml');
+check(
+  'staging rejects the reference attester and production promotion requires immutable digests',
+  stagingWorkflow.includes('validate-release-inputs.mjs') &&
+    stagingWorkflow.includes('validate-release-inputs.mjs --promotion'),
+);
 
 // Workflow actions execute third-party code with repository context. Require
 // immutable commit pins in every workflow; readable `# vN` comments preserve

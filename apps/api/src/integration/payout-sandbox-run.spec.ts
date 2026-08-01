@@ -91,6 +91,18 @@ describe('Payout sandbox run (DB-backed, zero network)', () => {
     payoutService = app.get(PayoutService);
     payoutCronService = app.get(PayoutCronService);
     await cleanDb(prisma);
+    // Production defaults the payout-request switch fail-closed; this isolated
+    // sandbox suite drives real request/approve/process flows in its reset DB.
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'payouts', target: 'requests' } },
+      create: { scope: 'payouts', target: 'requests', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated payout sandbox test' },
+    });
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'payouts', target: 'auto' } },
+      create: { scope: 'payouts', target: 'auto', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated payout sandbox test' },
+    });
 
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({

@@ -253,6 +253,40 @@ export function isVerifiedDetectorSource(
   return allowlist.includes(detectorVersion);
 }
 
+/** Shape of a persisted `wait_state_start` row, for shared re-classification. */
+export interface StoredWaitStart {
+  signals?: unknown;
+  evidence?: unknown;
+  detectorVersion?: string | null;
+}
+
+/**
+ * Shared helper for re-classifying a PERSISTED wait-state start row against
+ * the current detector-version allowlist. Callers that hold a
+ * `waitStateEvent` row (requestAd, recordQualifiedImpression, recordClick)
+ * must use this instead of re-extracting signals/evidence inline, so the
+ * parsing and policy stay consistent across the three settlement paths.
+ *
+ * @param waitStart - the stored start row, or null when no start is found.
+ * @param allowlist - value from `RuntimeConfigService.getVerifiedDetectorVersions()`.
+ */
+export function classifyStoredWaitStart(
+  waitStart: StoredWaitStart | null | undefined,
+  allowlist: string,
+): WaitClassification {
+  const signals = ((waitStart?.signals as unknown as WaitSignal[] | null) ?? []).filter(
+    (s): s is WaitSignal => s && typeof s === 'object' && 'type' in s,
+  );
+  const evidence = ((waitStart?.evidence as unknown as DetectorEvidence[] | null) ?? []).filter(
+    (e): e is DetectorEvidence => e && typeof e === 'object' && 'type' in e,
+  );
+  return classifyWaitState(
+    signals,
+    isVerifiedDetectorSource(waitStart?.detectorVersion, allowlist),
+    evidence,
+  );
+}
+
 export class BudgetExhaustedError extends Error {
   constructor() {
     super('Campaign budget exhausted or campaign inactive');

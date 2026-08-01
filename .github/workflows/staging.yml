@@ -156,6 +156,12 @@ jobs:
               exit 1
             fi
           done
+      - name: Reject reference attestation and invalid promotion inputs
+        env:
+          STAGING_WAIT_ATTESTATION_PROVIDER: ${{ secrets.STAGING_WAIT_ATTESTATION_PROVIDER }}
+          STAGING_WAIT_ATTESTATION_ISSUERS: ${{ secrets.STAGING_WAIT_ATTESTATION_ISSUERS }}
+          STAGING_WAIT_ATTESTATION_VERSIONS: ${{ secrets.STAGING_WAIT_ATTESTATION_VERSIONS }}
+        run: node scripts/validate-release-inputs.mjs
       - name: Log in to container registry
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
@@ -357,6 +363,11 @@ jobs:
               --certificate-identity "$EXPECTED_IDENTITY" \
               "$image"
           done
+      - name: Require immutable staging image digests
+        env:
+          STAGING_API_DIGEST: ${{ needs.staging-smoke.outputs.api_digest }}
+          STAGING_WEB_DIGEST: ${{ needs.staging-smoke.outputs.web_digest }}
+        run: node scripts/validate-release-inputs.mjs --promotion
       - name: Promote production images (pull same digest as staging, tag, push, deploy)
         id: promote
         env:

@@ -301,7 +301,7 @@ export default function SignupPage() {
               className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-sm font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
                 role === 'developer'
                   ? 'bg-white text-surface-900 shadow-sm'
-                  : 'text-surface-500 hover:text-surface-700'
+                  : 'text-surface-600 hover:text-surface-800'
               }`}
             >
               <input
@@ -318,7 +318,7 @@ export default function SignupPage() {
               className={`cursor-pointer py-2.5 px-4 rounded-lg text-center text-sm font-medium transition-all has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand-500 ${
                 role === 'advertiser'
                   ? 'bg-white text-surface-900 shadow-sm'
-                  : 'text-surface-500 hover:text-surface-700'
+                  : 'text-surface-600 hover:text-surface-800'
               }`}
             >
               <input

@@ -68,6 +68,34 @@ describe('env validation (config module)', () => {
     expect(envSchema.safeParse(baseProdEnv({ ALLOWED_CURRENCIES: '' })).success).toBe(false);
   });
 
+  it('rejects the repository reference wait-attestation bridge in production', () => {
+    const referenceIssuer = JSON.stringify([
+      {
+        provider: 'waitlayer-stub-bridge',
+        issuer: 'https://waitlayer.local/attestation',
+        audience: 'waitlayer-client',
+        publicKeys: {
+          stub: `-----BEGIN PUBLIC KEY-----\\n${'A'.repeat(96)}\\n-----END PUBLIC KEY-----`,
+        },
+      },
+    ]);
+    expect(
+      envSchema.safeParse(
+        baseProdEnv({
+          WAIT_ATTESTATION_ISSUERS: referenceIssuer,
+          VERIFIED_WAIT_ATTESTATION_VERSIONS: 'provider-v2',
+        }),
+      ).success,
+    ).toBe(false);
+    expect(
+      envSchema.safeParse(
+        baseProdEnv({
+          VERIFIED_WAIT_ATTESTATION_VERSIONS: 'stub-v1',
+        }),
+      ).success,
+    ).toBe(false);
+  });
+
   it('rejects malformed positive launch allowlists', () => {
     expect(envSchema.safeParse(baseDevEnv({ ALLOWED_COUNTRIES: 'USA' })).success).toBe(false);
     expect(envSchema.safeParse(baseDevEnv({ ALLOWED_CURRENCIES: 'US' })).success).toBe(false);
@@ -212,5 +240,35 @@ describe('env validation (config module)', () => {
 
   it('loadEnv throws on an invalid environment', () => {
     expect(() => loadEnv(baseDevEnv({ JWT_SECRET: 'short' }))).toThrow();
+  });
+
+  it('coerces THROTTLE_*_LIMIT overrides to integers', () => {
+    const env = loadEnv(
+      baseDevEnv({
+        THROTTLE_AUTH_SHORT_LIMIT: '200',
+        THROTTLE_AUTH_LONG_LIMIT: '500',
+        THROTTLE_EXTENSION_LIMIT: '600',
+        THROTTLE_DEFAULT_LIMIT: '1000',
+      }),
+    );
+    expect(env.THROTTLE_AUTH_SHORT_LIMIT).toBe(200);
+    expect(env.THROTTLE_AUTH_LONG_LIMIT).toBe(500);
+    expect(env.THROTTLE_EXTENSION_LIMIT).toBe(600);
+    expect(env.THROTTLE_DEFAULT_LIMIT).toBe(1000);
+  });
+
+  it('rejects THROTTLE_*_LIMIT overrides below 1', () => {
+    expect(() =>
+      loadEnv(baseDevEnv({ THROTTLE_AUTH_SHORT_LIMIT: '0' })),
+    ).toThrow();
+    expect(() =>
+      loadEnv(baseDevEnv({ THROTTLE_DEFAULT_LIMIT: '-5' })),
+    ).toThrow();
+  });
+
+  it('rejects malformed (non-numeric) THROTTLE_*_LIMIT overrides', () => {
+    expect(() =>
+      loadEnv(baseDevEnv({ THROTTLE_AUTH_SHORT_LIMIT: 'abc' })),
+    ).toThrow();
   });
 });

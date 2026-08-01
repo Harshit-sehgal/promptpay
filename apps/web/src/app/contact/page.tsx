@@ -52,7 +52,7 @@ export default function ContactPage() {
               </p>
               <a
                 href="mailto:support@waitlayer.com"
-                className="text-brand-600 font-medium text-sm hover:underline"
+                className="text-brand-700 font-medium text-sm hover:underline"
               >
                 support@waitlayer.com
               </a>
@@ -64,7 +64,7 @@ export default function ContactPage() {
               </p>
               <a
                 href="mailto:security@waitlayer.com"
-                className="text-brand-600 font-medium text-sm hover:underline"
+                className="text-brand-700 font-medium text-sm hover:underline"
               >
                 security@waitlayer.com
               </a>
@@ -78,7 +78,7 @@ export default function ContactPage() {
               </p>
               <a
                 href="mailto:trust@waitlayer.com"
-                className="text-brand-600 font-medium text-sm hover:underline"
+                className="text-brand-700 font-medium text-sm hover:underline"
               >
                 trust@waitlayer.com
               </a>

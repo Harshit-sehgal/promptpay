@@ -122,10 +122,20 @@ describe('API Contract Tests', () => {
     prisma = app.get(PrismaService);
     await cleanDb(prisma);
     // Contract coverage includes the billable response shape. Enable the
-    // otherwise fail-closed settlement gate only in this reset test database.
+    // otherwise fail-closed settlement gates only in this reset test database.
     await prisma.systemSetting.upsert({
       where: { scope_target: { scope: 'wait', target: 'earnings' } },
       create: { scope: 'wait', target: 'earnings', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated contract test' },
+    });
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'ads', target: 'global' } },
+      create: { scope: 'ads', target: 'global', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated contract test' },
+    });
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'payouts', target: 'requests' } },
+      create: { scope: 'payouts', target: 'requests', value: { enabled: true } },
       update: { value: { enabled: true }, reason: 'isolated contract test' },
     });
 

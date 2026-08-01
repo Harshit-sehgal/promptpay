@@ -58,6 +58,7 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
       PayoutProvider.STRIPE_CONNECT,
       PayoutProvider.WISE,
       PayoutProvider.MANUAL,
+      PayoutProvider.DODO_PAYMENTS,
     ],
   },
   EUR: {
@@ -74,6 +75,7 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
       PayoutProvider.STRIPE_CONNECT,
       PayoutProvider.WISE,
       PayoutProvider.MANUAL,
+      PayoutProvider.DODO_PAYMENTS,
     ],
   },
   GBP: {
@@ -100,7 +102,12 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
     campaignMinimumBudgetMinor: 5_000,
     campaignMaximumBudgetMinor: 100_000_000,
     campaignMinimumBidMinor: 100,
-    providers: [PayoutProvider.WISE, PayoutProvider.PAYPAL_EMAIL, PayoutProvider.MANUAL],
+    providers: [
+      PayoutProvider.WISE,
+      PayoutProvider.PAYPAL_EMAIL,
+      PayoutProvider.MANUAL,
+      PayoutProvider.DODO_PAYMENTS,
+    ],
   },
   AUD: {
     code: 'AUD',
@@ -131,7 +138,7 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
     // 1,000,000,000 paise.)
     campaignMaximumBudgetMinor: 80_000_000_000, // ₹80,00,00,000 = 80 crore = 80,000,000,000 paise
     campaignMinimumBidMinor: 1_000, // ₹10
-    providers: [PayoutProvider.WISE, PayoutProvider.MANUAL],
+    providers: [PayoutProvider.WISE, PayoutProvider.MANUAL, PayoutProvider.DODO_PAYMENTS],
   },
   // Non-USD / non-decimal-2 example: JPY is a zero-decimal currency.
   JPY: {
@@ -145,7 +152,7 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
     campaignMinimumBudgetMinor: 7_500, // ¥7,500
     campaignMaximumBudgetMinor: 150_000_000, // ¥150,000,000
     campaignMinimumBidMinor: 100, // ¥100
-    providers: [PayoutProvider.WISE, PayoutProvider.MANUAL],
+    providers: [PayoutProvider.WISE, PayoutProvider.MANUAL, PayoutProvider.DODO_PAYMENTS],
   },
   BRL: {
     code: 'BRL',
@@ -155,7 +162,12 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
     campaignMinimumBudgetMinor: 5_000,
     campaignMaximumBudgetMinor: 500_000_00,
     campaignMinimumBidMinor: 100,
-    providers: [PayoutProvider.WISE, PayoutProvider.PAYPAL_EMAIL, PayoutProvider.MANUAL],
+    providers: [
+      PayoutProvider.WISE,
+      PayoutProvider.PAYPAL_EMAIL,
+      PayoutProvider.MANUAL,
+      PayoutProvider.DODO_PAYMENTS,
+    ],
   },
 };
 

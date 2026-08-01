@@ -90,6 +90,7 @@ export enum PayoutProvider {
   PAYONEER = 'payoneer',
   WISE = 'wise',
   RAZORPAY = 'razorpay',
+  DODO_PAYMENTS = 'dodo_payments',
 }
 
 export enum PayoutStatus {

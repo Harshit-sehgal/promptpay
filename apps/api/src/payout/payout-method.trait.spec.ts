@@ -19,6 +19,7 @@ describe('PayoutMethodTrait registration guard (sandbox)', () => {
       // Stub providers — implemented only as a throwing stub, must not register.
       ['payoneer', 'payoneer@gated.dev'],
       ['razorpay', 'razorpay@gated.dev'],
+      ['dodo_payments', 'dodo@gated.dev'],
       // coming_soon providers with a real (but unlaunched) handler.
       ['paypal_payouts', 'pp_payouts@gated.dev'],
       ['stripe_connect', 'acct_gated_123'],

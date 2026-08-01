@@ -120,7 +120,7 @@ export default function PricingPage() {
           <div className="mx-auto max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Developer */}
             <div className="bg-white border-2 border-surface-200/80 rounded-2xl p-8 relative">
-              <div className="inline-flex items-center gap-1.5 bg-brand-50 border border-brand-200/60 rounded-full px-3 py-1 text-brand-600 text-[11px] font-medium mb-6">
+              <div className="inline-flex items-center gap-1.5 bg-brand-50 border border-brand-200/60 rounded-full px-3 py-1 text-brand-700 text-[11px] font-medium mb-6">
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />
                 For developers
               </div>
@@ -172,7 +172,7 @@ export default function PricingPage() {
                 {PLAN_FEATURES.map((f) => (
                   <li
                     key={f.label}
-                    className={`flex items-center gap-3 text-sm ${f.adv ? 'text-white' : 'text-white/30'}`}
+                    className={`flex items-center gap-3 text-sm ${f.adv ? 'text-white' : 'text-white/50'}`}
                   >
                     <span
                       className={f.adv ? 'text-emerald-400 shrink-0' : 'text-white/20 shrink-0'}
@@ -313,12 +313,12 @@ export default function PricingPage() {
                 {
                   name: 'PayPal',
                   status: 'Live',
-                  color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
+                  color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
                 },
                 {
                   name: 'Stripe Connect',
                   status: 'Coming Q3',
-                  color: 'text-amber-600 bg-amber-50 border-amber-200',
+                  color: 'text-amber-700 bg-amber-50 border-amber-200',
                 },
                 {
                   name: 'Payoneer',

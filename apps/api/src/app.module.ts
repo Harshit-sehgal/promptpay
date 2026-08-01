@@ -48,10 +48,29 @@ import { ReferralModule } from './referral/referral.module';
       useFactory: async (config: ConfigService) => ({
         storage: await RedisBackedThrottlerStorage.create(config),
         throttlers: [
-          { ttl: 60_000, limit: 10, name: 'auth-short' }, // auth endpoints: 10 req/min
-          { ttl: 300_000, limit: 30, name: 'auth-long' }, // auth endpoints: 30 req/5min
-          { ttl: 60_000, limit: 60, name: 'extension' }, // extension: 60 req/min (catches rate-limit fraud)
-          { ttl: 60_000, limit: 200, name: 'default' }, // everything else: 200 req/min
+          // Defaults are the production security posture; the THROTTLE_*_LIMIT
+          // env overrides exist for isolated test/CI APIs that must complete
+          // many auth calls quickly. Never raise them on a public production API.
+          {
+            ttl: 60_000,
+            limit: config.get<number>('THROTTLE_AUTH_SHORT_LIMIT') ?? 10,
+            name: 'auth-short',
+          }, // auth endpoints: 10 req/min
+          {
+            ttl: 300_000,
+            limit: config.get<number>('THROTTLE_AUTH_LONG_LIMIT') ?? 30,
+            name: 'auth-long',
+          }, // auth endpoints: 30 req/5min
+          {
+            ttl: 60_000,
+            limit: config.get<number>('THROTTLE_EXTENSION_LIMIT') ?? 60,
+            name: 'extension',
+          }, // extension: 60 req/min (catches rate-limit fraud)
+          {
+            ttl: 60_000,
+            limit: config.get<number>('THROTTLE_DEFAULT_LIMIT') ?? 200,
+            name: 'default',
+          }, // everything else: 200 req/min
         ],
       }),
     }),

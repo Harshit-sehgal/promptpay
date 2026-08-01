@@ -68,6 +68,13 @@ describe('Payout idempotency race (DB-backed)', () => {
     await app.init();
     prisma = app.get(PrismaService);
     await cleanDb(prisma);
+    // Production defaults the payout-request switch fail-closed; this isolated
+    // suite drives real request flows in its reset DB.
+    await prisma.systemSetting.upsert({
+      where: { scope_target: { scope: 'payouts', target: 'requests' } },
+      create: { scope: 'payouts', target: 'requests', value: { enabled: true } },
+      update: { value: { enabled: true }, reason: 'isolated idempotency race test' },
+    });
 
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({

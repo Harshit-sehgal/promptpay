@@ -47,6 +47,7 @@ export class PayoutService {
       payoneer: new StubPayoutProvider('Payoneer', 'payoneer'),
       wise: this.wise,
       razorpay: new StubPayoutProvider('Razorpay', 'razorpay'),
+      dodo_payments: new StubPayoutProvider('Dodo Payments', 'dodo_payments'),
     };
   }
 }

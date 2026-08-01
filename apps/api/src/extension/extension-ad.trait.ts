@@ -30,12 +30,9 @@ import {
   AdvertiserBalanceExhaustedError,
   advertiserCurrencyLockKey,
   BudgetExhaustedError,
-  classifyWaitState,
-  DetectorEvidence,
-  isVerifiedDetectorSource,
+  classifyStoredWaitStart,
   mergeBlockedCategories,
   ServedAd,
-  WaitSignal,
 } from './extension.constants';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 import { MINIMUM_WAIT_CONFIDENCE } from './extension-wait.trait';
@@ -292,17 +289,9 @@ export class ExtensionAdTrait {
     // still pass the ad-confidence gate above, but it must not reach payment
     // without corroboration. We recompute here so policy changes (e.g. an
     // updated allowlist) apply retroactively to existing wait-state rows.
-    const signals = ((waitStart.signals as unknown as WaitSignal[] | null) ?? []).filter(
-      (s): s is WaitSignal => s && typeof s === 'object' && 'type' in s,
-    );
-    const evidence = ((waitStart.evidence as unknown as DetectorEvidence[] | null) ?? []).filter(
-      (e): e is DetectorEvidence => e && typeof e === 'object' && 'type' in e,
-    );
-    const detectorAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
-    const classification = classifyWaitState(
-      signals,
-      isVerifiedDetectorSource(waitStart.detectorVersion, detectorAllowlist),
-      evidence,
+    const classification = classifyStoredWaitStart(
+      waitStart,
+      this.runtimeConfig.getVerifiedDetectorVersions(),
     );
     if (!classification.adEligible) {
       return { ad: null, reason: 'low_confidence_wait' };
@@ -930,17 +919,11 @@ export class ExtensionAdTrait {
       },
       orderBy: { createdAt: 'desc' },
     });
-    const waitSignals = (
-      (waitStartForImpression?.signals as unknown as WaitSignal[] | null) ?? []
-    ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
-    const waitEvidence = (
-      (waitStartForImpression?.evidence as unknown as DetectorEvidence[] | null) ?? []
-    ).filter((e): e is DetectorEvidence => e && typeof e === 'object' && 'type' in e);
-    const detectorAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
-    const classification = classifyWaitState(
-      waitSignals,
-      isVerifiedDetectorSource(waitStartForImpression?.detectorVersion, detectorAllowlist),
-      waitEvidence,
+    // P0.1: Re-classify the original wait state to enforce the payment gate
+    // and apply longer holds for unverified detector sources.
+    const classification = classifyStoredWaitStart(
+      waitStartForImpression,
+      this.runtimeConfig.getVerifiedDetectorVersions(),
     );
     // The signed provider assertion is mandatory for settlement. Client HMAC
     // evidence alone must never become withdrawable money, even when it uses
@@ -1252,17 +1235,9 @@ export class ExtensionAdTrait {
       },
       orderBy: { createdAt: 'desc' },
     });
-    const waitSignals = (
-      (waitStartForClick?.signals as unknown as WaitSignal[] | null) ?? []
-    ).filter((s): s is WaitSignal => s && typeof s === 'object' && 'type' in s);
-    const waitEvidence = (
-      (waitStartForClick?.evidence as unknown as DetectorEvidence[] | null) ?? []
-    ).filter((e): e is DetectorEvidence => e && typeof e === 'object' && 'type' in e);
-    const clickAllowlist = this.runtimeConfig.getVerifiedDetectorVersions();
-    const clickClassification = classifyWaitState(
-      waitSignals,
-      isVerifiedDetectorSource(waitStartForClick?.detectorVersion, clickAllowlist),
-      waitEvidence,
+    const clickClassification = classifyStoredWaitStart(
+      waitStartForClick,
+      this.runtimeConfig.getVerifiedDetectorVersions(),
     );
     if (
       isCpcBid &&
