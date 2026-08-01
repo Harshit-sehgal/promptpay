@@ -21,7 +21,7 @@ bid_type: cpm, cpc
 event_type: wait_state_start, wait_state_end, ad_request, ad_rendered, qualified_impression, click, report_ad
 ledger_entry_type: debit, credit, hold, release, reversal, payout, refund, reserve, fee
 ledger_status: estimated, pending, confirmed, held, reversed, paid, void
-payout_provider: manual, paypal_email, paypal_payouts, stripe_connect, payoneer, wise, razorpay
+payout_provider: manual, paypal_email, paypal_payouts, stripe_connect, payoneer, wise, razorpay, dodo_payments
 payout_status: draft, requested, under_review, approved, rejected, processing, paid, failed, cancelled
 fraud_flag_status: open, reviewing, resolved_valid, resolved_invalid, escalated
 approval_decision: approved, rejected, changes_requested

@@ -39,6 +39,10 @@ Default shown where one exists.
 | `API_BASE_URL`     | opt | `http://localhost:4002` | Public base URL of the API.                                         |
 | `WEB_BASE_URL`     | opt | `http://localhost:3000` | Frontend base URL (CORS / email links).                             |
 | `TRUST_PROXY_HOPS` | opt | `1`                     | Reverse-proxy trust hops for `req.ip` (0–3). See rate-limiting doc. |
+| `THROTTLE_AUTH_SHORT_LIMIT` | opt | `10`     | Requests/min on `/auth/login` + `/auth/signup` (+ 2FA) buckets. Raise ONLY for isolated test/CI APIs — never on a public production API. |
+| `THROTTLE_AUTH_LONG_LIMIT`  | opt | `30`     | Requests/min on other auth routes. Same production warning as above. |
+| `THROTTLE_EXTENSION_LIMIT`  | opt | `60`     | Requests/min on extension device/wait-report routes.                |
+| `THROTTLE_DEFAULT_LIMIT`    | opt | `200`    | Requests/min for all remaining API routes.                          |
 
 ## Web
 
@@ -51,7 +55,7 @@ Default shown where one exists.
 | `NEXT_PUBLIC_ALLOW_MOCK_AUTH`                  | opt         | —       | Shows mock-auth UI in local development only.                                               |
 | `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` | opt         | —       | JSON provider launch-status map baked into the web build.                                   |
 | `BFF_TRUST_PROXY_HOPS`                         | opt         | `1`     | Trusted forwarding hops for BFF network identity (1-3).                                     |
-| `COOKIE_SECURE`                                | opt         | —       | Explicit secure-cookie override for non-production only; `false` is rejected in production. |
+| `COOKIE_SECURE`                                | opt         | —       | Explicit secure-cookie override. `false` forces non-Secure cookies in every environment (operator escape hatch for plain-HTTP staging/CI hosts; emits a warning in production). The deploy preflight (`verify-deploy-env.mjs` / `web-env.ts`) still rejects `false` for real deployments. |
 | `BFF_TRUST_PROXY_HOPS`                         | req in prod | `1` dev | Forwarded-proxy hops trusted by the web BFF; keep aligned with the public edge topology.    |
 
 ## Auth
@@ -104,6 +108,7 @@ Default shown where one exists.
 | Variable                            | Req | Default | Purpose                                                                                                        |
 | ----------------------------------- | --- | ------- | -------------------------------------------------------------------------------------------------------------- |
 | `PAYOUT_ENCRYPTION_KEY`             | opt | —       | Base64-encoded 32-byte AES-256-GCM key for encrypting payout destinations at rest. **Required in production.** |
+| `PAYOUT_HMAC_KEY`                   | opt | —       | Base64-encoded 32-byte key for deterministic destination HMACs (duplicate/fraud matching without decrypting). **Required in production.** |
 | `PAYOUT_REQUIRE_2FA`                | opt | —       | `true` requires MFA-enrolled account to request payouts.                                                       |
 | `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —       | If > 0, newly-added/changed payout destinations require MFA for that many hours.                               |
 | `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —       | Strict JSON provider -> `available`/`coming_soon` API gate.                                                    |

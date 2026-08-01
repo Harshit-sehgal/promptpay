@@ -36,8 +36,8 @@ throws `BadRequestException` for any `coming_soon` provider). Covered by
 
 **Exact external step:** decide which automated rails are live and supply their
 credentials. Until then `paypal`/`stripe`/`wise` fall back to `dev_stub_*` in
-non-production and fail initiation in production; `payoneer`/`razorpay` are
-stub-only and rejected at registration regardless of override. Required env vars
+non-production and fail initiation in production; `payoneer`/`razorpay`/
+`dodo_payments` are stub-only and rejected at registration regardless of override. Required env vars
 once a rail is promoted:
 
 - PayPal Payouts: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MODE`
@@ -52,15 +52,19 @@ once a rail is promoted:
 `RUN chown -R node:node /app` then `USER node` (api lines 104–105, web lines
 136–137), `HEALTHCHECK` against `/health/ready` (api) and `/` (web), and a
 `docker-entrypoint.sh` that waits for Postgres, runs `prisma migrate deploy`, then
-`exec`s the app as PID 1. The CI `docker-build` job already boots the compiled
-image and asserts a controller route resolves over TCP (`GET /auth/me` → 401, not
-404; `/docs` → 200).
+`exec`s the app as PID 1. The base stage installs pnpm via
+`npm install -g pnpm@${PNPM_VERSION}` with optional `NPM_REGISTRY` / `PNPM_VERSION`
+build args (registry-resilient since 2026-07-23 — no hard-coded corepack fetch),
+and the generated `.npmrc` carries the registry override. The CI `docker-build`
+job already boots the compiled image and asserts a controller route resolves over
+TCP (`GET /auth/me` → 401, not 404; `/docs` → 200).
 
 **Exact external step:** run `docker compose build` (or `./scripts/ci-local.sh`
 with `DOCKER_BUILD=1` + `JWT_PUBLIC_KEY` set) from an environment with a
-**reachable npm registry**. In this sandbox `corepack prepare pnpm@11.9.0
---activate` fails with `ETIMEDOUT` against `registry.npmjs.org` — an environment
-constraint, not a code defect. Builds green once the registry is reachable.
+**reachable npm registry**. The image code is no longer tied to a single npm
+endpoint — operators in restricted networks can pass
+`--build-arg NPM_REGISTRY=https://your-registry.example.com` — but a registry
+fetch is still required somewhere in the build environment.
 
 ---
 

@@ -355,6 +355,26 @@ found and fixed this pass:
   reset phase ran with explicit user consent
   (`PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION`) on the isolated
   `waitlayer_test` database only.
+- **Root `.env` corruption repaired (local env, gitignored).** The file had
+  stray duplicate raw-PEM blocks from an earlier edit that broke
+  `docker compose` parsing (`unexpected character "/" in variable name`) and
+  kept a malformed `WAIT_ATTESTATION_ISSUERS` with broken `\\n` escaping.
+  Rewrote it as 24 clean lines: the keypair stays as single-line quoted values
+  with literal `\n` escapes (dotenv unescapes them; verified crypto round-trip
+  matches `apps/api/.env` by SPKI fingerprint), and the stub-bridge attestation
+  vars were removed (API does not read root `.env`; staging config lives in
+  GitHub secrets). `docker compose config`/`up` parse again; e2e re-verified
+  86/86 against the fixed env. Rule: keep PEM values single-line-with-`\n` in
+  root `.env` (docker compose cannot parse multi-line values) — multi-line PEM
+  blocks belong in `apps/api/.env` only.
+- **Docs drift swept:** `docs/ENV_REFERENCE.md` + `.env.example` now document
+  the `THROTTLE_*_LIMIT` overrides (10/30/60/200 defaults; test/CI-only), the
+  `PAYOUT_HMAC_KEY` payout-security var, the actual `COOKIE_SECURE=false`
+  behavior (warn + preflight rejection — not "rejected at runtime"), and
+  `dodo_payments` in the provider-status example maps; `payout-runbook.md`
+  §8.1, `03-database-schema.md`, and `FOUNDATION_STATUS.md` now list
+  `dodo_payments` as a stub-only provider; `remaining-open-items.md` A-075
+  entry reflects the registry-resilient Dockerfile (no more corepack mention).
 
 ## Open Items (not code-completable / unverified)
 

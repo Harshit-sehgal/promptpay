@@ -161,10 +161,11 @@ a code change. The code enforces a single source of truth
 | `wise`           | `coming_soon`  | Gated until credentials configured   |
 | `payoneer`       | `coming_soon`  | Stub-only — rejected at registration |
 | `razorpay`       | `coming_soon`  | Stub-only — rejected at registration |
+| `dodo_payments`  | `coming_soon`  | Stub-only — rejected at registration |
 
-`payoneer` / `razorpay` have no real handler; the API rejects them at
-`addPayoutMethod` / `normalizePayoutMethod` regardless of any override (security
-gate — do not promote them).
+`payoneer` / `razorpay` / `dodo_payments` have no real handler; the API rejects
+them at `addPayoutMethod` / `normalizePayoutMethod` regardless of any override
+(security gate — do not promote them).
 
 ### 8.2 Deploy-time gate (no code edit required)
 
