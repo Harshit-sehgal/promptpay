@@ -25,15 +25,15 @@
     "seed": "tsx prisma/seed-tools.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.9.0",
-    "@prisma/client": "^7.9.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
     "pg": "^8.13.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@types/pg": "^8.11.0",
     "@waitlayer/eslint-config": "workspace:*",
-    "prisma": "^7.9.0",
+    "prisma": "^7.9.1",
     "typescript": "^5.9.2"
   }
 }
