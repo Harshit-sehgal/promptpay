@@ -32,6 +32,23 @@ see the live risk/status register without being told to read a separate doc.
 - **All source-fixable issues A-001…A-086 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). **A-075** is now resolved as a code defect (Dockerfile registry-resilient pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below). - **Source closure notice:** no further source edits can close the remaining items. They are external operator/infra/product/legal tasks, including: A-030 (real payout-provider credentials / `WAITLAYER_PAYOUT_PROVIDER_STATUS`), P1.21 (GitHub branch-protection toggles), P0.5 (CI run on SHA from a runner with registry access), and the paid-launch staging experiment. A reference/stub independent wait-attestation provider bridge now exists under `tools/wait-attestation-bridge/` and is wired into the CLI/VSCode client flow; only operating and security-reviewing a real provider instance remains external. See "Remaining external activation tasks" below and the per-item notes in this file.
 - This is a snapshot. Re-run the gates after any code change to confirm health.
 
+### 2026-08-03 — source-fix pass
+
+- Fixed the CLI production build regression introduced by runtime package-version
+  loading: the `createRequire` binding is now named `packageRequire`, avoiding
+  TypeScript's CommonJS `require` collision (`apps/cli/src/index.ts`).
+- Fixed the remaining lint warnings in the dirty worktree (unused recovery-debt
+  `useRef` and import ordering in the Redis throttler/payout module).
+- Updated `scripts/audit-claims.mjs` to check the live Prisma CLI version
+  (`7.9.0`) used by the Dockerfile and lockfile; the machine audit is now 13/13.
+- Verified `pnpm typecheck`, `pnpm lint`, `pnpm build`, production dependency
+  audit, release-gate tests, targeted CLI/API tests, and `git diff --check`.
+- The full `pnpm test` unit/client phase passes (API 1,250 unit tests); its
+  integration runner is intentionally blocked at the destructive test-database
+  reset unless the operator explicitly consents. Running integration files
+  without that reset is not a valid full-gate substitute because prior files
+  can mutate the shared isolated database.
+
 ### 2026-07-28 Autonomous source-only hardening backlog
 
 The following items were identified from the current source and can be closed
@@ -42,13 +59,13 @@ short list current while the pass is active:
       production configuration and before a promotion-capable staging smoke.
 - [x] Require immutable `image@sha256` references before production promotion.
 - [x] Exercise Redis pub/sub runtime kill-switch invalidation across two real
-  service instances, not only mocked clients.
+      service instances, not only mocked clients.
 - [x] Make release-input validation part of the root test gate and give the
-  normal API test application an explicit test TOTP key. Unit tests that
-  intentionally inject an empty key retain their expected fallback warnings.
+      normal API test application an explicit test TOTP key. Unit tests that
+      intentionally inject an empty key retain their expected fallback warnings.
 - [x] Verify the pass: focused release/config/Redis tests, `pnpm typecheck`,
-  `pnpm lint`, `pnpm test`, `pnpm build`, and `node scripts/audit-claims.mjs`
-  all passed on 2026-07-28.
+      `pnpm lint`, `pnpm test`, `pnpm build`, and `node scripts/audit-claims.mjs`
+      all passed on 2026-07-28.
 
 ### 2026-07-31 — Full-gate re-verification and integration-suite repair
 
@@ -304,9 +321,9 @@ does 2 auth calls, easily exhausting 10/min.
   (`/tmp/restart-api.js`). Use Node/`dotenv`-style loading for PEM env vars;
   never `source` them from a raw environ dump.
 - **Verify:** API restarted on `:4002` with `THROTTLE_*_LIMIT=200/500/600/1000`
-  + the real PEM keys; e2e suite **86/86 passed twice in a row (26.6s each,
-  zero flakes)**, API unit/integration 1439/1439, web vitest 196/196,
-  typecheck/lint/build green.
+  - the real PEM keys; e2e suite **86/86 passed twice in a row (26.6s each,
+    zero flakes)**, API unit/integration 1439/1439, web vitest 196/196,
+    typecheck/lint/build green.
 - **Also confirmed:** BruteForceGuard (5 failed attempts → 15-min lock on
   route+IP+target) is a separate guard from the throttler — 429 "Too many
   failed attempts" during curl hammering was BruteForceGuard, not the throttle.
@@ -322,7 +339,7 @@ found and fixed this pass:
 - **Root-cause fix for local `next start` auth: the two local env keypairs
   disagreed.** The API signs JWTs with the keypair in `apps/api/.env`; the web
   middleware verifies with `JWT_PUBLIC_KEY` from the **repo-root `.env`**,
-  which held a *different* keypair. Login succeeded at the BFF (200) but every
+  which held a _different_ keypair. Login succeeded at the BFF (200) but every
   `router.push('/developer')` bounced back to `/auth/login?returnTo=…` because
   middleware RS256 verification failed against the wrong key — 26 e2e tests
   timed out at `loginAs` (fixtures/users.ts:97). Fixed by aligning the root

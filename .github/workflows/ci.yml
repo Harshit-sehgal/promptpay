@@ -210,6 +210,11 @@ jobs:
             printf '%s\n' "$PUBLIC_KEY"
             echo 'WAITLAYER_PUBLIC_KEY_EOF'
           } >> "$GITHUB_ENV"
+      # The e2e job boots a COMPILED API against the fresh service Postgres.
+      # Without applying migrations here, every fresh runner fails (the `test`
+      # job's migrations do not persist across jobs).
+      - name: Apply migrations
+        run: pnpm --filter @waitlayer/db migrate:deploy
       - name: Install Playwright browsers
         run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
       - name: Boot API for E2E

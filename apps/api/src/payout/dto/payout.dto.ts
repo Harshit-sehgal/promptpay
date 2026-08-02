@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsEnum,
   IsInt,
@@ -67,7 +68,8 @@ export class RequestPayoutDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMaxSize(50)
+  @IsUUID('all', { each: true })
   earningsEntryIds?: string[];
 
   /** Optional client-supplied idempotency key. Replaying a request with the

@@ -6,7 +6,7 @@ import { WaitAttestationFlow } from '@waitlayer/shared';
 import { runAdFlow } from '../lib/ad-flow';
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
-import { getErrorCode, getErrorMessage } from '../lib/errors';
+import { getErrorCode, getErrorMessage, getErrorStatus } from '../lib/errors';
 import { createCliWaitAssertionProvider } from '../lib/wait-attestation-provider';
 
 const STATE_FILE = `${process.cwd()}/.waitlayer-wait`;
@@ -169,82 +169,102 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
         userId: creds.userId,
       });
 
-      // P0.1: CLI marker-file evidence is user-controlled (the user writes the
-      // .waitlayer-wait file manually), NOT independently observed by the CLI.
-      // Using 'inferred' means the server's payment eligibility gate (requires
-      // ≥2 observed primary types) correctly classifies this as non-billable.
-      // A real CLI command wrapper (e.g. `waitlayer run -- claude ...`) that
-      // spawns and supervises the child process can later provide genuine
-      // observed evidence.
-      await api.reportWaitState({
-        deviceId,
-        waitStateId,
-        toolType: state.tool,
-        sessionId,
-        evidence: [
-          {
-            type: 'command_execution',
-            sourceType: 'inferred',
-            adapterId: 'cli.runner.command',
-            timestamp: state.startTime,
-            correlationId: sessionId,
-          },
-          {
-            type: 'active_task',
-            sourceType: 'inferred',
-            adapterId: 'cli.runner.task',
-            timestamp: state.startTime + 1,
-            correlationId: sessionId,
-          },
-        ],
-        // waitStateId and sessionId are bound by the client before signing,
-        // preventing cross-wait replay of signed evidence items.
-      });
+      try {
+        // P0.1: CLI marker-file evidence is user-controlled (the user writes the
+        // .waitlayer-wait file manually), NOT independently observed by the CLI.
+        // Using 'inferred' means the server's payment eligibility gate (requires
+        // ≥2 observed primary types) correctly classifies this as non-billable.
+        // A real CLI command wrapper (e.g. `waitlayer run -- claude ...`) that
+        // spawns and supervises the child process can later provide genuine
+        // observed evidence.
+        await api.reportWaitState({
+          deviceId,
+          waitStateId,
+          toolType: state.tool,
+          sessionId,
+          evidence: [
+            {
+              type: 'command_execution',
+              sourceType: 'inferred',
+              adapterId: 'cli.runner.command',
+              timestamp: state.startTime,
+              correlationId: sessionId,
+            },
+            {
+              type: 'active_task',
+              sourceType: 'inferred',
+              adapterId: 'cli.runner.task',
+              timestamp: state.startTime + 1,
+              correlationId: sessionId,
+            },
+          ],
+          // waitStateId and sessionId are bound by the client before signing,
+          // preventing cross-wait replay of signed evidence items.
+        });
 
-      // A-040: Serve an ad during the wait state using the tested runAdFlow()
-      // helper. Because the total wait-state duration is unknown until the file
-      // is removed, runAdFlow handles request + render now; the qualify step
-      // happens in endActiveWait() when the total duration is known.
-      if (serveAds) {
-        try {
-          const result = await runAdFlow(api, {
-            deviceId,
-            sessionId,
-            waitStateId,
-            toolType: state.tool,
-            idempotencyKey: `cli-ad-${waitStateId}`,
-            // The wait state is still in progress — we can't know the total
-            // duration yet. Pass a short duration so runAdFlow renders the ad
-            // but does NOT qualify it yet (qualify only happens when >= 5000ms).
-            // The qualify step will run in endActiveWait() with the real total.
-            durationMs: 0,
-          });
-          if (result.served && result.impressionToken) {
-            activeImpressionToken = result.impressionToken;
-            console.log(chalk.dim('[ad] served'));
-          } else if (result.mode === 'paused' || result.mode === 'telemetry_only') {
-            // Mirrors the VS Code extension: never render an ad surface when
-            // the platform is fail-closed. Inform the user instead.
-            console.log(
-              chalk.yellow(
-                result.mode === 'paused'
-                  ? 'WaitLayer rewards are paused by the operator.'
-                  : 'WaitLayer rewards are unavailable (telemetry-only mode).',
-              ),
-            );
+        // A-040: Serve an ad during the wait state using the tested runAdFlow()
+        // helper. Because the total wait-state duration is unknown until the file
+        // is removed, runAdFlow handles request + render now; the qualify step
+        // happens in endActiveWait() when the total duration is known.
+        if (serveAds) {
+          try {
+            const result = await runAdFlow(api, {
+              deviceId,
+              sessionId,
+              waitStateId,
+              toolType: state.tool,
+              idempotencyKey: `cli-ad-${waitStateId}`,
+              // The wait state is still in progress — we can't know the total
+              // duration yet. Pass a short duration so runAdFlow renders the ad
+              // but does NOT qualify it yet (qualify only happens when >= 5000ms).
+              // The qualify step will run in endActiveWait() with the real total.
+              durationMs: 0,
+            });
+            if (result.served && result.impressionToken) {
+              activeImpressionToken = result.impressionToken;
+              console.log(chalk.dim('[ad] served'));
+            } else if (result.mode === 'paused' || result.mode === 'telemetry_only') {
+              // Mirrors the VS Code extension: never render an ad surface when
+              // the platform is fail-closed. Inform the user instead.
+              console.log(
+                chalk.yellow(
+                  result.mode === 'paused'
+                    ? 'WaitLayer rewards are paused by the operator.'
+                    : 'WaitLayer rewards are unavailable (telemetry-only mode).',
+                ),
+              );
+            }
+          } catch (err: unknown) {
+            console.error(chalk.red(`ad error: ${getErrorMessage(err)}`));
           }
-        } catch (err: unknown) {
-          console.error(chalk.red(`ad error: ${getErrorMessage(err)}`));
         }
-      }
 
-      activeWaitStateId = waitStateId;
-      activeStartTime = state.startTime;
-      lastState = state;
+        activeWaitStateId = waitStateId;
+        activeStartTime = state.startTime;
+        lastState = state;
+      } catch (err: unknown) {
+        // The attestation session began but the wait never completed — drop
+        // the pending nonce so it cannot be consumed against a broken wait,
+        // and reset tracking so the next tick retries the marker from scratch.
+        attestation.cancel(waitStateId);
+        activeWaitStateId = null;
+        activeStartTime = null;
+        activeImpressionToken = null;
+        lastState = null;
+        throw err;
+      }
     } catch (err: unknown) {
       if (getErrorCode(err) === 'ENOENT') {
         // File disappeared — treat as wait state end
         await endActiveWait();
+      } else if (getErrorStatus(err) === 401) {
+        // Session is dead (refresh already failed). Spinning the loop would
+        // hammer the API with a doomed token every 3s — exit with a clear
+        // message instead so the user can re-authenticate.
+        console.error(
+          chalk.red('Session expired. Run `waitlayer auth` to log in again, then retry.'),
+        );
+        process.exit(1);
       } else {
         console.error(chalk.red(`watch error: ${getErrorMessage(err)}`));
       }
@@ -253,13 +273,20 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
 
   // ── SIGINT/SIGTERM cleanup ──
   // Send the final endWaitState before the process exits so we don't leave
-  // dangling wait states on the server when the user presses Ctrl+C.
+  // dangling wait states on the server when the user presses Ctrl+C. The
+  // flush is BOUNDED: a hung API must not leave Ctrl+C hanging forever — the
+  // process force-exits after the budget expires. The signal listener is
+  // one-shot, so a second Ctrl+C immediately terminates (default behavior).
   const handleSignal = async () => {
-    await endActiveWait();
-    process.exit(0);
+    const flush = endActiveWait().finally(() => process.exit(0));
+    setTimeout(() => {
+      console.error(chalk.red('Flush timed out — exiting.'));
+      process.exit(1);
+    }, 5000).unref();
+    await flush;
   };
-  process.on('SIGINT', handleSignal);
-  process.on('SIGTERM', handleSignal);
+  process.once('SIGINT', handleSignal);
+  process.once('SIGTERM', handleSignal);
 
   if (opts.once) {
     await poll();

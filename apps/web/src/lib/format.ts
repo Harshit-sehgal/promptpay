@@ -12,7 +12,21 @@ export { formatMinorUnits };
  *  multi-currency bugs). `formatCurrencyBreakdown` handles the
  *  zero/empty case below. */
 export function formatCurrency(minorUnits: bigint | number, currency: string): string {
-  return formatMinorUnits(BigInt(minorUnits), currency);
+  // Fail soft on malformed display values: an unexpected null/NaN/non-safe
+  // number from a drifted API shape must render "$0.00" instead of throwing
+  // and blanking the whole page. The authoritative numbers live on the
+  // byCurrency maps; this is a render-layer guard, not a data correction.
+  let minor = 0n;
+  try {
+    if (typeof minorUnits === 'bigint') {
+      minor = minorUnits;
+    } else if (Number.isSafeInteger(minorUnits)) {
+      minor = BigInt(minorUnits);
+    }
+  } catch {
+    minor = 0n;
+  }
+  return formatMinorUnits(minor, currency);
 }
 
 /** Format grouped minor-unit totals without mixing currencies */

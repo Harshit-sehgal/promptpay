@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { backgroundJobsEnabled } from '../common/utils/background-jobs';
+import { envNumber } from '../common/utils/env-number';
 import { ComplianceService } from './compliance.service';
 
 /**
@@ -17,9 +18,13 @@ export class RetentionCronService implements OnApplicationBootstrap, OnModuleDes
   private readonly logger = new Logger(RetentionCronService.name);
   private intervalId?: NodeJS.Timeout;
   private running = false;
-  // Configurable via RETENTION_CRON_INTERVAL_MS (default 24h).
-  private readonly POLL_INTERVAL_MS = Number(
-    process.env.RETENTION_CRON_INTERVAL_MS ?? 24 * 60 * 60 * 1000,
+  // Configurable via RETENTION_CRON_INTERVAL_MS (default 24h). Clamped to
+  // 1h..7d so a malformed value can never make setInterval fire immediately.
+  private readonly POLL_INTERVAL_MS = envNumber(
+    'RETENTION_CRON_INTERVAL_MS',
+    24 * 60 * 60 * 1000,
+    60 * 60 * 1000,
+    7 * 24 * 60 * 60 * 1000,
   );
 
   constructor(private compliance: ComplianceService) {}

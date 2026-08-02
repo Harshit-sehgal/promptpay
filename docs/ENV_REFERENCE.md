@@ -33,30 +33,30 @@ Default shown where one exists.
 
 ## API
 
-| Variable           | Req | Default                 | Purpose                                                             |
-| ------------------ | --- | ----------------------- | ------------------------------------------------------------------- |
-| `API_PORT`         | opt | `4002`                  | Port the NestJS API listens on.                                     |
-| `API_BASE_URL`     | opt | `http://localhost:4002` | Public base URL of the API.                                         |
-| `WEB_BASE_URL`     | opt | `http://localhost:3000` | Frontend base URL (CORS / email links).                             |
-| `TRUST_PROXY_HOPS` | opt | `1`                     | Reverse-proxy trust hops for `req.ip` (0–3). See rate-limiting doc. |
-| `THROTTLE_AUTH_SHORT_LIMIT` | opt | `10`     | Requests/min on `/auth/login` + `/auth/signup` (+ 2FA) buckets. Raise ONLY for isolated test/CI APIs — never on a public production API. |
-| `THROTTLE_AUTH_LONG_LIMIT`  | opt | `30`     | Requests/min on other auth routes. Same production warning as above. |
-| `THROTTLE_EXTENSION_LIMIT`  | opt | `60`     | Requests/min on extension device/wait-report routes.                |
-| `THROTTLE_DEFAULT_LIMIT`    | opt | `200`    | Requests/min for all remaining API routes.                          |
+| Variable                    | Req | Default                 | Purpose                                                                                                                                  |
+| --------------------------- | --- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_PORT`                  | opt | `4002`                  | Port the NestJS API listens on.                                                                                                          |
+| `API_BASE_URL`              | opt | `http://localhost:4002` | Public base URL of the API.                                                                                                              |
+| `WEB_BASE_URL`              | opt | `http://localhost:3000` | Frontend base URL (CORS / email links).                                                                                                  |
+| `TRUST_PROXY_HOPS`          | opt | `1`                     | Reverse-proxy trust hops for `req.ip` (0–3). See rate-limiting doc.                                                                      |
+| `THROTTLE_AUTH_SHORT_LIMIT` | opt | `10`                    | Requests/min on `/auth/login` + `/auth/signup` (+ 2FA) buckets. Raise ONLY for isolated test/CI APIs — never on a public production API. |
+| `THROTTLE_AUTH_LONG_LIMIT`  | opt | `30`                    | Requests/min on other auth routes. Same production warning as above.                                                                     |
+| `THROTTLE_EXTENSION_LIMIT`  | opt | `60`                    | Requests/min on extension device/wait-report routes.                                                                                     |
+| `THROTTLE_DEFAULT_LIMIT`    | opt | `200`                   | Requests/min for all remaining API routes.                                                                                               |
 
 ## Web
 
-| Variable                                       | Req         | Default | Purpose                                                                                     |
-| ---------------------------------------------- | ----------- | ------- | ------------------------------------------------------------------------------------------- |
-| `WEB_PORT`                                     | opt         | `3000`  | Next.js port.                                                                               |
-| `NEXT_PUBLIC_API_URL`                          | opt         | —       | Public API URL; required by the Vercel deployment preflight.                                |
-| `API_INTERNAL_URL`                             | opt         | —       | Server-only API URL preferred by BFF handlers.                                              |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`                 | opt         | —       | Google OAuth client id; required by Vercel preflight.                                       |
-| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`                  | opt         | —       | Shows mock-auth UI in local development only.                                               |
-| `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` | opt         | —       | JSON provider launch-status map baked into the web build.                                   |
-| `BFF_TRUST_PROXY_HOPS`                         | opt         | `1`     | Trusted forwarding hops for BFF network identity (1-3).                                     |
+| Variable                                       | Req         | Default | Purpose                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------- | ----------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WEB_PORT`                                     | opt         | `3000`  | Next.js port.                                                                                                                                                                                                                                                                             |
+| `NEXT_PUBLIC_API_URL`                          | opt         | —       | Public API URL; required by the Vercel deployment preflight.                                                                                                                                                                                                                              |
+| `API_INTERNAL_URL`                             | opt         | —       | Server-only API URL preferred by BFF handlers.                                                                                                                                                                                                                                            |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`                 | opt         | —       | Google OAuth client id; required by Vercel preflight.                                                                                                                                                                                                                                     |
+| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`                  | opt         | —       | Shows mock-auth UI in local development only.                                                                                                                                                                                                                                             |
+| `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` | opt         | —       | JSON provider launch-status map baked into the web build.                                                                                                                                                                                                                                 |
+| `BFF_TRUST_PROXY_HOPS`                         | opt         | `1`     | Trusted forwarding hops for BFF network identity (1-3).                                                                                                                                                                                                                                   |
 | `COOKIE_SECURE`                                | opt         | —       | Explicit secure-cookie override. `false` forces non-Secure cookies in every environment (operator escape hatch for plain-HTTP staging/CI hosts; emits a warning in production). The deploy preflight (`verify-deploy-env.mjs` / `web-env.ts`) still rejects `false` for real deployments. |
-| `BFF_TRUST_PROXY_HOPS`                         | req in prod | `1` dev | Forwarded-proxy hops trusted by the web BFF; keep aligned with the public edge topology.    |
+| `BFF_TRUST_PROXY_HOPS`                         | req in prod | `1` dev | Forwarded-proxy hops trusted by the web BFF; keep aligned with the public edge topology.                                                                                                                                                                                                  |
 
 ## Auth
 
@@ -105,13 +105,15 @@ Default shown where one exists.
 
 ## Payout security
 
-| Variable                            | Req | Default | Purpose                                                                                                        |
-| ----------------------------------- | --- | ------- | -------------------------------------------------------------------------------------------------------------- |
-| `PAYOUT_ENCRYPTION_KEY`             | opt | —       | Base64-encoded 32-byte AES-256-GCM key for encrypting payout destinations at rest. **Required in production.** |
-| `PAYOUT_HMAC_KEY`                   | opt | —       | Base64-encoded 32-byte key for deterministic destination HMACs (duplicate/fraud matching without decrypting). **Required in production.** |
-| `PAYOUT_REQUIRE_2FA`                | opt | —       | `true` requires MFA-enrolled account to request payouts.                                                       |
-| `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —       | If > 0, newly-added/changed payout destinations require MFA for that many hours.                               |
-| `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —       | Strict JSON provider -> `available`/`coming_soon` API gate.                                                    |
+| Variable                            | Req | Default                  | Purpose                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | --- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAYOUT_ENCRYPTION_KEY`             | opt | —                        | Base64-encoded 32-byte AES-256-GCM key for encrypting payout destinations at rest. **Required in production.**                                                                                                                                                                                                  |
+| `PAYOUT_HMAC_KEY`                   | opt | —                        | Base64-encoded 32-byte key for deterministic destination HMACs (duplicate/fraud matching without decrypting). **Required in production.**                                                                                                                                                                       |
+| `PAYOUT_REQUIRE_2FA`                | opt | —                        | `true` requires MFA-enrolled account to request payouts.                                                                                                                                                                                                                                                        |
+| `PAYOUT_DESTINATION_COOLDOWN_HOURS` | opt | —                        | If > 0, newly-added/changed payout destinations require MFA for that many hours.                                                                                                                                                                                                                                |
+| `PAYOUT_FENCE_HIGH_VALUE_MINOR`     | opt | per-currency default map | Global override for the payout-fence release threshold (in minor units, e.g. `1000000` = $10,000 USD). A fence release whose exposure is at or above the threshold requires a distinct second approver (`secondApproverId`). Beats any per-currency `HIGH_VALUE_FENCE_<CUR>_MINOR` override.                    |
+| `HIGH_VALUE_FENCE_<CUR>_MINOR`      | opt | per-currency default map | Per-currency threshold (ISO-4217 code in the variable name, e.g. `HIGH_VALUE_FENCE_USD_MINOR=1000000`). Beats the configured policy/default map for that currency but not the global `PAYOUT_FENCE_HIGH_VALUE_MINOR`. Defaults (minor units): USD/EUR/GBP/CAD/AUD/BRL `1000000`, INR `80000000`, JPY `1500000`. |
+| `WAITLAYER_PAYOUT_PROVIDER_STATUS`  | opt | —                        | Strict JSON provider -> `available`/`coming_soon` API gate.                                                                                                                                                                                                                                                     |
 
 ## Paid-launch policy
 

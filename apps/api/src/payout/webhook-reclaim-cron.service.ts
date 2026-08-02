@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
 import { EventBus } from '../common/events/event-bus';
+import { envNumber } from '../common/utils/env-number';
 import { PrismaService } from '../config/prisma.service';
 import { StripeProvider } from '../payout/providers';
 
@@ -34,15 +35,23 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
   private readonly enabled =
     process.env.WEBHOOK_RECLAIM_CRON === 'true' ||
     (process.env.NODE_ENV === 'production' && process.env.WEBHOOK_RECLAIM_CRON !== 'false');
-  private readonly POLL_INTERVAL_MS = Number(
-    process.env.WEBHOOK_RECLAIM_CRON_INTERVAL_MS ?? 300_000,
+  // Clamped so a malformed env value can never make setInterval fire in a
+  // hot loop or make the age/batch filters behave adversarially.
+  private readonly POLL_INTERVAL_MS = envNumber(
+    'WEBHOOK_RECLAIM_CRON_INTERVAL_MS',
+    300_000,
+    60_000,
+    86_400_000,
   );
   // Older than this → eligible for reclaim. 35 min > controller's 30-min stall
   // window so the two recovery paths never target the same row concurrently.
-  private readonly ORPHAN_AGE_MS = Number(
-    process.env.WEBHOOK_RECLAIM_CRON_AGE_MS ?? 35 * 60 * 1_000,
+  private readonly ORPHAN_AGE_MS = envNumber(
+    'WEBHOOK_RECLAIM_CRON_AGE_MS',
+    35 * 60 * 1_000,
+    60_000,
+    2_592_000_000,
   );
-  private readonly BATCH_SIZE = Number(process.env.WEBHOOK_RECLAIM_CRON_BATCH_SIZE ?? 100);
+  private readonly BATCH_SIZE = envNumber('WEBHOOK_RECLAIM_CRON_BATCH_SIZE', 100, 1, 1_000);
 
   constructor(
     private readonly prisma: PrismaService,

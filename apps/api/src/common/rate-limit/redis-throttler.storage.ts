@@ -1,3 +1,4 @@
+import { Global, Module, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 
@@ -5,7 +6,30 @@ import { RedisWindowCounter } from './redis-window-counter';
 
 type ThrottlerRecord = Awaited<ReturnType<ThrottlerStorage['increment']>>;
 
-export class RedisBackedThrottlerStorage implements ThrottlerStorage {
+export const THROTTLER_STORAGE = 'THROTTLER_STORAGE';
+
+/**
+ * Global provider for the shared throttler storage instance. A `@Global()`
+ * module is required because `ThrottlerModule.forRootAsync`'s `inject` list
+ * resolves tokens in ThrottlerModule's own context — an AppModule-local
+ * provider is invisible there. Global exports (like `ConfigModule`'s) resolve
+ * everywhere, so the factory and any consumer share one instance, and Nest
+ * runs its `onModuleDestroy` lifecycle hook (Redis disconnect) on shutdown.
+ */
+@Global()
+@Module({
+  providers: [
+    {
+      provide: THROTTLER_STORAGE,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => RedisBackedThrottlerStorage.create(config),
+    },
+  ],
+  exports: [THROTTLER_STORAGE],
+})
+export class ThrottlerStorageModule {}
+
+export class RedisBackedThrottlerStorage implements ThrottlerStorage, OnModuleDestroy {
   private readonly memory = new ThrottlerStorageService();
 
   constructor(
@@ -70,5 +94,10 @@ export class RedisBackedThrottlerStorage implements ThrottlerStorage {
 
   private async connect(): Promise<void> {
     await this.counter?.connect();
+  }
+
+  /** Release the Redis connection on shutdown (event-loop hang guard). */
+  async onModuleDestroy(): Promise<void> {
+    await this.counter?.disconnect();
   }
 }

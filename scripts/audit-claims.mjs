@@ -26,7 +26,7 @@ check(
   'Docker build tools are exact-version pinned and JWT signing secrets are not build args',
   dockerfile.includes('ARG PNPM_VERSION=11.9.0') &&
     dockerfile.includes('pnpm@${PNPM_VERSION}') &&
-    dockerfile.includes('prisma@7.8.0') &&
+    dockerfile.includes('prisma@7.9.0') &&
     !dockerfile.includes('ARG JWT_SECRET') &&
     !dockerfile.includes('ENV JWT_SECRET='),
 );

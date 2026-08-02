@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 
+import { envNumber } from '../common/utils/env-number';
 import { MetricsService } from './metrics.service';
 
 /**
@@ -75,7 +76,9 @@ export class AlertsService {
    * preserved — this only adds deduping on top of `alert`.
    */
   sendAlert(type: AlertEvent, key: string, payload: Record<string, unknown> = {}): boolean {
-    const cooldownMs = Number(process.env.ALERT_COOLDOWN_MS ?? DEFAULT_ALERT_COOLDOWN_MS);
+    // Clamped 1s..1h: a malformed env value must not disable dedup entirely
+    // (NaN cooldown → every alert forwards) nor suppress forever.
+    const cooldownMs = envNumber('ALERT_COOLDOWN_MS', DEFAULT_ALERT_COOLDOWN_MS, 1_000, 3_600_000);
     const dedupeKey = `${type}:${key}`;
     const now = Date.now();
     const last = this.lastSent.get(dedupeKey);
@@ -83,8 +86,31 @@ export class AlertsService {
       return false;
     }
     this.lastSent.set(dedupeKey, now);
+    this.pruneSent(now, cooldownMs);
     this.alert(type, payload);
     return true;
+  }
+
+  /**
+   * Bound the dedupe map so long-lived per-user/per-payout keys (e.g.
+   * `payout_fence_age:<accountId>`) cannot grow without limit. Entries older
+   * than 4 cooldown windows are dropped; beyond a hard cap the oldest entries
+   * are dropped (dedup degrades to "re-alert occasionally" — never fails).
+   */
+  private pruneSent(now: number, cooldownMs: number): void {
+    if (this.lastSent.size <= 2_000) {
+      // Drop only entries far past their suppression window, cheaply.
+      const cutoff = now - cooldownMs * 4;
+      for (const [key, ts] of this.lastSent) {
+        if (ts < cutoff) this.lastSent.delete(key);
+      }
+      return;
+    }
+    const oldest = [...this.lastSent.entries()].sort((a, b) => a[1] - b[1]);
+    const toDrop = this.lastSent.size - 2_000;
+    for (let i = 0; i < toDrop; i++) {
+      this.lastSent.delete(oldest[i][0]);
+    }
   }
 
   /**
@@ -98,8 +124,38 @@ export class AlertsService {
     const bucketKey = `rate:${name}:${key}`;
     const arr = (this.rateWindows.get(bucketKey) ?? []).filter((t) => t > now - windowMs);
     arr.push(now);
+    // Bound per-bucket growth: keep at most the newest 500 timestamps.
+    while (arr.length > 500) {
+      arr.shift();
+    }
     this.rateWindows.set(bucketKey, arr);
+    this.pruneRateBuckets(now, windowMs);
     return arr.length;
+  }
+
+  /**
+   * Bound the rate-bucket map: drop buckets that went fully stale (newest
+   * entry older than the current window) and, when the map is still oversized,
+   * drop the least-recently-active buckets. Prevents per-user spike tracking
+   * from leaking unbounded memory.
+   */
+  private pruneRateBuckets(now: number, windowMs: number): void {
+    if (this.rateWindows.size <= 2_000) return;
+    for (const [key, arr] of this.rateWindows) {
+      const newest = arr[arr.length - 1];
+      if (newest === undefined || newest <= now - windowMs) {
+        this.rateWindows.delete(key);
+      }
+    }
+    if (this.rateWindows.size > 2_000) {
+      const oldest = [...this.rateWindows.entries()].sort(
+        (a, b) => (a[1][a[1].length - 1] ?? 0) - (b[1][b[1].length - 1] ?? 0),
+      );
+      const toDrop = this.rateWindows.size - 2_000;
+      for (let i = 0; i < toDrop; i++) {
+        this.rateWindows.delete(oldest[i][0]);
+      }
+    }
   }
 
   private scrub(ctx: Record<string, unknown>): Record<string, unknown> {

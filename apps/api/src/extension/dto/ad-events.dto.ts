@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -45,6 +46,7 @@ export class AdRequestDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
   @Matches(/^[a-z0-9][a-z0-9-]*$/, {
     each: true,
@@ -56,6 +58,7 @@ export class AdRequestDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
   @Matches(/^[a-z0-9][a-z0-9-]*$/, {
     each: true,

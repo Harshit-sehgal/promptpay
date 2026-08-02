@@ -1,6 +1,10 @@
 import { Logger } from '@nestjs/common';
 
-const PROVIDER_TIMEOUT_MS = Number(process.env.PROVIDER_CALL_TIMEOUT_MS ?? 15_000);
+import { envNumber } from './env-number';
+
+// Clamped 1s..60s so a malformed env value can never become NaN (which would
+// make the timeout fire immediately and falsely trip every provider call).
+const PROVIDER_TIMEOUT_MS = envNumber('PROVIDER_CALL_TIMEOUT_MS', 15_000, 1_000, 60_000);
 
 /**
  * Run `fn` with a hard timeout. If the underlying call (an external PSP

@@ -1076,23 +1076,29 @@ export class PayoutRequestTrait {
     // prior call may have committed the paid state before referral processing
     // failed, and legacy paid payouts may predate cash-ledger accounting.
     if (payout.status === 'paid') {
-      await this.prisma.payoutAccount.updateMany({
-        where: { initiationPayoutId: payoutId },
-        data: { initiationPayoutId: null },
-      });
-      await this.prisma.platformLedger.upsert({
-        where: { idempotencyKey: `developer_payout_cash_${payoutId}` },
-        create: {
-          entryType: 'reversal',
-          status: 'confirmed',
-          amountMinor: authoritativeAmount,
-          currency: payout.currency,
-          bucket: 'cash',
-          referenceId: payoutId,
-          idempotencyKey: `developer_payout_cash_${payoutId}`,
-          description: `Developer payout cash settled — payout ${payoutId}`,
-        },
-        update: {},
+      // The replayed money side-effects commit atomically: a crash between
+      // the fence clear and the cash-ledger write would otherwise leave a
+      // paid payout with an uncleared fence and no settled cash row, and a
+      // concurrent replay could interleave the two.
+      await this.prisma.$transaction(async (tx) => {
+        await tx.payoutAccount.updateMany({
+          where: { initiationPayoutId: payoutId },
+          data: { initiationPayoutId: null },
+        });
+        await tx.platformLedger.upsert({
+          where: { idempotencyKey: `developer_payout_cash_${payoutId}` },
+          create: {
+            entryType: 'reversal',
+            status: 'confirmed',
+            amountMinor: authoritativeAmount,
+            currency: payout.currency,
+            bucket: 'cash',
+            referenceId: payoutId,
+            idempotencyKey: `developer_payout_cash_${payoutId}`,
+            description: `Developer payout cash settled — payout ${payoutId}`,
+          },
+          update: {},
+        });
       });
       await this.referral.processReferralRewards(payout.userId);
       return this.prisma.payoutRequest.findUnique({
@@ -1380,6 +1386,47 @@ export class PayoutRequestTrait {
         }
       }
       await tx.payoutAllocation.deleteMany({ where: { payoutRequestId: payoutId } });
+      // Restore the platform cash bucket: a stripe_connect payout records its
+      // cash out-flow at initiation under `developer_payout_cash_<payoutId>`.
+      // If that payout later fails, the money never left the platform, so the
+      // debit must be compensated by an equal confirmed credit or the cash
+      // bucket carries a phantom debit forever (surfacing as a permanent
+      // reconciliation gap). The compensation is idempotency-keyed so a
+      // re-delivered failure can never double-credit, and it is gated on the
+      // debit row actually existing so a failure before the debit was recorded
+      // never fabricates cash-in.
+      if (data.provider === 'stripe_connect') {
+        const cashDebit = await tx.platformLedger.findUnique({
+          where: { idempotencyKey: `developer_payout_cash_${payoutId}` },
+          select: { entryType: true },
+        });
+        if (cashDebit && cashDebit.entryType === 'reversal') {
+          const failedPayout = await tx.payoutRequest.findUnique({
+            where: { id: payoutId },
+            select: {
+              currency: true,
+              requestedAmountMinor: true,
+              approvedAmountMinor: true,
+            },
+          });
+          if (failedPayout) {
+            await tx.platformLedger.upsert({
+              where: { idempotencyKey: `developer_payout_cash_reclaim_${payoutId}` },
+              create: {
+                entryType: 'credit',
+                status: 'confirmed',
+                amountMinor: failedPayout.approvedAmountMinor ?? failedPayout.requestedAmountMinor,
+                currency: failedPayout.currency,
+                bucket: 'cash',
+                referenceId: payoutId,
+                idempotencyKey: `developer_payout_cash_reclaim_${payoutId}`,
+                description: `Developer payout cash restored — payout ${payoutId} failed`,
+              },
+              update: {},
+            });
+          }
+        }
+      }
       await tx.payoutAccount.updateMany({
         where: { initiationPayoutId: payoutId },
         data: { initiationPayoutId: null },

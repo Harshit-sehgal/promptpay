@@ -29,15 +29,36 @@ export default function ModalDialog({
     const previouslyFocused = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
 
-    const onKeyDown = (e: KeyboardEvent) => {
+    const FOCUSABLE_SELECTOR =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    const trapTab = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
         onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement;
+      if (e.shiftKey) {
+        if (current === first || !dialogRef.current.contains(current)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (current === last || !dialogRef.current.contains(current)) {
+        e.preventDefault();
+        first.focus();
       }
     };
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', trapTab);
     return () => {
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', trapTab);
       previouslyFocused?.focus?.();
     };
   }, [open, onClose]);

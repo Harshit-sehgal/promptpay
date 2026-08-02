@@ -41,7 +41,11 @@ describe('JwtStrategy', () => {
       status: 'active',
       trustLevel: 'new',
     };
-    prisma.session.findUnique.mockResolvedValue({ id: 'sess-active', revoked: false });
+    prisma.session.findUnique.mockResolvedValue({
+      id: 'sess-active',
+      revoked: false,
+      userId: 'u-active',
+    });
     prisma.user.findUnique.mockResolvedValue(user);
 
     await expect(
@@ -51,7 +55,11 @@ describe('JwtStrategy', () => {
 
   it('rejects restricted users even when the session is unrevoked', async () => {
     const { strategy, prisma } = makeStrategy();
-    prisma.session.findUnique.mockResolvedValue({ id: 'sess-restricted', revoked: false });
+    prisma.session.findUnique.mockResolvedValue({
+      id: 'sess-restricted',
+      revoked: false,
+      userId: 'u-restricted',
+    });
     prisma.user.findUnique.mockResolvedValue({
       id: 'u-restricted',
       email: 'restricted@test.com',
@@ -79,12 +87,35 @@ describe('JwtStrategy', () => {
     ).rejects.toThrow(UnauthorizedException);
     expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
+
+  it('rejects an unrevoked session owned by a DIFFERENT user than the token subject', async () => {
+    const { strategy, prisma } = makeStrategy();
+    // The session row belongs to u-other, but the token claims u-active:
+    // defense-in-depth must reject the (sub, jti) mismatch.
+    prisma.session.findUnique.mockResolvedValue({
+      id: 'sess-mismatch',
+      revoked: false,
+      userId: 'u-other',
+    });
+
+    await expect(
+      strategy.validate({
+        sub: 'u-active',
+        role: 'developer',
+        jti: 'sess-mismatch',
+        aud: 'access',
+      }),
+    ).rejects.toThrow(UnauthorizedException);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 describe('JwtStrategy key rotation (kid-aware verification)', () => {
   function makeStrategy(env: Record<string, string | undefined>) {
     const prisma = {
-      session: { findUnique: vi.fn().mockResolvedValue({ id: 'sess', revoked: false }) },
+      session: {
+        findUnique: vi.fn().mockResolvedValue({ id: 'sess', revoked: false, userId: 'u1' }),
+      },
       user: {
         findUnique: vi.fn().mockResolvedValue({
           id: 'u1',

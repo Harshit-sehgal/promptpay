@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { createRequire } from 'module';
 
 import { runAuth } from './commands/auth';
 import { runConfig } from './commands/config';
@@ -9,6 +10,12 @@ import { runSupervisedCommand } from './commands/run';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
 import { resolveApiBaseUrl } from './lib/api-client';
+
+// Read the version from package.json at runtime (dist/index.js sits beside the
+// installed package.json) so the reported version can never drift from the
+// published artifact.
+const packageRequire = createRequire(__filename);
+const { version } = packageRequire('../package.json') as { version: string };
 
 const API_URL = resolveApiBaseUrl();
 const API_HOSTNAME = (() => {
@@ -32,7 +39,7 @@ const program = new Command();
 program
   .name('waitlayer')
   .description('WaitLayer CLI — track AI wait states for the private beta')
-  .version('0.0.1');
+  .version(version);
 
 program
   .command('auth')

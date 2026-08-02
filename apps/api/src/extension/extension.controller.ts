@@ -1,4 +1,13 @@
-import { Body, Controller, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  ServiceUnavailableException,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
@@ -54,7 +63,10 @@ export class ExtensionController {
     @CurrentUser('id') userId: string,
     @Body() dto: CreateWaitAttestationSessionDto,
   ) {
-    return this.service.attestation!.createSession(userId, dto);
+    if (!this.service.attestation) {
+      throw new ServiceUnavailableException('Wait attestation is not configured');
+    }
+    return this.service.attestation.createSession(userId, dto);
   }
 
   @ApiOperation({ summary: 'Verify and consume a provider-signed wait attestation' })
@@ -64,7 +76,10 @@ export class ExtensionController {
     @CurrentUser('id') userId: string,
     @Body() dto: ConsumeWaitAttestationDto,
   ) {
-    return this.service.attestation!.consume(userId, dto);
+    if (!this.service.attestation) {
+      throw new ServiceUnavailableException('Wait attestation is not configured');
+    }
+    return this.service.attestation.consume(userId, dto);
   }
 
   @ApiOperation({

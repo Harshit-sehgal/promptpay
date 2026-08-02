@@ -6,6 +6,30 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
 
+/**
+ * Strictly parse the "min cents" filter: empty or non-numeric input means
+ * "no filter" (`undefined`), never a silent `1` — the previous
+ * `Number(value) || 1` coerced a half-typed or zero input into a minimum of
+ * 1 cent and refetched on every keystroke.
+ */
+function parseMinAmountMinor(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === '') return undefined;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return undefined;
+  return Math.max(1, Math.floor(parsed));
+}
+
+/** Debounce a fast-changing value (min-amount input) before it drives fetches. */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 type RecoveryDebtCaseStatus = 'open' | 'in_collections' | 'recovered' | 'written_off' | 'closed';
 
 interface RecoveryDebtCase {
@@ -79,21 +103,25 @@ export default function AdminRecoveryDebtPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [minAmountMinor, setMinAmountMinor] = useState('1');
+  const [minAmountMinor, setMinAmountMinor] = useState('');
   const [currency, setCurrency] = useState('');
   const [action, setAction] = useState<ActionState | null>(null);
   const [externalReference, setExternalReference] = useState('');
   const [note, setNote] = useState('');
   const [processing, setProcessing] = useState(false);
 
+  // Debounce the min-amount keystrokes so a full 400ms pause is needed
+  // before a fetch fires (typing "1234" no longer issues 4 requests).
+  const debouncedMinAmountMinor = useDebouncedValue(minAmountMinor, 400);
+
   const params = useMemo(
     () => ({
       page,
       limit: 25,
-      minAmountMinor: Number(minAmountMinor) || 1,
+      minAmountMinor: parseMinAmountMinor(debouncedMinAmountMinor),
       currency: currency.trim() || undefined,
     }),
-    [currency, minAmountMinor, page],
+    [currency, debouncedMinAmountMinor, page],
   );
 
   const fetchDebt = useCallback(() => {

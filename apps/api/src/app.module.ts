@@ -1,7 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
 import { SentryModule } from '@sentry/nestjs/setup';
 
 import { loadEnv } from '@waitlayer/config';
@@ -16,7 +16,10 @@ import { BruteForceGuard } from './common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from './common/guards/throttle-by-route.guard';
 import { CacheControlInterceptor } from './common/interceptors/cache-control.interceptor';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
-import { RedisBackedThrottlerStorage } from './common/rate-limit/redis-throttler.storage';
+import {
+  THROTTLER_STORAGE,
+  ThrottlerStorageModule,
+} from './common/rate-limit/redis-throttler.storage';
 import { ComplianceModule } from './compliance/compliance.module';
 import { PrismaModule } from './config/prisma.module';
 import { DeveloperModule } from './developer/developer.module';
@@ -43,10 +46,14 @@ import { ReferralModule } from './referral/referral.module';
     // override the defaults (process.env has higher precedence than `load`).
     ConfigModule.forRoot({ isGlobal: true, load: [() => loadEnv(process.env)] }),
     ThrottlerModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: async (config: ConfigService) => ({
-        storage: await RedisBackedThrottlerStorage.create(config),
+      imports: [ConfigModule, ThrottlerStorageModule],
+      // THROTTLER_STORAGE is provided by the global ThrottlerStorageModule
+      // (below) so the storage instance participates in the module lifecycle:
+      // `onModuleDestroy` disconnects its Redis client on shutdown
+      // (event-loop hang guard).
+      inject: [THROTTLER_STORAGE, ConfigService],
+      useFactory: async (storage: ThrottlerStorage, config: ConfigService) => ({
+        storage,
         throttlers: [
           // Defaults are the production security posture; the THROTTLE_*_LIMIT
           // env overrides exist for isolated test/CI APIs that must complete

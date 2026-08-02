@@ -9,6 +9,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import { ComplianceService } from './compliance.service';
 
@@ -55,6 +56,10 @@ export class ConsentAnonymousController {
   @ApiOperation({ summary: 'Record anonymous consent' })
   @Post('anonymous')
   @HttpCode(HttpStatus.CREATED)
+  // Public, unauthenticated write path: cap per-IP writes so a scripted
+  // visitor cannot flood the anonymous_consent table (the global `default`
+  // bucket is 200/min, far too high for DB-write amplification here).
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   recordAnonymous(@Body() dto: AnonymousConsentDto) {
     return this.compliance.recordAnonymousConsent({

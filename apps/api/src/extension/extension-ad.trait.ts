@@ -948,7 +948,7 @@ export class ExtensionAdTrait {
       };
     }
     const split = this.ledger.calculateSplit(BigInt(impression.campaign.bidAmountMinor));
-    const holdDays = this.ledger.getHoldDays(trustLevel, false);
+    const holdDays = this.ledger.getHoldDays(trustLevel, classification.unverifiedSource);
     // RESTRICTED → holdDays = -1 (indefinite). A negative hold must never
     // produce an `availableAt` in the past (that would immediately mature the
     // earnings and make them payout-eligible, the opposite of the restricted
@@ -1197,10 +1197,17 @@ export class ExtensionAdTrait {
     if (!selfClick.allowed) {
       return { clicked: false, reason: selfClick.reason || 'self_click' };
     }
-    // Non-blocking extended click-abuse signal
+    // Non-blocking extended click-abuse signal (best-effort by design, but a
+    // silent drop hides fraud-analysis outages — log a warn).
     void this.fraud
       .checkRepeatedClickAbuse(impression.userId, impression.campaignId)
-      .catch(() => undefined);
+      .catch((err) => {
+        this.logger.warn(
+          `Repeated click-abuse check failed for campaign ${impression.campaignId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      });
     // removed redundant existingClick findFirst (non-locked read).
     // @unique(impressionId) on AdClick + P2002 catch below are the real floor
     // — the findFirst misled readers into thinking JS was load-bearing when
@@ -1245,7 +1252,7 @@ export class ExtensionAdTrait {
     ) {
       return { clicked: false, reason: 'unverified_wait_attestation' };
     }
-    const holdDays = this.ledger.getHoldDays(trustLevel, false);
+    const holdDays = this.ledger.getHoldDays(trustLevel, clickClassification.unverifiedSource);
     // RESTRICTED → holdDays = -1 (indefinite). Never compute a past
     // `availableAt` for restricted users; null ⇒ never matures. See ledger.service.ts.
     const availableAt = holdDays < 0 ? null : new Date(Date.now() + holdDays * 24 * 60 * 60 * 1000);

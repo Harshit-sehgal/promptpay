@@ -1,5 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsEmail, IsIn, IsInt, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateFeedbackDto {
@@ -12,6 +22,8 @@ export class CreateFeedbackDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsInt()
+  @Min(1)
+  @Max(5)
   @Type(() => Number)
   rating?: number;
 

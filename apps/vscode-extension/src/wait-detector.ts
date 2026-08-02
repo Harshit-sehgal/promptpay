@@ -392,6 +392,11 @@ export class WaitStateDetector {
     this.waitStateId = '';
     this.waitManual = false;
     this.lastEditTime = Date.now();
+    // Restart the inactivity polling loop: while a wait was active the loop
+    // paused (checkInactivity early-returns without re-scheduling), so
+    // without this the detector would never infer another inactivity wait
+    // after a task/timer-driven wait ends, even while the user keeps idling.
+    this.scheduleInactivityCheck();
   }
 
   private emitSignal(signal: DetectorSignal) {

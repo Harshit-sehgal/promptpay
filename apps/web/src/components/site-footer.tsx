@@ -91,7 +91,7 @@ export default function SiteFooter() {
             >
               <li>
                 <Link
-                  href="//#developers"
+                  href="/#developers"
                   className="wl-link-u focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded"
                 >
                   Developers

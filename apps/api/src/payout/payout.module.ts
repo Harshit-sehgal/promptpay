@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 
 import { EventBus } from '../common/events/event-bus';
 import { FraudModule } from '../fraud/fraud.module';
-import { WebhookReclaimCronService } from '../integration/webhook-reclaim-cron.service';
 import { LedgerModule } from '../ledger/ledger.module';
 import { ReferralModule } from '../referral/referral.module';
 import { RuntimeConfigModule } from '../runtime-config/runtime-config.module';
@@ -16,6 +15,7 @@ import {
   WisePayoutProvider,
 } from './providers';
 import { StripeWebhookController } from './stripe-webhook.controller';
+import { WebhookReclaimCronService } from './webhook-reclaim-cron.service';
 
 @Module({
   imports: [LedgerModule, ReferralModule, RuntimeConfigModule, FraudModule],

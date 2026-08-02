@@ -1,5 +1,12 @@
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
-import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable, OnApplicationShutdown } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  OnApplicationShutdown,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { RedisWindowCounter } from '../rate-limit/redis-window-counter';
@@ -102,7 +109,10 @@ export class BruteForceGuard implements CanActivate, OnApplicationShutdown {
     );
 
     if (isLocked) {
-      throw new HttpException('Too many failed attempts - try again later', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'Too many failed attempts - try again later',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
   }
 
@@ -188,7 +198,10 @@ export class BruteForceGuard implements CanActivate, OnApplicationShutdown {
   ): Promise<T> {
     if (!redisCounter) {
       if (failClosed) {
-        throw new HttpException('Authentication rate limiter unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+        throw new HttpException(
+          'Authentication rate limiter unavailable',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
       }
       return memoryFallback();
     }
@@ -197,7 +210,10 @@ export class BruteForceGuard implements CanActivate, OnApplicationShutdown {
       return await redisOperation(redisCounter);
     } catch {
       if (failClosed) {
-        throw new HttpException('Authentication rate limiter unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+        throw new HttpException(
+          'Authentication rate limiter unavailable',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
       }
       return memoryFallback();
     }
@@ -323,7 +339,9 @@ function normalizeTarget(target?: string): string {
 }
 
 function hashValue(value: string): string {
-  return createHash('sha256').update(value || 'unknown').digest('hex');
+  return createHash('sha256')
+    .update(value || 'unknown')
+    .digest('hex');
 }
 
 function isAuthRoute(path: string): boolean {
@@ -331,12 +349,15 @@ function isAuthRoute(path: string): boolean {
   // verification tokens. Without brute-force tracking an attacker could
   // hammer the confirm endpoint guessing tokens. Treat them as auth routes so
   // the same route+IP lockout applies.
+  // `/auth/step-up` verifies a TOTP code to mint an action-scoped token —
+  // TOTP codes are 6 digits and must be brute-force protected the same way.
   return (
     path.includes('/auth/login') ||
     path.includes('/auth/signup') ||
     path.includes('/auth/google') ||
     path.includes('/auth/password') ||
     path.includes('/auth/2fa') ||
-    path.includes('/auth/verify-email')
+    path.includes('/auth/verify-email') ||
+    path.includes('/auth/step-up')
   );
 }

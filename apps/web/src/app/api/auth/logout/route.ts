@@ -11,6 +11,7 @@ import {
   readAuthCookie,
 } from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
+import { fetchApiJson, upstreamStatus } from '../_lib/upstream';
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,19 +39,10 @@ export async function POST(req: NextRequest) {
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
-    let apiRes: Response;
-    try {
-      apiRes = await fetch(`${apiBaseUrl()}/auth/logout`, {
-        method: 'POST',
-        headers,
-      });
-    } catch {
-      // Network error — don't clear cookies; the revocation didn't happen.
-      return NextResponse.json(
-        { message: 'Logout failed — could not reach server. Retry.' },
-        { status: 502 },
-      );
-    }
+    const apiRes = await fetchApiJson(`${apiBaseUrl()}/auth/logout`, {
+      method: 'POST',
+      headers,
+    });
 
     if (!apiRes.ok && apiRes.status !== 401) {
       // The API failed to process the request (5xx, 400, etc.) but it's not
@@ -58,7 +50,7 @@ export async function POST(req: NextRequest) {
       // should retry.
       return NextResponse.json(
         { message: 'Logout failed — server error. Retry.' },
-        { status: apiRes.status },
+        { status: upstreamStatus(apiRes.status) },
       );
     }
 

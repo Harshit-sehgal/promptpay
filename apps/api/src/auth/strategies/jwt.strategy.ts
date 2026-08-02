@@ -102,6 +102,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!session || session.revoked) {
       throw new UnauthorizedException('Session is revoked');
     }
+    // Defense-in-depth: the token subject must own the session row. Tokens are
+    // signed, but a mismatched (sub, jti) pair would otherwise pass the
+    // revoked check against another user's session id.
+    if (session.userId !== payload.sub) {
+      throw new UnauthorizedException('Session user mismatch');
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },

@@ -217,9 +217,15 @@ export class ExtensionWaitTrait {
     // (e.g. repeated identical single-signal submissions) for review. This is
     // best-effort and non-blocking so a transient anomaly cannot break the
     // event-recording path.
-    void this.checkAnomalousWaitState?.(userId, dto.deviceId, dto.signals ?? []).catch(
-      () => undefined,
-    );
+    void this.checkAnomalousWaitState?.(userId, dto.deviceId, dto.signals ?? []).catch((err) => {
+      // Best-effort by design (must not block wait recording), but a silent
+      // drop hides fraud-analysis outages — surface a warn with context.
+      this.logger.warn(
+        `Anomalous wait-signal check failed for device ${dto.deviceId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
     try {
       return await this.prisma.waitStateEvent.create({
         data: {
@@ -362,9 +368,7 @@ export class ExtensionWaitTrait {
         ) {
           return winner;
         }
-        throw new ConflictException(
-          'A wait_state_end event already exists for this waitStateId.',
-        );
+        throw new ConflictException('A wait_state_end event already exists for this waitStateId.');
       }
       throw error;
     }

@@ -214,7 +214,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     }),
     vscode.commands.registerCommand('waitlayer.openDashboard', () => {
-      vscode.env.openExternal(vscode.Uri.parse('https://waitlayer.com/developer'));
+      vscode.env.openExternal(vscode.Uri.parse(config.getDashboardUrl()));
     }),
     vscode.commands.registerCommand('waitlayer.reportFalseWait', async (reason?: string) => {
       if (!(await config.waitTelemetryEnabled())) {
@@ -321,236 +321,265 @@ export async function activate(context: vscode.ExtensionContext) {
   ];
 
   // Wait-state detection — fires when AI assistant shows waiting indicator
-  detector.onSignal(async (signal) => {
-    if (signal.type === 'wait_start') {
-      const event = signal.event;
+  // The detector's emitSignal wraps this callback, but that wrapper only
+  // catches synchronous throws — an async rejection inside this handler
+  // would otherwise surface as an unhandled promise rejection. Guard the
+  // whole signal pipeline with an explicit catch.
+  detector.onSignal((signal) => {
+    void (async () => {
+      if (signal.type === 'wait_start') {
+        const event = signal.event;
 
-      // Shadow waits (weak inactivity-only detections or shadowOnly-adapter
-      // waits) are local-only and excluded from monetization: record nothing
-      // server-side and request no ad, so they create no API traffic, no noisy
-      // wait records, and no misleading analytics. The detector still tracks
-      // them locally for its own state machine.
-      if (event.shadow) return;
+        // Shadow waits (weak inactivity-only detections or shadowOnly-adapter
+        // waits) are local-only and excluded from monetization: record nothing
+        // server-side and request no ad, so they create no API traffic, no noisy
+        // wait records, and no misleading analytics. The detector still tracks
+        // them locally for its own state machine.
+        if (event.shadow) return;
 
-      // Establish local UI state synchronously so a user can immediately mark
-      // a detection as false. This does not send data anywhere; the network
-      // consent check below remains the boundary for all API activity.
-      activeWaitStateId = event.waitStateId;
-      flaggedWaitStateId = null;
+        // Establish local UI state synchronously so a user can immediately mark
+        // a detection as false. This does not send data anywhere; the network
+        // consent check below remains the boundary for all API activity.
+        activeWaitStateId = event.waitStateId;
+        flaggedWaitStateId = null;
 
-      // Privacy is a hard boundary: do not create an active server-side wait,
-      // build evidence, request ads, or contact the device endpoint until the
-      // user has explicitly opted into wait telemetry.
-      if (!(await config.waitTelemetryEnabled())) {
-        if (activeWaitStateId === event.waitStateId) activeWaitStateId = null;
-        return;
-      }
-      // P1.18 #3 — richer in-wait notification explaining the detection and
-      // offering a "Report false positive" action. Does not block the ad flow.
-      const choice = await vscode.window.showInformationMessage(
-        `WaitLayer detected an AI assistant wait (${event.tool}). ` +
-          `If this was a false detection, let us know.`,
-        REPORT_FALSE_POSITIVE_ACTION,
-      );
-      if (choice && choice.title === REPORT_FALSE_POSITIVE_ACTION.title) {
-        await vscode.commands.executeCommand('waitlayer.reportFalseWait');
-      }
-
-      const startPromise = (async (): Promise<string | null> => {
-        try {
-          // 1. Get or register device (obtains UUID)
-          const deviceId = await api.getOrRegisterDevice();
-          const idempotencyKey = `ws-start-${event.waitStateId}`;
-
-          // An earning attempt starts its independent proof before the
-          // operation. Telemetry-only waits remain valid without an attester.
-          if (await config.adsEnabled()) {
-            const provider = createVsCodeWaitAssertionProvider();
-            if (provider) {
-              const userId = (await config.getDeviceUserId()) ?? undefined;
-              await attestation.begin({
-                deviceId,
-                sessionId,
-                waitStateId: event.waitStateId,
-                provider,
-                userId,
-              });
-              attestationBegunWaits.add(event.waitStateId);
-            } else {
-              status.showRewardsUnavailable();
+        // Privacy is a hard boundary: do not create an active server-side wait,
+        // build evidence, request ads, or contact the device endpoint until the
+        // user has explicitly opted into wait telemetry.
+        if (!(await config.waitTelemetryEnabled())) {
+          if (activeWaitStateId === event.waitStateId) activeWaitStateId = null;
+          return;
+        }
+        // P1.18 #3 — richer in-wait notification explaining the detection and
+        // offering a "Report false positive" action. Must NOT block the wait
+        // lifecycle: an awaited modal would stall waitStateStart (and thus the
+        // ad flow) until the user dismisses it — which, during a real wait,
+        // means the user is away and the whole wait times out waiting on the
+        // notification. Fire it detached; a dismissed notification never delays
+        // telemetry.
+        void Promise.resolve(
+          vscode.window.showInformationMessage(
+            `WaitLayer detected an AI assistant wait (${event.tool}). ` +
+              `If this was a false detection, let us know.`,
+            REPORT_FALSE_POSITIVE_ACTION,
+          ),
+        )
+          .then(async (choice) => {
+            if (choice && choice.title === REPORT_FALSE_POSITIVE_ACTION.title) {
+              await vscode.commands.executeCommand('waitlayer.reportFalseWait');
             }
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`WaitLayer: false-positive prompt failed — ${msg}`);
+          });
+
+        const startPromise = (async (): Promise<string | null> => {
+          try {
+            // 1. Get or register device (obtains UUID)
+            const deviceId = await api.getOrRegisterDevice();
+            const idempotencyKey = `ws-start-${event.waitStateId}`;
+
+            // An earning attempt starts its independent proof before the
+            // operation. Telemetry-only waits remain valid without an attester.
+            if (await config.adsEnabled()) {
+              const provider = createVsCodeWaitAssertionProvider();
+              if (provider) {
+                const userId = (await config.getDeviceUserId()) ?? undefined;
+                await attestation.begin({
+                  deviceId,
+                  sessionId,
+                  waitStateId: event.waitStateId,
+                  provider,
+                  userId,
+                });
+                attestationBegunWaits.add(event.waitStateId);
+              } else {
+                status.showRewardsUnavailable();
+              }
+            }
+
+            // 2. Register wait state start with API
+            await api.waitStateStart({
+              deviceId,
+              sessionId,
+              waitStateId: event.waitStateId,
+              toolType: 'vscode',
+              idempotencyKey,
+              signals: event.signals,
+              detectorVersion: event.detectorVersion,
+              evidence: buildEvidence(event, sessionId),
+            });
+            return deviceId;
+          } catch (err: unknown) {
+            attestation.cancel(event.waitStateId);
+            attestationBegunWaits.delete(event.waitStateId);
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`WaitLayer: failed to record wait state start — ${msg}`);
+            return null;
+          }
+        })();
+        waitStartPromises.set(event.waitStateId, startPromise);
+
+        const deviceId = await startPromise;
+        if (waitStartPromises.get(event.waitStateId) === startPromise) {
+          waitStartPromises.delete(event.waitStateId);
+        }
+        if (!deviceId) {
+          if (activeWaitStateId === event.waitStateId) activeWaitStateId = null;
+          return;
+        }
+
+        // A matching end may arrive while device registration or the start POST
+        // is in flight. The end handler waits for this promise; do not continue
+        // into ad work once that wait has already finished.
+        if (activeWaitStateId !== event.waitStateId) return;
+
+        // Decouple ad request and display from wait start recording
+        try {
+          if (!(await config.adsEnabled()) || activeWaitStateId !== event.waitStateId) return;
+          if (!attestationBegunWaits.has(event.waitStateId)) return;
+          if ((await config.inQuietHours()) || activeWaitStateId !== event.waitStateId) return;
+
+          // Enforce frequency cap
+          const maxAdsPerHour = await config.getMaxAdsPerHour();
+          if (activeWaitStateId !== event.waitStateId) return;
+          const now = Date.now();
+          adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
+          if (adTimestamps.length >= maxAdsPerHour) {
+            console.warn('WaitLayer: frequency cap reached, skipping ad');
+            return;
           }
 
-          // 2. Register wait state start with API
-          await api.waitStateStart({
+          // 3. Request an ad
+          const adResponse = await api.requestAd({
             deviceId,
             sessionId,
             waitStateId: event.waitStateId,
             toolType: 'vscode',
-            idempotencyKey,
-            signals: event.signals,
-            detectorVersion: event.detectorVersion,
-            evidence: buildEvidence(event, sessionId),
+            idempotencyKey: `ad-req-${event.waitStateId}`,
           });
-          return deviceId;
-        } catch (err: unknown) {
-          attestation.cancel(event.waitStateId);
-          attestationBegunWaits.delete(event.waitStateId);
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`WaitLayer: failed to record wait state start — ${msg}`);
-          return null;
-        }
-      })();
-      waitStartPromises.set(event.waitStateId, startPromise);
+          const ad = adResponse.ad;
 
-      const deviceId = await startPromise;
-      if (waitStartPromises.get(event.waitStateId) === startPromise) {
-        waitStartPromises.delete(event.waitStateId);
-      }
-      if (!deviceId) {
-        if (activeWaitStateId === event.waitStateId) activeWaitStateId = null;
-        return;
-      }
-
-      // A matching end may arrive while device registration or the start POST
-      // is in flight. The end handler waits for this promise; do not continue
-      // into ad work once that wait has already finished.
-      if (activeWaitStateId !== event.waitStateId) return;
-
-      // Decouple ad request and display from wait start recording
-      try {
-        if (!(await config.adsEnabled()) || activeWaitStateId !== event.waitStateId) return;
-        if (!attestationBegunWaits.has(event.waitStateId)) return;
-        if ((await config.inQuietHours()) || activeWaitStateId !== event.waitStateId) return;
-
-        // Enforce frequency cap
-        const maxAdsPerHour = await config.getMaxAdsPerHour();
-        if (activeWaitStateId !== event.waitStateId) return;
-        const now = Date.now();
-        adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
-        if (adTimestamps.length >= maxAdsPerHour) {
-          console.warn('WaitLayer: frequency cap reached, skipping ad');
-          return;
-        }
-
-        // 3. Request an ad
-        const adResponse = await api.requestAd({
-          deviceId,
-          sessionId,
-          waitStateId: event.waitStateId,
-          toolType: 'vscode',
-          idempotencyKey: `ad-req-${event.waitStateId}`,
-        });
-        const ad = adResponse.ad;
-
-        // The server is authoritative for launch mode. In the default
-        // fail-closed telemetry_only mode, do not open a sponsored panel that a
-        // developer could reasonably interpret as a reward-bearing action.
-        if (
-          !ad &&
-          adResponse.mode === 'telemetry_only' &&
-          activeWaitStateId === event.waitStateId
-        ) {
-          status.showRewardsUnavailable();
-          return;
-        }
-
-        if (ad && activeWaitStateId === event.waitStateId) {
-          adTimestamps.push(now);
-          status.showAdServing();
-
-          // 4. Record that the ad was rendered to the user
-          await api.recordAdRendered({
-            impressionToken: ad.impressionToken,
-            renderedAt: new Date().toISOString(),
-            idempotencyKey: `render-${ad.impressionToken}`,
-          });
-          if (activeWaitStateId !== event.waitStateId) return;
-
-          // 5. Show ad in panel. Track when the impression became visible
-          const impressionShownAt = Date.now();
-          panel.show(
-            {
-              headline: ad.title,
-              message: ad.message,
-              ctaText: ctaTextForAd(ad),
-              ctaUrl: ad.destinationUrl,
-              impressionToken: ad.impressionToken,
-            },
-            async (clicked) => {
-              try {
-                const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
-                // The panel may close before the tool operation ends. Hold the
-                // interaction in memory until the independent assertion is
-                // consumed; never qualify a reward-bearing impression first.
-                await settleInteraction(event.waitStateId, {
-                  impressionToken: ad.impressionToken,
-                  visibleDurationMs,
-                  clicked,
-                });
-              } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
-              } finally {
-                panel.hide();
-              }
-            },
-          );
-        }
-      } catch (err: unknown) {
-        // Don't disrupt the IDE with a modal, but make the failure visible in
-        // the extension's output channel
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: ad request/display failed — ${msg}`);
-      }
-    } else if (signal.type === 'wait_end') {
-      const event = signal.event;
-      if (activeWaitStateId === event.waitStateId) {
-        activeWaitStateId = null;
-        const startPromise = waitStartPromises.get(event.waitStateId);
-        // A wait can end while the opt-in check or start request is in flight.
-        // With no start promise there is no server-side row to close.
-        const startRecorded = startPromise ? (await startPromise) !== null : false;
-        if (!startRecorded) {
-          if (activeWaitStateId === null) {
-            panel.hide();
-            status.showIdle();
+          // The server is authoritative for launch mode. In the default
+          // fail-closed telemetry_only mode, do not open a sponsored panel that a
+          // developer could reasonably interpret as a reward-bearing action.
+          if (
+            !ad &&
+            adResponse.mode === 'telemetry_only' &&
+            activeWaitStateId === event.waitStateId
+          ) {
+            status.showRewardsUnavailable();
+            return;
           }
-          return;
+
+          if (ad && activeWaitStateId === event.waitStateId) {
+            adTimestamps.push(now);
+            status.showAdServing();
+
+            // 4. Record that the ad was rendered to the user
+            await api.recordAdRendered({
+              impressionToken: ad.impressionToken,
+              renderedAt: new Date().toISOString(),
+              idempotencyKey: `render-${ad.impressionToken}`,
+            });
+            if (activeWaitStateId !== event.waitStateId) return;
+
+            // 5. Show ad in panel. Track when the impression became visible
+            const impressionShownAt = Date.now();
+            panel.show(
+              {
+                headline: ad.title,
+                message: ad.message,
+                ctaText: ctaTextForAd(ad),
+                ctaUrl: ad.destinationUrl,
+                impressionToken: ad.impressionToken,
+              },
+              async (clicked) => {
+                try {
+                  const visibleDurationMs = Math.max(0, Date.now() - impressionShownAt);
+                  // The panel may close before the tool operation ends. Hold the
+                  // interaction in memory until the independent assertion is
+                  // consumed; never qualify a reward-bearing impression first.
+                  await settleInteraction(event.waitStateId, {
+                    impressionToken: ad.impressionToken,
+                    visibleDurationMs,
+                    clicked,
+                  });
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
+                } finally {
+                  panel.hide();
+                }
+              },
+            );
+          }
+        } catch (err: unknown) {
+          // Don't disrupt the IDE with a modal, but make the failure visible in
+          // the extension's output channel
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`WaitLayer: ad request/display failed — ${msg}`);
         }
-        try {
-          await api.waitStateEnd({
-            waitStateId: event.waitStateId,
-            durationSeconds: Math.floor(event.durationMs / 1000),
-            idempotencyKey: `ws-end-${event.waitStateId}`,
-          });
-          if (attestationBegunWaits.has(event.waitStateId)) {
-            await attestation.consume(event.waitStateId);
+      } else if (signal.type === 'wait_end') {
+        const event = signal.event;
+        if (activeWaitStateId === event.waitStateId) {
+          activeWaitStateId = null;
+          const startPromise = waitStartPromises.get(event.waitStateId);
+          // A wait can end while the opt-in check or start request is in flight.
+          // With no start promise there is no server-side row to close.
+          const startRecorded = startPromise ? (await startPromise) !== null : false;
+          if (!startRecorded) {
+            if (activeWaitStateId === null) {
+              panel.hide();
+              status.showIdle();
+            }
+            return;
+          }
+          try {
+            await api.waitStateEnd({
+              waitStateId: event.waitStateId,
+              durationSeconds: Math.floor(event.durationMs / 1000),
+              idempotencyKey: `ws-end-${event.waitStateId}`,
+            });
+            if (attestationBegunWaits.has(event.waitStateId)) {
+              await attestation.consume(event.waitStateId);
+              attestationBegunWaits.delete(event.waitStateId);
+              attestedWaits.add(event.waitStateId);
+              // Bound the set: one entry per wait accrues over a long-lived
+              // session, and settlement happens promptly — prune the oldest
+              // entry past 100 so memory cannot grow without limit.
+              if (attestedWaits.size > 100) {
+                const oldest = attestedWaits.values().next().value;
+                if (oldest !== undefined) attestedWaits.delete(oldest);
+              }
+              const interaction = pendingInteractions.get(event.waitStateId);
+              if (interaction) {
+                pendingInteractions.delete(event.waitStateId);
+                await settleInteraction(event.waitStateId, interaction);
+              }
+            }
+          } catch (err: unknown) {
+            attestation.cancel(event.waitStateId);
             attestationBegunWaits.delete(event.waitStateId);
-            attestedWaits.add(event.waitStateId);
-            const interaction = pendingInteractions.get(event.waitStateId);
-            if (interaction) {
-              pendingInteractions.delete(event.waitStateId);
-              await settleInteraction(event.waitStateId, interaction);
+            pendingInteractions.delete(event.waitStateId);
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`WaitLayer: failed to record wait state end — ${msg}`);
+          } finally {
+            // A newer wait can start while this end POST is in flight. Do not
+            // hide that wait's panel or overwrite its status when the older end
+            // request eventually settles.
+            if (activeWaitStateId === null) {
+              panel.hide();
+              status.showIdle();
             }
           }
-        } catch (err: unknown) {
-          attestation.cancel(event.waitStateId);
-          attestationBegunWaits.delete(event.waitStateId);
-          pendingInteractions.delete(event.waitStateId);
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`WaitLayer: failed to record wait state end — ${msg}`);
-        } finally {
-          // A newer wait can start while this end POST is in flight. Do not
-          // hide that wait's panel or overwrite its status when the older end
-          // request eventually settles.
-          if (activeWaitStateId === null) {
-            panel.hide();
-            status.showIdle();
-          }
         }
       }
-    }
+    })().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`WaitLayer: detector signal handler failed — ${msg}`);
+    });
   });
 
   detector.start(context);

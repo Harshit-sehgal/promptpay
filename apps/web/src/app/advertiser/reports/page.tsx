@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
@@ -119,6 +119,8 @@ export default function AdvertiserReportsPage() {
 
   // ── Data fetching ──
 
+  const fetchReportsRequestIdRef = useRef(0);
+
   const handleExportCsv = useCallback(() => {
     if (!dateRange) return;
     const params = new URLSearchParams({
@@ -146,11 +148,23 @@ export default function AdvertiserReportsPage() {
     };
     if (campaignFilter) params.campaignId = campaignFilter;
 
+    // Stale-response guard: rapid filter changes fire overlapping requests;
+    // only the newest one may write state, or an old response could
+    // overwrite the reports for the currently selected range.
+    const requestId = ++fetchReportsRequestIdRef.current;
     advertiserApi
       .getReports(params)
-      .then((res: { data: ReportsData }) => setData(res.data))
-      .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load reports')))
-      .finally(() => setLoading(false));
+      .then((res: { data: ReportsData }) => {
+        if (fetchReportsRequestIdRef.current !== requestId) return;
+        setData(res.data);
+      })
+      .catch((err: unknown) => {
+        if (fetchReportsRequestIdRef.current !== requestId) return;
+        setError(getErrorMessage(err, 'Failed to load reports'));
+      })
+      .finally(() => {
+        if (fetchReportsRequestIdRef.current === requestId) setLoading(false);
+      });
   }, [dateRange, campaignFilter]);
 
   useEffect(() => {

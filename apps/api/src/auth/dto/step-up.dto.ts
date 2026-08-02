@@ -1,4 +1,4 @@
-import { IsString, Matches } from 'class-validator';
+import { IsString, Matches, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class StepUpRequestDto {
@@ -7,6 +7,7 @@ export class StepUpRequestDto {
     example: 'payout:request',
   })
   @IsString()
+  @MaxLength(64)
   action: string;
 
   @ApiProperty({ description: 'Current TOTP code or backup code', example: '123456' })

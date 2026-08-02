@@ -39,14 +39,16 @@ function resolveThrottleName(path: string): string {
   // a credential-stuffing vector where many OAuth token attempts could be
   // replayed against the verifier without throttling. `/auth/verify-email/*`
   // was also uncovered — verification tokens are short random strings that
-  // must not be brute-forced.
+  // must not be brute-forced. `/auth/step-up` verifies TOTP codes (6 digits)
+  // and must be throttled the same way.
   if (
     path.includes('/auth/login') ||
     path.includes('/auth/signup') ||
     path.includes('/auth/password') ||
     path.includes('/auth/google') ||
     path.includes('/auth/verify-email') ||
-    path.includes('/auth/2fa')
+    path.includes('/auth/2fa') ||
+    path.includes('/auth/step-up')
   ) {
     return 'auth-short';
   }

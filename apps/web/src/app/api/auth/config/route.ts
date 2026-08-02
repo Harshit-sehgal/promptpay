@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 
 import { apiBaseUrl } from '../_lib/cookies';
+import { fetchApiJson, upstreamStatus } from '../_lib/upstream';
 
 /**
  * Same-origin proxy for the API's `/auth/config` endpoint (Google Client ID
@@ -21,11 +22,10 @@ import { apiBaseUrl } from '../_lib/cookies';
  */
 export async function GET() {
   try {
-    const res = await fetch(`${apiBaseUrl()}/auth/config`, {
+    const res = await fetchApiJson(`${apiBaseUrl()}/auth/config`, {
       headers: { 'Content-Type': 'application/json' },
     });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    return NextResponse.json(res.data ?? {}, { status: upstreamStatus(res.status) });
   } catch (err: unknown) {
     // Degrade gracefully — the client treats a failed discovery as
     // "Google sign-in unavailable" and falls back to email/password.

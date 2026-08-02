@@ -6,6 +6,7 @@ import { PayoutStatus } from '@waitlayer/shared';
 
 import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';
+import { envNumber } from '../common/utils/env-number';
 import {
   decryptPayoutDestination,
   isEncryptedDestination,
@@ -68,8 +69,14 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
   private intervalId?: NodeJS.Timeout;
   private pollInFlight = false;
   private readonly ownerId = randomUUID();
-  // Configurable via PAYOUT_POLL_INTERVAL_MS (default 10 minutes).
-  private readonly POLL_INTERVAL_MS = Number(process.env.PAYOUT_POLL_INTERVAL_MS ?? 600_000);
+  // Configurable via PAYOUT_POLL_INTERVAL_MS (default 10 minutes). Clamped so
+  // a malformed env value can never make setInterval fire in a hot loop.
+  private readonly POLL_INTERVAL_MS = envNumber(
+    'PAYOUT_POLL_INTERVAL_MS',
+    600_000,
+    60_000,
+    86_400_000,
+  );
   /** Skip payouts processed within the last N ms (anti-fast-poll) */
   private readonly STALL_THRESHOLD_MS = 120_000; // 2 minutes
   private readonly BATCH_SIZE = boundedPositiveInt(
@@ -78,8 +85,11 @@ export class PayoutCronService implements OnApplicationBootstrap, OnModuleDestro
     500,
   );
   /** A `processing` payout older than this is escalated for manual review (P1.10). */
-  private readonly ESCALATION_AGE_MS = Number(
-    process.env.PAYOUT_ESCALATION_AGE_MS ?? 24 * 60 * 60 * 1000,
+  private readonly ESCALATION_AGE_MS = envNumber(
+    'PAYOUT_ESCALATION_AGE_MS',
+    24 * 60 * 60 * 1000,
+    60_000,
+    2_592_000_000,
   );
 
   constructor(

@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import api from '@/lib/api/client';
 import { getDashboardPath, SignupRole } from '@/lib/auth-routing';
 
@@ -77,24 +85,42 @@ async function authFetch(path: string, body: unknown): Promise<unknown> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Guards the mount-time /auth/me probe: if the user logs in/out (or the
+  // provider unmounts) while the probe is in flight, the stale probe result
+  // must not clobber the fresher state — a late 401 catch would otherwise
+  // wipe a just-completed login, and a late 200 would resurrect a logged-out
+  // session.
+  const generationRef = useRef(0);
+  const mountedRef = useRef(true);
 
   // On mount, call /auth/me. The httpOnly access_token cookie is sent
   // automatically (withCredentials: true). If the cookie is valid, we get
   // the user profile. If 401, the interceptor attempts a refresh; if that
   // also fails, we fall through to logged-out state.
   useEffect(() => {
+    mountedRef.current = true;
+    const generation = generationRef.current;
     api
       .get('/auth/me')
       .then((res) => {
+        if (generation !== generationRef.current || !mountedRef.current) return;
         setUser(res.data as User);
       })
       .catch(() => {
         // Not logged in or session expired — stay logged out.
         // No localStorage to clean up; cookies are httpOnly and cleared
         // by the Route Handler on refresh failure.
+        if (generation !== generationRef.current || !mountedRef.current) return;
         setUser(null);
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        if (generation === generationRef.current && mountedRef.current) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string, twoFactorToken?: string) => {
@@ -106,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // The Route Handler already merged /auth/me into the user profile
     const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+    generationRef.current += 1;
     setUser(fullUser);
     return fullUser;
   }, []);
@@ -117,27 +144,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })) as { user: Record<string, unknown> };
     const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+    generationRef.current += 1;
     setUser(fullUser);
     return fullUser;
   }, []);
 
-  const googleLogin = useCallback(async (
-    idToken: string,
-    role?: string,
-    twoFactorToken?: string,
-    consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
-  ) => {
-    const data = (await authFetch('/auth/google', {
-      idToken,
-      role: role as 'developer' | 'advertiser' | undefined,
-      ...(twoFactorToken ? { twoFactorToken } : {}),
-      ...(consent ? { ageConfirmed: consent.ageConfirmed, termsAccepted: consent.termsAccepted, policyVersion: consent.policyVersion } : {}),
-    })) as { user: Record<string, unknown> };
-    const fullUser = mapUser(data.user);
-    localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
-    setUser(fullUser);
-    return fullUser;
-  }, []);
+  const googleLogin = useCallback(
+    async (
+      idToken: string,
+      role?: string,
+      twoFactorToken?: string,
+      consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
+    ) => {
+      const data = (await authFetch('/auth/google', {
+        idToken,
+        role: role as 'developer' | 'advertiser' | undefined,
+        ...(twoFactorToken ? { twoFactorToken } : {}),
+        ...(consent
+          ? {
+              ageConfirmed: consent.ageConfirmed,
+              termsAccepted: consent.termsAccepted,
+              policyVersion: consent.policyVersion,
+            }
+          : {}),
+      })) as { user: Record<string, unknown> };
+      const fullUser = mapUser(data.user);
+      localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+      generationRef.current += 1;
+      setUser(fullUser);
+      return fullUser;
+    },
+    [],
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -149,9 +187,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // (and therefore the session) are still alive.
       await api.post('/auth/logout');
       localStorage.removeItem('lastDashboard');
+      generationRef.current += 1;
       setUser(null);
     } catch (err: unknown) {
-      console.warn('[WaitLayer] logout failed — keeping the session active:', err instanceof Error ? err.message : String(err));
+      console.warn(
+        '[WaitLayer] logout failed — keeping the session active:',
+        err instanceof Error ? err.message : String(err),
+      );
       throw err;
     }
   }, []);

@@ -9,6 +9,7 @@ import {
   stripAuthTokens,
 } from '../_lib/cookies';
 import { readLimitedJsonBody, rejectCrossOriginMutation } from '../_lib/request-guards';
+import { fetchApiJson, upstreamStatus } from '../_lib/upstream';
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,15 +21,15 @@ export async function POST(req: NextRequest) {
     const identity = rateLimitIdentity(req);
 
     // 1. Call the API login endpoint
-    const loginRes = await fetch(`${apiBaseUrl()}/auth/login`, {
+    const loginRes = await fetchApiJson(`${apiBaseUrl()}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...identity.headers },
       body: JSON.stringify(body),
     });
-    const loginData = await loginRes.json();
+    const loginData = loginRes.data;
     if (!loginRes.ok) {
       return applyRateLimitIdentity(
-        NextResponse.json(loginData, { status: loginRes.status }),
+        NextResponse.json(loginData ?? {}, { status: upstreamStatus(loginRes.status) }),
         identity,
         req.headers,
       );
@@ -42,19 +43,22 @@ export async function POST(req: NextRequest) {
 
     // 2. Fetch the full user profile from /auth/me so the browser gets
     //    trustLevel/status/referralCode without a second client-side round-trip.
-    const meRes = await fetch(`${apiBaseUrl()}/auth/me`, {
+    const meRes = await fetchApiJson(`${apiBaseUrl()}/auth/me`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     let fullUser = user;
     if (meRes.ok) {
-      const meData = await meRes.json();
-      fullUser = { ...(user as Record<string, unknown>), ...(meData as Record<string, unknown>) };
+      const meData = meRes.data as Record<string, unknown> | null;
+      if (meData) {
+        fullUser = { ...(user as Record<string, unknown>), ...meData };
+      }
     }
 
     // 3. Set httpOnly cookies + return user (NOT tokens) to browser
-    const response = NextResponse.json(stripAuthTokens({ ...loginData, user: fullUser }), {
-      status: 200,
-    });
+    const response = NextResponse.json(
+      stripAuthTokens({ ...(loginData as Record<string, unknown>), user: fullUser }),
+      { status: 200 },
+    );
     return applyRateLimitIdentity(
       applyAuthCookies(response, { accessToken, refreshToken, headers: req.headers }),
       identity,

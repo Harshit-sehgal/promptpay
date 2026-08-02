@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Req,
   UnauthorizedException,
@@ -212,7 +213,7 @@ export class AuthController {
   revokeSession(
     @CurrentUser('id') userId: string,
     @CurrentUser('role') role: string,
-    @Param('id') sessionId: string,
+    @Param('id', ParseUUIDPipe) sessionId: string,
   ) {
     return this.authService.revokeSession(userId, sessionId, role);
   }

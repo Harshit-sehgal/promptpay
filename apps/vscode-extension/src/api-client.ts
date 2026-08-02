@@ -175,10 +175,24 @@ export class ApiClient {
 
   private deviceUUID: string | null = null;
 
+  /** In-flight registration promise: concurrent callers (e.g. a wait start
+   *  racing a device report) share one POST instead of double-registering or
+   *  tripping the server's per-fingerprint duplicate-device path. */
+  private deviceRegistrationInFlight: Promise<string> | null = null;
+
   async getOrRegisterDevice(): Promise<string> {
     await this._initialized;
     if (this.deviceUUID && this.deviceEventSecret) return this.deviceUUID;
+    if (this.deviceRegistrationInFlight) return this.deviceRegistrationInFlight;
+    this.deviceRegistrationInFlight = this.registerDevice();
+    try {
+      return await this.deviceRegistrationInFlight;
+    } finally {
+      this.deviceRegistrationInFlight = null;
+    }
+  }
 
+  private async registerDevice(): Promise<string> {
     try {
       const stored = await this.config.getDeviceUUID();
       const storedSecret = await this.config.getDeviceEventSecret();
@@ -461,7 +475,10 @@ export class ApiClient {
     return this.post('/extension/wait-attestation/session', input);
   }
 
-  async consumeWaitAttestation(input: { attestationSessionId: string; assertion: string }): Promise<void> {
+  async consumeWaitAttestation(input: {
+    attestationSessionId: string;
+    assertion: string;
+  }): Promise<void> {
     await this.post('/extension/wait-attestation/consume', input);
   }
 
@@ -755,7 +772,7 @@ export class ApiClient {
         lookup: lookupWithTimeout,
         headers: {
           ...headers,
-          'X-Extension-Version': '0.0.1',
+          'X-Extension-Version': EXTENSION_MANIFEST_VERSION,
           'X-Tool-Type': 'vscode',
         },
       },
@@ -828,7 +845,7 @@ function headers(path: string, bodyStr: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(bodyStr).toString(),
-    'X-Extension-Version': '0.0.1',
+    'X-Extension-Version': EXTENSION_MANIFEST_VERSION,
     'X-Tool-Type': 'vscode',
   };
 }

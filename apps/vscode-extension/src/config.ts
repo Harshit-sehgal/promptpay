@@ -33,6 +33,24 @@ export class ConfigurationManager {
     );
   }
 
+  /**
+   * Web dashboard origin derived from the configured API URL (e.g.
+   * `https://api.waitlayer.com/api/v1` → `https://waitlayer.com/developer`),
+   * so staging/dev installs open the matching dashboard instead of always
+   * pointing at the production site.
+   */
+  getDashboardUrl(): string {
+    const apiUrl = this.getApiUrl();
+    try {
+      const parsed = new URL(apiUrl);
+      const host = parsed.hostname;
+      const webHost = host.startsWith('api.') ? host.slice('api.'.length) : host;
+      return `${parsed.protocol}//${webHost}/developer`;
+    } catch {
+      return 'https://waitlayer.com/developer';
+    }
+  }
+
   async adsEnabled(): Promise<boolean> {
     const cfg = vscode.workspace.getConfiguration(CONFIG_SECTION);
     const stored = cfg.get<boolean>('adsEnabled');
@@ -87,7 +105,12 @@ export class ConfigurationManager {
   }
 
   async getMaxAdsPerHour(): Promise<number> {
-    return vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('maxAdsPerHour') ?? 6;
+    const raw = vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('maxAdsPerHour') ?? 6;
+    // Clamp to 0–60: a malformed/negative/huge setting must never make the
+    // frequency-cap logic behave pathologically (0 disables ads entirely;
+    // >60 would effectively disable the cap).
+    if (typeof raw !== 'number' || Number.isNaN(raw)) return 6;
+    return Math.max(0, Math.min(60, Math.floor(raw)));
   }
 
   /**
@@ -96,9 +119,13 @@ export class ConfigurationManager {
    * Configurable via `waitlayer.inactivityTimeoutMs` in VS Code settings.
    */
   getInactivityTimeoutMs(): number {
-    return (
-      vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('inactivityTimeoutMs') ?? 15_000
-    );
+    const raw =
+      vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('inactivityTimeoutMs') ??
+      15_000;
+    // Clamp to 1s–10min: a 0/negative value would infer waits on every idle
+    // keystroke pause, and a huge value would make waits unreachable.
+    if (typeof raw !== 'number' || Number.isNaN(raw)) return 15_000;
+    return Math.max(1_000, Math.min(600_000, Math.floor(raw)));
   }
 
   async getTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {

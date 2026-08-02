@@ -12,6 +12,7 @@ import {
   readAuthCookie,
 } from '../_lib/cookies';
 import { rejectCrossOriginMutation } from '../_lib/request-guards';
+import { fetchApiJson, upstreamStatus } from '../_lib/upstream';
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,19 +26,19 @@ export async function POST(req: NextRequest) {
     }
     const identity = rateLimitIdentity(req);
 
-    const apiRes = await fetch(`${apiBaseUrl()}/auth/refresh`, {
+    const apiRes = await fetchApiJson(`${apiBaseUrl()}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...identity.headers },
       body: JSON.stringify({ refreshToken }),
     });
-    const data = await apiRes.json();
+    const data = apiRes.data;
     if (!apiRes.ok) {
       // Refresh failed — clear stale cookies
       return applyRateLimitIdentity(
         clearAuthCookies(
           NextResponse.json(
             { message: (data as { message?: string }).message || 'Refresh failed' },
-            { status: apiRes.status },
+            { status: upstreamStatus(apiRes.status) },
           ),
           req.headers,
         ),

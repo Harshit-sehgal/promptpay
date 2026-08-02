@@ -101,7 +101,7 @@ COPY --from=build /app/package.json ./
 # it globally keeps it out of node_modules (which is pruned of all dev deps).
 # A-075: carry the registry override into this stage too.
 ARG NPM_REGISTRY=https://registry.npmjs.org
-RUN npm config set registry "$NPM_REGISTRY" && npm install -g prisma@7.8.0
+RUN npm config set registry "$NPM_REGISTRY" && npm install -g prisma@7.9.0
 
 # Drop devDependencies from the runtime image. `pnpm prune` does NOT prune a
 # workspace, so we reinstall production-only from the pnpm store inherited from

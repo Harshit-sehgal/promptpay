@@ -16,6 +16,8 @@ export class ForgotPasswordDto {
 export class ResetPasswordDto {
   @ApiProperty()
   @IsString()
+  // RS256-signed reset tokens are ~800 chars; keep a generous ceiling.
+  @MaxLength(4096)
   token!: string;
 
   @ApiProperty()
