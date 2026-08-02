@@ -17,6 +17,12 @@ permissions:
   contents: read
   id-token: write
 
+# A new dispatch supersedes an in-flight one for the same environment target
+# so two operators cannot race the staging/promotion gate.
+concurrency:
+  group: staging-release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Re-run the complete CI/security/financial gate on the exact SHA selected
   # by this manual dispatch. A staging approval must never promote a commit

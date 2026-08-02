@@ -326,24 +326,48 @@ export class ExtensionWaitTrait {
       );
     }
     const duration = serverDuration;
-    return this.prisma.waitStateEvent.create({
-      data: {
-        userId: start.userId,
-        deviceId: start.deviceId,
-        sessionId: start.sessionId,
-        eventType: 'wait_state_end',
-        waitStateId: dto.waitStateId,
-        toolType: start.toolType,
-        duration,
-        signature: dto.signature,
-        idempotencyKey: dto.idempotencyKey,
-        // Mirror detection metadata from the start event so analytics and
-        // billing guards can inspect the end event without joining the start.
-        confidence: start.confidence,
-        reason: start.reason,
-        detectorVersion: start.detectorVersion,
-      },
-    });
+    try {
+      return await this.prisma.waitStateEvent.create({
+        data: {
+          userId: start.userId,
+          deviceId: start.deviceId,
+          sessionId: start.sessionId,
+          eventType: 'wait_state_end',
+          waitStateId: dto.waitStateId,
+          toolType: start.toolType,
+          duration,
+          signature: dto.signature,
+          idempotencyKey: dto.idempotencyKey,
+          // Mirror detection metadata from the start event so analytics and
+          // billing guards can inspect the end event without joining the start.
+          confidence: start.confidence,
+          reason: start.reason,
+          detectorVersion: start.detectorVersion,
+        },
+      });
+    } catch (error) {
+      // Unique-race handling, mirroring the start path: a concurrent exact
+      // retry committed between our pre-check and the insert — return the
+      // winner. A duplicate end for the same waitStateId under a different
+      // key is surfaced as a clean 409 instead of a raw P2002 (500).
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const winner = await this.prisma.waitStateEvent.findUnique({
+          where: { idempotencyKey: dto.idempotencyKey },
+        });
+        if (
+          winner &&
+          winner.userId === userId &&
+          winner.waitStateId === dto.waitStateId &&
+          winner.eventType === 'wait_state_end'
+        ) {
+          return winner;
+        }
+        throw new ConflictException(
+          'A wait_state_end event already exists for this waitStateId.',
+        );
+      }
+      throw error;
+    }
   }
 
   /**

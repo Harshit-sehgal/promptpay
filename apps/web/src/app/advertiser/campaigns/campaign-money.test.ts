@@ -4,7 +4,6 @@ import { campaignMinimumBudgetMinor } from '@waitlayer/shared';
 
 import {
   campaignMoneyInputPolicy,
-  MIN_CAMPAIGN_BUDGET_MINOR,
   parseCampaignAmountMinor,
 } from './campaign-money';
 
@@ -17,7 +16,6 @@ describe('campaign money input policy', () => {
       maximumBudget: '1000000',
       minimumBudgetLabel: '$50.00',
     });
-    expect(MIN_CAMPAIGN_BUDGET_MINOR).toBe(5000n);
   });
 
   it('uses whole units and a JPY-specific floor (not the USD 5000-minor value)', () => {

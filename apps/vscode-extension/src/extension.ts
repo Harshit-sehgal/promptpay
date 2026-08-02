@@ -580,6 +580,12 @@ export async function activate(context: vscode.ExtensionContext) {
   // network hiccup permanently showed "logged out" with no recovery path
   // other than IDE restart or explicit login.
   let bootRetried = false;
+  let bootRetryTimer: NodeJS.Timeout | undefined;
+  context.subscriptions.push({
+    dispose: () => {
+      if (bootRetryTimer) clearTimeout(bootRetryTimer);
+    },
+  });
   const fetchBootBalance = () => {
     api
       .getBalance()
@@ -595,7 +601,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (!bootRetried) {
           bootRetried = true;
           console.warn(`[WaitLayer] Initial balance fetch failed — retrying in 30s: ${msg}`);
-          setTimeout(fetchBootBalance, 30_000);
+          bootRetryTimer = setTimeout(fetchBootBalance, 30_000);
         } else {
           console.warn(`[WaitLayer] Initial balance fetch failed after retry: ${msg}`);
           status.setLoggedOut();

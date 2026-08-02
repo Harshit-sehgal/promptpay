@@ -1,5 +1,4 @@
 import {
-  AD_SERVING,
   campaignMaximumBudgetMinor,
   campaignMinimumBidMinor,
   campaignMinimumBudgetMinor,
@@ -7,14 +6,6 @@ import {
   majorToMinor,
   minorToMajorInputValue,
 } from '@waitlayer/shared';
-
-/**
- * Backward-compatibility export. New code should use the per-currency
- * `campaignMinimumBudgetMinor(currency)` helper instead of this USD-shaped
- * global constant. Kept so existing form validation that still references it
- * compiles; it equals the USD minimum (5000 minor).
- */
-export const MIN_CAMPAIGN_BUDGET_MINOR = BigInt(AD_SERVING.MIN_CAMPAIGN_BUDGET_MINOR);
 
 /**
  * Per-currency campaign money-policy for web input forms. Reads the

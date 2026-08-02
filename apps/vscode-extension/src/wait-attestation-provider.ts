@@ -4,6 +4,8 @@ import { WaitAssertionProvider } from '@waitlayer/shared';
 
 /** A configured HTTPS bridge to an independently operated attester. The
  * extension sends a server-issued nonce; it never possesses signing material. */
+const ATTESTATION_REQUEST_TIMEOUT_MS = 10_000;
+
 export function createVsCodeWaitAssertionProvider(): WaitAssertionProvider | null {
   const config = vscode.workspace.getConfiguration('waitlayer');
   const provider = config.get<string>('attestationProvider')?.trim();
@@ -15,18 +17,34 @@ export function createVsCodeWaitAssertionProvider(): WaitAssertionProvider | nul
   return {
     provider,
     async obtainAssertion(input) {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...input, provider }),
-      });
-      if (!response.ok)
-        throw new Error(`Wait attestation provider rejected the operation (${response.status})`);
-      const responseBody = (await response.json()) as { assertion?: unknown };
-      if (typeof responseBody.assertion !== 'string' || responseBody.assertion.length < 32) {
-        throw new Error('Wait attestation provider returned no usable assertion');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ATTESTATION_REQUEST_TIMEOUT_MS);
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...input, provider }),
+          signal: controller.signal,
+        });
+        if (!response.ok)
+          throw new Error(
+            `Wait attestation provider rejected the operation (${response.status})`,
+          );
+        const responseBody = (await response.json()) as { assertion?: unknown };
+        if (typeof responseBody.assertion !== 'string' || responseBody.assertion.length < 32) {
+          throw new Error('Wait attestation provider returned no usable assertion');
+        }
+        return responseBody.assertion;
+      } catch (error) {
+        if (controller.signal.aborted) {
+          throw new Error(
+            `Wait attestation provider timed out after ${ATTESTATION_REQUEST_TIMEOUT_MS}ms`,
+          );
+        }
+        throw error;
+      } finally {
+        clearTimeout(timer);
       }
-      return responseBody.assertion;
     },
   };
 }

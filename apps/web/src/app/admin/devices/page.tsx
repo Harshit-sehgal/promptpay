@@ -55,14 +55,17 @@ export default function AdminDevicesPage() {
   const [submittedSearch, setSubmittedSearch] = useState('');
   const [devices, setDevices] = useState<AdminDevice[]>([]);
   const [deviceTotal, setDeviceTotal] = useState(0);
+  const [devicePage, setDevicePage] = useState(1);
   const [deviceLoading, setDeviceLoading] = useState(true);
+  const DEVICE_PAGE_SIZE = 25;
 
   const fetchDevices = useCallback(async () => {
     setDeviceLoading(true);
     setError(null);
     try {
       const res = await adminApi.getDevices({
-        limit: 25,
+        limit: DEVICE_PAGE_SIZE,
+        page: devicePage,
         ...(submittedSearch ? { search: submittedSearch } : {}),
       });
       const data = res.data as AdminDevicesResponse;
@@ -73,7 +76,7 @@ export default function AdminDevicesPage() {
     } finally {
       setDeviceLoading(false);
     }
-  }, [submittedSearch]);
+  }, [submittedSearch, devicePage]);
 
   useEffect(() => {
     void fetchDevices();
@@ -82,6 +85,7 @@ export default function AdminDevicesPage() {
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     setSubmittedSearch(search.trim());
+    setDevicePage(1);
   };
 
   const selectDevice = (device: AdminDevice) => {
@@ -183,8 +187,7 @@ export default function AdminDevicesPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {devices.map((device) => (
-                <div key={device.id} className="border border-surface-200/80 rounded-xl p-4">
+              {devices.map((device) => (                <div key={device.id} className="border border-surface-200/80 rounded-xl p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -229,6 +232,35 @@ export default function AdminDevicesPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {!deviceLoading && devices.length > 0 && (
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <span className="text-surface-500">
+                Page {devicePage} of {Math.max(1, Math.ceil(deviceTotal / DEVICE_PAGE_SIZE))}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDevicePage((p) => Math.max(1, p - 1))}
+                  disabled={devicePage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-surface-200 text-surface-700 text-sm disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDevicePage((p) =>
+                      Math.min(Math.max(1, Math.ceil(deviceTotal / DEVICE_PAGE_SIZE)), p + 1),
+                    )
+                  }
+                  disabled={devicePage >= Math.max(1, Math.ceil(deviceTotal / DEVICE_PAGE_SIZE))}
+                  className="px-3 py-1.5 rounded-lg border border-surface-200 text-surface-700 text-sm disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </section>

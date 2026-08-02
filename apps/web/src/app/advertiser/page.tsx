@@ -18,17 +18,17 @@ interface DashboardCampaign {
   name: string;
   status: string;
   bidType: string;
-  bidAmountMinor: number;
-  budgetTotalMinor: number;
-  budgetSpentMinor: number;
+  bidAmountMinor: bigint;
+  budgetTotalMinor: bigint;
+  budgetSpentMinor: bigint;
   currency: string;
   createdAt: string;
   creatives?: CreativeSummary[];
 }
 
 interface AdvertiserData {
-  totalSpendMinor: number;
-  totalSpendByCurrency?: Record<string, number>;
+  totalSpendMinor: bigint;
+  totalSpendByCurrency?: Record<string, bigint>;
   totalImpressions: number;
   totalClicks: number;
   ctr: number;

@@ -8,10 +8,10 @@
 #   ./scripts/ci-local.sh                      # run all code gates
 #   JWT_PUBLIC_KEY=... DOCKER_BUILD=1 ./scripts/ci-local.sh   # also build images
 #
-# NOTE: the Docker build step needs a reachable npm registry (the Dockerfile's
-# `corepack prepare pnpm@11.9.0` hits registry.npmjs.org). In sandboxes without
-# registry access this step fails with ETIMEDOUT — that is the known A-075
-# environment constraint, not a code defect.
+# NOTE: the Docker build step needs a reachable npm registry (the Dockerfile
+# installs pnpm via npm with an optional NPM_REGISTRY override). In sandboxes
+# without registry access this step fails with ETIMEDOUT — that is the known
+# A-075 environment constraint, not a code defect.
 set -eu
 
 cd "$(dirname "$0")/.."

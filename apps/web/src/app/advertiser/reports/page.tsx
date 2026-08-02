@@ -15,7 +15,7 @@ interface ReportRow {
   impressions: number;
   clicks: number;
   ctr: number;
-  spendMinor: number;
+  spendMinor: bigint;
   currency: string;
 }
 
@@ -31,8 +31,8 @@ interface ReportsData {
   summary: {
     totalImpressions: number;
     totalClicks: number;
-    totalSpendMinor: number;
-    totalSpendByCurrency?: Record<string, number>;
+    totalSpendMinor: bigint;
+    totalSpendByCurrency?: Record<string, bigint>;
     avgCtr: number;
     totalCampaigns: number;
   };

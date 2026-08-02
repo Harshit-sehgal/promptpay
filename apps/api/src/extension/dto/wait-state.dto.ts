@@ -146,6 +146,7 @@ export class WaitStateStartDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(512)
   signature!: string;
 }
 
@@ -172,6 +173,7 @@ export class WaitStateEndDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(512)
   signature!: string;
 }
 

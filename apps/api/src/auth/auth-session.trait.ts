@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcryptjs';
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'crypto';
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'crypto';
 import { StringValue } from 'ms';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -244,18 +244,14 @@ export class AuthSessionTrait {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const length = 8;
     for (let attempt = 0; attempt < 10; attempt++) {
-      const code = Array.from(randomBytes(length))
-        .map((b) => chars[b % chars.length])
-        .join('');
+      const code = Array.from({ length }, () => chars[randomInt(chars.length)]).join('');
       const exists = await this.prisma.user.findUnique({
         where: { referralCode: code },
       });
       if (!exists) return code;
     }
     // Fallback: append random suffix to avoid infinite loop
-    const base = Array.from(randomBytes(6))
-      .map((b) => chars[b % chars.length])
-      .join('');
+    const base = Array.from({ length: 6 }, () => chars[randomInt(chars.length)]).join('');
     const suffix = Date.now().toString(36).slice(-4).toUpperCase();
     return `${base}${suffix}`;
   }

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -87,6 +88,7 @@ export class UpdateSettingsDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(100)
   @IsString({ each: true })
   @MaxLength(64, { each: true })
   @Matches(/^[a-z0-9][a-z0-9-]*$/, {

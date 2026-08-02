@@ -59,6 +59,7 @@ services:
     # Production/staging deployments set WAITLAYER_API_IMAGE to an immutable
     # registry digest. Local compose retains this predictable development tag.
     image: ${WAITLAYER_API_IMAGE:-waitlayer-api:local}
+    restart: unless-stopped
     build:
       context: .
       target: api
@@ -137,6 +138,7 @@ services:
   web:
     # See api.image: CI supplies a content-addressed image for release hosts.
     image: ${WAITLAYER_WEB_IMAGE:-waitlayer-web:local}
+    restart: unless-stopped
     build:
       context: .
       target: web

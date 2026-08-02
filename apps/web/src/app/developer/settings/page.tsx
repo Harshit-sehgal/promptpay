@@ -2,7 +2,6 @@
 /* eslint-disable @next/next/no-img-element */
 
 import type { AxiosResponse } from 'axios';
-import QRCode from 'qrcode';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
 import { stringifyApiData } from '@/lib/api/client';
@@ -169,6 +168,9 @@ export default function DevSettingsPage() {
       const res = await authApi.setup2fa();
       setTotpSecret(res.data.secret);
       setOtpauthUrl(res.data.otpauthUrl);
+      // Lazy-load the QR renderer only when the setup flow is actually opened
+      // (keeps the qrcode package out of the settings page's initial bundle).
+      const { default: QRCode } = await import('qrcode');
       QRCode.toDataURL(res.data.otpauthUrl)
         .then(setQrDataUrl)
         .catch(() => setQrDataUrl(null));

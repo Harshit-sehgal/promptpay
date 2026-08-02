@@ -12,7 +12,7 @@ export interface AdFlowClient {
     waitStateId: string;
     toolType: string;
     idempotencyKey: string;
-  }): Promise<Ad | null>;
+  }): Promise<{ ad: Ad | null; mode?: string }>;
   recordAdRendered(input: {
     impressionToken: string;
     renderedAt: string;
@@ -54,15 +54,15 @@ export interface AdFlowParams {
 export async function runAdFlow(
   client: AdFlowClient,
   params: AdFlowParams,
-): Promise<{ served: boolean; impressionToken?: string }> {
-  const ad = await client.requestAd({
+): Promise<{ served: boolean; impressionToken?: string; mode?: string }> {
+  const { ad, mode } = await client.requestAd({
     deviceId: params.deviceId,
     sessionId: params.sessionId,
     waitStateId: params.waitStateId,
     toolType: params.toolType,
     idempotencyKey: params.idempotencyKey,
   });
-  if (!ad) return { served: false };
+  if (!ad) return { served: false, mode };
 
   await client.recordAdRendered({
     impressionToken: ad.impressionToken,
@@ -79,5 +79,5 @@ export async function runAdFlow(
     });
   }
 
-  return { served: true, impressionToken: ad.impressionToken };
+  return { served: true, impressionToken: ad.impressionToken, mode };
 }

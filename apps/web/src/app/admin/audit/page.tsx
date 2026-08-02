@@ -18,12 +18,18 @@ interface AuditEntry {
 }
 
 interface AuditLogResponse {
-  entries?: AuditEntry[];
-  logs?: AuditEntry[];
+  items?: AuditEntry[];
+  total?: number;
+  page?: number;
+  limit?: number;
 }
+
+const PAGE_SIZE = 50;
 
 export default function AdminAuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actorFilter, setActorFilter] = useState('');
@@ -33,22 +39,31 @@ export default function AdminAuditPage() {
     setLoading(true);
     setError(null);
 
-    // The audit endpoint returns paginated entries; we render a flat list
-    // when present.
     adminApi
       .getAuditLog({
         actorRole: actorFilter || undefined,
-        action: actionFilter || undefined,
+        page,
+        limit: PAGE_SIZE,
       })
       .then((res: { data?: AuditLogResponse }) => {
         if (!res) return;
-        setEntries(res.data?.entries || res.data?.logs || []);
+        setEntries(res.data?.items || []);
+        setTotal(res.data?.total ?? 0);
       })
       .catch((err: unknown) => {
         setError(getErrorMessage(err, 'Failed to load audit log'));
       })
       .finally(() => setLoading(false));
-  }, [actorFilter, actionFilter]);
+  }, [actorFilter, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [actorFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const visibleEntries = actionFilter.trim()
+    ? entries.filter((e) => e.action.toLowerCase().includes(actionFilter.trim().toLowerCase()))
+    : entries;
 
   return (
     <>
@@ -85,7 +100,7 @@ export default function AdminAuditPage() {
       )}
 
       <div className="bg-ink-800 border border-ink-600/30 rounded-xl overflow-hidden">
-        {entries.length === 0 && !loading ? (
+        {visibleEntries.length === 0 && !loading ? (
           <div className="text-ink-300 text-sm py-12 text-center">
             No audit entries match the current filters. Audit log will populate as actions are
             recorded.
@@ -102,7 +117,7 @@ export default function AdminAuditPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-600/20">
-              {entries.map((e) => (
+              {visibleEntries.map((e) => (
                 <tr key={e.id} className="hover:bg-ink-700/30 transition-colors">
                   <td className="px-4 py-3 text-ink-200 text-xs">
                     {new Date(e.createdAt).toLocaleString()}
@@ -135,6 +150,30 @@ export default function AdminAuditPage() {
             </tbody>
           </table>
         )}
+      </div>
+
+      <div className="mt-4 flex items-center justify-between text-sm">
+        <span className="text-ink-300">
+          {total.toLocaleString()} entries · page {page} of {totalPages}
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || loading}
+            className="px-3 py-1.5 rounded-lg bg-ink-800 border border-ink-600/50 text-white text-sm disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || loading}
+            className="px-3 py-1.5 rounded-lg bg-ink-800 border border-ink-600/50 text-white text-sm disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </>
   );

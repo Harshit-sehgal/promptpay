@@ -1,5 +1,9 @@
 import { formatMinorUnits } from '@waitlayer/shared';
 
+/** Re-export the shared exact minor-unit formatter so web components get all
+ * money formatting from one module. */
+export { formatMinorUnits };
+
 /** Format minor units (cents) to display currency string.
  *  Uses the per-currency minor-unit exponent (JPY=0, USD=2, BHD=3, ...) so
  *  non-2-decimal currencies are not mis-rendered. `currency` is

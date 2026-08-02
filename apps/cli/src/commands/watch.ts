@@ -222,6 +222,16 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
           if (result.served && result.impressionToken) {
             activeImpressionToken = result.impressionToken;
             console.log(chalk.dim('[ad] served'));
+          } else if (result.mode === 'paused' || result.mode === 'telemetry_only') {
+            // Mirrors the VS Code extension: never render an ad surface when
+            // the platform is fail-closed. Inform the user instead.
+            console.log(
+              chalk.yellow(
+                result.mode === 'paused'
+                  ? 'WaitLayer rewards are paused by the operator.'
+                  : 'WaitLayer rewards are unavailable (telemetry-only mode).',
+              ),
+            );
           }
         } catch (err: unknown) {
           console.error(chalk.red(`ad error: ${getErrorMessage(err)}`));

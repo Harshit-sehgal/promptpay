@@ -66,4 +66,32 @@ describe('reportsToCsv', () => {
   it('handles an empty report', () => {
     expect(reportsToCsv([]).split('\n')).toHaveLength(1);
   });
+
+  it('neutralises spreadsheet formula injection in string cells', () => {
+    const csv = reportsToCsv([
+      {
+        campaignId: '=HYPERLINK("https://evil.example","x")',
+        campaignName: '+SUM(A1:A10)',
+        status: '-cmd|calc',
+        impressions: 1,
+        clicks: 0,
+        ctr: 0,
+        spendMinor: 0,
+        currency: '@import("https://evil.example")',
+      },
+    ]);
+    const line = csv.split('\n')[1];
+    expect(line).toContain("'=HYPERLINK(");
+    expect(line).toContain("'+SUM(A1:A10)");
+    expect(line).toContain("'-cmd|calc");
+    expect(line).toContain("'@import(");
+  });
+
+  it('leaves normal string and numeric cells untouched', () => {
+    const csv = reportsToCsv([rows[0]]);
+    const line = csv.split('\n')[1];
+    expect(line).toContain('"Launch, ""Big"""');
+    expect(line).toContain(',5,');
+    expect(line).not.toContain("'");
+  });
 });

@@ -87,6 +87,7 @@ export class WaitStateDetector {
 
   // ── Editor inactivity tracking ──
   private inactivityTimer?: NodeJS.Timeout;
+  private burstTimer?: NodeJS.Timeout;
   private lastEditTime = 0;
   private getInactivityTimeoutMs: () => number;
   /** Whether the active wait is a shadow (non-monetizable) detection. */
@@ -215,8 +216,9 @@ export class WaitStateDetector {
       // trigger ads. This ties the terminal signal to a real coding context.
       if (!this.inWait && this.windowFocused && vscode.window.activeTextEditor) {
         this.enterWait('terminal');
-        // Short wait — terminal activity bursts are brief
-        setTimeout(() => {
+        // Short wait — terminal activity bursts are brief. Tracked so the
+        // timer cannot fire after the detector is disposed.
+        this.burstTimer = setTimeout(() => {
           if (this.inWait && this.waitStart > 0) {
             this.endWait();
           }
@@ -240,6 +242,7 @@ export class WaitStateDetector {
       dispose: () => {
         for (const d of this.disposables) d.dispose();
         if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
+        if (this.burstTimer) clearTimeout(this.burstTimer);
       },
     });
   }

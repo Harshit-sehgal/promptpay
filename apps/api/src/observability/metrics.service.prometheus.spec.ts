@@ -57,3 +57,27 @@ describe('MetricsService — Prometheus + bigint safety (P1.24)', () => {
     expect(m.getMoneyCounter('bad')).toBe(0n);
   });
 });
+
+describe('MetricsService — series cap (P1.24)', () => {
+  it('drops new series beyond the cap while preserving existing counters', () => {
+    const m = new MetricsService();
+    for (let i = 0; i < 1024; i += 1) {
+      m.recordDetectorVersionAdoption(`v${i}`);
+    }
+    expect(m.getCounter('detector_version{version=v0}')).toBe(1);
+    m.recordDetectorVersionAdoption('v1024');
+    expect(m.getCounter('detector_version{version=v1024}')).toBe(0);
+    m.recordDetectorVersionAdoption('v3');
+    expect(m.getCounter('detector_version{version=v3}')).toBe(2);
+  });
+
+  it('applies the cap to money series too', () => {
+    const m = new MetricsService();
+    for (let i = 0; i < 1024; i += 1) {
+      m.incrementMoney(`money{key=${i}}`, 1n);
+    }
+    m.incrementMoney('money{key=1024}', 1n);
+    expect(m.getMoneyCounter('money{key=1024}')).toBe(0n);
+    expect(m.getMoneyCounter('money{key=0}')).toBe(1n);
+  });
+});

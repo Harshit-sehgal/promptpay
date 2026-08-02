@@ -83,6 +83,7 @@ export class AdRequestDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(512)
   signature!: string;
 }
 
@@ -113,6 +114,7 @@ export class AdRenderedDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(512)
   signature!: string;
 }
 
@@ -142,6 +144,7 @@ export class QualifiedImpressionDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(512)
   signature!: string;
 }
 
@@ -164,6 +167,7 @@ export class AdClickDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(512)
   signature!: string;
 }
 
@@ -204,5 +208,6 @@ export class ReportAdDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(512)
   signature!: string;
 }

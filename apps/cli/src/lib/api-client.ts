@@ -17,6 +17,19 @@ import { parseMinor } from './format';
 import { signPayload } from './signing';
 import { normalizeToolType } from './tool-types';
 
+// Real CLI version from the packaged manifest instead of a hardcoded
+// constant, so device registration always reports the actual shipped build.
+// Compiled dist builds resolve the manifest next to the package; dev/test
+// imports of the raw source fall back to the declared baseline version.
+function readManifestVersion(): string {
+  try {
+    return (require('../../package.json') as { version: string }).version;
+  } catch {
+    return '0.0.1';
+  }
+}
+const CLI_MANIFEST_VERSION: string = readManifestVersion();
+
 const PRODUCTION_API_URL = 'https://api.waitlayer.com/api/v1';
 
 /**
@@ -177,7 +190,7 @@ export class ApiClient {
     const registrationPayload = {
       toolType: 'terminal',
       fingerprintHash: fingerprint,
-      extensionVersion: '0.0.1',
+      extensionVersion: CLI_MANIFEST_VERSION,
       platform: os.platform() || 'unknown',
       ...(this.deviceEventSecret ? { existingEventSecret: this.deviceEventSecret } : {}),
       ...(recoverySupportToken ? { recoverySupportToken } : {}),
@@ -440,7 +453,7 @@ export class ApiClient {
     toolType: string;
     idempotencyKey: string;
     country?: string;
-  }): Promise<Ad | null> {
+  }): Promise<{ ad: Ad | null; mode?: string }> {
     // A-056: send a best-effort ISO country code so country-targeted campaigns
     // can be enforced without server-side geolocation. Falls back to the
     // developer's profile country server-side when omitted.
@@ -461,11 +474,11 @@ export class ApiClient {
       ...(country ? { country } : {}),
     };
     const signature = await this.signEventPayload(payload);
-    const res = await this.raw<{ ad: Ad | null }>('POST', '/extension/ad-request', {
+    const res = await this.raw<{ ad: Ad | null; mode?: string }>('POST', '/extension/ad-request', {
       ...payload,
       signature,
     });
-    return res?.ad ?? null;
+    return { ad: res?.ad ?? null, mode: res?.mode };
   }
 
   async recordAdRendered(input: {

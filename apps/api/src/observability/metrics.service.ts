@@ -34,6 +34,16 @@ export interface MetricsSnapshot {
 @Injectable()
 export class MetricsService {
   private readonly logger = new Logger(MetricsService.name);
+  /**
+   * Hard cap on distinct metric series per map. Every key is a metric name
+   * plus its label set; label cardinality is normally bounded by enums
+   * (currency, provider, status), but a hostile client could report arbitrary
+   * values through e.g. `detector_version{version=...}`. Without a cap this
+   * would be an unbounded in-process memory leak and an unbounded scrape
+   * payload. New series beyond the cap are dropped (with a one-time warning)
+   * rather than evicted, so existing counters keep their monotonic value.
+   */
+  private static readonly MAX_SERIES = 1024;
   private readonly counters = new Map<string, number>();
   private readonly gauges = new Map<string, number>();
   // Bigint-safe monetary accumulators (P1.24). Exact in memory and in the
@@ -41,17 +51,33 @@ export class MetricsService {
   // number coercion for monetary amounts.
   private readonly moneyCounters = new Map<string, bigint>();
   private readonly moneyGauges = new Map<string, bigint>();
+  private seriesDroppedWarned = false;
+
+  private capacityFor(map: Map<string, unknown>): boolean {
+    if (map.size < MetricsService.MAX_SERIES) return true;
+    if (!this.seriesDroppedWarned) {
+      this.seriesDroppedWarned = true;
+      this.logger.warn(
+        `Metrics series cap (${MetricsService.MAX_SERIES}) reached; dropping new series. ` +
+          'Check for unbounded label cardinality in metric names.',
+      );
+    }
+    return false;
+  }
 
   increment(name: string, by = 1): void {
     if (!Number.isFinite(by)) return;
+    if (!this.counters.has(name) && !this.capacityFor(this.counters)) return;
     this.counters.set(name, (this.counters.get(name) ?? 0) + by);
   }
 
   setCounter(name: string, value: number): void {
+    if (!this.counters.has(name) && !this.capacityFor(this.counters)) return;
     this.counters.set(name, value);
   }
 
   gauge(name: string, value: number): void {
+    if (!this.gauges.has(name) && !this.capacityFor(this.gauges)) return;
     this.gauges.set(name, value);
   }
 
@@ -71,11 +97,13 @@ export class MetricsService {
   // --- Bigint-safe monetary helpers (P1.24) ---
   incrementMoney(name: string, by: bigint): void {
     if (typeof by !== 'bigint') return;
+    if (!this.moneyCounters.has(name) && !this.capacityFor(this.moneyCounters)) return;
     this.moneyCounters.set(name, (this.moneyCounters.get(name) ?? 0n) + by);
   }
 
   gaugeMoney(name: string, value: bigint): void {
     if (typeof value !== 'bigint') return;
+    if (!this.moneyGauges.has(name) && !this.capacityFor(this.moneyGauges)) return;
     this.moneyGauges.set(name, value);
   }
 

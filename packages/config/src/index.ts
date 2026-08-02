@@ -1,11 +1,19 @@
 import { z } from 'zod';
 
+// Mirrors the full `PAYOUT_PROVIDERS` catalogue from packages/shared so an
+// operator copying the .env.example override map never trips config
+// validation. Stub-only providers (payoneer/razorpay/dodo_payments) are still
+// rejected at registration regardless of any override, so accepting them here
+// is harmless — it only prevents an inconsistent boot-time rejection.
 const PAYOUT_PROVIDERS = new Set([
   'paypal_email',
   'manual',
   'paypal_payouts',
   'stripe_connect',
   'wise',
+  'payoneer',
+  'razorpay',
+  'dodo_payments',
 ]);
 
 function validProviderStatusJson(value: string): boolean {

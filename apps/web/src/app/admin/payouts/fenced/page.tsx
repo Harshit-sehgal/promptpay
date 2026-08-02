@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatRelativeTime } from '@/lib/format';
@@ -292,14 +293,13 @@ export default function AdminFencedPayoutAccountsPage() {
       )}
 
       {/* Release fence modal */}
-      {releaseFor && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="release-fence-title"
-            className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full"
-          >
+      <ModalDialog
+        open={!!releaseFor}
+        onClose={closeRelease}
+        labelledBy="release-fence-title"
+      >
+        {releaseFor && (
+          <>
             <h3 id="release-fence-title" className="text-white font-semibold mb-2">
               Release payout-account fence
             </h3>
@@ -394,9 +394,9 @@ export default function AdminFencedPayoutAccountsPage() {
                 {processing === releaseFor.id ? 'Working...' : 'Confirm release'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalDialog>
     </>
   );
 }

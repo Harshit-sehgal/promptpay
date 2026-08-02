@@ -215,6 +215,8 @@ export default function AdminCampaignsPage() {
                 <div className="border-t border-ink-600/30 pt-3 mt-3">
                   <button
                     onClick={() => setExpandedCampaign(expandedCampaign === c.id ? null : c.id)}
+                    aria-expanded={expandedCampaign === c.id}
+                    aria-controls={`creative-list-${c.id}`}
                     className="text-brand-400 hover:text-brand-300 text-xs font-medium mb-2 flex items-center gap-1"
                   >
                     {expandedCampaign === c.id ? '▼' : '▶'} {c.creatives.length} creative
@@ -226,7 +228,7 @@ export default function AdminCampaignsPage() {
                   </button>
 
                   {expandedCampaign === c.id && (
-                    <div className="space-y-2 mt-2">
+                    <div id={`creative-list-${c.id}`} className="space-y-2 mt-2">
                       {c.creatives.map((cr) => (
                         <div
                           key={cr.id}

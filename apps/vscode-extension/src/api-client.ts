@@ -15,6 +15,19 @@ import { ConfigurationManager } from './config';
 import { requestHostnameForUrl, resolveCredentialSafeUrl } from './transport-policy';
 import type { WaitSignal } from './wait-detector';
 
+// Real extension version from the packaged manifest instead of a hardcoded
+// constant, so device registration always reports the actual shipped build.
+// The bundle script injects `WAITLAYER_EXTENSION_VERSION` via esbuild `define`
+// (esbuild refuses to bundle `require('package.json')` — it always leaves it
+// external, which the VSIX verification step rejects). Dev/test imports of
+// the raw source fall back to the declared baseline version.
+function readManifestVersion(): string {
+  const injected = process.env.WAITLAYER_EXTENSION_VERSION;
+  if (injected && injected !== '0.0.0') return injected;
+  return '0.0.1';
+}
+const EXTENSION_MANIFEST_VERSION: string = readManifestVersion();
+
 export interface Ad {
   impressionToken: string;
   campaignId: string;
@@ -183,7 +196,7 @@ export class ApiClient {
     const registrationPayload = {
       toolType: 'vscode',
       fingerprintHash: fingerprint,
-      extensionVersion: '0.0.1',
+      extensionVersion: EXTENSION_MANIFEST_VERSION,
       platform: process.platform || 'unknown',
       ...(this.deviceEventSecret ? { existingEventSecret: this.deviceEventSecret } : {}),
     };

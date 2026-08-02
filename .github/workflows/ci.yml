@@ -3,6 +3,12 @@ name: CI
 permissions:
   contents: read
 
+# Cancel superseded runs on the same ref so stale commits don't waste CI
+# minutes or leave an older result attached to a newer push.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_call:
   push:
@@ -100,6 +106,11 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+      # The API integration suite resets and runs against TEST_DATABASE_URL
+      # (defaults to :5433 locally). CI only provisions postgres on :5432, so
+      # the isolated-test URL must point there or every integration spec
+      # fails to connect.
+      TEST_DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
       JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
       REDIS_URL: redis://localhost:6379
       TOTP_SECRET_ENCRYPTION_KEY: test-totp-encryption-key-not-for-production-32+

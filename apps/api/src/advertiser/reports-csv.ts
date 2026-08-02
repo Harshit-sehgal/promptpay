@@ -15,7 +15,14 @@ export interface ReportRow {
 }
 
 function csvCell(value: string | number | bigint): string {
-  const s = String(value);
+  let s = String(value);
+  // Formula injection guard: cells beginning with `=`, `+`, `-` or `@` are
+  // interpreted as formulas/DDE links by spreadsheet applications (e.g. Excel
+  // CSV import). Prefix an apostrophe so the cell renders as literal text.
+  // Numeric columns are non-negative and never start with these characters.
+  if (typeof value === 'string' && /^[=+\-@]/.test(s)) {
+    s = `'${s}`;
+  }
   if (/[",\n]/.test(s)) {
     return `"${s.replace(/"/g, '""')}"`;
   }

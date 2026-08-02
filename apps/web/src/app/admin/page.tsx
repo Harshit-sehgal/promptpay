@@ -12,8 +12,8 @@ interface AdminOverview {
   activeUsers: number;
   activeCampaigns: number;
   totalBillableImpressions: number;
-  totalPayoutsMinor: number;
-  totalPayoutsByCurrency?: Record<string, number>;
+  totalPayoutsMinor: bigint;
+  totalPayoutsByCurrency?: Record<string, bigint>;
   openFraudFlags: number;
 }
 
@@ -43,7 +43,7 @@ export default function AdminDashboard() {
   const payoutTotals =
     data?.totalPayoutsByCurrency ?? (data ? { USD: data.totalPayoutsMinor } : {});
   const payoutCurrencies = Object.keys(payoutTotals)
-    .filter((currency) => (payoutTotals[currency] ?? 0) !== 0)
+    .filter((currency) => (payoutTotals[currency] ?? 0n) !== 0n)
     .sort();
 
   return (

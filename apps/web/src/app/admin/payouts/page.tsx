@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import ModalDialog from '@/components/ui/modal-dialog';
 import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
@@ -411,14 +412,16 @@ export default function AdminPayoutsPage() {
       )}
 
       {/* Payout-account emergency freeze / unfreeze modal */}
-      {accountAction && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="payout-account-action-title"
-            className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full"
-          >
+      <ModalDialog
+        open={!!accountAction}
+        onClose={() => {
+          setAccountAction(null);
+          setAccountActionReason('');
+        }}
+        labelledBy="payout-account-action-title"
+      >
+        {accountAction && (
+          <>
             <h3 id="payout-account-action-title" className="text-white font-semibold mb-2">
               {accountAction.mode === 'freeze'
                 ? 'Freeze payout account'
@@ -474,14 +477,20 @@ export default function AdminPayoutsPage() {
                     : 'Confirm unfreeze'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalDialog>
 
       {/* Reject modal */}
-      {rejectModalFor && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+      <ModalDialog
+        open={!!rejectModalFor}
+        onClose={() => {
+          setRejectModalFor(null);
+          setRejectReason('');
+        }}
+      >
+        {rejectModalFor && (
+          <>
             <h3 className="text-white font-semibold mb-2">Reject payout</h3>
             <p className="text-ink-300 text-sm mb-4">
               Reject{' '}
@@ -516,14 +525,20 @@ export default function AdminPayoutsPage() {
                 Reject
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalDialog>
 
       {/* Approve (partial) modal */}
-      {approveModalFor && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+      <ModalDialog
+        open={!!approveModalFor}
+        onClose={() => {
+          setApproveModalFor(null);
+          setApproveAmount('');
+        }}
+      >
+        {approveModalFor && (
+          <>
             <h3 className="text-white font-semibold mb-2">Approve payout</h3>
             <p className="text-ink-300 text-sm mb-4">
               Requested{' '}
@@ -566,14 +581,22 @@ export default function AdminPayoutsPage() {
                 {processing === approveModalFor.id ? 'Working...' : 'Approve'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalDialog>
 
       {/* Manual reconciliation modal */}
-      {reconcileModalFor && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-ink-800 border border-ink-600/30 rounded-2xl p-6 max-w-md w-full">
+      <ModalDialog
+        open={!!reconcileModalFor}
+        onClose={() => {
+          setReconcileModalFor(null);
+          setReconcileProviderTxId('');
+          setReconcileAmount('');
+          setReconcilePaidAt('');
+        }}
+      >
+        {reconcileModalFor && (
+          <>
             <h3 className="text-white font-semibold mb-2">Manual reconciliation</h3>
             <p className="text-ink-300 text-sm mb-4">
               Record an external provider payment for{' '}
@@ -639,9 +662,9 @@ export default function AdminPayoutsPage() {
                 {processing === reconcileModalFor.id ? 'Working...' : 'Mark paid'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </ModalDialog>
     </>
   );
 }

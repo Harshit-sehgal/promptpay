@@ -4,7 +4,7 @@ import { AdFlowClient, MINIMUM_VISIBLE_DURATION_MS, runAdFlow } from './ad-flow'
 
 function makeClient(ad: { impressionToken: string } | null) {
   return {
-    requestAd: vi.fn().mockResolvedValue(ad),
+    requestAd: vi.fn().mockResolvedValue({ ad, mode: 'earnings_enabled' }),
     recordAdRendered: vi.fn().mockResolvedValue(undefined),
     recordImpressionQualified: vi.fn().mockResolvedValue(undefined),
   } as unknown as AdFlowClient;
@@ -23,7 +23,19 @@ describe('runAdFlow (A-040)', () => {
     const client = makeClient(null);
     const res = await runAdFlow(client, { ...params, durationMs: 10_000 });
     expect(res.served).toBe(false);
+    expect(res.mode).toBe('earnings_enabled');
     expect(client.recordAdRendered).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the launch mode when no ad is served (paused/telemetry)', async () => {
+    const client = makeClient(null);
+    (client.requestAd as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ad: null,
+      mode: 'telemetry_only',
+    });
+    const res = await runAdFlow(client, { ...params, durationMs: 10_000 });
+    expect(res.served).toBe(false);
+    expect(res.mode).toBe('telemetry_only');
   });
 
   it('requests, renders, and qualifies a long enough wait state', async () => {
