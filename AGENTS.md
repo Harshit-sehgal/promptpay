@@ -536,8 +536,9 @@ pnpm@11.9.0 --activate`. The generated `.npmrc` carries the registry override
 ## 2026-07-10 Source Audit — gap closures
 
 The 2026-07-10 source audit verified `AGENTS.md` against the actual code.
-`waitlayer-gap-analysis.md` is **historical** — its note listing A-074…A-081 as
-OPEN is stale/false; those items are code-DONE. The following previously-mis-closed
+The historical `waitlayer-gap-analysis.md` (158-gap closure summary, its A-074…A-081
+notes stale/false) was removed 2026-08-04 as a stale artifact; those items are
+code-DONE. The following previously-mis-closed
 gaps are now **code-closed**:
 
 - #23 / #63 — 2FA endpoints (`/auth/2fa/*`) now use the tight `auth-short` (10/min) throttle bucket.
@@ -871,7 +872,8 @@ totalSpendByCurrency.USD ?? 0`. Now uses `primaryCurrency(totalSpendByCurrency)`
   clashes with the trait interface (TS2430).
 - **God-service decomposition (completed 2026-07-12):** all six largest
   NestJS services are now split into mixin/trait files + thin facades via the
-  hardened `decompose-service.mjs` — methods copied verbatim, with a prototype
+  hardened `decompose-service.mjs` (removed 2026-08-04 after the refactor
+  completed; no live references remained) — methods copied verbatim, with a prototype
   `Object.defineProperty` assign-loop wiring cross-trait `this.<method>` calls so
   runtime behaviour is identical. `AuthService` (bb5fcbf) plus `LedgerService`
   (math/earnings/balance/admin), `AdminService`
