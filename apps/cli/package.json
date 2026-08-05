@@ -30,7 +30,7 @@
     "keytar": "npm:@napi-rs/keyring@^1.1.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@waitlayer/eslint-config": "workspace:*",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
