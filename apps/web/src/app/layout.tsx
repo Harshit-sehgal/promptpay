@@ -3,6 +3,7 @@ import localFont from 'next/font/local';
 import './globals.css';
 import ConsentRePrompt from '@/components/consent-reprompt';
 import CookieConsent from '@/components/cookie-consent';
+import SandboxBanner from '@/components/sandbox-banner';
 import SiteFooter from '@/components/site-footer';
 import { SkipLink } from '@/components/skip-link';
 
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <body className="font-sans antialiased">
         <SkipLink />
+        <SandboxBanner />
         <Providers>
           {children}
           <SiteFooter />

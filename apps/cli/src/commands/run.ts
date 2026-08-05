@@ -6,6 +6,7 @@ import * as path from 'path';
 import { sendAgentEventToBridge } from '../lib/agent-bridge';
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
+import { printSandboxBanner } from '../lib/environment-label';
 import { getErrorMessage } from '../lib/errors';
 import { createGenericWrapperEvent } from '../lib/generic-wrapper-adapter';
 import { normalizeToolType } from '../lib/tool-types';
@@ -34,6 +35,9 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
   }
 
   const api = new ApiClient(creds);
+  // Keep the wrapped command's stdout byte-for-byte compatible with normal
+  // invocation; the environment marker belongs on stderr for `run`.
+  await printSandboxBanner(api, process.stderr);
   const executable = command[0];
   const args = command.slice(1);
   const toolType = normalizeToolType(path.basename(executable));
@@ -208,7 +212,15 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
         );
       }
     }
-    console.log(chalk.dim('WaitLayer beta: supervised wait recorded; rewards are not enabled.'));
+    const outcome = terminationSignal || exitResult?.signal || exitResult?.code !== 0 ? 'failed' : 'completed';
+    const telemetry = started ? 'recorded' : 'unavailable';
+    // Completion summaries belong on stderr so the wrapped agent's stdout
+    // remains byte-for-byte compatible for pipes, scripts, and IDE terminals.
+    console.error(
+      chalk.dim(
+        `WaitLayer: supervised session ${outcome} (${toolType}); telemetry ${telemetry}; rewards are not enabled.`,
+      ),
+    );
   }
 }
 

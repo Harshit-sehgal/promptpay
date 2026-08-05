@@ -86,6 +86,19 @@ describe('StatusBar — state updates', () => {
     expect(mock.item.command).toBe('waitlayer.showEarnings');
   });
 
+  it('shows a persistent sandbox marker in every status state', () => {
+    const bar = new StatusBar();
+    bar.register(makeContext(), 'sandbox');
+
+    expect(mock.item.text).toContain('WaitLayer [SANDBOX]');
+    expect(mock.item.tooltip).toContain('no cash value');
+    bar.showAdServing();
+    expect(mock.item.text).toContain('WaitLayer [SANDBOX]');
+    bar.setEarnings(1250n, 'USD');
+    expect(mock.item.text).toContain('WaitLayer [SANDBOX]');
+    expect(mock.item.tooltip).toContain('no cash value');
+  });
+
   it('shows the logged-out state and switches the command to login', () => {
     const bar = new StatusBar();
     bar.register(makeContext());
@@ -112,7 +125,7 @@ describe('StatusBar — state updates', () => {
     const bar = new StatusBar();
 
     expect(() => bar.showIdle()).not.toThrow();
-    expect(() => bar.setEarnings(1n)).not.toThrow();
+    expect(() => bar.setEarnings(1n, 'USD')).not.toThrow();
     expect(mock.created).toHaveLength(0);
   });
 });

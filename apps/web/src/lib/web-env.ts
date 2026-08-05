@@ -42,6 +42,9 @@ const webEnvSchema = z
     JWT_ISSUER: z.string().min(1).optional(),
     JWT_AUDIENCE: z.string().min(1).optional(),
     NEXT_PUBLIC_API_URL: z.string().optional(),
+    NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: z
+      .enum(['development', 'test', 'sandbox', 'staging', 'production'])
+      .default('production'),
     API_INTERNAL_URL: z.string().optional(),
     BFF_TRUST_PROXY_HOPS: z.coerce.number().int().min(1).max(3).default(1),
     COOKIE_SECURE: z.string().optional(),
@@ -95,6 +98,7 @@ export interface WebEnv {
   JWT_ISSUER?: string;
   JWT_AUDIENCE?: string;
   NEXT_PUBLIC_API_URL?: string;
+  NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND?: 'development' | 'test' | 'sandbox' | 'staging' | 'production';
   API_INTERNAL_URL?: string;
   BFF_TRUST_PROXY_HOPS?: number;
   COOKIE_SECURE?: string;
@@ -121,6 +125,7 @@ export function validateWebEnv(source: NodeJS.ProcessEnv = process.env): WebEnv 
       JWT_ISSUER: source.JWT_ISSUER,
       JWT_AUDIENCE: source.JWT_AUDIENCE,
       NEXT_PUBLIC_API_URL: source.NEXT_PUBLIC_API_URL,
+      NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: source.NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND as WebEnv['NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND'],
       API_INTERNAL_URL: source.API_INTERNAL_URL,
       BFF_TRUST_PROXY_HOPS: source.BFF_TRUST_PROXY_HOPS
         ? Number(source.BFF_TRUST_PROXY_HOPS)

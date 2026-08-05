@@ -4,8 +4,11 @@ import { formatMinorUnits } from '@waitlayer/shared';
 
 export class StatusBar {
   private bar?: vscode.StatusBarItem;
+  private sandbox = false;
+  private environmentMismatch = false;
 
-  register(context: vscode.ExtensionContext) {
+  register(context: vscode.ExtensionContext, environmentKind = 'production') {
+    this.sandbox = environmentKind === 'sandbox';
     this.bar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 50);
     this.setLoggedIn();
     this.bar.show();
@@ -14,14 +17,30 @@ export class StatusBar {
 
   showAdServing() {
     if (this.bar) {
-      this.bar.text = '$(zap) WaitLayer: showing ad';
+      this.bar.text = this.environmentMismatch ? this.mismatchLabel() : this.label('showing ad');
     }
+  }
+
+  showEnvironmentMismatch(clientKind: string, serverKind: string): void {
+    this.environmentMismatch = true;
+    if (!this.bar) return;
+    this.bar.text = '$(warning) WaitLayer: ENVIRONMENT MISMATCH';
+    this.bar.tooltip = `Environment mismatch: client=${clientKind}, server=${serverKind}. Check the API URL and environment setting.`;
+    this.bar.command = 'waitlayer.openDashboard';
   }
 
   showRewardsUnavailable() {
     if (this.bar) {
-      this.bar.text = '$(info) WaitLayer: rewards unavailable';
-      this.bar.tooltip = 'Wait detected. Rewards are not enabled in this launch mode.';
+      this.bar.text = this.environmentMismatch
+        ? this.mismatchLabel()
+        : this.sandbox
+        ? '$(info) WaitLayer [SANDBOX]: test credits only'
+        : '$(info) WaitLayer: rewards unavailable';
+      this.bar.tooltip = this.environmentMismatch
+        ? 'Environment mismatch: check the API URL and environment setting.'
+        : this.sandbox
+          ? 'Sandbox: test credits only; no cash value.'
+          : 'Wait detected. Rewards are not enabled in this launch mode.';
       this.bar.command = 'waitlayer.showEarnings';
     }
   }
@@ -30,10 +49,16 @@ export class StatusBar {
     this.setLoggedIn();
   }
 
+  isEnvironmentVerified(): boolean {
+    return !this.environmentMismatch;
+  }
+
   setLoggedIn() {
     if (!this.bar) return;
-    this.bar.text = '$(zap) WaitLayer: idle';
-    this.bar.tooltip = 'WaitLayer click to view earnings';
+    this.bar.text = this.environmentMismatch ? this.mismatchLabel() : this.label('idle');
+    this.bar.tooltip = this.sandbox
+      ? 'Sandbox: test credits only; no cash value. Click for details.'
+      : 'WaitLayer click to view earnings';
     this.bar.command = 'waitlayer.showEarnings';
   }
 
@@ -44,17 +69,31 @@ export class StatusBar {
    */
   setEarnings(amountMinor: bigint, currency: string) {
     if (this.bar) {
-      this.bar.text = `$(zap) WaitLayer: ${formatMinorUnits(amountMinor, currency)}`;
-      this.bar.tooltip = `Click for balance details`;
+      this.bar.text = this.environmentMismatch
+        ? this.mismatchLabel()
+        : this.sandbox
+        ? `$(zap) WaitLayer [SANDBOX]: ${formatMinorUnits(amountMinor, currency)}`
+        : `$(zap) WaitLayer: ${formatMinorUnits(amountMinor, currency)}`;
+      this.bar.tooltip = this.sandbox
+        ? `Sandbox test credits only; no cash value. Click for balance details.`
+        : `Click for balance details`;
       this.bar.command = 'waitlayer.showEarnings';
     }
   }
 
   setLoggedOut() {
     if (this.bar) {
-      this.bar.text = '$(zap) WaitLayer: logged out';
-      this.bar.tooltip = 'Log in to WaitLayer';
+      this.bar.text = this.environmentMismatch ? this.mismatchLabel() : this.label('logged out');
+      this.bar.tooltip = this.sandbox ? 'Sandbox environment — log in for test credits.' : 'Log in to WaitLayer';
       this.bar.command = 'waitlayer.login';
     }
+  }
+
+  private label(state: string): string {
+    return this.sandbox ? `$(zap) WaitLayer [SANDBOX]: ${state}` : `$(zap) WaitLayer: ${state}`;
+  }
+
+  private mismatchLabel(): string {
+    return '$(warning) WaitLayer: ENVIRONMENT MISMATCH';
   }
 }

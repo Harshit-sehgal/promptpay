@@ -35,6 +35,11 @@ type WorkUnitDescriptor = {
   outcomeCategory?: string;
 };
 
+const OPPORTUNITY_TTL_MS = 15 * 60 * 1000;
+const MIN_FOREGROUND_WAIT_MS = 30 * 1000;
+const MAX_OPPORTUNITY_TRIGGER_AGE_MS = 15 * 60 * 1000;
+const OPPORTUNITY_CONFIDENCE_CAP = 0.8;
+
 @Injectable()
 export class AgentService {
   private readonly environmentKind: string;
@@ -402,6 +407,11 @@ export class AgentService {
         },
       });
 
+      // WL-061 is deliberately an agent-domain projection only. It inserts
+      // candidate opportunities and never calls legacy ad selection, billing,
+      // impressions, clicks, or ledger services.
+      await this.maybeGenerateOpportunity(tx, userId, deviceId, session.id, event);
+
       const sessionUpdate =
         !latestEvent || isEventAtOrAfterLatest(event, latestEvent)
           ? sessionUpdateFor(event, occurredAt)
@@ -410,6 +420,108 @@ export class AgentService {
         await tx.agentSession.update({ where: { id: session.id }, data: sessionUpdate });
       }
       return { eventId: event.eventId, duplicate: false };
+    });
+  }
+
+  private async maybeGenerateOpportunity(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    deviceId: string,
+    sessionId: string,
+    event: AgentLifecycleEventV1,
+  ): Promise<void> {
+    const placementType =
+      event.eventType === 'surface.visible'
+        ? 'foreground_wait'
+        : event.eventType === 'user.returned'
+          ? 'completion_return'
+          : null;
+    if (!placementType) return;
+
+    const occurredAt = new Date(event.occurredAt);
+    const now = Date.now();
+    // Delayed offline telemetry must not create a stale surface opportunity.
+    // This is an inventory projection, not a way to replay an old event into
+    // an ad or financial path.
+    if (
+      occurredAt.getTime() < now - MAX_OPPORTUNITY_TRIGGER_AGE_MS ||
+      occurredAt.getTime() > now + 5 * 60 * 1000
+    ) {
+      return;
+    }
+
+    let workUnitId: string | null = null;
+    if (placementType === 'foreground_wait') {
+      const [activeWorkUnit, processingStart] = await Promise.all([
+        tx.agentWorkUnit.findFirst({
+          where: { sessionId, status: 'active' },
+          select: { id: true },
+        }),
+        tx.agentLifecycleEvent.findFirst({
+          where: {
+            sessionId,
+            eventType: { in: ['turn.processing_started', 'task.created'] },
+            occurredAt: { lt: occurredAt },
+          },
+          orderBy: [{ occurredAt: 'desc' }, { sequence: 'desc' }, { eventId: 'desc' }],
+          select: { occurredAt: true, workUnitId: true },
+        }),
+      ]);
+      if (!activeWorkUnit || !processingStart) return;
+      if (occurredAt.getTime() - processingStart.occurredAt.getTime() < MIN_FOREGROUND_WAIT_MS) {
+        return;
+      }
+      workUnitId = activeWorkUnit.id;
+    } else {
+      const backgrounded = await tx.agentLifecycleEvent.findFirst({
+        where: {
+          sessionId,
+          eventType: 'user.backgrounded',
+          occurredAt: { lt: occurredAt },
+        },
+        orderBy: [{ occurredAt: 'desc' }, { sequence: 'desc' }, { eventId: 'desc' }],
+        select: { occurredAt: true },
+      });
+      if (!backgrounded) return;
+
+      const completedWork = await tx.agentLifecycleEvent.findFirst({
+        where: {
+          sessionId,
+          eventType: {
+            in: ['turn.completed', 'task.completed', 'session.ended'],
+          },
+          occurredAt: { gt: backgrounded.occurredAt, lt: occurredAt },
+        },
+        orderBy: [{ occurredAt: 'desc' }, { sequence: 'desc' }, { eventId: 'desc' }],
+        select: { workUnitId: true },
+      });
+      if (!completedWork) return;
+      workUnitId = completedWork.workUnitId;
+    }
+
+    const idempotencyKey = `agent-opportunity:v1:${placementType}:${event.eventId}`;
+    const eligibleAt = new Date();
+    const expiresAt = new Date(eligibleAt.getTime() + OPPORTUNITY_TTL_MS);
+    const confidence = Math.min(Math.max(event.confidence, 0), OPPORTUNITY_CONFIDENCE_CAP);
+
+    await tx.adOpportunity.upsert({
+      where: { idempotencyKey },
+      create: {
+        id: randomUUID(),
+        userId,
+        deviceId,
+        sessionId,
+        workUnitId,
+        triggerEventId: event.eventId,
+        placementType,
+        state: 'candidate',
+        attentionConfidence: confidence,
+        integrationConfidence: confidence,
+        eligibleAt,
+        expiresAt,
+        idempotencyKey,
+      },
+      update: {},
     });
   }
 

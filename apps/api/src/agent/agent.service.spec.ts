@@ -39,6 +39,7 @@ function makePrisma() {
     agentLifecycleEvent: { findFirst: vi.fn(), create: vi.fn() },
     agentSession: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     agentWorkUnit: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    adOpportunity: { upsert: vi.fn() },
   };
   const prisma = {
     device: { findFirst: vi.fn().mockResolvedValue({ id: DEVICE_ID, eventSecret: SECRET }) },
@@ -127,6 +128,7 @@ describe('AgentService', () => {
     tx.agentWorkUnit.findFirst.mockResolvedValue(null);
     tx.agentWorkUnit.create.mockResolvedValue(storedWorkUnit);
     tx.agentLifecycleEvent.create.mockResolvedValue({});
+    tx.adOpportunity.upsert.mockResolvedValue({});
 
     const acceptedEvent = event({
       providerTurnHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',

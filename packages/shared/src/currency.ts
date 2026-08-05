@@ -43,6 +43,21 @@ export interface CurrencyPolicy {
   providers: PayoutProvider[];
 }
 
+/** ISO 4217's reserved testing code. It has no cash value and no real provider. */
+export const TEST_CURRENCY_CODE = 'XTS' as const;
+
+export type CurrencyEnvironmentKind =
+  | 'development'
+  | 'test'
+  | 'sandbox'
+  | 'staging'
+  | 'production';
+
+/**
+ * Real settlement currencies. Keep XTS out of this map deliberately: many
+ * clients derive their real-currency selectors from `Object.keys(CURRENCY_POLICY)`.
+ * Sandbox/test code must opt into `TEST_CURRENCY_POLICY` explicitly.
+ */
 export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
   USD: {
     code: 'USD',
@@ -171,6 +186,23 @@ export const CURRENCY_POLICY: Record<string, CurrencyPolicy> = {
   },
 };
 
+/**
+ * Isolated test-credit policy. XTS is intentionally not part of
+ * `CURRENCY_POLICY`, so it cannot leak into production deposit, campaign, or
+ * payout selectors by accident. Sandbox/test flows resolve it explicitly via
+ * `getCurrencyPolicyForEnvironment`.
+ */
+export const TEST_CURRENCY_POLICY: CurrencyPolicy = {
+  code: TEST_CURRENCY_CODE,
+  minorUnitExponent: 2,
+  depositMinimumMinor: 1,
+  payoutMinimumMinor: 1,
+  campaignMinimumBudgetMinor: 100,
+  campaignMaximumBudgetMinor: 100_000_000,
+  campaignMinimumBidMinor: 1,
+  providers: [],
+};
+
 const DEFAULT_POLICY: CurrencyPolicy = {
   code: 'USD',
   minorUnitExponent: 2,
@@ -190,8 +222,40 @@ export function getCurrencyPolicy(code: string | null | undefined): CurrencyPoli
   return CURRENCY_POLICY[code.toUpperCase()] ?? null;
 }
 
+/**
+ * Resolve a currency in an explicitly identified environment. Real currencies
+ * remain available everywhere; XTS is available only in isolated `test` and
+ * `sandbox` environments. `development`, `staging`, and `production` do not
+ * silently acquire test-credit support.
+ */
+export function getCurrencyPolicyForEnvironment(
+  code: string | null | undefined,
+  environmentKind: CurrencyEnvironmentKind | string | null | undefined,
+): CurrencyPolicy | null {
+  if (!code) return null;
+  const normalized = code.toUpperCase();
+  if (normalized === TEST_CURRENCY_CODE) {
+    return environmentKind === 'test' || environmentKind === 'sandbox'
+      ? TEST_CURRENCY_POLICY
+      : null;
+  }
+  return CURRENCY_POLICY[normalized] ?? null;
+}
+
+/** Production-safe currency check. XTS is deliberately excluded. */
 export function isSupportedCurrency(code: string | null | undefined): boolean {
   return getCurrencyPolicy(code) !== null;
+}
+
+export function isSupportedCurrencyForEnvironment(
+  code: string | null | undefined,
+  environmentKind: CurrencyEnvironmentKind | string | null | undefined,
+): boolean {
+  return getCurrencyPolicyForEnvironment(code, environmentKind) !== null;
+}
+
+export function isTestCurrency(code: string | null | undefined): boolean {
+  return code?.toUpperCase() === TEST_CURRENCY_CODE;
 }
 
 /**
@@ -226,6 +290,7 @@ export function primaryCurrency(totals: Record<string, bigint>): string {
 
 /** Minor-unit exponent for a currency (defaults to 2 when unknown). */
 export function minorUnitExponent(code: string | null | undefined): number {
+  if (isTestCurrency(code)) return TEST_CURRENCY_POLICY.minorUnitExponent;
   return getCurrencyPolicy(code)?.minorUnitExponent ?? 2;
 }
 
@@ -347,6 +412,25 @@ export function isProviderSupportedForCurrency(
   const policy = getCurrencyPolicy(code);
   if (!policy) return false;
   return policy.providers.includes(provider);
+}
+
+/**
+ * Format XTS using explicit no-cash-value wording. This is separate from
+ * `formatMinorUnits` so generic currency formatting cannot make test credits
+ * look like a withdrawable fiat balance.
+ */
+export function formatTestCredits(minorUnits: bigint): string {
+  const exponent = TEST_CURRENCY_POLICY.minorUnitExponent;
+  const absolute = minorUnits < 0n ? -minorUnits : minorUnits;
+  const factor = 10n ** BigInt(exponent);
+  const whole = absolute / factor;
+  const fraction = (absolute % factor).toString().padStart(exponent, '0');
+  const groupedWhole = new Intl.NumberFormat('en-US', {
+    useGrouping: true,
+    maximumFractionDigits: 0,
+  }).format(whole);
+  const value = `${groupedWhole}.${fraction}`;
+  return `${minorUnits < 0n ? '-' : ''}Test credits ${value} (no cash value)`;
 }
 
 /**

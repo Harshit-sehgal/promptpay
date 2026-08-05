@@ -2,6 +2,7 @@ import chalk from 'chalk';
 
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
+import { printSandboxBanner } from '../lib/environment-label';
 import { getErrorMessage, getErrorStatus } from '../lib/errors';
 import { formatCurrency } from '../lib/format';
 
@@ -85,6 +86,7 @@ export async function runStatus() {
     );
 
     console.log();
+    await printSandboxBanner(api);
     console.log(chalk.bold.cyan('WaitLayer Status'));
     console.log(chalk.dim('─'.repeat(40)));
     console.log();

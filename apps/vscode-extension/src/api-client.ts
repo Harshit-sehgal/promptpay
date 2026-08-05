@@ -92,6 +92,11 @@ interface RawBalance {
 
 export type WaitLaunchMode = 'paused' | 'telemetry_only' | 'earnings_enabled';
 
+export interface EnvironmentIdentity {
+  environmentKind: 'development' | 'test' | 'sandbox' | 'staging' | 'production';
+  environmentId: string;
+}
+
 export interface ServerAdResponse {
   ad: Ad | null;
   mode?: WaitLaunchMode;
@@ -450,6 +455,10 @@ export class ApiClient {
    * Client-side toggles persist locally but must ALSO update the server
    * so the source of truth stays authoritative (P0 — Unify consent).
    */
+  async getEnvironmentIdentity(): Promise<EnvironmentIdentity> {
+    return this.get<EnvironmentIdentity>('/health');
+  }
+
   async updateAdsEnabled(enabled: boolean): Promise<void> {
     await this.patch('/developer/settings', { adsEnabled: enabled });
   }

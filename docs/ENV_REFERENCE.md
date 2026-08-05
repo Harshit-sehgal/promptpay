@@ -17,6 +17,7 @@ Default shown where one exists.
 
 | `WAITLAYER_ENVIRONMENT_KIND` | opt | `development` | `development` \\| `test` \\| `sandbox` \\| `staging` \\| `production`; production requires `NODE_ENV=production`, and sandbox is never production. |
 | `WAITLAYER_ENVIRONMENT_ID` | opt | `local` | Stable environment/run identifier persisted in the database marker. |
+| `NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND` | opt | `development` | Web build identity; valid values are `development`, `test`, `sandbox`, `staging`, and `production`; `sandbox` renders a persistent “Test credits only — no cash value” banner. Production deployments must set this explicitly to `production`. |
 | `ENABLE_STAGING_FAUCET` | opt | `false` | Test faucet toggle; accepted only in `test`, `sandbox`, or `staging`. |
 
 ## Database

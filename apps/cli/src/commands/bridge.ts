@@ -6,6 +6,8 @@ import { getCredentials } from '../lib/credentials';
 
 export async function runBridge(options: { action?: string } = {}) {
   const action = options.action ?? 'status';
+  // Bridge status can run without API credentials, so it intentionally does
+  // not claim a sandbox environment from a local variable alone.
   const paths = getSpoolPaths();
 
   if (action === 'status') {

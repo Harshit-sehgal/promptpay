@@ -63,6 +63,15 @@ enum BidType {
   cpc
 }
 
+enum AdPlacementType {
+  foreground_wait
+  completion_return
+  input_required
+  background_sponsor
+  failure_recovery
+  dashboard_native
+}
+
 enum EventType {
   wait_state_start
   wait_state_end
@@ -478,6 +487,7 @@ model Campaign {
   updatedAt DateTime @updatedAt
 
   creatives        AdCreative[]
+  placements       CampaignPlacement[]
   impressions      AdImpression[]
   clicks           AdClick[]
   countryTargeting CountryTargeting[]
@@ -492,6 +502,30 @@ model Campaign {
   @@index([status, category])
   @@index([status, budgetReservedMinor], map: "campaigns_status_budget_reserved_idx")
   @@map("campaigns")
+}
+
+// Additive campaign-to-placement configuration. Placement bids remain
+// data-driven; legacy campaign bid/auction paths are unchanged until a later
+// opportunity/placement release explicitly consumes this relation.
+model CampaignPlacement {
+  id                    String         @id @default(uuid())
+  campaignId            String
+  campaign              Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  placementType         AdPlacementType @map("placement_type")
+  bidType               BidType
+  bidAmountMinor        BigInt         @map("bid_amount_minor")
+  minAttentionScore     Float?         @map("min_attention_score")
+  minIntegrationScore   Float?         @map("min_integration_score")
+  frequencyCapPerHour   Int?           @map("frequency_cap_per_hour")
+  frequencyCapPerDay    Int?           @map("frequency_cap_per_day")
+  isActive              Boolean        @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([campaignId, placementType])
+  @@index([placementType, isActive])
+  @@map("campaign_placements")
 }
 
 model AdCreative {
@@ -761,7 +795,10 @@ model AdOpportunity {
   session               AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   workUnitId            String?
   triggerEventId        String?
-  placementType         String   @map("placement_type")
+  // Kept as text for forward-compatible opportunity records. The placement
+  // catalogue is enforced on CampaignPlacement; WL-061 will validate this
+  // field when it introduces the opportunity generator.
+  placementType         String         @map("placement_type")
   state                 String
   attentionConfidence   Float    @map("attention_confidence")
   integrationConfidence Float    @map("integration_confidence")

@@ -22,6 +22,16 @@ export class ConfigurationManager {
     this.secrets = secrets;
   }
 
+  getEnvironmentKind(): 'development' | 'test' | 'sandbox' | 'staging' | 'production' {
+    const value = vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .get<string>('environmentKind', 'production');
+    if (value === 'development' || value === 'test' || value === 'sandbox' || value === 'staging') {
+      return value;
+    }
+    return 'production';
+  }
+
   getApiUrl(): string {
     // Packaged/distributed installs default to the production SaaS origin so a
     // user who installs the extension can reach the real API without manual

@@ -6,6 +6,7 @@ import { WaitAttestationFlow } from '@waitlayer/shared';
 import { runAdFlow } from '../lib/ad-flow';
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
+import { printSandboxBanner } from '../lib/environment-label';
 import { getErrorCode, getErrorMessage, getErrorStatus } from '../lib/errors';
 import { createCliWaitAssertionProvider } from '../lib/wait-attestation-provider';
 
@@ -40,6 +41,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   const attestation = new WaitAttestationFlow(api);
   const serveAds = opts.ads ?? true;
 
+  await printSandboxBanner(api);
   console.log(chalk.cyan('WaitLayer watch') + chalk.dim(` — watching ${STATE_FILE}`));
   console.log(chalk.dim('Press Ctrl+C to stop.'));
 

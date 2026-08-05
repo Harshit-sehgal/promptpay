@@ -46,6 +46,19 @@ export enum BidType {
   CPM = 'cpm',
   CPC = 'cpc',
 }
+
+// Placement vocabulary is shared by campaign configuration and the additive
+// agent-opportunity domain. The first two are the initial external-beta
+// candidates; the remaining values stay available for sandbox experiments.
+export enum AdPlacementType {
+  FOREGROUND_WAIT = 'foreground_wait',
+  COMPLETION_RETURN = 'completion_return',
+  INPUT_REQUIRED = 'input_required',
+  BACKGROUND_SPONSOR = 'background_sponsor',
+  FAILURE_RECOVERY = 'failure_recovery',
+  DASHBOARD_NATIVE = 'dashboard_native',
+}
+
 export enum ToolType {
   VSCODE = 'vscode',
   CURSOR = 'cursor',

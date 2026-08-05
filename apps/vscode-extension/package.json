@@ -130,6 +130,12 @@
           "default": "https://api.waitlayer.com/api/v1",
           "description": "WaitLayer API base URL"
         },
+        "waitlayer.environmentKind": {
+          "type": "string",
+          "enum": ["development", "test", "sandbox", "staging", "production"],
+          "default": "production",
+          "description": "Deployment environment label. Sandbox shows a persistent test-credits marker."
+        },
         "waitlayer.preferredDisplayCurrency": {
           "type": "string",
           "default": "",

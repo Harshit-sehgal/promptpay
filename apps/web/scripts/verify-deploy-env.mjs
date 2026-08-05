@@ -1,9 +1,23 @@
 import { createPublicKey } from 'node:crypto';
 
 const enforce = process.env.VERCEL === '1' || process.env.WAITLAYER_REQUIRE_DEPLOY_ENV === '1';
-if (!enforce) process.exit(0);
-
 const errors = [];
+const environmentKind = process.env.NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND ?? 'production';
+if (!['development', 'test', 'sandbox', 'staging', 'production'].includes(environmentKind)) {
+  errors.push(
+    'NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND must be development, test, sandbox, staging, or production',
+  );
+}
+if (errors.length > 0) {
+  console.error('Deployment environment preflight failed:');
+  for (const error of errors) console.error(`- ${error}`);
+  process.exit(1);
+}
+if (!enforce) {
+  console.log('Deployment environment marker check passed.');
+  process.exit(0);
+}
+
 const secret = process.env.JWT_SECRET ?? '';
 const publicKey = (process.env.JWT_PUBLIC_KEY ?? '').replace(/\\n/g, '\n');
 const additionalPublicKeys = (process.env.JWT_PUBLIC_KEYS ?? '').replace(/\\n/g, '\n');

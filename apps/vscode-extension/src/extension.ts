@@ -78,8 +78,27 @@ export async function activate(context: vscode.ExtensionContext) {
     config.detectorRolloutPercent(),
   );
 
-  // Register status bar
-  status.register(context);
+  // Register status bar using the local preference immediately, then verify it
+  // against the API. A local setting is not authoritative: a mismatched
+  // client/server environment is shown explicitly rather than silently
+  // claiming sandbox or production.
+  const clientEnvironmentKind = config.getEnvironmentKind();
+  status.register(context, clientEnvironmentKind);
+  let environmentVerified = false;
+  void api
+    .getEnvironmentIdentity()
+    .then((identity) => {
+      if (identity.environmentKind !== clientEnvironmentKind) {
+        status.showEnvironmentMismatch(clientEnvironmentKind, identity.environmentKind);
+        return;
+      }
+      environmentVerified = true;
+    })
+    .catch((error: unknown) => {
+      status.showEnvironmentMismatch(clientEnvironmentKind, 'unverified');
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`WaitLayer: environment identity could not be verified — ${msg}`);
+    });
 
   // Frequency cap tracking
   let adTimestamps: number[] = [];
@@ -381,6 +400,10 @@ export async function activate(context: vscode.ExtensionContext) {
         // wait records, and no misleading analytics. The detector still tracks
         // them locally for its own state machine.
         if (event.shadow) return;
+        if (!environmentVerified || !status.isEnvironmentVerified()) {
+          console.warn('WaitLayer: environment identity is not verified; suppressing wait telemetry');
+          return;
+        }
 
         // Establish local UI state synchronously so a user can immediately mark
         // a detection as false. This does not send data anywhere; the network

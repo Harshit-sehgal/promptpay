@@ -2,6 +2,7 @@ import chalk from 'chalk';
 
 import { ApiClient } from '../lib/api-client';
 import { getCredentials } from '../lib/credentials';
+import { printSandboxBanner } from '../lib/environment-label';
 import { getErrorMessage, getErrorStatus } from '../lib/errors';
 import { prompt } from '../lib/prompt';
 
@@ -24,6 +25,7 @@ export async function runConfig() {
       const settings = await api.getSettings();
 
       console.log();
+      await printSandboxBanner(api);
       console.log(chalk.bold.cyan('WaitLayer Settings'));
       console.log(chalk.dim('─'.repeat(40)));
       console.log();

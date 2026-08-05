@@ -3,6 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { validateWebEnv } from './web-env';
 
 describe('web environment validation', () => {
+  it('defaults the web environment marker to production and accepts sandbox explicitly', () => {
+    expect(validateWebEnv({ NODE_ENV: 'development' }).NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND).toBe(
+      'production',
+    );
+    expect(
+      validateWebEnv({
+        NODE_ENV: 'development',
+        NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: 'sandbox',
+      }).NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND,
+    ).toBe('sandbox');
+  });
+
   it('requires a non-placeholder JWT secret and public key in production', () => {
     expect(() => validateWebEnv({ NODE_ENV: 'production' })).toThrow('Invalid web environment');
     expect(() =>

@@ -56,6 +56,15 @@ afterEach(() => {
 });
 
 describe('ConfigurationManager — settings parsing & validation', () => {
+  it('resolves the explicit environment kind and defaults to production', () => {
+    const mgr = makeManager();
+    expect(mgr.getEnvironmentKind()).toBe('production');
+    mock.config.environmentKind = 'sandbox';
+    expect(mgr.getEnvironmentKind()).toBe('sandbox');
+    mock.config.environmentKind = 'invalid';
+    expect(mgr.getEnvironmentKind()).toBe('production');
+  });
+
   it('resolves the API base URL from settings, falling back to the SaaS default', () => {
     const mgr = makeManager();
 

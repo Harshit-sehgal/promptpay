@@ -4,11 +4,17 @@ import {
   campaignMaximumBudgetMinor,
   CURRENCY_POLICY,
   formatMinorUnits,
+  formatTestCredits,
+  getCurrencyPolicyForEnvironment,
   highValueFenceReleaseMinor,
+  isSupportedCurrencyForEnvironment,
+  isTestCurrency,
   majorToMinor,
   minorToMajorInputValue,
   minorUnitExponent,
   primaryCurrency,
+  TEST_CURRENCY_CODE,
+  TEST_CURRENCY_POLICY,
 } from './currency';
 
 describe('currency policy — INR campaign budget (P1.13)', () => {
@@ -19,6 +25,30 @@ describe('currency policy — INR campaign budget (P1.13)', () => {
   it('round-trips to major units: 80,000,000,000 paise = 800,000,000 rupees = ₹80,00,00,000', () => {
     const minor = campaignMaximumBudgetMinor('INR');
     expect(minor / 100n).toBe(800_000_000n);
+  });
+});
+
+describe('currency policy — sandbox/test credits (WL-012)', () => {
+  it('keeps XTS out of the real-currency policy and provider catalogue', () => {
+    expect(TEST_CURRENCY_CODE).toBe('XTS');
+    expect(CURRENCY_POLICY.XTS).toBeUndefined();
+    expect(TEST_CURRENCY_POLICY.providers).toEqual([]);
+    expect(isTestCurrency('xts')).toBe(true);
+    expect(isSupportedCurrencyForEnvironment('XTS', 'production')).toBe(false);
+    expect(isSupportedCurrencyForEnvironment('XTS', 'staging')).toBe(false);
+    expect(isSupportedCurrencyForEnvironment('XTS', 'development')).toBe(false);
+  });
+
+  it('allows XTS only for explicitly isolated test and sandbox environments', () => {
+    expect(getCurrencyPolicyForEnvironment('XTS', 'test')).toBe(TEST_CURRENCY_POLICY);
+    expect(getCurrencyPolicyForEnvironment('XTS', 'sandbox')).toBe(TEST_CURRENCY_POLICY);
+    expect(isSupportedCurrencyForEnvironment('USD', 'production')).toBe(true);
+    expect(isSupportedCurrencyForEnvironment('XTS', 'unknown')).toBe(false);
+  });
+
+  it('uses unmistakable no-cash-value wording for test-credit displays', () => {
+    expect(formatTestCredits(12_345n)).toBe('Test credits 123.45 (no cash value)');
+    expect(formatTestCredits(-100n)).toBe('-Test credits 1.00 (no cash value)');
   });
 });
 

@@ -131,6 +131,11 @@ export interface Ad {
   ctaText?: string | null;
 }
 
+export interface EnvironmentIdentity {
+  environmentKind: 'development' | 'test' | 'sandbox' | 'staging' | 'production';
+  environmentId: string;
+}
+
 export class ApiClient {
   private deviceUUID: string | null = null;
   private deviceEventSecret: string | null = null;
@@ -336,6 +341,10 @@ export class ApiClient {
         byCurrency: parseCurrencyTotals(res.paidOut.byCurrency),
       },
     };
+  }
+
+  async getEnvironmentIdentity(): Promise<EnvironmentIdentity> {
+    return this.raw<EnvironmentIdentity>('GET', '/health', undefined);
   }
 
   async getRequiredConsentVersions(): Promise<Record<string, string> | null> {

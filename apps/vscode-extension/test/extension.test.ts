@@ -7,6 +7,7 @@ const mock = vi.hoisted(() => ({
     promptLogin: vi.fn(),
     logout: vi.fn(),
     getBalance: vi.fn(),
+    getEnvironmentIdentity: vi.fn(),
     getOrRegisterDevice: vi.fn(),
     waitStateStart: vi.fn(),
     waitStateEnd: vi.fn(),
@@ -17,6 +18,7 @@ const mock = vi.hoisted(() => ({
     getDeveloperSettings: vi.fn(),
   },
   config: {
+    getEnvironmentKind: vi.fn(() => 'production'),
     getInactivityTimeoutMs: vi.fn(() => 15_000),
     toggleAds: vi.fn(),
     adsEnabled: vi.fn(),
@@ -54,6 +56,7 @@ const mock = vi.hoisted(() => ({
     setEarnings: vi.fn(),
     showAdServing: vi.fn(),
     showIdle: vi.fn(),
+    isEnvironmentVerified: vi.fn(() => true),
   },
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),
@@ -143,6 +146,10 @@ beforeEach(() => {
   mock.api.promptLogin.mockResolvedValue(false);
   mock.api.logout.mockResolvedValue(undefined);
   mock.api.getBalance.mockResolvedValue(zeroBalance);
+  mock.api.getEnvironmentIdentity.mockResolvedValue({
+    environmentKind: 'production',
+    environmentId: 'test-run',
+  });
   mock.api.getOrRegisterDevice.mockResolvedValue('device-1');
   mock.api.waitStateStart.mockResolvedValue({});
   mock.api.waitStateEnd.mockResolvedValue({});

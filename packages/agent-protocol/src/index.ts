@@ -446,6 +446,14 @@ export type ProviderFixture = {
 export function normalizeFixture(fixture: ProviderFixture): SanitizedHookPayload {
   return sanitizeHookPayload(fixture.provider, fixture.providerEvent, fixture.payload);
 }
+
+export type { GoldenAgentFixture } from './golden-fixtures';
+export {
+  AGENT_GOLDEN_FIXTURES,
+  goldenFixtureProviders,
+  loadGoldenAgentFixtures,
+} from './golden-fixtures';
+
 export function scanForbiddenAgentFields(value: unknown): string[] {
   const found = new Set<string>();
   const visit = (candidate: unknown) => {
