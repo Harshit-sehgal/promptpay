@@ -101,6 +101,8 @@ services:
       # real Google account. The verifier requires BOTH NODE_ENV !== 'production'
       # AND an explicit flag — never set this in staging/production.
       ALLOW_MOCK_GOOGLE: ${ALLOW_MOCK_GOOGLE:-true}
+      WAITLAYER_ENVIRONMENT_KIND: ${WAITLAYER_ENVIRONMENT_KIND:-development}
+      WAITLAYER_ENVIRONMENT_ID: ${WAITLAYER_ENVIRONMENT_ID:-local-compose}
       ENABLE_STAGING_FAUCET: ${ENABLE_STAGING_FAUCET:-false}
       ALLOWED_COUNTRIES: ${ALLOWED_COUNTRIES:-}
       ALLOWED_CURRENCIES: ${ALLOWED_CURRENCIES:-}

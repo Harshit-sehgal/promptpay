@@ -5,6 +5,7 @@
     "forceConsistentCasingInFileNames": true,
     "lib": ["ES2022", "ES2024"],
     "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "dist",
     "rootDir": "src",
     "resolveJsonModule": true,

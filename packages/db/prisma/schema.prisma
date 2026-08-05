@@ -239,6 +239,9 @@ model User {
   referralRewards            ReferralReward[]
   apiKeys                    ApiKey[]
   consents                   Consent[]
+  agentSessions              AgentSession[]
+  attentionWindows           AttentionWindow[]
+  adOpportunities            AdOpportunity[]
 
   @@unique([githubId])
   // The `email` @unique (above) already serves equality/like scans on
@@ -303,6 +306,9 @@ model Device {
   adClicks        AdClick[]
   fraudFlags      FraudFlag[]
   recoveryTokens  DeviceRecoveryToken[]
+  agentSessions   AgentSession[]
+  attentionWindows AttentionWindow[]
+  adOpportunities AdOpportunity[]
 
   @@unique([userId, fingerprintHash])
   // Cross-user fingerprint collisions are now handled as high-severity fraud
@@ -620,6 +626,155 @@ model WaitStateEvent {
   @@index([confidence], map: "wait_state_events_confidence_idx")
   @@index([isFalsePositive], map: "wait_state_events_false_positive_idx")
   @@map("wait_state_events")
+}
+
+// Environment identity is persisted in the database so a deployment cannot
+// silently point a sandbox API at a production-marked database (or reuse a
+// prior run's sandbox database with a different tenant identity).
+model EnvironmentMarker {
+  id              Int      @id @default(1)
+  environmentKind String   @map("environment_kind")
+  environmentId   String   @map("environment_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("environment_markers")
+}
+
+// Provider-neutral, non-financial agent lifecycle domain. These models are
+// additive: no relation to ad impressions, ledgers, payouts, or settlement is
+// intentional for Release 0.2.
+model AgentSession {
+  id                  String   @id @default(uuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId            String
+  device              Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  correlationId       String   @unique @map("correlation_id")
+  provider            String
+  integrationMode     String   @map("integration_mode")
+  providerSessionHash String?  @map("provider_session_hash")
+  workspaceHash       String?  @map("workspace_hash")
+  status              String
+  adapterVersion      String   @map("adapter_version")
+  providerVersion     String?  @map("provider_version")
+  startedAt           DateTime @map("started_at") @db.Timestamptz
+  endedAt             DateTime? @map("ended_at") @db.Timestamptz
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  workUnits        AgentWorkUnit[]
+  events           AgentLifecycleEvent[]
+  attentionWindows AttentionWindow[]
+  adOpportunities  AdOpportunity[]
+
+  @@unique([userId, deviceId, provider, providerSessionHash])
+  @@index([userId, startedAt])
+  @@index([deviceId, status])
+  @@map("agent_sessions")
+}
+
+model AgentWorkUnit {
+  id                   String   @id @default(uuid())
+  sessionId            String
+  session              AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  parentWorkUnitId     String?  @map("parent_work_unit_id")
+  parentWorkUnit       AgentWorkUnit? @relation("AgentWorkUnitParent", fields: [parentWorkUnitId], references: [id], onDelete: SetNull)
+  childWorkUnits       AgentWorkUnit[] @relation("AgentWorkUnitParent")
+  kind                 String
+  providerWorkUnitHash String?  @map("provider_work_unit_hash")
+  status               String
+  startedAt            DateTime @map("started_at") @db.Timestamptz
+  endedAt              DateTime? @map("ended_at") @db.Timestamptz
+  toolCallCount        Int      @default(0) @map("tool_call_count")
+  subagentCount        Int      @default(0) @map("subagent_count")
+  outcomeCategory      String?  @map("outcome_category")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  events AgentLifecycleEvent[]
+
+  @@unique([sessionId, kind, providerWorkUnitHash])
+  @@index([sessionId, startedAt])
+  @@index([parentWorkUnitId])
+  @@map("agent_work_units")
+}
+
+model AgentLifecycleEvent {
+  id              String   @id @default(uuid())
+  sessionId       String
+  session          AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  workUnitId      String?  @map("work_unit_id")
+  workUnit        AgentWorkUnit? @relation(fields: [workUnitId], references: [id], onDelete: SetNull)
+  eventId         String   @unique @map("event_id")
+  idempotencyKey  String   @unique @map("idempotency_key")
+  schemaVersion   Int      @map("schema_version")
+  environmentId   String   @map("environment_id")
+  eventType       String   @map("event_type")
+  sourceType      String   @map("source_type")
+  confidence      Float
+  occurredAt      DateTime @map("occurred_at") @db.Timestamptz
+  receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz
+  sequence        Int?
+  correlationId   String   @map("correlation_id")
+  causationId     String?  @map("causation_id")
+  metadata        Json
+  adapterVersion  String   @map("adapter_version")
+  clientVersion   String   @map("client_version")
+  signature       String
+
+  @@index([sessionId, occurredAt])
+  @@index([eventType, occurredAt])
+  @@index([correlationId, sequence])
+  @@map("agent_lifecycle_events")
+}
+
+model AttentionWindow {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId         String
+  device            Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  sessionId        String?
+  session           AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  state            String
+  source           String
+  confidence       Float
+  startedAt        DateTime @map("started_at") @db.Timestamptz
+  endedAt          DateTime? @map("ended_at") @db.Timestamptz
+  visibleSurface   Float?   @map("visible_surface")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([userId, startedAt])
+  @@index([deviceId, startedAt])
+  @@index([sessionId, startedAt])
+  @@map("attention_windows")
+}
+
+model AdOpportunity {
+  id                    String   @id @default(uuid())
+  userId                String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId              String
+  device                Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  sessionId             String?
+  session               AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  workUnitId            String?
+  triggerEventId        String?
+  placementType         String   @map("placement_type")
+  state                 String
+  attentionConfidence   Float    @map("attention_confidence")
+  integrationConfidence Float    @map("integration_confidence")
+  eligibleAt            DateTime @map("eligible_at") @db.Timestamptz
+  expiresAt             DateTime @map("expires_at") @db.Timestamptz
+  rejectionReason       String?  @map("rejection_reason")
+  idempotencyKey        String   @unique @map("idempotency_key")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@index([sessionId, placementType])
+  @@index([state, expiresAt])
+  @@map("ad_opportunities")
 }
 
 // A nonce issued by WaitLayer before an approved AI/provider operation. The

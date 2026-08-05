@@ -7,6 +7,9 @@ const keytarMock = vi.hoisted(() => ({
 }));
 
 const readFileSyncMock = vi.hoisted(() => vi.fn());
+const writeFileSyncMock = vi.hoisted(() => vi.fn());
+const renameSyncMock = vi.hoisted(() => vi.fn());
+const chmodSyncMock = vi.hoisted(() => vi.fn());
 
 vi.mock('keytar', () => ({
   default: keytarMock,
@@ -18,6 +21,9 @@ vi.mock('fs', async () => {
   return {
     ...actual,
     readFileSync: readFileSyncMock,
+    writeFileSync: writeFileSyncMock,
+    renameSync: renameSyncMock,
+    chmodSync: chmodSyncMock,
   };
 });
 
@@ -29,7 +35,7 @@ vi.mock('os', async () => {
   };
 });
 
-import { getCredentials } from './credentials';
+import { getCredentials, getOrCreateInstallationId } from './credentials';
 
 describe('getCredentials', () => {
   afterEach(() => {
@@ -144,6 +150,37 @@ describe('getCredentials', () => {
     const creds = await getCredentials();
 
     expect(creds).toBeNull();
+  });
+
+  it('creates and persists a random installation identity without host-derived material', async () => {
+    readFileSyncMock.mockImplementationOnce(() => {
+      throw new Error('ENOENT');
+    });
+
+    const installationId = await getOrCreateInstallationId();
+
+    expect(installationId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(writeFileSyncMock).toHaveBeenCalledOnce();
+    const [, serialized] = writeFileSyncMock.mock.calls[0] as [string, string];
+    const persisted = JSON.parse(serialized) as { installationId: string };
+    expect(persisted.installationId).toBe(installationId);
+    expect(serialized).not.toContain('/tmp/waitlayer-test-home');
+    expect(serialized).not.toContain('hostname');
+    expect(renameSyncMock).toHaveBeenCalledOnce();
+  });
+
+  it('reuses a valid persisted installation identity', async () => {
+    readFileSyncMock.mockReturnValueOnce(
+      JSON.stringify({
+        email: 'dev@example.com',
+        installationId: 'd7c4d9c5-4b73-4f98-9f33-54d6f8f0132b',
+      }),
+    );
+
+    const installationId = await getOrCreateInstallationId();
+
+    expect(installationId).toBe('d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b');
+    expect(writeFileSyncMock).not.toHaveBeenCalled();
   });
 
   it('does not re-sync the keychain when the stored tokens already match', async () => {

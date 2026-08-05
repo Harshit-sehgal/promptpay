@@ -27,6 +27,7 @@ import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter'
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { validateMigrations } from './common/migration/migration-validator';
 import { getPrismaCliMigrationStatus } from './common/migration/prisma-migration-status';
+import { EnvironmentMarkerService } from './config/environment-marker.service';
 import { PrismaService } from './config/prisma.service';
 import { AlertsService } from './observability/alerts.service';
 
@@ -138,6 +139,8 @@ async function bootstrap() {
     }
     console.warn('[WaitLayer] Continuing boot despite migration mismatch (non-production).');
   }
+
+  await app.get(EnvironmentMarkerService).verify();
 
   // ── OpenAPI / Swagger docs ───────────────────────────────
   // Machine-readable API contract + interactive UI at /api/v1/docs. This is

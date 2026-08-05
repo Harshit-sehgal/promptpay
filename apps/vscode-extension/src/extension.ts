@@ -10,6 +10,8 @@ import {
 
 import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
+import { AgentBridgeClient } from './agent-bridge-client';
+import { AgentSessionCorrelation } from './agent-session-correlation';
 import { ApiClient } from './api-client';
 import { ConfigurationManager } from './config';
 import { AI_TOOL_VALUES } from './detector-adapters';
@@ -82,6 +84,9 @@ export async function activate(context: vscode.ExtensionContext) {
   // Frequency cap tracking
   let adTimestamps: number[] = [];
   const sessionId = crypto.randomUUID();
+  const correlatedSessions = new AgentSessionCorrelation();
+  let bridgeClient: AgentBridgeClient | undefined;
+  let bridgeLifecycleGeneration = 0;
   let activeWaitStateId: string | null = null;
   let flaggedWaitStateId: string | null = null;
   const waitStartPromises = new Map<string, Promise<string | null>>();
@@ -108,17 +113,54 @@ export async function activate(context: vscode.ExtensionContext) {
   // Consent is server-authoritative. Refresh it both at activation and after
   // login, because activation can happen before credentials exist or after a
   // user changed their choices on another client.
+  const startBridgeIfConsented = async (generation = bridgeLifecycleGeneration) => {
+    if (
+      generation !== bridgeLifecycleGeneration ||
+      bridgeClient ||
+      !(await config.waitTelemetryEnabled()) ||
+      generation !== bridgeLifecycleGeneration
+    )
+      return;
+    bridgeClient = new AgentBridgeClient({
+      onEvent: (event) => {
+        // Native/wrapper events are read-only corroboration for VS Code. The
+        // correlation layer applies native-first precedence and deduplicates
+        // event IDs; it never forwards events or creates ad/financial state.
+        correlatedSessions.accept(event);
+      },
+      onError: (error) => {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn(`WaitLayer: local agent bridge unavailable — ${msg}`);
+      },
+    });
+    bridgeClient.start();
+  };
+
+  const stopBridge = () => {
+    bridgeLifecycleGeneration += 1;
+    bridgeClient?.dispose();
+    bridgeClient = undefined;
+    correlatedSessions.clear();
+  };
+
   const syncServerConsent = async () => {
+    const generation = bridgeLifecycleGeneration;
     const settings = await api.getDeveloperSettings();
+    if (generation !== bridgeLifecycleGeneration) return;
     if (
       typeof settings.adsEnabled === 'boolean' &&
       (await config.adsEnabled()) !== settings.adsEnabled
     ) {
+      if (generation !== bridgeLifecycleGeneration) return;
       await config.setAdsEnabled(settings.adsEnabled);
     }
     if (typeof settings.waitTelemetryEnabled === 'boolean') {
+      if (generation !== bridgeLifecycleGeneration) return;
       await config.setWaitTelemetryEnabled(settings.waitTelemetryEnabled);
     }
+    if (generation !== bridgeLifecycleGeneration) return;
+    if (await config.waitTelemetryEnabled()) await startBridgeIfConsented(generation);
+    else if (generation === bridgeLifecycleGeneration) stopBridge();
   };
 
   // Register all commands
@@ -147,6 +189,7 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         await api.logout();
       } finally {
+        stopBridge();
         status.setLoggedOut();
       }
     }),
@@ -203,6 +246,8 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         await api.updateWaitTelemetryEnabled(enabled);
         await config.setWaitTelemetryEnabled(enabled);
+        if (enabled) await startBridgeIfConsented();
+        else stopBridge();
         vscode.window.showInformationMessage(
           enabled
             ? 'WaitLayer: wait telemetry enabled. Detected waits may now be sent to WaitLayer.'
@@ -591,7 +636,16 @@ export async function activate(context: vscode.ExtensionContext) {
       pendingInteractions.clear();
     },
   };
-  context.subscriptions.push(...commands, attestationCleanup);
+  context.subscriptions.push(
+    ...commands,
+    attestationCleanup,
+    {
+      dispose: () => {
+        stopBridge();
+      },
+    },
+  );
+
 
   // Fetch server-side consent after boot. A failed initial sync is non-fatal:
   // no local state is changed, and successful login retries this exact path.

@@ -4,7 +4,17 @@ import { Command } from 'commander';
 import { createRequire } from 'module';
 
 import { runAuth } from './commands/auth';
+import { runBridge } from './commands/bridge';
 import { runConfig } from './commands/config';
+import { runHookIngest } from './commands/hooks';
+import {
+  runIntegrationDisable,
+  runIntegrationEnable,
+  runIntegrationInstall,
+  runIntegrationRepair,
+  runIntegrationStatus,
+  runIntegrationUninstall,
+} from './commands/integrations';
 import { runLogout } from './commands/logout';
 import { runSupervisedCommand } from './commands/run';
 import { runStatus } from './commands/status';
@@ -72,6 +82,61 @@ program
       process.exitCode = 1;
     }
   });
+
+const hooksCommand = program.command('hooks').description('Process provider lifecycle hooks');
+hooksCommand
+  .command('ingest')
+  .description('Sanitize one provider lifecycle hook into the local event spool')
+  .requiredOption('--provider <provider>', 'Provider identifier, for example claude_code')
+  .requiredOption('--event <event>', 'Provider lifecycle event name')
+  .action(async (options) => {
+    await runHookIngest(options);
+  });
+
+const integrationsCommand = program
+  .command('integrations')
+  .description('Install, inspect, repair, or remove native provider integrations');
+integrationsCommand
+  .command('install <provider>')
+  .description('Install a user-level native hook integration')
+  .action((provider: string) => {
+    runIntegrationInstall({ provider });
+  });
+integrationsCommand
+  .command('status [provider]')
+  .description('Show native integration health')
+  .action((provider?: string) => {
+    runIntegrationStatus({ provider });
+  });
+integrationsCommand
+  .command('disable <provider>')
+  .description('Disable lifecycle telemetry for a provider without removing hooks')
+  .action((provider: string) => {
+    runIntegrationDisable({ provider });
+  });
+integrationsCommand
+  .command('enable <provider>')
+  .description('Re-enable lifecycle telemetry for a provider')
+  .action((provider: string) => {
+    runIntegrationEnable({ provider });
+  });
+integrationsCommand
+  .command('repair <provider>')
+  .description('Repair a WaitLayer-owned native hook integration')
+  .action((provider: string) => {
+    runIntegrationRepair({ provider });
+  });
+integrationsCommand
+  .command('uninstall <provider>')
+  .description('Remove only WaitLayer-owned native hook entries')
+  .action((provider: string) => {
+    runIntegrationUninstall({ provider });
+  });
+
+program
+  .command('bridge [action]')
+  .description('Run, inspect, flush, or clear the local agent event bridge')
+  .action((action?: string) => runBridge({ action }));
 
 program
   .command('logout')

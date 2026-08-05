@@ -7,6 +7,7 @@ import {
   Logger,
   UseGuards,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 
@@ -28,6 +29,7 @@ export class HealthController {
   constructor(
     private prisma: PrismaService,
     private redis: RedisHealthService,
+    private config?: ConfigService,
   ) {}
 
   @ApiOperation({ summary: 'Health check' })
@@ -38,6 +40,8 @@ export class HealthController {
       status: 'ok',
       timestamp: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
+      environmentKind: this.config?.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development'),
+      environmentId: this.config?.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local'),
     };
 
     // Database connectivity check
@@ -80,6 +84,8 @@ export class HealthController {
     const checks: Record<string, unknown> = {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      environmentKind: this.config?.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development'),
+      environmentId: this.config?.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local'),
     };
     let ready = true;
 

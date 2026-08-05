@@ -11,6 +11,7 @@
     "moduleResolution": "bundler",
     "outDir": "dist",
     "paths": {
+      "@waitlayer/agent-protocol": ["packages/agent-protocol/src"],
       "@waitlayer/config": ["packages/config/src"],
       "@waitlayer/db": ["packages/db/src"],
       "@waitlayer/shared": ["packages/shared/src"],

@@ -264,4 +264,20 @@ export class MetricsService {
   recordLedgerDiscrepancy(): void {
     this.increment('ledger_discrepancies');
   }
+
+  // --- Agent lifecycle reconciliation (WL-033) ---
+  recordAgentSessionAbandoned(): void {
+    this.increment('agent_sessions_abandoned');
+  }
+  recordAgentSessionReconciliationSkipped(reason: 'recent_event' | 'active_work_unit'): void {
+    this.increment(`agent_session_reconciliation_skipped{reason=${reason}}`);
+  }
+  recordAgentSessionReconciliation(abandoned: number, scanned: number): void {
+    this.increment('agent_session_reconciliation_runs');
+    this.increment('agent_sessions_reconciliation_scanned', scanned);
+    this.increment('agent_sessions_reconciliation_abandoned', abandoned);
+  }
+  recordAgentSessionReconciliationError(): void {
+    this.increment('agent_session_reconciliation_errors');
+  }
 }

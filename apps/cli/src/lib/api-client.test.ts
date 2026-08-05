@@ -1,4 +1,18 @@
+import { createHash } from 'crypto';
+import * as http from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
+
+const getOrCreateInstallationIdMock = vi.hoisted(() => vi.fn());
+const getDeviceEventSecretMock = vi.hoisted(() => vi.fn());
+
+vi.mock('./credentials', async () => {
+  const actual = await vi.importActual<typeof import('./credentials')>('./credentials');
+  return {
+    ...actual,
+    getOrCreateInstallationId: getOrCreateInstallationIdMock,
+    getDeviceEventSecret: getDeviceEventSecretMock,
+  };
+});
 
 import { ApiClient, resolveApiBaseUrl } from './api-client';
 import { Credentials } from './credentials';
@@ -26,6 +40,105 @@ function stubRaw(client: ApiClient, response: unknown) {
 }
 
 describe('ApiClient transport policy', () => {
+  it('uses a random installation identity for a fresh device registration', async () => {
+    getOrCreateInstallationIdMock.mockResolvedValueOnce('d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b');
+    const client = new ApiClient({ ...creds });
+    const request = stubRaw(client, { id: 'device-1', eventSecret: 'event-secret-1' });
+
+    await expect(client.getOrRegisterDevice()).resolves.toBe('device-1');
+
+    expect(request).toHaveBeenCalledWith(
+      'POST',
+      '/extension/register-device',
+      expect.objectContaining({
+        fingerprintHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        installationId: 'd7c4d9c5-4b73-4f98-9f33-54d6f8f0132b',
+      }),
+    );
+    const payload = request.mock.calls[0]?.[2] as { fingerprintHash: string };
+    const expectedFingerprint = createHash('sha256')
+      .update('waitlayer-installation:d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b')
+      .digest('hex');
+    expect(payload.fingerprintHash).toBe(expectedFingerprint);
+  });
+
+  it('retries without installationId when an older strict API rejects it', async () => {
+    getOrCreateInstallationIdMock.mockResolvedValueOnce('d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b');
+    const client = new ApiClient({ ...creds });
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce({
+        status: 400,
+        message: ['property installationId should not exist'],
+      })
+      .mockResolvedValueOnce({ id: 'device-1', eventSecret: 'event-secret-1' });
+    (client as unknown as { raw: typeof request }).raw = request;
+
+    await expect(client.getOrRegisterDevice()).resolves.toBe('device-1');
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1]?.[2]).not.toHaveProperty('installationId');
+  });
+
+  it('keeps the random identity for a migrated installation that lost its secret', async () => {
+    getOrCreateInstallationIdMock.mockResolvedValueOnce('d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b');
+    getDeviceEventSecretMock.mockResolvedValueOnce(null);
+    const client = new ApiClient({
+      ...creds,
+      deviceUUID: 'migrated-device',
+      installationId: 'd7c4d9c5-4b73-4f98-9f33-54d6f8f0132b',
+    });
+    const request = stubRaw(client, { id: 'migrated-device', eventSecret: 'event-secret-1' });
+
+    await expect(client.getOrRegisterDevice()).resolves.toBe('migrated-device');
+
+    expect(request.mock.calls[0]?.[2]).toHaveProperty(
+      'installationId',
+      'd7c4d9c5-4b73-4f98-9f33-54d6f8f0132b',
+    );
+  });
+
+  it('omits the new installation identity for legacy recovery registration', async () => {
+    getOrCreateInstallationIdMock.mockResolvedValueOnce('d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b');
+    getDeviceEventSecretMock.mockResolvedValueOnce(null);
+    const client = new ApiClient({ ...creds, deviceUUID: 'legacy-device' });
+    const request = stubRaw(client, { id: 'legacy-device', eventSecret: 'event-secret-1' });
+
+    await expect(client.getOrRegisterDevice()).resolves.toBe('legacy-device');
+
+    expect(request.mock.calls[0]?.[2]).not.toHaveProperty('installationId');
+  });
+
+  it('sends the agent protocol version header for lifecycle batches', async () => {
+    const server = http.createServer((request, response) => {
+      expect(request.headers['x-waitlayer-agent-protocol-version']).toBe('1');
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end('{}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Test server did not bind');
+    try {
+      const rawRequest = (new ApiClient(creds) as unknown as {
+        raw<T>(
+          method: 'GET' | 'POST' | 'PATCH',
+          path: string,
+          body?: Record<string, unknown>,
+        ): Promise<T>;
+      }).raw;
+      await expect(
+        rawRequest.call(
+          new ApiClient(creds),
+          'POST',
+          `http://127.0.0.1:${address.port}/agent-events/batch`,
+          {},
+        ),
+      ).resolves.toEqual({});
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
   it('refuses cleartext requests to non-loopback hosts', async () => {
     await expect(raw(new ApiClient(creds), 'http://example.com/api/v1/auth/me')).rejects.toThrow(
       /refuses to send credentials/,

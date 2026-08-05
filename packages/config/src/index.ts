@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { ENVIRONMENT_KINDS } from './environment';
+
 // Mirrors the full `PAYOUT_PROVIDERS` catalogue from packages/shared so an
 // operator copying the .env.example override map never trips config
 // validation. Stub-only providers (payoneer/razorpay/dodo_payments) are still
@@ -157,6 +159,12 @@ const envSchema = z
     // General
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+    // Product/deployment identity. This is deliberately separate from
+    // NODE_ENV: a sandbox may run a production-shaped build, while production
+    // must never boot with sandbox facilities enabled.
+    WAITLAYER_ENVIRONMENT_KIND: z.enum(ENVIRONMENT_KINDS).default('development'),
+    WAITLAYER_ENVIRONMENT_ID: z.string().min(1).max(128).default('local'),
+    ENABLE_STAGING_FAUCET: z.enum(['true', 'false']).default('false'),
 
     // Database
     DATABASE_URL: z.string(),
@@ -425,6 +433,48 @@ const envSchema = z
   })
   .refine(
     (env) => {
+      if (env.NODE_ENV === 'production' && env.WAITLAYER_ENVIRONMENT_KIND !== 'production') {
+        return false;
+      }
+      if (env.WAITLAYER_ENVIRONMENT_KIND === 'production' && env.NODE_ENV !== 'production') {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        'NODE_ENV=production requires WAITLAYER_ENVIRONMENT_KIND=production, and production environment kind requires NODE_ENV=production.',
+      path: ['WAITLAYER_ENVIRONMENT_KIND'],
+    },
+  )
+  .refine(
+    (env) => {
+      if (
+        env.ENABLE_STAGING_FAUCET === 'true' &&
+        !['test', 'sandbox', 'staging'].includes(env.WAITLAYER_ENVIRONMENT_KIND)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: 'ENABLE_STAGING_FAUCET is allowed only in test, sandbox, or staging environments.',
+      path: ['ENABLE_STAGING_FAUCET'],
+    },
+  )
+  .refine(
+    (env) => {
+      if (env.WAITLAYER_ENVIRONMENT_KIND === 'sandbox' && env.NODE_ENV === 'production')
+        return false;
+      return true;
+    },
+    {
+      message: 'A sandbox environment cannot boot as NODE_ENV=production.',
+      path: ['WAITLAYER_ENVIRONMENT_KIND'],
+    },
+  )
+  .refine(
+    (env) => {
       if (env.NODE_ENV === 'production' && !env.REDIS_URL) return false;
       return true;
     },
@@ -465,10 +515,16 @@ const envSchema = z
     message: 'PAYOUT_DESTINATION_COOLDOWN_HOURS must be at least 24 hours in production.',
     path: ['PAYOUT_DESTINATION_COOLDOWN_HOURS'],
   })
-  .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.PRIVACY_HASH_KEY), {
-    message: 'PRIVACY_HASH_KEY is required in production and must be at least 32 characters.',
-    path: ['PRIVACY_HASH_KEY'],
-  })
+  .refine(
+    (env) =>
+      !['sandbox', 'staging', 'production'].includes(env.WAITLAYER_ENVIRONMENT_KIND) ||
+      Boolean(env.PRIVACY_HASH_KEY),
+    {
+      message:
+        'PRIVACY_HASH_KEY is required in sandbox, staging, and production and must be at least 32 characters.',
+      path: ['PRIVACY_HASH_KEY'],
+    },
+  )
   .refine((env) => env.NODE_ENV !== 'production' || Boolean(env.EMAIL_QUEUE_SECRET), {
     message: 'EMAIL_QUEUE_SECRET is required in production and must be at least 32 characters.',
     path: ['EMAIL_QUEUE_SECRET'],
@@ -647,3 +703,4 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
 export type Env = z.infer<typeof envSchema>;
 
 export { envSchema };
+export * from './environment';

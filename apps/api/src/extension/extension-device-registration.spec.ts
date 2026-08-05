@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 
 function makeTrait(overrides: Record<string, unknown> = {}) {
@@ -98,6 +99,53 @@ describe('ExtensionDeviceReportTrait.registerDevice duplicate-device safety', ()
         extensionVersion: '1.2.3',
       }),
     ).rejects.toThrow('outbox unavailable');
+  });
+
+  it('derives a server-keyed pseudonym from the installation identity', async () => {
+    process.env.PRIVACY_HASH_KEY = 'test-installation-pseudonym-key-at-least-32';
+    const { trait, tx } = makeTrait();
+    tx.device.findFirst.mockResolvedValueOnce(null);
+
+    await trait.registerDevice('new-user-1', {
+      toolType: 'vscode',
+      installationId: 'd7c4d9c5-4b73-4f98-9f33-54d6f8f0132b',
+      extensionVersion: '1.2.3',
+    });
+
+    expect(tx.device.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        fingerprintHash: privacyPseudonym(
+          'd7c4d9c5-4b73-4f98-9f33-54d6f8f0132b',
+          'device-installation',
+        ),
+      }),
+    });
+    expect(tx.device.create.mock.calls[0]?.[0].data.fingerprintHash).not.toContain(
+      'd7c4d9c5-4b73-4f98-9f33-54d6f8f0132b',
+    );
+    delete process.env.PRIVACY_HASH_KEY;
+  });
+
+  it('keeps legacy fingerprint-only registration unchanged', async () => {
+    const { trait, tx } = makeTrait();
+
+    await trait.registerDevice('new-user-1', {
+      toolType: 'vscode',
+      fingerprintHash: 'legacy-fingerprint-123456',
+      extensionVersion: '1.2.3',
+    });
+
+    expect(tx.device.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ fingerprintHash: 'legacy-fingerprint-123456' }),
+    });
+  });
+
+  it('rejects registration when neither installationId nor legacy fingerprint is supplied', async () => {
+    const { trait } = makeTrait();
+
+    await expect(
+      trait.registerDevice('new-user-1', { toolType: 'vscode', extensionVersion: '1.2.3' }),
+    ).rejects.toThrow('installationId is required');
   });
 
   it('rechecks same-user ownership after locking and rotates instead of racing into a unique error', async () => {

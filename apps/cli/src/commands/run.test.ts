@@ -31,9 +31,17 @@ const mocks = vi.hoisted(() => {
   };
 });
 
+const bridge = vi.hoisted(() => ({ send: vi.fn().mockResolvedValue(undefined) }));
+
 vi.mock('child_process', () => ({ spawn: mocks.spawn }));
+vi.mock('../lib/agent-bridge', () => ({
+  sendAgentEventToBridge: bridge.send,
+}));
 vi.mock('../lib/credentials', () => ({
-  getCredentials: vi.fn().mockResolvedValue({ email: 'dev@example.test' }),
+  getCredentials: vi.fn().mockResolvedValue({
+    email: 'dev@example.test',
+    installationId: 'installation-123456789',
+  }),
 }));
 vi.mock('../lib/api-client', () => ({
   ApiClient: class {
@@ -50,6 +58,8 @@ describe('runSupervisedCommand', () => {
     mocks.api.getOrRegisterDevice.mockClear();
     mocks.api.reportWaitState.mockClear();
     mocks.api.endWaitState.mockClear();
+    bridge.send.mockClear();
+    bridge.send.mockResolvedValue(undefined);
     mocks.child.removeAllListeners();
   });
 
@@ -87,6 +97,15 @@ describe('runSupervisedCommand', () => {
     expect(mocks.api.endWaitState).toHaveBeenCalledWith(
       expect.objectContaining({ waitStateId: expect.stringMatching(/^cli-run-/) }),
     );
+    expect(bridge.send).toHaveBeenCalledTimes(2);
+    expect(bridge.send.mock.calls.map(([input]) => input.event.eventType)).toEqual([
+      'session.started',
+      'session.ended',
+    ]);
+    expect(bridge.send.mock.calls[0]?.[0].event.eventId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(JSON.stringify(bridge.send.mock.calls[0]?.[0].event)).not.toContain('--version');
   });
 
   it('still runs the wrapped command when start telemetry is unavailable', async () => {
@@ -99,6 +118,7 @@ describe('runSupervisedCommand', () => {
 
     await expect(run).resolves.toBe(7);
     expect(mocks.api.endWaitState).not.toHaveBeenCalled();
+    expect(bridge.send).toHaveBeenCalledTimes(2);
   });
 
   it('does not record telemetry when the wrapped executable cannot spawn', async () => {
@@ -109,6 +129,7 @@ describe('runSupervisedCommand', () => {
     await expect(run).rejects.toThrow('ENOENT');
     expect(mocks.api.reportWaitState).not.toHaveBeenCalled();
     expect(mocks.api.endWaitState).not.toHaveBeenCalled();
+    expect(bridge.send).not.toHaveBeenCalled();
   });
 
   it('requires a command', async () => {

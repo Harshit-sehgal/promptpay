@@ -16,6 +16,7 @@ import { PROHIBITED_DATA_FIELDS, verifySignature } from '@waitlayer/shared';
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';
 import { getAdvertiserBalance } from '../common/utils/advertiser-balance';
+import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { LedgerService } from '../ledger/ledger.service';
@@ -37,7 +38,8 @@ export class ExtensionDeviceReportTrait {
     userId: string,
     dto: {
       toolType: string;
-      fingerprintHash: string;
+      fingerprintHash?: string;
+      installationId?: string;
       extensionVersion?: string;
       platform?: string;
       publicKey?: string;
@@ -49,6 +51,16 @@ export class ExtensionDeviceReportTrait {
   ) {
     // Privacy: reject payloads containing prohibited data fields
     this.enforcePrivacyOn(dto);
+    if (!dto.installationId && !dto.fingerprintHash) {
+      throw new BadRequestException('installationId is required for new device registration');
+    }
+    // New clients send a random installation ID. Derive the server-keyed
+    // pseudonym used by the existing device schema so raw installation IDs are
+    // never persisted or exposed in fraud/admin surfaces. Legacy clients keep
+    // their existing fingerprintHash unchanged for migration compatibility.
+    const fingerprintHash = dto.installationId
+      ? privacyPseudonym(dto.installationId, 'device-installation')
+      : dto.fingerprintHash!;
     // Runtime kill-switch: tool integration and extension version
     if (!(await this.runtimeConfig.isToolEnabled(dto.toolType))) {
       throw new ForbiddenException(`Tool integration "${dto.toolType}" is currently disabled`);
@@ -85,7 +97,7 @@ export class ExtensionDeviceReportTrait {
           action: 'legacy_device_secret_issued',
           targetType: 'device',
           targetId: existingDevice.id,
-          afterSnap: { fingerprintHash: dto.fingerprintHash },
+          afterSnap: { fingerprintHash },
         });
         return { ...updated, eventSecret: migratedSecret };
       }
@@ -143,7 +155,7 @@ export class ExtensionDeviceReportTrait {
 
     // Check for duplicate device (same user + same fingerprint = re-registration).
     const existingDevice = await this.prisma.device.findUnique({
-      where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
+      where: { userId_fingerprintHash: { userId, fingerprintHash } },
     });
     if (existingDevice) return reregisterExistingDevice(existingDevice);
     // Cross-user fingerprint handling (P1). The global unique constraint on
@@ -158,24 +170,24 @@ export class ExtensionDeviceReportTrait {
     // active while any of the protective writes are still in flight creates a
     // bypass when the process or database fails between those steps.
     const registration = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`device-fingerprint:${dto.fingerprintHash}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`device-fingerprint:${fingerprintHash}`}))`;
       // The initial same-user lookup happened before the transaction for the
       // common re-registration path. Recheck after taking the lock so two
       // first-time registrations cannot race into a raw composite-unique error.
       const sameUserDevice = await tx.device.findUnique({
-        where: { userId_fingerprintHash: { userId, fingerprintHash: dto.fingerprintHash } },
+        where: { userId_fingerprintHash: { userId, fingerprintHash } },
         select: { id: true, eventSecret: true },
       });
       if (sameUserDevice) return { device: null, existingDevice: sameUserDevice };
       const owner = await tx.device.findFirst({
-        where: { fingerprintHash: dto.fingerprintHash, NOT: { userId } },
+        where: { fingerprintHash, NOT: { userId } },
         select: { userId: true, id: true },
       });
       const eventSecret = crypto.randomBytes(32).toString('hex');
       const createdDevice = await tx.device.create({
         data: {
           userId,
-          fingerprintHash: dto.fingerprintHash,
+          fingerprintHash,
           eventSecret,
           toolType: dto.toolType as ToolTypeEnum,
           extensionVersion: dto.extensionVersion,
@@ -204,7 +216,7 @@ export class ExtensionDeviceReportTrait {
               flagType: 'duplicate_device',
               severity: 'high',
               evidence: {
-                fingerprintHash: dto.fingerprintHash,
+                fingerprintHash,
                 existingUserId: owner.userId,
               },
             },
@@ -217,7 +229,7 @@ export class ExtensionDeviceReportTrait {
             action: 'duplicate_device_allowed_restricted',
             targetType: 'device',
             targetId: createdDevice.id,
-            afterSnap: { fingerprintHash: dto.fingerprintHash, existingUserId: owner.userId },
+            afterSnap: { fingerprintHash, existingUserId: owner.userId },
             nextRetryAt: new Date(),
           },
         });

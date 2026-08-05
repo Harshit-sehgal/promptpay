@@ -8,6 +8,7 @@ import { loadEnv } from '@waitlayer/config';
 
 import { AdminModule } from './admin/admin.module';
 import { AdvertiserModule } from './advertiser/advertiser.module';
+import { AgentModule } from './agent/agent.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { CampaignModule } from './campaign/campaign.module';
@@ -21,6 +22,7 @@ import {
   ThrottlerStorageModule,
 } from './common/rate-limit/redis-throttler.storage';
 import { ComplianceModule } from './compliance/compliance.module';
+import { EnvironmentMarkerService } from './config/environment-marker.service';
 import { PrismaModule } from './config/prisma.module';
 import { DeveloperModule } from './developer/developer.module';
 import { ExtensionModule } from './extension/extension.module';
@@ -88,6 +90,7 @@ import { ReferralModule } from './referral/referral.module';
     DeveloperModule,
     AdvertiserModule,
     AdminModule,
+    AgentModule,
     ExtensionModule,
     FeedbackModule,
     LedgerModule,
@@ -102,6 +105,7 @@ import { ReferralModule } from './referral/referral.module';
     // ApiKeyGuard first: it's a no-op unless `x-api-key` is present AND the
     // route opted in via @AllowApiKey(). Otherwise it passes through and lets
     // JwtAuthGuard authenticate the request normally.
+    EnvironmentMarkerService,
     { provide: APP_GUARD, useClass: ApiKeyGuard },
     { provide: APP_GUARD, useClass: BruteForceGuard },
     { provide: APP_GUARD, useClass: ThrottleByRouteGuard },

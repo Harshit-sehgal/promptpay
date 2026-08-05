@@ -1,15 +1,21 @@
-import * as crypto from 'crypto';
+import { createHash } from 'crypto';
 import * as dns from 'dns';
 import * as http from 'http';
 import * as https from 'https';
 import * as os from 'os';
 
+import {
+  AGENT_PROTOCOL_VERSION_HEADER,
+  AgentLifecycleEventV1,
+  canonicalAgentBatchPayload,
+} from '@waitlayer/agent-protocol';
 import { DETECTOR_VERSION, DetectorEvidence, signEvidence } from '@waitlayer/shared';
 
 import {
   clearTokens,
   Credentials,
   getDeviceEventSecret,
+  getOrCreateInstallationId,
   setCredentials,
   storeDeviceEventSecret,
 } from './credentials';
@@ -172,24 +178,31 @@ export class ApiClient {
     }
     if (this.deviceUUID && this.deviceEventSecret) return this.deviceUUID;
 
-    const hostname = os.hostname();
-    const username = os.userInfo().username;
-    const homedir = os.homedir();
-    const platform = os.platform();
-    const arch = os.arch();
-    const ostype = os.type();
-    const osrelease = os.release();
-    const totalMemGb = Math.round(os.totalmem() / (1024 * 1024 * 1024));
-    const fingerprint = crypto
-      .createHash('sha256')
-      .update(
-        `cli-${hostname}-${username}-${platform}-${arch}-${homedir}-${ostype}-${osrelease}-${totalMemGb}`,
-      )
-      .digest('hex');
+    // New installations use a stable random identity persisted in protected
+    // local metadata. The server still receives the historical
+    // `fingerprintHash` field for wire compatibility, but it is now only a
+    // SHA-256 pseudonym of that random value — never a hash of hostname,
+    // username, home path, OS release, architecture, or memory.
+    //
+    // A device UUID with a missing event secret indicates an older install
+    // whose keychain/file secret was lost. Keep the legacy derivation only for
+    // that recovery-compatible migration path; no new registration depends on
+    // host attributes.
+    const hadPersistedInstallationId = Boolean(this.creds?.installationId);
+    const installationId = await getOrCreateInstallationId();
+    if (this.creds) this.creds.installationId = installationId;
+    const legacySecretRecovery =
+      Boolean(this.deviceUUID) && !this.deviceEventSecret && !hadPersistedInstallationId;
+    const fingerprint = legacySecretRecovery
+      ? createLegacyFingerprint()
+      : createHash('sha256').update(`waitlayer-installation:${installationId}`).digest('hex');
     const recoverySupportToken = process.env.WAITLAYER_DEVICE_RECOVERY_TOKEN?.trim();
     const registrationPayload = {
       toolType: 'terminal',
+      // Keep fingerprintHash for legacy server/client compatibility while the
+      // server derives the authoritative keyed pseudonym from installationId.
       fingerprintHash: fingerprint,
+      ...(legacySecretRecovery ? {} : { installationId }),
       extensionVersion: CLI_MANIFEST_VERSION,
       platform: os.platform() || 'unknown',
       ...(this.deviceEventSecret ? { existingEventSecret: this.deviceEventSecret } : {}),
@@ -204,13 +217,27 @@ export class ApiClient {
         registrationPayload,
       );
     } catch (err: unknown) {
-      if (isDeviceRecoveryError(err) && !recoverySupportToken) {
-        throw new Error(
-          `${getRequestErrorMessage(err)}. ` +
-            'If support issued a device recovery token, rerun with WAITLAYER_DEVICE_RECOVERY_TOKEN set to that one-time token.',
+      // During a rolling deployment, an older API may still reject the new
+      // installationId field because its strict ValidationPipe forbids unknown
+      // properties. The fingerprintHash is already derived from the random
+      // installation ID, so retrying without only this additive field keeps
+      // old servers compatible without weakening their validation rules.
+      if (installationId && isUnknownInstallationIdError(err)) {
+        const { installationId: _unsupported, ...legacyPayload } = registrationPayload;
+        res = await this.raw<RegisterDeviceResponse>(
+          'POST',
+          '/extension/register-device',
+          legacyPayload,
         );
+      } else {
+        if (isDeviceRecoveryError(err) && !recoverySupportToken) {
+          throw new Error(
+            `${getRequestErrorMessage(err)}. ` +
+              'If support issued a device recovery token, rerun with WAITLAYER_DEVICE_RECOVERY_TOKEN set to that one-time token.',
+          );
+        }
+        throw err;
       }
-      throw err;
     }
 
     if (res && res.id) {
@@ -228,6 +255,26 @@ export class ApiClient {
       return res.id;
     }
     throw new Error('Failed to register CLI device');
+  }
+
+  async ingestAgentEvents(input: {
+    installationId: string;
+    deviceId: string;
+    events: AgentLifecycleEventV1[];
+  }): Promise<{
+    accepted: string[];
+    duplicates: string[];
+    rejected: Array<{ eventId: string; reason: string }>;
+  }> {
+    const payload = {
+      schemaVersion: 1 as const,
+      environmentId: process.env.WAITLAYER_ENVIRONMENT_ID ?? 'local',
+      installationId: input.installationId,
+      deviceId: input.deviceId,
+      events: input.events,
+    };
+    const signature = await this.signEventPayload(canonicalAgentBatchPayload(payload));
+    return this.raw('POST', '/agent-events/batch', { ...payload, signature });
   }
 
   async login(input: { email: string; password: string; twoFactorToken?: string }) {
@@ -722,6 +769,9 @@ export class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(bodyStr).toString(),
+          ...(url.pathname === '/agent-events/batch'
+            ? { [AGENT_PROTOCOL_VERSION_HEADER]: '1' }
+            : {}),
           ...(this.creds?.accessToken ? { Authorization: `Bearer ${this.creds.accessToken}` } : {}),
         },
       },
@@ -798,6 +848,22 @@ export class ApiClient {
   }
 }
 
+function createLegacyFingerprint(): string {
+  const hostname = os.hostname();
+  const username = os.userInfo().username;
+  const homedir = os.homedir();
+  const platform = os.platform();
+  const arch = os.arch();
+  const ostype = os.type();
+  const osrelease = os.release();
+  const totalMemGb = Math.round(os.totalmem() / (1024 * 1024 * 1024));
+  return createHash('sha256')
+    .update(
+      `cli-${hostname}-${username}-${platform}-${arch}-${homedir}-${ostype}-${osrelease}-${totalMemGb}`,
+    )
+    .digest('hex');
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -806,6 +872,13 @@ function getRequestErrorMessage(err: unknown): string {
   if (isRecord(err) && typeof err.message === 'string') return err.message;
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+function isUnknownInstallationIdError(err: unknown): boolean {
+  if (!isRecord(err) || err.status !== 400) return false;
+  const message = err.message;
+  const text = Array.isArray(message) ? message.join(' ') : String(message ?? '');
+  return /installationId/i.test(text) && /not exist|unknown|whitelist/i.test(text);
 }
 
 function isDeviceRecoveryError(err: unknown): boolean {

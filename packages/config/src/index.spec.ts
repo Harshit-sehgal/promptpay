@@ -11,6 +11,7 @@ function validKey(): string {
 function fullProductionEnv(): Record<string, string> {
   return {
     NODE_ENV: 'production',
+    WAITLAYER_ENVIRONMENT_KIND: 'production',
     DATABASE_URL: 'postgresql://localhost:5432/waitlayer',
     REDIS_URL: 'redis://localhost:6379',
     JWT_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nMIIEvQ==\n-----END PRIVATE KEY-----',
@@ -43,6 +44,8 @@ describe('@waitlayer/config env schema', () => {
   it('loads a minimal development environment with defaults', () => {
     const env = loadEnv(BASE_ENV);
     expect(env.NODE_ENV).toBe('test');
+    expect(env.WAITLAYER_ENVIRONMENT_KIND).toBe('development');
+    expect(env.WAITLAYER_ENVIRONMENT_ID).toBe('local');
     expect(env.API_PORT).toBe(4002);
     expect(env.WEB_PORT).toBe(3000);
     expect(env.JWT_ISSUER).toBe('waitlayer');
@@ -77,9 +80,7 @@ describe('@waitlayer/config env schema', () => {
 
   it('rejects known placeholder JWT_SECRETs', () => {
     expect(() => loadEnv({ ...BASE_ENV, JWT_SECRET: 'change-me-1234567890abcdef' })).toThrow();
-    expect(() =>
-      loadEnv({ ...BASE_ENV, JWT_SECRET: 'dev-jwt-secret-1234567890abcdef' }),
-    ).toThrow();
+    expect(() => loadEnv({ ...BASE_ENV, JWT_SECRET: 'dev-jwt-secret-1234567890abcdef' })).toThrow();
     expect(() =>
       loadEnv({ ...BASE_ENV, JWT_SECRET: 'a-solid-random-secret-1234567890abc' }),
     ).not.toThrow();
@@ -117,6 +118,41 @@ describe('@waitlayer/config env schema', () => {
 
     const minimal = loadEnv(fullProductionEnv());
     expect(minimal.NODE_ENV).toBe('production');
+  });
+
+  it('requires a dedicated privacy key outside development/test', () => {
+    expect(() => loadEnv({ ...BASE_ENV, WAITLAYER_ENVIRONMENT_KIND: 'sandbox' })).toThrow(
+      'Invalid environment configuration',
+    );
+    expect(() =>
+      loadEnv({
+        ...BASE_ENV,
+        WAITLAYER_ENVIRONMENT_KIND: 'sandbox',
+        PRIVACY_HASH_KEY: validKey(),
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects mismatched environment identity and unsafe faucet settings', () => {
+    expect(() =>
+      loadEnv({ ...BASE_ENV, NODE_ENV: 'production', WAITLAYER_ENVIRONMENT_KIND: 'sandbox' }),
+    ).toThrow();
+    expect(() => loadEnv({ ...BASE_ENV, WAITLAYER_ENVIRONMENT_KIND: 'production' })).toThrow();
+    expect(() =>
+      loadEnv({
+        ...BASE_ENV,
+        ENABLE_STAGING_FAUCET: 'true',
+        WAITLAYER_ENVIRONMENT_KIND: 'development',
+      }),
+    ).toThrow();
+    expect(() =>
+      loadEnv({
+        ...BASE_ENV,
+        ENABLE_STAGING_FAUCET: 'true',
+        WAITLAYER_ENVIRONMENT_KIND: 'sandbox',
+        PRIVACY_HASH_KEY: validKey(),
+      }),
+    ).not.toThrow();
   });
 
   it('rejects the reference wait-attestation stub bridge in production', () => {

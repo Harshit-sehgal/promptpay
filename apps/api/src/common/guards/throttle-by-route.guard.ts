@@ -55,7 +55,7 @@ function resolveThrottleName(path: string): string {
   if (path.includes('/auth/refresh')) {
     return 'auth-long';
   }
-  if (path.includes('/extension')) {
+  if (path.includes('/extension') || path.includes('/agent-events')) {
     return 'extension';
   }
   return 'default';

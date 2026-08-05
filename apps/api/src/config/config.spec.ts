@@ -29,6 +29,7 @@ function baseDevEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
 function baseProdEnv(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     NODE_ENV: 'production',
+    WAITLAYER_ENVIRONMENT_KIND: 'production',
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
     JWT_SECRET: 'a-very-long-production-jwt-secret-value-32plus!!',
     JWT_PRIVATE_KEY: TEST_JWT_PRIVATE_KEY,

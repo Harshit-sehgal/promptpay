@@ -42,4 +42,20 @@ describe('MetricsService (P1.24)', () => {
     expect(m.getCounter('clicks')).toBe(1);
     expect(m.getCounter('reservation_drift')).toBe(1);
   });
+
+  it('records agent-session reconciliation counters without monetary metrics', () => {
+    const m = new MetricsService();
+    m.recordAgentSessionReconciliation(2, 5);
+    m.recordAgentSessionAbandoned();
+    m.recordAgentSessionReconciliationSkipped('active_work_unit');
+    m.recordAgentSessionReconciliationError();
+
+    expect(m.getCounter('agent_session_reconciliation_runs')).toBe(1);
+    expect(m.getCounter('agent_sessions_reconciliation_scanned')).toBe(5);
+    expect(m.getCounter('agent_sessions_reconciliation_abandoned')).toBe(2);
+    expect(m.getCounter('agent_sessions_abandoned')).toBe(1);
+    expect(m.getCounter('agent_session_reconciliation_skipped{reason=active_work_unit}')).toBe(1);
+    expect(m.getCounter('agent_session_reconciliation_errors')).toBe(1);
+    expect(m.snapshot().moneyCounters).toEqual({});
+  });
 });

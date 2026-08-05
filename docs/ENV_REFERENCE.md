@@ -15,6 +15,10 @@ Default shown where one exists.
 | `NODE_ENV`  | opt | `development` | `development` \| `production` \| `test` |
 | `LOG_LEVEL` | opt | `info`        | `debug` \| `info` \| `warn` \| `error`  |
 
+| `WAITLAYER_ENVIRONMENT_KIND` | opt | `development` | `development` \\| `test` \\| `sandbox` \\| `staging` \\| `production`; production requires `NODE_ENV=production`, and sandbox is never production. |
+| `WAITLAYER_ENVIRONMENT_ID` | opt | `local` | Stable environment/run identifier persisted in the database marker. |
+| `ENABLE_STAGING_FAUCET` | opt | `false` | Test faucet toggle; accepted only in `test`, `sandbox`, or `staging`. |
+
 ## Database
 
 | Variable       | Req | Default | Purpose                                                   |

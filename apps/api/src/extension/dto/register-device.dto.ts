@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 import { ToolType } from '@waitlayer/shared';
@@ -8,11 +8,24 @@ export class RegisterDeviceDto {
   @IsEnum(ToolType)
   toolType!: ToolType;
 
-  @ApiProperty()
+  /**
+   * Legacy device pseudonym accepted for older clients. New clients should
+   * send installationId instead; the API derives this field with its keyed
+   * privacy pseudonymizer before persistence.
+   */
+  @ApiProperty({ required: false, deprecated: true })
+  @IsOptional()
   @IsString()
   @MinLength(16)
   @MaxLength(128)
-  fingerprintHash!: string;
+  fingerprintHash?: string;
+
+  /** Stable random per-installation ID generated locally by current clients. */
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
+  installationId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

@@ -40,6 +40,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      '@waitlayer/agent-protocol': path.resolve(__dirname, '../../packages/agent-protocol/src'),
       '@waitlayer/config': path.resolve(__dirname, '../../packages/config/src'),
       '@waitlayer/db': path.resolve(__dirname, '../../packages/db/src'),
       '@waitlayer/shared': path.resolve(__dirname, '../../packages/shared/src'),

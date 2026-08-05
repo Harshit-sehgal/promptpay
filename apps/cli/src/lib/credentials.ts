@@ -1,7 +1,9 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+import { clearAgentTelemetry, enableBridge } from './agent-spool';
 
 const CRED_DIR = path.join(os.homedir(), '.config', 'waitlayer');
 const CRED_FILE = path.join(CRED_DIR, 'credentials.json');
@@ -81,6 +83,7 @@ interface RawCredentials {
   userId: string;
   role: string;
   deviceUUID?: string;
+  installationId?: string;
   deviceEventSecret?: string;
 }
 
@@ -91,6 +94,8 @@ export interface Credentials {
   userId: string;
   role: string;
   deviceUUID?: string;
+  /** Stable random per-installation identity; never derived from host attributes. */
+  installationId?: string;
 }
 
 export interface Tokens {
@@ -150,7 +155,79 @@ export async function getCredentials(): Promise<Credentials | null> {
     userId: safe.userId,
     role: safe.role,
     ...(safe.deviceUUID ? { deviceUUID: safe.deviceUUID } : {}),
+    ...(safe.installationId ? { installationId: safe.installationId } : {}),
   };
+}
+
+/**
+ * Return the persisted installation identity, creating it atomically in the
+ * credential metadata when this is the first CLI run. The value is random and
+ * contains no hostname, username, home path, OS detail, or hardware data.
+ *
+ * This helper intentionally does not require authentication, so device
+ * registration can use the same stable identity before tokens are available.
+ */
+export async function getOrCreateInstallationId(): Promise<string> {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    parsed = JSON.parse(fs.readFileSync(CRED_FILE, 'utf-8')) as Record<string, unknown>;
+  } catch {
+    parsed = null;
+  }
+
+  const existing = typeof parsed?.installationId === 'string' ? parsed.installationId : undefined;
+  if (existing && /^[0-9a-f-]{36}$/i.test(existing)) return existing;
+
+  fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
+  const lock = acquireInstallationLock();
+
+  try {
+    // Re-read while holding the inter-process lock. Another process may have
+    // won the race between the initial read and lock acquisition.
+    let lockedMetadata: Record<string, unknown> = {};
+    try {
+      lockedMetadata = JSON.parse(fs.readFileSync(CRED_FILE, 'utf-8')) as Record<string, unknown>;
+      const lockedId =
+        typeof lockedMetadata.installationId === 'string'
+          ? lockedMetadata.installationId
+          : undefined;
+      if (lockedId && /^[0-9a-f-]{36}$/i.test(lockedId)) return lockedId;
+    } catch {
+      // The file may not exist or may be a legacy malformed credential file.
+    }
+
+    const installationId = randomUUID();
+    try {
+      fs.chmodSync(CRED_DIR, 0o700);
+    } catch {
+      // Best effort on filesystems that do not support chmod.
+    }
+
+    const next = { ...lockedMetadata, installationId };
+    const tempFile = `${CRED_FILE}.${process.pid}.${randomUUID()}.tmp`;
+    fs.writeFileSync(tempFile, JSON.stringify(next, null, 2), { mode: 0o600 });
+    try {
+      fs.chmodSync(tempFile, 0o600);
+    } catch {
+      // Best effort on filesystems that do not support chmod.
+    }
+    try {
+      fs.renameSync(tempFile, CRED_FILE);
+    } catch (error: unknown) {
+      // Some Windows filesystems reject replacing an existing file with
+      // renameSync. The lock makes this fallback safe for this metadata file.
+      if (!isAlreadyExistsError(error) && !isPermissionError(error)) throw error;
+      try {
+        fs.unlinkSync(CRED_FILE);
+      } catch {
+        // The destination may have disappeared between the two operations.
+      }
+      fs.renameSync(tempFile, CRED_FILE);
+    }
+    return installationId;
+  } finally {
+    releaseInstallationLock(lock);
+  }
 }
 
 export async function setCredentials(creds: Credentials): Promise<void> {
@@ -169,19 +246,40 @@ export async function setCredentials(creds: Credentials): Promise<void> {
   }
   // Strip the event secret AND the tokens BEFORE writing. The event secret is
   // stored via storeDeviceEventSecret(); the tokens via saveTokens(). The JSON
-  // file never carries either in cleartext.
-  const {
-    deviceEventSecret: _dev,
-    accessToken: _at,
-    refreshToken: _rt,
-    ...safe
-  } = creds as RawCredentials;
-  fs.writeFileSync(CRED_FILE, JSON.stringify(safe, null, 2), { mode: 0o600 });
+  // file never carries either in cleartext. Preserve an installation identity
+  // created before authentication; auth flows do not need to know about it.
+  const lock = acquireInstallationLock();
   try {
-    fs.chmodSync(CRED_FILE, 0o600);
-  } catch {
-    // Ignore permissions failures on read-only environments
+    const persistedInstallationId = readStoredInstallationId();
+    const metadata = {
+      ...creds,
+      ...(creds.installationId || persistedInstallationId
+        ? { installationId: creds.installationId ?? persistedInstallationId }
+        : {}),
+    } as RawCredentials;
+    const { deviceEventSecret: _dev, accessToken: _at, refreshToken: _rt, ...safe } = metadata;
+    const tempFile = `${CRED_FILE}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      fs.writeFileSync(tempFile, JSON.stringify(safe, null, 2), { mode: 0o600 });
+      fs.renameSync(tempFile, CRED_FILE);
+      try {
+        fs.chmodSync(CRED_FILE, 0o600);
+      } catch {
+        // Ignore permissions failures on read-only environments
+      }
+    } finally {
+      try {
+        fs.unlinkSync(tempFile);
+      } catch {
+        // Rename success or an earlier write failure may leave nothing to clean.
+      }
+    }
+  } finally {
+    releaseInstallationLock(lock);
   }
+  // Re-enable telemetry only after token and credential metadata persistence
+  // has completed successfully.
+  enableBridge();
 }
 
 /** Store the per-device event secret separately from the main credential file.
@@ -359,7 +457,95 @@ function decodeHashedDeviceSecret(hashedHex: string): string {
   return buf.toString('utf-8');
 }
 
+function acquireInstallationLock(): { file: string; handle: number } {
+  const file = `${CRED_FILE}.installation.lock`;
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    try {
+      const handle = fs.openSync(file, 'wx', 0o600);
+      fs.writeSync(handle, JSON.stringify({ pid: process.pid, createdAt: Date.now() }));
+      return { file, handle };
+    } catch (error: unknown) {
+      if (!isAlreadyExistsError(error)) throw error;
+      try {
+        const ageMs = Date.now() - fs.statSync(file).mtimeMs;
+        const lockOwner = readLockOwner(file);
+        if (ageMs > 30_000 && (!lockOwner || !isProcessAlive(lockOwner.pid))) {
+          fs.unlinkSync(file);
+          continue;
+        }
+      } catch {
+        // The lock disappeared between open/stat; retry.
+      }
+      if (Date.now() >= deadline) {
+        throw new Error('WaitLayer credential metadata is locked by another process');
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+}
+
+function readLockOwner(file: string): { pid: number; createdAt: number } | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    return typeof parsed.pid === 'number' && typeof parsed.createdAt === 'number'
+      ? { pid: parsed.pid, createdAt: parsed.createdAt }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    return isFileSystemError(error, 'EPERM');
+  }
+}
+
+function releaseInstallationLock(lock: { file: string; handle: number }): void {
+  try {
+    fs.closeSync(lock.handle);
+  } finally {
+    try {
+      fs.unlinkSync(lock.file);
+    } catch {
+      // Best effort cleanup; stale-lock recovery handles a crashed writer.
+    }
+  }
+}
+
+function readStoredInstallationId(): string | undefined {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(CRED_FILE, 'utf-8')) as Record<string, unknown>;
+    const installationId = parsed.installationId;
+    return typeof installationId === 'string' && /^[0-9a-f-]{36}$/i.test(installationId)
+      ? installationId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return isFileSystemError(error, 'EEXIST');
+}
+
+function isPermissionError(error: unknown): boolean {
+  return isFileSystemError(error, 'EPERM');
+}
+
+function isFileSystemError(error: unknown, code: string): boolean {
+  return Boolean(error && typeof error === 'object' && (error as { code?: string }).code === code);
+}
+
 export async function clearCredentials(): Promise<void> {
+  // Clear queued agent telemetry before removing account metadata. The queue
+  // may contain events captured while offline and must not survive logout or
+  // account deletion for a later account to upload them.
+  clearAgentTelemetry();
   // Best-effort keychain clears (fire-and-forget; the file unlink below is the
   // authoritative local cleanup).
   void clearDeviceEventSecret();
