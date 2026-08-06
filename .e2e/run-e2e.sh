@@ -26,6 +26,12 @@ export API_PORT=4002
 export API_BASE_URL="http://localhost:4002"
 export WEB_BASE_URL="http://localhost:3000"
 export EMAIL_DRIVER="console"
+# The whole e2e suite shares one IP; the production auth throttle (10/min)
+# exhausted across loginAs helpers caused retry flakes. Test-only API: raise.
+export THROTTLE_AUTH_SHORT_LIMIT="200"
+export THROTTLE_AUTH_LONG_LIMIT="500"
+export THROTTLE_EXTENSION_LIMIT="600"
+export THROTTLE_DEFAULT_LIMIT="1000"
 export NEXT_PUBLIC_API_URL="http://localhost:4002/api/v1"
 export NEXT_PUBLIC_ALLOW_MOCK_AUTH="true"
 
