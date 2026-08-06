@@ -60,6 +60,7 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
   private readonly cache = new Map<string, CacheEntry<unknown>>();
   private readonly logger = new Logger(RuntimeConfigService.name);
   private readonly redisUrl: string | undefined;
+  private readonly redisConnectTimeoutMs: number;
   private readonly allowedCountries: Set<string> | null;
   private readonly allowedCurrencies: Set<string> | null;
   private redisPublisher: RedisClientType | null = null;
@@ -71,6 +72,10 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
     private config: ConfigService,
   ) {
     this.redisUrl = this.config.get<string>('REDIS_URL');
+    const rawConnectTimeout = Number(this.config.get<string>('REDIS_CONNECT_TIMEOUT_MS') ?? 2000);
+    this.redisConnectTimeoutMs = Number.isFinite(rawConnectTimeout)
+      ? Math.min(Math.max(Math.trunc(rawConnectTimeout), 50), 30_000)
+      : 2000;
     this.allowedCountries = parseCodeAllowlist(
       this.config.get<string>('ALLOWED_COUNTRIES'),
       /^[A-Z]{2}$/,
@@ -88,8 +93,16 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
    */
   async onModuleInit(): Promise<void> {
     if (!this.redisUrl) return;
-    const publisher = createClient({ url: this.redisUrl });
-    const subscriber = createClient({ url: this.redisUrl });
+    // Fail fast when Redis is unreachable: a bounded connect timeout plus a
+    // no-reconnect strategy makes connect() reject promptly instead of
+    // retrying forever, so a Redis outage never hangs API boot. The 30s cache
+    // TTL remains the documented resilience fallback.
+    const redisSocket = {
+      connectTimeout: this.redisConnectTimeoutMs,
+      reconnectStrategy: false as const,
+    };
+    const publisher = createClient({ url: this.redisUrl, socket: redisSocket });
+    const subscriber = createClient({ url: this.redisUrl, socket: redisSocket });
     const onRedisError = (error: unknown) => {
       this.logger.warn(`Runtime-config cache invalidation Redis error: ${String(error)}`);
     };
@@ -487,6 +500,16 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
    */
   getVerifiedDetectorVersions(): string {
     return (this.config.get<string>('VERIFIED_DETECTOR_VERSIONS') ?? '').trim();
+  }
+
+  /**
+   * Product/deployment environment identity (`WAITLAYER_ENVIRONMENT_KIND`),
+   * deliberately separate from `NODE_ENV`. A `'sandbox'` deployment serves
+   * non-cash XTS placements through the sandbox opportunity path (WL-G007)
+   * instead of failing closed; every other kind keeps the production gates.
+   */
+  getEnvironmentKind(): string {
+    return this.config.get<string>('WAITLAYER_ENVIRONMENT_KIND') ?? 'development';
   }
 
   // ── Private helpers ──

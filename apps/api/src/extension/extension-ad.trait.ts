@@ -8,7 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { BidType, Prisma } from '@waitlayer/db';
+import { BidType, CampaignStatus, CreativeStatus, Prisma } from '@waitlayer/db';
 import { MINIMUM_VISIBLE_DURATION_MS } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
@@ -37,6 +37,28 @@ import {
 import { ExtensionDeviceReportTrait } from './extension-device-report.trait';
 import { MINIMUM_WAIT_CONFIDENCE } from './extension-wait.trait';
 import { formatHHMMInZone, isTimeInRange } from './quiet-hours';
+
+/**
+ * Sandbox placement types servable by the sandbox opportunity path
+ * (WL-062 / WL-063). Mirrors the `AdPlacementType` schema enum values; the
+ * db package does not re-export that enum, so this local literal union keeps
+ * the where-clause typing exact without a runtime import.
+ */
+const SANDBOX_PLACEMENT_TYPES = new Set([
+  'foreground_wait',
+  'completion_return',
+  'input_required',
+  'background_sponsor',
+  'failure_recovery',
+  'dashboard_native',
+] as const);
+type SandboxPlacementType =
+  | 'foreground_wait'
+  | 'completion_return'
+  | 'input_required'
+  | 'background_sponsor'
+  | 'failure_recovery'
+  | 'dashboard_native';
 
 /**
  * Run a best-effort, non-blocking async task without letting a missing method
@@ -202,6 +224,16 @@ export class ExtensionAdTrait {
     const { signature: _, ...payload } = dto;
     if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
       throw new ForbiddenException('Invalid request signature');
+    }
+    // WL-G007 / WL-062: in an explicitly sandbox deployment, serve non-cash
+    // XTS placements through the separate sandbox opportunity path. Sandbox
+    // ads never run the production settlement gates or touch the billing
+    // ledger; every response is visibly marked (mode: 'sandbox',
+    // hasCashValue: false). Production environments never reach this branch.
+    // The optional call keeps older mocks (without the method) on the
+    // production path — only an explicitly sandbox deployment opts in.
+    if (this.runtimeConfig.getEnvironmentKind?.() === 'sandbox') {
+      return this.serveSandboxOpportunity(userId, dto);
     }
     // Launch-integrity gate: do not show a monetization surface when the
     // server cannot settle rewards. A client-held device secret is not an
@@ -404,6 +436,248 @@ export class ExtensionAdTrait {
       adCache: this.adCache,
       claimImpression: (args) => this.claimImpression(args),
     });
+  }
+
+  /**
+   * WL-063: serve a non-cash sandbox placement for an explicit placement type
+   * (e.g. `completion_return`). Same privacy-first authorization gates as
+   * `requestAd`, then the shared sandbox opportunity path. Only meaningful on
+   * a sandbox deployment; the method is safe (fail-closed) anywhere.
+   */
+  async requestSandboxPlacement(
+    userId: string,
+    dto: {
+      deviceId: string;
+      correlationId: string;
+      placementType: string;
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
+    if (this.runtimeConfig.getEnvironmentKind?.() !== 'sandbox') {
+      return { ad: null, reason: 'sandbox_unavailable', mode: 'sandbox', hasCashValue: false };
+    }
+    this.enforcePrivacyOn(dto);
+    await this.requireAdTelemetryConsent(userId);
+    const device = await this.prisma.device.findUnique({
+      where: { id: dto.deviceId },
+      include: { user: { select: { status: true } } },
+    });
+    if (!device || device.userId !== userId) {
+      throw new ForbiddenException('Device does not belong to this user');
+    }
+    if (!isActiveAccountStatus(device.user.status)) {
+      return { ad: null, reason: 'account_not_active', mode: 'sandbox', hasCashValue: false };
+    }
+    const ccpaOptedOut = await this.compliance.isConsented(userId, 'ccpa_opt_out');
+    if (ccpaOptedOut) {
+      void this.audit.log({
+        actorId: userId,
+        actorRole: 'developer',
+        action: 'ccpa_opt_out_enforced',
+        targetType: 'ad_request',
+        targetId: userId,
+        afterSnap: { reason: 'ad_not_served_ccpa_opt_out', mode: 'sandbox' },
+      });
+      return { ad: null, reason: 'ccpa_opt_out', mode: 'sandbox', hasCashValue: false };
+    }
+    const { signature: _, ...payload } = dto;
+    if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+    return this.serveSandboxOpportunity(userId, {
+      deviceId: dto.deviceId,
+      sessionId: dto.correlationId,
+      idempotencyKey: dto.idempotencyKey,
+      placementType: dto.placementType,
+    });
+  }
+
+  /**
+   * Shared non-cash sandbox serving path (WL-G007 / WL-062 / WL-063).
+   *
+   * Serves XTS house/test placements from a separate opportunity + placement
+   * path so sandbox developers exercise the full ad lifecycle without any
+   * production control being weakened (WAIT_EARNINGS stays disabled). No
+   * production settlement gate runs here: no billing impression token is
+   * persisted in the billing pipeline, `billingAuthorizedAt` is never set,
+   * and no ledger row is written. Every response — served or fail-closed —
+   * is visibly marked `mode: 'sandbox'` with `hasCashValue: false`.
+   */
+  private async serveSandboxOpportunity(
+    userId: string,
+    dto: {
+      deviceId: string;
+      sessionId?: string;
+      waitStateId?: string;
+      country?: string;
+      allowedCategories?: string[];
+      blockedCategories?: string[];
+      idempotencyKey: string;
+      placementType?: string;
+    },
+  ) {
+    const sandboxMark = { mode: 'sandbox', hasCashValue: false } as const;
+    const requestedPlacementType = dto.placementType ?? 'foreground_wait';
+    if (!SANDBOX_PLACEMENT_TYPES.has(requestedPlacementType as SandboxPlacementType)) {
+      return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
+    }
+    const placementType = requestedPlacementType as SandboxPlacementType;
+    // The platform ad kill-switch also governs sandbox placements.
+    if (!(await this.runtimeConfig.isAdsEnabled())) {
+      return { ad: null, reason: 'platform_ads_paused', ...sandboxMark };
+    }
+    // A-056: country targeting enforcement applies to sandbox serving too.
+    const userCountry =
+      normalizeCountryCode(dto.country) ??
+      (await this.prisma.user
+        .findUnique({ where: { id: userId }, select: { country: true } })
+        .then((u) => normalizeCountryCode(u?.country)));
+    if (!(await this.runtimeConfig.isCountryAllowed(userCountry))) {
+      return { ad: null, reason: 'country_blocked', ...sandboxMark };
+    }
+    // Replay: a claimed sandbox opportunity for this idempotency key returns
+    // the exact same (non-cash) placement instead of serving a second one.
+    const existing = await this.prisma.adOpportunity.findFirst({
+      where: { userId, deviceId: dto.deviceId, claimIdempotencyKey: dto.idempotencyKey },
+    });
+    if (existing?.sandboxImpressionToken) {
+      const creative = await this.prisma.adCreative.findUnique({
+        where: { id: existing.selectedCreativeId ?? '' },
+      });
+      if (!creative) return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
+      return {
+        ad: {
+          impressionToken: existing.sandboxImpressionToken,
+          campaignId: existing.selectedCampaignId ?? '',
+          creativeId: creative.id,
+          title: creative.title,
+          message: creative.sponsoredMessage,
+          label: 'Sponsored',
+          displayDomain: creative.displayDomain ?? '',
+          destinationUrl: creative.destinationUrl,
+          ctaText: creative.ctaText ?? null,
+        },
+        ...sandboxMark,
+      };
+    }
+    // A-061 exposure-cap semantics: sandbox placements count toward the
+    // developer's maxAdsPerHour like any ad exposure.
+    const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
+    const maxPerHour = settings?.maxAdsPerHour ?? 6;
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentClaims = await this.prisma.adOpportunity.count({
+      where: { userId, deviceId: dto.deviceId, state: 'claimed', claimedAt: { gte: oneHourAgo } },
+    });
+    if (recentClaims >= maxPerHour) {
+      return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
+    }
+    // A live, unexpired candidate opportunity for this placement type.
+    const opportunity = await this.prisma.adOpportunity.findFirst({
+      where: {
+        userId,
+        deviceId: dto.deviceId,
+        placementType,
+        state: 'candidate',
+        eligibleAt: { lte: new Date() },
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { eligibleAt: 'desc' },
+    });
+    if (!opportunity) {
+      return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
+    }
+    // A-057: honor persisted + per-request blocked categories.
+    const blocked = mergeBlockedCategories(
+      settings?.blockedCategories ?? [],
+      dto.blockedCategories,
+    );
+    // House/test campaigns only: XTS currency, active campaign, approved creative.
+    const placements = await this.prisma.campaignPlacement.findMany({
+      where: {
+        placementType,
+        isActive: true,
+        campaign: {
+          currency: 'XTS',
+          status: CampaignStatus.active,
+          category: blocked.length > 0 ? { notIn: blocked } : undefined,
+        },
+      },
+      include: {
+        campaign: {
+          include: {
+            creatives: {
+              where: { status: CreativeStatus.approved },
+              select: {
+                id: true,
+                title: true,
+                sponsoredMessage: true,
+                displayDomain: true,
+                destinationUrl: true,
+                ctaText: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+    // Placement threshold filtering, then a deterministic first eligible pick.
+    const eligible = placements.filter(
+      (p) =>
+        (p.minAttentionScore == null || opportunity.attentionConfidence >= p.minAttentionScore) &&
+        (p.minIntegrationScore == null ||
+          opportunity.integrationConfidence >= p.minIntegrationScore) &&
+        p.campaign.creatives.length > 0,
+    );
+    const placement = eligible[0];
+    const creative = placement?.campaign.creatives[0];
+    if (!placement || !creative) {
+      return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
+    }
+    const sandboxImpressionToken = crypto.randomUUID();
+    const claimed = await this.prisma.adOpportunity.updateMany({
+      where: { id: opportunity.id, state: 'candidate', claimIdempotencyKey: null },
+      data: {
+        state: 'claimed',
+        claimedAt: new Date(),
+        claimIdempotencyKey: dto.idempotencyKey,
+        selectedCampaignId: placement.campaign.id,
+        selectedCreativeId: creative.id,
+        sandboxImpressionToken,
+      },
+    });
+    if (claimed.count === 0) {
+      // Lost a concurrent claim race; the other request serves the placement.
+      return { ad: null, reason: 'no_sandbox_placement', ...sandboxMark };
+    }
+    void this.audit.log({
+      actorId: userId,
+      actorRole: 'developer',
+      action: 'sandbox_opportunity_served',
+      targetType: 'ad_opportunity',
+      targetId: opportunity.id,
+      afterSnap: {
+        placementType,
+        campaignId: placement.campaign.id,
+        mode: 'sandbox',
+        hasCashValue: false,
+      },
+    });
+    return {
+      ad: {
+        impressionToken: sandboxImpressionToken,
+        campaignId: placement.campaign.id,
+        creativeId: creative.id,
+        title: creative.title,
+        message: creative.sponsoredMessage,
+        label: 'Sponsored',
+        displayDomain: creative.displayDomain ?? '',
+        destinationUrl: creative.destinationUrl,
+        ctaText: creative.ctaText ?? null,
+      },
+      ...sandboxMark,
+    };
   }
 
   /**

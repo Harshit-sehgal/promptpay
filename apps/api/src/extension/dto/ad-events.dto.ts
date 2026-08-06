@@ -18,7 +18,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { ToolType } from '@waitlayer/shared';
+import { AdPlacementType, ToolType } from '@waitlayer/shared';
 
 import { WAIT_STATE_MAX_DURATION_SECONDS } from '../extension.constants';
 
@@ -187,6 +187,39 @@ export const REPORT_AD_REASONS = [
   'fraud',
   'other',
 ] as const;
+
+/**
+ * WL-063: request a non-cash sandbox placement for an explicit placement type
+ * (e.g. `completion_return`). Only served on a sandbox deployment; the client
+ * always receives `mode: 'sandbox'` / `hasCashValue: false` responses.
+ */
+export class SandboxPlacementDto {
+  @ApiProperty({ enum: AdPlacementType })
+  @IsEnum(AdPlacementType)
+  placementType!: AdPlacementType;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  correlationId!: string;
+
+  @ApiProperty()
+  @IsUUID()
+  deviceId!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  idempotencyKey!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(512)
+  signature!: string;
+}
 
 export class ReportAdDto {
   @ApiProperty()
