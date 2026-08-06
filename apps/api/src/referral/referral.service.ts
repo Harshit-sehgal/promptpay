@@ -116,6 +116,17 @@ export class ReferralService {
       throw new BadRequestException('You have already used a referral code');
     }
 
+    // Prevent reciprocal referral loops (A refers B, then B tries to refer A):
+    // each member of the pair would earn a reward for the same relationship —
+    // a classic abuse pattern. The reverse edge is blocked when this pair
+    // already has a referral in the opposite direction.
+    const reciprocal = await this.prisma.referral.findFirst({
+      where: { referrerId: userId, referredId: referrer.id },
+    });
+    if (reciprocal) {
+      throw new BadRequestException('Referral loops are not allowed');
+    }
+
     // Create the referral record — catch DB-level unique-constraint violation
     // (P2002 on @@unique([referredId]) for the concurrent race window).
     try {

@@ -375,6 +375,22 @@ describe('LedgerService', () => {
       expect(mockPrisma.$transaction).toHaveBeenCalled();
     });
 
+    it('stores no available date for restricted trust earnings', async () => {
+      await service.recordImpressionEarnings({
+        userId: 'u-1',
+        campaignId: 'c-restricted',
+        impressionId: 'imp-restricted',
+        bidAmountMinor: 2_00n,
+        currency: 'USD',
+        advertiserId: 'a-1',
+        trustLevel: 'restricted',
+      });
+
+      expect(mockPrisma.earningsLedger.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ availableAt: null, status: 'estimated' }),
+      });
+    });
+
     it('creates no impression ledger entries when campaign budget is exhausted', async () => {
       mockPrisma.$executeRaw.mockResolvedValueOnce(0);
 
