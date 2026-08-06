@@ -65,7 +65,11 @@ export class AgentService {
     if (end.getTime() - start.getTime() > maxWindowMs) {
       throw new BadRequestException('Analytics range cannot exceed 31 days');
     }
-    if (end.getTime() - start.getTime() < 0 || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    if (
+      end.getTime() - start.getTime() < 0 ||
+      !Number.isFinite(start.getTime()) ||
+      !Number.isFinite(end.getTime())
+    ) {
       throw new BadRequestException('Analytics range must contain valid timestamps');
     }
 
@@ -75,43 +79,50 @@ export class AgentService {
       userId,
       startedAt: { gte: start, lt: end },
     } as const;
-    const [sessions, total, providerRows, statusRows, workUnitRows] = await Promise.all([
-      this.prisma.agentSession.findMany({
-        where,
-        orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-        select: {
-          id: true,
-          provider: true,
-          integrationMode: true,
-          status: true,
-          startedAt: true,
-          endedAt: true,
-          _count: { select: { events: true, workUnits: true } },
-        },
-      }),
-      this.prisma.agentSession.count({ where }),
-      this.prisma.agentSession.groupBy({
-        by: ['provider'],
-        where,
-        _count: { _all: true },
-      }),
-      this.prisma.agentSession.groupBy({
-        by: ['status'],
-        where,
-        _count: { _all: true },
-      }),
-      this.prisma.agentWorkUnit.groupBy({
-        by: ['kind', 'status'],
-        where: { session: where },
-        _count: { _all: true },
-      }),
-    ]);
+    const [sessions, total, providerRows, statusRows, workUnitRows, opportunityRows] =
+      await Promise.all([
+        this.prisma.agentSession.findMany({
+          where,
+          orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+          skip: (page - 1) * limit,
+          take: limit,
+          select: {
+            id: true,
+            provider: true,
+            integrationMode: true,
+            status: true,
+            startedAt: true,
+            endedAt: true,
+            _count: { select: { events: true, workUnits: true } },
+          },
+        }),
+        this.prisma.agentSession.count({ where }),
+        this.prisma.agentSession.groupBy({
+          by: ['provider'],
+          where,
+          _count: { _all: true },
+        }),
+        this.prisma.agentSession.groupBy({
+          by: ['status'],
+          where,
+          _count: { _all: true },
+        }),
+        this.prisma.agentWorkUnit.groupBy({
+          by: ['kind', 'status'],
+          where: { session: where },
+          _count: { _all: true },
+        }),
+        this.prisma.adOpportunity.groupBy({
+          by: ['placementType', 'state'],
+          where: { userId, createdAt: { gte: start, lt: end } },
+          _count: { _all: true },
+        }),
+      ]);
 
     return {
       mode: 'agent_telemetry',
       financialSideEffects: false,
+      environmentId: this.environmentId,
       range: { from: start.toISOString(), to: end.toISOString() },
       page,
       limit,
@@ -123,6 +134,10 @@ export class AgentService {
         status: session.status,
         startedAt: session.startedAt,
         endedAt: session.endedAt,
+        durationMs:
+          session.endedAt && session.endedAt.getTime() >= session.startedAt.getTime()
+            ? session.endedAt.getTime() - session.startedAt.getTime()
+            : null,
         eventCount: session._count.events,
         workUnitCount: session._count.workUnits,
       })),
@@ -140,6 +155,12 @@ export class AgentService {
           status: row.status,
           count: row._count._all,
         })),
+        opportunities: opportunityRows.map((row) => ({
+          placementType: row.placementType,
+          state: row.state,
+          count: row._count._all,
+        })),
+        opportunityMetrics: summarizeOpportunityMetrics(opportunityRows),
       },
     };
   }
@@ -352,11 +373,7 @@ export class AgentService {
       const latestEvent = existingSession
         ? await tx.agentLifecycleEvent.findFirst({
             where: { sessionId: existingSession.id },
-            orderBy: [
-              { occurredAt: 'desc' },
-              { sequence: 'desc' },
-              { eventId: 'desc' },
-            ],
+            orderBy: [{ occurredAt: 'desc' }, { sequence: 'desc' }, { eventId: 'desc' }],
             select: { occurredAt: true, sequence: true, eventId: true },
           })
         : null;
@@ -668,6 +685,24 @@ function isEventAtOrAfterLatest(
 
 function isTerminalWorkUnitStatus(status: string): boolean {
   return ['completed', 'failed', 'cancelled', 'stopped'].includes(status);
+}
+
+function summarizeOpportunityMetrics(
+  rows: Array<{ placementType: string; state: string; _count: { _all: number } }>,
+) {
+  const total = rows.reduce((sum, row) => sum + row._count._all, 0);
+  const claimed = rows
+    .filter((row) => row.state === 'claimed')
+    .reduce((sum, row) => sum + row._count._all, 0);
+  const expired = rows
+    .filter((row) => row.state === 'expired')
+    .reduce((sum, row) => sum + row._count._all, 0);
+  return {
+    total,
+    claimed,
+    expired,
+    claimRate: total === 0 ? 0 : Number((claimed / total).toFixed(4)),
+  };
 }
 
 function sessionStatusFor(event: AgentLifecycleEventV1): string {

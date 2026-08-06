@@ -12,6 +12,7 @@ function makeService() {
       groupBy: vi.fn(),
     },
     agentWorkUnit: { groupBy: vi.fn() },
+    adOpportunity: { groupBy: vi.fn() },
   };
   const service = new AgentService(
     prisma as never,
@@ -51,6 +52,9 @@ describe('AgentService.getAnalytics (WL-034)', () => {
     prisma.agentWorkUnit.groupBy.mockResolvedValue([
       { kind: 'turn', status: 'completed', _count: { _all: 1 } },
     ]);
+    prisma.adOpportunity.groupBy.mockResolvedValue([
+      { placementType: 'completion_return', state: 'claimed', _count: { _all: 1 } },
+    ]);
 
     const result = await service.getAnalytics('user-a', query());
 
@@ -72,10 +76,12 @@ describe('AgentService.getAnalytics (WL-034)', () => {
     expect(result).toMatchObject({
       mode: 'agent_telemetry',
       financialSideEffects: false,
+      environmentId: 'local',
       total: 1,
       sessions: [
         expect.objectContaining({
           id: 'session-1',
+          durationMs: 300000,
           eventCount: 4,
           workUnitCount: 2,
         }),
@@ -84,6 +90,8 @@ describe('AgentService.getAnalytics (WL-034)', () => {
         byProvider: [{ provider: 'claude_code', sessions: 1 }],
         byStatus: [{ status: 'ended', sessions: 1 }],
         workUnits: [{ kind: 'turn', status: 'completed', count: 1 }],
+        opportunities: [{ placementType: 'completion_return', state: 'claimed', count: 1 }],
+        opportunityMetrics: { total: 1, claimed: 1, expired: 0, claimRate: 1 },
       },
     });
     expect(JSON.stringify(result)).not.toContain('metadata');
@@ -115,11 +123,18 @@ describe('AgentService.getAnalytics (WL-034)', () => {
     prisma.agentSession.count.mockResolvedValue(0);
     prisma.agentSession.groupBy.mockResolvedValue([]);
     prisma.agentWorkUnit.groupBy.mockResolvedValue([]);
+    prisma.adOpportunity.groupBy.mockResolvedValue([]);
 
     const result = await service.getAnalytics('user-b', {} as AgentAnalyticsQueryDto);
 
     expect(result.page).toBe(1);
     expect(result.limit).toBe(25);
+    expect(result.aggregates.opportunityMetrics).toEqual({
+      total: 0,
+      claimed: 0,
+      expired: 0,
+      claimRate: 0,
+    });
     expect(prisma.agentSession.count).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ userId: 'user-b' }) }),
     );

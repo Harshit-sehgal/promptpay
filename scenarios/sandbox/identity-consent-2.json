@@ -1,0 +1,35 @@
+{
+  "id": "identity-consent-telemetry-enabled",
+  "catalogId": 2,
+  "version": 1,
+  "persona": "consented_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-identity-consent-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "medium",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/identity-consent.runner.mjs", "telemetry-enabled"],
+    "timeoutMs": 5000
+  },
+  "actions": ["enable_telemetry", "enqueue_safe_event", "verify_spool_state"],
+  "expected": {
+    "eventTypes": ["telemetry.enabled"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

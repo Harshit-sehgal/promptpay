@@ -1,0 +1,40 @@
+{
+  "id": "reliability-kill-switch-active-opportunity",
+  "catalogId": 70,
+  "version": 1,
+  "persona": "kill_switch_operator",
+  "environment": "sandbox",
+  "seed": "waitlayer-reliability-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/advertising.runner.mjs", "kill-switch"],
+    "timeoutMs": 5000
+  },
+  "actions": [
+    "create_active_opportunity",
+    "disable_platform_ads",
+    "request_opportunity",
+    "verify_not_served"
+  ],
+  "expected": {
+    "eventTypes": ["opportunity.kill_switch"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

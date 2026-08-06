@@ -124,10 +124,6 @@ export type HookNormalizationOptions = {
 export function normalizeHookEvent(
   options: HookNormalizationOptions,
 ): AgentLifecycleEventV1 | null {
-  // Codex native hooks remain disabled until an authoritative lifecycle
-  // schema and trust contract are verified. This boundary protects callers
-  // that use the generic normalizer directly instead of runHookIngest().
-  if (options.provider === 'codex_cli') return null;
   const eventType = resolveEventType(options.providerEvent);
   if (!eventType || !isProvider(options.provider)) return null;
   if (!isRecord(options.input)) return null;

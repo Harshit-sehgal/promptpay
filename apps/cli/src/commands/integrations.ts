@@ -53,6 +53,20 @@ export function runIntegrationEnable(
   return setIntegrationDisabled(options, false);
 }
 
+export function runIntegrationTrust(
+  options: IntegrationCommandOptions,
+): IntegrationStatusResult | null {
+  const provider = parseProvider(options.provider);
+  if (!provider) {
+    process.exitCode = 1;
+    return printInvalidProvider(options.provider);
+  }
+  const result = new HookConfigManager().setTrusted(provider, true);
+  printResult('Trusted', result);
+  setFailureExitCode(result);
+  return result;
+}
+
 function setIntegrationDisabled(
   options: IntegrationCommandOptions,
   disabled: boolean,

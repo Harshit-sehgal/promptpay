@@ -63,8 +63,6 @@ services:
     build:
       context: .
       target: api
-      provenance: true
-      sbom: true
       args:
         JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
         JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
@@ -149,8 +147,6 @@ services:
     build:
       context: .
       target: web
-      provenance: true
-      sbom: true
       # Next.js inlines these at *build* time — runtime `environment:` below
       # does NOT reach the Edge middleware or the client bundle (A-083). Pass
       # real production values here; the ${VAR:-default} fallbacks match the

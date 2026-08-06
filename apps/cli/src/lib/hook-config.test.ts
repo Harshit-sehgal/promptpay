@@ -169,12 +169,15 @@ describe('HookConfigManager', () => {
     });
   });
 
-  it('refuses to modify Codex until its hook format is verified', () => {
+  it('installs Codex hooks but keeps them degraded until explicit trust', () => {
     const { manager, configPath } = makeManager({}, 'codex');
     const result = manager.install('codex');
     expect(result.status).toBe('degraded');
-    expect(result.reason).toContain('not verified');
+    expect(result.reason).toContain('trust review');
     expect(fs.existsSync(configPath)).toBe(true);
-    expect(JSON.parse(fs.readFileSync(configPath, 'utf8'))).toEqual({});
+    expect(JSON.stringify(JSON.parse(fs.readFileSync(configPath, 'utf8')))).toContain(
+      WAITLAYER_HOOK_MARKER,
+    );
+    expect(manager.setTrusted('codex', true).status).toBe('active');
   });
 });

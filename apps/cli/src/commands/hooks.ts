@@ -40,14 +40,18 @@ export async function runHookIngest(options: HookIngestOptions): Promise<boolean
     const credentials = await getCredentials();
     const deviceId = credentials?.deviceUUID;
     if (!credentials?.installationId || !deviceId) return false;
-    const integrationProvider = provider === 'claude_code' ? 'claude-code' : null;
-    if (integrationProvider && new HookConfigManager().isDisabled(integrationProvider)) return false;
-    if (provider === 'codex_cli') {
-      adaptCodexHook(providerEvent, input);
-      return false;
-    }
-    const adapted = provider === 'claude_code' ? adaptClaudeCodeHook(providerEvent, input) : null;
-    if (provider === 'claude_code' && !adapted) return false;
+    const integrationProvider =
+      provider === 'claude_code' ? 'claude-code' : provider === 'codex_cli' ? 'codex' : null;
+    const configManager = new HookConfigManager();
+    if (integrationProvider && configManager.isDisabled(integrationProvider)) return false;
+    if (provider === 'codex_cli' && !configManager.isTrusted('codex')) return false;
+    const adapted =
+      provider === 'claude_code'
+        ? adaptClaudeCodeHook(providerEvent, input)
+        : provider === 'codex_cli'
+          ? adaptCodexHook(providerEvent, input)
+          : null;
+    if ((provider === 'claude_code' || provider === 'codex_cli') && !adapted) return false;
     const event = normalizeHookEvent({
       provider,
       providerEvent: adapted?.providerEvent ?? providerEvent,

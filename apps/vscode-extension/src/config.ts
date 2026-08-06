@@ -1,11 +1,18 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+import { isTimeInRange } from './quiet-hours';
+
 const CONFIG_SECTION = 'waitlayer';
 
 export class ConfigurationManager {
+  private static readonly installationIdPromises = new WeakMap<
+    vscode.SecretStorage,
+    Promise<string>
+  >();
   private readonly secrets: vscode.SecretStorage;
   private deviceKey = 'waitlayer.deviceFingerprint';
+  private installationIdKey = 'waitlayer.installationId';
   private deviceUuidKey = 'waitlayer.deviceUUID';
   private deviceEventSecretKey = 'waitlayer.deviceEventSecret';
   private deviceUserIdKey = 'waitlayer.deviceUserId';
@@ -168,6 +175,49 @@ export class ConfigurationManager {
       console.error(`[WaitLayer] SecretStorage failure: ${msg}`);
       throw e;
     }
+  }
+
+  /**
+   * Stable random identity for cross-surface correlation. This is deliberately
+   * separate from the legacy device fingerprint used by device registration;
+   * it never includes machine attributes and is persisted in SecretStorage.
+   */
+  async getInstallationId(): Promise<string> {
+    const existing = ConfigurationManager.installationIdPromises.get(this.secrets);
+    if (existing) return existing;
+    const pending = this.loadOrCreateInstallationId();
+    ConfigurationManager.installationIdPromises.set(this.secrets, pending);
+    try {
+      return await pending;
+    } catch (error) {
+      ConfigurationManager.installationIdPromises.delete(this.secrets);
+      throw error;
+    }
+  }
+
+  private async loadOrCreateInstallationId(): Promise<string> {
+    try {
+      const existing = await this.secrets.get(this.installationIdKey);
+      if (existing && /^[0-9a-f-]{36}$/i.test(existing)) return existing;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure (getInstallationId): ${msg}`);
+    }
+
+    const installationId = crypto.randomUUID();
+    try {
+      await this.secrets.store(this.installationIdKey, installationId);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WaitLayer] SecretStorage failure (storeInstallationId): ${msg}`);
+      // A changing installation identity would break correlation and ownership
+      // safety. Fail activation rather than silently generating a new identity
+      // on every window restart.
+      throw new Error('WaitLayer installation identity could not be persisted safely', {
+        cause: e,
+      });
+    }
+    return installationId;
   }
 
   async getDeviceFingerprint(): Promise<string> {
@@ -360,12 +410,4 @@ export class ConfigurationManager {
 function currentTimeHHMM(): string {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-}
-
-function isTimeInRange(now: string, start: string, end: string): boolean {
-  if (start <= end) {
-    return now >= start && now <= end;
-  }
-  // Wraps midnight, e.g. 22:00 → 08:00
-  return now >= start || now <= end;
 }

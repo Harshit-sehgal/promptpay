@@ -1,0 +1,35 @@
+{
+  "id": "adversarial-automated-clicks",
+  "catalogId": 88,
+  "version": 1,
+  "persona": "automated_click_attacker",
+  "environment": "sandbox",
+  "seed": "waitlayer-adversarial-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/adversarial-fraud.runner.mjs"],
+    "timeoutMs": 5000
+  },
+  "actions": ["emit_regular_impressions", "run_automated_pattern_detector", "verify_fraud_flag"],
+  "expected": {
+    "eventTypes": ["adversarial.automated_clicks"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

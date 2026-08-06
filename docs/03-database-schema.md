@@ -3,7 +3,7 @@
 ## Conventions
 
 - Primary keys use UUID.
-- Money uses integer minor units and currency code.
+- Money uses 64-bit integer minor units (`BIGINT`) and a currency code.
 - Ledger tables are append-only.
 - Sensitive external identifiers are encrypted or hashed where possible.
 - All mutable business records include created_at and updated_at.
@@ -86,7 +86,7 @@ approval_decision: approved, rejected, changes_requested
 - user_id uuid primary key references users(id)
 - ads_enabled boolean not null default true
 - quiet_mode boolean not null default false
-- max_ads_per_hour int not null default 12
+- max_ads_per_hour int not null default 6
 - allowed_categories text[] not null default '{}'
 - blocked_categories text[] not null default '{}'
 - privacy_export_requested_at timestamptz
@@ -138,14 +138,14 @@ Constraint:
 - status campaign_status not null default draft
 - category_id uuid references categories(id)
 - bid_type bid_type not null default cpm
-- bid_amount_minor int not null
-- budget_total_minor int not null
-- budget_spent_minor int not null default 0
+- bid_amount_minor bigint not null
+- budget_total_minor bigint not null
+- budget_spent_minor bigint not null default 0
 - currency char(3) not null default 'USD'
 - starts_at timestamptz
 - ends_at timestamptz
 - frequency_cap_user_hour int default 2
-- frequency_cap_user_day int default 8
+- frequency_cap_user_day int default 6
 - quality_score numeric(5,2) not null default 50
 - submitted_at timestamptz
 - approved_at timestamptz
@@ -286,7 +286,7 @@ Indexes:
 - payout_request_id uuid references payout_requests(id)
 - entry_type ledger_entry_type not null
 - status ledger_status not null
-- amount_minor int not null
+- amount_minor bigint not null
 - currency char(3) not null
 - description text not null
 - available_at timestamptz
@@ -301,7 +301,7 @@ Indexes:
 - impression_id uuid references ad_impressions(id)
 - click_id uuid references ad_clicks(id)
 - entry_type ledger_entry_type not null
-- amount_minor int not null
+- amount_minor bigint not null
 - currency char(3) not null
 - description text not null
 - stripe_payment_intent_id text
@@ -314,7 +314,7 @@ Indexes:
 - campaign_id uuid references campaigns(id)
 - impression_id uuid references ad_impressions(id)
 - entry_type ledger_entry_type not null
-- amount_minor int not null
+- amount_minor bigint not null
 - currency char(3) not null
 - bucket text not null -- platform_fee, fraud_reserve, payment_reserve
 - idempotency_key text unique not null
@@ -328,8 +328,8 @@ Indexes:
 - user_id uuid references users(id)
 - payout_account_id uuid references payout_accounts(id)
 - status payout_status not null default requested
-- requested_amount_minor int not null
-- approved_amount_minor int
+- requested_amount_minor bigint not null
+- approved_amount_minor bigint
 - currency char(3) not null
 - requested_at timestamptz not null
 - reviewed_by uuid references users(id)
@@ -345,7 +345,7 @@ Indexes:
 - provider payout_provider not null
 - provider_transaction_id text
 - status payout_status not null
-- amount_minor int not null
+- amount_minor bigint not null
 - currency char(3) not null
 - paid_at timestamptz
 - failure_reason text
@@ -359,7 +359,7 @@ Indexes:
 - id uuid primary key
 - user_id uuid references users(id) on delete restrict
 - status recovery_debt_case_status not null default open
-- amount_minor int not null
+- amount_minor bigint not null
 - currency char(3) not null default 'USD'
 - external_reference text
 - note text
@@ -472,7 +472,7 @@ Indexes and constraints:
 - id uuid primary key
 - referral_id uuid references referrals(id)
 - user_id uuid references users(id)
-- amount_minor int not null
+- amount_minor bigint not null
 - currency char(3) not null
 - status ledger_status not null default pending
 - created_at timestamptz not null

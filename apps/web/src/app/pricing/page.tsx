@@ -260,17 +260,17 @@ export default function PricingPage() {
                 <tbody className="divide-y divide-surface-100">
                   <tr className="hover:bg-surface-50/50 transition-colors">
                     <td className="px-6 py-4 text-surface-900 font-medium">High trust</td>
-                    <td className="px-6 py-4 text-surface-600">7 days</td>
+                    <td className="px-6 py-4 text-surface-600">To be confirmed</td>
                     <td className="px-6 py-4 text-surface-600">$10.00</td>
                   </tr>
                   <tr className="hover:bg-surface-50/50 transition-colors">
                     <td className="px-6 py-4 text-surface-900 font-medium">Normal</td>
-                    <td className="px-6 py-4 text-surface-600">14 days</td>
+                    <td className="px-6 py-4 text-surface-600">To be confirmed</td>
                     <td className="px-6 py-4 text-surface-600">$10.00</td>
                   </tr>
                   <tr className="hover:bg-surface-50/50 transition-colors">
                     <td className="px-6 py-4 text-surface-900 font-medium">New account</td>
-                    <td className="px-6 py-4 text-surface-600">30 days</td>
+                    <td className="px-6 py-4 text-surface-600">To be confirmed</td>
                     <td className="px-6 py-4 text-surface-600">$10.00</td>
                   </tr>
                   <tr className="hover:bg-surface-50/50 transition-colors">

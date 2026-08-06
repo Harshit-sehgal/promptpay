@@ -1,0 +1,41 @@
+{
+  "id": "vscode-multiple-windows",
+  "catalogId": 23,
+  "version": 1,
+  "persona": "multi_window_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-vscode-attention-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/vscode-attention.runner.mjs", "multiple-windows"],
+    "timeoutMs": 10000
+  },
+  "actions": [
+    "focus_two_windows",
+    "show_two_surfaces",
+    "verify_single_owner",
+    "release_first_owner",
+    "verify_promotion"
+  ],
+  "expected": {
+    "eventTypes": ["vscode.single_owner"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

@@ -56,8 +56,8 @@ export default function SecurityPage() {
             </h2>
             <p className="text-surface-500 text-sm leading-relaxed font-light">
               Sensitive fields such as Authenticator secrets and integration tokens are encrypted
-              at-rest using AES-256-GCM. Decryption keys are rotated and managed securely in our
-              production environment.
+              at-rest using AES-256-GCM. Production key rotation and management are deployment
+              controls that must be configured and verified before launch.
             </p>
           </section>
 

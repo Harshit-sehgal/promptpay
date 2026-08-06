@@ -9,8 +9,10 @@ function makePrisma() {
     referral: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
+      create: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
     },
+    user: { findUnique: vi.fn() },
     referralReward: {
       findFirst: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
@@ -95,6 +97,33 @@ describe('ReferralService.processReferralRewards payoutable earnings (A-041)', (
     expect(prisma.earningsLedger.create).toHaveBeenCalledTimes(1);
     // Idempotent no-op must NOT emit a second audit row.
     expect(audit.log).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ReferralService referral-loop prevention', () => {
+  it('rejects a reciprocal referral that would create a two-account loop', async () => {
+    const prisma = makePrisma();
+    prisma.user = {
+      findUnique: vi.fn().mockResolvedValue({
+        id: 'user-b',
+        email: 'b@example.test',
+        status: 'active',
+      }),
+    };
+    // user-b was already referred by user-a; user-a now tries to apply B's code.
+    prisma.referral.findFirst
+      .mockResolvedValueOnce({ referrerId: 'user-a' })
+      .mockResolvedValueOnce(null);
+    const service = new ReferralService(
+      prisma as any,
+      { audit: { log: vi.fn() } } as any,
+      { get: vi.fn().mockReturnValue('http://localhost:3000') } as any,
+    );
+
+    await expect(service.applyReferralCode('user-a', 'B-CODE')).rejects.toThrow(
+      'Referral loops are not allowed',
+    );
+    expect(prisma.referral.create).not.toHaveBeenCalled();
   });
 });
 

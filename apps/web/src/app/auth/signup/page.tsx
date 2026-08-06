@@ -482,7 +482,7 @@ export default function SignupPage() {
             <button
               disabled
               type="button"
-              className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-400 font-medium py-3 rounded-xl text-sm opacity-75 cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-3 bg-surface-50 border border-surface-200/60 text-surface-600 font-medium py-3 rounded-xl text-sm cursor-not-allowed"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path
@@ -503,7 +503,7 @@ export default function SignupPage() {
                 />
               </svg>
               <span>Continue with Google</span>
-              <span className="text-xs text-surface-300 font-normal">
+              <span className="text-xs text-surface-600 font-normal">
                 (disabled: client ID missing)
               </span>
             </button>

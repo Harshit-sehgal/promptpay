@@ -10,8 +10,8 @@ export const WAITLAYER_HOOK_MARKER = 'waitlayer-managed-hook-v1';
 
 export type IntegrationProvider = 'claude-code' | 'codex';
 
-/** WL-043 ships Claude Code JSON merging; Codex remains deferred to WL-045. */
-export const VERIFIED_INTEGRATION_PROVIDERS: IntegrationProvider[] = ['claude-code'];
+/** Native hook configuration is supported for both providers; Codex remains trust-gated. */
+export const VERIFIED_INTEGRATION_PROVIDERS: IntegrationProvider[] = ['claude-code', 'codex'];
 type ConfigShape = Record<string, unknown>;
 
 type HookCommand = {
@@ -81,7 +81,8 @@ const PROVIDER_CONFIG: Record<
     protocolProvider: 'claude_code',
   },
   codex: {
-    relativePath: path.join('.codex', 'config.json'),
+    // Codex keeps lifecycle hooks in hooks.json, separate from config.toml.
+    relativePath: path.join('.codex', 'hooks.json'),
     events: [
       'SessionStart',
       'UserPromptSubmit',
@@ -125,7 +126,6 @@ export class HookConfigManager {
   }
 
   install(provider: IntegrationProvider): IntegrationChangeResult {
-    if (provider === 'codex') return this.unsupportedResult(provider);
     const current = this.readConfig(provider);
     if (current.kind === 'invalid') return this.invalidResult(provider, current.reason);
     if (current.kind === 'missing') {
@@ -159,7 +159,6 @@ export class HookConfigManager {
   }
 
   setDisabled(provider: IntegrationProvider, disabled: boolean): IntegrationStatusResult {
-    if (provider === 'codex') return this.unsupportedResult(provider);
     const current = this.readConfig(provider);
     if (current.kind === 'invalid') return this.invalidResult(provider, current.reason);
     const config = current.kind === 'valid' ? current.config : {};
@@ -168,7 +167,6 @@ export class HookConfigManager {
   }
 
   uninstall(provider: IntegrationProvider): IntegrationChangeResult {
-    if (provider === 'codex') return this.unsupportedResult(provider);
     const current = this.readConfig(provider);
     if (current.kind === 'invalid') return this.invalidResult(provider, current.reason);
     if (current.kind === 'missing') return this.result(provider, {}, false);
@@ -189,7 +187,6 @@ export class HookConfigManager {
   }
 
   status(provider: IntegrationProvider): IntegrationStatusResult {
-    if (provider === 'codex') return this.unsupportedResult(provider);
     const current = this.readConfig(provider);
     if (current.kind === 'invalid') return this.invalidResult(provider, current.reason);
     if (current.kind === 'missing') return this.result(provider, {}, false);
@@ -212,6 +209,19 @@ export class HookConfigManager {
     return readState(this.statePath(provider))?.disabled === true;
   }
 
+  /** Record the operator's explicit confirmation of the provider hook trust prompt. */
+  setTrusted(provider: IntegrationProvider, trusted: boolean): IntegrationStatusResult {
+    const current = this.readConfig(provider);
+    const config = current.kind === 'valid' ? current.config : {};
+    const state = readState(this.statePath(provider));
+    this.persistState(provider, config, state?.disabled === true, trusted);
+    return this.status(provider);
+  }
+
+  isTrusted(provider: IntegrationProvider): boolean {
+    return readState(this.statePath(provider))?.trusted === true;
+  }
+
   private result(
     provider: IntegrationProvider,
     config: ConfigShape,
@@ -228,6 +238,8 @@ export class HookConfigManager {
     const stateDrifted = Boolean(state?.configHash && state.configHash !== hashConfig(config));
     if (state?.disabled === true) status = 'disabled';
     else if (stateDrifted) status = 'degraded';
+    const trustPending = provider === 'codex' && state?.trusted !== true && status === 'active';
+    if (trustPending) status = 'degraded';
     return {
       provider,
       status,
@@ -243,6 +255,9 @@ export class HookConfigManager {
             reason:
               'provider configuration was manually modified; run repair to restore WaitLayer entries',
           }
+        : {}),
+      ...(trustPending
+        ? { reason: 'Codex hooks are installed but require explicit trust review' }
         : {}),
       changed,
       ...(backupPath ? { backupPath } : {}),
@@ -351,7 +366,12 @@ export class HookConfigManager {
     return path.join(this.stateDir, `integration-${provider}.json`);
   }
 
-  private persistState(provider: IntegrationProvider, config: ConfigShape, disabled = false): void {
+  private persistState(
+    provider: IntegrationProvider,
+    config: ConfigShape,
+    disabled = false,
+    trusted = false,
+  ): void {
     fs.mkdirSync(this.stateDir, { recursive: true, mode: 0o700 });
     const state = {
       version: HOOK_CONFIG_VERSION,
@@ -360,6 +380,7 @@ export class HookConfigManager {
       marker: WAITLAYER_HOOK_MARKER,
       configHash: hashConfig(config),
       ...(disabled ? { disabled: true } : {}),
+      ...(trusted ? { trusted: true } : {}),
       updatedAt: this.now().toISOString(),
     };
     const file = this.statePath(provider);
@@ -574,7 +595,9 @@ function capabilityForStatus(status: IntegrationStatus): IntegrationCapability {
   return 'degraded';
 }
 
-function readState(file: string): { disabled?: boolean; configHash?: string } | null {
+function readState(
+  file: string,
+): { disabled?: boolean; trusted?: boolean; configHash?: string } | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
     return isRecord(parsed) ? parsed : null;

@@ -90,6 +90,64 @@ export class AdRequestDto {
   signature!: string;
 }
 
+/**
+ * Display-only sandbox placement request driven by the provider-neutral agent
+ * event stream. It deliberately uses the server-side correlation id rather
+ * than exposing an internal AgentSession primary key to clients.
+ */
+export class SandboxPlacementDto {
+  @ApiProperty()
+  @IsUUID()
+  deviceId!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(256)
+  correlationId!: string;
+
+  @ApiProperty({ enum: ['completion_return'] })
+  @IsIn(['completion_return'])
+  placementType!: 'completion_return';
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @Matches(/^[a-z0-9][a-z0-9-]*$/, { each: true })
+  @MaxLength(64, { each: true })
+  allowedCategories?: string[];
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @Matches(/^[a-z0-9][a-z0-9-]*$/, { each: true })
+  @MaxLength(64, { each: true })
+  blockedCategories?: string[];
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2)
+  @MinLength(2)
+  country?: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  idempotencyKey!: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(512)
+  signature!: string;
+}
+
 export class AdRenderedDto {
   @ApiProperty()
   @IsString()

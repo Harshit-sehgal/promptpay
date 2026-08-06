@@ -1,11 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
-
-import type { AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
-
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
 
 import { AgentBridgeClient } from '../src/agent-bridge-client';
 
@@ -50,8 +49,10 @@ function listen(server: net.Server, socketPath: string): Promise<void> {
 }
 
 afterEach(async () => {
-  for (const server of sockets.splice(0)) await new Promise<void>((resolve) => server.close(() => resolve()));
-  for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+  for (const server of sockets.splice(0))
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  for (const directory of directories.splice(0))
+    fs.rmSync(directory, { recursive: true, force: true });
 });
 
 describe('AgentBridgeClient', () => {
@@ -71,17 +72,25 @@ describe('AgentBridgeClient', () => {
     sockets.push(server);
     await listen(server, paths.socketPath);
     const received: AgentLifecycleEventV1[] = [];
+    const connectionStates: boolean[] = [];
     const client = new AgentBridgeClient({
       socketPath: paths.socketPath,
       secretPath: paths.secretPath,
       reconnect: false,
       onEvent: (event) => received.push(event),
+      onConnectionChange: (connected) => connectionStates.push(connected),
     });
     client.start();
-    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    await vi.waitFor(
+      () => {
+        expect(received).toHaveLength(1);
+      },
+      { timeout: 1_000, interval: 10 },
+    );
     client.dispose();
     expect(received).toHaveLength(1);
     expect(received[0]?.eventId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(connectionStates).toEqual([false, true, false]);
   });
 
   it('uses the default bridge event socket and can be disposed before reconnect', () => {

@@ -19,6 +19,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import SandboxCreditPanel from '@/components/sandbox-credit-panel';
 import { getErrorMessage } from '@/lib/api/errors';
 import { developerApi, referralApi } from '@/lib/api/services';
 import { formatCurrencyBreakdown } from '@/lib/format';
@@ -252,6 +253,8 @@ export default function DeveloperDashboard() {
           </Link>
         </div>
       </div>
+
+      <SandboxCreditPanel />
 
       {loading && (
         <div className="flex items-center justify-center py-24">

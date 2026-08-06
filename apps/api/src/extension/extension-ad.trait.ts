@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 
 import { BidType, Prisma } from '@waitlayer/db';
-import { MINIMUM_VISIBLE_DURATION_MS } from '@waitlayer/shared';
+import { MINIMUM_VISIBLE_DURATION_MS, TEST_CURRENCY_CODE } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';
@@ -210,10 +210,18 @@ export class ExtensionAdTrait {
     // path. Returning the explicit mode lets shipped clients explain the
     // state honestly instead of displaying an ad that will later be voided.
     const launchMode = await this.runtimeConfig.getWaitLaunchMode();
-    if (launchMode !== 'earnings_enabled') {
+    if (launchMode === 'paused') {
       return {
         ad: null,
-        reason: launchMode === 'paused' ? 'platform_ads_paused' : 'earnings_not_available',
+        reason: 'platform_ads_paused',
+        mode: launchMode,
+      };
+    }
+    const isSandbox = this.runtimeConfig.getEnvironmentKind?.() === 'sandbox';
+    if (launchMode !== 'earnings_enabled' && !isSandbox) {
+      return {
+        ad: null,
+        reason: 'earnings_not_available',
         mode: launchMode,
       };
     }
@@ -230,6 +238,81 @@ export class ExtensionAdTrait {
     });
     if (!waitStart) {
       throw new BadRequestException('No matching active wait state start');
+    }
+    if (isSandbox) {
+      // Sandbox placements still honor the same consent, detector, confidence,
+      // wait-lifecycle, user-settings, quiet-hours, country, and ad-switch
+      // boundaries. Only attestation and production financial authorization are
+      // intentionally absent from this branch.
+      if (!(await this.runtimeConfig.isDetectorVersionEnabled(waitStart.detectorVersion))) {
+        return {
+          ad: null,
+          mode: 'sandbox',
+          hasCashValue: false,
+          reason: 'detector_version_disabled',
+        };
+      }
+      if (
+        waitStart.confidence === null ||
+        waitStart.confidence < MINIMUM_WAIT_CONFIDENCE ||
+        waitStart.isFalsePositive
+      ) {
+        return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'low_confidence_wait' };
+      }
+      const sandboxClassification = classifyStoredWaitStart(
+        waitStart,
+        this.runtimeConfig.getVerifiedDetectorVersions(),
+      );
+      if (!sandboxClassification.adEligible) {
+        return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'low_confidence_wait' };
+      }
+      const sandboxWaitEnd = await this.prisma.waitStateEvent.findFirst({
+        where: {
+          userId,
+          deviceId: dto.deviceId,
+          sessionId: dto.sessionId,
+          waitStateId: dto.waitStateId,
+          eventType: 'wait_state_end',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (sandboxWaitEnd && sandboxWaitEnd.createdAt >= waitStart.createdAt) {
+        throw new BadRequestException('Wait state has already ended');
+      }
+      if (!(await this.runtimeConfig.isAdsEnabled())) {
+        return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'platform_ads_paused' };
+      }
+      const sandboxSettings = await this.prisma.userSettings.findUnique({ where: { userId } });
+      if (sandboxSettings && !sandboxSettings.adsEnabled) {
+        return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'ads_disabled' };
+      }
+      if (
+        sandboxSettings?.quietMode &&
+        isTimeInRange(
+          formatHHMMInZone(new Date(), sandboxSettings.timezone ?? 'UTC'),
+          sandboxSettings.quietModeStart || '22:00',
+          sandboxSettings.quietModeEnd || '08:00',
+        )
+      ) {
+        return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'quiet_mode' };
+      }
+      const sandboxCountry =
+        normalizeCountryCode(dto.country) ??
+        (await this.prisma.user
+          .findUnique({ where: { id: userId }, select: { country: true } })
+          .then((u) => normalizeCountryCode(u?.country)));
+      if (!(await this.runtimeConfig.isCountryAllowed(sandboxCountry))) {
+        return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'country_blocked' };
+      }
+      return this.requestSandboxForegroundPlacement(userId, {
+        ...dto,
+        allowedCategories: dto.allowedCategories,
+        blockedCategories: mergeBlockedCategories(
+          sandboxSettings?.blockedCategories ?? [],
+          dto.blockedCategories,
+        ),
+        maxAdsPerHour: sandboxSettings?.maxAdsPerHour ?? 6,
+      });
     }
     // P1.17: detector-version kill-switch. Refuse to serve ads for a disabled
     // detector version so a bad release cannot accrue billable impressions,
@@ -404,6 +487,325 @@ export class ExtensionAdTrait {
       adCache: this.adCache,
       claimImpression: (args) => this.claimImpression(args),
     });
+  }
+
+  /**
+   * Claim a placement generated from the provider-neutral agent domain. This
+   * endpoint is intentionally sandbox-only and has no legacy impression,
+   * click, budget-reservation, or ledger side effects.
+   */
+  async requestSandboxPlacement(
+    userId: string,
+    dto: {
+      deviceId: string;
+      correlationId: string;
+      placementType: 'completion_return';
+      allowedCategories?: string[];
+      blockedCategories?: string[];
+      country?: string;
+      idempotencyKey: string;
+      signature: string;
+    },
+  ) {
+    this.enforcePrivacyOn(dto);
+    await this.requireAdTelemetryConsent(userId);
+    if (this.runtimeConfig.getEnvironmentKind?.() !== 'sandbox') {
+      throw new ForbiddenException('Sandbox placements are available only in sandbox environments');
+    }
+    const device = await this.prisma.device.findUnique({
+      where: { id: dto.deviceId },
+      include: { user: { select: { status: true } } },
+    });
+    if (!device || device.userId !== userId)
+      throw new ForbiddenException('Device does not belong to this user');
+    if (!isActiveAccountStatus(device.user.status))
+      return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'account_not_active' };
+    const { signature: _, ...payload } = dto;
+    if (!(await this.verifyDeviceSignature(dto.deviceId, payload, dto.signature))) {
+      throw new ForbiddenException('Invalid request signature');
+    }
+    if (!(await this.runtimeConfig.isAdsEnabled())) {
+      return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'platform_ads_paused' };
+    }
+    const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
+    if (settings && !settings.adsEnabled) {
+      return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'ads_disabled' };
+    }
+    const country =
+      normalizeCountryCode(dto.country) ??
+      (await this.prisma.user
+        .findUnique({ where: { id: userId }, select: { country: true } })
+        .then((u) => normalizeCountryCode(u?.country)));
+    if (!(await this.runtimeConfig.isCountryAllowed(country))) {
+      return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'country_blocked' };
+    }
+    const session = await this.prisma.agentSession.findUnique({
+      where: { correlationId: dto.correlationId },
+      select: { id: true, userId: true, deviceId: true },
+    });
+    if (!session || session.userId !== userId || session.deviceId !== dto.deviceId) {
+      return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'no_sandbox_placement' };
+    }
+    return this.requestSandboxForegroundPlacement(userId, {
+      deviceId: dto.deviceId,
+      sessionId: session.id,
+      placementType: dto.placementType,
+      idempotencyKey: dto.idempotencyKey,
+      allowedCategories: dto.allowedCategories,
+      blockedCategories: mergeBlockedCategories(
+        settings?.blockedCategories ?? [],
+        dto.blockedCategories,
+      ),
+      maxAdsPerHour: settings?.maxAdsPerHour ?? 6,
+    });
+  }
+
+  /**
+   * Serve one candidate foreground placement in an explicitly isolated sandbox.
+   * This path never creates an AdImpression, reserves campaign budget, invokes
+   * auction/ledger services, or returns a production launch mode. Campaigns
+   * must opt into the placement relation and use XTS so a test campaign cannot
+   * accidentally look like a cash-valued placement.
+   */
+  private async requestSandboxForegroundPlacement(
+    userId: string,
+    dto: {
+      deviceId: string;
+      sessionId: string;
+      waitStateId?: string;
+      placementType?: 'foreground_wait' | 'completion_return';
+      idempotencyKey: string;
+      allowedCategories?: string[];
+      blockedCategories?: string[];
+      maxAdsPerHour: number;
+    },
+  ): Promise<{
+    ad: ServedAd | null;
+    mode: 'sandbox';
+    hasCashValue: false;
+    reason?: string;
+  }> {
+    const now = new Date();
+    const placementType = dto.placementType ?? 'foreground_wait';
+    const claimIdempotencyKey = `sandbox-${placementType}:v1:${userId}:${dto.deviceId}:${dto.waitStateId}:${dto.idempotencyKey}`;
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const replay = await tx.adOpportunity.findFirst({
+        where: { userId, claimIdempotencyKey, state: 'rendered' },
+        select: {
+          selectedCampaignId: true,
+          selectedCreativeId: true,
+          sandboxImpressionToken: true,
+        },
+      });
+      if (
+        replay?.selectedCampaignId &&
+        replay.selectedCreativeId &&
+        replay.sandboxImpressionToken
+      ) {
+        const creative = await tx.adCreative.findUnique({
+          where: { id: replay.selectedCreativeId },
+          select: {
+            title: true,
+            sponsoredMessage: true,
+            displayDomain: true,
+            destinationUrl: true,
+            ctaText: true,
+          },
+        });
+        if (creative) {
+          return {
+            campaignId: replay.selectedCampaignId,
+            creativeId: replay.selectedCreativeId,
+            impressionToken: replay.sandboxImpressionToken,
+            title: creative.title,
+            message: creative.sponsoredMessage,
+            displayDomain: creative.displayDomain,
+            destinationUrl: creative.destinationUrl,
+            ctaText: creative.ctaText,
+          };
+        }
+      }
+
+      const exposureCount = await tx.adOpportunity.count({
+        where: {
+          userId,
+          placementType,
+          state: 'rendered',
+          claimedAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
+        },
+      });
+      if (exposureCount >= dto.maxAdsPerHour) return null;
+
+      const opportunity = await tx.adOpportunity.findFirst({
+        where: {
+          userId,
+          deviceId: dto.deviceId,
+          sessionId: dto.sessionId,
+          placementType,
+          state: 'candidate',
+          eligibleAt: { lte: now },
+          expiresAt: { gt: now },
+        },
+        orderBy: [{ eligibleAt: 'asc' }, { createdAt: 'asc' }],
+        select: { id: true, attentionConfidence: true, integrationConfidence: true },
+      });
+      if (!opportunity) return null;
+
+      const placements = await tx.campaignPlacement.findMany({
+        where: {
+          placementType,
+          isActive: true,
+          bidType: 'cpm',
+          campaign: {
+            status: 'active',
+            currency: TEST_CURRENCY_CODE,
+            ...(dto.allowedCategories?.length ? { category: { in: dto.allowedCategories } } : {}),
+            ...(dto.blockedCategories?.length
+              ? { category: { notIn: dto.blockedCategories } }
+              : {}),
+          },
+        },
+        orderBy: [{ bidAmountMinor: 'desc' }, { createdAt: 'asc' }],
+        include: {
+          campaign: {
+            include: {
+              creatives: {
+                where: { status: 'approved' },
+                orderBy: { createdAt: 'asc' },
+                take: 1,
+              },
+            },
+          },
+        },
+      });
+
+      let placement: (typeof placements)[number] | undefined;
+      for (const candidate of placements) {
+        if (
+          (candidate.minAttentionScore !== null &&
+            candidate.minAttentionScore !== undefined &&
+            opportunity.attentionConfidence < candidate.minAttentionScore) ||
+          (candidate.minIntegrationScore !== null &&
+            candidate.minIntegrationScore !== undefined &&
+            opportunity.integrationConfidence < candidate.minIntegrationScore) ||
+          !candidate.campaign.creatives[0]
+        ) {
+          continue;
+        }
+        const hourCount = candidate.frequencyCapPerHour
+          ? await tx.adOpportunity.count({
+              where: {
+                userId,
+                selectedCampaignId: candidate.campaign.id,
+                state: 'rendered',
+                claimedAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
+              },
+            })
+          : 0;
+        if (candidate.frequencyCapPerHour && hourCount >= candidate.frequencyCapPerHour) continue;
+        const dayCount = candidate.frequencyCapPerDay
+          ? await tx.adOpportunity.count({
+              where: {
+                userId,
+                selectedCampaignId: candidate.campaign.id,
+                state: 'rendered',
+                claimedAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+              },
+            })
+          : 0;
+        if (candidate.frequencyCapPerDay && dayCount >= candidate.frequencyCapPerDay) continue;
+        placement = candidate;
+        break;
+      }
+      if (!placement?.campaign.creatives[0]) return null;
+
+      const creative = placement.campaign.creatives[0];
+      const impressionToken = `sandbox-${crypto.randomUUID()}`;
+      const claim = await tx.adOpportunity.updateMany({
+        where: { id: opportunity.id, state: 'candidate', expiresAt: { gt: now } },
+        data: {
+          // `rendered` is the server-authoritative "served to the client"
+          // state for this display-only path. There is no legacy impression
+          // acknowledgement to transition later; the token is replayable until
+          // the opportunity TTL and never carries cash value.
+          state: 'rendered',
+          claimIdempotencyKey,
+          claimedAt: now,
+          selectedCampaignId: placement.campaign.id,
+          selectedCreativeId: creative.id,
+          sandboxImpressionToken: impressionToken,
+        },
+      });
+      if (claim.count !== 1) {
+        const winner = await tx.adOpportunity.findFirst({
+          where: { id: opportunity.id, claimIdempotencyKey, state: 'rendered' },
+          select: {
+            selectedCampaignId: true,
+            selectedCreativeId: true,
+            sandboxImpressionToken: true,
+          },
+        });
+        if (
+          !winner?.selectedCampaignId ||
+          !winner.selectedCreativeId ||
+          !winner.sandboxImpressionToken
+        ) {
+          return null;
+        }
+        const winnerCreative = await tx.adCreative.findUnique({
+          where: { id: winner.selectedCreativeId },
+          select: {
+            title: true,
+            sponsoredMessage: true,
+            displayDomain: true,
+            destinationUrl: true,
+            ctaText: true,
+          },
+        });
+        if (!winnerCreative) return null;
+        return {
+          campaignId: winner.selectedCampaignId,
+          creativeId: winner.selectedCreativeId,
+          impressionToken: winner.sandboxImpressionToken,
+          title: winnerCreative.title,
+          message: winnerCreative.sponsoredMessage,
+          displayDomain: winnerCreative.displayDomain,
+          destinationUrl: winnerCreative.destinationUrl,
+          ctaText: winnerCreative.ctaText,
+        };
+      }
+
+      return {
+        campaignId: placement.campaign.id,
+        creativeId: creative.id,
+        impressionToken,
+        title: creative.title,
+        message: creative.sponsoredMessage,
+        displayDomain: creative.displayDomain,
+        destinationUrl: creative.destinationUrl,
+        ctaText: creative.ctaText,
+      };
+    });
+
+    if (!claimed) {
+      return { ad: null, mode: 'sandbox', hasCashValue: false, reason: 'no_sandbox_placement' };
+    }
+
+    return {
+      mode: 'sandbox',
+      hasCashValue: false,
+      ad: {
+        impressionToken: claimed.impressionToken,
+        campaignId: claimed.campaignId,
+        creativeId: claimed.creativeId,
+        title: claimed.title,
+        message: claimed.message,
+        label: 'Sponsored · Sandbox',
+        displayDomain: claimed.displayDomain,
+        destinationUrl: claimed.destinationUrl,
+        ctaText: claimed.ctaText,
+      },
+    };
   }
 
   /**

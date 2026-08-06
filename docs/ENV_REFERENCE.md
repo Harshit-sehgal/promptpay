@@ -29,9 +29,10 @@ Default shown where one exists.
 
 ## Redis
 
-| Variable    | Req  | Default | Purpose                                                                                   |
-| ----------- | ---- | ------- | ----------------------------------------------------------------------------------------- |
-| `REDIS_URL` | opt* | —       | Redis for distributed rate limiting + brute-force tracking. **Required in `production`.** |
+| Variable                   | Req  | Default | Purpose                                                                                                                                                              |
+| -------------------------- | ---- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_URL`                | opt* | —       | Redis for distributed rate limiting + brute-force tracking. **Required in `production`.**                                                                            |
+| `REDIS_CONNECT_TIMEOUT_MS` | opt  | —       | Optional bounded Redis startup-connect timeout (100–30,000 ms); when set, the runtime does not retry a failed startup connection and retains the local TTL fallback. |
 
 \* `REDIS_URL` is optional in dev/test but **required in production** (the config
 `refine()` rejects a production boot without it).

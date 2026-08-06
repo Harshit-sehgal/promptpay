@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getDeviceEventSecret: vi.fn(),
   sendAgentEventToBridge: vi.fn(),
   isDisabled: vi.fn(),
+  isTrusted: vi.fn(),
 }));
 
 vi.mock('../lib/credentials', () => ({
@@ -17,6 +18,7 @@ vi.mock('../lib/agent-bridge', () => ({
 vi.mock('../lib/hook-config', () => ({
   HookConfigManager: class {
     isDisabled = mocks.isDisabled;
+    isTrusted = mocks.isTrusted;
   },
 }));
 
@@ -50,6 +52,7 @@ describe('runHookIngest', () => {
   afterEach(() => {
     vi.clearAllMocks();
     mocks.isDisabled.mockReturnValue(false);
+    mocks.isTrusted.mockReturnValue(false);
   });
 
   it('delivers a sanitized event locally without invoking the API', async () => {
@@ -103,6 +106,34 @@ describe('runHookIngest', () => {
       runHookIngest({ provider: 'codex_cli', event: 'SessionStart', input: eventInput }),
     ).resolves.toBe(false);
     expect(mocks.sendAgentEventToBridge).not.toHaveBeenCalled();
+  });
+
+  it('delivers a trusted Codex stop hook after safe projection', async () => {
+    mocks.getCredentials.mockResolvedValue(credentials);
+    mocks.getDeviceEventSecret.mockResolvedValue('device-secret');
+    mocks.isTrusted.mockReturnValue(true);
+    mocks.sendAgentEventToBridge.mockResolvedValue(undefined);
+
+    await expect(
+      runHookIngest({
+        provider: 'codex_cli',
+        event: 'Stop',
+        input: JSON.stringify({
+          session_id: 'codex-session-1',
+          turn_id: 'codex-turn-1',
+          cwd: '/private/worktree',
+          last_assistant_message: 'private output',
+        }),
+      }),
+    ).resolves.toBe(true);
+    const [{ event }] = mocks.sendAgentEventToBridge.mock.calls[0] as [
+      { event: Record<string, unknown> },
+    ];
+    expect(event.provider).toBe('codex_cli');
+    expect(event.eventType).toBe('turn.completed');
+    expect(event.adapterVersion).toBe('codex-cli-hooks-0.1.0');
+    expect(JSON.stringify(event)).not.toContain('private output');
+    expect(JSON.stringify(event)).not.toContain('private/worktree');
   });
 
   it('rejects unsupported Claude hook events without bridge delivery', async () => {

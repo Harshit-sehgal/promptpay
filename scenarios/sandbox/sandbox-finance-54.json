@@ -1,0 +1,35 @@
+{
+  "id": "sandbox-finance-hold-release",
+  "catalogId": 54,
+  "version": 1,
+  "persona": "reviewed_sandbox_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-finance-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/ledger-boundaries.runner.mjs", "release"],
+    "timeoutMs": 5000
+  },
+  "actions": ["resolve_fraud_flag", "release_flag_scoped_hold", "verify_confirmed_status"],
+  "expected": {
+    "eventTypes": ["finance.hold_released"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

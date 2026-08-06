@@ -1,8 +1,8 @@
 # Security / Operational Audit Checklist
 
-> **Status:** Updated 2026-07-12 after the fix pass described in `AGENTS.md`.
-> All code-completable items below are implemented and verified by
-> `pnpm typecheck`, `pnpm lint`, and `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism`.
+> **Status:** Reconciled 2026-08-06 against the live source. Historical dates
+> and claims below are retained for traceability; the current repository and
+> current quality-gate outputs are authoritative.
 
 ## ✅ Completed Fixes
 
@@ -44,34 +44,34 @@
 | 1.1 | 🔴 High   | Add `pnpm audit` or dependency vulnerability scanning to CI | ✅ Done                                           |
 | 1.2 | 🟡 Medium | Docker CI only health-checks API, not web image             | ✅ Done                                           |
 | 1.3 | 🟡 Medium | No lint/typecheck on compiled Docker image                  | ✅ Done                                           |
-| 1.4 | 🟡 Medium | No e2e/browser tests in CI                                  | Add Playwright/Cypress browser smoke test         |
+| 1.4 | 🟡 Medium | No e2e/browser tests in CI                                  | ✅ Done in `.github/workflows/ci.yml` (`e2e`)     |
 | 1.5 | 🟢 Low    | Dependabot config scope unverified for GitHub Actions       | ✅ Already configured in `.github/dependabot.yml` |
 | 1.6 | 🟢 Low    | Some `package.json` files lack `engines` field              | ✅ Done                                           |
 
 ### 2. Database / Schema
 
-| #   | Severity  | Item                                                                                | Recommended Action                     |
-| --- | --------- | ----------------------------------------------------------------------------------- | -------------------------------------- |
-| 2.1 | 🔴 High   | Monetary columns are still `Int` (2^31 cap), not `BigInt`                           | Migrate monetary columns to `BigInt`   |
-| 2.2 | 🟡 Medium | Missing covering index on `earnings_ledger(userId, status, availableAt, createdAt)` | Add `createdAt` to covering index      |
-| 2.3 | 🟡 Medium | Missing composite index on `ad_impressions(campaignId, qualifiedAt, isBillable)`    | Add reporting-friendly composite index |
-| 2.4 | 🟢 Low    | Misleading comments about duplicate `@unique`/`@@index` storage                     | Clean up or remove stale comments      |
-| 2.5 | 🟢 Low    | No partial indexes for common filtered queries                                      | Add partial indexes where appropriate  |
+| #   | Severity  | Item                                                                                | Recommended Action                        |
+| --- | --------- | ----------------------------------------------------------------------------------- | ----------------------------------------- |
+| 2.1 | 🔴 High   | Monetary columns are still `Int` (2^31 cap), not `BigInt`                           | ✅ Current money fields use `BigInt`      |
+| 2.2 | 🟡 Medium | Missing covering index on `earnings_ledger(userId, status, availableAt, createdAt)` | ✅ Added in migration `20260806040000`    |
+| 2.3 | 🟡 Medium | Missing composite index on `ad_impressions(campaignId, qualifiedAt, isBillable)`    | ✅ Added in migration `20260806040000`    |
+| 2.4 | 🟢 Low    | Misleading comments about duplicate `@unique`/`@@index` storage                     | ✅ Current schema comments are reviewed   |
+| 2.5 | 🟢 Low    | No partial indexes for common filtered queries                                      | Deferred; query-plan evidence is required |
 
 ### 3. Operational Reliability
 
-| #   | Severity  | Item                                            | Recommended Action                          |
-| --- | --------- | ----------------------------------------------- | ------------------------------------------- |
-| 3.1 | 🟡 Medium | No email queue/fallback for transactional email | Implement email queue with retry + fallback |
-| 3.2 | 🟡 Medium | No backup/DR runbooks                           | Write backup and disaster-recovery runbooks |
-| 3.3 | 🟢 Low    | Feature flags not implemented                   | Evaluate feature-flag solution              |
+| #   | Severity  | Item                                            | Recommended Action                                               |
+| --- | --------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| 3.1 | 🟡 Medium | No email queue/fallback for transactional email | ✅ Email queue, retry, poison handling, and fallback exist       |
+| 3.2 | 🟡 Medium | No backup/DR runbooks                           | ✅ Implemented in `docs/16-operational-runbooks.md` and CI drill |
+| 3.3 | 🟢 Low    | Feature flags not implemented                   | ✅ Runtime switches/configuration are implemented                |
 
 ### 4. Strategic
 
-| #   | Severity  | Item                    | Recommended Action                       |
-| --- | --------- | ----------------------- | ---------------------------------------- |
-| 4.1 | 🔴 High   | External security audit | Schedule third-party security audit      |
-| 4.2 | 🟡 Medium | Cost/spend controls     | Add campaign spend guardrails and alerts |
+| #   | Severity  | Item                    | Recommended Action                                          |
+| --- | --------- | ----------------------- | ----------------------------------------------------------- |
+| 4.1 | 🔴 High   | External security audit | Schedule third-party security audit                         |
+| 4.2 | 🟡 Medium | Cost/spend controls     | ✅ Atomic budget guards, caps, alerts, and spend cron exist |
 
 ## Verification Commands
 
@@ -81,4 +81,6 @@ pnpm lint
 pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 ```
 
-Last verified: 2026-07-12 — all green.
+Last reconciled: 2026-08-06. Current schema validation, migration status, and
+the repository quality gates are recorded in `AGENTS.md` and the release
+backlog; external security review remains open.

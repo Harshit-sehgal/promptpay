@@ -1,0 +1,35 @@
+{
+  "id": "vscode-inactivity-without-ai",
+  "catalogId": 28,
+  "version": 1,
+  "persona": "vscode_inactive_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-vscode-detector-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/vscode-detector.runner.mjs", "inactivity"],
+    "timeoutMs": 10000
+  },
+  "actions": ["observe_inactivity", "resolve_detector_adapter", "verify_shadow_only"],
+  "expected": {
+    "eventTypes": ["vscode.inactivity_shadow"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

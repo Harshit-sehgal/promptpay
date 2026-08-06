@@ -33,6 +33,7 @@ const mock = vi.hoisted(() => ({
     toggleDetectorSource: vi.fn(),
     falsePositiveSuppressionMinutes: vi.fn(() => 30),
     getDeviceUserId: vi.fn(() => null),
+    getInstallationId: vi.fn(async () => 'test-installation'),
   },
   detector: {
     onSignal: vi.fn(),
@@ -63,6 +64,21 @@ const mock = vi.hoisted(() => ({
   showQuickPick: vi.fn(),
   executeCommand: vi.fn(),
   globalState: { get: vi.fn(() => undefined), update: vi.fn() },
+  attention: {
+    setWindowFocused: vi.fn(),
+    setSurfaceVisible: vi.fn(),
+    setBridgeConnected: vi.fn(),
+    reserveOwner: vi.fn(() => true),
+    getState: vi.fn(() => 'foreground_visible'),
+    isOwner: vi.fn(() => true),
+    onChange: vi.fn(),
+    releaseReservation: vi.fn(),
+    reset: vi.fn(),
+    dispose: vi.fn(),
+  },
+  attentionChangeListener: undefined as ((change: { current: string }) => void) | undefined,
+  windowStateListener: undefined as ((state: { focused: boolean }) => void) | undefined,
+  bridgeConnectionListener: undefined as ((connected: boolean) => void) | undefined,
 }));
 
 vi.mock('vscode', () => ({
@@ -82,9 +98,25 @@ vi.mock('vscode', () => ({
     showInformationMessage: mock.showInformationMessage,
     showErrorMessage: mock.showErrorMessage,
     showQuickPick: mock.showQuickPick,
+    onDidChangeWindowState: vi.fn((listener: (state: { focused: boolean }) => void) => {
+      mock.windowStateListener = listener;
+      return { dispose: vi.fn() };
+    }),
   },
   env: { openExternal: vi.fn(), machineId: 'test-machine-id' },
   Uri: { parse: vi.fn((value: string) => value) },
+}));
+
+vi.mock('../src/agent-bridge-client', () => ({
+  AgentBridgeClient: vi.fn(function AgentBridgeClient(options: {
+    onConnectionChange?: (connected: boolean) => void;
+  }) {
+    mock.bridgeConnectionListener = options.onConnectionChange;
+    return {
+      start: vi.fn(() => options.onConnectionChange?.(true)),
+      dispose: vi.fn(() => options.onConnectionChange?.(false)),
+    };
+  }),
 }));
 
 vi.mock('../src/api-client', () => ({
@@ -106,8 +138,19 @@ vi.mock('../src/wait-detector', () => ({
 }));
 
 vi.mock('../src/ad-panel', () => ({
-  AdPanel: vi.fn(function AdPanel() {
-    return mock.panel;
+  AdPanel: vi.fn(function AdPanel(
+    _context: unknown,
+    _api: unknown,
+    onVisibilityChange?: (visible: boolean) => void,
+  ) {
+    return {
+      ...mock.panel,
+      show: vi.fn((_ad: unknown, _onComplete: unknown) => onVisibilityChange?.(true)),
+      hide: vi.fn((_options?: { complete?: boolean }) => {
+        mock.panel.hide(_options);
+        onVisibilityChange?.(false);
+      }),
+    };
   }),
 }));
 
@@ -117,7 +160,15 @@ vi.mock('../src/status-bar', () => ({
   }),
 }));
 
+vi.mock('../src/attention-state-machine', () => ({
+  AttentionStateMachine: vi.fn(function AttentionStateMachine() {
+    return mock.attention;
+  }),
+}));
+
 import { activate } from '../src/extension';
+
+let lastContext: vscode.ExtensionContext | undefined;
 
 const zeroBalance = {
   available: { amountMinor: 0n, currency: 'USD' },
@@ -127,11 +178,12 @@ const zeroBalance = {
 };
 
 function makeContext(): vscode.ExtensionContext {
-  return {
+  lastContext = {
     secrets: {},
     subscriptions: [],
     globalState: mock.globalState,
   } as unknown as vscode.ExtensionContext;
+  return lastContext;
 }
 async function activateAndClearBootState() {
   activate(makeContext());
@@ -143,6 +195,7 @@ async function activateAndClearBootState() {
 beforeEach(() => {
   vi.clearAllMocks();
   mock.commands.clear();
+  lastContext = undefined;
   mock.api.promptLogin.mockResolvedValue(false);
   mock.api.logout.mockResolvedValue(undefined);
   mock.api.getBalance.mockResolvedValue(zeroBalance);
@@ -161,9 +214,18 @@ beforeEach(() => {
   // Existing lifecycle tests exercise the opted-in path. The dedicated test
   // below locks the default privacy boundary.
   mock.config.waitTelemetryEnabled.mockResolvedValue(true);
+  mock.attention.getState.mockReturnValue('foreground_visible');
+  mock.attention.isOwner.mockReturnValue(true);
   mock.config.inQuietHours.mockResolvedValue(false);
   mock.config.getMaxAdsPerHour.mockResolvedValue(5);
   mock.signalHandler = undefined;
+  mock.windowStateListener = undefined;
+  mock.bridgeConnectionListener = undefined;
+  mock.attentionChangeListener = undefined;
+  mock.attention.onChange.mockImplementation((listener: (change: { current: string }) => void) => {
+    mock.attentionChangeListener = listener;
+    return vi.fn();
+  });
   mock.detector.onSignal.mockImplementation((handler) => {
     mock.signalHandler = handler;
   });
@@ -196,6 +258,52 @@ describe('extension auth commands', () => {
 
     expect(mock.api.logout).toHaveBeenCalledTimes(1);
     expect(mock.status.setLoggedOut).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('extension attention lifecycle (WL-051)', () => {
+  it('wires focus changes and cleanup to the non-financial attention layer', async () => {
+    await activateAndClearBootState();
+
+    expect(mock.attention.setWindowFocused).toHaveBeenCalledWith(true);
+    expect(mock.windowStateListener).toBeDefined();
+
+    mock.windowStateListener?.({ focused: false });
+    expect(mock.attention.setWindowFocused).toHaveBeenCalledWith(false);
+
+    for (const subscription of lastContext?.subscriptions ?? []) subscription.dispose();
+    expect(mock.attention.setBridgeConnected).toHaveBeenCalledWith(false);
+    expect(mock.attention.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the panel on background without settling an impression', async () => {
+    await activateAndClearBootState();
+
+    mock.attentionChangeListener?.({ current: 'background' });
+
+    expect(mock.panel.hide).toHaveBeenCalledWith({ complete: false });
+    expect(mock.attention.releaseReservation).not.toHaveBeenCalled();
+    expect(mock.api.recordAdRendered).not.toHaveBeenCalled();
+    expect(mock.api.requestAd).not.toHaveBeenCalled();
+  });
+
+  it('keeps panel visibility and bridge connectivity in the attention layer only', async () => {
+    await activateAndClearBootState();
+
+    const panelFactory = (await import('../src/ad-panel')).AdPanel;
+    expect(panelFactory).toHaveBeenCalled();
+    const onVisibilityChange = (panelFactory as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0]?.[2] as ((visible: boolean) => void) | undefined;
+    onVisibilityChange?.(true);
+    expect(mock.attention.setSurfaceVisible).toHaveBeenCalledWith(true);
+    onVisibilityChange?.(false);
+    expect(mock.attention.setSurfaceVisible).toHaveBeenCalledWith(false);
+
+    expect(mock.bridgeConnectionListener).toBeDefined();
+    mock.bridgeConnectionListener?.(true);
+    expect(mock.attention.setBridgeConnected).toHaveBeenCalledWith(true);
+    mock.bridgeConnectionListener?.(false);
+    expect(mock.attention.setBridgeConnected).toHaveBeenCalledWith(false);
   });
 });
 

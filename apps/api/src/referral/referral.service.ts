@@ -106,6 +106,24 @@ export class ReferralService {
       throw new BadRequestException('You cannot refer yourself');
     }
 
+    // Do not allow a referral graph cycle. A user who was referred by the
+    // current user cannot then refer that user back, even when both accounts
+    // have not yet earned a reward. Walk the existing parent chain from the
+    // proposed referrer and fail closed if it reaches the applicant.
+    const visited = new Set<string>();
+    let ancestorId: string | null = referrer.id;
+    while (ancestorId && !visited.has(ancestorId)) {
+      if (ancestorId === userId) {
+        throw new BadRequestException('Referral loops are not allowed');
+      }
+      visited.add(ancestorId);
+      const parent: { referrerId: string } | null = await this.prisma.referral.findFirst({
+        where: { referredId: ancestorId },
+        select: { referrerId: true },
+      });
+      ancestorId = parent?.referrerId ?? null;
+    }
+
     // Prevent re-referral — user already referred. The schema's @@unique([referredId])
     // is the authoritative guard (closes the TOCTOU race between findFirst and create);
     // we check here for a clean error message in the no-race case.

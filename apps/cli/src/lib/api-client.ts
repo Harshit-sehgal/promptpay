@@ -136,6 +136,29 @@ export interface EnvironmentIdentity {
   environmentId: string;
 }
 
+export type WaitLaunchMode = 'paused' | 'telemetry_only' | 'earnings_enabled' | 'sandbox';
+
+export interface SandboxCreditsResponse {
+  mode: 'sandbox';
+  hasCashValue: false;
+  currency: 'XTS';
+  balanceMinor: string;
+  environmentId: string;
+}
+
+export interface SandboxPayoutSimulationResponse {
+  mode: 'sandbox';
+  hasCashValue: false;
+  simulationId: string;
+  status: string;
+  amountMinor: string;
+  currency: 'XTS';
+  balanceMinor: string;
+  providerTxId?: string | null;
+  duplicate: boolean;
+  environmentId: string;
+}
+
 export class ApiClient {
   private deviceUUID: string | null = null;
   private deviceEventSecret: string | null = null;
@@ -347,6 +370,35 @@ export class ApiClient {
     return this.raw<EnvironmentIdentity>('GET', '/health', undefined);
   }
 
+  async getSandboxCredits(): Promise<SandboxCreditsResponse> {
+    return this.raw<SandboxCreditsResponse>('GET', '/sandbox/credits', undefined);
+  }
+
+  async claimSandboxFaucet(
+    idempotencyKey: string,
+  ): Promise<
+    SandboxCreditsResponse & { grantedMinor: number; duplicate: boolean; exhausted: boolean }
+  > {
+    return this.raw('POST', '/sandbox/faucet', { idempotencyKey });
+  }
+
+  async simulateSandboxPayout(input: {
+    amountMinor: number;
+    destinationAlias: string;
+    outcome: 'paid' | 'processing' | 'failed' | 'ambiguous' | 'reversed';
+    idempotencyKey: string;
+  }): Promise<SandboxPayoutSimulationResponse> {
+    return this.raw<SandboxPayoutSimulationResponse>('POST', '/sandbox/payouts', input);
+  }
+
+  async listSandboxPayouts(): Promise<{
+    mode: 'sandbox';
+    hasCashValue: false;
+    payouts: Array<Record<string, unknown>>;
+  }> {
+    return this.raw('GET', '/sandbox/payouts', undefined);
+  }
+
   async getRequiredConsentVersions(): Promise<Record<string, string> | null> {
     return this.raw<Record<string, string>>('GET', '/consent/required-versions');
   }
@@ -509,7 +561,7 @@ export class ApiClient {
     toolType: string;
     idempotencyKey: string;
     country?: string;
-  }): Promise<{ ad: Ad | null; mode?: string }> {
+  }): Promise<{ ad: Ad | null; mode?: WaitLaunchMode; hasCashValue?: boolean }> {
     // A-056: send a best-effort ISO country code so country-targeted campaigns
     // can be enforced without server-side geolocation. Falls back to the
     // developer's profile country server-side when omitted.
@@ -530,11 +582,44 @@ export class ApiClient {
       ...(country ? { country } : {}),
     };
     const signature = await this.signEventPayload(payload);
-    const res = await this.raw<{ ad: Ad | null; mode?: string }>('POST', '/extension/ad-request', {
+    const res = await this.raw<{
+      ad: Ad | null;
+      mode?: WaitLaunchMode;
+      hasCashValue?: boolean;
+    }>('POST', '/extension/ad-request', {
       ...payload,
       signature,
     });
-    return { ad: res?.ad ?? null, mode: res?.mode };
+    return { ad: res?.ad ?? null, mode: res?.mode, hasCashValue: res?.hasCashValue };
+  }
+
+  async requestSandboxCompletionPlacement(input: {
+    deviceId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    country?: string;
+  }): Promise<{ ad: Ad | null; mode?: WaitLaunchMode; hasCashValue?: boolean; reason?: string }> {
+    const country = input.country ?? detectCountryCode();
+    const payload = {
+      deviceId: input.deviceId,
+      correlationId: input.correlationId,
+      placementType: 'completion_return' as const,
+      idempotencyKey: input.idempotencyKey,
+      ...(country ? { country } : {}),
+    };
+    const signature = await this.signEventPayload(payload);
+    const res = await this.raw<{
+      ad: Ad | null;
+      mode?: WaitLaunchMode;
+      hasCashValue?: boolean;
+      reason?: string;
+    }>('POST', '/extension/sandbox-placement-request', { ...payload, signature });
+    return {
+      ad: res?.ad ?? null,
+      mode: res?.mode,
+      hasCashValue: res?.hasCashValue,
+      reason: res?.reason,
+    };
   }
 
   async recordAdRendered(input: {

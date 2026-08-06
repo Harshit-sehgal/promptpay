@@ -16,12 +16,7 @@ export type AttentionStateChange = {
 };
 
 export type AttentionStateChangeReason =
-  | 'initial'
-  | 'window_focus'
-  | 'surface_visibility'
-  | 'device_lock'
-  | 'bridge_connection'
-  | 'reset';
+  'initial' | 'window_focus' | 'surface_visibility' | 'device_lock' | 'bridge_connection' | 'reset';
 
 export type AttentionStateMachineOptions = {
   /** Stable local installation identity used to coordinate surfaces. */
@@ -46,6 +41,7 @@ export type AttentionStateMachineOptions = {
  */
 export class AttentionStateMachine {
   private static readonly owners = new Map<string, string>();
+  private static readonly instances = new Map<string, Map<string, AttentionStateMachine>>();
 
   private readonly installationId: string;
   private readonly ownerId: string;
@@ -57,6 +53,7 @@ export class AttentionStateMachine {
   private locked = false;
   private connected = true;
   private ownsAttention = false;
+  private reservationActive = false;
 
   constructor(options: AttentionStateMachineOptions) {
     if (!options.installationId.trim()) throw new Error('Attention installationId is required');
@@ -64,6 +61,9 @@ export class AttentionStateMachine {
     this.installationId = options.installationId;
     this.ownerId = options.ownerId;
     this.now = options.now ?? Date.now;
+    const peers = AttentionStateMachine.instances.get(this.installationId) ?? new Map();
+    peers.set(this.ownerId, this);
+    AttentionStateMachine.instances.set(this.installationId, peers);
   }
 
   getState(): AttentionState {
@@ -93,9 +93,19 @@ export class AttentionStateMachine {
     this.recompute('window_focus');
   }
 
+  /** Reserve this installation's single foreground presentation owner. */
+  reserveOwner(): boolean {
+    if (this.locked || !this.connected || !this.focused) return false;
+    this.reservationActive = true;
+    this.acquireOwner();
+    if (!this.ownsAttention) this.reservationActive = false;
+    return this.ownsAttention;
+  }
+
   /** Update whether a WaitLayer-owned surface is currently visible. */
   setSurfaceVisible(visible: boolean): void {
     this.surfaceVisible = visible;
+    if (visible) this.reservationActive = false;
     this.recompute('surface_visibility');
   }
 
@@ -111,9 +121,17 @@ export class AttentionStateMachine {
     this.recompute('bridge_connection');
   }
 
+  /** Release a temporary foreground reservation without changing observations. */
+  releaseReservation(): void {
+    if (!this.reservationActive) return;
+    this.reservationActive = false;
+    if (!this.surfaceVisible) this.releaseOwner();
+  }
+
   /** Release this owner and return the machine to an unobserved state. */
   reset(): void {
     this.releaseOwner();
+    this.reservationActive = false;
     this.focused = false;
     this.surfaceVisible = false;
     this.locked = false;
@@ -123,11 +141,15 @@ export class AttentionStateMachine {
 
   dispose(): void {
     this.reset();
+    const peers = AttentionStateMachine.instances.get(this.installationId);
+    peers?.delete(this.ownerId);
+    if (peers?.size === 0) AttentionStateMachine.instances.delete(this.installationId);
     this.listeners.clear();
   }
 
   private recompute(reason: AttentionStateChangeReason): void {
     const next = this.resolveState();
+    if (next !== 'foreground_visible') this.reservationActive = false;
     if (next === 'foreground_visible') {
       this.acquireOwner();
       if (!this.ownsAttention) {
@@ -158,10 +180,16 @@ export class AttentionStateMachine {
   }
 
   private releaseOwner(): void {
-    if (AttentionStateMachine.owners.get(this.installationId) === this.ownerId) {
-      AttentionStateMachine.owners.delete(this.installationId);
-    }
+    const released = AttentionStateMachine.owners.get(this.installationId) === this.ownerId;
+    if (released) AttentionStateMachine.owners.delete(this.installationId);
     this.ownsAttention = false;
+    if (released) {
+      // Recompute peers immediately so a second VS Code window can claim the
+      // released foreground owner without waiting for another OS event.
+      for (const peer of AttentionStateMachine.instances.get(this.installationId)?.values() ?? []) {
+        if (peer !== this) peer.recompute('window_focus');
+      }
+    }
   }
 
   private transition(current: AttentionState, reason: AttentionStateChangeReason): void {

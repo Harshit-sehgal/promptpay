@@ -29,8 +29,110 @@ see the live risk/status register without being told to read a separate doc.
 
 ## Current Status (snapshot 2026-07-23)
 
+### 2026-08-06 — consented full gate and CI residual fixes
+
+- The guarded authoritative root test was run with explicit consent against the
+  isolated `waitlayer_test` database on port 5433: 14/14 Turbo tasks passed,
+  including the API unit/integration suites and 9/9 release gates.
+- The latest remote CI run on SHA `25da3e1` exposed repository defects that
+  were not covered by the local source gates. They are fixed in the current
+  worktree: E2E now builds the API's workspace dependencies before booting;
+  config source imports use runtime-safe `.js` specifiers; the CLI bundles its
+  private workspace protocol/shared libraries for standalone npm installs;
+  Compose attestation settings are passed through supported Buildx flags; the
+  Trivy fixture generates keys at test time instead of storing PEM-shaped
+  literals; and the Docker dependency layer includes all workspace manifests.
+- Production and development dependency audits are clean after raising the
+  patched `fast-uri`, `postcss`, `undici`, and `brace-expansion` floors.
+- Local Docker image verification is still environment-limited: the default
+  Docker driver cannot emit attestations, and the registry timed out while
+  downloading the clean build's dependency graph. The CI Buildx runner remains
+  the authoritative image proof.
+
 - **All source-fixable issues A-001…A-086 are resolved, code-verified, and `pnpm typecheck` / `pnpm lint` / `pnpm test` / `pnpm build` (web + api) pass.** The 2026-07-11 web-build blocker was an environment leak (`NODE_ENV=development` inherited by static-generation workers), fixed by forcing `NODE_ENV=production` in the web build script (see the RESOLVED Open Item "Build — Web `next build`"). **A-075** is now resolved as a code defect (Dockerfile registry-resilient pnpm install, 2026-07-23). Browser/live E2E for A-033, A-018, A-036, A-047, and A-040 is now **live-verified 2026-07-15** (see "2026-07-15 Live E2E verification" below). - **Source closure notice:** no further source edits can close the remaining items. They are external operator/infra/product/legal tasks, including: A-030 (real payout-provider credentials / `WAITLAYER_PAYOUT_PROVIDER_STATUS`), P1.21 (GitHub branch-protection toggles), P0.5 (CI run on SHA from a runner with registry access), and the paid-launch staging experiment. A reference/stub independent wait-attestation provider bridge now exists under `tools/wait-attestation-bridge/` and is wired into the CLI/VSCode client flow; only operating and security-reviewing a real provider instance remains external. See "Remaining external activation tasks" below and the per-item notes in this file.
 - This is a snapshot. Re-run the gates after any code change to confirm health.
+
+### 2026-08-06 — WaitLayer blueprint residual backlog
+
+The implementation blueprint and current source audit now have a durable
+residual-work register at [`docs/ops/waitlayer-release-backlog.md`](docs/ops/waitlayer-release-backlog.md).
+Its explicit blueprint requirement matrix separates verified source work,
+partial foundations, repository work remaining, and operator/external launch
+gates.
+The current dirty worktree contains the in-progress `WL-051` attention-owner,
+`WL-062` sandbox foreground/completion-return placement, sandbox XTS credit,
+guarded seed/reset/reconciliation, deterministic sandbox payout simulation,
+scenario runner/reporting, opportunity analytics, and the health-gated
+developer sandbox-credit panel changes;
+preserve and review those changes before publication. A Prisma schema
+annotation repair in this pass made the live development database schema diff
+clean. The full root test was subsequently run with explicit consent on the
+isolated test database and passed all 14/14 tasks, including the destructive
+reset and 9/9 release gates.
+
+- `scenarios/catalog.json` now validates the complete 90-entry Appendix A
+  scenario inventory; catalog presence must not be reported as runtime
+  execution coverage.
+- The blueprint copy-consistency pass removed unverified legal-entity,
+  response-time, active-revenue, and fixed-hold promises from public and draft
+  legal surfaces. Final entity, contact, and policy values remain
+  operator/legal decisions.
+- The compiled local runtime path is now verified: `pnpm start:api` boots the
+  compiled API with Postgres/Redis connected; `pnpm start:web` delegates through
+  the workspace package; and web health/proxy endpoints respond when the
+  repository-root environment is loaded with the PEM-safe dotenv loader. This
+  is local evidence, not Docker/CI proof. The full Playwright matrix passed
+  86/86 after using the documented test-only throttle overrides.
+- Fixed the signup disabled-Google control's color contrast defect found by live
+  axe checks. Focused browser coverage is 39/39; `pnpm run
+test:compiled-entrypoints` is 2/2 and guards both compiled config resolution
+  and the root web launcher.
+- Added the missing advertiser sandbox deposit journey: isolated XTS deposit
+  simulations with idempotent approved/processing/declined/refunded/disputed/
+  timeout outcomes, credit-entry reversal handling, advertiser-only API routes,
+  and a health-gated advertiser dashboard panel. The new migration is applied
+  to the local development database (86 migrations; schema diff clean). API
+  service coverage is 8/8 and web panel coverage is 4/4; production mode makes
+  no sandbox deposit calls.
+- Sandbox payout simulations now expose callback-before-response,
+  duplicate-callback, timeout, and reconciliation-escalation outcomes in
+  addition to paid/processing/failed/ambiguous/reversed, while preserving the
+  existing isolated XTS and no-external-transfer boundary.
+- The scenario auditor/report/runner/triage foundation now has 28/28 focused
+  tests and requires canonical Appendix A `catalogId` plus event types. Reports
+  carry sanitized issue-quality metadata, and automatic triage is limited to
+  deterministic high-confidence failures; the executable inventory now covers
+  90/90 scenarios. Privacy scenarios execute the real
+  compiled CLI hook normalizer with planted secrets and the real local-spool
+  deletion path; terminal scenarios execute the native lifecycle adapters;
+  they fail on leakage, durable-record residue, or normalization mismatch.
+  Seven additional CLI boundary fixtures now execute real hook configuration,
+  Codex trust-gated native adapter/capability, wrapper normalization, malformed-input
+  rejection, duplicate-spool suppression, old-schema quarantine, and hook plus
+  local-telemetry deletion paths, and the compiled advertiser export/erasure
+  service and sandbox XTS simulations. Four identity/consent fixtures now
+  execute compiled signup defaults, CLI telemetry enablement, ad opt-out, and
+  consent revocation; ten advertising fixtures execute compiled sandbox
+  placement serving, replay, expiry, category/country blocks, and frequency
+  caps. Ten VS Code fixtures now execute the compiled attention state machine,
+  detector adapter, and false-positive suppression policy. Executable coverage
+  is now 90/90; Codex native scenarios use the current official hook contract
+  through a trust-gated adapter and sanitized normalizer.
+- Agent analytics now includes the authoritative environment ID and a bounded
+  per-session duration field; the focused analytics contract remains 3/3.
+- Sandbox advertiser deposit coverage now exercises every approved, delayed,
+  duplicate, refund, dispute, timeout, mismatch, and callback outcome; focused
+  service coverage is 9/9.
+- Added reporting covering indexes for the bounded earnings-ledger and
+  campaign-impression queries in migration
+  `20260806040000_reporting_query_indexes`; both local databases report 86
+  migrations applied and current.
+- Final source gates after this slice passed: typecheck 17/17, lint 11/11,
+  build 11/11, release gates 9/9, claims audit 13/13, schema diff clean, and
+  both local databases current at 86 migrations. Root `pnpm test` passed the
+  non-destructive API/web phases (API 1,295 unit tests; web 203 tests) and
+  stopped at the consent-protected test-database reset; no destructive reset
+  was authorized in this pass.
 
 ### 2026-08-03 — source-fix pass
 
@@ -390,8 +492,8 @@ found and fixed this pass:
   behavior (warn + preflight rejection — not "rejected at runtime"), and
   `dodo_payments` in the provider-status example maps; `payout-runbook.md`
   §8.1, `03-database-schema.md`, and `FOUNDATION_STATUS.md` now list
-  `dodo_payments` as a stub-only provider; `remaining-open-items.md` A-075
-  entry reflects the registry-resilient Dockerfile (no more corepack mention).
+  `dodo_payments` as a stub-only provider; the current release backlog records
+  the registry-resilient Dockerfile (no more corepack mention).
 
 ## Open Items (not code-completable / unverified)
 

@@ -8,29 +8,30 @@ import {
 } from './codex-adapter';
 
 describe('Codex adapter', () => {
-  it('reports native integration as unsupported and unverified', () => {
+  it('reports native integration as supported but unverified until explicit trust', () => {
     expect(getCodexCapabilityStatus('/home/user/.codex/config.json')).toEqual({
       provider: 'codex_cli',
       adapterVersion: CODEX_ADAPTER_VERSION,
-      supported: false,
+      supported: true,
       trustStatus: 'unverified',
-      reason: expect.stringContaining('not verified'),
+      reason: expect.stringContaining('trust review'),
       configPath: '/home/user/.codex/config.json',
     });
     expect(isCodexNativeIntegrationTrusted()).toBe(false);
   });
 
-  it('does not inspect or retain an unverified provider payload', () => {
+  it('projects official-shaped payloads without retaining sensitive fields', () => {
     const payload = {
       prompt: 'private prompt',
       command: 'cat secret.txt',
       transcript_path: '/home/user/transcript.jsonl',
     };
     const result = adaptCodexHook('SessionStart', payload);
-    expect(result).toEqual({
-      supported: false,
+    expect(result).toMatchObject({
+      supported: true,
+      providerEvent: 'SessionStart',
       adapterVersion: CODEX_ADAPTER_VERSION,
-      reason: expect.stringContaining('unavailable'),
+      input: {},
     });
     expect(JSON.stringify(result)).not.toContain('private prompt');
     expect(JSON.stringify(result)).not.toContain('secret.txt');

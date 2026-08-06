@@ -1,0 +1,35 @@
+{
+  "id": "vscode-false-positive-suppression",
+  "catalogId": 29,
+  "version": 1,
+  "persona": "vscode_false_positive_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-vscode-detector-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/vscode-detector.runner.mjs", "false-positive"],
+    "timeoutMs": 10000
+  },
+  "actions": ["report_false_positive", "compute_suppression_window", "verify_new_wait_suppressed"],
+  "expected": {
+    "eventTypes": ["vscode.false_positive_suppressed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

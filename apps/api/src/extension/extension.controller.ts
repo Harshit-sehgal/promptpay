@@ -23,6 +23,7 @@ import {
   QualifiedImpressionDto,
   RegisterDeviceDto,
   ReportAdDto,
+  SandboxPlacementDto,
   WaitStateEndDto,
   WaitStateStartDto,
 } from './dto';
@@ -101,6 +102,13 @@ export class ExtensionController {
   @HttpCode(HttpStatus.OK)
   requestAd(@CurrentUser('id') userId: string, @Body() dto: AdRequestDto) {
     return this.service.requestAd(userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Request an isolated sandbox completion-return placement' })
+  @Post('sandbox-placement-request')
+  @HttpCode(HttpStatus.OK)
+  requestSandboxPlacement(@CurrentUser('id') userId: string, @Body() dto: SandboxPlacementDto) {
+    return this.service.requestSandboxPlacement(userId, dto);
   }
 
   @ApiOperation({ summary: 'Record ad rendered' })

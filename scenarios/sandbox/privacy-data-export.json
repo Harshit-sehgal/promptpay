@@ -1,0 +1,35 @@
+{
+  "id": "privacy-data-export",
+  "catalogId": 78,
+  "version": 1,
+  "persona": "privacy_conscious_user",
+  "environment": "sandbox",
+  "seed": "waitlayer-data-export-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/privacy-account.runner.mjs", "export"],
+    "timeoutMs": 5000
+  },
+  "actions": ["request_data_export", "enforce_collection_caps", "verify_export_metadata"],
+  "expected": {
+    "eventTypes": ["privacy.export.completed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement"],
+    "fields": ["prompt", "output", "cwd", "workspacePath", "sourceCode", "passwordHash"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

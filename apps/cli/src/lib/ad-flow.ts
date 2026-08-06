@@ -12,7 +12,7 @@ export interface AdFlowClient {
     waitStateId: string;
     toolType: string;
     idempotencyKey: string;
-  }): Promise<{ ad: Ad | null; mode?: string }>;
+  }): Promise<{ ad: Ad | null; mode?: string; hasCashValue?: boolean }>;
   recordAdRendered(input: {
     impressionToken: string;
     renderedAt: string;
@@ -54,8 +54,8 @@ export interface AdFlowParams {
 export async function runAdFlow(
   client: AdFlowClient,
   params: AdFlowParams,
-): Promise<{ served: boolean; impressionToken?: string; mode?: string }> {
-  const { ad, mode } = await client.requestAd({
+): Promise<{ served: boolean; impressionToken?: string; mode?: string; hasCashValue?: boolean }> {
+  const { ad, mode, hasCashValue } = await client.requestAd({
     deviceId: params.deviceId,
     sessionId: params.sessionId,
     waitStateId: params.waitStateId,
@@ -63,7 +63,16 @@ export async function runAdFlow(
     idempotencyKey: params.idempotencyKey,
   });
   if (!ad) return { served: false, mode };
-
+  // Sandbox placements are display-only. Never call legacy impression or
+  // qualification endpoints for a response unless the server explicitly
+  // proves the placement has no cash value. A malformed sandbox response fails
+  // closed instead of entering the production impression path.
+  if (mode === 'sandbox') {
+    if (hasCashValue !== false) {
+      throw new Error('Invalid sandbox ad response: hasCashValue must be false');
+    }
+    return { served: true, impressionToken: ad.impressionToken, mode, hasCashValue: false };
+  }
   await client.recordAdRendered({
     impressionToken: ad.impressionToken,
     renderedAt: new Date().toISOString(),

@@ -1,0 +1,35 @@
+{
+  "id": "sandbox-finance-earning-hold",
+  "catalogId": 53,
+  "version": 1,
+  "persona": "unverified_sandbox_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-finance-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/ledger-boundaries.runner.mjs", "hold"],
+    "timeoutMs": 5000
+  },
+  "actions": ["calculate_normal_hold", "calculate_unverified_hold", "verify_extended_hold"],
+  "expected": {
+    "eventTypes": ["finance.earning_hold"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

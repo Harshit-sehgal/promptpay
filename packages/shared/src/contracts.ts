@@ -127,28 +127,40 @@ export const WaitStateEndResponse = WaitStateStartResponse.extend({
 });
 
 /** POST /api/v1/extension/ad-request response */
-export const AdRequestResponse = z.object({
-  ad: z
-    .object({
-      impressionToken: z.string().min(1),
-      campaignId: z.string().min(1),
-      creativeId: z.string().min(1),
-      title: z.string(),
-      message: z.string(),
-      label: z.string(),
-      displayDomain: z.string(),
-      destinationUrl: z.string().refine((v) => typeof v === 'string' && v.startsWith('https://'), {
-        message: 'destinationUrl must be an https:// URL',
-      }),
-      ctaText: z.string().nullable().optional(),
-    })
-    .nullable(),
-  // Present when the server intentionally suppresses the ad surface because
-  // the launch cannot settle rewards. Optional preserves compatibility with
-  // older API deployments and ordinary no-campaign responses.
+const AdRequestAdSchema = z
+  .object({
+    impressionToken: z.string().min(1),
+    campaignId: z.string().min(1),
+    creativeId: z.string().min(1),
+    title: z.string(),
+    message: z.string(),
+    label: z.string(),
+    displayDomain: z.string(),
+    destinationUrl: z.string().refine((v) => typeof v === 'string' && v.startsWith('https://'), {
+      message: 'destinationUrl must be an https:// URL',
+    }),
+    ctaText: z.string().nullable().optional(),
+  })
+  .nullable();
+
+const StandardAdRequestResponse = z.object({
+  ad: AdRequestAdSchema,
   mode: z.enum(['paused', 'telemetry_only', 'earnings_enabled']).optional(),
+  hasCashValue: z.boolean().optional(),
   reason: z.string().optional(),
 });
+
+const SandboxAdRequestResponse = z.object({
+  ad: AdRequestAdSchema,
+  mode: z.literal('sandbox'),
+  // Sandbox is deliberately non-cash. Keeping this as a literal prevents a
+  // client/server drift from silently turning a test placement into a money
+  // surface.
+  hasCashValue: z.literal(false),
+  reason: z.string().optional(),
+});
+
+export const AdRequestResponse = z.union([StandardAdRequestResponse, SandboxAdRequestResponse]);
 
 /** POST /api/v1/extension/ad-rendered response */
 export const AdRenderedResponse = z.object({

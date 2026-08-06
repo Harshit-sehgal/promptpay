@@ -219,7 +219,7 @@ jobs:
         run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
       - name: Boot API for E2E
         run: |
-          pnpm --filter waitlayer-api build
+          pnpm --filter "waitlayer-api..." build
           node apps/api/dist/apps/api/src/main.js &
           API_PID=$!
           for i in $(seq 1 30); do
@@ -362,7 +362,7 @@ jobs:
       # Web reads JWT_PUBLIC_KEY + NEXT_PUBLIC_* at build time (Edge middleware
       # inlines them). JWT_SECRET remains runtime-only for BFF HMAC signing.
       - name: Build web image (verifies build-time secret wiring)
-        run: docker compose -f docker-compose.yml build web
+        run: docker compose -f docker-compose.yml build --provenance=true --sbom=true web
         env:
           NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: '53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.apps.googleusercontent.com'
@@ -385,7 +385,8 @@ jobs:
       # that the in-process suite could never catch).
       - name: Build + boot API and verify it serves over TCP
         run: |
-          docker compose -f docker-compose.yml up -d api postgres redis
+          docker compose -f docker-compose.yml build --provenance=true --sbom=true api
+          docker compose -f docker-compose.yml up -d --no-build api postgres redis
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:4002/api/v1/health/ready; then
               echo "API healthy over TCP"; break
@@ -433,7 +434,7 @@ jobs:
       # or static-generation issues).
       - name: Build + boot web and verify it serves over TCP
         run: |
-          docker compose -f docker-compose.yml up -d web
+          docker compose -f docker-compose.yml up -d --no-build web
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:3000; then
               echo "Web healthy over TCP"; break
