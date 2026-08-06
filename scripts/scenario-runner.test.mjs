@@ -170,3 +170,58 @@ test('terminates a fixture that exceeds its fault-injection timeout', async () =
     /scenario fixture timed out/,
   );
 });
+
+test('rejects a trace that leaks a secret container (privacy canary)', async () => {
+  await assert.rejects(
+    runScenario(path.resolve('scenarios/sandbox/privacy-canary-leak.json')),
+    /privacy canary triggered/,
+  );
+});
+
+test('kills a fixture that floods stdout past the output cap', async () => {
+  const started = Date.now();
+  await assert.rejects(
+    runScenario(path.resolve('scenarios/sandbox/runner-output-flood.json')),
+    /exceeded the stdout output cap/,
+  );
+  // The cap check must fail fast, not buffer gigabytes until the timeout.
+  assert.ok(Date.now() - started < 30_000);
+});
+
+test('terminates the whole process group when a grandchild holds stdout open', async () => {
+  const { mkdtempSync, readFileSync, rmSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'scenario-group-'));
+  const pidFile = join(dir, 'grandchild.pid');
+  try {
+    process.env.SCENARIO_GRANDCHILD_PID_FILE = pidFile;
+    // Fixture exits 0 but the grandchild keeps the pipe open: the run must
+    // NOT return success, and must not hang past the fixture timeout.
+    await assert.rejects(
+      runScenario(path.resolve('scenarios/sandbox/runner-process-group-leak.json')),
+      /scenario fixture timed out/,
+    );
+    delete process.env.SCENARIO_GRANDCHILD_PID_FILE;
+    assert.ok(existsSync(pidFile), 'grandchild pid file was never written');
+    const grandchildPid = Number(readFileSync(pidFile, 'utf8').trim());
+    assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 1);
+    // The detached process-group teardown must have reaped the grandchild.
+    // A dying process may linger as a zombie for a moment, so poll briefly.
+    const deadline = Date.now() + 3_000;
+    let reaped = false;
+    while (Date.now() < deadline) {
+      try {
+        process.kill(grandchildPid, 0);
+      } catch {
+        reaped = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.ok(reaped, `grandchild ${grandchildPid} survived the group teardown`);
+  } finally {
+    delete process.env.SCENARIO_GRANDCHILD_PID_FILE;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

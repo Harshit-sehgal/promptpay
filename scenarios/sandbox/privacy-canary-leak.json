@@ -1,0 +1,43 @@
+{
+  "id": "privacy-canary-leak",
+  "catalogId": 9001,
+  "version": 1,
+  "persona": "distracted_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-sandbox-v1",
+  "actions": [
+    "signup",
+    "consent",
+    "start_session"
+  ],
+  "expected": {
+    "eventTypes": [
+      "session.started"
+    ],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": [],
+    "fields": []
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  },
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": []
+  },
+  "runner": {
+    "command": "node",
+    "args": [
+      "scenarios/sandbox/privacy-canary-leak.runner.mjs"
+    ],
+    "timeoutMs": 5000
+  }
+}

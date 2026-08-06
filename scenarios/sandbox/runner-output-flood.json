@@ -1,0 +1,41 @@
+{
+  "id": "runner-output-flood",
+  "catalogId": 9002,
+  "version": 1,
+  "persona": "distracted_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-sandbox-v1",
+  "actions": [
+    "signup"
+  ],
+  "expected": {
+    "eventTypes": [
+      "session.started"
+    ],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": [],
+    "fields": []
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  },
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": []
+  },
+  "runner": {
+    "command": "node",
+    "args": [
+      "scenarios/sandbox/output-flood.runner.mjs"
+    ],
+    "timeoutMs": 5000
+  }
+}

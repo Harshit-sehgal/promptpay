@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { buildScenarioReport } from './scenario-report.mjs';
-import { validateManifest } from './scenario-audit.mjs';
+import { findPrivacyCanaries, validateManifest } from './scenario-audit.mjs';
 
 export async function runScenario(manifestPath) {
   const startedAt = new Date().toISOString();
@@ -31,39 +31,80 @@ export async function runScenario(manifestPath) {
       throw new Error('scenario runner path escapes repository root');
   }
   const timeoutMs = Math.min(Math.max(Number(manifest.runner.timeoutMs ?? 5000), 100), 30_000);
-  const stdout = [];
-  const stderr = [];
+  const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+  const chunks = { stdout: [], stderr: [] };
+  const bytes = { stdout: 0, stderr: 0 };
+  let settled = false;
+  /**
+   * Kill the whole POSIX process group. A fixture that spawns grandchildren
+   * (or a grandchild that inherits stdout) must not outlive the run: killing
+   * only the direct child would leave the group running and the pipes open.
+   */
+  const teardown = (child) => {
+    if (child.pid === undefined) return;
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {
+      /* already exited */
+    }
+    setTimeout(() => {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        /* already exited */
+      }
+    }, 500).unref?.();
+  };
   const exitCode = await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd,
       shell: false,
+      detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      reject(new Error('scenario fixture timed out'));
-    }, timeoutMs);
-    child.stdout.on('data', (chunk) => stdout.push(chunk));
-    child.stderr.on('data', (chunk) => stderr.push(chunk));
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      teardown(child);
+      reject(new Error(message));
+    };
+    const timer = setTimeout(() => fail('scenario fixture timed out'), timeoutMs);
+    const onData = (stream) => (chunk) => {
+      if (settled) return;
+      chunks[stream].push(chunk);
+      bytes[stream] += chunk.length;
+      if (bytes[stream] > MAX_OUTPUT_BYTES) {
+        fail(`scenario fixture exceeded the ${stream} output cap (2 MiB)`);
+      }
+    };
+    child.stdout.on('data', onData('stdout'));
+    child.stderr.on('data', onData('stderr'));
     child.on('error', (error) => {
       clearTimeout(timer);
-      reject(error);
+      fail(error);
     });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       resolve(code ?? (signal ? 1 : 0));
     });
   });
   if (exitCode !== 0)
     throw new Error(
-      `scenario fixture exited with ${exitCode}: ${Buffer.concat(stderr).toString().slice(0, 500)}`,
+      `scenario fixture exited with ${exitCode}: ${Buffer.concat(chunks.stderr).toString().slice(0, 500)}`,
     );
   let trace;
   try {
-    trace = JSON.parse(Buffer.concat(stdout).toString());
+    trace = JSON.parse(Buffer.concat(chunks.stdout).toString());
   } catch {
     throw new Error('scenario fixture did not emit a JSON trace');
   }
+  const canaries = findPrivacyCanaries(JSON.stringify(trace));
+  if (canaries.length)
+    throw new Error(`privacy canary triggered: ${canaries.join(', ')}`);
+  const manifestErrors = validateManifest(manifest);
+  if (manifestErrors.length) throw new Error(`invalid scenario: ${manifestErrors.join(', ')}`);
   return { manifest, trace, startedAt, endedAt: new Date().toISOString() };
 }
 

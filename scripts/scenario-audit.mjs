@@ -17,6 +17,29 @@ const REQUIRED = [
 ];
 const FORBIDDEN_STRUCTURE_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 
+/**
+ * Secret-container canaries. Traces are privacy evidence: any of these
+ * containers means the sanitization pipeline leaked. Matches are reported by
+ * NAME only — never the matched text, so a leak cannot be echoed into logs.
+ */
+const PRIVACY_CANARY_PATTERNS = [
+  { name: 'pem private key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
+  { name: 'jwt', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/ },
+  { name: 'auth bearer token', re: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i },
+  { name: 'provider secret', re: /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}/ },
+  { name: 'webhook secret', re: /\bwhsec_[A-Za-z0-9]{16,}/ },
+  { name: 'github token', re: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/ },
+  { name: 'aws access key', re: /\bAKIA[0-9A-Z]{16}\b/ },
+];
+
+export function findPrivacyCanaries(text) {
+  const found = [];
+  for (const { name, re } of PRIVACY_CANARY_PATTERNS) {
+    if (re.test(text)) found.push(name);
+  }
+  return found;
+}
+
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
@@ -127,6 +150,8 @@ function auditTrace(manifest, trace) {
     errors.push(`missing expected events: ${missingEvents.join(',')}`);
   if (missingPlacements.length)
     errors.push(`missing expected placements: ${missingPlacements.join(',')}`);
+  for (const canary of findPrivacyCanaries(JSON.stringify(events)))
+    errors.push(`privacy canary triggered: ${canary}`);
   return errors;
 }
 
