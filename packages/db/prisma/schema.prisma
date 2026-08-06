@@ -230,7 +230,7 @@ model User {
   payoutRequests             PayoutRequest[]
   // Approvals this admin issued as a campaign reviewer (nullable FK on
   // CampaignApproval.reviewerId with ON DELETE SET NULL — see there).
-  campaignApprovals          CampaignApproval[]    @relation("CampaignReviewer")
+  campaignApprovals          CampaignApproval[]         @relation("CampaignReviewer")
   trustScore                 TrustScore?
   fraudFlags                 FraudFlag[]
   adReports                  AdReport[]
@@ -238,19 +238,22 @@ model User {
   waitAttestationSessions    WaitAttestationSession[]
   adImpressions              AdImpression[]
   adClicks                   AdClick[]
-  deviceRecoveryTokens       DeviceRecoveryToken[] @relation("DeviceRecoveryUserTokens")
-  issuedDeviceRecoveryTokens DeviceRecoveryToken[] @relation("IssuedDeviceRecoveryTokens")
-  recoveryDebtCases          RecoveryDebtCase[]    @relation("RecoveryDebtUserCases")
-  openedRecoveryDebtCases    RecoveryDebtCase[]    @relation("RecoveryDebtOpenedBy")
-  resolvedRecoveryDebtCases  RecoveryDebtCase[]    @relation("RecoveryDebtResolvedBy")
-  referralOut                Referral[]            @relation("Referrer")
-  referralIn                 Referral[]            @relation("Referred")
+  deviceRecoveryTokens       DeviceRecoveryToken[]      @relation("DeviceRecoveryUserTokens")
+  issuedDeviceRecoveryTokens DeviceRecoveryToken[]      @relation("IssuedDeviceRecoveryTokens")
+  recoveryDebtCases          RecoveryDebtCase[]         @relation("RecoveryDebtUserCases")
+  openedRecoveryDebtCases    RecoveryDebtCase[]         @relation("RecoveryDebtOpenedBy")
+  resolvedRecoveryDebtCases  RecoveryDebtCase[]         @relation("RecoveryDebtResolvedBy")
+  referralOut                Referral[]                 @relation("Referrer")
+  referralIn                 Referral[]                 @relation("Referred")
   referralRewards            ReferralReward[]
   apiKeys                    ApiKey[]
   consents                   Consent[]
   agentSessions              AgentSession[]
   attentionWindows           AttentionWindow[]
   adOpportunities            AdOpportunity[]
+  sandboxCreditAccounts      SandboxCreditAccount[]
+  sandboxPayoutSimulations   SandboxPayoutSimulation[]
+  sandboxDepositSimulations  SandboxDepositSimulation[]
 
   @@unique([githubId])
   // The `email` @unique (above) already serves equality/like scans on
@@ -309,15 +312,15 @@ model Device {
   createdAt  DateTime @default(now())
   lastSeenAt DateTime @default(now())
 
-  waitStateEvents WaitStateEvent[]
+  waitStateEvents         WaitStateEvent[]
   waitAttestationSessions WaitAttestationSession[]
-  adImpressions   AdImpression[]
-  adClicks        AdClick[]
-  fraudFlags      FraudFlag[]
-  recoveryTokens  DeviceRecoveryToken[]
-  agentSessions   AgentSession[]
-  attentionWindows AttentionWindow[]
-  adOpportunities AdOpportunity[]
+  adImpressions           AdImpression[]
+  adClicks                AdClick[]
+  fraudFlags              FraudFlag[]
+  recoveryTokens          DeviceRecoveryToken[]
+  agentSessions           AgentSession[]
+  attentionWindows        AttentionWindow[]
+  adOpportunities         AdOpportunity[]
 
   @@unique([userId, fingerprintHash])
   // Cross-user fingerprint collisions are now handled as high-severity fraud
@@ -356,24 +359,24 @@ model DeviceRecoveryToken {
 // ══════════════════════════════════════════════════════════
 
 model UserSettings {
-  id                String   @id @default(uuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  adsEnabled        Boolean  @default(false)
+  id                         String    @id @default(uuid())
+  userId                     String    @unique
+  user                       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adsEnabled                 Boolean   @default(false)
   // Telemetry is a separate, explicit consent from ad display. No wait event
   // or reward path may be accepted while this remains false.
   waitTelemetryEnabled       Boolean   @default(false) @map("wait_telemetry_enabled")
   waitTelemetryConsentAt     DateTime? @map("wait_telemetry_consent_at") @db.Timestamptz
   waitTelemetryPolicyVersion String?   @map("wait_telemetry_policy_version")
-  quietMode         Boolean  @default(false)
-  quietModeStart    String   @default("22:00")
-  quietModeEnd      String   @default("08:00")
-  maxAdsPerHour     Int      @default(6)
-  timezone          String?
+  quietMode                  Boolean   @default(false)
+  quietModeStart             String    @default("22:00")
+  quietModeEnd               String    @default("08:00")
+  maxAdsPerHour              Int       @default(6)
+  timezone                   String?
   // A-057: per-developer persisted blocked category slugs. The API loads
   // these during ad selection and merges them with any per-request client-
   // supplied arrays, guaranteeing enforcement even when the client omits them.
-  blockedCategories String[] @default([]) @map("blocked_categories")
+  blockedCategories          String[]  @default([]) @map("blocked_categories")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -508,20 +511,20 @@ model Campaign {
 // data-driven; legacy campaign bid/auction paths are unchanged until a later
 // opportunity/placement release explicitly consumes this relation.
 model CampaignPlacement {
-  id                    String         @id @default(uuid())
-  campaignId            String
-  campaign              Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  placementType         AdPlacementType @map("placement_type")
-  bidType               BidType
-  bidAmountMinor        BigInt         @map("bid_amount_minor")
-  minAttentionScore     Float?         @map("min_attention_score")
-  minIntegrationScore   Float?         @map("min_integration_score")
-  frequencyCapPerHour   Int?           @map("frequency_cap_per_hour")
-  frequencyCapPerDay    Int?           @map("frequency_cap_per_day")
-  isActive              Boolean        @default(true) @map("is_active")
+  id                  String          @id @default(uuid())
+  campaignId          String
+  campaign            Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  placementType       AdPlacementType @map("placement_type")
+  bidType             BidType
+  bidAmountMinor      BigInt          @map("bid_amount_minor")
+  minAttentionScore   Float?          @map("min_attention_score")
+  minIntegrationScore Float?          @map("min_integration_score")
+  frequencyCapPerHour Int?            @map("frequency_cap_per_hour")
+  frequencyCapPerDay  Int?            @map("frequency_cap_per_day")
+  isActive            Boolean         @default(true) @map("is_active")
 
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@unique([campaignId, placementType])
   @@index([placementType, isActive])
@@ -669,8 +672,8 @@ model EnvironmentMarker {
   id              Int      @id @default(1)
   environmentKind String   @map("environment_kind")
   environmentId   String   @map("environment_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("environment_markers")
 }
@@ -679,52 +682,52 @@ model EnvironmentMarker {
 // additive: no relation to ad impressions, ledgers, payouts, or settlement is
 // intentional for Release 0.2.
 model AgentSession {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   userId              String
-  user                User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   deviceId            String
-  device              Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  correlationId       String   @unique @map("correlation_id")
+  device              Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  correlationId       String    @unique @map("correlation_id")
   provider            String
-  integrationMode     String   @map("integration_mode")
-  providerSessionHash String?  @map("provider_session_hash")
-  workspaceHash       String?  @map("workspace_hash")
+  integrationMode     String    @map("integration_mode")
+  providerSessionHash String?   @map("provider_session_hash")
+  workspaceHash       String?   @map("workspace_hash")
   status              String
-  adapterVersion      String   @map("adapter_version")
-  providerVersion     String?  @map("provider_version")
-  startedAt           DateTime @map("started_at") @db.Timestamptz
+  adapterVersion      String    @map("adapter_version")
+  providerVersion     String?   @map("provider_version")
+  startedAt           DateTime  @map("started_at") @db.Timestamptz
   endedAt             DateTime? @map("ended_at") @db.Timestamptz
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   workUnits        AgentWorkUnit[]
   events           AgentLifecycleEvent[]
   attentionWindows AttentionWindow[]
   adOpportunities  AdOpportunity[]
 
-  @@unique([userId, deviceId, provider, providerSessionHash])
+  @@unique([userId, deviceId, provider, providerSessionHash], map: "agent_sessions_userId_deviceId_provider_provider_session_hash_k")
   @@index([userId, startedAt])
   @@index([deviceId, status])
   @@map("agent_sessions")
 }
 
 model AgentWorkUnit {
-  id                   String   @id @default(uuid())
+  id                   String          @id @default(uuid())
   sessionId            String
-  session              AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  parentWorkUnitId     String?  @map("parent_work_unit_id")
-  parentWorkUnit       AgentWorkUnit? @relation("AgentWorkUnitParent", fields: [parentWorkUnitId], references: [id], onDelete: SetNull)
+  session              AgentSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  parentWorkUnitId     String?         @map("parent_work_unit_id")
+  parentWorkUnit       AgentWorkUnit?  @relation("AgentWorkUnitParent", fields: [parentWorkUnitId], references: [id], onDelete: SetNull)
   childWorkUnits       AgentWorkUnit[] @relation("AgentWorkUnitParent")
   kind                 String
-  providerWorkUnitHash String?  @map("provider_work_unit_hash")
+  providerWorkUnitHash String?         @map("provider_work_unit_hash")
   status               String
-  startedAt            DateTime @map("started_at") @db.Timestamptz
-  endedAt              DateTime? @map("ended_at") @db.Timestamptz
-  toolCallCount        Int      @default(0) @map("tool_call_count")
-  subagentCount        Int      @default(0) @map("subagent_count")
-  outcomeCategory      String?  @map("outcome_category")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @updatedAt @map("updated_at")
+  startedAt            DateTime        @map("started_at") @db.Timestamptz
+  endedAt              DateTime?       @map("ended_at") @db.Timestamptz
+  toolCallCount        Int             @default(0) @map("tool_call_count")
+  subagentCount        Int             @default(0) @map("subagent_count")
+  outcomeCategory      String?         @map("outcome_category")
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   events AgentLifecycleEvent[]
 
@@ -735,27 +738,27 @@ model AgentWorkUnit {
 }
 
 model AgentLifecycleEvent {
-  id              String   @id @default(uuid())
-  sessionId       String
-  session          AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  workUnitId      String?  @map("work_unit_id")
-  workUnit        AgentWorkUnit? @relation(fields: [workUnitId], references: [id], onDelete: SetNull)
-  eventId         String   @unique @map("event_id")
-  idempotencyKey  String   @unique @map("idempotency_key")
-  schemaVersion   Int      @map("schema_version")
-  environmentId   String   @map("environment_id")
-  eventType       String   @map("event_type")
-  sourceType      String   @map("source_type")
-  confidence      Float
-  occurredAt      DateTime @map("occurred_at") @db.Timestamptz
-  receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz
-  sequence        Int?
-  correlationId   String   @map("correlation_id")
-  causationId     String?  @map("causation_id")
-  metadata        Json
-  adapterVersion  String   @map("adapter_version")
-  clientVersion   String   @map("client_version")
-  signature       String
+  id             String         @id @default(uuid())
+  sessionId      String
+  session        AgentSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  workUnitId     String?        @map("work_unit_id")
+  workUnit       AgentWorkUnit? @relation(fields: [workUnitId], references: [id], onDelete: SetNull)
+  eventId        String         @unique @map("event_id")
+  idempotencyKey String         @unique @map("idempotency_key")
+  schemaVersion  Int            @map("schema_version")
+  environmentId  String         @map("environment_id")
+  eventType      String         @map("event_type")
+  sourceType     String         @map("source_type")
+  confidence     Float
+  occurredAt     DateTime       @map("occurred_at") @db.Timestamptz
+  receivedAt     DateTime       @default(now()) @map("received_at") @db.Timestamptz
+  sequence       Int?
+  correlationId  String         @map("correlation_id")
+  causationId    String?        @map("causation_id")
+  metadata       Json
+  adapterVersion String         @map("adapter_version")
+  clientVersion  String         @map("client_version")
+  signature      String
 
   @@index([sessionId, occurredAt])
   @@index([eventType, occurredAt])
@@ -764,20 +767,20 @@ model AgentLifecycleEvent {
 }
 
 model AttentionWindow {
-  id               String   @id @default(uuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  deviceId         String
-  device            Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  sessionId        String?
-  session           AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  state            String
-  source           String
-  confidence       Float
-  startedAt        DateTime @map("started_at") @db.Timestamptz
-  endedAt          DateTime? @map("ended_at") @db.Timestamptz
-  visibleSurface   Float?   @map("visible_surface")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId       String
+  device         Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  sessionId      String?
+  session        AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  state          String
+  source         String
+  confidence     Float
+  startedAt      DateTime      @map("started_at") @db.Timestamptz
+  endedAt        DateTime?     @map("ended_at") @db.Timestamptz
+  visibleSurface Float?        @map("visible_surface")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([userId, startedAt])
   @@index([deviceId, startedAt])
@@ -786,56 +789,164 @@ model AttentionWindow {
 }
 
 model AdOpportunity {
-  id                    String   @id @default(uuid())
-  userId                String
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  deviceId              String
-  device                Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  sessionId             String?
-  session               AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  workUnitId            String?
-  triggerEventId        String?
-  // Kept as text for forward-compatible opportunity records. The placement
-  // catalogue is enforced on CampaignPlacement; WL-061 will validate this
-  // field when it introduces the opportunity generator.
-  placementType         String         @map("placement_type")
-  state                 String
-  attentionConfidence   Float    @map("attention_confidence")
-  integrationConfidence Float    @map("integration_confidence")
-  eligibleAt            DateTime @map("eligible_at") @db.Timestamptz
-  expiresAt             DateTime @map("expires_at") @db.Timestamptz
-  rejectionReason       String?  @map("rejection_reason")
-  idempotencyKey        String   @unique @map("idempotency_key")
-  createdAt             DateTime @default(now()) @map("created_at")
+  id                     String        @id @default(uuid())
+  userId                 String
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId               String
+  device                 Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  sessionId              String?
+  session                AgentSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  workUnitId             String?
+  triggerEventId         String?
+  placementType          String        @map("placement_type")
+  state                  String
+  attentionConfidence    Float         @map("attention_confidence")
+  integrationConfidence  Float         @map("integration_confidence")
+  eligibleAt             DateTime      @map("eligible_at") @db.Timestamptz
+  expiresAt              DateTime      @map("expires_at") @db.Timestamptz
+  rejectionReason        String?       @map("rejection_reason")
+  claimIdempotencyKey    String?       @map("claim_idempotency_key")
+  claimedAt              DateTime?     @map("claimed_at") @db.Timestamptz
+  selectedCampaignId     String?       @map("selected_campaign_id")
+  selectedCreativeId     String?       @map("selected_creative_id")
+  sandboxImpressionToken String?       @map("sandbox_impression_token")
+  idempotencyKey         String        @unique @map("idempotency_key")
+  createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([userId, createdAt])
   @@index([sessionId, placementType])
   @@index([state, expiresAt])
+  @@index([claimIdempotencyKey], map: "ad_opportunities_claim_idempotency_key_idx")
   @@map("ad_opportunities")
 }
 
 // A nonce issued by WaitLayer before an approved AI/provider operation. The
 // raw nonce is returned once to the client but only its digest is persisted.
 // A client-held device secret is never sufficient to consume this session.
+model SandboxCreditAccount {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  environmentId String   @map("environment_id")
+  currency      String   @default("XTS")
+  balanceMinor  BigInt   @default(0) @map("balance_minor")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  operations SandboxOperation[]
+  entries    SandboxCreditEntry[]
+  payouts    SandboxPayoutSimulation[]
+  deposits   SandboxDepositSimulation[]
+
+  @@unique([userId, environmentId])
+  @@unique([id, environmentId], map: "sandbox_credit_accounts_id_environment_id_key")
+  @@unique([id, userId, environmentId], map: "sandbox_credit_accounts_id_user_id_environment_id_key")
+  @@index([environmentId, createdAt])
+  @@map("sandbox_credit_accounts")
+}
+
+model SandboxOperation {
+  id                 String               @id @default(uuid())
+  accountId          String               @map("account_id")
+  account            SandboxCreditAccount @relation(fields: [accountId, environmentId], references: [id, environmentId], onDelete: Cascade)
+  environmentId      String               @map("environment_id")
+  idempotencyKey     String               @map("idempotency_key")
+  operationType      String               @map("operation_type")
+  payloadHash        String               @map("payload_hash")
+  resultBalanceMinor BigInt?              @map("result_balance_minor")
+  resultId           String?              @map("result_id")
+  resultStatus       String?              @map("result_status")
+  completedAt        DateTime?            @map("completed_at") @db.Timestamptz
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([accountId, idempotencyKey])
+  @@index([accountId, createdAt])
+  @@index([environmentId, createdAt])
+  @@map("sandbox_operations")
+}
+
+model SandboxCreditEntry {
+  id             String               @id @default(uuid())
+  accountId      String               @map("account_id")
+  account        SandboxCreditAccount @relation(fields: [accountId, environmentId], references: [id, environmentId], onDelete: Cascade)
+  environmentId  String               @map("environment_id")
+  currency       String               @default("XTS")
+  entryType      String               @map("entry_type")
+  amountMinor    BigInt               @map("amount_minor")
+  idempotencyKey String               @map("idempotency_key")
+  metadata       Json?
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([accountId, idempotencyKey])
+  @@index([accountId, createdAt])
+  @@index([environmentId, createdAt])
+  @@map("sandbox_credit_entries")
+}
+
+model SandboxPayoutSimulation {
+  id               String               @id @default(uuid())
+  userId           String               @map("user_id")
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId        String               @map("account_id")
+  account          SandboxCreditAccount @relation(fields: [accountId, userId, environmentId], references: [id, userId, environmentId], onDelete: Cascade, map: "sandbox_payout_account_fkey")
+  environmentId    String               @map("environment_id")
+  currency         String               @default("XTS")
+  amountMinor      BigInt               @map("amount_minor")
+  destinationAlias String               @map("destination_alias")
+  requestedOutcome String               @map("requested_outcome")
+  status           String
+  providerTxId     String?              @map("provider_tx_id")
+  idempotencyKey   String               @map("idempotency_key")
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([accountId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([environmentId, status, createdAt])
+  @@map("sandbox_payout_simulations")
+}
+
+model SandboxDepositSimulation {
+  id               String               @id @default(uuid())
+  userId           String               @map("user_id")
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId        String               @map("account_id")
+  account          SandboxCreditAccount @relation(fields: [accountId, userId, environmentId], references: [id, userId, environmentId], onDelete: Cascade, map: "sandbox_deposit_account_fkey")
+  environmentId    String               @map("environment_id")
+  currency         String               @default("XTS")
+  amountMinor      BigInt               @map("amount_minor")
+  requestedOutcome String               @map("requested_outcome")
+  status           String
+  providerTxId     String?              @map("provider_tx_id")
+  idempotencyKey   String               @map("idempotency_key")
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([accountId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([environmentId, status, createdAt])
+  @@map("sandbox_deposit_simulations")
+}
+
 model WaitAttestationSession {
-  id             String   @id @default(uuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  deviceId       String
-  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  waitStateId    String   @map("wait_state_id")
-  clientSessionId String  @map("client_session_id")
-  provider       String
-  nonceHash      String   @unique @map("nonce_hash")
+  id                     String    @id @default(uuid())
+  userId                 String
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId               String
+  device                 Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  waitStateId            String    @map("wait_state_id")
+  clientSessionId        String    @map("client_session_id")
+  provider               String
+  nonceHash              String    @unique @map("nonce_hash")
   // A nonce is only usable to start an operation briefly. Consumption may
   // occur after the permitted wait duration, with a small network grace.
-  operationStartDeadline DateTime @map("expires_at") @db.Timestamptz
-  consumeDeadline        DateTime @map("consume_deadline") @db.Timestamptz
-  consumedAt     DateTime? @map("consumed_at") @db.Timestamptz
+  operationStartDeadline DateTime  @map("expires_at") @db.Timestamptz
+  consumeDeadline        DateTime  @map("consume_deadline") @db.Timestamptz
+  consumedAt             DateTime? @map("consumed_at") @db.Timestamptz
   // Expired, unconsumed sessions are retained as audit records. Hard deletion
   // can be blocked by a served AdImpression's restrictive foreign key.
-  expiredAt      DateTime? @map("expired_at") @db.Timestamptz
-  createdAt      DateTime @default(now()) @db.Timestamptz @map("created_at")
+  expiredAt              DateTime? @map("expired_at") @db.Timestamptz
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   attestation WaitAttestation?
   impressions AdImpression[]
@@ -852,22 +963,22 @@ model WaitAttestationSession {
 // retained for audit correlation only. Provider event id and wait binding are
 // unique replay floors independent of client idempotency keys.
 model WaitAttestation {
-  id                String   @id @default(uuid())
-  sessionId         String   @unique @map("session_id")
-  session           WaitAttestationSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
-  userId            String   @map("user_id")
-  deviceId          String   @map("device_id")
-  waitStateId       String   @map("wait_state_id")
-  provider          String
-  issuer            String
-  keyId             String   @map("key_id")
-  attestationVersion String  @map("attestation_version")
-  providerEventId   String   @unique @map("provider_event_id")
-  assertionDigest   String   @map("assertion_digest")
-  startedAt         DateTime @map("started_at") @db.Timestamptz
-  endedAt           DateTime @map("ended_at") @db.Timestamptz
-  durationMs        Int      @map("duration_ms")
-  createdAt         DateTime @default(now()) @db.Timestamptz @map("created_at")
+  id                 String                 @id @default(uuid())
+  sessionId          String                 @unique @map("session_id")
+  session            WaitAttestationSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  userId             String                 @map("user_id")
+  deviceId           String                 @map("device_id")
+  waitStateId        String                 @map("wait_state_id")
+  provider           String
+  issuer             String
+  keyId              String                 @map("key_id")
+  attestationVersion String                 @map("attestation_version")
+  providerEventId    String                 @unique @map("provider_event_id")
+  assertionDigest    String                 @map("assertion_digest")
+  startedAt          DateTime               @map("started_at") @db.Timestamptz
+  endedAt            DateTime               @map("ended_at") @db.Timestamptz
+  durationMs         Int                    @map("duration_ms")
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz
 
   @@unique([userId, deviceId, waitStateId])
   @@index([provider, createdAt])
@@ -876,48 +987,48 @@ model WaitAttestation {
 }
 
 model AdImpression {
-  id                  String     @id @default(uuid())
-  campaignId          String
+  id                   String                  @id @default(uuid())
+  campaignId           String
   // Impressions are the platform's permanent audit trail for an ad served.
   // Hard-deleting a Campaign row would cascade-delete every impression ever
   // served against it (millions of rows in production). RESTRICT prevents
   // silent cascades and forces a deliberate archival/retention decision
   // before deletion — same intent as the explicit AdClick/AdReport rules
   // documented below.
-  campaign            Campaign   @relation(fields: [campaignId], references: [id], onDelete: Restrict)
-  creativeId          String
-  creative            AdCreative @relation(fields: [creativeId], references: [id], onDelete: Restrict)
-  userId              String
+  campaign             Campaign                @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  creativeId           String
+  creative             AdCreative              @relation(fields: [creativeId], references: [id], onDelete: Restrict)
+  userId               String
   // Soft-delete policy: the platform never hard-deletes User rows — the
   // deleteAccount path sets status='deleted' and anonymizes PII.
   // Impressions are an immutable audit trail, so RESTRICT prevents any
   // future hard-delete path from silently removing them.
-  user                User       @relation(fields: [userId], references: [id], onDelete: Restrict)
-  deviceId            String
-  device              Device     @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  sessionId           String
-  waitStateId         String?
+  user                 User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deviceId             String
+  device               Device                  @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  sessionId            String
+  waitStateId          String?
   // Every served reward-bearing ad is permanently linked to the independent
   // attestation attempt that existed before the wait started.
-  attestationSessionId String? @map("attestation_session_id")
+  attestationSessionId String?                 @map("attestation_session_id")
   attestationSession   WaitAttestationSession? @relation(fields: [attestationSessionId], references: [id], onDelete: Restrict)
-  idempotencyKey      String?    @unique
+  idempotencyKey       String?                 @unique
   // Raw impression token returned to the client. Stored so durable idempotency
   // can reconstruct the original ad response on retry. Hashed variant below is
   // the authoritative lookup for render/qualify/click endpoints.
-  impressionToken     String?    @unique(map: "ad_impressions_impression_token_idx") @map("impression_token")
-  impressionTokenHash String     @unique
-  renderedAt          DateTime?
-  qualifiedAt         DateTime?  @db.Timestamptz
-  isQualified         Boolean    @default(false) @map("is_qualified")
-  billingAuthorizedAt DateTime?  @map("billing_authorized_at") @db.Timestamptz
-  visibleDurationMs   Int?
-  visibleSurface      Float?
-  isBillable          Boolean    @default(false)
-  billedAt             DateTime?  @map("billed_at") @db.Timestamptz
-  invalidationReason  String?
-  invalidatedAt       DateTime?
-  ipHash              String?
+  impressionToken      String?                 @unique(map: "ad_impressions_impression_token_idx") @map("impression_token")
+  impressionTokenHash  String                  @unique
+  renderedAt           DateTime?
+  qualifiedAt          DateTime?               @db.Timestamptz
+  isQualified          Boolean                 @default(false) @map("is_qualified")
+  billingAuthorizedAt  DateTime?               @map("billing_authorized_at") @db.Timestamptz
+  visibleDurationMs    Int?
+  visibleSurface       Float?
+  isBillable           Boolean                 @default(false)
+  billedAt             DateTime?               @map("billed_at") @db.Timestamptz
+  invalidationReason   String?
+  invalidatedAt        DateTime?
+  ipHash               String?
 
   createdAt DateTime @default(now())
 
@@ -927,6 +1038,7 @@ model AdImpression {
   fraudFlags FraudFlag[]
 
   @@index([campaignId, qualifiedAt])
+  @@index([campaignId, qualifiedAt, isBillable], map: "ad_impressions_campaignId_qualifiedAt_isBillable_idx")
   @@index([userId, qualifiedAt])
   @@index([deviceId, qualifiedAt])
   @@index([ipHash, qualifiedAt])
@@ -1041,6 +1153,7 @@ model EarningsLedger {
   payoutAllocations PayoutAllocation[]
 
   @@index([userId, status, availableAt])
+  @@index([userId, status, availableAt, createdAt], map: "earnings_ledger_userId_status_availableAt_createdAt_idx")
   @@index([campaignId])
   @@index([createdAt])
   // Hot-path index for system-wide scans of fraud/review queues
