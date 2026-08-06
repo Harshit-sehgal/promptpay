@@ -85,7 +85,7 @@
     zero flakes), `audit-claims` 13/13, `scan-build-secrets` PASS (placeholder
     detection now requires an assignment context, after web-env.ts's allowlist
     literal made every bundle fail), `audit-dependencies` clean, `pnpm audit
-    --prod` clean.
+--prod` clean.
 - Worktree clean; commits landed this session: `b9fdb14` (cross-tenant spec),
   `eb9e6d8` (dedup matrix + 2 migrations), `ab72971` (attention lease),
   `00ae5c1` (scenario harness), `e8e476f` (scan fix + const), `22c59b7`
@@ -153,7 +153,7 @@
   current and `migrate diff` drift-free.
 - **Dependency audit:** the only known advisory is the quarantined dev-only
   `brace-expansion` path (`@nestjs/cli → fork-ts-checker-webpack-plugin →
-  minimatch@3`; no compatible parent upgrade). `scripts/audit-dependencies.mjs`
+minimatch@3`; no compatible parent upgrade). `scripts/audit-dependencies.mjs`
   hard-fails on anything else.
 - **CI jobs:** `timeout-minutes: 30`; security job `continue-on-error: false`;
   gitleaks passes `GITHUB_TOKEN` (SARIF with `security-events: write`);
@@ -235,7 +235,7 @@
   `scenarios/` (manifests, runners, catalog) — deterministic, disposable,
   sanitized traces, fault injection, privacy canaries. Root scripts:
   `scenario:check|catalog|coverage|report|run|repeat|triage`, `sandbox:seed|
-  reset|reconcile`, `test:compiled-entrypoints`.
+reset|reconcile`, `test:compiled-entrypoints`.
 
 ## Verified Resolved Index (A-001…A-086, code-verified 2026-07-10 / later)
 
