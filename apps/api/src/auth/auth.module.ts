@@ -9,6 +9,7 @@ import { FraudModule } from '../fraud/fraud.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { deriveKeyId } from './jwt-key-id';
+import { normalizePem } from './jwt-keys';
 import { SessionCleanupCron } from './session-cleanup.cron';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -20,13 +21,18 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const accessTtl = config.get<string>('JWT_ACCESS_TTL', '15m');
-        const privateKey = config.get<string>('JWT_PRIVATE_KEY');
-        const publicKey = config.get<string>('JWT_PUBLIC_KEY');
-        if (!privateKey || !publicKey) {
+        const rawPrivateKey = config.get<string>('JWT_PRIVATE_KEY');
+        const rawPublicKey = config.get<string>('JWT_PUBLIC_KEY');
+        if (!rawPrivateKey || !rawPublicKey) {
           throw new Error(
             'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be defined for RS256 token signing.',
           );
         }
+        // A-097: PEMs are stored single-line with literal `\n` escapes because
+        // Compose/--env-file cannot carry multi-line values. Without this the
+        // signer receives a malformed key and every login 500s at runtime.
+        const privateKey = normalizePem(rawPrivateKey);
+        const publicKey = normalizePem(rawPublicKey);
         // Derive a stable key ID from the public key so verification can
         // detect key rotation and clients can select the right JWKS key.
         const kid = deriveKeyId(publicKey);

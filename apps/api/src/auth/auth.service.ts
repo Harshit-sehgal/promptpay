@@ -12,6 +12,7 @@ import { AuthEmailTrait } from './auth-email.trait';
 import { AuthPasswordTrait } from './auth-password.trait';
 import { AuthSessionTrait } from './auth-session.trait';
 import { AuthTotpTrait } from './auth-totp.trait';
+import { normalizePem } from './jwt-keys';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 
 @Injectable()
@@ -58,7 +59,10 @@ export class AuthService {
         'JWT_SECRET must be defined and at least 32 characters for refresh-token HMAC and BFF identity signing.',
       );
     }
-    this.publicKey = publicKey;
+    // A-097: normalise the `\n`-escaped single-line PEM form that deployments
+    // are documented to use. `this.publicKey` feeds token verification and key
+    // derivation; an escaped value silently breaks both.
+    this.publicKey = normalizePem(publicKey);
     this.jwtSecret = hmacSecret;
     this.totpEncryptionKey = this.buildTotpEncryptionKey();
   }

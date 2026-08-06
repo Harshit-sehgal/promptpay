@@ -27,7 +27,31 @@ every blocking check passed.
 > with the full repo source and **no** Prisma CLI — not the API runtime image.
 > Always deploy with an explicit `-f docs/ops/docker-compose.images.example.yml`.
 
-## Step 0 — Create the first administrator (A-088)
+## Step 0a — Stamp the database environment marker (A-096)
+
+**The API will not start in production without this.**
+`EnvironmentMarkerService.verify()` refuses to boot unless `environment_markers`
+row 1 exists and matches your `WAITLAYER_ENVIRONMENT_KIND`/`_ID`. Non-production
+auto-creates it; production deliberately does not, because auto-stamping would
+destroy the interlock — an API accidentally pointed at the wrong database would
+simply claim it.
+
+Run once, after `migrate deploy`, against the database you intend to serve:
+
+```bash
+DATABASE_URL=<production-url> \
+WAITLAYER_ENVIRONMENT_KIND=production \
+WAITLAYER_ENVIRONMENT_ID=<your-env-id> \
+  pnpm bootstrap:env-marker --confirm-stamp
+```
+
+- [ ] Marker stamped and matches the API's configured kind/id.
+
+> If it refuses with "REFUSING TO OVERWRITE", **stop**. Your `DATABASE_URL`
+> points at a database already claimed by another environment. That is the
+> accident this interlock exists to catch.
+
+## Step 0b — Create the first administrator (A-088)
 
 **Do this once, immediately after the first `migrate deploy`, before anything
 else.** Until it is done the deployment is inert: signup refuses privileged

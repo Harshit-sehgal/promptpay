@@ -31,7 +31,7 @@
   and the gate fixes below. Typecheck 17/17 and lint 11/11 green on the landed
   tree; sandbox 18/18, placement 12/12, scenario suites 30/30, VSIX bundle +
   isolated smoke, web panels 4/4, referral/ledger 39/39, vscode 138/139.
-- Issues A-001…A-091 are resolved and gate-verified.
+- Issues A-001…A-097 are resolved and gate-verified.
 - **2026-08-07 launch audit.** A from-scratch launch-readiness audit disproved
   the previous claim that only external items remained ("no source edit can
   close them"). It found four source-fixable blockers no gate covered — two of
@@ -178,7 +178,7 @@ strings), enforces a minimum body length so an empty shell cannot pass, and
 checks the footer links resolve. **Prefer an assertion on rendered output over
 an assertion that a build succeeded.**
 
-## Resolved 2026-08-07 (second pass) — A-092…A-095, deployability
+## Resolved 2026-08-07 (second pass) — A-092…A-097, deployability
 
 Found by actually building the images and booting the stack in production mode
 rather than reasoning about it. **Nobody had ever done this**, and all three
@@ -240,9 +240,52 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
   `test:release-gates`) — a preflight that cannot fail manufactures confidence
   at exactly the wrong moment.
 
-**Rule this pass earns:** _build and boot the artifact you intend to ship._
-A-087 hid because nothing rendered a page; A-092/093/095 hid because nothing
-ever built the production image and started it.
+- **A-096 — a fresh production database could not boot the API.**
+  `EnvironmentMarkerService.verify()` refuses to start a **production**
+  deployment unless `environment_markers` row 1 exists and matches
+  `WAITLAYER_ENVIRONMENT_KIND`/`WAITLAYER_ENVIRONMENT_ID`. Non-production
+  auto-creates it; production deliberately does not, because auto-stamping
+  would destroy the interlock (an API pointed at the wrong database would
+  cheerfully claim it). That design is right — but **nothing created the row**:
+  no seed, migration, script, or runbook. A fresh production database simply
+  could not start the API.
+  **Fix:** `scripts/bootstrap-environment-marker.mjs` — requires
+  `--confirm-stamp`, refuses to overwrite a marker with different values (the
+  exact wrong-database accident the interlock exists for), no-ops on a matching
+  marker so redeploys are safe, and warns when stamping a database that already
+  holds user rows.
+
+- **A-097 — every login/signup/refresh returned HTTP 500 in production.**
+  The worst defect found in this audit, and it was invisible to every gate.
+  PEMs are documented to be stored as **single-line values with literal `\n`
+  escapes** (Compose and `--env-file` cannot carry multi-line values). The
+  verification path normalised those escapes (`jwt-keys.ts` `normalizePem`),
+  but the RS256 **signing** path did not: `auth.module.ts` and
+  `auth.service.ts` read `JWT_PRIVATE_KEY` raw and handed it to
+  `jsonwebtoken`. A correctly-configured production API therefore booted
+  cleanly, reported `GET /health` 200 with `database: connected`, served every
+  public page — and then failed **all** authentication with
+  `secretOrPrivateKey must be an asymmetric key when using RS256`.
+  **Why nothing caught it:** `test-setup.ts` and `.e2e/run-e2e.sh` both inject
+  real multi-line PEMs, so the escaped form — the only form a real deployment
+  uses — was never exercised anywhere in 1316 tests.
+  **Fix:** `normalizePem` exported and applied at both signing sites; new
+  `jwt-signing-key.spec.ts` pins it, including a guard test asserting the raw
+  escaped key genuinely fails to sign (so the suite cannot quietly stop testing
+  the real thing) and an idempotence test so multi-line PEMs keep working.
+
+**Rules this pass earns:**
+
+1. _Build and boot the artifact you intend to ship._ A-087 hid because nothing
+   rendered a page; A-092/093/095/096/097 hid because nothing ever built the
+   production image, started it, and used it.
+2. _Test the configuration format production actually uses._ A-097 survived
+   1316 tests because every one of them supplied a friendlier input than any
+   real deployment does. When a value has a canonical on-disk encoding, the
+   encoding is part of the contract — test it, not just the parsed form.
+3. _A green health check is not a working service._ The API reported healthy
+   while 100% of authentication was failing. Health checks should exercise a
+   representative path, not just liveness.
 
 ## Open Items (external — operator / infra / product / legal, NOT code)
 

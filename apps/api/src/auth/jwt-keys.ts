@@ -33,8 +33,19 @@ export interface VerificationKeySet {
 /**
  * Normalise a PEM string that may carry literal "\n" escape sequences (as
  * written in .env files) into real newline-separated PEM text.
+ *
+ * A-097: this MUST be applied to the signing (private) key too, not just the
+ * verification keys. Deployments are documented to store PEMs as single-line
+ * values with literal `\n` escapes, because Docker Compose and `--env-file`
+ * cannot carry multi-line values. The verification path normalised; the
+ * RS256 *signing* path passed the raw value straight to `jsonwebtoken`, so a
+ * correctly-configured production API booted, reported healthy, served public
+ * pages — and then failed EVERY login, signup, and refresh with
+ * "secretOrPrivateKey must be an asymmetric key when using RS256" (HTTP 500).
+ * Tests never caught it because `test-setup.ts` and the e2e runner both inject
+ * real multi-line PEMs, so the escaped form was never exercised.
  */
-function normalizePem(raw: string): string {
+export function normalizePem(raw: string): string {
   return raw.replace(/\\n/g, '\n').trim();
 }
 

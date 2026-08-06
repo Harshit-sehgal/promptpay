@@ -19,6 +19,7 @@
     "db:push": "pnpm --filter @waitlayer/db push",
     "db:studio": "pnpm --filter @waitlayer/db studio",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
+    "bootstrap:env-marker": "node scripts/bootstrap-environment-marker.mjs",
     "deploy:preflight": "node scripts/deploy-preflight.mjs",
     "econ": "node scripts/advertiser-economics.calc.mjs",
     "sandbox:seed": "node scripts/sandbox-seed.mjs",
