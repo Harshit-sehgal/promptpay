@@ -1,28 +1,43 @@
-import { promises as fs } from 'fs';
-import Link from 'next/link';
-import path from 'path';
+import type { Metadata } from 'next';
+import { LegalDocument, LegalHeading } from '@/components/legal-document';
 
-export default async function CookiePolicyPage() {
-  let body = '';
-  try {
-    const file = path.join(process.cwd(), 'docs', 'legal', 'cookie-policy.md');
-    body = await fs.readFile(file, 'utf8');
-  } catch {
-    body = '# Cookie Policy\n\nContent unavailable.';
-  }
+export const metadata: Metadata = {
+  title: 'Cookie Policy — WaitLayer',
+  description:
+    'How WaitLayer uses essential and analytics cookies, and what it deliberately does not do.',
+};
 
+export default function CookiePolicyPage() {
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-surface-50">
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        <Link href="/" className="text-brand-500 hover:text-brand-600 text-xs font-medium">
-          ← Back
-        </Link>
-        <article className="prose-wl mt-4">
-          <pre className="whitespace-pre-wrap text-surface-700 text-sm leading-relaxed font-sans">
-            {body}
-          </pre>
-        </article>
-      </div>
-    </main>
+    <LegalDocument title="Cookie Policy" lastUpdated="2026-07-19">
+      <p>WaitLayer uses cookies and similar technologies as described below.</p>
+
+      <LegalHeading>Essential cookies</LegalHeading>
+      <p>
+        Required to keep you signed in, maintain your session, and enforce security (CSRF/origin
+        checks). These cannot be disabled and are set as <code>HttpOnly</code> cookies so
+        client-side JavaScript cannot read them.
+      </p>
+
+      <LegalHeading>Analytics cookies</LegalHeading>
+      <p>
+        Used only with your consent to understand how the product is used and to improve it. Managed
+        via the cookie banner; you can change your choice at any time from &ldquo;Cookie
+        Settings&rdquo; in the footer.
+      </p>
+
+      <LegalHeading>What we do NOT do</LegalHeading>
+      <p>
+        We do not use advertising or third-party ad-network tracking cookies, and we never read your
+        code, prompts, or terminal output. See the Privacy Policy for the full data-handling
+        summary.
+      </p>
+
+      <LegalHeading>Managing cookies</LegalHeading>
+      <p>
+        Use the cookie banner or your browser settings to clear or block cookies. Disabling
+        essential cookies will prevent sign-in.
+      </p>
+    </LegalDocument>
   );
 }

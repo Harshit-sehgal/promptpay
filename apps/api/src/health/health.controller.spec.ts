@@ -36,6 +36,66 @@ describe('HealthController route security', () => {
   });
 });
 
+describe('HealthController wait launch mode (A-089)', () => {
+  const redisOk = { check: vi.fn().mockResolvedValue('connected') };
+  const config = { get: vi.fn((_key: string, fallback?: unknown) => fallback) };
+
+  function controllerWith(runtimeConfig: { getWaitLaunchMode: () => Promise<string> }) {
+    return new HealthController(
+      databaseProbePrisma('ok') as never,
+      redisOk as never,
+      runtimeConfig as never,
+      config as never,
+    );
+  }
+
+  it('publishes the launch mode so clients can state settlement status honestly', async () => {
+    const controller = controllerWith({
+      getWaitLaunchMode: vi.fn().mockResolvedValue('telemetry_only'),
+    });
+
+    await expect(controller.check()).resolves.toMatchObject({
+      status: 'ok',
+      waitLaunchMode: 'telemetry_only',
+    });
+  });
+
+  it('reports earnings_enabled when settlement is genuinely live', async () => {
+    const controller = controllerWith({
+      getWaitLaunchMode: vi.fn().mockResolvedValue('earnings_enabled'),
+    });
+
+    await expect(controller.check()).resolves.toMatchObject({
+      waitLaunchMode: 'earnings_enabled',
+    });
+  });
+
+  it('degrades to "unknown" rather than failing the liveness probe', async () => {
+    // A runtime-config outage must not turn the liveness probe red — an
+    // infrastructure probe failing would take the deployment out of rotation
+    // over a non-critical disclosure field.
+    const controller = controllerWith({
+      getWaitLaunchMode: vi.fn().mockRejectedValue(new Error('settings unavailable')),
+    });
+
+    await expect(controller.check()).resolves.toMatchObject({
+      status: 'ok',
+      waitLaunchMode: 'unknown',
+    });
+  });
+
+  it('never reports earnings_enabled when the mode cannot be resolved', async () => {
+    // Fail-closed: the disclosure banner keys off this value, so an unreadable
+    // config must never let the product claim it pays people.
+    const controller = controllerWith({
+      getWaitLaunchMode: vi.fn().mockRejectedValue(new Error('boom')),
+    });
+
+    const result = (await controller.check()) as { waitLaunchMode: string };
+    expect(result.waitLaunchMode).not.toBe('earnings_enabled');
+  });
+});
+
 describe('HealthController metrics endpoint', () => {
   function metricsPrisma() {
     const tx = {

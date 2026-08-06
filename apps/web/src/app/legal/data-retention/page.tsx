@@ -1,28 +1,59 @@
-import { promises as fs } from 'fs';
-import Link from 'next/link';
-import path from 'path';
+import type { Metadata } from 'next';
+import { LegalDocument, LegalTable } from '@/components/legal-document';
 
-export default async function DataRetentionPage() {
-  let body = '';
-  try {
-    const file = path.join(process.cwd(), 'docs', 'legal', 'data-retention.md');
-    body = await fs.readFile(file, 'utf8');
-  } catch {
-    body = '# Data Retention Schedule\n\nContent unavailable.';
-  }
+export const metadata: Metadata = {
+  title: 'Data Retention Schedule — WaitLayer',
+  description: 'How long WaitLayer retains each category of personal data, and why.',
+};
 
+const RETENTION_ROWS: string[][] = [
+  [
+    'Account & profile',
+    'Duration of account; purged on account erasure',
+    'Soft-deleted, then purged per the erasure job',
+  ],
+  [
+    'Authentication sessions',
+    'Access token 15 min; refresh token 30 days',
+    'Refresh tokens are revocable server-side',
+  ],
+  [
+    'Consent records',
+    'Indefinite (audit)',
+    'Append-only; reflects each version you accepted or declined',
+  ],
+  [
+    'Ad / wait-state events',
+    'Rolling retention per the retention cron',
+    'Aggregated, de-identified analytics may be kept longer',
+  ],
+  [
+    'Ledger & payout records',
+    'Retained for financial / regulatory compliance',
+    'Immutable financial ledger',
+  ],
+  [
+    'Feedback & false-positive flags',
+    'Retained to improve detection quality',
+    'Associated with the originating wait event',
+  ],
+];
+
+export default function DataRetentionPage() {
   return (
-    <main id="main-content" tabIndex={-1} className="min-h-screen bg-surface-50">
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        <Link href="/" className="text-brand-500 hover:text-brand-600 text-xs font-medium">
-          ← Back
-        </Link>
-        <article className="prose-wl mt-4">
-          <pre className="whitespace-pre-wrap text-surface-700 text-sm leading-relaxed font-sans">
-            {body}
-          </pre>
-        </article>
-      </div>
-    </main>
+    <LegalDocument title="Data Retention Schedule" lastUpdated="2026-07-19">
+      <p>
+        WaitLayer retains personal data only as long as necessary for the purposes described in the
+        Privacy Policy and applicable law.
+      </p>
+
+      <LegalTable head={['Data', 'Retention', 'Notes']} rows={RETENTION_ROWS} />
+
+      <p>
+        For data-subject requests (access, deletion, portability), contact the operator privacy
+        address configured for this deployment. See the GDPR Data Processing Agreement for EU
+        processing terms.
+      </p>
+    </LegalDocument>
   );
 }

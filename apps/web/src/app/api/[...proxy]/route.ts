@@ -70,6 +70,8 @@ export const ALLOWED_PATH_PREFIXES = [
   '/developer/earnings',
   '/developer/settings',
   '/developer/trust',
+  // Connected-client summary powering the dashboard onboarding panel (A-090).
+  '/developer/devices',
   '/developer/export-data',
   '/developer/api-keys',
   '/developer/delete-account',

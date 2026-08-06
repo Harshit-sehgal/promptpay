@@ -31,9 +31,22 @@
   and the gate fixes below. Typecheck 17/17 and lint 11/11 green on the landed
   tree; sandbox 18/18, placement 12/12, scenario suites 30/30, VSIX bundle +
   isolated smoke, web panels 4/4, referral/ledger 39/39, vscode 138/139.
-- All source-fixable issues A-001…A-086 are resolved and gate-verified. The
-  remaining items are **external** (operator/infra/product/legal) — see
-  "Open Items" below. No source edit can close them.
+- Issues A-001…A-091 are resolved and gate-verified.
+- **2026-08-07 launch audit.** A from-scratch launch-readiness audit disproved
+  the previous claim that only external items remained ("no source edit can
+  close them"). It found four source-fixable blockers no gate covered — two of
+  which (A-087, A-088) made a fresh production deployment non-functional — plus
+  a live dependency advisory. All five are now fixed; see "Resolved 2026-08-07"
+  below. Full analysis and phasing: `LAUNCH_PLAN.md`.
+- **Gate coverage lesson:** every gate in this repo was green _while_ A-087
+  shipped a user-visible failure in every build. Green gates prove the
+  invariants they encode; they do not prove the product works. Prefer an
+  assertion on rendered output over an assertion that a build succeeded.
+- **Fresh gates after the 2026-08-07 fixes:** typecheck 17/17, lint 11/11,
+  build 11/11, API unit **1316/1316** (127 files, +10), web 203, cli 123,
+  vscode 142+1 skip, shared 77, e2e **114/114** (+28 content-gate tests),
+  `audit-claims` 13/13, `scan-build-secrets` PASS, `audit-dependencies` clean,
+  `pnpm audit --prod` clean.
 - **2026-08-07 gate hardening (this session):**
   - Pre-commit hook: deterministic `eslint --fix` + `prettier --write` on
     staged files (no lint-staged, no stash); `lint-staged` dependency removed.
@@ -91,6 +104,80 @@
   `00ae5c1` (scenario harness), `e8e476f` (scan fix + const), `22c59b7`
   (e2e throttle).
 
+## Resolved 2026-08-07 — A-087…A-090 + A-091
+
+Found by a from-scratch launch-readiness audit against `f5f69ec` and fixed the
+same day. All four were source-fixable and none was covered by an existing
+gate. Full context and phasing: `LAUNCH_PLAN.md`.
+
+- **A-087 — `/legal/*` shipped "Content unavailable" in every build.** The three
+  pages read `path.join(process.cwd(), 'docs', 'legal', '*.md')`; `next build`
+  runs with cwd `apps/web` while the markdown sat at the **repo root**, so the
+  read always threw ENOENT and a `try/catch` substituted a fallback string —
+  frozen into the prerendered HTML of all three static routes, and linked from
+  the footer of every page. Broken locally too, not just on deploy.
+  **Fix:** content moved into the component tree — a shared
+  `components/legal-document.tsx` plus three TSX pages, matching how `/terms`
+  and `/privacy` already worked. The filesystem read and the silent fallback are
+  gone; `docs/legal/` is now a pointer README. **Verified** by decoding the
+  build artifact: all three `.next/server/app/legal/*.html` contain their real
+  bodies and zero "Content unavailable" (previously the `<pre>` held exactly
+  `'# GDPR Data Processing Agreement\n\nContent unavailable.'`).
+
+- **A-088 — a fresh production database could not produce an admin.** No seed,
+  script, endpoint, or migration created an `admin`/`super_admin`, and signup
+  refuses privileged roles — so no campaign could be approved, no money switch
+  flipped, no payout processed. The deployment booted inert, permanently.
+  **Fix:** `scripts/bootstrap-admin.mjs` (`pnpm bootstrap:admin`) — constant-time
+  `ADMIN_BOOTSTRAP_TOKEN` gate, one-shot (refuses once any admin exists, checked
+  again inside the transaction against a concurrent run), shared
+  `passwordValidationError` rules, bcrypt cost 12, creates User + AdminUser +
+  an in-transaction `admin.bootstrap` audit row, never echoes the password, and
+  prints the TOTP requirement that `AdminMfaStepUpGuard` enforces.
+  `enforce-health-metrics.mjs` (which creates a **passwordless** CI admin) now
+  hard-refuses under `NODE_ENV=production`. Deployment checklist gained a
+  Step 0. **Verified** against the test DB: all four refusal paths, the happy
+  path, the one-shot re-run guard, and the resulting row shape.
+
+- **A-089 — the web app never disclosed the non-billable beta state.**
+  `getWaitLaunchMode()` was consumed only by `extension-ad.trait.ts`, so a
+  developer saw an empty earnings dashboard with no explanation while the
+  marketing site discussed earning.
+  **Fix:** launch mode is published on the public `GET /health` contract
+  (fails soft to `unknown`, never to `earnings_enabled`); `LaunchModeBanner`
+  renders on every `/developer/*` route from the layout so a new page cannot
+  ship without the disclosure; the payout request form is gated on the same
+  signal. 4 new controller specs cover the fail-closed behaviour.
+
+- **A-090 — signed-up developers had no path to start.** The dashboard
+  contained zero references to the extension, the CLI, install commands, or
+  device registration.
+  **Fix:** `GET /developer/devices` (a deliberately narrow select — never
+  `eventSecret`, `publicKey`, or `fingerprintHash`; `take: 25`) plus a
+  `DeveloperGetStarted` panel that self-hides once a client connects. 6 new
+  specs, including one asserting the select shape so a future convenience edit
+  cannot widen it into a signing-key leak. **Note:** the panel deliberately
+  does _not_ link to the Marketplace/npm until the clients are actually
+  published — flip `CLIENTS_PUBLISHED` in the component when they are.
+
+- **A-091 — js-yaml advisory (GHSA-5p4m-2wfm-xmqj / CVE-2026-59870, high).**
+  Surfaced mid-session as a newly published advisory, not by any code change:
+  quadratic CPU on `!!omap` resolution in js-yaml <4.3.1, reaching production
+  through `@nestjs/swagger` (plus dev paths via `@nestjs/cli`, `@vscode/vsce`).
+  **Fix:** `'js-yaml@^4.0.0': 4.3.1` security floor in `pnpm-workspace.yaml`,
+  scoped to ^4 so consumers are not forced onto 5.x. `audit-dependencies` and
+  `pnpm audit --prod` clean; zero `js-yaml@4.3.0` left in the lockfile.
+
+**The gate class that hid A-087.** Every gate here pointed inward — it proved
+properties of the code to itself. None asserted that a user opening a page saw
+the right thing, which is why a footer-linked legal document could be blank
+since inception through 395 commits of green builds. `apps/web/e2e/public-content.spec.ts`
+now asserts distinctive body text on 11 public routes, rejects degradation
+markers (`Content unavailable`, `undefined`, `NaN`, `[object Object]`, error
+strings), enforces a minimum body length so an empty shell cannot pass, and
+checks the footer links resolve. **Prefer an assertion on rendered output over
+an assertion that a build succeeded.**
+
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
 1. **Independent wait attestation operation:** a real provider/bridge whose
@@ -105,10 +192,30 @@
    analogous `PRODUCTION_*` values, plus the remote Compose `.env`
    (`NODE_ENV=production`, DB/Redis URLs, JWT keys, API URL, mock-auth off).
    Missing values fail the gate by design.
-3. **Public deployment:** `api.waitlayer.com` DNS does not resolve; Vercel
-   project `prj_V9GCWpyR3BctdDuEYgPcGusD8au9` serves a stale build
-   (`/comparison` 404 on `www.waitlayer.com`). Deploy the current web build,
-   provision the API at the HTTPS origin, verify BFF + representative routes.
+3. **Public deployment — the application has never been deployed.** Corrected
+   2026-08-07; the prior wording ("stale build, `/comparison` 404") understated
+   this by an order of magnitude. Live probe of 21 routes on
+   `www.waitlayer.com` (Vercel project `prj_V9GCWpyR3BctdDuEYgPcGusD8au9`,
+   `x-vercel-cache: HIT`, `age: 881782` ≈ 10.2 days):
+   - `200` — `/`, `/pricing`, `/faq`, `/manifesto`, `/changelog`, `/contact`
+   - `307` — `/terms`, `/privacy`
+   - `404` — `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`,
+     `/admin`, `/security`, `/status`, `/feedback`, `/comparison`,
+     `/payout-policy`, `/advertiser-policy`, all `/legal/*`
+
+   What is live is a marketing build that predates the entire application: no
+   auth, no dashboards. `api.waitlayer.com` has no DNS record at all.
+   **Architecture note (this is the good news):** auth cookies are written by
+   the Next.js BFF (`app/api/auth/_lib/cookies.ts`), not by the API, so
+   `__Host-` cookies live on the web origin and the API may sit on a different
+   host with no cross-origin cookie problem. The only hard requirement is that
+   the API is HTTPS-reachable **server-side** from the web host. Recommended
+   split: web stays on Vercel (edge middleware + SRI + CSP are already tuned
+   for it); API goes to a container host with managed Postgres + Redis behind
+   `api.waitlayer.com`. Set `NEXT_PUBLIC_API_URL`/`API_INTERNAL_URL` as Vercel
+   **build** variables — Next inlines them at build time and runtime env does
+   not reach middleware or the client bundle (A-083).
+
 4. **Docker image e2e:** `docker compose build` needs a reachable npm registry
    from the build runner (Dockerfile is registry-resilient since A-075).
 5. **Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
@@ -117,10 +224,29 @@
    (local remote sanitized; repository operator must rotate it).
 7. **Google OAuth credentials** for live Google sign-in (CSP `frame-src`
    verified live; only the ID-token callback needs real creds).
-8. **PSP credentials/lifecycle (A-030):** which automated rails (Stripe
-   Connect / PayPal Payouts / Wise / Payoneer / Razorpay) are enabled at the
-   provider level; launch countries/currencies, KYC/tax/legal docs. `dodo_payments`
-   is stub-only like the others.
+8. **PSP credentials/lifecycle (A-030):** which automated rails are enabled at
+   the provider level; launch countries/currencies, KYC/tax/legal docs.
+   Corrected 2026-08-07 — the prior wording ("`dodo_payments` is stub-only
+   **like the others**") wrongly implied every automated rail is a stub. Actual
+   split:
+   - **Complete implementations, credential-gated:** `paypal_payouts`
+     (`providers/paypal-payouts.provider.ts`, 238 LOC), `stripe_connect`
+     (`providers/stripe.provider.ts`, 465 LOC), `wise`
+     (`providers/wise.provider.ts`, 310 LOC). These call real provider APIs and
+     fail closed in production without credentials.
+   - **Genuine `StubPayoutProvider`s** (`payout.service.ts:47,49,50`):
+     `payoneer`, `razorpay`, `dodo_payments`. Registration is blocked at
+     `payout-method.trait.ts:142-160`, so they cannot be persisted even if the
+     `WAITLAYER_PAYOUT_PROVIDER_STATUS` override marks them available.
+   - **Available today:** only `paypal_email` and `manual`
+     (`packages/shared/src/payout-providers.ts:32-45`) — both "admin-processed",
+     i.e. a human sends money by hand. Do not launch on `manual` at volume: it
+     has no reconciliation story. Recommended first automated rail is
+     **PayPal Payouts** (lowest KYC friction for global small payouts, and the
+     implementation is already done); validate with
+     `apps/api/src/integration/payout-sandbox-run.spec.ts` against sandbox
+     credentials before promoting via the env override.
+     `README.md` already described this split correctly; this file did not.
 9. **Green GitHub Actions SHA run:** `gh`/`act` unavailable in dev sandboxes;
    every CI job category has a local equivalent.
 10. **Test-DB reset consent:** full `pnpm test` integration phase needs
@@ -149,8 +275,11 @@
   `deposits.global`) via `prisma.systemSetting.upsert` in `beforeAll`; fresh
   DBs seed them disabled. Never enable them for real money paths.
 - **Services:** Postgres `:5432` (dev, `waitlayer-dev` creds), `:5433` (test,
-  `waitlayer_test`), Redis `:6379`. 89 migrations; keep `migrate status`
-  current and `migrate diff` drift-free.
+  `waitlayer_test`), Redis `:6379`. Keep `migrate status` current and
+  `migrate diff` drift-free. **Do not hardcode a migration count in prose** —
+  it was stated as both `89` and `91` in three places in this file (actual: 91,
+  from `find migrations -mindepth 1 -maxdepth 1 -type d`; the `0_init` directory
+  is why a `grep '^2'` undercounts by one). Derive it, don't assert it.
 - **Dependency audit:** the only known advisory is the quarantined dev-only
   `brace-expansion` path (`@nestjs/cli → fork-ts-checker-webpack-plugin →
 minimatch@3`; no compatible parent upgrade). `scripts/audit-dependencies.mjs`
@@ -349,6 +478,24 @@ pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
 Additional gates: `node scripts/audit-claims.mjs` (13/13), `node scripts/scan-build-secrets.mjs`,
 `node scripts/audit-dependencies.mjs`, `node scripts/check-licenses.mjs`,
 `pnpm --filter waitlayer-web exec playwright test` (e2e, 86 tests — run via
-`.e2e/run-e2e.sh`), `pnpm --filter @waitlayer/db exec prisma migrate status`
-(89 migrations) and `prisma migrate diff --exit-code --from-config-datasource
---to-schema ./prisma/schema.prisma` (no drift).
+`.e2e/run-e2e.sh`), plus migration status and drift.
+
+**The migration-status command needs an explicit `DATABASE_URL`.** As previously
+documented here it fails: `prisma.config.ts` requires `datasource.url`, and the
+bare command errors with `The datasource.url property is required in your Prisma
+config file`. Prefix it (and never `source` the environ dump — see the PEM rule
+above):
+
+```bash
+DATABASE_URL=$(grep -m1 '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '"') \
+  pnpm --filter @waitlayer/db exec prisma migrate status
+# → "N migrations found in prisma/migrations" + "Database schema is up to date!"
+```
+
+Then `prisma migrate diff --exit-code --from-config-datasource --to-schema
+./prisma/schema.prisma` (no drift).
+
+**What these gates do not cover** (learned 2026-08-07, see A-087): they assert
+that builds succeed and invariants hold, never that a rendered page contains its
+intended content. A page whose content silently falls back to an error string
+passes every gate in this list.

@@ -59,6 +59,19 @@ function exit(message, code = 1) {
 }
 
 async function main() {
+  // A-088 guard. Below, this script creates a `role: 'admin'` user with NO
+  // passwordHash so CI can mint a token for the admin health routes. That is
+  // safe in an ephemeral CI database and unacceptable anywhere else — a
+  // passwordless administrator is a standing privilege-escalation primitive.
+  // Refuse to run against a production database at all; use
+  // `scripts/bootstrap-admin.mjs` to create a real administrator.
+  if (process.env.NODE_ENV === 'production') {
+    exit(
+      'enforce-health-metrics creates a passwordless CI admin and must never run with ' +
+        'NODE_ENV=production. Use scripts/bootstrap-admin.mjs to create a real administrator.',
+    );
+  }
+
   const privateKey = process.env.JWT_PRIVATE_KEY;
   if (!privateKey) {
     exit('JWT_PRIVATE_KEY is required to sign the CI admin token');

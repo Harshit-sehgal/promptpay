@@ -2,6 +2,33 @@
 
 Run through this before and after every production deploy.
 
+## Step 0 — Create the first administrator (A-088)
+
+**Do this once, immediately after the first `migrate deploy`, before anything
+else.** Until it is done the deployment is inert: signup refuses privileged
+roles by design, so nobody can approve a campaign, flip any of the five
+fail-closed money switches, verify a payout account, or process a payout.
+
+```bash
+ADMIN_BOOTSTRAP_TOKEN=<secret-from-secret-manager> \
+DATABASE_URL=<production-url> \
+  pnpm bootstrap:admin --token <same-secret> --email ops@yourdomain.com
+# password is prompted (not echoed, stays out of shell history and `ps`)
+```
+
+- [ ] Administrator created (`super_admin`, audited as `admin.bootstrap`).
+- [ ] **TOTP enrolled for that account.** In production `AdminMfaStepUpGuard`
+      rejects every admin `POST/PUT/PATCH/DELETE` unless 2FA is enabled _and_
+      recent (`ADMIN_MFA_STEP_UP_MAX_AGE_SECONDS`, default 600s). Skip this and
+      every admin action returns 403.
+- [ ] `ADMIN_BOOTSTRAP_TOKEN` rotated out of the environment afterwards. The
+      script is one-shot and refuses to run again, but do not leave it lying
+      around.
+
+> `scripts/enforce-health-metrics.mjs` also creates an admin — a **passwordless**
+> one, for CI health probes. It now hard-refuses when `NODE_ENV=production`.
+> Never point it at a production database.
+
 ## Pre-deploy
 
 - [ ] PR reviewed against `docs/CODE_REVIEW_CHECKLIST.md`; CI green (typecheck,

@@ -19,6 +19,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { DeveloperGetStarted } from '@/components/developer-get-started';
 import SandboxCreditPanel from '@/components/sandbox-credit-panel';
 import { getErrorMessage } from '@/lib/api/errors';
 import { developerApi, referralApi } from '@/lib/api/services';
@@ -253,6 +254,10 @@ export default function DeveloperDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* A-090: activation path. Self-hides once a client has connected, so it
+          guides a new developer without becoming permanent furniture. */}
+      <DeveloperGetStarted />
 
       {loading && (
         <div className="flex items-center justify-center py-24">

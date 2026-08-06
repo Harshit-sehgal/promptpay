@@ -87,6 +87,29 @@ attestable integration is deployed and reviewed.
 - **Compliance**: Consent ledger, data-retention cron, and admin/user erasure paths that revoke sessions and API keys
 - **API Keys**: Machine-to-machine auth with scoped, expirable keys
 
+### Runtime state of the money features
+
+The features above are **implemented and tested**, not **switched on**. Every
+money path is behind a runtime setting that fails closed when its row is absent,
+so a fresh database starts fully disabled (`runtime-config.service.ts`):
+
+| Switch             | Default | Gates                                                    |
+| ------------------ | ------- | -------------------------------------------------------- |
+| `ads.global`       | **off** | serving any ad at all                                    |
+| `wait.earnings`    | **off** | settlement; also requires an external attestation issuer |
+| `deposits.global`  | **off** | advertiser funding                                       |
+| `payouts.requests` | **off** | developer payout requests                                |
+| `payouts.auto`     | **off** | automated payout processing                              |
+
+Only an `admin`/`super_admin` can flip them. Payout rails: `paypal_email` and
+`manual` are available (both admin-processed by hand); PayPal Payouts, Stripe
+Connect and Wise are complete but credential-gated; Payoneer, Razorpay and Dodo
+Payments are stubs that are refused at registration.
+
+**Launch readiness:** see [`LAUNCH_PLAN.md`](LAUNCH_PLAN.md) for the audited gap
+list and phasing, and `AGENTS.md` → "Open Source-Fixable Items" (A-087…A-090)
+for the code-level blockers.
+
 ## Documentation
 
 - [Strategy Audit](docs/00-strategy-audit.md)
@@ -109,4 +132,6 @@ attestable integration is deployed and reviewed.
 - [API Changelog](docs/17-api-changelog.md)
 - [Architecture Decision Records](docs/adr/0001-record-architecture-decisions.md)
 - [Wait-attestation Launch Gate](docs/ops/wait-attestation-launch-gate.md)
-- [Foundation Status](FOUNDATION_STATUS.md)
+- [Launch Plan](LAUNCH_PLAN.md) — 2026-08-07 launch-readiness audit and phasing
+- [Foundation Status](FOUNDATION_STATUS.md) — **superseded 2026-08-07**, kept as
+  a historical record of the July hardening pass; do not plan against it

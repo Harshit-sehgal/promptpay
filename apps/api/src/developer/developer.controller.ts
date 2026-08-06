@@ -55,6 +55,20 @@ export class DeveloperController {
     return this.service.getTrust(userId);
   }
 
+  /**
+   * Connected-client summary for the dashboard onboarding panel (A-090).
+   *
+   * A developer could previously sign up and find nothing anywhere telling
+   * them a client had to be installed, let alone whether theirs had connected.
+   * This returns the minimum needed to answer "is it working yet?" — never the
+   * per-device `eventSecret`, `publicKey`, or `fingerprintHash`.
+   */
+  @ApiOperation({ summary: 'Get connected device summary' })
+  @Get('devices')
+  getDevices(@CurrentUser('id') userId: string) {
+    return this.service.getDeviceSummary(userId);
+  }
+
   @ApiOperation({ summary: 'Update settings' })
   @Patch('settings')
   // settings changes (ads enable flag, quiet-mode windows, hourly

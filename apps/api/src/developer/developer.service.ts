@@ -320,6 +320,49 @@ export class DeveloperService {
     });
   }
 
+  /**
+   * Minimal connected-client summary for the developer dashboard (A-090).
+   *
+   * Deliberately narrow: the selected columns are the only ones a developer
+   * needs to confirm their install worked. `eventSecret` (the per-device HMAC
+   * signing key), `publicKey`, and `fingerprintHash` are never selected —
+   * a dashboard read must not be able to leak the material that signs device
+   * events, and the fingerprint is a cross-account correlation handle used by
+   * fraud review.
+   */
+  async getDeviceSummary(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'developer') throw new ForbiddenException('Not a developer account');
+
+    const devices = await this.prisma.device.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        toolType: true,
+        platform: true,
+        extensionVersion: true,
+        createdAt: true,
+        lastSeenAt: true,
+      },
+      orderBy: { lastSeenAt: 'desc' },
+      // A developer with an unbounded device list is a fraud signal, not a
+      // pagination problem; cap the read so the dashboard cannot be used to
+      // pull an arbitrarily large result set.
+      take: 25,
+    });
+
+    return {
+      deviceCount: devices.length,
+      hasConnectedDevice: devices.length > 0,
+      lastSeenAt: devices[0]?.lastSeenAt ?? null,
+      devices,
+    };
+  }
+
   async getTrust(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

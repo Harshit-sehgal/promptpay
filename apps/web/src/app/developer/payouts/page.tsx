@@ -4,6 +4,7 @@ import type { AxiosResponse } from 'axios';
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard, StatusBadge } from '@/components';
+import { earningsAreLive, useWaitLaunchMode } from '@/components/launch-mode-banner';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, payoutApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
@@ -112,6 +113,13 @@ export default function DevPayoutsPage() {
   const payoutTwoFactorEnabled = user?.twoFactorEnabled === true || info?.twoFactorEnabled === true;
   const requestBlockedByTwoFactor =
     info?.requiresTwoFactorForPayout === true && !payoutTwoFactorEnabled;
+  // A-089: the server already refuses payout requests while `payouts.requests`
+  // is fail-closed. Showing a live request form anyway invites the user to fill
+  // it in and be rejected, and implies earnings are payable when settlement has
+  // never been enabled. Gate the form on the same published signal the banner
+  // uses; this is disclosure, not enforcement — the API remains authoritative.
+  const { mode: launchMode } = useWaitLaunchMode();
+  const earningsLive = earningsAreLive(launchMode);
 
   // Keep the chosen currency valid for the (possibly changed) provider.
   useEffect(() => {
@@ -360,7 +368,20 @@ export default function DevPayoutsPage() {
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm mb-8">
             <h2 className="text-surface-900 font-bold text-[16px] mb-5">Request payout</h2>
 
-            {requestBlockedByTwoFactor ? (
+            {!earningsLive ? (
+              <div className="bg-sky-50/40 border border-sky-100/70 rounded-xl p-5 text-sky-900 leading-relaxed text-sm font-normal">
+                Payout requests are unavailable while the platform is in{' '}
+                <span className="font-semibold">
+                  {launchMode === 'paused'
+                    ? 'paused'
+                    : launchMode === 'unknown'
+                      ? 'an unconfirmed'
+                      : 'wait-detection-only'}
+                </span>{' '}
+                mode. No earnings accrue and nothing is payable yet. You can still register and
+                verify a payout account now so it is ready when settlement is enabled.
+              </div>
+            ) : requestBlockedByTwoFactor ? (
               <div className="bg-amber-50/30 border border-amber-100/60 rounded-xl p-5 text-amber-800 leading-relaxed text-sm font-normal">
                 Two-factor authentication is required before requesting a payout. Enable 2FA in
                 settings, then return here.

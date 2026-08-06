@@ -49,6 +49,7 @@ const mockPrisma = {
     findFirst: vi.fn(),
     updateMany: vi.fn(),
   },
+  device: { findMany: vi.fn() },
   deviceRecoveryToken: { updateMany: vi.fn() },
   payoutAccount: { updateMany: vi.fn() },
   userSettings: { updateMany: vi.fn() },
@@ -89,6 +90,7 @@ describe('DeveloperService', () => {
     mockPrisma.advertiserLedger.findFirst.mockResolvedValue(null);
     mockPrisma.campaign.findFirst.mockResolvedValue(null);
     mockPrisma.campaign.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.device.findMany.mockResolvedValue([]);
     mockPrisma.deviceRecoveryToken.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.payoutAccount.updateMany.mockResolvedValue({ count: 0 });
     mockPrisma.userSettings.updateMany.mockResolvedValue({ count: 0 });
@@ -104,6 +106,78 @@ describe('DeveloperService', () => {
       mockGoogleVerifier,
       mockEmail,
     );
+  });
+
+  describe('getDeviceSummary (A-090)', () => {
+    const DEVELOPER = { id: 'user_123', role: 'developer' };
+
+    it('never selects the per-device signing secret or fingerprint', async () => {
+      // The dashboard onboarding panel is an authenticated *read* surface. If
+      // this select ever widens to `eventSecret`, any XSS or logging mistake on
+      // the dashboard leaks the key that signs device events — which would let
+      // an attacker forge wait states. `fingerprintHash` is a cross-account
+      // correlation handle reserved for fraud review. Assert the select shape
+      // directly so a future convenience edit cannot quietly add them.
+      mockPrisma.user.findUnique.mockResolvedValue(DEVELOPER);
+      mockPrisma.device.findMany.mockResolvedValue([]);
+
+      await service.getDeviceSummary('user_123');
+
+      const select = mockPrisma.device.findMany.mock.calls[0][0].select;
+      expect(select.eventSecret).toBeUndefined();
+      expect(select.publicKey).toBeUndefined();
+      expect(select.fingerprintHash).toBeUndefined();
+      expect(select).toMatchObject({ id: true, toolType: true, lastSeenAt: true });
+    });
+
+    it('scopes the query to the calling developer and caps the result set', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(DEVELOPER);
+      mockPrisma.device.findMany.mockResolvedValue([]);
+
+      await service.getDeviceSummary('user_123');
+
+      const args = mockPrisma.device.findMany.mock.calls[0][0];
+      expect(args.where).toEqual({ userId: 'user_123' });
+      expect(args.take).toBe(25);
+    });
+
+    it('reports no connected device for a fresh account', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(DEVELOPER);
+      mockPrisma.device.findMany.mockResolvedValue([]);
+
+      await expect(service.getDeviceSummary('user_123')).resolves.toEqual({
+        deviceCount: 0,
+        hasConnectedDevice: false,
+        lastSeenAt: null,
+        devices: [],
+      });
+    });
+
+    it('summarises connected devices newest-first', async () => {
+      const newest = new Date('2026-08-07T10:00:00Z');
+      mockPrisma.user.findUnique.mockResolvedValue(DEVELOPER);
+      mockPrisma.device.findMany.mockResolvedValue([
+        { id: 'dev_1', toolType: 'vscode', lastSeenAt: newest },
+        { id: 'dev_2', toolType: 'claude_code', lastSeenAt: new Date('2026-08-01T10:00:00Z') },
+      ]);
+
+      const result = await service.getDeviceSummary('user_123');
+
+      expect(result.deviceCount).toBe(2);
+      expect(result.hasConnectedDevice).toBe(true);
+      expect(result.lastSeenAt).toBe(newest);
+      expect(mockPrisma.device.findMany.mock.calls[0][0].orderBy).toEqual({ lastSeenAt: 'desc' });
+    });
+
+    it('refuses a non-developer account', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user_9', role: 'advertiser' });
+      await expect(service.getDeviceSummary('user_9')).rejects.toThrow('Not a developer account');
+    });
+
+    it('refuses an unknown user', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.getDeviceSummary('nope')).rejects.toThrow('User not found');
+    });
   });
 
   describe('deleteAccount', () => {

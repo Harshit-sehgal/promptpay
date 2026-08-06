@@ -17,6 +17,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { verifyMigrationsApplied } from '../config/migration-check';
 import { PrismaService } from '../config/prisma.service';
 import { MINIMUM_WAIT_CONFIDENCE, SIGNAL_WEIGHTS } from '../extension/extension.constants';
+import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { RedisHealthService } from './redis-health.service';
 
 @ApiTags('Health')
@@ -29,6 +30,7 @@ export class HealthController {
   constructor(
     private prisma: PrismaService,
     private redis: RedisHealthService,
+    private runtimeConfig: RuntimeConfigService,
     private config?: ConfigService,
   ) {}
 
@@ -43,6 +45,20 @@ export class HealthController {
       environmentKind: this.config?.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development'),
       environmentId: this.config?.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local'),
     };
+
+    // A-089: publish the settlement state on the public health contract.
+    // `getWaitLaunchMode()` was previously consumed only by the extension ad
+    // path, so a developer signing up on the web saw an empty earnings
+    // dashboard with no explanation of why nothing could ever accrue. This is
+    // a deliberate, non-sensitive disclosure: it reports only which of the
+    // three published modes the platform is in, never the underlying
+    // configuration. It fails soft — a runtime-config outage must not turn the
+    // liveness probe red.
+    try {
+      checks['waitLaunchMode'] = await this.runtimeConfig.getWaitLaunchMode();
+    } catch {
+      checks['waitLaunchMode'] = 'unknown';
+    }
 
     // Database connectivity check
     try {

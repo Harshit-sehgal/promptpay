@@ -2,6 +2,33 @@
 
 Last updated: 2026-07-11 (current hardening pass)
 
+> ## ⚠️ SUPERSEDED — historical record only (banner added 2026-08-07)
+>
+> **Do not plan against this file.** It was last updated **2026-07-11** and is
+> the largest document in the repo, which makes it the most likely thing to
+> mislead you. It is retained only as an audit trail of the July hardening pass.
+>
+> | Current source of truth                                  | Covers                                                     |
+> | -------------------------------------------------------- | ---------------------------------------------------------- |
+> | `AGENTS.md`                                              | live audit register, open items, invariants, gate commands |
+> | `LAUNCH_PLAN.md`                                         | 2026-08-07 launch-readiness audit and phasing              |
+> | `pnpm typecheck && pnpm lint && pnpm test && pnpm build` | actual health                                              |
+>
+> **Known-stale claims below**, corrected as of 2026-08-07:
+>
+> - "typecheck 14/14, lint 9/9" → actually **17/17** and **11/11**.
+> - Domain table row 8 says Frontend **PASS**, "all pages compile; payload shapes
+>   align" — true, and insufficient. Compiling is not working: the three
+>   `/legal/*` pages compile _and_ ship "Content unavailable" in every build
+>   (`AGENTS.md` A-087).
+> - "No silently-failing domains" → **false**. A-087 is exactly that: a silent
+>   `try/catch` fallback frozen into prerendered HTML, invisible to every gate.
+> - The domain table scores implementation, never reachability or operability.
+>   As of 2026-08-07 the application is **not deployed** (13 of 21 probed public
+>   routes 404, no `api.waitlayer.com` DNS) and a fresh production database
+>   **cannot produce an admin** (A-088), so nothing in this table is reachable
+>   by a real user regardless of its status column.
+>
 > **Authoritative health signal:** this narrative is NOT the source of truth.
 > The live signal is `pnpm test` + the `docker-build` CI job (boots the compiled
 > API over TCP). Re-run the quality gates after any code change.
