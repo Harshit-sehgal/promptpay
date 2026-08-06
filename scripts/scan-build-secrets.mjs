@@ -35,9 +35,13 @@ const SECRET_PATTERNS = [
   /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{24,}\b/,
 ];
 
-const PLACEHOLDER_SECRETS = [
-  'dev-only-docker-compose-jwt-secret-at-least-32-char',
-  'test-jwt-secret-for-integration-test-runs-only-32+',
+// Known dev/test default values, matched ONLY in assignment context
+// (e.g. `JWT_SECRET=dev-only-…` in an env file). A bare literal inside
+// bundled source — web-env.ts legitimately embeds the compose dev default in
+// its PUBLIC_JWT_SECRETS allowlist — is code data, not a shipped secret.
+const PLACEHOLDER_PATTERNS = [
+  /JWT_SECRET[=:]\s*["']?(?:dev-only-docker-compose-jwt-secret-at-least-32-char|test-jwt-secret-for-integration-test-runs-only-32\+)["']?/,
+  /DATABASE_URL[=:]\s*["'][^"']*(?:dev-only|test-only|placeholder)[^"']*["']/,
 ];
 
 // Files/extensions that are not useful to scan and commonly contain false positives.
@@ -76,9 +80,9 @@ function scanFile(path) {
     }
   }
 
-  for (const placeholder of PLACEHOLDER_SECRETS) {
-    if (content.includes(placeholder)) {
-      findings.push({ path, pattern: `placeholder: ${placeholder}` });
+  for (const pattern of PLACEHOLDER_PATTERNS) {
+    if (pattern.test(content)) {
+      findings.push({ path, pattern: `placeholder: ${pattern.toString()}` });
     }
   }
 

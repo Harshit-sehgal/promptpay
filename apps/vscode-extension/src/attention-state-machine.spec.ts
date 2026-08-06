@@ -269,7 +269,7 @@ describe('AttentionStateMachine (WL-051)', () => {
 
   it('promotion skips disposed waiters and never promotes a dead machine', () => {
     const installationId = `installation-${randomUUID()}`;
-    let now = 1_000;
+    const now = 1_000;
     const first = new AttentionStateMachine({
       installationId,
       ownerId: 'window-a',
