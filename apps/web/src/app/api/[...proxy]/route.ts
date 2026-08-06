@@ -119,6 +119,10 @@ export const ALLOWED_PATH_PREFIXES = [
   // Health check
   '/health',
 
+  // Sandbox test-credit flows (health-gated in the UI; upstream still enforces
+  // role and environment restrictions)
+  '/sandbox',
+
   // Campaigns (shared — creative management from both advertiser + admin pages)
   '/campaigns',
 

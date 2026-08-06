@@ -19,6 +19,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import SandboxCreditPanel from '@/components/sandbox-credit-panel';
 import { getErrorMessage } from '@/lib/api/errors';
 import { developerApi, referralApi } from '@/lib/api/services';
 import { formatCurrencyBreakdown } from '@/lib/format';
@@ -281,6 +282,8 @@ export default function DeveloperDashboard() {
 
       {data && (
         <>
+          <SandboxCreditPanel />
+
           <section className="mb-6 rounded-lg border border-surface-200/80 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap items-center gap-2">

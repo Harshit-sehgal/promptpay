@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
+import SandboxDepositPanel from '@/components/sandbox-deposit-panel';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatNumber, formatPercent } from '@/lib/format';
@@ -196,6 +197,8 @@ export default function AdvertisersPage() {
 
       {data && (
         <>
+          <SandboxDepositPanel />
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <StatCard
               label="Total spend"
