@@ -246,6 +246,18 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`bootstrap-admin: ${error instanceof Error ? error.message : error}`);
+  const message = error instanceof Error ? error.message : String(error);
+  // Ordering guard — see bootstrap-environment-marker.mjs. Running this before
+  // `prisma migrate deploy` otherwise surfaces a bare "table does not exist".
+  if (/does not exist in the current database|P2021/.test(message)) {
+    console.error(
+      'bootstrap-admin: the database has no schema yet.\n' +
+        '        Run migrations first, then re-run this:\n' +
+        '          cd packages/db && prisma migrate deploy\n' +
+        '        See docs/ops/deployment-checklist.md → cold-start order.',
+    );
+  } else {
+    console.error(`bootstrap-admin: ${message}`);
+  }
   process.exitCode = 1;
 });

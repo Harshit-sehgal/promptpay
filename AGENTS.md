@@ -287,6 +287,24 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
    while 100% of authentication was failing. Health checks should exercise a
    representative path, not just liveness.
 
+**Cold-start deploy verified end-to-end (2026-08-07).** The full first-deploy
+sequence was run against an **empty database** using the shipped
+`--target api` image with nothing mounted:
+`migrate deploy` (91 applied) → `bootstrap:env-marker --confirm-stamp` →
+`bootstrap:admin` → boot → `GET /health` 200
+(`environmentKind: production`, `waitLaunchMode: paused`, database + redis
+connected) → **`POST /auth/login` 200 issuing a `super_admin` token** → admin
+reads 200 → admin write correctly **403 "Recent two-factor authentication is
+required"** → all five money switches `enabled: false`.
+
+That run also exposed an **ordering trap**: `environment_markers`, `users`, and
+`admin_users` are created by the migrations, so both bootstrap scripts fail on a
+truly empty database. The order is `migrate deploy` → marker → admin, now
+documented as a cold-start table at the top of
+`docs/ops/deployment-checklist.md`, and both scripts detect the missing-schema
+case (P2021) and say "run migrations first" instead of surfacing a bare
+Prisma "table does not exist".
+
 **Measured but deliberately NOT changed (follow-up, not a blocker):** the API
 runtime image is **4.75 GB**, and `RUN chown -R node:node /app` is a single
 **1.18 GB** layer that duplicates every file already copied — it also dominates

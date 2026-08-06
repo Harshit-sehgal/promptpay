@@ -110,9 +110,20 @@ async function main() {
 
 main()
   .catch((error) => {
-    console.error(
-      `bootstrap-environment-marker: ${error instanceof Error ? error.message : error}`,
-    );
+    const message = error instanceof Error ? error.message : String(error);
+    // Ordering guard: this script and bootstrap-admin both write to tables the
+    // migrations create, so running either before `prisma migrate deploy`
+    // surfaces a bare "table does not exist" that reads like a broken script.
+    if (/does not exist in the current database|P2021/.test(message)) {
+      console.error(
+        'bootstrap-environment-marker: the database has no schema yet.\n' +
+          '        Run migrations first, then re-run this:\n' +
+          '          cd packages/db && prisma migrate deploy\n' +
+          '        See docs/ops/deployment-checklist.md → cold-start order.',
+      );
+    } else {
+      console.error(`bootstrap-environment-marker: ${message}`);
+    }
     process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());

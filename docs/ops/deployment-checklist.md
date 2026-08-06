@@ -2,13 +2,36 @@
 
 Run through this before and after every production deploy.
 
+## First deploy: cold-start order (verified end-to-end 2026-08-07)
+
+These steps are **order-dependent** and the order is not obvious. Verified by
+running the whole sequence against an empty database using the shipped image:
+
+| #   | Step                                          | Why the order matters                                                                      |
+| --- | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | `deploy:preflight` (env only, no `--with-db`) | Catches config/override problems before anything touches the database.                     |
+| 2   | `prisma migrate deploy`                       | **Creates the schema.** Everything below writes to tables that do not exist yet.           |
+| 3   | `bootstrap:env-marker --confirm-stamp`        | Needs `environment_markers`, which step 2 creates. The API will not boot without this row. |
+| 4   | `bootstrap:admin`                             | Needs `users`/`admin_users`, which step 2 creates.                                         |
+| 5   | Start the API                                 | Its entrypoint re-runs `migrate deploy` (idempotent, advisory-locked).                     |
+| 6   | Enrol TOTP on the admin                       | Until this, every admin write returns 403.                                                 |
+| 7   | `deploy:preflight --with-db`                  | Now it can verify admin + MFA + switch state.                                              |
+
+> Running step 3 or 4 before step 2 fails with
+> `The table public.environment_markers does not exist in the current database`.
+> That is the schema being absent, not a broken script.
+
+Steps 5–7 are unnecessary on a redeploy; steps 3 and 4 are one-shot and safely
+no-op or refuse on re-run.
+
 ## Step −1 — Run the deploy preflight
 
 One command, on the deploy host, with the production environment loaded. It
 fails closed on everything below that can be checked mechanically.
 
 ```bash
-pnpm deploy:preflight --with-db     # omit --with-db to skip Postgres/Redis probes
+pnpm deploy:preflight                # env/config only — safe before migrations
+pnpm deploy:preflight --with-db      # after migrations: probes Postgres/Redis + operator readiness
 ```
 
 It checks: the dev-compose override trap (see the warning below), the full
@@ -28,6 +51,9 @@ every blocking check passed.
 > Always deploy with an explicit `-f docs/ops/docker-compose.images.example.yml`.
 
 ## Step 0a — Stamp the database environment marker (A-096)
+
+> **Run `prisma migrate deploy` first.** This writes to `environment_markers`,
+> which the migrations create. See the cold-start order table above.
 
 **The API will not start in production without this.**
 `EnvironmentMarkerService.verify()` refuses to boot unless `environment_markers`
