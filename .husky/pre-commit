@@ -1,1 +1,21 @@
-pnpm exec lint-staged
+#!/usr/bin/env sh
+# Deterministic pre-commit: lint and format staged files directly.
+# Replaces lint-staged — its stash-and-restore of partially staged changes
+# raced the commit and produced phantom commits (see AGENTS.md 2026-07-20).
+# This hook has no stash machinery: it operates only on the current index,
+# re-stages formatting fixes, and aborts the commit if eslint errors.
+set -eu
+
+code_files="$(git diff --cached --name-only --diff-filter=ACM -- '*.ts' '*.tsx' '*.js' '*.jsx')"
+fmt_files="$(git diff --cached --name-only --diff-filter=ACM -- '*.json' '*.md' '*.yml' '*.yaml' '*.css' '*.scss')"
+
+if [ -n "$code_files" ]; then
+  printf '%s\n' "$code_files" | xargs pnpm exec eslint --fix
+fi
+
+all_files="$(printf '%s\n%s' "$code_files" "$fmt_files" | sed '/^$/d')"
+if [ -n "$all_files" ]; then
+  printf '%s\n' "$all_files" | xargs pnpm exec prettier --write
+  # Re-stage formatting fixes so the commit includes them.
+  printf '%s\n' "$all_files" | xargs git add
+fi
