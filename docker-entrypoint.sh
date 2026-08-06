@@ -20,7 +20,18 @@ set -e
 node scripts/wait-for-postgres.mjs
 
 # 2. Apply migrations once. Idempotent + advisory-locked.
-prisma migrate deploy --schema packages/db/prisma/schema.prisma
+#
+# Run from packages/db, NOT from /app (A-095). Prisma 7 takes the connection
+# URL from `prisma.config.ts` rather than the schema's datasource block, and it
+# only discovers that config relative to the working directory. Invoked from
+# /app the CLI found no config and failed with "The datasource.url property is
+# required in your Prisma config file", so no containerized deploy could ever
+# migrate. `NODE_PATH` (set in the Dockerfile) makes the globally-installed
+# `prisma/config` module resolvable from here.
+#
+# Run in a subshell so the working directory change cannot leak into the exec
+# below — the app must still start from /app.
+(cd packages/db && prisma migrate deploy)
 
 # 3. Hand off to the main process as PID 1.
 exec "$@"

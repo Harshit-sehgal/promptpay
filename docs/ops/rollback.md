@@ -7,8 +7,25 @@ bad code first, then reconcile data**. Full runbook also at
 ## 1. Stop / isolate the bad release
 
 - **API/Web (containers):** redeploy the previous image tag, or scale the
-  bad revision to 0 and the previous to desired. For compose:
-  `docker compose up -d --force-recreate`.
+  bad revision to 0 and the previous to desired. For compose, **always pass
+  `-f` explicitly**:
+
+  ```bash
+  docker compose --env-file .env.production \
+    -f docs/ops/docker-compose.images.example.yml up -d --force-recreate
+  ```
+
+  > ⚠️ **Never run bare `docker compose up` on a deployment host.** Compose
+  > auto-loads `docker-compose.override.yml`, which is committed to this repo
+  > and is **development-only**: it switches both images to the `build` stage
+  > (full source tree + dev dependencies), forces `NODE_ENV=development`,
+  > replaces the compiled entrypoint with `pnpm dev`, and turns
+  > `ALLOW_MOCK_GOOGLE`/`MOCK_GOOGLE_ENABLED` **on**. Doing this during a
+  > rollback would "recover" the incident into a dev server with mock
+  > authentication enabled in production. Verified 2026-08-07: bare
+  > `docker compose build api` produces the dev image, not the API runtime
+  > image (A-093).
+
 - **Feature toggles:** prefer disabling via env (`LAUNCH_SPLIT_ENABLED`,
   `WEBHOOK_ASYNC_PROCESSING`, `PAYOUT_REQUIRE_2FA`) and redeploy — no code
   rollback needed for toggle-bound changes.

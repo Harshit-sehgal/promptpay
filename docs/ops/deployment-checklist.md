@@ -2,6 +2,31 @@
 
 Run through this before and after every production deploy.
 
+## Step −1 — Run the deploy preflight
+
+One command, on the deploy host, with the production environment loaded. It
+fails closed on everything below that can be checked mechanically.
+
+```bash
+pnpm deploy:preflight --with-db     # omit --with-db to skip Postgres/Redis probes
+```
+
+It checks: the dev-compose override trap (see the warning below), the full
+`@waitlayer/config` production schema, `COOKIE_SECURE`, every mock-auth flag,
+test-only `THROTTLE_*` overrides, the reference attestation bridge, Postgres
+and Redis reachability, unfinished migrations, whether an administrator exists
+**and has TOTP enrolled**, and which money switches are live. Exit 0 means
+every blocking check passed.
+
+> ⚠️ **Never run bare `docker compose build` / `docker compose up` on a
+> deployment host.** Compose auto-loads the committed
+> `docker-compose.override.yml`, which is development-only: it switches both
+> services to the `build` stage, forces `NODE_ENV=development`, replaces the
+> compiled entrypoint with `pnpm dev`, and turns mock Google auth **on**.
+> Verified 2026-08-07 (A-093): `docker compose build api` produces an image
+> with the full repo source and **no** Prisma CLI — not the API runtime image.
+> Always deploy with an explicit `-f docs/ops/docker-compose.images.example.yml`.
+
 ## Step 0 — Create the first administrator (A-088)
 
 **Do this once, immediately after the first `migrate deploy`, before anything

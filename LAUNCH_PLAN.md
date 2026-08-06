@@ -361,10 +361,41 @@ clean.
 
 ### Phase 1 — Get it online (weeks 1–2)
 
+**The code-side blockers in this phase are now closed.** I built the images and
+booted the API in production mode — something nobody had done — and found three
+defects that would each have stopped a deployment dead. All fixed and verified:
+
+- ~~**A-092** `docker compose build` failed on a stock Docker install~~ ✅ —
+  hardcoded `provenance`/`sbom` are unsupported by the default driver; now
+  `${DOCKER_ATTEST:-false}`, opt-in for CI/release.
+- ~~**A-093** `docker compose` on a deploy host builds the **dev** image~~ ✅ —
+  the committed `docker-compose.override.yml` is auto-loaded and forces
+  `target: build`, `NODE_ENV=development`, and mock Google auth **on**. Proven:
+  the compose-built image has the full repo source and no Prisma CLI.
+  `docs/ops/rollback.md` had told operators to run bare `docker compose up`
+  during an incident. Corrected, and `deploy-preflight` now hard-fails on it.
+- ~~**A-095** the production image could never run migrations~~ ✅ —
+  `prisma.config.ts` imports `prisma/config`, but the CLI is installed globally
+  and a global install isn't on Node's resolution chain, so every container
+  died on "The datasource.url property is required". Fixed with `NODE_PATH` +
+  running migrate from `packages/db`; **all 91 migrations verified applying
+  from inside the container.**
+- **A-094** `pnpm deploy:preflight` ✅ _(new)_ — validates an actual
+  environment, not the code: the override trap, full config schema,
+  `COOKIE_SECURE`, mock-auth flags, test-only `THROTTLE_*`, the stub attestation
+  bridge, Postgres/Redis reachability, unfinished migrations, **whether an
+  administrator exists and has TOTP**, and which money switches are live.
+  10 tests in `test:release-gates`.
+
+Remaining, and genuinely operator-only:
+
 5. Provision managed Postgres + Redis; deploy API image; `api.waitlayer.com` DNS + TLS.
 6. Fill `staging.yml` secrets; get one **green** staging run with the smoke test.
 7. Redeploy web from `main` with correct build-time env; verify all 21 routes.
 8. Sentry + alert routing; first backup + one rehearsed restore.
+
+Run `pnpm deploy:preflight --with-db` on the host first — it converts most of
+step 5–7's failure modes into a checklist that fails before users see them.
 
 **Exit:** signup → login → developer dashboard works on the public domain.
 

@@ -180,6 +180,13 @@ jobs:
           # JWT_SECRET is a runtime-only secret; never pass it to docker build.
           # Compose emits provenance/SBOM attestations for these images; every
           # build argument below is public configuration or a public key.
+          #
+          # A-092: attestations are opt-in via DOCKER_ATTEST because the default
+          # `docker` driver cannot produce them (hardcoding them broke every
+          # local/deploy-host `docker compose build`). These images are pushed
+          # and cosign-signed, so they MUST keep provenance + SBOM — this runner
+          # sets up buildx above, which supports them. Do not remove.
+          DOCKER_ATTEST: 'true'
           WAITLAYER_API_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-api:staging-${{ github.sha }}
           WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:staging-${{ github.sha }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}/api/v1

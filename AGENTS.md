@@ -178,6 +178,72 @@ strings), enforces a minimum body length so an empty shell cannot pass, and
 checks the footer links resolve. **Prefer an assertion on rendered output over
 an assertion that a build succeeded.**
 
+## Resolved 2026-08-07 (second pass) — A-092…A-095, deployability
+
+Found by actually building the images and booting the stack in production mode
+rather than reasoning about it. **Nobody had ever done this**, and all three
+defects below were fatal to a containerized deploy. Open item #4 ("Docker image
+e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
+
+- **A-092 — `docker compose build` failed on a stock Docker install.**
+  `docker-compose.yml` hardcoded `provenance: true` / `sbom: true` for both
+  services; the default `docker` driver cannot produce attestations, so every
+  build died with "Attestation is not supported for the docker driver".
+  **Fix:** `provenance: ${DOCKER_ATTEST:-false}` / `sbom: ${DOCKER_ATTEST:-false}`
+  — the documented path works out of the box, and CI/release sets
+  `DOCKER_ATTEST=true` (with a buildx container driver or the containerd image
+  store) to restore supply-chain attestations.
+
+- **A-093 — `docker compose` on a deploy host builds the DEV image.**
+  `docker-compose.override.yml` is committed and auto-loaded by Compose, and it
+  overrides `target: build` for api and web, forces `NODE_ENV=development`,
+  swaps the compiled entrypoint for `pnpm dev`, and enables
+  `ALLOW_MOCK_GOOGLE`/`MOCK_GOOGLE_ENABLED`. Proven side-by-side:
+
+  |                           | `docker compose build api` | `docker build --target api` |
+  | ------------------------- | -------------------------- | --------------------------- |
+  | Prisma CLI                | **MISSING**                | present                     |
+  | full repo source in image | **PRESENT**                | absent                      |
+
+  The production runbooks correctly pass `-f docs/ops/docker-compose.images.example.yml`,
+  but `docs/ops/rollback.md` said bare `docker compose up -d --force-recreate`
+  — i.e. mid-incident, the rollback runbook would have "recovered" production
+  into a dev server with mock auth on. **Fix:** rollback.md corrected with an
+  explicit `-f` and a warning; `deploy-preflight` hard-fails when the override
+  is present.
+
+- **A-095 — the production image could never run migrations.**
+  `packages/db/prisma.config.ts` does `import { defineConfig } from 'prisma/config'`,
+  but the api stage installs the Prisma CLI **globally** (to survive
+  `pnpm install --prod`), and a global install is not on Node's module
+  resolution chain. Loading the config failed with "Cannot find module
+  'prisma/config'"; the CLI fell back to a config with no datasource and the
+  container died on "The datasource.url property is required in your Prisma
+  config file". Every containerized boot failed at the entrypoint — loudly
+  (exit 1), but fatally.
+  **Fix:** `ENV NODE_PATH=/usr/local/lib/node_modules` in the api stage, and
+  the entrypoint runs `prisma migrate deploy` from `packages/db` (in a subshell
+  so the cwd cannot leak into the `exec`). **Verified:** all 91 migrations
+  applied from inside the container.
+  Same root cause as the `migrate status` gate-command defect noted above —
+  Prisma 7 takes the URL from `prisma.config.ts`, not the schema, and only
+  discovers that config relative to the working directory.
+
+- **A-094 — `pnpm deploy:preflight` (new capability, not a bug fix).**
+  Nothing validated _an environment_; the gates validate the code. The
+  preflight fails closed on: the A-093 override trap, the full
+  `@waitlayer/config` production schema, `COOKIE_SECURE=false`, every mock-auth
+  flag, test-only `THROTTLE_*` overrides, the reference attestation bridge,
+  Postgres/Redis reachability, unfinished migrations, **no administrator**
+  (A-088) or an administrator without TOTP, and it reports which money switches
+  are live. Covered by `scripts/deploy-preflight.test.mjs` (10 tests, wired into
+  `test:release-gates`) — a preflight that cannot fail manufactures confidence
+  at exactly the wrong moment.
+
+**Rule this pass earns:** _build and boot the artifact you intend to ship._
+A-087 hid because nothing rendered a page; A-092/093/095 hid because nothing
+ever built the production image and started it.
+
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
 1. **Independent wait attestation operation:** a real provider/bridge whose
@@ -216,8 +282,16 @@ an assertion that a build succeeded.**
    **build** variables — Next inlines them at build time and runtime env does
    not reach middleware or the client bundle (A-083).
 
-4. **Docker image e2e:** `docker compose build` needs a reachable npm registry
-   from the build runner (Dockerfile is registry-resilient since A-075).
+4. ~~**Docker image e2e:** `docker compose build` needs a reachable npm
+   registry from the build runner.~~ **CLOSED 2026-08-07 — this was a
+   misdiagnosis.** The registry was never the problem. Both images build
+   locally, and the real defects were A-092 (hardcoded attestations break the
+   default Docker driver), A-093 (the auto-loaded dev override builds the wrong
+   stage), and A-095 (the production image could not run migrations). All three
+   are fixed and verified above; the API image now boots in production mode
+   with all 91 migrations applied. Remaining Docker work is genuinely external:
+   pushing to a real `CONTAINER_REGISTRY` (item 2) and running the attested
+   build in CI with `DOCKER_ATTEST=true`.
 5. **Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
    settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`

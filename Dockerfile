@@ -125,6 +125,15 @@ RUN chown -R node:node /app
 USER node
 
 ENV NODE_ENV=production
+# A-095: `packages/db/prisma.config.ts` does `import { defineConfig } from
+# 'prisma/config'`. The Prisma CLI is installed GLOBALLY above (to survive the
+# `pnpm install --prod` prune), and a global install is not on Node's
+# node_modules resolution chain — so loading the config failed with
+# "Cannot find module 'prisma/config'", the CLI fell back to a config with no
+# datasource, and every containerized boot died on
+# "The datasource.url property is required in your Prisma config file".
+# Without this the production image could never run migrations at all.
+ENV NODE_PATH=/usr/local/lib/node_modules
 EXPOSE 4002
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:4002/api/v1/health/ready || exit 1
