@@ -21,7 +21,8 @@ export type AttentionStateChangeReason =
   | 'surface_visibility'
   | 'device_lock'
   | 'bridge_connection'
-  | 'reset';
+  | 'reset'
+  | 'promotion';
 
 export type AttentionStateMachineOptions = {
   /** Stable local installation identity used to coordinate surfaces. */
@@ -46,6 +47,8 @@ export type AttentionStateMachineOptions = {
  */
 export class AttentionStateMachine {
   private static readonly owners = new Map<string, string>();
+  /** Surfaces waiting (foreground-eligible but not owning) for promotion. */
+  private static readonly waiting = new Map<string, AttentionStateMachine[]>();
 
   private readonly installationId: string;
   private readonly ownerId: string;
@@ -82,6 +85,22 @@ export class AttentionStateMachine {
     return this.ownsAttention;
   }
 
+  /**
+   * Claim installation attention ownership BEFORE the WaitLayer surface is
+   * visible, so the focus→visible transition keeps a stable owner. Returns
+   * whether this surface now holds ownership (false when the window is not
+   * focused or another surface already owns attention).
+   */
+  reserveOwner(): boolean {
+    if (this.locked || !this.connected || !this.focused) return false;
+    const currentOwner = AttentionStateMachine.owners.get(this.installationId);
+    if (currentOwner && currentOwner !== this.ownerId) return false;
+    AttentionStateMachine.owners.set(this.installationId, this.ownerId);
+    this.ownsAttention = true;
+    this.removeFromWaiting();
+    return true;
+  }
+
   onChange(listener: (change: AttentionStateChange) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -114,6 +133,7 @@ export class AttentionStateMachine {
   /** Release this owner and return the machine to an unobserved state. */
   reset(): void {
     this.releaseOwner();
+    this.removeFromWaiting();
     this.focused = false;
     this.surfaceVisible = false;
     this.locked = false;
@@ -131,11 +151,16 @@ export class AttentionStateMachine {
     if (next === 'foreground_visible') {
       this.acquireOwner();
       if (!this.ownsAttention) {
+        // Another surface owns attention: stay foreground-eligible but not
+        // owning, and register for promotion when that owner releases.
+        this.enqueueWaiting();
         this.transition('foreground_not_visible', reason);
         return;
       }
     } else if (this.ownsAttention) {
       this.releaseOwner();
+    } else {
+      this.removeFromWaiting();
     }
     this.transition(next, reason);
   }
@@ -160,8 +185,45 @@ export class AttentionStateMachine {
   private releaseOwner(): void {
     if (AttentionStateMachine.owners.get(this.installationId) === this.ownerId) {
       AttentionStateMachine.owners.delete(this.installationId);
+      this.promoteNext();
     }
     this.ownsAttention = false;
+  }
+
+  private enqueueWaiting(): void {
+    const list = AttentionStateMachine.waiting.get(this.installationId) ?? [];
+    if (!list.includes(this)) list.push(this);
+    AttentionStateMachine.waiting.set(this.installationId, list);
+  }
+
+  private removeFromWaiting(): void {
+    const list = AttentionStateMachine.waiting.get(this.installationId);
+    if (!list) return;
+    const next = list.filter((machine) => machine !== this);
+    if (next.length) AttentionStateMachine.waiting.set(this.installationId, next);
+    else AttentionStateMachine.waiting.delete(this.installationId);
+  }
+
+  /**
+   * After the current owner releases, hand attention to the first waiting
+   * surface that is still foreground-eligible. The promoted surface recomputes
+   * (acquiring ownership) so no separate observation event is required.
+   */
+  private promoteNext(): void {
+    const list = AttentionStateMachine.waiting.get(this.installationId) ?? [];
+    for (const candidate of list) {
+      if (
+        !candidate.ownsAttention &&
+        candidate.focused &&
+        candidate.surfaceVisible &&
+        !candidate.locked &&
+        candidate.connected
+      ) {
+        candidate.recompute('promotion');
+        return;
+      }
+    }
+    AttentionStateMachine.waiting.delete(this.installationId);
   }
 
   private transition(current: AttentionState, reason: AttentionStateChangeReason): void {

@@ -1,6 +1,9 @@
 const Module = require('node:module');
 const path = require('node:path');
 
+const extensionRoot = path.resolve(__dirname, '..');
+const entryPath = path.join(extensionRoot, 'out', 'extension.js');
+
 const originalLoad = Module._load;
 Module._load = function load(request, parent, isMain) {
   if (request === 'vscode') return {};
@@ -8,7 +11,7 @@ Module._load = function load(request, parent, isMain) {
 };
 
 try {
-  const entry = require(path.resolve('out/extension.js'));
+  const entry = require(entryPath);
   if (typeof entry.activate !== 'function' || typeof entry.deactivate !== 'function') {
     throw new Error('bundle does not export activate/deactivate');
   }

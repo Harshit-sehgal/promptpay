@@ -1,11 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
-
-import type { AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
-
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import type { AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
 
 import { AgentBridgeClient } from '../src/agent-bridge-client';
 
@@ -50,8 +49,10 @@ function listen(server: net.Server, socketPath: string): Promise<void> {
 }
 
 afterEach(async () => {
-  for (const server of sockets.splice(0)) await new Promise<void>((resolve) => server.close(() => resolve()));
-  for (const directory of directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+  for (const server of sockets.splice(0))
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  for (const directory of directories.splice(0))
+    fs.rmSync(directory, { recursive: true, force: true });
 });
 
 describe('AgentBridgeClient', () => {

@@ -3,7 +3,7 @@
   "displayName": "WaitLayer",
   "version": "0.0.1",
   "publisher": "waitlayer",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "https://github.com/Harshit-sehgal/promptpay.git"
@@ -132,7 +132,13 @@
         },
         "waitlayer.environmentKind": {
           "type": "string",
-          "enum": ["development", "test", "sandbox", "staging", "production"],
+          "enum": [
+            "development",
+            "test",
+            "sandbox",
+            "staging",
+            "production"
+          ],
           "default": "production",
           "description": "Deployment environment label. Sandbox shows a persistent test-credits marker."
         },
@@ -183,14 +189,12 @@
     "typecheck": "tsc --noEmit",
     "build": "pnpm run bundle",
     "test": "vitest run",
-    "package:vsix": "vsce package --no-dependencies",
-    "publish:vsix": "vsce publish --no-dependencies"
+    "package:vsix": "node ./scripts/package-vsix.mjs",
+    "publish:vsix": "node ./scripts/package-vsix.mjs /tmp/waitlayer-vscode.vsix && vsce publish --packagePath /tmp/waitlayer-vscode.vsix"
   },
   "main": "./out/extension.js",
-  "dependencies": {
-    "@waitlayer/agent-protocol": "workspace:*"
-  },
   "devDependencies": {
+    "@waitlayer/agent-protocol": "workspace:*",
     "@types/node": "^26.1.1",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.9.2",
