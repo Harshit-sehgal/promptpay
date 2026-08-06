@@ -170,4 +170,140 @@ describe('AttentionStateMachine (WL-051)', () => {
     first.dispose();
     second.dispose();
   });
+
+  it('reclaims a stale lease from a crashed owner so the queue never stalls', () => {
+    const installationId = `installation-${randomUUID()}`;
+    let now = 1_000;
+    const crashed = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-a',
+      now: () => now,
+      leaseMs: 60_000,
+    });
+    crashed.setWindowFocused(true);
+    crashed.setSurfaceVisible(true);
+    expect(crashed.isOwner()).toBe(true);
+
+    // The crashed window never releases; its lease simply expires.
+    now += 61_000;
+    const next = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-b',
+      now: () => now,
+      leaseMs: 60_000,
+    });
+    next.setWindowFocused(true);
+    next.setSurfaceVisible(true);
+    expect(next.isOwner()).toBe(true);
+    expect(next.getState()).toBe('foreground_visible');
+    crashed.dispose();
+    next.dispose();
+  });
+
+  it('treats an unexpired lease as blocking until it runs out', () => {
+    const installationId = `installation-${randomUUID()}`;
+    let now = 1_000;
+    const first = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-a',
+      now: () => now,
+      leaseMs: 30_000,
+    });
+    first.setWindowFocused(true);
+    first.setSurfaceVisible(true);
+    expect(first.isOwner()).toBe(true);
+
+    const second = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-b',
+      now: () => now,
+      leaseMs: 30_000,
+    });
+    second.setWindowFocused(true);
+    second.setSurfaceVisible(true);
+    expect(second.isOwner()).toBe(false);
+    expect(second.reserveOwner()).toBe(false);
+    expect(second.getState()).toBe('foreground_not_visible');
+
+    // Lease expiry alone (no release from the crashed owner) unblocks the
+    // waiter on its next observation recompute.
+    now += 31_000;
+    second.setSurfaceVisible(true);
+    expect(second.isOwner()).toBe(true);
+    expect(second.getState()).toBe('foreground_visible');
+    first.dispose();
+    second.dispose();
+  });
+
+  it('refreshes the lease on every observation while owning attention', () => {
+    const installationId = `installation-${randomUUID()}`;
+    let now = 1_000;
+    const owner = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-a',
+      now: () => now,
+      leaseMs: 40_000,
+    });
+    owner.setWindowFocused(true);
+    owner.setSurfaceVisible(true);
+    expect(owner.isOwner()).toBe(true);
+
+    const contender = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-b',
+      now: () => now,
+      leaseMs: 40_000,
+    });
+    // Periodic observations keep the lease alive past the 60s mark.
+    for (let t = 0; t < 4; t += 1) {
+      now += 25_000;
+      owner.setSurfaceVisible(true);
+      expect(owner.isOwner()).toBe(true);
+      contender.setWindowFocused(true);
+      contender.setSurfaceVisible(true);
+      expect(contender.isOwner()).toBe(false);
+    }
+    owner.dispose();
+    contender.dispose();
+  });
+
+  it('promotion skips disposed waiters and never promotes a dead machine', () => {
+    const installationId = `installation-${randomUUID()}`;
+    let now = 1_000;
+    const first = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-a',
+      now: () => now,
+      leaseMs: 60_000,
+    });
+    first.setWindowFocused(true);
+    first.setSurfaceVisible(true);
+    const disposedWaiter = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-b',
+      now: () => now,
+      leaseMs: 60_000,
+    });
+    disposedWaiter.setWindowFocused(true);
+    disposedWaiter.setSurfaceVisible(true);
+    expect(disposedWaiter.isOwner()).toBe(false);
+    disposedWaiter.dispose();
+
+    const third = new AttentionStateMachine({
+      installationId,
+      ownerId: 'window-c',
+      now: () => now,
+      leaseMs: 60_000,
+    });
+    third.setWindowFocused(true);
+    third.setSurfaceVisible(true);
+    expect(third.isOwner()).toBe(false);
+
+    first.reset();
+    // The disposed waiter is skipped; the remaining eligible waiter wins.
+    expect(third.isOwner()).toBe(true);
+    expect(third.getState()).toBe('foreground_visible');
+    first.dispose();
+    third.dispose();
+  });
 });

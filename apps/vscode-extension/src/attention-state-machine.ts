@@ -6,6 +6,12 @@ export type AttentionState =
   | 'device_locked'
   | 'disconnected';
 
+/** A time-bounded ownership claim for one installation. */
+type OwnerRecord = {
+  ownerId: string;
+  leasedUntil: number;
+};
+
 export type AttentionStateChange = {
   previous: AttentionState;
   current: AttentionState;
@@ -30,6 +36,13 @@ export type AttentionStateMachineOptions = {
   /** Stable identity for this VS Code window/surface. */
   ownerId: string;
   now?: () => number;
+  /**
+   * How long an attention claim stays valid without a refresh. A surface
+   * that crashes (or a window that is hard-killed) can never release its
+   * owner slot otherwise, stalling every other surface's promotion queue.
+   * Defaults to 60 seconds; refreshed on every observation recompute.
+   */
+  leaseMs?: number;
 };
 
 /**
@@ -46,13 +59,14 @@ export type AttentionStateMachineOptions = {
  * state contract.
  */
 export class AttentionStateMachine {
-  private static readonly owners = new Map<string, string>();
+  private static readonly owners = new Map<string, OwnerRecord>();
   /** Surfaces waiting (foreground-eligible but not owning) for promotion. */
   private static readonly waiting = new Map<string, AttentionStateMachine[]>();
 
   private readonly installationId: string;
   private readonly ownerId: string;
   private readonly now: () => number;
+  private readonly leaseMs: number;
   private readonly listeners = new Set<(change: AttentionStateChange) => void>();
   private state: AttentionState = 'unknown';
   private focused = false;
@@ -60,6 +74,7 @@ export class AttentionStateMachine {
   private locked = false;
   private connected = true;
   private ownsAttention = false;
+  private disposed = false;
 
   constructor(options: AttentionStateMachineOptions) {
     if (!options.installationId.trim()) throw new Error('Attention installationId is required');
@@ -67,6 +82,7 @@ export class AttentionStateMachine {
     this.installationId = options.installationId;
     this.ownerId = options.ownerId;
     this.now = options.now ?? Date.now;
+    this.leaseMs = options.leaseMs ?? 60_000;
   }
 
   getState(): AttentionState {
@@ -93,9 +109,7 @@ export class AttentionStateMachine {
    */
   reserveOwner(): boolean {
     if (this.locked || !this.connected || !this.focused) return false;
-    const currentOwner = AttentionStateMachine.owners.get(this.installationId);
-    if (currentOwner && currentOwner !== this.ownerId) return false;
-    AttentionStateMachine.owners.set(this.installationId, this.ownerId);
+    if (!this.claimLease()) return false;
     this.ownsAttention = true;
     this.removeFromWaiting();
     return true;
@@ -142,11 +156,13 @@ export class AttentionStateMachine {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.reset();
     this.listeners.clear();
   }
 
   private recompute(reason: AttentionStateChangeReason): void {
+    if (this.disposed) return;
     const next = this.resolveState();
     if (next === 'foreground_visible') {
       this.acquireOwner();
@@ -172,18 +188,34 @@ export class AttentionStateMachine {
     return this.surfaceVisible ? 'foreground_visible' : 'foreground_not_visible';
   }
 
-  private acquireOwner(): void {
-    const currentOwner = AttentionStateMachine.owners.get(this.installationId);
-    if (currentOwner && currentOwner !== this.ownerId) {
-      this.ownsAttention = false;
-      return;
+  /**
+   * Claim (or refresh) the installation lease. A stale lease from a crashed
+   * surface is reclaimable, so a dead owner can never stall promotion
+   * forever. Returns whether this machine holds the lease afterwards.
+   */
+  private claimLease(): boolean {
+    const current = AttentionStateMachine.owners.get(this.installationId);
+    if (
+      current &&
+      current.ownerId !== this.ownerId &&
+      current.leasedUntil >= this.now()
+    ) {
+      return false;
     }
-    AttentionStateMachine.owners.set(this.installationId, this.ownerId);
-    this.ownsAttention = true;
+    AttentionStateMachine.owners.set(this.installationId, {
+      ownerId: this.ownerId,
+      leasedUntil: this.now() + this.leaseMs,
+    });
+    return true;
+  }
+
+  private acquireOwner(): void {
+    this.ownsAttention = this.claimLease();
   }
 
   private releaseOwner(): void {
-    if (AttentionStateMachine.owners.get(this.installationId) === this.ownerId) {
+    const current = AttentionStateMachine.owners.get(this.installationId);
+    if (current?.ownerId === this.ownerId) {
       AttentionStateMachine.owners.delete(this.installationId);
       this.promoteNext();
     }
@@ -208,10 +240,12 @@ export class AttentionStateMachine {
    * After the current owner releases, hand attention to the first waiting
    * surface that is still foreground-eligible. The promoted surface recomputes
    * (acquiring ownership) so no separate observation event is required.
+   * Disposed machines and stale leases can never block the queue.
    */
   private promoteNext(): void {
     const list = AttentionStateMachine.waiting.get(this.installationId) ?? [];
     for (const candidate of list) {
+      if (candidate.disposed) continue;
       if (
         !candidate.ownsAttention &&
         candidate.focused &&
