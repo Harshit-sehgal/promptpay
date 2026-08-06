@@ -261,3 +261,41 @@ export const campaignApi = {
 export const systemApi = {
   getHealth: () => api.get('/platform-health'),
 };
+
+export const sandboxApi = {
+  getCredits: () => api.get('/sandbox/credits'),
+  claimFaucet: (idempotencyKey: string) => api.post('/sandbox/faucet', { idempotencyKey }),
+  simulatePayout: (data: {
+    amountMinor: number;
+    destinationAlias: string;
+    outcome:
+      | 'paid'
+      | 'processing'
+      | 'failed'
+      | 'ambiguous'
+      | 'reversed'
+      | 'callback_before_response'
+      | 'duplicate_callback'
+      | 'timeout'
+      | 'reconciliation_escalation';
+    idempotencyKey: string;
+  }) => api.post('/sandbox/payouts', data),
+  listPayouts: () => api.get('/sandbox/payouts'),
+  simulateDeposit: (data: {
+    amountMinor: number;
+    outcome:
+      | 'approved'
+      | 'processing'
+      | 'declined'
+      | 'refunded'
+      | 'disputed'
+      | 'timeout'
+      | 'duplicate_callback'
+      | 'delayed_callback'
+      | 'callback_before_response'
+      | 'currency_mismatch'
+      | 'amount_mismatch';
+    idempotencyKey: string;
+  }) => api.post('/sandbox/deposits', data),
+  listDeposits: () => api.get('/sandbox/deposits'),
+};

@@ -1,0 +1,31 @@
+{
+  "id": "advertising-consent-revoked-before-render",
+  "catalogId": 45,
+  "version": 1,
+  "persona": "revoked_before_render_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-advertising-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/advertising.runner.mjs", "consent-before-render"],
+    "timeoutMs": 5000
+  },
+  "actions": ["create_active_opportunity", "revoke_consent", "request_ad", "verify_not_rendered"],
+  "expected": {
+    "eventTypes": ["opportunity.consent_revoked_before_render"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": { "duplicateCanonicalEvents": 0, "missingExpectedEventTypes": 0 }
+}

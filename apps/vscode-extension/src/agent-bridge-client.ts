@@ -4,10 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 
-import {
-  agentLifecycleEventSchema,
-  type AgentLifecycleEventV1,
-} from '@waitlayer/agent-protocol';
+import { agentLifecycleEventSchema, type AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
 
 const MAX_LINE_BYTES = 256 * 1024;
 const AUTH_TIMEOUT_MS = 2_000;
@@ -20,6 +17,7 @@ export type AgentBridgeClientOptions = {
   reconnect?: boolean;
   onEvent: (event: AgentLifecycleEventV1) => void;
   onError?: (error: unknown) => void;
+  onConnectionChange?: (connected: boolean) => void;
 };
 
 /**
@@ -34,6 +32,7 @@ export class AgentBridgeClient implements vscode.Disposable {
   private disposed = false;
   private authenticated = false;
   private buffer = '';
+  private connectionState: boolean | undefined;
 
   private readonly socketPath: string;
   private readonly secretPath: string;
@@ -49,6 +48,7 @@ export class AgentBridgeClient implements vscode.Disposable {
   start(): void {
     if (this.started || this.disposed) return;
     this.started = true;
+    this.setConnectionState(false);
     void this.connect();
   }
 
@@ -68,6 +68,7 @@ export class AgentBridgeClient implements vscode.Disposable {
       secret = (await fs.promises.readFile(this.secretPath, 'utf8')).trim();
       if (secret.length < 32) throw new Error('WaitLayer bridge secret is invalid');
     } catch {
+      this.setConnectionState(false);
       this.scheduleReconnect();
       return;
     }
@@ -95,6 +96,7 @@ export class AgentBridgeClient implements vscode.Disposable {
     });
     socket.on('close', () => {
       settled = true;
+      this.setConnectionState(false);
       clearTimeout(authTimer);
       this.socket = undefined;
       this.authenticated = false;
@@ -150,6 +152,7 @@ export class AgentBridgeClient implements vscode.Disposable {
       }
       this.authenticated = true;
       this.reconnectDelay = INITIAL_RECONNECT_MS;
+      this.setConnectionState(true);
       return;
     }
     if (!this.authenticated) {
@@ -158,6 +161,12 @@ export class AgentBridgeClient implements vscode.Disposable {
     }
     const parsed = agentLifecycleEventSchema.safeParse(raw.event);
     if (parsed.success) this.options.onEvent(parsed.data);
+  }
+
+  private setConnectionState(connected: boolean): void {
+    if (this.connectionState === connected) return;
+    this.connectionState = connected;
+    this.options.onConnectionChange?.(connected);
   }
 
   private scheduleReconnect(): void {
@@ -178,6 +187,7 @@ export class AgentBridgeClient implements vscode.Disposable {
     this.socket = undefined;
     this.authenticated = false;
     this.buffer = '';
+    this.setConnectionState(false);
   }
 }
 

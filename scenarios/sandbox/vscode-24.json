@@ -1,0 +1,35 @@
+{
+  "id": "vscode-terminal-agent",
+  "catalogId": 24,
+  "version": 1,
+  "persona": "vscode_terminal_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-vscode-detector-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "medium",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/vscode-detector.runner.mjs", "terminal"],
+    "timeoutMs": 10000
+  },
+  "actions": ["observe_terminal_agent", "resolve_detector_adapter", "verify_lifecycle_signal"],
+  "expected": {
+    "eventTypes": ["vscode.terminal_lifecycle"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "terminal-native-subprocess",
+  "catalogId": 7,
+  "version": 1,
+  "persona": "terminal_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-terminal-subprocess-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "medium",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/terminal-native-subprocess.runner.mjs", "success"],
+    "timeoutMs": 5000
+  },
+  "actions": ["start_session", "spawn_child", "task_completed", "session_ended"],
+  "expected": {
+    "eventTypes": ["session.started", "task.created", "task.completed", "session.ended"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "raw_prompt", "raw_output"],
+    "fields": ["prompt", "output", "cwd", "workspacePath", "filePath", "sourceCode"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

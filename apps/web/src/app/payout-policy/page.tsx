@@ -40,10 +40,10 @@ export default function PayoutPolicyPage() {
           <section className="mb-10">
             <h2 className="text-xl font-semibold text-surface-900 mb-4">1. Earnings Release</h2>
             <p className="text-surface-600 leading-relaxed mb-4">
-              At launch, developer earnings will be categorized in three states: estimated,
-              confirmed, and held. Earnings will become available for payout after passing a hold
-              period (3 days for new accounts, longer for higher trust levels). Held earnings will
-              be released after fraud investigation completes.
+              If rewards are enabled after the required reviews, developer earnings may be
+              categorized in estimated, confirmed, and held states. Any hold period will be
+              configured and published before activation; held earnings remain unavailable until the
+              applicable review completes.
             </p>
           </section>
 

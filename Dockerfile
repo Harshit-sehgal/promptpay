@@ -16,6 +16,7 @@ ENV CI=true
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
 COPY packages/db/package.json packages/db/
+COPY packages/agent-protocol/package.json packages/agent-protocol/
 COPY packages/shared/package.json packages/shared/
 COPY packages/eslint-config/package.json packages/eslint-config/
 COPY packages/config/package.json packages/config/
@@ -24,6 +25,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY apps/cli/package.json apps/cli/
 COPY apps/vscode-extension/package.json apps/vscode-extension/
+COPY tools/wait-attestation-bridge/package.json tools/wait-attestation-bridge/
 
 # pnpm 11 blocks packages not in onlyBuiltDependencies from running install
 # scripts. The .npmrc config approves esbuild and Prisma packages and carries

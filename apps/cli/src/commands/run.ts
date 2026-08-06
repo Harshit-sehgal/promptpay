@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
@@ -12,6 +13,26 @@ import { createGenericWrapperEvent } from '../lib/generic-wrapper-adapter';
 import { normalizeToolType } from '../lib/tool-types';
 
 const FORWARDED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+
+/**
+ * Start a supervised command and wait for the definitive spawn handshake.
+ * Keeping this boundary separate makes the missing-executable invariant
+ * directly testable without requiring credentials or an API connection.
+ */
+export async function spawnSupervisedCommand(command: string[]): Promise<ChildProcess> {
+  if (command.length === 0 || !command[0]) {
+    throw new Error('Usage: waitlayer run -- <AI command> [arguments...]');
+  }
+  const child = spawn(command[0], command.slice(1), {
+    stdio: 'inherit',
+    shell: false,
+  });
+  await new Promise<void>((resolve, reject) => {
+    child.once('spawn', resolve);
+    child.once('error', reject);
+  });
+  return child;
+}
 
 /**
  * Run an AI command under direct CLI supervision.
@@ -39,7 +60,6 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
   // invocation; the environment marker belongs on stderr for `run`.
   await printSandboxBanner(api, process.stderr);
   const executable = command[0];
-  const args = command.slice(1);
   const toolType = normalizeToolType(path.basename(executable));
   const waitStateId = `cli-run-${randomUUID()}`;
   const sessionId = `cli-run-session-${waitStateId}`;
@@ -47,35 +67,26 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
   const deviceId = await api.getOrRegisterDevice();
 
   // Start the child before reporting it. A failed spawn must never produce a
-  // synthetic wait state. stdio is inherited so `waitlayer run` preserves the
-  // wrapped tool's normal interactive behavior.
-  const child = spawn(executable, args, {
-    stdio: 'inherit',
-    shell: false,
-  });
-
-  // `spawn()` returns a ChildProcess even when the executable cannot be
-  // started. Wait for Node's definitive spawn/error event before sending any
-  // telemetry so a missing binary cannot create a synthetic wait state.
-  await new Promise<void>((resolve, reject) => {
-    child.once('spawn', resolve);
-    child.once('error', reject);
-  });
+  // synthetic wait state; the helper waits for Node's definitive
+  // spawn/error event before any telemetry is sent.
+  const child = await spawnSupervisedCommand(command);
 
   // Install the close listener immediately after the spawn handshake. A very
   // short-lived command can exit while local telemetry is being queued; the
   // wrapper must never hang or miss its end event in that race.
   let exitResult: { code: number; signal: NodeJS.Signals | null } | undefined;
   let endedAt: Date | undefined;
-  const exitPromise = new Promise<{ code: number; signal: NodeJS.Signals | null }>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      endedAt = new Date();
-      const result = { code: signal ? signalExitCode(signal) : (code ?? 1), signal };
-      exitResult = result;
-      resolve(result);
-    });
-  });
+  const exitPromise = new Promise<{ code: number; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        endedAt = new Date();
+        const result = { code: signal ? signalExitCode(signal) : (code ?? 1), signal };
+        exitResult = result;
+        resolve(result);
+      });
+    },
+  );
 
   const installationId = creds.installationId;
   let wrapperStarted = false;
@@ -97,7 +108,9 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
     } catch (error: unknown) {
       // The wrapper remains useful when the local bridge/spool is unavailable;
       // never turn optional analytics into a broken coding-agent command.
-      console.warn(chalk.yellow(`WaitLayer wrapper telemetry unavailable: ${getErrorMessage(error)}`));
+      console.warn(
+        chalk.yellow(`WaitLayer wrapper telemetry unavailable: ${getErrorMessage(error)}`),
+      );
     }
   }
 
@@ -212,7 +225,8 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
         );
       }
     }
-    const outcome = terminationSignal || exitResult?.signal || exitResult?.code !== 0 ? 'failed' : 'completed';
+    const outcome =
+      terminationSignal || exitResult?.signal || exitResult?.code !== 0 ? 'failed' : 'completed';
     const telemetry = started ? 'recorded' : 'unavailable';
     // Completion summaries belong on stderr so the wrapped agent's stdout
     // remains byte-for-byte compatible for pipes, scripts, and IDE terminals.

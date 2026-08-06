@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { envSchema, loadEnv } from './index';
@@ -9,13 +10,14 @@ function validKey(): string {
 }
 
 function fullProductionEnv(): Record<string, string> {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
   return {
     NODE_ENV: 'production',
     WAITLAYER_ENVIRONMENT_KIND: 'production',
     DATABASE_URL: 'postgresql://localhost:5432/waitlayer',
     REDIS_URL: 'redis://localhost:6379',
-    JWT_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nMIIEvQ==\n-----END PRIVATE KEY-----',
-    JWT_PUBLIC_KEY: '-----BEGIN PUBLIC KEY-----\nMIIBIjANBg==\n-----END PUBLIC KEY-----',
+    JWT_PRIVATE_KEY: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    JWT_PUBLIC_KEY: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
     BFF_TRUST_PROXY_HOPS: '1',
     ALLOWED_COUNTRIES: 'US,IN',
     ALLOWED_CURRENCIES: 'USD,INR',

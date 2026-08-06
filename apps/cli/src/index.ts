@@ -13,10 +13,12 @@ import {
   runIntegrationInstall,
   runIntegrationRepair,
   runIntegrationStatus,
+  runIntegrationTrust,
   runIntegrationUninstall,
 } from './commands/integrations';
 import { runLogout } from './commands/logout';
 import { runSupervisedCommand } from './commands/run';
+import { runSandboxFaucet, runSandboxPayout, runSandboxStatus } from './commands/sandbox';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
 import { resolveApiBaseUrl } from './lib/api-client';
@@ -62,6 +64,27 @@ program
   .command('status')
   .description('Show current earnings and wait state stats')
   .action(() => runStatus());
+
+const sandboxCommand = program
+  .command('sandbox')
+  .description('Exercise isolated XTS test-credit flows');
+sandboxCommand
+  .command('status')
+  .description('Show sandbox credits and simulated payouts')
+  .action(() => runSandboxStatus());
+sandboxCommand
+  .command('faucet')
+  .description('Claim an idempotent XTS faucet grant')
+  .option('--idempotency-key <key>')
+  .action((options) => runSandboxFaucet(options));
+sandboxCommand
+  .command('payout')
+  .description('Create a deterministic, non-cash payout simulation')
+  .requiredOption('--amount-minor <amount>')
+  .requiredOption('--destination <alias>')
+  .option('--outcome <outcome>', 'paid, processing, failed, ambiguous, or reversed', 'paid')
+  .option('--idempotency-key <key>')
+  .action((options) => runSandboxPayout(options));
 
 program
   .command('watch')
@@ -119,6 +142,12 @@ integrationsCommand
   .description('Re-enable lifecycle telemetry for a provider')
   .action((provider: string) => {
     runIntegrationEnable({ provider });
+  });
+integrationsCommand
+  .command('trust <provider>')
+  .description('Record explicit local trust after reviewing provider hooks')
+  .action((provider: string) => {
+    runIntegrationTrust({ provider });
   });
 integrationsCommand
   .command('repair <provider>')

@@ -1,5 +1,10 @@
 # Definition of Done
 
+> This is the original MVP checklist retained for historical traceability. Its
+> unchecked boxes are not live status. Current implementation and release
+> status is maintained in `AGENTS.md` and
+> `docs/ops/waitlayer-release-backlog.md`.
+
 ## MVP definition of done
 
 The MVP is done only when every item below is true and verified in the current product state.

@@ -60,6 +60,7 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
   private readonly cache = new Map<string, CacheEntry<unknown>>();
   private readonly logger = new Logger(RuntimeConfigService.name);
   private readonly redisUrl: string | undefined;
+  private readonly redisConnectTimeoutMs: number | undefined;
   private readonly allowedCountries: Set<string> | null;
   private readonly allowedCurrencies: Set<string> | null;
   private redisPublisher: RedisClientType | null = null;
@@ -71,6 +72,11 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
     private config: ConfigService,
   ) {
     this.redisUrl = this.config.get<string>('REDIS_URL');
+    const configuredRedisTimeout = this.config.get<number>('REDIS_CONNECT_TIMEOUT_MS');
+    this.redisConnectTimeoutMs =
+      typeof configuredRedisTimeout === 'number' && Number.isFinite(configuredRedisTimeout)
+        ? Math.max(100, Math.min(30_000, Math.floor(configuredRedisTimeout)))
+        : undefined;
     this.allowedCountries = parseCodeAllowlist(
       this.config.get<string>('ALLOWED_COUNTRIES'),
       /^[A-Z]{2}$/,
@@ -88,8 +94,20 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
    */
   async onModuleInit(): Promise<void> {
     if (!this.redisUrl) return;
-    const publisher = createClient({ url: this.redisUrl });
-    const subscriber = createClient({ url: this.redisUrl });
+    const socketOptions = this.redisConnectTimeoutMs
+      ? {
+          connectTimeout: this.redisConnectTimeoutMs,
+          reconnectStrategy: false as const,
+        }
+      : undefined;
+    const publisher = createClient({
+      url: this.redisUrl,
+      ...(socketOptions ? { socket: socketOptions } : {}),
+    });
+    const subscriber = createClient({
+      url: this.redisUrl,
+      ...(socketOptions ? { socket: socketOptions } : {}),
+    });
     const onRedisError = (error: unknown) => {
       this.logger.warn(`Runtime-config cache invalidation Redis error: ${String(error)}`);
     };
@@ -387,6 +405,11 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
     } catch {
       return false;
     }
+  }
+
+  /** Return the deployment marker used for sandbox/production boundaries. */
+  getEnvironmentKind(): string {
+    return this.config.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development');
   }
 
   /**

@@ -1,0 +1,61 @@
+{
+  "id": "terminal-claude-background-completion",
+  "catalogId": 11,
+  "version": 1,
+  "persona": "distracted_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-sandbox-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "medium",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/terminal-claude-background-completion.runner.mjs"],
+    "timeoutMs": 5000
+  },
+  "actions": [
+    "signup",
+    "consent",
+    "start_session",
+    "task_started",
+    "backgrounded",
+    "task_completed",
+    "returned",
+    "completion_return_placement",
+    "credits_observed"
+  ],
+  "expected": {
+    "eventTypes": [
+      "session.started",
+      "task.created",
+      "task.completed",
+      "user.backgrounded",
+      "user.returned",
+      "placement.claimed"
+    ],
+    "placementTypes": ["completion_return"],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["payout_paid", "production_settlement", "raw_prompt", "raw_output", "raw_path"],
+    "fields": [
+      "prompt",
+      "rawPrompt",
+      "output",
+      "rawOutput",
+      "cwd",
+      "workspacePath",
+      "filePath",
+      "sourceCode"
+    ]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

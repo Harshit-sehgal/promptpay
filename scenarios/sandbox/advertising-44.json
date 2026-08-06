@@ -1,0 +1,35 @@
+{
+  "id": "advertising-ad-report",
+  "catalogId": 44,
+  "version": 1,
+  "persona": "reporting_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-ad-boundary-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/ad-boundaries.runner.mjs", "report"],
+    "timeoutMs": 10000
+  },
+  "actions": ["record_served_ad", "report_ad", "verify_impression_invalidated"],
+  "expected": {
+    "eventTypes": ["ad.reported"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

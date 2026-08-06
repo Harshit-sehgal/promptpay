@@ -11,7 +11,11 @@ export class AdPanel {
   // `this.completed = false` in the next `show()` would un-arm the prior
   // panel's dispose. Callers descend through this ref so `hide()` can invoke
   // the current ad's completion if the panel was never interacted with.
-  private active?: { fire: (clicked: boolean) => void; dispose: () => void };
+  private active?: {
+    fire: (clicked: boolean) => void;
+    dispose: () => void;
+    suppress: () => void;
+  };
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -19,6 +23,7 @@ export class AdPanel {
       recordClick: (impressionToken: string) => Promise<void>;
       recordImpressionEnd: (impressionToken: string, visibleDurationMs: number) => Promise<void>;
     },
+    private readonly onVisibilityChange?: (visible: boolean) => void,
   ) {}
 
   show(
@@ -50,6 +55,7 @@ export class AdPanel {
       },
     );
     this.panel = panel;
+    this.onVisibilityChange?.(true);
 
     const ctaUri = safeExternalUri(ad.ctaUrl);
 
@@ -82,21 +88,29 @@ export class AdPanel {
         fireComplete(true);
       }
     });
+    let suppressCompletion = false;
     panel.onDidDispose(() => {
-      fireComplete(false);
+      this.onVisibilityChange?.(false);
+      if (!suppressCompletion) fireComplete(false);
     });
 
     this.active = {
       fire: fireComplete,
       dispose: () => panel.dispose(),
+      suppress: () => {
+        suppressCompletion = true;
+        panel.dispose();
+        if (this.active?.fire === fireComplete) this.active = undefined;
+      },
     };
   }
 
-  hide() {
+  hide(options: { complete?: boolean } = {}) {
     // Reaching into `active` instead of `panel` ensures we only dispose if
-    // the panel is still the current ad's panel, and that a stale dispose (no
-    // completion callback) is captured by the per-ad guard above.
-    this.active?.dispose();
+    // the panel is still the current ad's panel. Attention-driven dismissal
+    // must not masquerade as a user completion or qualify an impression.
+    if (options.complete === false) this.active?.suppress();
+    else this.active?.dispose();
   }
 }
 

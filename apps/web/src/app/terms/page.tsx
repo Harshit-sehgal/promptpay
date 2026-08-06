@@ -36,9 +36,9 @@ export default function TermsPage() {
           </h2>
           <p>
             WaitLayer is currently a privacy-first private beta for AI tool wait-state verification.
-            Rewards and advertiser billing are disabled during the beta. Once independently
-            attestable rewards are enabled, developers may earn from validated ad impressions and
-            advertisers may reach a high-intent developer audience.
+            Rewards, withdrawals, and advertiser billing are disabled during the beta. Any future
+            rewards or advertiser features require independent attestation, operational review, and
+            updated terms before activation.
           </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">
@@ -69,14 +69,14 @@ export default function TermsPage() {
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">6. Revenue sharing</h2>
           <p>
-            Developers receive 60% of ad revenue (80% during launch incentive period). The platform
-            retains 30% (10% during launch) with 10% allocated to fraud and payment reserves.
+            No revenue sharing is active during the beta. Any future revenue-sharing terms will be
+            published before rewards are enabled.
           </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">7. Payout terms</h2>
           <p>
-            Earnings must reach the minimum threshold to be eligible for payout. New accounts are
-            subject to a 30-day hold period. Payout processing times vary by provider.
+            No cash payouts are available during the beta. Future thresholds, holds, and provider
+            processing times will be described in the then-current payout policy before activation.
           </p>
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">8. Disclaimer</h2>

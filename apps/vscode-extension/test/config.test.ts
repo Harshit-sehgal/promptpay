@@ -56,6 +56,17 @@ afterEach(() => {
 });
 
 describe('ConfigurationManager — settings parsing & validation', () => {
+  it('creates and reuses a random installation identity independently of the device fingerprint', async () => {
+    const mgr = makeManager();
+    const first = await mgr.getInstallationId();
+    const second = await mgr.getInstallationId();
+
+    expect(first).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(second).toBe(first);
+    expect(first).not.toBe(await mgr.getDeviceFingerprint());
+    expect(mock.secrets['waitlayer.installationId']).toBe(first);
+  });
+
   it('resolves the explicit environment kind and defaults to production', () => {
     const mgr = makeManager();
     expect(mgr.getEnvironmentKind()).toBe('production');

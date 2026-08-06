@@ -1,0 +1,35 @@
+{
+  "id": "terminal-native-cancelled",
+  "catalogId": 19,
+  "version": 1,
+  "persona": "terminal_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-terminal-cancelled-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "medium",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/terminal-native-lifecycle.runner.mjs", "cancelled"],
+    "timeoutMs": 5000
+  },
+  "actions": ["start_session", "ctrl_c", "cancel_task"],
+  "expected": {
+    "eventTypes": ["turn.cancelled"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement"],
+    "fields": ["prompt", "output", "command", "cwd", "sourceCode"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

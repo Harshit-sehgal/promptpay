@@ -1,0 +1,40 @@
+{
+  "id": "advertising-completion-return",
+  "catalogId": 37,
+  "version": 1,
+  "persona": "returning_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-advertising-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/advertising.runner.mjs", "completion-return"],
+    "timeoutMs": 5000
+  },
+  "actions": [
+    "complete_task",
+    "return_to_client",
+    "request_completion_return_opportunity",
+    "verify_sandbox_response"
+  ],
+  "expected": {
+    "eventTypes": ["opportunity.completion_return"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

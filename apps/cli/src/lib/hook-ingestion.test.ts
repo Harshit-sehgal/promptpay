@@ -81,17 +81,21 @@ describe('hook ingestion normalization', () => {
     expect(JSON.stringify(event)).not.toContain('never retain');
   });
 
-  it('rejects Codex at the generic normalization boundary while native support is disabled', () => {
-    expect(
-      normalizeHookEvent({
-        provider: 'codex_cli',
-        providerEvent: 'SessionStart',
-        input: { session_id: 'provider-session-1' },
-        installationId: INSTALLATION_ID,
-        deviceId: DEVICE_ID,
-        environmentKind: 'test',
-      }),
-    ).toBeNull();
+  it('normalizes the verified Codex hook boundary without raw payload fields', () => {
+    const event = normalizeHookEvent({
+      provider: 'codex_cli',
+      providerEvent: 'SessionStart',
+      input: { session_id: 'provider-session-1', prompt: 'private prompt' },
+      installationId: INSTALLATION_ID,
+      deviceId: DEVICE_ID,
+      environmentKind: 'test',
+    });
+    expect(event).toMatchObject({
+      provider: 'codex_cli',
+      eventType: 'session.started',
+      integrationMode: 'native_hook',
+    });
+    expect(JSON.stringify(event)).not.toContain('private prompt');
   });
 
   it('replays the same sanitized hook with the same event identity without a device secret', () => {

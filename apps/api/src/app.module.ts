@@ -33,6 +33,7 @@ import { LedgerModule } from './ledger/ledger.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { PayoutModule } from './payout/payout.module';
 import { ReferralModule } from './referral/referral.module';
+import { SandboxModule } from './sandbox/sandbox.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { ReferralModule } from './referral/referral.module';
     FraudModule,
     CampaignModule,
     ReferralModule,
+    SandboxModule,
     ComplianceModule,
     ObservabilityModule,
   ],

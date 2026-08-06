@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ENVIRONMENT_KINDS } from './environment';
+import { ENVIRONMENT_KINDS } from './environment.js';
 
 // Mirrors the full `PAYOUT_PROVIDERS` catalogue from packages/shared so an
 // operator copying the .env.example override map never trips config
@@ -703,4 +703,4 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env) {
 export type Env = z.infer<typeof envSchema>;
 
 export { envSchema };
-export * from './environment';
+export * from './environment.js';

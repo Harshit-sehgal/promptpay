@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import type { SpoolPaths } from './agent-spool';
 import { clearAgentTelemetry, enableBridge } from './agent-spool';
 
 const CRED_DIR = path.join(os.homedir(), '.config', 'waitlayer');
@@ -541,17 +542,27 @@ function isFileSystemError(error: unknown, code: string): boolean {
   return Boolean(error && typeof error === 'object' && (error as { code?: string }).code === code);
 }
 
-export async function clearCredentials(): Promise<void> {
+export type ClearCredentialsOptions = {
+  /** Disposable paths used by isolated tests; production callers use defaults. */
+  credentialFile?: string;
+  spoolPaths?: SpoolPaths;
+  /** Avoid touching the real OS keychain in an isolated disposable fixture. */
+  clearKeychain?: boolean;
+};
+
+export async function clearCredentials(options: ClearCredentialsOptions = {}): Promise<void> {
   // Clear queued agent telemetry before removing account metadata. The queue
   // may contain events captured while offline and must not survive logout or
   // account deletion for a later account to upload them.
-  clearAgentTelemetry();
+  clearAgentTelemetry(options.spoolPaths);
   // Best-effort keychain clears (fire-and-forget; the file unlink below is the
   // authoritative local cleanup).
-  void clearDeviceEventSecret();
-  void clearTokens();
+  if (options.clearKeychain !== false) {
+    void clearDeviceEventSecret();
+    void clearTokens();
+  }
   try {
-    fs.unlinkSync(CRED_FILE);
+    fs.unlinkSync(options.credentialFile ?? CRED_FILE);
   } catch {
     /* noop — file may not exist */
   }

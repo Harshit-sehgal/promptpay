@@ -1,0 +1,35 @@
+{
+  "id": "missing-executable",
+  "catalogId": 18,
+  "version": 1,
+  "persona": "terminal_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-missing-executable-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/cli-boundary.runner.mjs", "missing-executable"],
+    "timeoutMs": 5000
+  },
+  "actions": ["spawn_missing_executable", "verify_no_synthetic_telemetry"],
+  "expected": {
+    "eventTypes": ["process.spawn_rejected"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["session.started", "production_settlement"],
+    "fields": ["prompt", "output", "cwd", "workspacePath", "sourceCode"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

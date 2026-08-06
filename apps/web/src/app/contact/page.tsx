@@ -128,8 +128,9 @@ export default function ContactPage() {
           </div>
 
           <p className="text-surface-400 text-xs mt-8 leading-relaxed">
-            Response times are typically within two business days. Never share your password or
-            two-factor codes with anyone — WaitLayer support will never ask for them.
+            Support availability and response times depend on the current beta operations. Never
+            share your password or two-factor codes with anyone — WaitLayer support will never ask
+            for them.
           </p>
         </div>
       </main>

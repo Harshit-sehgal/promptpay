@@ -2,9 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AdFlowClient, MINIMUM_VISIBLE_DURATION_MS, runAdFlow } from './ad-flow';
 
-function makeClient(ad: { impressionToken: string } | null) {
+function makeClient(
+  ad: { impressionToken: string } | null,
+  response: Record<string, unknown> = {},
+) {
   return {
-    requestAd: vi.fn().mockResolvedValue({ ad, mode: 'earnings_enabled' }),
+    requestAd: vi.fn().mockResolvedValue({ ad, mode: 'earnings_enabled', ...response }),
     recordAdRendered: vi.fn().mockResolvedValue(undefined),
     recordImpressionQualified: vi.fn().mockResolvedValue(undefined),
   } as unknown as AdFlowClient;
@@ -38,6 +41,26 @@ describe('runAdFlow (A-040)', () => {
     expect(res.mode).toBe('telemetry_only');
   });
 
+  it('does not send production impression events for a sandbox placement', async () => {
+    const client = makeClient(
+      { impressionToken: 'sandbox-imp-1' },
+      {
+        mode: 'sandbox',
+        hasCashValue: false,
+      },
+    );
+
+    const res = await runAdFlow(client, { ...params, durationMs: 10_000 });
+
+    expect(res).toMatchObject({
+      served: true,
+      mode: 'sandbox',
+      hasCashValue: false,
+    });
+    expect(client.recordAdRendered).not.toHaveBeenCalled();
+    expect(client.recordImpressionQualified).not.toHaveBeenCalled();
+  });
+
   it('requests, renders, and qualifies a long enough wait state', async () => {
     const client = makeClient({ impressionToken: 'imp_1' });
     const res = await runAdFlow(client, { ...params, durationMs: 8000 });
@@ -58,6 +81,13 @@ describe('runAdFlow (A-040)', () => {
     await runAdFlow(client, { ...params, durationMs: MINIMUM_VISIBLE_DURATION_MS - 1 });
 
     expect(client.recordAdRendered).toHaveBeenCalledOnce();
+    expect(client.recordImpressionQualified).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when sandbox cash-value metadata is missing', async () => {
+    const client = makeClient({ impressionToken: 'sandbox-imp-1' }, { mode: 'sandbox' });
+    await expect(runAdFlow(client, params)).rejects.toThrow('hasCashValue must be false');
+    expect(client.recordAdRendered).not.toHaveBeenCalled();
     expect(client.recordImpressionQualified).not.toHaveBeenCalled();
   });
 });

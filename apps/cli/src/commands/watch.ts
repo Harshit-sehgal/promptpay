@@ -56,6 +56,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
   // We track the impressionToken here so the qualify call in endActiveWait
   // can reference the same impression.
   let activeImpressionToken: string | null = null;
+  let activeSandboxPlacement = false;
 
   /** End the current active wait state and reset tracking. Shared by both
    *  the file-empty and ENOENT paths — ensures the wait-end logic lives in
@@ -88,7 +89,12 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
     // A-040: Qualify the impression via runAdFlow's logic if the wait state
     // lasted long enough.  We preserve the original order (endWaitState first,
     // qualify second) to minimize behavioral changes from the refactoring.
-    if (activeImpressionToken && durationMs >= 5000 && attestationConsumed) {
+    if (
+      activeImpressionToken &&
+      !activeSandboxPlacement &&
+      durationMs >= 5000 &&
+      attestationConsumed
+    ) {
       try {
         await api.recordImpressionQualified({
           impressionToken: activeImpressionToken,
@@ -108,6 +114,7 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
     activeWaitStateId = null;
     activeStartTime = null;
     activeImpressionToken = null;
+    activeSandboxPlacement = false;
     lastState = null;
   };
 
@@ -224,7 +231,14 @@ export async function runWatch(opts: { once?: boolean; ads?: boolean }) {
             });
             if (result.served && result.impressionToken) {
               activeImpressionToken = result.impressionToken;
-              console.log(chalk.dim('[ad] served'));
+              activeSandboxPlacement = result.mode === 'sandbox' && result.hasCashValue === false;
+              console.log(
+                chalk.dim(activeSandboxPlacement ? '[sandbox placement] shown' : '[ad] served'),
+              );
+            } else if (result.mode === 'sandbox') {
+              console.log(
+                chalk.yellow('Sandbox placement shown — test credits only; no cash value.'),
+              );
             } else if (result.mode === 'paused' || result.mode === 'telemetry_only') {
               // Mirrors the VS Code extension: never render an ad surface when
               // the platform is fail-closed. Inform the user instead.

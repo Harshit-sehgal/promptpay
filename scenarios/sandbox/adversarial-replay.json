@@ -1,0 +1,35 @@
+{
+  "id": "adversarial-replay-detection",
+  "catalogId": 83,
+  "version": 1,
+  "persona": "replay_client",
+  "environment": "sandbox",
+  "seed": "waitlayer-replay-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/adversarial-replay.runner.mjs"],
+    "timeoutMs": 5000
+  },
+  "actions": ["session_started", "replay_event"],
+  "expected": {
+    "eventTypes": ["session.started", "placement.claimed"],
+    "placementTypes": ["foreground_wait"],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "raw_prompt", "raw_output"],
+    "fields": ["prompt", "output", "cwd", "workspacePath", "sourceCode"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

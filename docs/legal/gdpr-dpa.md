@@ -1,7 +1,9 @@
 # WaitLayer — GDPR Data Processing Agreement (DPA)
 
 **Last updated:** 2026-07-01
-**Controller:** WaitLayer, Inc. ("WaitLayer", "we", "us")
+**Controller:** The legal entity operating WaitLayer is not yet finalized. This
+document is a private-beta draft and must not be published as a final legal
+notice until the entity and official privacy contact are confirmed.
 **Effective for:** all users (developers, advertisers, and visitors) in the European Economic Area.
 
 This DPA forms part of, and is incorporated into, the WaitLayer Terms of
@@ -23,17 +25,18 @@ Regulation (GDPR, Regulation (EU) 2016/679).
   GitHub), payout destination.
 - Service telemetry: hashed device fingerprints, hashed IP, ad interaction
   events, consent records.
-- Financial: earnings ledger entries, payout requests (no raw card data is
-  stored by WaitLayer).
+- Financial: optional sandbox or planned rewards records and payout requests
+  (no raw card data is stored by WaitLayer). Real rewards are disabled in the
+  current beta.
 
 ## 3. Purposes & Legal Bases
 
-| Purpose | Legal basis (GDPR Art.) |
-| --- | --- |
-| Provide the reward marketplace & ad serving | Art. 6(1)(b) — contract |
-| Fraud prevention & security | Art. 6(1)(f) — legitimate interests |
-| Marketing communications (opt-in) | Art. 6(1)(a) — consent |
-| Legal / tax retention | Art. 6(1)(c) — legal obligation |
+| Purpose                                                                   | Legal basis (GDPR Art.)             |
+| ------------------------------------------------------------------------- | ----------------------------------- |
+| Provide beta wait-state verification and any enabled marketplace features | Art. 6(1)(b) — contract             |
+| Fraud prevention & security                                               | Art. 6(1)(f) — legitimate interests |
+| Marketing communications (opt-in)                                         | Art. 6(1)(a) — consent              |
+| Legal / tax retention                                                     | Art. 6(1)(c) — legal obligation     |
 
 ## 4. Data Subject Rights
 
@@ -44,7 +47,9 @@ You may exercise the following rights at any time:
 - **Rectification** — update profile fields in settings.
 - **Erasure** — delete your account; WaitLayer anonymizes personal data and
   revokes active sessions and API keys.
-- **Objection / Restriction** — contact `privacy@waitlayer.dev`.
+- **Objection / Restriction** — use the verified privacy contact published with
+  the final legal notice. The current contact address is intentionally not
+  asserted in this draft.
 
 We respond to verified requests within **30 days** as required by Art. 12.
 
@@ -79,4 +84,4 @@ purposes.
 
 ## 9. Contact
 
-Data Protection Officer / privacy requests: **privacy@waitlayer.dev**
+Data Protection Officer / privacy requests: **to be confirmed before publication**

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { LoadingSpinner, StatCard } from '@/components';
+import SandboxDepositPanel from '@/components/sandbox-deposit-panel';
 import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { formatCurrency, formatCurrencyBreakdown, formatNumber, formatPercent } from '@/lib/format';
@@ -175,6 +176,8 @@ export default function AdvertisersPage() {
           </div>
         </div>
       )}
+
+      <SandboxDepositPanel />
 
       {loading && (
         <div className="flex items-center justify-center py-24">

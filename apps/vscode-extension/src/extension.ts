@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 
+import { type AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
 import {
   type DetectorEvidence,
   FalsePositiveReason,
@@ -13,6 +14,7 @@ import { AdPanel } from './ad-panel';
 import { AgentBridgeClient } from './agent-bridge-client';
 import { AgentSessionCorrelation } from './agent-session-correlation';
 import { ApiClient } from './api-client';
+import { type AttentionState, AttentionStateMachine } from './attention-state-machine';
 import { ConfigurationManager } from './config';
 import { AI_TOOL_VALUES } from './detector-adapters';
 import { computeSuppressUntil, KNOWN_DETECTOR_SOURCES } from './detector-policy';
@@ -66,8 +68,38 @@ export async function activate(context: vscode.ExtensionContext) {
     // False-positive suppression (P1.18): suppress NEW waits while active.
     isSuppressed: (now) => detectorState.isSuppressed(now),
   });
-  const panel = new AdPanel(context, api);
   const status = new StatusBar();
+  const sessionId = crypto.randomUUID();
+  const attention = new AttentionStateMachine({
+    installationId: await config.getInstallationId(),
+    ownerId: sessionId,
+  });
+  let attentionState: AttentionState = attention.getState();
+  const panel = new AdPanel(context, api, (visible) => {
+    attention.setSurfaceVisible(visible);
+  });
+  const attentionSubscription = attention.onChange((change) => {
+    attentionState = change.current;
+    // Attention is a presentation boundary only. Losing focus, lock, or the
+    // local bridge hides a panel; it never creates, settles, or authorizes
+    // wait/ad/financial state.
+    if (
+      change.current === 'background' ||
+      change.current === 'device_locked' ||
+      change.current === 'disconnected'
+    ) {
+      panel.hide({ complete: false });
+    }
+  });
+  // VS Code does not expose a portable device-lock event to extensions. The
+  // state machine remains conservative: host adapters may call
+  // setDeviceLocked(), while this client supplies focus, surface-visibility,
+  // and bridge-connectivity observations only.
+  attention.setWindowFocused(true);
+  attention.setSurfaceVisible(false);
+  const windowStateSubscription = vscode.window.onDidChangeWindowState((state) => {
+    attention.setWindowFocused(state.focused);
+  });
 
   // Staged rollout / experiment assignment (P1.17). Enrollment + variant are
   // derived from a stable hash so they survive reloads (persisted in
@@ -102,7 +134,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Frequency cap tracking
   let adTimestamps: number[] = [];
-  const sessionId = crypto.randomUUID();
   const correlatedSessions = new AgentSessionCorrelation();
   let bridgeClient: AgentBridgeClient | undefined;
   let bridgeLifecycleGeneration = 0;
@@ -129,6 +160,56 @@ export async function activate(context: vscode.ExtensionContext) {
     if (interaction.clicked) await api.recordClick(interaction.impressionToken);
   };
 
+  const requestSandboxCompletionPlacement = async (event: AgentLifecycleEventV1) => {
+    if (
+      config.getEnvironmentKind() !== 'sandbox' ||
+      event.eventType !== 'user.returned' ||
+      !event.deviceId ||
+      !environmentVerified ||
+      !(await config.waitTelemetryEnabled()) ||
+      !(await config.adsEnabled()) ||
+      isAttentionUnavailable(attention.getState())
+    ) {
+      return;
+    }
+    const now = Date.now();
+    adTimestamps = adTimestamps.filter((timestamp) => now - timestamp < 3600_000);
+    if (adTimestamps.length >= (await config.getMaxAdsPerHour())) return;
+    if (!attention.reserveOwner()) return;
+    try {
+      const response = await api.requestSandboxCompletionPlacement({
+        deviceId: event.deviceId,
+        correlationId: event.correlationId,
+        idempotencyKey: `sandbox-completion-${event.eventId}`,
+      });
+      if (!response.ad || response.mode !== 'sandbox' || response.hasCashValue !== false) {
+        attention.releaseReservation();
+        return;
+      }
+      attention.setSurfaceVisible(true);
+      if (!attention.isOwner() || isAttentionUnavailable(attention.getState())) {
+        panel.hide({ complete: false });
+        return;
+      }
+      adTimestamps.push(now);
+      status.showAdServing();
+      panel.show(
+        {
+          headline: response.ad.title,
+          message: response.ad.message,
+          ctaText: ctaTextForAd(response.ad),
+          ctaUrl: response.ad.destinationUrl,
+          impressionToken: response.ad.impressionToken,
+        },
+        () => panel.hide({ complete: false }),
+      );
+    } catch (error: unknown) {
+      attention.releaseReservation();
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`WaitLayer: sandbox completion placement failed — ${message}`);
+    }
+  };
+
   // Consent is server-authoritative. Refresh it both at activation and after
   // login, because activation can happen before credentials exist or after a
   // user changed their choices on another client.
@@ -146,10 +227,15 @@ export async function activate(context: vscode.ExtensionContext) {
         // correlation layer applies native-first precedence and deduplicates
         // event IDs; it never forwards events or creates ad/financial state.
         correlatedSessions.accept(event);
+        void requestSandboxCompletionPlacement(event);
       },
       onError: (error) => {
         const msg = error instanceof Error ? error.message : String(error);
+        attention.setBridgeConnected(false);
         console.warn(`WaitLayer: local agent bridge unavailable — ${msg}`);
+      },
+      onConnectionChange: (connected) => {
+        attention.setBridgeConnected(connected);
       },
     });
     bridgeClient.start();
@@ -159,6 +245,7 @@ export async function activate(context: vscode.ExtensionContext) {
     bridgeLifecycleGeneration += 1;
     bridgeClient?.dispose();
     bridgeClient = undefined;
+    attention.setBridgeConnected(false);
     correlatedSessions.clear();
   };
 
@@ -401,7 +488,9 @@ export async function activate(context: vscode.ExtensionContext) {
         // them locally for its own state machine.
         if (event.shadow) return;
         if (!environmentVerified || !status.isEnvironmentVerified()) {
-          console.warn('WaitLayer: environment identity is not verified; suppressing wait telemetry');
+          console.warn(
+            'WaitLayer: environment identity is not verified; suppressing wait telemetry',
+          );
           return;
         }
 
@@ -519,6 +608,18 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
           }
 
+          // Attention and ownership are checked before the API request as well
+          // as before rendering. A backgrounded or competing window must not
+          // create an ad opportunity merely because a wait is still active.
+          if (isAttentionUnavailable(attention.getState())) return;
+
+          // Claim the single local presentation owner before asking for an ad.
+          // The panel is not visible yet, so this is a reservation of the
+          // foreground surface; no ad or financial event is created by it.
+          if (!attention.reserveOwner() || isAttentionUnavailable(attention.getState())) {
+            return;
+          }
+
           // 3. Request an ad
           const adResponse = await api.requestAd({
             deviceId,
@@ -528,10 +629,35 @@ export async function activate(context: vscode.ExtensionContext) {
             idempotencyKey: `ad-req-${event.waitStateId}`,
           });
           const ad = adResponse.ad;
+          if (!ad || activeWaitStateId !== event.waitStateId) attention.releaseReservation(); // The server is authoritative for launch mode. Sandbox placements
+          // are display-only and never enter the legacy impression/ledger path.
+          if (ad && adResponse.mode === 'sandbox' && adResponse.hasCashValue === false) {
+            attention.setSurfaceVisible(true);
+            if (!attention.isOwner() || attention.getState() !== 'foreground_visible') {
+              attention.setSurfaceVisible(false);
+              return;
+            }
+            adTimestamps.push(now);
+            status.showAdServing();
+            panel.show(
+              {
+                headline: ad.title,
+                message: ad.message,
+                ctaText: ctaTextForAd(ad),
+                ctaUrl: ad.destinationUrl,
+                impressionToken: ad.impressionToken,
+              },
+              () => {
+                panel.hide({ complete: false });
+              },
+            );
+            return;
+          }
 
           // The server is authoritative for launch mode. In the default
           // fail-closed telemetry_only mode, do not open a sponsored panel that a
           // developer could reasonably interpret as a reward-bearing action.
+
           if (
             !ad &&
             adResponse.mode === 'telemetry_only' &&
@@ -541,7 +667,20 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
           }
 
-          if (ad && activeWaitStateId === event.waitStateId) {
+          if (
+            ad &&
+            activeWaitStateId === event.waitStateId &&
+            attentionState !== 'background' &&
+            attentionState !== 'device_locked' &&
+            attentionState !== 'disconnected'
+          ) {
+            // Claim the single local foreground surface before rendering. A
+            // competing VS Code window cannot receive the same presentation.
+            attention.setSurfaceVisible(true);
+            if (!attention.isOwner() || attention.getState() !== 'foreground_visible') {
+              attention.setSurfaceVisible(false);
+              return;
+            }
             adTimestamps.push(now);
             status.showAdServing();
 
@@ -584,6 +723,7 @@ export async function activate(context: vscode.ExtensionContext) {
             );
           }
         } catch (err: unknown) {
+          attention.releaseReservation();
           // Don't disrupt the IDE with a modal, but make the failure visible in
           // the extension's output channel
           const msg = err instanceof Error ? err.message : String(err);
@@ -659,16 +799,14 @@ export async function activate(context: vscode.ExtensionContext) {
       pendingInteractions.clear();
     },
   };
-  context.subscriptions.push(
-    ...commands,
-    attestationCleanup,
-    {
-      dispose: () => {
-        stopBridge();
-      },
+  context.subscriptions.push(...commands, attestationCleanup, {
+    dispose: () => {
+      stopBridge();
+      attentionSubscription();
+      windowStateSubscription.dispose();
+      attention.dispose();
     },
-  );
-
+  });
 
   // Fetch server-side consent after boot. A failed initial sync is non-fatal:
   // no local state is changed, and successful login retries this exact path.
@@ -774,6 +912,10 @@ function buildEvidence(
   // independent sources. Without real terminal activity, a heuristic
   // ai_generation cannot become billable by auto-adding a second signal.
   return evidence;
+}
+
+function isAttentionUnavailable(state: AttentionState): boolean {
+  return state === 'background' || state === 'device_locked' || state === 'disconnected';
 }
 
 export function deactivate() {

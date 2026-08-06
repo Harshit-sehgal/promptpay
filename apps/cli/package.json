@@ -15,7 +15,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && esbuild dist/index.js --bundle --platform=node --format=cjs --external:chalk --external:commander --external:keytar --outfile=dist/index.bundled.js && mv dist/index.bundled.js dist/index.js",
     "dev": "tsc -w",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
@@ -23,8 +23,6 @@
     "pack:check": "node ../../scripts/verify-cli-bin.mjs"
   },
   "dependencies": {
-    "@waitlayer/agent-protocol": "workspace:*",
-    "@waitlayer/shared": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^15.0.0",
     "keytar": "npm:@napi-rs/keyring@^1.1.0"
@@ -32,6 +30,9 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@waitlayer/eslint-config": "workspace:*",
+    "@waitlayer/agent-protocol": "workspace:*",
+    "@waitlayer/shared": "workspace:*",
+    "esbuild": "^0.28.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
   }

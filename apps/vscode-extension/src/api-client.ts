@@ -90,7 +90,28 @@ interface RawBalance {
   paidOut: RawAmountEntry;
 }
 
-export type WaitLaunchMode = 'paused' | 'telemetry_only' | 'earnings_enabled';
+export type WaitLaunchMode = 'paused' | 'telemetry_only' | 'earnings_enabled' | 'sandbox';
+
+export interface SandboxCreditsResponse {
+  mode: 'sandbox';
+  hasCashValue: false;
+  currency: 'XTS';
+  balanceMinor: string;
+  environmentId: string;
+}
+
+export interface SandboxPayoutSimulationResponse {
+  mode: 'sandbox';
+  hasCashValue: false;
+  simulationId: string;
+  status: string;
+  amountMinor: string;
+  currency: 'XTS';
+  balanceMinor: string;
+  providerTxId?: string | null;
+  duplicate: boolean;
+  environmentId: string;
+}
 
 export interface EnvironmentIdentity {
   environmentKind: 'development' | 'test' | 'sandbox' | 'staging' | 'production';
@@ -100,6 +121,7 @@ export interface EnvironmentIdentity {
 export interface ServerAdResponse {
   ad: Ad | null;
   mode?: WaitLaunchMode;
+  hasCashValue?: boolean;
   reason?: string;
 }
 
@@ -365,6 +387,27 @@ export class ApiClient {
     return res ?? { ad: null };
   }
 
+  async requestSandboxCompletionPlacement(input: {
+    deviceId: string;
+    correlationId: string;
+    idempotencyKey: string;
+    country?: string;
+  }): Promise<ServerAdResponse> {
+    const country = input.country ?? detectCountryCode();
+    const payload = {
+      deviceId: input.deviceId,
+      correlationId: input.correlationId,
+      placementType: 'completion_return' as const,
+      idempotencyKey: input.idempotencyKey,
+      ...(country ? { country } : {}),
+    };
+    const res = await this.post<ServerAdResponse>('/extension/sandbox-placement-request', {
+      ...payload,
+      signature: await this.signEventPayload(payload),
+    });
+    return res ?? { ad: null };
+  }
+
   async recordAdRendered(input: {
     impressionToken: string;
     renderedAt: string;
@@ -457,6 +500,19 @@ export class ApiClient {
    */
   async getEnvironmentIdentity(): Promise<EnvironmentIdentity> {
     return this.get<EnvironmentIdentity>('/health');
+  }
+
+  async getSandboxCredits(): Promise<SandboxCreditsResponse> {
+    return this.get<SandboxCreditsResponse>('/sandbox/credits');
+  }
+
+  async simulateSandboxPayout(input: {
+    amountMinor: number;
+    destinationAlias: string;
+    outcome: 'paid' | 'processing' | 'failed' | 'ambiguous' | 'reversed';
+    idempotencyKey: string;
+  }): Promise<SandboxPayoutSimulationResponse> {
+    return this.post<SandboxPayoutSimulationResponse>('/sandbox/payouts', input);
   }
 
   async updateAdsEnabled(enabled: boolean): Promise<void> {

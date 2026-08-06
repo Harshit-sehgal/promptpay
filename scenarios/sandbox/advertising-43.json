@@ -1,0 +1,35 @@
+{
+  "id": "advertising-ad-dismiss",
+  "catalogId": 43,
+  "version": 1,
+  "persona": "dismissed_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-ad-boundary-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/ad-boundaries.runner.mjs", "dismiss"],
+    "timeoutMs": 10000
+  },
+  "actions": ["show_ad_panel", "dismiss_panel", "verify_not_completed"],
+  "expected": {
+    "eventTypes": ["ad.dismissed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

@@ -139,15 +139,17 @@ waitlayer integrations uninstall claude-code
 ```
 
 `integrations status` reports a stable capability tier for automation and human
-operators: `native` means the verified Claude hook set is active, `wrapper`
+operators: `native` means the verified hook set is active, `wrapper`
 means no native hook is installed and `waitlayer run -- ...` remains the safe
 fallback, `degraded` means hooks are present but incomplete/unverified or the
 configuration is malformed, and `disabled` means collection is explicitly
 turned off. Use `integrations disable claude-code` / `integrations enable
 claude-code` to toggle the explicit disabled state without removing hooks.
-Codex is included in status as `degraded`/unverified and is never silently
-installed. A degraded, disabled, or managed status exits non-zero so CI and
-setup scripts cannot mistake an unhealthy integration for success.
+Codex is installed additively into its user-level `hooks.json`, but remains
+`degraded` until the operator explicitly reviews the provider trust prompt and
+runs `waitlayer integrations trust codex`. A degraded, disabled, or managed
+status exits non-zero so CI and setup scripts cannot mistake an unhealthy
+integration for success.
 
 Installation is additive and idempotent. Existing provider hooks are preserved;
 WaitLayer-owned entries carry a stable marker and are the only entries repair or
@@ -155,11 +157,9 @@ uninstall may change. Existing files are backed up with owner-only permissions
 before modification. Invalid JSON or configurations marked as managed/locked are
 reported as degraded/managed and are never overwritten. Project-level hooks and
 provider-specific trust prompts remain an explicit user/provider concern; the
-CLI does not silently modify project files or grant trust. Codex configuration merging and native ingestion are intentionally fail-closed:
-the current adapter reports `unsupported` / `unverified` and changes no files or
-payloads because no authoritative Codex CLI hook schema and trust contract have
-been verified. Codex support must not be enabled by guessing a config format;
-this remains the explicit WL-045 follow-up.
+CLI does not silently modify project files or grant trust. Codex native ingestion
+is implemented against its command-hook schema, projects only bounded scalar
+metadata, and remains fail-closed until explicit local trust is recorded.
 
 The generic wrapper path (`waitlayer run -- <command>`) now also emits canonical
 `generic_wrapper` lifecycle events to the local bridge: process start, optional

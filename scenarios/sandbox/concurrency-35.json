@@ -1,0 +1,35 @@
+{
+  "id": "concurrency-same-user-two-devices",
+  "catalogId": 35,
+  "version": 1,
+  "persona": "multi_device_user",
+  "environment": "sandbox",
+  "seed": "waitlayer-concurrency-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/concurrency.runner.mjs", "two-devices"],
+    "timeoutMs": 10000
+  },
+  "actions": ["start_device_a", "start_device_b", "verify_device_scoping"],
+  "expected": {
+    "eventTypes": ["concurrency.two_devices"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

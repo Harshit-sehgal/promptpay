@@ -1,0 +1,35 @@
+{
+  "id": "identity-consent-ads-disabled",
+  "catalogId": 3,
+  "version": 1,
+  "persona": "ad_opt_out_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-identity-consent-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/identity-consent.runner.mjs", "ads-disabled"],
+    "timeoutMs": 5000
+  },
+  "actions": ["record_wait", "request_ad", "verify_ad_suppressed"],
+  "expected": {
+    "eventTypes": ["ads.suppressed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}
