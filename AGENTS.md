@@ -287,6 +287,17 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
    while 100% of authentication was failing. Health checks should exercise a
    representative path, not just liveness.
 
+**Measured but deliberately NOT changed (follow-up, not a blocker):** the API
+runtime image is **4.75 GB**, and `RUN chown -R node:node /app` is a single
+**1.18 GB** layer that duplicates every file already copied — it also dominates
+build time (~15–20 min on this host, by far the slowest step). Switching the
+`COPY --from=build` lines to `COPY --chown=node:node` and dropping the
+recursive `chown` would remove that layer and most of the build time. It is not
+done here because it changes file-ownership semantics for a running container
+immediately before handover, and the current image demonstrably works — the
+risk outweighs the saving until someone can verify the runtime end-to-end after
+the change. Registry bandwidth and deploy latency are the costs of leaving it.
+
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
 1. **Independent wait attestation operation:** a real provider/bridge whose
