@@ -24,7 +24,7 @@
 
 ## Current Status (snapshot 2026-08-07)
 
-- **89 migrations.** The sandbox XTS economy wave (7 logical commits,
+- **91 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of
   `25da3e1`: sandbox module + schema/migrations, extension non-cash placement
   path, web panels, VSIX packaging + attention promotion, scenario harness,
@@ -44,13 +44,52 @@
     unless `CI=true` or `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1`
     (`scripts/check-integration-consent.mjs`).
   - `.e2e/verify-key-alignment.mjs` compares SPKI fingerprints of root `.env`,
-    `apps/api/.env`, and `.e2e/*.pem` before e2e runs (root+api+.e2e all one
+    `apps/api/.env`, and `.e2e/*.pem` before e2e runs (root+api+**.e2e all one
     keypair, 6 sources agree); `.e2e/*.pem` regenerated to the authoritative
     `.env` keypair.
-- Worktree clean; 7 commits landed `34270c1` (hook), `d11bb14` (sandbox
-  economy), `25dce3c` (placement path), `6567a6b` (referral loop + maturity),
-  `79cc4b0` (vscode packaging), `453b3af` (web panels), `f27beb2`
-  (tools/ci/config), `7a82b6e` (gates).
+- **2026-08-07 completion pass (this session, HEAD `22c59b7`):**
+  - Opportunity-dedup matrix (`opportunity-dedup.spec.ts`, env kind `sandbox`)
+    found two real defects, fixed by migrations `20260807000000_sandbox_xts_campaign_currency`
+    (widens `chk_campaigns_currency_iso` to admit `XTS` on `campaigns` only —
+    settlement surfaces stay XTS-excluded) and
+    `20260807010000_sandbox_deposit_index_name` (renames the 63-byte-adjacent
+    explicit index to the canonical name). 7/7; the cross-tenant spec
+    (`b9fdb14`, 5/5) proves cross-user/cross-environment key isolation,
+    concurrent faucet dedup, retention, and role gates with zero cash rows.
+  - Attention ownership is now a time-bounded lease (ownerId + leasedUntil,
+    60s default, refreshed on observation, stale reclaim in `claimLease()`,
+    promotion skips disposed machines) so a crashed VS Code window can no
+    longer deadlock the promotion queue (`ab72971`, 12/12).
+  - Scenario runner hardening (`00ae5c1`): whole-POSIX-group teardown for
+    detached fixtures (SIGTERM→SIGKILL), 2 MiB per-stream output caps, privacy
+    canaries (PEM/JWT/Bearer/provider-webhook/GitHub/AWS patterns reported by
+    name only) fail-fast the trace; 13/13 runner + 18/18 audit/report/catalog/
+    coverage/repeat/triage tests.
+  - VSIX chain proven end-to-end (bundle → package vsix → unzip → manifest has
+    **zero** runtime deps → `verify-isolated-artifact` PASS). publish-vscode/
+    publish-cli workflows gate the packaged artifact (apiUrl default check +
+    isolated smoke) before upload, and release events now trigger publish.
+  - CI/Docker inputs verified: gitleaks gets `GITHUB_TOKEN`; the
+    `docker-build` CI job now boots the compiled API image and asserts
+    controller routes resolve over TCP (login 400, /auth/me 401, /docs 200
+    — non-404), scans the extracted web `.next` for signing secrets, and the
+    compose web service carries build-time `JWT_PUBLIC_KEY`/`NEXT_PUBLIC_*`
+    args + health checks.
+  - Migrations: **91**, both dev (:5432) and test (:5433) drift-free
+    (`migrate diff --exit-code` = no difference). Dev had a stale FAILED row
+    for `20260807010000` (its rename hotfix already existed from a prior
+    `db push`); healed with `migrate resolve --applied`.
+  - Fresh gates: typecheck 17/17, lint 11/11, API unit 1306/1306 + all 21
+    integration files, web 203, cli 123, shared 77, vscode 142+1 skip, build
+    11/11, e2e **86/86 in 1.4m** (throttle overrides added to `.e2e/run-e2e.sh`,
+    zero flakes), `audit-claims` 13/13, `scan-build-secrets` PASS (placeholder
+    detection now requires an assignment context, after web-env.ts's allowlist
+    literal made every bundle fail), `audit-dependencies` clean, `pnpm audit
+    --prod` clean.
+- Worktree clean; commits landed this session: `b9fdb14` (cross-tenant spec),
+  `eb9e6d8` (dedup matrix + 2 migrations), `ab72971` (attention lease),
+  `00ae5c1` (scenario harness), `e8e476f` (scan fix + const), `22c59b7`
+  (e2e throttle).
 
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
