@@ -2,6 +2,11 @@
 set -euo pipefail
 cd /home/harshit/Documents/Work/Money/promptpay
 
+# E2E auth collapses when root .env and apps/api/.env hold different JWT
+# keypairs (AGENTS.md 2026-08-02): the BFF issues tokens signed by one key,
+# middleware verifies with the other. Fail early instead of 26 timeout flake.
+node .e2e/verify-key-alignment.mjs
+
 # Clean up any stale servers from previous runs
 fuser -k 3000/tcp 4002/tcp 2>/dev/null || true
 sleep 1
