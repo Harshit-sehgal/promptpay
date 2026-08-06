@@ -38,8 +38,8 @@ jobs:
         run: pnpm --filter waitlayer-vscode build
       - name: Package VSIX
         run: |
-          mkdir -p ../../artifacts/vscode
-          pnpm exec vsce package --no-dependencies --out ../../artifacts/vscode/waitlayer-vscode.vsix
+          mkdir -p "$GITHUB_WORKSPACE/artifacts/vscode"
+          pnpm run package:vsix -- "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
         working-directory: apps/vscode-extension
       - name: Smoke test VSIX metadata
         run: |
@@ -50,6 +50,7 @@ jobs:
           cp /tmp/waitlayer-vsix/extension/package.json /tmp/waitlayer-vscode-package.json
           node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
           node scripts/verify-vsix-artifact.cjs /tmp/waitlayer-vsix/extension
+          node apps/vscode-extension/scripts/verify-isolated-artifact.cjs /tmp/waitlayer-vsix/extension
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

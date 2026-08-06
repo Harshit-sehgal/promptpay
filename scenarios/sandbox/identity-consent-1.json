@@ -1,0 +1,35 @@
+{
+  "id": "identity-consent-signup-default",
+  "catalogId": 1,
+  "version": 1,
+  "persona": "new_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-identity-consent-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/identity-consent.runner.mjs", "signup-default"],
+    "timeoutMs": 10000
+  },
+  "actions": ["signup", "create_default_settings", "verify_telemetry_disabled"],
+  "expected": {
+    "eventTypes": ["signup.completed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["password", "passwordHash", "prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

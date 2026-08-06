@@ -6,12 +6,14 @@ packages:
 overrides:
   # Security floors for transitive Next/Sentry and AJV dependency paths.
   # Keep these explicit until the direct packages raise their own lower bounds.
-  fast-uri: 3.1.4
+  fast-uri: 3.1.5
   multer: 2.2.0
-  postcss: 8.5.22
+  postcss: 8.5.23
   find-my-way: 9.7.0
   valibot: 1.4.2
-  'brace-expansion@^5.0.0': 5.0.8
+  undici: 7.29.0
+  'brace-expansion@^1.1.0': 1.1.18
+  'brace-expansion@^5.0.0': 5.0.9
   sharp: 0.35.0
 
 allowBuilds:

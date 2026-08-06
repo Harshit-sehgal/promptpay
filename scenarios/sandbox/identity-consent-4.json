@@ -1,0 +1,35 @@
+{
+  "id": "identity-consent-revoked-mid-session",
+  "catalogId": 4,
+  "version": 1,
+  "persona": "revoked_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-identity-consent-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/identity-consent.runner.mjs", "consent-revoked"],
+    "timeoutMs": 5000
+  },
+  "actions": ["start_session", "revoke_telemetry_consent", "request_ad", "verify_rejected"],
+  "expected": {
+    "eventTypes": ["consent.revoked"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

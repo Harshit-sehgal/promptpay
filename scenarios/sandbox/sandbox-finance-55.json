@@ -1,0 +1,35 @@
+{
+  "id": "sandbox-finance-reversal",
+  "catalogId": 55,
+  "version": 1,
+  "persona": "fraud_review_sandbox_operator",
+  "environment": "sandbox",
+  "seed": "waitlayer-finance-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/ledger-boundaries.runner.mjs", "reversal"],
+    "timeoutMs": 5000
+  },
+  "actions": ["identify_invalid_earning", "reverse_earning", "verify_compensation_rows"],
+  "expected": {
+    "eventTypes": ["finance.reversed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

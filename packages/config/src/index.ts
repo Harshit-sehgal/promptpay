@@ -164,6 +164,10 @@ const envSchema = z
     // must never boot with sandbox facilities enabled.
     WAITLAYER_ENVIRONMENT_KIND: z.enum(ENVIRONMENT_KINDS).default('development'),
     WAITLAYER_ENVIRONMENT_ID: z.string().min(1).max(128).default('local'),
+    // Operator-only bearer for resetting one isolated sandbox environment.
+    // It is intentionally optional at boot; the reset endpoint fails closed
+    // until an operator explicitly configures it in a test/sandbox deployment.
+    SANDBOX_RESET_TOKEN: z.string().min(32).max(256).optional(),
     ENABLE_STAGING_FAUCET: z.enum(['true', 'false']).default('false'),
 
     // Database
@@ -172,6 +176,11 @@ const envSchema = z
 
     // Redis
     REDIS_URL: z.string().optional(),
+    // Bounded socket connect timeout for the runtime-config Redis pub/sub
+    // clients. Fail fast (instead of retrying forever) when Redis is
+    // unreachable so API boot never hangs; the 30s config cache TTL remains
+    // the resilience fallback.
+    REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(50).max(30_000).default(2000),
 
     // API
     API_PORT: z.coerce.number().int().min(1).max(65_535).default(4002),

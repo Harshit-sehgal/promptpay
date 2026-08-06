@@ -266,6 +266,8 @@ jobs:
             kill $API_PID $WEB_PID 2>/dev/null || true
             rm -f /tmp/e2e_pids
           fi
+      - name: Build CLI artifact in the E2E job
+        run: pnpm --filter "waitlayer-cli..." build
       - name: Verify CLI bin artifacts exist
         run: pnpm --filter waitlayer-cli pack:check
 
@@ -301,7 +303,7 @@ jobs:
       - name: Package VS Code extension (no publish)
         run: |
           mkdir -p artifacts/vscode
-          pnpm --filter waitlayer-vscode exec vsce package --no-dependencies -o "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
+          pnpm --filter waitlayer-vscode package:vsix -- "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
       - name: Smoke test VSIX metadata
         run: |
           test -s artifacts/vscode/waitlayer-vscode.vsix
@@ -311,6 +313,7 @@ jobs:
           cp /tmp/waitlayer-vsix/extension/package.json /tmp/waitlayer-vscode-package.json
           node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
           node scripts/verify-vsix-artifact.cjs /tmp/waitlayer-vsix/extension
+          node apps/vscode-extension/scripts/verify-isolated-artifact.cjs /tmp/waitlayer-vsix/extension
 
   # Build the Docker images and prove the COMPILED artifacts actually serve
   # traffic. The integration suite only exercises the source AppModule via
@@ -581,6 +584,7 @@ jobs:
       - name: Secret scanning (gitleaks)
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
       - name: Filesystem vulnerability scan (trivy)
         uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0

@@ -17,6 +17,7 @@ Default shown where one exists.
 
 | `WAITLAYER_ENVIRONMENT_KIND` | opt | `development` | `development` \\| `test` \\| `sandbox` \\| `staging` \\| `production`; production requires `NODE_ENV=production`, and sandbox is never production. |
 | `WAITLAYER_ENVIRONMENT_ID` | opt | `local` | Stable environment/run identifier persisted in the database marker. |
+| `SANDBOX_RESET_TOKEN` | opt | — | 32–256 character operator bearer required by the admin-only sandbox reset endpoint; accepted only by `test`/`sandbox` deployments and never a production credential. |
 | `NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND` | opt | `development` | Web build identity; valid values are `development`, `test`, `sandbox`, `staging`, and `production`; `sandbox` renders a persistent “Test credits only — no cash value” banner. Production deployments must set this explicitly to `production`. |
 | `ENABLE_STAGING_FAUCET` | opt | `false` | Test faucet toggle; accepted only in `test`, `sandbox`, or `staging`. |
 
@@ -29,9 +30,10 @@ Default shown where one exists.
 
 ## Redis
 
-| Variable    | Req  | Default | Purpose                                                                                   |
-| ----------- | ---- | ------- | ----------------------------------------------------------------------------------------- |
-| `REDIS_URL` | opt* | —       | Redis for distributed rate limiting + brute-force tracking. **Required in `production`.** |
+| Variable                   | Req  | Default | Purpose                                                                                                                                                     |
+| -------------------------- | ---- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REDIS_URL`                | opt* | —       | Redis for distributed rate limiting + brute-force tracking. **Required in `production`.**                                                                   |
+| `REDIS_CONNECT_TIMEOUT_MS` | opt  | `2000`  | Bounded Redis pub/sub connection timeout (50–30000 ms); API boot fails fast on an unreachable Redis client and retains the local config-cache TTL fallback. |
 
 \* `REDIS_URL` is optional in dev/test but **required in production** (the config
 `refine()` rejects a production boot without it).

@@ -11,16 +11,36 @@ if (!fs.existsSync(packagePath) || !fs.existsSync(entryPath)) {
 }
 
 const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-const runtimeDependencies = pkg.dependencies || {};
-const workspaceRuntimeRefs = Object.entries(runtimeDependencies).filter(([, version]) =>
-  String(version).startsWith('workspace:'),
+if (pkg.main !== './out/extension.js') {
+  throw new Error(`Packaged VSIX has unexpected main entry: ${String(pkg.main)}`);
+}
+const licenseFiles = ['LICENSE', 'LICENSE.txt'];
+if (
+  pkg.license !== 'SEE LICENSE IN LICENSE' ||
+  !licenseFiles.some((name) => fs.existsSync(path.join(extensionRoot, name)))
+) {
+  throw new Error('Packaged VSIX is missing the declared proprietary LICENSE file');
+}
+const dependencySections = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+];
+const workspaceRefs = dependencySections.flatMap((section) =>
+  Object.entries(pkg[section] || {})
+    .filter(([, version]) => String(version).startsWith('workspace:'))
+    .map(([name]) => `${section}.${name}`),
 );
-if (workspaceRuntimeRefs.length > 0) {
+if (workspaceRefs.length > 0) {
   throw new Error(
-    `Packaged VSIX retains workspace runtime dependencies: ${workspaceRuntimeRefs
-      .map(([name]) => name)
-      .join(', ')}`,
+    `Packaged VSIX retains workspace dependency references: ${workspaceRefs.join(', ')}`,
   );
+}
+for (const section of dependencySections) {
+  if (pkg[section] && Object.keys(pkg[section]).length > 0) {
+    throw new Error(`Packaged VSIX must be self-contained; found ${section}`);
+  }
 }
 
 const originalLoad = Module._load;

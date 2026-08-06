@@ -1,0 +1,41 @@
+{
+  "id": "vscode-background-return",
+  "catalogId": 22,
+  "version": 1,
+  "persona": "vscode_returning_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-vscode-attention-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "medium",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/vscode-attention.runner.mjs", "background-return"],
+    "timeoutMs": 10000
+  },
+  "actions": [
+    "focus_window",
+    "show_surface",
+    "background_window",
+    "return_window",
+    "verify_attention_owner"
+  ],
+  "expected": {
+    "eventTypes": ["vscode.background_return"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

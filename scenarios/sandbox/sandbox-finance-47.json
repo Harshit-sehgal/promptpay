@@ -1,0 +1,35 @@
+{
+  "id": "sandbox-finance-cpm-split",
+  "catalogId": 47,
+  "version": 1,
+  "persona": "sandbox_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-finance-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/ledger-boundaries.runner.mjs", "split-cpm"],
+    "timeoutMs": 5000
+  },
+  "actions": ["calculate_cpm_split", "verify_conservation"],
+  "expected": {
+    "eventTypes": ["finance.cpm_split"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

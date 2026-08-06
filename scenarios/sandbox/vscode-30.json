@@ -1,0 +1,35 @@
+{
+  "id": "vscode-quiet-mode",
+  "catalogId": 30,
+  "version": 1,
+  "persona": "quiet_mode_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-vscode-detector-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/vscode-detector.runner.mjs", "quiet-hours"],
+    "timeoutMs": 10000
+  },
+  "actions": ["enable_quiet_mode", "evaluate_midnight_range", "verify_surface_suppressed"],
+  "expected": {
+    "eventTypes": ["vscode.quiet_mode"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

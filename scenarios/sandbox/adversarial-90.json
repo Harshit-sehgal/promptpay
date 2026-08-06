@@ -1,0 +1,35 @@
+{
+  "id": "adversarial-tampered-hook-event",
+  "catalogId": 90,
+  "version": 1,
+  "persona": "tampered_hook_attacker",
+  "environment": "sandbox",
+  "seed": "waitlayer-adversarial-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/cli-boundary.runner.mjs", "tampered-hook-event"],
+    "timeoutMs": 5000
+  },
+  "actions": ["submit_unknown_hook_event", "normalize_input", "verify_rejected"],
+  "expected": {
+    "eventTypes": ["hook.tampered_rejected"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

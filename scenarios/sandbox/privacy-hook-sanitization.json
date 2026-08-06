@@ -1,0 +1,44 @@
+{
+  "id": "privacy-hook-sanitization",
+  "catalogId": 71,
+  "version": 1,
+  "persona": "privacy_conscious_user",
+  "environment": "sandbox",
+  "seed": "waitlayer-privacy-hook-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/privacy-hook-sanitization.runner.mjs"],
+    "timeoutMs": 5000
+  },
+  "actions": ["receive_provider_hook", "sanitize_payload", "emit_canonical_event"],
+  "expected": {
+    "eventTypes": ["tool.started"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement"],
+    "fields": [
+      "prompt",
+      "command",
+      "tool_input",
+      "transcript_path",
+      "cwd",
+      "workspacePath",
+      "sourceCode",
+      "apiKey"
+    ]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

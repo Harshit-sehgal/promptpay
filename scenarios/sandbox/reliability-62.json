@@ -1,0 +1,35 @@
+{
+  "id": "reliability-redis-offline",
+  "catalogId": 62,
+  "version": 1,
+  "persona": "redis_outage_operator",
+  "environment": "sandbox",
+  "seed": "waitlayer-reliability-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/reliability-infrastructure.runner.mjs", "redis-offline"],
+    "timeoutMs": 5000
+  },
+  "actions": ["disconnect_redis", "initialize_runtime_config", "verify_ttl_fallback"],
+  "expected": {
+    "eventTypes": ["reliability.redis_offline"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

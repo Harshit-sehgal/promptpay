@@ -1,0 +1,35 @@
+{
+  "id": "advertising-category-block",
+  "catalogId": 40,
+  "version": 1,
+  "persona": "category_opt_out_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-advertising-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "high",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/advertising.runner.mjs", "category-block"],
+    "timeoutMs": 5000
+  },
+  "actions": ["set_blocked_category", "request_opportunity", "verify_not_served"],
+  "expected": {
+    "eventTypes": ["opportunity.category_blocked"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["placement.claimed", "production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

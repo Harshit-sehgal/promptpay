@@ -1,0 +1,35 @@
+{
+  "id": "privacy-user-path",
+  "catalogId": 73,
+  "version": 1,
+  "persona": "privacy_conscious_user",
+  "environment": "sandbox",
+  "seed": "waitlayer-privacy-path-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/privacy-adversarial.runner.mjs", "path"],
+    "timeoutMs": 5000
+  },
+  "actions": ["receive_path_bearing_hook", "sanitize_payload"],
+  "expected": {
+    "eventTypes": ["tool.failed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement"],
+    "fields": ["cwd", "workspacePath", "filePath", "sourceCode", "prompt", "output"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

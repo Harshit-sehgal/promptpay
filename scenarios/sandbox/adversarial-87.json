@@ -1,0 +1,35 @@
+{
+  "id": "adversarial-repeated-completion",
+  "catalogId": 87,
+  "version": 1,
+  "persona": "replay_attacker",
+  "environment": "sandbox",
+  "seed": "waitlayer-adversarial-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/concurrency.runner.mjs", "repeated-completion"],
+    "timeoutMs": 10000
+  },
+  "actions": ["complete_task", "replay_completion", "verify_duplicate_rejected"],
+  "expected": {
+    "eventTypes": ["adversarial.repeated_completion"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

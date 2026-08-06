@@ -1,0 +1,35 @@
+{
+  "id": "reliability-out-of-order-events",
+  "catalogId": 66,
+  "version": 1,
+  "persona": "reordered_client",
+  "environment": "sandbox",
+  "seed": "waitlayer-reliability-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/concurrency.runner.mjs", "out-of-order"],
+    "timeoutMs": 10000
+  },
+  "actions": ["record_terminal_event", "replay_stale_event", "verify_terminal_state_retained"],
+  "expected": {
+    "eventTypes": ["reliability.out_of_order_rejected"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement", "payout_paid"],
+    "fields": ["prompt", "output", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

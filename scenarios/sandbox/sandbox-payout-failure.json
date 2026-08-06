@@ -1,0 +1,35 @@
+{
+  "id": "sandbox-payout-failure",
+  "catalogId": 57,
+  "version": 1,
+  "persona": "sandbox_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-sandbox-payout-failed-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/sandbox-finance.runner.mjs", "payout-failed"],
+    "timeoutMs": 5000
+  },
+  "actions": ["simulate_failed_payout", "verify_refund_entry", "verify_balance_restored"],
+  "expected": {
+    "eventTypes": ["sandbox.payout.failed"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement"],
+    "fields": ["prompt", "output", "cwd", "workspacePath", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}

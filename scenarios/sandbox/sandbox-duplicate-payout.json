@@ -1,0 +1,35 @@
+{
+  "id": "sandbox-duplicate-payout",
+  "catalogId": 59,
+  "version": 1,
+  "persona": "sandbox_developer",
+  "environment": "sandbox",
+  "seed": "waitlayer-sandbox-payout-duplicate-v1",
+  "reporting": {
+    "deterministic": true,
+    "severity": "critical",
+    "reproductionConfidence": 1,
+    "evidenceArtifacts": ["scenario-report.json"]
+  },
+  "runner": {
+    "command": "node",
+    "args": ["scenarios/sandbox/sandbox-finance.runner.mjs", "payout-duplicate_request"],
+    "timeoutMs": 5000
+  },
+  "actions": ["submit_payout", "replay_same_idempotency_key", "verify_single_debit"],
+  "expected": {
+    "eventTypes": ["sandbox.payout.duplicate_request"],
+    "placementTypes": [],
+    "financialMode": "sandbox",
+    "hasCashValue": false
+  },
+  "forbidden": {
+    "eventTypes": ["production_settlement"],
+    "fields": ["prompt", "output", "cwd", "workspacePath", "sourceCode", "providerSecret"]
+  },
+  "tolerances": {
+    "duplicateCanonicalEvents": 0,
+    "missingExpectedEventTypes": 0,
+    "forbiddenMatches": 0
+  }
+}
