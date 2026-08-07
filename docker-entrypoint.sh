@@ -16,7 +16,18 @@
 
 set -e
 
+# Timestamped phase markers. A container that is slow to become healthy gives
+# an operator nothing to go on otherwise: `docker compose ps` says
+# "health: starting" and the log is silent until Nest prints its first line.
+# Knowing whether the time went to waiting for Postgres, to migrating, or to
+# the app itself is the difference between a two-minute diagnosis and a
+# guess — and this cold-start path is exactly where a deploy stalls.
+phase() {
+  echo "[entrypoint $(date -u '+%H:%M:%S')] $*"
+}
+
 # 1. Block until Postgres is reachable (reads DATABASE_URL from the environment).
+phase "waiting for postgres"
 node scripts/wait-for-postgres.mjs
 
 # 2. Apply migrations once. Idempotent + advisory-locked.
@@ -36,7 +47,9 @@ node scripts/wait-for-postgres.mjs
 #
 # Run in a subshell so the working directory change cannot leak into the exec
 # below — the app must still start from /app.
+phase "applying migrations"
 (cd packages/db && ./node_modules/.bin/prisma migrate deploy)
 
 # 3. Hand off to the main process as PID 1.
+phase "starting application"
 exec "$@"

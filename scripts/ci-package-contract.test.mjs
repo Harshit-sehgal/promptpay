@@ -220,3 +220,42 @@ test('prisma CLI is a PRODUCTION dependency, and the image does not reinstall it
     );
   }
 });
+
+test('the API image bakes in the Prisma schema engine instead of downloading it at boot', () => {
+  // `@prisma/engines` does not ship the ~22 MB `schema-engine-<platform>`
+  // binary in its tarball — its postinstall downloads it. The runtime stage
+  // installs with `--ignore-scripts`, so without an explicit fetch the binary
+  // is absent and Prisma pulls it lazily on first use. In a container that
+  // first use is `prisma migrate deploy` in the entrypoint, so EVERY container
+  // start downloaded 22 MB before the app could boot: cold start went from ~8s
+  // to 46s, one CI run never passed its healthcheck at all (272s of failing
+  // probes, then "dependency failed to start"), and an image built this way
+  // cannot start on a host with no egress to Prisma's CDN.
+  const dockerfile = read('Dockerfile');
+  const apiStage = dockerfile.split(/^FROM /m).find((st) => /^base AS api\b/.test(st));
+  assert.ok(apiStage, 'expected an api runtime stage');
+
+  const installIndex = apiStage.search(/^RUN[^\n]*pnpm install --prod/m);
+  const ensureIndex = apiStage.search(/^RUN[^\n]*ensure-prisma-engines\.mjs/m);
+  assert.ok(
+    installIndex !== -1,
+    'the api stage must still do a production-only install',
+  );
+  assert.ok(
+    ensureIndex !== -1,
+    'the api stage must run scripts/ensure-prisma-engines.mjs so the engine is in the image',
+  );
+  assert.ok(
+    ensureIndex > installIndex,
+    'the engine fetch must run AFTER the production install, or it resolves nothing',
+  );
+
+  // And the script itself must still fail closed. A version that logs a
+  // warning instead of exiting non-zero would let the defect ship silently.
+  const script = read('scripts/ensure-prisma-engines.mjs');
+  assert.match(
+    script,
+    /process\.exit\(1\)/,
+    'ensure-prisma-engines must fail the build when the engine is missing',
+  );
+});

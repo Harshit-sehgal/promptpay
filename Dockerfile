@@ -112,6 +112,18 @@ COPY --from=build /app/package.json ./
 # wired up; we regenerate the client explicitly below.
 RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 
+# `--ignore-scripts` also skipped @prisma/engines' postinstall, and that
+# postinstall is what DOWNLOADS the ~22 MB schema-engine binary — the npm
+# tarball does not contain it. Prisma then fetches it lazily on first use,
+# which in a container is `prisma migrate deploy` in the entrypoint: every
+# container start pulled 22 MB from Prisma's CDN before the app could boot.
+# Cold start went from ~8s to 46s, one run never passed its healthcheck at all
+# (272s of failing probes, then "dependency failed to start"), and an image
+# like that cannot start on a host without egress to that CDN.
+# Fetch it here, once, and fail the build if it is still missing.
+COPY --from=build /app/scripts/ensure-prisma-engines.mjs ./scripts/ensure-prisma-engines.mjs
+RUN node scripts/ensure-prisma-engines.mjs
+
 # Regenerate the Prisma client for the production dependency set (offline).
 # Required because `--ignore-scripts` skipped it above. Run from packages/db and
 # via its own bin: Prisma 7 discovers `prisma.config.ts` relative to the working

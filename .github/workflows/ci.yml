@@ -598,6 +598,31 @@ jobs:
           fi
           echo "GET /api/v1/docs resolved over TCP with expected status 200"
 
+          # Everything above probes the API from the HOST through the published
+          # port. The container's own healthcheck is a DIFFERENT code path — it
+          # runs `wget` inside the container — and nothing in this step has ever
+          # evaluated it. That gap is not academic: the next step's
+          # `depends_on: api: service_healthy` failed with "container
+          # waitlayer-api-1 is unhealthy" for 272s while this step had just
+          # proven the same image serves 200 on /health/ready in 46s.
+          # The documented production cold start is `docker compose up -d --wait`,
+          # which depends entirely on this probe, so assert it here where the
+          # API is already known-good and the failure is unambiguous.
+          echo "───────── container healthcheck (the probe compose orchestrates on) ─────────"
+          if ! docker compose -f docker-compose.yml exec -T api \
+              wget --no-verbose --tries=1 --spider http://localhost:4002/api/v1/health/ready; then
+            echo "The API serves over the published port but its OWN healthcheck command fails."
+            echo "───────── health probe history ─────────"
+            docker inspect --format '{{json .State.Health}}' waitlayer-api-1 || true
+            echo "───────── wget present? ─────────"
+            docker compose -f docker-compose.yml exec -T api sh -c 'command -v wget; wget --version 2>&1 | head -1' || true
+            echo "───────── listening sockets ─────────"
+            docker compose -f docker-compose.yml exec -T api sh -c 'cat /proc/net/tcp /proc/net/tcp6 2>/dev/null' || true
+            exit 1
+          fi
+          echo "Container healthcheck command succeeded from inside the container"
+          docker inspect --format 'health={{.State.Health.Status}} failing={{.State.Health.FailingStreak}}' waitlayer-api-1 || true
+
           docker compose -f docker-compose.yml down -v
         env:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
@@ -608,7 +633,21 @@ jobs:
       # or static-generation issues).
       - name: Build + boot web and verify it serves over TCP
         run: |
-          docker compose -f docker-compose.yml up -d web
+          # `up -d web` waits on `depends_on: api: service_healthy`, so it can
+          # fail BEFORE the readiness loop below ever runs — the diagnostics
+          # further down never fired and the only output was
+          # "dependency failed to start: container waitlayer-api-1 is unhealthy",
+          # with no indication of why. Capture the api's health probe output and
+          # logs at the point of failure.
+          if ! docker compose -f docker-compose.yml up -d web; then
+            echo "───────── compose up failed ─────────"
+            docker compose -f docker-compose.yml ps || true
+            echo "───────── api health probe history ─────────"
+            docker inspect --format '{{json .State.Health}}' waitlayer-api-1 2>/dev/null || true
+            echo "───────── api logs ─────────"
+            docker compose -f docker-compose.yml logs --no-color --tail 200 api || true
+            exit 1
+          fi
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:3000; then
               echo "Web healthy over TCP"; break

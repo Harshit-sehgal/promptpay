@@ -575,6 +575,48 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
+## Resolved 2026-08-08 (sixth pass) — A-106, the image that could not boot offline
+
+**A-106 — the runtime image downloaded a 22 MB Prisma binary on every container
+start.** `@prisma/engines` does not ship the `schema-engine-<platform>` binary in
+its npm tarball (`files: ["dist","download","scripts"]`); its `postinstall`
+fetches it. The api runtime stage installs with `--ignore-scripts`, so the
+binary was simply absent from the image, and Prisma fetched it lazily on first
+use — which in a container is `prisma migrate deploy` in the entrypoint.
+
+Consequences, all measured rather than reasoned about:
+
+- Cold start went from **10.5s** (`dbeec08`, container Started → Healthy) to
+  **46s** (`b3f95fb`, same measurement), and on the next step of the same run
+  the container never became healthy at all: **272s of failing probes**, then
+  `dependency failed to start: container waitlayer-api-1 is unhealthy`.
+- **An image built this way cannot start on a host with no egress to Prisma's
+  CDN** — an ordinary production posture. That is strictly worse than the HIGH
+  CVE the change was fixing.
+
+Proven locally, not inferred: hiding the local `schema-engine-debian-openssl-3.0.x`
+and running `prisma migrate status` silently re-downloaded all 22 MB before doing
+anything. `scripts/ensure-prisma-engines.mjs` now fetches it once at build time
+and **fails the build** if it is still missing; both branches were exercised
+locally. A contract test asserts the fetch exists, runs _after_ the production
+install, and still exits non-zero on failure — all three mutations were caught.
+
+**How this hid, and the lesson.** The api boot step proved the API serves 200 on
+`/health/ready` **through the published port**. The container's own healthcheck
+is a different code path — `wget` inside the container — and _nothing in that
+step ever evaluated it_. So the step passed while the very probe the documented
+production cold start (`docker compose up -d --wait`) depends on was failing.
+The boot step now asserts the in-container healthcheck directly, where the API
+is already known-good and the failure is unambiguous. `docker-entrypoint.sh` also
+prints timestamped phase markers (waiting for postgres / applying migrations /
+starting application), because a slow cold start previously produced a silent
+log and `health: starting` with nothing to diagnose from.
+
+Two smaller pipeline fixes came with it: `up -d web` fails on its
+`depends_on: service_healthy` **before** the readiness loop, so the existing
+diagnostics never fired and the only output was the one-line "is unhealthy" —
+it now dumps the health-probe history and api logs at the point of failure.
+
 ## Resolved 2026-08-07 (fifth pass) — CI green, plus two self-audited gaps
 
 **CI on `main` is green for the first time: 12/12 jobs at `dbeec08`**, including
