@@ -130,6 +130,21 @@ jobs:
         run: |
           PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
           PUBLIC_KEY=$(printf '%s\n' "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          # Mask BEFORE the value can reach a log. GitHub does not auto-mask
+          # values written to GITHUB_ENV, and it prints every subsequent step's
+          # `env:` block — so this ephemeral private key was appearing in
+          # plaintext across several jobs. Multi-line secrets must be masked
+          # line by line. Only the base64 body is masked; the `-----BEGIN…`
+          # delimiters are public constants and masking them would redact
+          # unrelated log lines.
+          while IFS= read -r line; do
+            case "$line" in
+              -----*) ;;
+              *) [ "${#line}" -gt 20 ] && echo "::add-mask::$line" ;;
+            esac
+          done <<EOF
+          $PRIVATE_KEY
+          EOF
           {
             echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
             printf '%s\n' "$PRIVATE_KEY"
@@ -202,6 +217,21 @@ jobs:
         run: |
           PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
           PUBLIC_KEY=$(printf '%s\n' "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          # Mask BEFORE the value can reach a log. GitHub does not auto-mask
+          # values written to GITHUB_ENV, and it prints every subsequent step's
+          # `env:` block — so this ephemeral private key was appearing in
+          # plaintext across several jobs. Multi-line secrets must be masked
+          # line by line. Only the base64 body is masked; the `-----BEGIN…`
+          # delimiters are public constants and masking them would redact
+          # unrelated log lines.
+          while IFS= read -r line; do
+            case "$line" in
+              -----*) ;;
+              *) [ "${#line}" -gt 20 ] && echo "::add-mask::$line" ;;
+            esac
+          done <<EOF
+          $PRIVATE_KEY
+          EOF
           {
             echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
             printf '%s\n' "$PRIVATE_KEY"
@@ -423,6 +453,21 @@ jobs:
         run: |
           PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
           PUBLIC_KEY=$(printf '%s\n' "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          # Mask BEFORE the value can reach a log. GitHub does not auto-mask
+          # values written to GITHUB_ENV, and it prints every subsequent step's
+          # `env:` block — so this ephemeral private key was appearing in
+          # plaintext across several jobs. Multi-line secrets must be masked
+          # line by line. Only the base64 body is masked; the `-----BEGIN…`
+          # delimiters are public constants and masking them would redact
+          # unrelated log lines.
+          while IFS= read -r line; do
+            case "$line" in
+              -----*) ;;
+              *) [ "${#line}" -gt 20 ] && echo "::add-mask::$line" ;;
+            esac
+          done <<EOF
+          $PRIVATE_KEY
+          EOF
           {
             echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
             printf '%s\n' "$PRIVATE_KEY"
@@ -611,6 +656,44 @@ jobs:
         env:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
 
+      # Scan the ARTEFACTS WE SHIP, not just the source tree. The `security` job
+      # runs `trivy fs` over the repo, which cannot see the base image, the OS
+      # packages, or anything `pnpm install --prod` pulled into the runtime
+      # layer — i.e. most of a container's real attack surface. `down -v` above
+      # removes containers, not images, so both are still present here.
+      #
+      # `ignore-unfixed: true` matches the existing filesystem-scan policy: fail
+      # only on vulnerabilities that actually have a fix available, so the gate
+      # stays actionable rather than permanently red on unfixable base-image CVEs.
+      - name: Resolve built image names
+        id: images
+        run: |
+          cfg=$(docker compose -f docker-compose.yml config --format json 2>/dev/null) || true
+          api=$(printf '%s' "$cfg" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).services.api.image||'')}catch{process.stdout.write('')}})")
+          web=$(printf '%s' "$cfg" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).services.web.image||'')}catch{process.stdout.write('')}})")
+          [ -n "$api" ] || api=$(docker compose -f docker-compose.yml config --images | grep -E '(^|/)waitlayer-api(:|$)' | head -1)
+          [ -n "$web" ] || web=$(docker compose -f docker-compose.yml config --images | grep -E '(^|/)waitlayer-web(:|$)' | head -1)
+          test -n "$api" && test -n "$web" || { echo "could not resolve built image names"; exit 1; }
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "scanning: $api and $web"
+      - name: Vulnerability scan — API runtime image (trivy)
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
+        with:
+          scan-type: 'image'
+          image-ref: ${{ steps.images.outputs.api }}
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+      - name: Vulnerability scan — web runtime image (trivy)
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
+        with:
+          scan-type: 'image'
+          image-ref: ${{ steps.images.outputs.web }}
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+
   # ── Backup & restore DR drill (mandatory priority) ──
   # Proves backups are demonstrably testable: seed the test DB, take a logical
   # dump, restore it into a FRESH database, apply migrations, and assert row
@@ -769,15 +852,32 @@ jobs:
         run: |
           openssl genrsa -out /tmp/ci-private.pem 2048 2>/dev/null
           openssl rsa -in /tmp/ci-private.pem -pubout -out /tmp/ci-public.pem 2>/dev/null
+          PRIV_ESC="$(awk '{printf "%s\\n", $0}' /tmp/ci-private.pem)"
+          PUB_ESC="$(awk '{printf "%s\\n", $0}' /tmp/ci-public.pem)"
+          JWT_SEC="$(openssl rand -base64 48 | tr -d '\n')"
+          TOTP_KEY="$(openssl rand -base64 48 | tr -d '\n')"
+          EMAILQ_SEC="$(openssl rand -hex 32)"
+          PAYOUT_ENC="$(openssl rand -base64 32 | tr -d '\n')"
+          PAYOUT_MAC="$(openssl rand -base64 32 | tr -d '\n')"
+          PRIVACY_KEY="$(openssl rand -hex 32)"
+          # Mask every generated secret before writing it to GITHUB_ENV (see the
+          # note on the multi-line block above). The escaped PEM is a single
+          # line, so one mask covers it. The PUBLIC key is deliberately not
+          # masked — it is public, and redacting it makes key-alignment
+          # failures unreadable.
+          for secret in "$PRIV_ESC" "$JWT_SEC" "$TOTP_KEY" "$EMAILQ_SEC" \
+                        "$PAYOUT_ENC" "$PAYOUT_MAC" "$PRIVACY_KEY"; do
+            echo "::add-mask::$secret"
+          done
           {
-            echo "JWT_PRIVATE_KEY=$(awk '{printf "%s\\n", $0}' /tmp/ci-private.pem)"
-            echo "JWT_PUBLIC_KEY=$(awk '{printf "%s\\n", $0}' /tmp/ci-public.pem)"
-            echo "JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
-            echo "TOTP_SECRET_ENCRYPTION_KEY=$(openssl rand -base64 48 | tr -d '\n')"
-            echo "EMAIL_QUEUE_SECRET=$(openssl rand -hex 32)"
-            echo "PAYOUT_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')"
-            echo "PAYOUT_HMAC_KEY=$(openssl rand -base64 32 | tr -d '\n')"
-            echo "PRIVACY_HASH_KEY=$(openssl rand -hex 32)"
+            echo "JWT_PRIVATE_KEY=$PRIV_ESC"
+            echo "JWT_PUBLIC_KEY=$PUB_ESC"
+            echo "JWT_SECRET=$JWT_SEC"
+            echo "TOTP_SECRET_ENCRYPTION_KEY=$TOTP_KEY"
+            echo "EMAIL_QUEUE_SECRET=$EMAILQ_SEC"
+            echo "PAYOUT_ENCRYPTION_KEY=$PAYOUT_ENC"
+            echo "PAYOUT_HMAC_KEY=$PAYOUT_MAC"
+            echo "PRIVACY_HASH_KEY=$PRIVACY_KEY"
           } >> "$GITHUB_ENV"
 
       - name: Assert the PEM really is in the escaped form
