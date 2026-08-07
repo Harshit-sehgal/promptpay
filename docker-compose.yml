@@ -150,7 +150,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      # The entrypoint runs `prisma migrate deploy` BEFORE Nest boots, and a
+      # cold database applies all 94 migrations first. `start_period` is the
+      # window Docker provides for exactly this — failures inside it do not
+      # count toward `retries`, so a slow first boot is not treated as a sick
+      # container. At 30s a fresh database reported the api as unhealthy and
+      # `depends_on: service_healthy` then failed the web container with
+      # "dependency failed to start", even though the API was migrating
+      # normally and became healthy moments later.
+      # This also matters in production: the documented cold-start path runs
+      # `docker compose up -d --wait` against an empty database.
+      start_period: 180s
 
   web:
     # See api.image: CI supplies a content-addressed image for release hosts.

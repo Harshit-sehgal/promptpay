@@ -133,7 +133,10 @@ ENV NODE_ENV=production
 # Without this the production image could never run migrations at all.
 ENV NODE_PATH=/usr/local/lib/node_modules
 EXPOSE 4002
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# 180s start period: the entrypoint applies all migrations before Nest boots,
+# and a cold database makes that the slowest part of the first start. Failures
+# inside start-period do not count toward --retries.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:4002/api/v1/health/ready || exit 1
 CMD ["sh", "/app/docker-entrypoint.sh", "node", "apps/api/dist/apps/api/src/main.js"]
 
