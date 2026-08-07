@@ -575,6 +575,59 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
+## Resolved 2026-08-07 (fifth pass) — CI green, plus two self-audited gaps
+
+**CI on `main` is green for the first time: 12/12 jobs at `dbeec08`**, including
+`docker-build` with both container-boot steps actually executing (API and web
+each built, booted, and served over TCP). Reaching that took five layered
+fixes, each hidden behind the previous one — see the fourth-pass section.
+
+Two further gaps were then found by reviewing the pipeline rather than by any
+failure:
+
+- **Ephemeral CI private keys were printed in plaintext in Actions logs.**
+  GitHub does not auto-mask values written to `GITHUB_ENV` and echoes every
+  step's `env:` block, so the per-run RS256 key appeared across the test, e2e,
+  docker-build and production-boot-smoke jobs. Disposable, but it violates this
+  repo's own no-secrets-in-logs rule. All four generation blocks now
+  `::add-mask::` before writing; multi-line secrets are masked line by line
+  (the only form GitHub honours), and only the base64 body — masking the
+  `-----BEGIN…` delimiters would redact unrelated log lines. Public keys stay
+  unmasked so key-alignment failures remain readable. Verified locally: 26 mask
+  directives from a real key, no heredoc whitespace corruption, every masked
+  line matching a key line exactly, and the escaped form byte-identical so the
+  A-097 assertion is unaffected.
+
+- **Nothing scanned the runtime images.** `trivy fs` covers the source tree,
+  which cannot see the base image, OS packages, or anything
+  `pnpm install --prod` pulled into the runtime layer. Both images are now
+  scanned as release gates in `docker-build`, where they already exist
+  (`down -v` removes containers, not images), with `ignore-unfixed: true` to
+  match the existing filesystem-scan policy. **These two scans have never
+  executed** — Trivy's DB download is blocked in this environment. If the first
+  run is red the findings are real and have fixes available by definition; do
+  not reach for the severity threshold.
+
+**Double spending is now proven, not just structurally prevented.**
+`payout_allocations` carries `@@unique([earningsEntryId])`, so Postgres makes it
+impossible for one earnings entry to fund two payouts — but nothing checked
+whether the LOSER of that race gets a clean refusal or a raw constraint
+violation surfacing as a 500 (which reads as a platform fault and invites a
+retry). `payout-double-execution.spec.ts` now races two requests with DISTINCT
+idempotency keys against one entry — genuinely different from
+`payout-idempotency-race`, which races the same key and is replay safety. Result:
+exactly one 201, a sub-500 refusal, one allocation row, one payout request.
+
+**Gap sweeps that came back clean** (recorded so they are not re-run blindly):
+every one of the 13 cron classes is registered in a module (the ad-opportunity
+expiry cron was the only orphan, restored in the fourth pass); no composite
+index has columns unreferenced in TypeScript; no `package.json` script points at
+a missing file; every `|| true` remaining in CI is cleanup, diagnostics, or a
+documented fallback — none masks an assertion; all 59 distinct API paths the web
+calls are covered by the BFF proxy allowlist (`/api/platform-health` is a local
+Next route handler, not proxied); and `runtime-config-redis-propagation` really
+does run in CI, which sets `REDIS_URL`.
+
 ## Resolved 2026-08-07 (fourth pass) — the CI-only defect class
 
 The first pass of this session verified everything locally and reported green.
