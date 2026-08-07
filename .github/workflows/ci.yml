@@ -498,11 +498,18 @@ jobs:
       - name: Build + boot API and verify it serves over TCP
         run: |
           docker compose -f docker-compose.yml up -d api postgres redis
-          for i in $(seq 1 30); do
+          # 90 x 2s = 180s. The old 60s budget was not enough for a COLD start:
+          # the entrypoint applies all 94 migrations to an empty database before
+          # Nest boots. This is a timing budget, not an assertion — the check
+          # still requires the container to become ready and serve. Observed
+          # failing at "Up 58 seconds (health: starting)" with
+          # "All migrations have been successfully applied" in the log, while a
+          # rerun against an already-migrated volume passed.
+          for i in $(seq 1 90); do
             if curl -fsS http://localhost:4002/api/v1/health/ready; then
               echo "API healthy over TCP"; break
             fi
-            if [ "$i" -eq 30 ]; then
+            if [ "$i" -eq 90 ]; then
               echo "API container did not become ready within timeout"
               # Without this the failure is 30 identical curl errors and no
               # cause. The container's own logs are the only evidence of why it
