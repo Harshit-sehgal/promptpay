@@ -575,6 +575,51 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
+## Branch state (2026-08-07, fourth pass)
+
+`integration/agent-beta` is the live line. Checked every branch rather than
+assuming:
+
+- **`main` had ZERO commits not already in `integration/agent-beta`**, so the
+  merge is a clean fast-forward — main becomes exactly the tree verified here,
+  with no merge commit and no possibility of a different result.
+- `agent/harden-production-launch-config` and `autoresearch/session-20260710`:
+  0 commits not in beta. Fully absorbed; safe to delete.
+- `agent/complete-hardening-and-cleanup`: 1 commit not in beta (`ac3b80e`), but
+  that is the ORIGINAL squashed form of the sandbox XTS wave, which was
+  re-landed as seven separate commits. Its tree is ~17k lines behind beta.
+  Only 11 files exist there and not on beta, and all but one are correct
+  removals:
+  - `docs/legal/*.md` — deliberately moved into the component tree by A-087.
+  - `apps/web/src/lib/payout-providers.ts` — deliberately replaced by runtime
+    readiness (`payout-readiness.ts`).
+  - `apps/vscode-extension/src/quiet-hours.ts` — a 6-line pure helper that is
+    unreferenced even on its own branch. Dead code; the real quiet-hours logic
+    lives in `apps/api/src/extension/quiet-hours.ts`.
+  - `extension-ad-sandbox-placement.spec.ts` — present on beta as
+    `extension-ad.sandbox-placement.spec.ts` (renamed, not lost).
+  - `apps/cli/src/commands/sandbox.ts` — a genuinely absent sandbox-only CLI
+    command (faucet/deposit/payout simulation), gated on
+    `environmentKind` ∈ {sandbox,test} so it cannot run in production. Not
+    launch-blocking; recover it if the sandbox economy gets used.
+  - **`ad-opportunity-expiry.cron.ts` — genuinely lost, and restored.** See
+    below.
+
+**The one real loss: the ad-opportunity expiry sweep.** The tell was in the
+schema, not the code: `AdOpportunity` carries `@@index([state, expiresAt])` on
+beta with **no query that uses it**. An index whose only consumer is missing is
+a strong signal something was dropped. Serving is unaffected (it filters
+`expiresAt > now`), so this was never a correctness bug — but nothing swept or
+purged `ad_opportunities` (`retention.cron`/`compliance.purge` do not cover it),
+so every unclaimed opportunity stayed `candidate` forever and the table grew
+without bound. Restored with its module registration and verified against the
+real schema — `rejection_reason` exists, `'expired'` is already a live state,
+and `EXPLAIN` shows the sweep is now an Index Scan on the previously dead index.
+
+**23 dependabot branches** are open and untouched by this pass. They are
+mechanical dependency bumps; several target actions already pinned to SHAs in
+these workflows and will conflict. Review them after the launch, not before.
+
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
 1. **Independent wait attestation operation:** a real provider/bridge whose
