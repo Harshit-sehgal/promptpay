@@ -22,6 +22,7 @@
     "bootstrap:env-marker": "node scripts/bootstrap-environment-marker.mjs",
     "deploy:preflight": "node scripts/deploy-preflight.mjs",
     "smoke:production": "bash scripts/production-boot-smoke.sh",
+    "e2e:production": "bash .e2e/run-e2e-production.sh",
     "econ": "node scripts/advertiser-economics.calc.mjs",
     "sandbox:seed": "node scripts/sandbox-seed.mjs",
     "sandbox:reset": "node scripts/sandbox-reset.mjs",

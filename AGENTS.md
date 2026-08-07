@@ -31,7 +31,7 @@
   and the gate fixes below. Typecheck 17/17 and lint 11/11 green on the landed
   tree; sandbox 18/18, placement 12/12, scenario suites 30/30, VSIX bundle +
   isolated smoke, web panels 4/4, referral/ledger 39/39, vscode 138/139.
-- Issues A-001…A-100 are resolved and gate-verified.
+- Issues A-001…A-101 are resolved and gate-verified.
 - **2026-08-07 launch audit.** A from-scratch launch-readiness audit disproved
   the previous claim that only external items remained ("no source edit can
   close them"). It found four source-fixable blockers no gate covered — two of
@@ -178,7 +178,7 @@ strings), enforces a minimum body length so an empty shell cannot pass, and
 checks the footer links resolve. **Prefer an assertion on rendered output over
 an assertion that a build succeeded.**
 
-## Resolved 2026-08-07 (second pass) — A-092…A-100, deployability
+## Resolved 2026-08-07 (second pass) — A-092…A-101, deployability
 
 Found by actually building the images and booting the stack in production mode
 rather than reasoning about it. **Nobody had ever done this**, and all three
@@ -362,6 +362,22 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
   - **Gate:** the production smoke now asserts both halves — that setup
     _requires_ a re-auth proof (the security control must not become permissive)
     **and** that it _succeeds_ with one (enrolment must remain possible). 21/21.
+
+- **A-101 — the browser suite now runs against a PRODUCTION-mode API**
+  (`pnpm e2e:production`, `.e2e/run-e2e-production.sh`). `.e2e/run-e2e.sh`
+  builds the web for production but exports `NODE_ENV=development` for the API,
+  so all 114 browser tests exercised a development API — the same split that
+  hid A-097. The new runner boots the API exactly as a deployment does
+  (production env kind, escaped PEMs, stamped marker, full config schema, mock
+  auth off, MFA step-up live) and **rebuilds the web against that run's public
+  key**, because the middleware and client bundle inline `JWT_PUBLIC_KEY` and
+  `NEXT_PUBLIC_*` at **build** time (A-083) — a runtime-only value would leave
+  middleware verifying with the wrong key. Isolated ports (4108/3100), its own
+  Redis database index, hermetic port cleanup.
+  **Result: 114/114 green against production**, including the authenticated
+  developer and advertiser journeys through the real BFF (cookie issuance,
+  identity-header HMAC signing, middleware JWT verification). No test changes
+  were needed — the suite already avoids the dev-only mock-Google button.
 
 **Cold-start deploy verified end-to-end (2026-08-07).** The full first-deploy
 sequence was run against an **empty database** using the shipped
