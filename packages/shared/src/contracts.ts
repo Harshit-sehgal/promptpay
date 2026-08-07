@@ -194,28 +194,64 @@ export const AdClickResponse = z.discriminatedUnion('clicked', [
 // Payout API Contracts
 // ══════════════════════════════════════════════════════════
 
-/** POST /api/v1/payout/method response — full PayoutAccount row shape */
-export const PayoutMethodResponse = z.object({
-  id: z.string(),
-  userId: z.string(),
-  provider: PayoutProviderSchema,
-  destination: z.string(),
-  currency: z.string(),
-  isVerified: z.boolean(),
-  isActive: z.boolean(),
-  // drift fix: PayoutAccount also carries a `isFrozen` /
-  // `initiationPayoutId` fence pair used by the payout-request lock (see
-  // `payout-request.trait.ts`). When a request is `processing`, the chosen
-  // account is fenced (`isFrozen=true`, `initiationPayoutId=request.id`) so
-  // a second concurrent request can't double-spend on the same destination.
-  // Expose them so the web payouts screen can render a "locked" badge and
-  // disable the form. Both are part of the persisted row from POST /method
-  // and GET /info, so the contract now matches what callers actually see.
-  isFrozen: z.boolean().optional(),
-  initiationPayoutId: z.string().nullable().optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
+/** POST /api/v1/payout/method response — explicit safe display shape. */
+export const PayoutMethodResponse = z
+  .object({
+    id: z.string(),
+    provider: PayoutProviderSchema,
+    // Masked display value only. The encrypted destination and its HMAC are
+    // persistence details and must never cross the API boundary.
+    destination: z.string(),
+    currency: z.string(),
+    isVerified: z.boolean(),
+    isActive: z.boolean(),
+    // `isFrozen` is the operator emergency stop. `initiationPayoutId` is a
+    // separate durable fence around an outbound provider call. Expose both so
+    // clients can distinguish an operator action from a payout in progress.
+    isFrozen: z.boolean().optional(),
+    initiationPayoutId: z.string().nullable().optional(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .strict();
+
+export const PayoutProviderReadinessStatus = z.enum([
+  'available',
+  'coming_soon',
+  'temporarily_disabled',
+  'unconfigured',
+  'unimplemented',
+]);
+
+export const PayoutProviderReadinessReasonCode = z.enum([
+  'launch_not_available',
+  'operator_disabled',
+  'provider_unconfigured',
+  'provider_unimplemented',
+]);
+
+/** GET /api/v1/payout/providers — runtime provider availability. */
+export const PayoutProviderReadinessSchema = z
+  .object({
+    provider: PayoutProviderSchema,
+    label: z.string().min(1),
+    available: z.boolean(),
+    status: PayoutProviderReadinessStatus,
+    reasonCode: PayoutProviderReadinessReasonCode.nullable(),
+    note: z.string(),
+    // Deliberately user-safe. Server configuration key names and credential
+    // details belong in operator logs/preflight output, not this public API.
+    reason: z.string().nullable(),
+  })
+  .strict();
+
+export const PayoutProviderReadinessResponse = z
+  .object({ providers: z.array(PayoutProviderReadinessSchema) })
+  .strict();
+
+export const RemovePayoutMethodResponse = z.object({ removed: z.literal(true) }).strict();
+
+export type PayoutProviderReadiness = z.infer<typeof PayoutProviderReadinessSchema>;
 
 /** POST /api/v1/payout/request response — full PayoutRequest row shape */
 export const PayoutAllocationResponse = z.object({

@@ -39,6 +39,8 @@ export interface PayoutProviderHandler {
     currency: string;
   }): Promise<{
     providerTxId: string;
+    /** Remote funding leg that must be reconciled before a failed payout is released. */
+    providerFundingTxId?: string;
     status: string;
   }>;
   checkStatus(

@@ -6,7 +6,7 @@ import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
 import { PayoutProviderHandler } from '../payout.service';
-import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
+import { PayoutProviderSafeFailure, PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 
 const WISE_MAX_MINOR_AMOUNT = 999_999_999n;
 
@@ -189,29 +189,46 @@ export class WisePayoutProvider implements PayoutProviderHandler {
 
     const email = params.destination?.trim();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      throw new Error('Invalid Wise payout destination: must be a recipient email.');
+      throw new PayoutProviderSafeFailure(
+        'Invalid Wise payout destination: must be a recipient email.',
+      );
     }
 
     const currency = params.currency.toUpperCase();
-    const safeAmountMinor = requireProviderSafeMinorAmount(
-      params.amountMinor,
-      'Wise',
-      WISE_MAX_MINOR_AMOUNT,
-    );
+    let safeAmountMinor: bigint;
+    try {
+      safeAmountMinor = requireProviderSafeMinorAmount(
+        params.amountMinor,
+        'Wise',
+        WISE_MAX_MINOR_AMOUNT,
+      );
+    } catch (err: unknown) {
+      throw new PayoutProviderSafeFailure(err instanceof Error ? err.message : String(err));
+    }
     const amount = Number(minorToMajorInputValue(safeAmountMinor, currency));
     if (majorToMinor(amount, currency) !== safeAmountMinor) {
-      throw new Error(
+      throw new PayoutProviderSafeFailure(
         `Refusing Wise payout amount ${safeAmountMinor}: conversion would lose minor-unit precision`,
       );
     }
 
-    const recipientId = await this.resolveRecipient(email, currency);
+    let recipientId: string;
+    let quoteUuid: string;
+    try {
+      // Recipient/quote creation cannot move money. If either operation fails,
+      // the local allocation can be released; only transfer submission below
+      // crosses the ambiguity boundary.
+      recipientId = await this.resolveRecipient(email, currency);
+      quoteUuid = await this.createQuote(recipientId, amount, currency);
+    } catch (err: unknown) {
+      throw new PayoutProviderSafeFailure(
+        `Wise pre-transfer setup failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     // Wise requires a quote before a transfer: the quote captures the rate and
     // the balance draw. A transfer sent without a valid `quoteUuid` is rejected
     // by Wise, so we create one first and fail closed if it cannot be created.
-    const quoteUuid = await this.createQuote(recipientId, amount, currency);
-
     const transferRes = await fetch(`${this.baseUrl}/v1/transfers`, {
       method: 'POST',
       headers: this.headers(),

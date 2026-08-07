@@ -27,7 +27,7 @@ import {
   RESERVED_PAYOUT_STATUSES,
 } from './payout.constants';
 import { PayoutMethodTrait } from './payout-method.trait';
-import { PayoutProviderUnsafeFailure } from './payout-provider.errors';
+import { PayoutProviderSafeFailure, PayoutProviderUnsafeFailure } from './payout-provider.errors';
 import { validatePayoutTransition } from './payout-state-machine';
 
 const DEFAULT_PROVIDER_CALL_TIMEOUT_MS = 15_000;
@@ -398,6 +398,11 @@ export class PayoutRequestTrait {
     if (account.isFrozen) {
       throw new ForbiddenException('Payout destination is frozen by operator');
     }
+    if (account.initiationPayoutId) {
+      throw new ConflictException(
+        'Payout destination has an active or ambiguous provider initiation; wait for reconciliation',
+      );
+    }
     // Payout destination verification is a money-movement safety gate: funds
     // must only leave to a destination an operator (or the provider) has
     // verified (ownership challenge, provider verification, etc.). An
@@ -444,6 +449,39 @@ export class PayoutRequestTrait {
     let committed: Prisma.PayoutRequestGetPayload<{ include: { allocations: true } }>;
     try {
       committed = await this.prisma.$transaction(async (tx) => {
+        // Serialize request creation with payout-method replacement/removal.
+        // Without this lock, a request can pass the outer account check just
+        // before another transaction deactivates the destination, leaving a
+        // newly reserved payout that can never be processed.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'payout-account:' + userId}))`;
+        const accountState = await tx.payoutAccount.findUnique({
+          where: { id: dto.payoutAccountId },
+          select: {
+            userId: true,
+            isActive: true,
+            isVerified: true,
+            isFrozen: true,
+            initiationPayoutId: true,
+            currency: true,
+          },
+        });
+        if (!accountState || accountState.userId !== userId) {
+          throw new BadRequestException('Invalid payout account');
+        }
+        if (!accountState.isActive || !accountState.isVerified || accountState.isFrozen) {
+          throw new ForbiddenException('Payout destination is no longer active and verified');
+        }
+        if (accountState.initiationPayoutId) {
+          throw new ConflictException(
+            'Payout destination has an active or ambiguous provider initiation; wait for reconciliation',
+          );
+        }
+        if ((accountState.currency ?? 'USD').toUpperCase() !== currency) {
+          throw new BadRequestException(
+            `Payout currency ${currency} does not match the payout account currency ${accountState.currency}`,
+          );
+        }
+
         // In-tx pre-check (safe: SELECT before any failed statement). Handles
         // the race where a concurrent request committed after the outside
         // pre-check but before this tx opened.
@@ -798,6 +836,38 @@ export class PayoutRequestTrait {
           );
         }
       }
+      // Validate and decrypt the destination before committing the
+      // approved->processing claim or creating an ambiguous-initiation
+      // placeholder. Any local key/AAD/HMAC/migration failure therefore rolls
+      // this transaction back to `approved`; no provider call has occurred.
+      const rawDest = pkt.payoutAccount.destination;
+      if (
+        process.env.NODE_ENV === 'production' &&
+        (!isEncryptedDestination(rawDest) ||
+          !pkt.payoutAccount.destinationHmac ||
+          !pkt.payoutAccount.encryptionMigratedAt)
+      ) {
+        throw new BadRequestException('Payout destination requires secure migration before use');
+      }
+      let decryptedDestination: string;
+      try {
+        decryptedDestination = isEncryptedDestination(rawDest)
+          ? decryptPayoutDestination(rawDest, {
+              accountId: pkt.payoutAccount.id,
+              userId: pkt.payoutAccount.userId,
+              provider: pkt.payoutAccount.provider,
+              currency: pkt.payoutAccount.currency,
+            })
+          : rawDest;
+      } catch {
+        throw new BadRequestException('Payout destination failed integrity validation');
+      }
+      if (
+        pkt.payoutAccount.destinationHmac &&
+        hmacPayoutDestination(decryptedDestination) !== pkt.payoutAccount.destinationHmac
+      ) {
+        throw new BadRequestException('Payout destination failed integrity validation');
+      }
       // Atomically serialize provider initiation against the operator freeze.
       // The payout id is a durable fence, not an expiring lease: if this worker
       // crashes after the claim commits, neither another payout nor a freeze can
@@ -846,46 +916,25 @@ export class PayoutRequestTrait {
       });
       return {
         ...pkt,
+        decryptedDestination,
         placeholderTransactionId: placeholder.id,
       };
     });
     let retainFenceForReconciliation = false;
     try {
       const expectedAmount = payout.approvedAmountMinor ?? payout.requestedAmountMinor;
-      // Provider I/O is fail-closed in production. A legacy/plaintext or
-      // integrity-incomplete destination is never forwarded merely because a
-      // row survived an older migration.
-      const rawDest = payout.payoutAccount.destination;
-      if (
-        process.env.NODE_ENV === 'production' &&
-        (!isEncryptedDestination(rawDest) ||
-          !payout.payoutAccount.destinationHmac ||
-          !payout.payoutAccount.encryptionMigratedAt)
-      ) {
-        throw new Error('payout_destination_migration_required');
-      }
-      const decryptedDestination = isEncryptedDestination(rawDest)
-        ? decryptPayoutDestination(rawDest, {
-            accountId: payout.payoutAccount.id,
-            userId: payout.payoutAccount.userId,
-            provider: payout.payoutAccount.provider,
-            currency: payout.payoutAccount.currency,
-          })
-        : rawDest;
-      if (
-        payout.payoutAccount.destinationHmac &&
-        hmacPayoutDestination(decryptedDestination) !== payout.payoutAccount.destinationHmac
-      ) {
-        throw new Error('payout_destination_migration_required');
-      }
-      let result: { providerTxId: string; status: string };
+      let result: {
+        providerTxId: string;
+        providerFundingTxId?: string;
+        status: string;
+      };
       try {
         result = await providerBreaker.call(`initiate:${payout.payoutAccount.provider}`, () =>
           withTimeout(
             () =>
               provider.initiate({
                 payoutRequestId: payout.id,
-                destination: decryptedDestination,
+                destination: payout.decryptedDestination,
                 amountMinor: expectedAmount,
                 currency: payout.currency,
               }),
@@ -900,7 +949,11 @@ export class PayoutRequestTrait {
               providerTxId: `initiate_pending_${payout.id}`,
               status: PayoutStatus.PROCESSING,
             },
-            data: { providerTxId: result.providerTxId, failureReason: null },
+            data: {
+              providerTxId: result.providerTxId,
+              providerFundingTxId: result.providerFundingTxId ?? null,
+              failureReason: null,
+            },
           });
           if (providerTxUpdate.count !== 1) {
             throw new Error(
@@ -936,6 +989,17 @@ export class PayoutRequestTrait {
           // remote outcome is known: no transfer was attempted. Close the local
           // claim as failed and release allocations/fence instead of creating a
           // permanent ambiguous-initiation incident.
+          await this.markPayoutFailed(payout.id, {
+            provider: payout.payoutAccount.provider,
+            providerTxId: `initiate_pending_${payout.id}`,
+            failureReason: err.message,
+          });
+          throw new BadRequestException(err.message);
+        }
+        if (err instanceof PayoutProviderSafeFailure) {
+          // The provider proves no remote money is outstanding (for example,
+          // Stripe confirmed the funding transfer reversal). This is the one
+          // exception class for which releasing allocations is safe.
           await this.markPayoutFailed(payout.id, {
             provider: payout.payoutAccount.provider,
             providerTxId: `initiate_pending_${payout.id}`,

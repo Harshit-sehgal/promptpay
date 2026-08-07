@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import Stripe from 'stripe';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -8,7 +9,7 @@ import {
   STRIPE_MAX_MINOR_AMOUNT,
 } from '../../common/utils/provider-amount';
 import type { PayoutProviderHandler } from '../payout.service';
-import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
+import { PayoutProviderSafeFailure, PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 
 /**
  * Stripe Connect payout provider.
@@ -117,7 +118,7 @@ export class StripeProvider {
    * (charges_enabled + payouts_enabled + details_submitted).
    */
   async retrieveConnectAccountVerification(accountId: string): Promise<{
-    chargesEnabled: boolean;
+    transfersActive: boolean;
     payoutsEnabled: boolean;
     detailsSubmitted: boolean;
   } | null> {
@@ -127,7 +128,7 @@ export class StripeProvider {
     }
     const account = await this.stripe.accounts.retrieve(accountId);
     return {
-      chargesEnabled: Boolean(account.charges_enabled),
+      transfersActive: account.capabilities?.transfers === 'active',
       payoutsEnabled: Boolean(account.payouts_enabled),
       detailsSubmitted: Boolean(account.details_submitted),
     };
@@ -294,15 +295,30 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
       );
     }
 
-    const account = await this.stripe.accounts.create({
-      type: 'express',
-      email: params.email,
-      metadata: {
-        waitlayerUserId: params.userId,
+    const environmentKind = this.config.get<string>('WAITLAYER_ENVIRONMENT_KIND') ?? 'development';
+    const environmentId = this.config.get<string>('WAITLAYER_ENVIRONMENT_ID') ?? 'local';
+    const idempotencyKey = `waitlayer-connect-${createHash('sha256')
+      .update(`${environmentKind}\0${environmentId}\0${params.userId}`)
+      .digest('hex')}`;
+    const account = await this.stripe.accounts.create(
+      {
+        type: 'express',
+        email: params.email,
+        capabilities: {
+          transfers: { requested: true },
+        },
+        metadata: {
+          waitlayerUserId: params.userId,
+          waitlayerEnvironmentKind: environmentKind,
+          waitlayerEnvironmentId: environmentId,
+        },
       },
-    });
+      { idempotencyKey },
+    );
 
-    this.logger.log(`Stripe Connect account created: user=${params.userId}, account=${account.id}`);
+    const userRef = privacyPseudonym(params.userId, 'stripe-connect-user').slice(0, 12);
+    const accountRef = privacyPseudonym(account.id, 'stripe-connect-account').slice(0, 12);
+    this.logger.log(`Stripe Connect account created: userRef=${userRef}, accountRef=${accountRef}`);
 
     return { accountId: account.id };
   }
@@ -329,7 +345,8 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
       type: 'account_onboarding',
     });
 
-    this.logger.log(`Stripe Connect onboarding link created: account=${params.accountId}`);
+    const accountRef = privacyPseudonym(params.accountId, 'stripe-connect-account').slice(0, 12);
+    this.logger.log(`Stripe Connect onboarding link created: accountRef=${accountRef}`);
 
     if (!link.url) {
       throw new Error('Stripe did not return an onboarding URL');
@@ -342,7 +359,7 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
     destination: string;
     amountMinor: bigint;
     currency: string;
-  }): Promise<{ providerTxId: string; status: string }> {
+  }): Promise<{ providerTxId: string; providerFundingTxId: string; status: string }> {
     if (!this.stripe) {
       throw new Error(
         'Stripe Connect payout provider is not configured (STRIPE_SECRET_KEY missing).',
@@ -351,15 +368,24 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
 
     const connectedAccount = params.destination?.trim();
     if (!connectedAccount || !connectedAccount.startsWith('acct_')) {
-      throw new Error(
+      throw new PayoutProviderSafeFailure(
         'Invalid Stripe Connect destination: a developer payout method must store a connected account id (acct_...).',
       );
     }
 
     // Stripe expects integer minor units (cents) and a lowercase currency code.
-    const amount = Number(
-      requireProviderSafeMinorAmount(params.amountMinor, 'Stripe Connect', STRIPE_MAX_MINOR_AMOUNT),
-    );
+    let amount: number;
+    try {
+      amount = Number(
+        requireProviderSafeMinorAmount(
+          params.amountMinor,
+          'Stripe Connect',
+          STRIPE_MAX_MINOR_AMOUNT,
+        ),
+      );
+    } catch (err: unknown) {
+      throw new PayoutProviderSafeFailure(err instanceof Error ? err.message : String(err));
+    }
 
     const transferGroup = `wl_payout_${params.payoutRequestId}`;
     const transfer = await this.stripe.transfers.create(
@@ -415,7 +441,7 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
         );
       }
 
-      throw new Error(
+      throw new PayoutProviderSafeFailure(
         `Stripe Connect payout creation failed after transfer ${transfer.id}; transfer was reversed.`,
       );
     }
@@ -428,7 +454,73 @@ export class StripeConnectPayoutProvider implements PayoutProviderHandler {
       `Stripe Connect payout initiated: request=${params.payoutRequestId}, accountRef=${accountRef}, amount=${amount} ${params.currency}, stripeTransfer=${transfer.id}, stripePayout=${payout.id}`,
     );
 
-    return { providerTxId: payout.id, status: payout.status ?? 'pending' };
+    return {
+      providerTxId: payout.id,
+      providerFundingTxId: transfer.id,
+      status: payout.status ?? 'pending',
+    };
+  }
+
+  /**
+   * Recover platform funds after a connected-account bank payout fails.
+   * A failed Stripe bank payout returns funds to the connected account, not
+   * the platform. Local earnings stay reserved until this transfer reversal is
+   * conclusively observed. The retrieve fallback makes retries safe even if a
+   * successful reversal response was lost or Stripe's idempotency window has
+   * elapsed.
+   */
+  async reverseFundingTransfer(params: {
+    payoutRequestId: string;
+    transferId: string;
+    amountMinor: bigint;
+  }): Promise<{ reversalId: string | null; alreadyReversed: boolean }> {
+    if (!this.stripe) {
+      throw new PayoutProviderUnsafeFailure(
+        'Stripe Connect is not configured; the funding transfer cannot be reconciled.',
+      );
+    }
+    if (!params.transferId.startsWith('tr_')) {
+      throw new PayoutProviderUnsafeFailure(
+        'Stripe funding transfer id is missing or invalid; allocations must remain reserved.',
+      );
+    }
+    const amount = Number(
+      requireProviderSafeMinorAmount(
+        params.amountMinor,
+        'Stripe Connect transfer reversal',
+        STRIPE_MAX_MINOR_AMOUNT,
+      ),
+    );
+    const reversalKey = `wl_payout_${params.payoutRequestId}_transfer_reversal`;
+    try {
+      const reversal = await this.stripe.transfers.createReversal(
+        params.transferId,
+        {
+          amount,
+          metadata: {
+            payoutRequestId: params.payoutRequestId,
+            provider: 'stripe_connect',
+            reason: 'connected_account_bank_payout_failed',
+          },
+        },
+        { idempotencyKey: reversalKey },
+      );
+      return { reversalId: reversal.id, alreadyReversed: false };
+    } catch (originalError: unknown) {
+      try {
+        const transfer = await this.stripe.transfers.retrieve(params.transferId);
+        if (transfer.reversed || transfer.amount_reversed >= amount) {
+          return { reversalId: null, alreadyReversed: true };
+        }
+      } catch {
+        // Preserve the original reversal failure below. A failed confirmation
+        // is never treated as proof that platform funds returned.
+      }
+      const reason = originalError instanceof Error ? originalError.message : String(originalError);
+      throw new PayoutProviderUnsafeFailure(
+        `Stripe transfer ${params.transferId} could not be reversed or confirmed reversed (${reason}); allocations remain reserved for reconciliation.`,
+      );
+    }
   }
 
   async checkStatus(

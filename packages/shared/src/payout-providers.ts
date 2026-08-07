@@ -9,10 +9,9 @@
 // provider -> 'available' | 'coming_soon' (NEXT_PUBLIC_WAITLAYER_PAYOUT_
 // PROVIDER_STATUS on the web, WAITLAYER_PAYOUT_PROVIDER_STATUS on the API).
 // Unknown provider keys and invalid status values are ignored so a typo in the
-// env var never silently breaks the payout selector or registration.
-//
-// This module is the single source of truth for that gate, shared by the web
-// UI and the API so both honour the same operator decision (A-030).
+// env var never silently breaks registration. The API exposes the resulting
+// runtime readiness to the web; the client deliberately has no independent
+// build-time override that could drift from server enforcement.
 
 export type PayoutProviderLaunchStatus = 'available' | 'coming_soon';
 

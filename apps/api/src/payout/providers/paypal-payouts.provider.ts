@@ -6,7 +6,7 @@ import { minorToMajorInputValue } from '@waitlayer/shared';
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
 import { PayoutProviderHandler } from '../payout.service';
-import { PayoutProviderUnsafeFailure } from '../payout-provider.errors';
+import { PayoutProviderSafeFailure, PayoutProviderUnsafeFailure } from '../payout-provider.errors';
 
 interface PayPalTokenResponse {
   access_token: string;
@@ -123,13 +123,27 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
 
     const email = params.destination?.trim();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      throw new Error('Invalid PayPal payout destination: must be a recipient email.');
+      throw new PayoutProviderSafeFailure(
+        'Invalid PayPal payout destination: must be a recipient email.',
+      );
     }
 
-    const safeAmountMinor = requireProviderSafeMinorAmount(params.amountMinor, 'PayPal Payouts');
+    let safeAmountMinor: bigint;
+    try {
+      safeAmountMinor = requireProviderSafeMinorAmount(params.amountMinor, 'PayPal Payouts');
+    } catch (err: unknown) {
+      throw new PayoutProviderSafeFailure(err instanceof Error ? err.message : String(err));
+    }
     const amount = minorToMajorInputValue(safeAmountMinor, params.currency);
 
-    const token = await this.getAccessToken();
+    let token: string;
+    try {
+      token = await this.getAccessToken();
+    } catch (err: unknown) {
+      throw new PayoutProviderSafeFailure(
+        `PayPal authentication failed before payout submission: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     const senderItemId = `wl_${params.payoutRequestId}`;
 
     const res = await fetch(`${this.baseUrl}/v1/payments/payouts`, {

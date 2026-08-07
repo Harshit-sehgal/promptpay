@@ -529,7 +529,7 @@ describe('PayoutCronService', () => {
     it('falls back to attempt+escalate when external-reference lookup returns processing (P1.10)', async () => {
       const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
       const mockRefProvider = {
-        checkStatus: vi.fn(),
+        checkStatus: vi.fn().mockResolvedValue({ status: 'processing' }),
         checkStatusByReference: vi.fn().mockResolvedValue({ status: 'processing' }),
       };
       mockPrisma.payoutRequest.findMany.mockResolvedValue([
@@ -546,11 +546,16 @@ describe('PayoutCronService', () => {
       mockPayoutService.getProvider.mockReturnValue(mockRefProvider);
 
       vi.mocked(service as any).pollProcessingPayouts.mockRestore();
-      await service.pollProcessingPayouts();
+      const result = await service.pollProcessingPayouts();
 
+      expect(result).toEqual({ checked: 1, completed: 0, failed: 0 });
       expect(mockRefProvider.checkStatusByReference).toHaveBeenCalledWith('req_ref_pending', {
         destination: 'dev@x.com',
       });
+      expect(mockRefProvider.checkStatus).toHaveBeenCalledWith(
+        'req_ref_pending',
+        expect.objectContaining({ externalReference: 'req_ref_pending' }),
+      );
       expect(mockPayoutService.markPayoutPaid).not.toHaveBeenCalled();
       expect(mockPayoutService.markPayoutFailed).not.toHaveBeenCalled();
       expect(mockAlerts.alertPayoutEscalation).toHaveBeenCalledWith(

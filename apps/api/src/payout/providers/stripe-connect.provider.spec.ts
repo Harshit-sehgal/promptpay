@@ -43,6 +43,11 @@ function fakeStripe(
         if (options.reversalFails) throw new Error('reversal failed');
         return { id: 'trr_test_123' };
       }),
+      retrieve: vi.fn(async (transferId: string) => ({
+        id: transferId,
+        reversed: false,
+        amount_reversed: 0,
+      })),
     },
     payouts: {
       create: vi.fn(async (args: any, opts: any) => {
@@ -98,6 +103,7 @@ describe('StripeConnectPayoutProvider', () => {
       });
 
       expect(res.providerTxId).toBe('po_test_123');
+      expect(res.providerFundingTxId).toBe('tr_test_123');
       const { calls, transferCalls } = (provider as any).stripe as ReturnType<typeof fakeStripe>;
       expect(transferCalls[0].args).toEqual({
         amount: 2500,
@@ -211,6 +217,75 @@ describe('StripeConnectPayoutProvider', () => {
           currency: 'USD',
         }),
       ).rejects.toThrow(/Do not release payout allocations/);
+    });
+
+    it('classifies a confirmed automatic reversal as safe to release locally', async () => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      (provider as any).stripe = fakeStripe({ payoutCreateFails: true });
+
+      await expect(
+        provider.initiate({
+          payoutRequestId: 'req_safe',
+          destination: 'acct_developer123',
+          amountMinor: 2500,
+          currency: 'USD',
+        }),
+      ).rejects.toMatchObject({ name: 'PayoutProviderSafeFailure' });
+    });
+  });
+
+  describe('reverseFundingTransfer', () => {
+    it('reverses exactly the persisted funding transfer with an idempotency key', async () => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      const stripe = fakeStripe();
+      (provider as any).stripe = stripe;
+
+      await expect(
+        provider.reverseFundingTransfer({
+          payoutRequestId: 'req_failed_bank',
+          transferId: 'tr_test_123',
+          amountMinor: 2500n,
+        }),
+      ).resolves.toEqual({ reversalId: 'trr_test_123', alreadyReversed: false });
+
+      expect(stripe.transfers.createReversal).toHaveBeenCalledWith(
+        'tr_test_123',
+        expect.objectContaining({ amount: 2500 }),
+        { idempotencyKey: 'wl_payout_req_failed_bank_transfer_reversal' },
+      );
+    });
+
+    it('accepts a retrieved fully-reversed transfer after an ambiguous retry response', async () => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      const stripe = fakeStripe({ reversalFails: true });
+      stripe.transfers.retrieve.mockResolvedValue({
+        id: 'tr_test_123',
+        reversed: true,
+        amount_reversed: 2500,
+      });
+      (provider as any).stripe = stripe;
+
+      await expect(
+        provider.reverseFundingTransfer({
+          payoutRequestId: 'req_retry',
+          transferId: 'tr_test_123',
+          amountMinor: 2500n,
+        }),
+      ).resolves.toEqual({ reversalId: null, alreadyReversed: true });
+    });
+
+    it('fails unsafe when a reversal cannot be made or confirmed', async () => {
+      const provider = makeProvider({ secretKey: 'sk_test_xxx' });
+      const stripe = fakeStripe({ reversalFails: true });
+      (provider as any).stripe = stripe;
+
+      await expect(
+        provider.reverseFundingTransfer({
+          payoutRequestId: 'req_unreconciled',
+          transferId: 'tr_test_123',
+          amountMinor: 2500n,
+        }),
+      ).rejects.toMatchObject({ name: 'PayoutProviderUnsafeFailure' });
     });
   });
 

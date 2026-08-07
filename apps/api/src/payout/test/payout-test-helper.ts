@@ -76,7 +76,7 @@ export function makePayoutService(
     {} as never,
     {} as never,
     runtimeConfig as never,
-    {} as never,
+    { checkSharedPayoutDestination: vi.fn().mockResolvedValue(undefined) } as never,
     alerts,
   );
   return { prisma, service, audit };

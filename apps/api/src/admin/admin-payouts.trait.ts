@@ -29,6 +29,51 @@ interface ReconciliationTelemetry {
 
 const FENCE_APPROVAL_EXPIRY_MINUTES = 60;
 
+function displayPayoutDestination(account: {
+  id: string;
+  userId: string;
+  provider: string;
+  destination: string;
+  currency: string;
+}): string {
+  return safeDisplayDestination(account.destination, {
+    accountId: account.id,
+    userId: account.userId,
+    provider: account.provider,
+    currency: account.currency,
+  });
+}
+
+function publicPayoutAccount(account: {
+  id: string;
+  userId: string;
+  provider: string;
+  destination: string;
+  currency: string;
+  isVerified: boolean;
+  isActive: boolean;
+  isFrozen: boolean;
+  initiationPayoutId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: { id: string; email: string } | null;
+}) {
+  return {
+    id: account.id,
+    userId: account.userId,
+    provider: account.provider,
+    destination: displayPayoutDestination(account),
+    currency: account.currency,
+    isVerified: account.isVerified,
+    isActive: account.isActive,
+    isFrozen: account.isFrozen,
+    initiationPayoutId: account.initiationPayoutId,
+    createdAt: account.createdAt,
+    updatedAt: account.updatedAt,
+    user: account.user ?? null,
+  };
+}
+
 export class AdminPayoutsTrait {
   declare prisma: PrismaService;
   declare audit: AuditService;
@@ -36,7 +81,7 @@ export class AdminPayoutsTrait {
   declare payoutService: PayoutService;
 
   async getPendingPayouts() {
-    return this.prisma.payoutRequest.findMany({
+    const payouts = await this.prisma.payoutRequest.findMany({
       where: { status: { in: ['requested', 'under_review', 'approved', 'processing'] } },
       include: {
         user: { select: { email: true, name: true, trustLevel: true } },
@@ -45,6 +90,10 @@ export class AdminPayoutsTrait {
       },
       orderBy: { createdAt: 'asc' },
     });
+    return payouts.map((payout) => ({
+      ...payout,
+      payoutAccount: publicPayoutAccount(payout.payoutAccount),
+    }));
   }
 
   async approvePayout(
@@ -254,7 +303,10 @@ export class AdminPayoutsTrait {
     const updated = await this.prisma.$transaction(async (tx) => {
       const row = await tx.payoutAccount.update({
         where: { id: payoutAccountId },
-        data: { isVerified: verified },
+        data: {
+          isVerified: verified,
+          verificationRejectedAt: verified ? null : new Date(),
+        },
       });
       await this.audit.logStrict(
         {
@@ -267,7 +319,7 @@ export class AdminPayoutsTrait {
           afterSnap: {
             isVerified: verified,
             provider: account.provider,
-            destination: safeDisplayDestination(account.destination),
+            destination: displayPayoutDestination(account),
             userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
@@ -276,7 +328,7 @@ export class AdminPayoutsTrait {
       );
       return row;
     });
-    return updated;
+    return publicPayoutAccount(updated);
   }
 
   /**
@@ -349,13 +401,13 @@ export class AdminPayoutsTrait {
             isFrozen: account.isFrozen,
             isVerified: account.isVerified,
             provider: account.provider,
-            destination: safeDisplayDestination(account.destination),
+            destination: displayPayoutDestination(account),
             userEmail: safeDisplayEmail(account.user?.email),
           },
           afterSnap: {
             isFrozen: true,
             provider: account.provider,
-            destination: safeDisplayDestination(account.destination),
+            destination: displayPayoutDestination(account),
             userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
@@ -373,7 +425,7 @@ export class AdminPayoutsTrait {
       void this.emailQueueService
         .sendPayoutAccountFrozenAlert(account.user.email, {
           provider: account.provider,
-          destination: safeDisplayDestination(account.destination),
+          destination: displayPayoutDestination(account),
           currency: account.currency ?? 'USD',
           actorRole: reviewerRole,
           reason: reason ?? undefined,
@@ -384,7 +436,7 @@ export class AdminPayoutsTrait {
           console.warn(`[AdminPayoutsTrait] payout-account-frozen email delivery failed: ${msg}`);
         });
     }
-    return updated;
+    return publicPayoutAccount(updated);
   }
 
   /**
@@ -494,7 +546,7 @@ export class AdminPayoutsTrait {
         ? (allocationSummaryById.get(account.initiationPayoutId) ?? null)
         : null;
       return {
-        ...account,
+        ...publicPayoutAccount(account),
         reconciliationAttempts: telemetry?.reconciliationAttempts ?? 0,
         lastReconciliationAt: telemetry?.lastReconciliationAt?.toISOString() ?? null,
         escalatedAt: telemetry?.escalatedAt?.toISOString() ?? null,
@@ -802,14 +854,14 @@ export class AdminPayoutsTrait {
           beforeSnap: {
             initiationPayoutId: account.initiationPayoutId,
             provider: account.provider,
-            destination: safeDisplayDestination(account.destination),
+            destination: displayPayoutDestination(account),
             userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
           afterSnap: {
             initiationPayoutId: null,
             provider: account.provider,
-            destination: safeDisplayDestination(account.destination),
+            destination: displayPayoutDestination(account),
             userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
             observedPayoutStatus: fencedPayout.status,
@@ -831,7 +883,7 @@ export class AdminPayoutsTrait {
       };
     });
     return {
-      ...updated.row,
+      ...publicPayoutAccount(updated.row),
       ...updated.telemetry,
     };
   }
@@ -950,13 +1002,13 @@ export class AdminPayoutsTrait {
             isFrozen: account.isFrozen,
             isVerified: account.isVerified,
             provider: account.provider,
-            destination: safeDisplayDestination(account.destination),
+            destination: displayPayoutDestination(account),
             userEmail: safeDisplayEmail(account.user?.email),
           },
           afterSnap: {
             isFrozen: false,
             provider: account.provider,
-            destination: safeDisplayDestination(account.destination),
+            destination: displayPayoutDestination(account),
             userEmail: safeDisplayEmail(account.user?.email),
             reason: reason ?? null,
           },
@@ -965,6 +1017,6 @@ export class AdminPayoutsTrait {
       );
       return row;
     });
-    return updated;
+    return publicPayoutAccount(updated);
   }
 }

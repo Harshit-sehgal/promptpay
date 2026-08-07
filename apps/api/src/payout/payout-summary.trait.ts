@@ -45,68 +45,63 @@ export class PayoutSummaryTrait {
         return fallback;
       }
     };
-    const [
-      accounts,
-      payoutHistory,
-      confirmedEarnings,
-      confirmedDebits,
-      allocatedRows,
-      userSecurity,
-    ] = await Promise.all([
-      safe(
-        () =>
-          this.prisma.payoutAccount.findMany({
-            where: { userId, isActive: true },
-            orderBy: { createdAt: 'desc' },
-          }),
-        'accounts',
-        [],
-      ),
-      safe(
-        () =>
-          this.prisma.payoutRequest.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'desc' },
-            take: 20,
-            include: { allocations: true },
-          }),
-        'payoutHistory',
-        [],
-      ),
-      safe(
-        () =>
-          this.prisma.earningsLedger.groupBy({
-            by: ['currency'],
-            where: { userId, status: 'confirmed', entryType: 'credit' },
-            _sum: { amountMinor: true },
-          }),
-        'confirmedEarnings',
-        [],
-      ),
-      safe(
-        () =>
-          this.prisma.earningsLedger.groupBy({
-            by: ['currency'],
-            where: { userId, status: 'confirmed', entryType: 'debit' },
-            _sum: { amountMinor: true },
-          }),
-        'confirmedDebits',
-        [],
-      ),
-      // NOTE: this slice is intentionally NOT wrapped in `safe(...)`.
-      // A transient failure here must THROW (rejecting the whole
-      // `Promise.all`, surfacing as a 500) rather than falling back to a
-      // value. Any silent fallback — `[]` OR `null` — would skip
-      // subtracting in-flight payouts and OVERstate the available balance
-      // (the only unsafe direction among the resilient fallbacks). Better a
-      // 500 than a lie. The authoritative `requestPayout` re-validates
-      // availability anyway.
-      this.prisma.$queryRaw<
-        Array<{
-          currency: string;
-          amountMinor: bigint | number | null;
-        }>
-      >`
+    const [accounts, confirmedEarnings, confirmedDebits, allocatedRows, userSecurity] =
+      await Promise.all([
+        safe(
+          () =>
+            this.prisma.payoutAccount.findMany({
+              where: { userId, isActive: true },
+              orderBy: { createdAt: 'desc' },
+              select: {
+                id: true,
+                provider: true,
+                destination: true,
+                currency: true,
+                isVerified: true,
+                isActive: true,
+                isFrozen: true,
+                initiationPayoutId: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            }),
+          'accounts',
+          [],
+        ),
+        safe(
+          () =>
+            this.prisma.earningsLedger.groupBy({
+              by: ['currency'],
+              where: { userId, status: 'confirmed', entryType: 'credit' },
+              _sum: { amountMinor: true },
+            }),
+          'confirmedEarnings',
+          [],
+        ),
+        safe(
+          () =>
+            this.prisma.earningsLedger.groupBy({
+              by: ['currency'],
+              where: { userId, status: 'confirmed', entryType: 'debit' },
+              _sum: { amountMinor: true },
+            }),
+          'confirmedDebits',
+          [],
+        ),
+        // NOTE: this slice is intentionally NOT wrapped in `safe(...)`.
+        // A transient failure here must THROW (rejecting the whole
+        // `Promise.all`, surfacing as a 500) rather than falling back to a
+        // value. Any silent fallback — `[]` OR `null` — would skip
+        // subtracting in-flight payouts and OVERstate the available balance
+        // (the only unsafe direction among the resilient fallbacks). Better a
+        // 500 than a lie. The authoritative `requestPayout` re-validates
+        // availability anyway.
+        this.prisma.$queryRaw<
+          Array<{
+            currency: string;
+            amountMinor: bigint | number | null;
+          }>
+        >`
         SELECT e."currency" AS "currency", COALESCE(SUM(pa."amountMinor"), 0)::bigint AS "amountMinor"
         FROM "payout_allocations" pa
         INNER JOIN "payout_requests" pr ON pr."id" = pa."payoutRequestId"
@@ -115,16 +110,16 @@ export class PayoutSummaryTrait {
           AND pr."status" IN (${Prisma.join(RESERVED_PAYOUT_STATUSES)})
         GROUP BY e."currency"
       `,
-      safe(
-        () =>
-          this.prisma.user.findUnique({
-            where: { id: userId },
-            select: { twoFactorEnabled: true },
-          }),
-        'userSecurity',
-        null,
-      ),
-    ]);
+        safe(
+          () =>
+            this.prisma.user.findUnique({
+              where: { id: userId },
+              select: { twoFactorEnabled: true },
+            }),
+          'userSecurity',
+          null,
+        ),
+      ]);
     const rawBalancesByCurrency: Record<string, bigint> = {};
     for (const row of confirmedEarnings) {
       this.addCurrencyAmount(rawBalancesByCurrency, row.currency, row._sum.amountMinor ?? 0n);
@@ -151,15 +146,27 @@ export class PayoutSummaryTrait {
     // misleading `currency: 'USD'` / `$0` balance.
     const currency = primaryCurrency(availableBalanceByCurrency);
     return {
-      payoutAccounts: (accounts as Array<Record<string, unknown>>).map((account) => ({
-        ...account,
-        destination: safeDisplayDestination(account.destination as string | null | undefined),
+      payoutAccounts: accounts.map((account) => ({
+        id: account.id,
+        provider: account.provider,
+        destination: safeDisplayDestination(account.destination, {
+          accountId: account.id,
+          userId,
+          provider: account.provider,
+          currency: account.currency,
+        }),
+        currency: account.currency,
+        isVerified: account.isVerified,
+        isActive: account.isActive,
+        isFrozen: account.isFrozen,
+        initiationPayoutId: account.initiationPayoutId,
+        createdAt: account.createdAt,
+        updatedAt: account.updatedAt,
       })),
       availableBalanceMinor: availableBalanceByCurrency[currency] ?? 0n,
       availableBalanceByCurrency,
       minimumThresholdMinor: BigInt(PAYOUT.MINIMUM_THRESHOLD_MINOR),
       currency,
-      payoutHistory,
       requiresTwoFactorForPayout: this.config.get<string>('PAYOUT_REQUIRE_2FA') === 'true',
       twoFactorEnabled: userSecurity?.twoFactorEnabled ?? false,
     };

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
+import { encryptPayoutDestination } from '../common/utils/payout-encryption';
 import { AdminService } from './admin.service';
 
 const mockPrisma: any = {
@@ -573,7 +574,7 @@ describe('AdminService', () => {
       expect(result.isVerified).toBe(true);
       expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
         where: { id: 'pa-1' },
-        data: { isVerified: true },
+        data: { isVerified: true, verificationRejectedAt: null },
       });
       expect(mockAudit.logStrict).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -583,6 +584,82 @@ describe('AdminService', () => {
         }),
         expect.anything(),
       );
+    });
+
+    it('durably marks an admin rejection so provider webhooks cannot revive it', async () => {
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: 'pa-1',
+        userId: 'u1',
+        isVerified: false,
+        isActive: true,
+        isFrozen: false,
+        initiationPayoutId: null,
+        provider: 'wise',
+        destination: 'wise-dest',
+        currency: 'USD',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+      mockPrisma.payoutAccount.update.mockImplementation(({ data }: { data: object }) =>
+        Promise.resolve({
+          id: 'pa-1',
+          userId: 'u1',
+          provider: 'wise',
+          destination: 'wise-dest',
+          currency: 'USD',
+          isVerified: false,
+          isActive: true,
+          isFrozen: false,
+          initiationPayoutId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...data,
+        }),
+      );
+
+      await service.setPayoutAccountVerified('admin-1', 'admin', 'pa-1', false, 'ownership failed');
+
+      expect(mockPrisma.payoutAccount.update).toHaveBeenCalledWith({
+        where: { id: 'pa-1' },
+        data: {
+          isVerified: false,
+          verificationRejectedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('decrypts an AAD-bound destination only into a masked audit value', async () => {
+      const binding = {
+        accountId: 'pa-bound',
+        userId: 'u1',
+        provider: 'wise',
+        currency: 'USD',
+      };
+      const destination = encryptPayoutDestination('developer@example.com', binding);
+      mockPrisma.payoutAccount.findUnique.mockResolvedValue({
+        id: binding.accountId,
+        userId: binding.userId,
+        isVerified: false,
+        provider: binding.provider,
+        destination,
+        currency: binding.currency,
+        user: { id: 'u1', email: 'dev@example.com' },
+      });
+      mockPrisma.payoutAccount.update.mockResolvedValue({
+        id: binding.accountId,
+        isVerified: true,
+      });
+
+      await service.setPayoutAccountVerified('admin-1', 'admin', binding.accountId, true);
+
+      expect(mockAudit.logStrict).toHaveBeenCalledWith(
+        expect.objectContaining({
+          afterSnap: expect.objectContaining({ destination: 'dev***@example.com' }),
+        }),
+        expect.anything(),
+      );
+      expect(JSON.stringify(mockAudit.logStrict.mock.calls)).not.toContain(destination);
     });
 
     it('rejects a payout account verification for a missing account', async () => {

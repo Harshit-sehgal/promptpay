@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
@@ -11,7 +11,12 @@ import {
 } from '@waitlayer/shared';
 
 import { AuditService } from '../audit/audit.service';
-import { encryptPayoutDestination, hmacPayoutDestination } from '../common/utils/payout-encryption';
+import {
+  encryptPayoutDestination,
+  hmacPayoutDestination,
+  safeDisplayDestination,
+  tryDecryptPayoutDestination,
+} from '../common/utils/payout-encryption';
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';
 import { RUNTIME_CONFIG_KEYS } from '../runtime-config/runtime-config.service';
@@ -49,6 +54,21 @@ export class PayoutMethodTrait {
   ) {
     const { provider, destination, currency } = await this.normalizePayoutMethod(dto);
     const method = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'payout-account:' + userId}))`;
+      const activeAccount = await tx.payoutAccount.findFirst({
+        where: { userId, provider, isActive: true },
+        select: { id: true, isFrozen: true, initiationPayoutId: true },
+      });
+      if (activeAccount?.isFrozen) {
+        throw new ConflictException(
+          'Cannot replace a payout method frozen by an operator; ask an administrator to review it first',
+        );
+      }
+      if (activeAccount?.initiationPayoutId) {
+        throw new ConflictException(
+          'Cannot replace payout method while a provider initiation is awaiting reconciliation',
+        );
+      }
       // guard against deactivating a payout account that has
       // in-flight payout requests (requested / under_review / approved /
       // processing). Deactivating such an account permanently wedges those
@@ -73,7 +93,13 @@ export class PayoutMethodTrait {
       // partial unique index, while retaining any number of inactive historical
       // destinations for audit.
       await tx.payoutAccount.updateMany({
-        where: { userId, provider, isActive: true },
+        where: {
+          userId,
+          provider,
+          isActive: true,
+          isFrozen: false,
+          initiationPayoutId: null,
+        },
         data: { isActive: false },
       });
       // Encrypt the destination at rest using AES-256-GCM, and compute a
@@ -123,7 +149,93 @@ export class PayoutMethodTrait {
     void this.fraudService
       ?.checkSharedPayoutDestination(userId, destination, destHmacForFraud)
       .catch(() => undefined);
-    return method;
+    // Return an explicit public shape. Never spread the Prisma row here: it
+    // contains encrypted destination ciphertext, its deterministic HMAC, and
+    // encryption metadata that are storage details rather than API fields.
+    return {
+      id: method.id,
+      provider: method.provider,
+      destination: safeDisplayDestination(method.destination, {
+        accountId: method.id,
+        userId,
+        provider: method.provider,
+        currency: method.currency,
+      }),
+      currency: method.currency,
+      isVerified: method.isVerified,
+      isActive: method.isActive,
+      isFrozen: method.isFrozen,
+      initiationPayoutId: method.initiationPayoutId,
+      createdAt: method.createdAt,
+      updatedAt: method.updatedAt,
+    };
+  }
+
+  /** Deactivate an owned payout method while preserving its audit history. */
+  async removePayoutMethod(userId: string, payoutAccountId: string) {
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Serialize registration/removal for this user. Historical records are
+      // retained; deletion means deactivation so settled payouts keep their
+      // referential and audit trail.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'payout-account:' + userId}))`;
+      const account = await tx.payoutAccount.findUnique({
+        where: { id: payoutAccountId },
+        select: {
+          id: true,
+          userId: true,
+          provider: true,
+          currency: true,
+          isActive: true,
+          isFrozen: true,
+          initiationPayoutId: true,
+        },
+      });
+      if (!account || account.userId !== userId || !account.isActive) {
+        throw new NotFoundException('Active payout method not found');
+      }
+      if (account.isFrozen) {
+        throw new ConflictException(
+          'Cannot remove a payout method frozen by an operator; ask an administrator to review it first',
+        );
+      }
+      const inFlightCount = await tx.payoutRequest.count({
+        where: {
+          userId,
+          payoutAccountId,
+          status: { in: RESERVED_PAYOUT_STATUSES },
+        },
+      });
+      if (inFlightCount > 0 || account.initiationPayoutId) {
+        throw new ConflictException(
+          'Cannot remove payout method while a payout is still in progress',
+        );
+      }
+      const deactivated = await tx.payoutAccount.updateMany({
+        where: {
+          id: payoutAccountId,
+          userId,
+          isActive: true,
+          isFrozen: false,
+          initiationPayoutId: null,
+        },
+        data: { isActive: false },
+      });
+      if (deactivated.count !== 1) {
+        throw new ConflictException('Payout method changed concurrently; reload and try again');
+      }
+      await this.audit.logStrict(
+        {
+          actorId: userId,
+          actorRole: 'developer',
+          action: 'remove_payout_method',
+          targetType: 'payout_account',
+          targetId: payoutAccountId,
+          beforeSnap: { provider: account.provider, currency: account.currency },
+        },
+        tx,
+      );
+      return { removed: true };
+    });
   }
 
   async normalizePayoutMethod(dto: {
@@ -214,14 +326,112 @@ export class PayoutMethodTrait {
    * sends an account.updated webhook (or the return redirect is validated).
    */
   private validateReturnUrl(url: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new BadRequestException('Return/refresh URL is invalid');
+    }
+    if (parsed.username || parsed.password) {
+      throw new BadRequestException('Return/refresh URL must not contain credentials');
+    }
+
+    if (this.config.get<string>('NODE_ENV') === 'production') {
+      const webBaseUrl = this.config.get<string>('WEB_BASE_URL');
+      let webOrigin: string;
+      try {
+        webOrigin = new URL(webBaseUrl ?? '').origin;
+      } catch {
+        throw new BadRequestException('WEB_BASE_URL is not configured for Stripe onboarding');
+      }
+      if (parsed.protocol !== 'https:' || parsed.origin !== webOrigin) {
+        throw new BadRequestException(
+          'Return/refresh URL must use the configured production web origin',
+        );
+      }
+      return;
+    }
+
     const allowed = this.config.get<string>('WAITLAYER_STRIPE_CONNECT_RETURN_DOMAINS');
     if (!allowed) return;
     const allowedHosts = allowed.split(',').map((h) => h.trim().toLowerCase());
     if (allowedHosts.length === 0) return;
-    const host = new URL(url).hostname.toLowerCase();
+    const host = parsed.hostname.toLowerCase();
     if (!allowedHosts.includes(host)) {
       throw new BadRequestException('Return/refresh URL host is not allowed');
     }
+  }
+
+  /**
+   * Return the active Stripe account, if any, after proving that it is safe to
+   * reuse. Callers hold the per-user payout-account advisory lock. A Stripe
+   * onboarding retry must never silently replace an operator-frozen account or
+   * a destination tied to reserved/ambiguous money movement.
+   */
+  private async reusableStripeAccount(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    currency: string,
+  ) {
+    const account = await tx.payoutAccount.findFirst({
+      where: { userId, provider: 'stripe_connect', isActive: true },
+      select: {
+        id: true,
+        userId: true,
+        provider: true,
+        destination: true,
+        currency: true,
+        isFrozen: true,
+        initiationPayoutId: true,
+      },
+    });
+    if (!account) return null;
+    if (account.isFrozen) {
+      throw new ConflictException(
+        'Stripe Connect onboarding is blocked because the current payout method is frozen by an operator',
+      );
+    }
+    if (account.initiationPayoutId) {
+      throw new ConflictException(
+        'Stripe Connect onboarding is blocked while a provider initiation awaits reconciliation',
+      );
+    }
+    const inFlightCount = await tx.payoutRequest.count({
+      where: {
+        userId,
+        payoutAccountId: account.id,
+        status: { in: RESERVED_PAYOUT_STATUSES },
+      },
+    });
+    if (inFlightCount > 0) {
+      throw new ConflictException(
+        `Stripe Connect onboarding is blocked while ${inFlightCount} payout(s) are still in progress`,
+      );
+    }
+    if (account.currency.toUpperCase() !== currency) {
+      throw new ConflictException(
+        `The existing Stripe Connect method uses ${account.currency}; remove it before onboarding a ${currency} method`,
+      );
+    }
+    let accountId: string;
+    try {
+      accountId = tryDecryptPayoutDestination(account.destination, {
+        accountId: account.id,
+        userId: account.userId,
+        provider: account.provider,
+        currency: account.currency,
+      });
+    } catch {
+      throw new ConflictException(
+        'The existing Stripe Connect method cannot be read safely; ask an administrator to review it',
+      );
+    }
+    if (!accountId.startsWith('acct_')) {
+      throw new ConflictException(
+        'The existing Stripe Connect method is invalid; ask an administrator to review it',
+      );
+    }
+    return { payoutAccountId: account.id, accountId };
   }
 
   async createStripeConnectOnboarding(
@@ -260,17 +470,86 @@ export class PayoutMethodTrait {
     this.validateReturnUrl(dto.refreshUrl);
     this.validateReturnUrl(dto.returnUrl);
 
-    let accountId: string;
+    // First reuse any durable pending/existing Stripe account. This makes link
+    // refreshes idempotent and avoids creating a new remote account on every
+    // browser retry.
+    let persisted = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'payout-account:' + userId}))`;
+      return this.reusableStripeAccount(tx, userId, currency);
+    });
+
+    if (!persisted) {
+      let createdAccountId: string;
+      try {
+        const createdRemote = await (
+          stripeConnect as StripeConnectPayoutProvider
+        ).createConnectAccount({ userId, email });
+        createdAccountId = createdRemote.accountId;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Stripe Connect onboarding failed';
+        throw new BadRequestException(message);
+      }
+
+      // Persist the pending account before asking Stripe for a short-lived
+      // onboarding link. If link creation fails or the process exits, the next
+      // request reuses this row and the provider's stable account-creation
+      // idempotency key, rather than leaving an untracked remote account.
+      persisted = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'payout-account:' + userId}))`;
+        const concurrent = await this.reusableStripeAccount(tx, userId, currency);
+        if (concurrent) {
+          if (concurrent.accountId !== createdAccountId) {
+            throw new ConflictException(
+              'A different Stripe Connect method was registered concurrently; reload before continuing',
+            );
+          }
+          return concurrent;
+        }
+
+        const payoutAccountId = randomUUID();
+        const encryptedConnectDest = encryptPayoutDestination(createdAccountId, {
+          accountId: payoutAccountId,
+          userId,
+          provider: 'stripe_connect',
+          currency,
+        });
+        const created = await tx.payoutAccount.create({
+          data: {
+            id: payoutAccountId,
+            userId,
+            provider: 'stripe_connect',
+            destination: encryptedConnectDest,
+            destinationHmac: hmacPayoutDestination(createdAccountId),
+            currency,
+            isVerified: false,
+            encryptionMigratedAt: new Date(),
+          },
+        });
+        await this.audit.logStrict(
+          {
+            actorId: userId,
+            actorRole: 'developer',
+            action: 'add_payout_method',
+            targetType: 'payout_account',
+            targetId: created.id,
+            beforeSnap: { provider: 'stripe_connect', currency, pending: true },
+          },
+          tx,
+        );
+        return { payoutAccountId: created.id, accountId: createdAccountId };
+      });
+    }
+
+    if (!persisted) {
+      throw new ConflictException('Stripe Connect onboarding could not be persisted');
+    }
+
     let onboardingUrl: string;
     try {
-      ({ accountId } = await (stripeConnect as StripeConnectPayoutProvider).createConnectAccount({
-        userId,
-        email,
-      }));
       ({ url: onboardingUrl } = await (
         stripeConnect as StripeConnectPayoutProvider
       ).createOnboardingLink({
-        accountId,
+        accountId: persisted.accountId,
         refreshUrl: dto.refreshUrl,
         returnUrl: dto.returnUrl,
       }));
@@ -279,50 +558,7 @@ export class PayoutMethodTrait {
       throw new BadRequestException(message);
     }
 
-    // Persist the pending payout account. It is not verified until Stripe
-    // confirms onboarding completion.
-    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      await tx.payoutAccount.updateMany({
-        where: { userId, provider: 'stripe_connect', isActive: true },
-        data: { isActive: false },
-      });
-      const payoutAccountId = randomUUID();
-      const encryptedConnectDest = encryptPayoutDestination(accountId, {
-        accountId: payoutAccountId,
-        userId,
-        provider: 'stripe_connect',
-        currency,
-      });
-      const connectDestHmac = hmacPayoutDestination(accountId);
-      const created = await tx.payoutAccount.create({
-        data: {
-          id: payoutAccountId,
-          userId,
-          provider: 'stripe_connect',
-          destination: encryptedConnectDest,
-          destinationHmac: connectDestHmac,
-          currency,
-          isVerified: false,
-          encryptionMigratedAt: new Date(),
-        },
-      });
-      // Audit INSIDE the transaction so a Stripe Connect onboarding record is
-      // only persisted together with its audit trail.
-      await this.audit.logStrict(
-        {
-          actorId: userId,
-          actorRole: 'developer',
-          action: 'add_payout_method',
-          targetType: 'payout_account',
-          targetId: created.id,
-          beforeSnap: { provider: 'stripe_connect', currency, pending: true },
-        },
-        tx,
-      );
-      return created;
-    });
-
-    return { accountId, onboardingUrl };
+    return { accountId: persisted.accountId, onboardingUrl };
   }
 
   async getPayoutProviderAvailability() {
@@ -345,19 +581,39 @@ export class PayoutMethodTrait {
             Boolean(handler) &&
             !isStub &&
             readiness?.ok !== false;
-          const reason = isRuntimeBlocked
-            ? 'Provider is temporarily disabled by operator.'
-            : launchStatus === 'coming_soon'
-              ? info.note
-              : !handler || isStub
-                ? 'Provider integration is not implemented.'
-                : readiness && !readiness.ok
-                  ? readiness.reason
-                  : null;
+          const status = available
+            ? ('available' as const)
+            : isRuntimeBlocked
+              ? ('temporarily_disabled' as const)
+              : launchStatus === 'coming_soon'
+                ? ('coming_soon' as const)
+                : !handler || isStub
+                  ? ('unimplemented' as const)
+                  : ('unconfigured' as const);
+          const reasonCode = available
+            ? null
+            : isRuntimeBlocked
+              ? ('operator_disabled' as const)
+              : launchStatus === 'coming_soon'
+                ? ('launch_not_available' as const)
+                : !handler || isStub
+                  ? ('provider_unimplemented' as const)
+                  : ('provider_unconfigured' as const);
+          const reason = available
+            ? null
+            : status === 'temporarily_disabled'
+              ? 'This payout provider is temporarily unavailable.'
+              : status === 'coming_soon'
+                ? info.note
+                : status === 'unimplemented'
+                  ? 'This payout provider is not available yet.'
+                  : 'This payout provider is not configured for this environment.';
           return {
             provider: info.provider,
             label: info.label,
-            status: available ? ('available' as const) : ('coming_soon' as const),
+            available,
+            status,
+            reasonCode,
             note: info.note,
             reason,
           };

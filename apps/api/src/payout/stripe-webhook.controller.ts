@@ -20,6 +20,11 @@ import { AuditService } from '../audit/audit.service';
 import { EventBus } from '../common/events/event-bus';
 import { getErrorCode, getErrorMessage } from '../common/utils/errors';
 import { assertSafeJson } from '../common/utils/json-value';
+import {
+  hmacPayoutDestination,
+  tryDecryptPayoutDestination,
+} from '../common/utils/payout-encryption';
+import { privacyPseudonym } from '../common/utils/privacy-hash';
 import { PrismaService } from '../config/prisma.service';
 import { ReferralService } from '../referral/referral.service';
 import { PayoutService } from './payout.service';
@@ -616,7 +621,7 @@ export class StripeWebhookController implements OnModuleInit {
   /**
    * Auto-verify a developer's Stripe Connect payout account when Stripe fires
    * `account.updated` reporting onboarding completion
-   * (charges_enabled + payouts_enabled + details_submitted).
+   * (`transfers` capability active + payouts_enabled + details_submitted).
    *
    * Without this handler, a developer who completes Stripe Connect onboarding
    * stays `isVerified: false` forever and can never receive payouts without a
@@ -624,23 +629,21 @@ export class StripeWebhookController implements OnModuleInit {
    * documented in `createStripeConnectOnboarding` was this webhook, which the
    * switch never routed.
    *
-   * CAS-gated on `isVerified: false` so a later admin rejection (which flips
-   * `isVerified` back to false) takes precedence and a stale/redelivered
-   * `account.updated` cannot resurrect a rejected account without an explicit
-   * admin re-verification. The CAS also scopes to `provider: 'stripe_connect'`
-   * and the exact `destination` (acct_...) so an attacker cannot post an
-   * `account.updated` for their own connected account and verify someone
-   * else's payout row.
+   * Candidates are found by the deterministic destination HMAC, then decrypted
+   * with their row-bound AAD and compared exactly. The CAS excludes an
+   * operator freeze and the durable `verificationRejectedAt` marker, so a
+   * stale/redelivered event cannot resurrect an explicitly rejected account.
    */
   private async handleAccountUpdated(event: Stripe.Event): Promise<void> {
     const account = event.data.object as Stripe.Account;
     const accountId = account.id;
+    const accountRef = privacyPseudonym(accountId, 'stripe-connect-webhook-account').slice(0, 12);
     // Verify the account's capabilities directly from Stripe — the webhook
     // payload's `charges_enabled`/`payouts_enabled` reflect the event snapshot,
     // but a re-retrieve guards against a malformed/old payload and matches the
     // authoritative state Stripe just recorded.
     let verification: {
-      chargesEnabled: boolean;
+      transfersActive: boolean;
       payoutsEnabled: boolean;
       detailsSubmitted: boolean;
     } | null;
@@ -648,7 +651,7 @@ export class StripeWebhookController implements OnModuleInit {
       verification = await this.stripe.retrieveConnectAccountVerification(accountId);
     } catch (err: unknown) {
       this.logger.warn(
-        `account.updated for ${accountId}: failed to re-retrieve verification (${getErrorMessage(
+        `account.updated for accountRef=${accountRef}: failed to re-retrieve verification (${getErrorMessage(
           err,
         )}); marking webhook processed`,
       );
@@ -666,13 +669,13 @@ export class StripeWebhookController implements OnModuleInit {
       return;
     }
     const isOnboarded =
-      verification.chargesEnabled && verification.payoutsEnabled && verification.detailsSubmitted;
+      verification.transfersActive && verification.payoutsEnabled && verification.detailsSubmitted;
     if (!isOnboarded) {
       // Onboarding still incomplete — acknowledge receipt and wait for the
       // next `account.updated`. Do NOT flip `isVerified` (it is already false
       // for a pending onboarding account).
       this.logger.log(
-        `account.updated for ${accountId}: onboarding still incomplete (charges=${verification.chargesEnabled}, payouts=${verification.payoutsEnabled}, details=${verification.detailsSubmitted})`,
+        `account.updated for accountRef=${accountRef}: onboarding still incomplete (transfers=${verification.transfersActive}, payouts=${verification.payoutsEnabled}, details=${verification.detailsSubmitted})`,
       );
       await this.prisma.webhookEvent.updateMany({
         where: { provider: 'stripe', eventId: event.id },
@@ -681,46 +684,94 @@ export class StripeWebhookController implements OnModuleInit {
       return;
     }
 
-    // CAS-flip the matching payout account to verified. `where` scopes to
-    // `provider: 'stripe_connect'`, `destination: accountId`, and
-    // `isVerified: false` so only a genuinely-pending account for THIS Stripe
-    // account is promoted, and a later admin rejection (which would flip
-    // `isVerified` back to false then re-true manually) takes precedence.
-    const flip = await this.prisma.payoutAccount.updateMany({
+    const destinationHmac = hmacPayoutDestination(accountId);
+    const candidates = await this.prisma.payoutAccount.findMany({
       where: {
         provider: 'stripe_connect',
-        destination: accountId,
+        destinationHmac,
         isVerified: false,
+        verificationRejectedAt: null,
+        isFrozen: false,
         isActive: true,
       },
-      data: { isVerified: true },
+      select: {
+        id: true,
+        userId: true,
+        provider: true,
+        destination: true,
+        currency: true,
+      },
+      take: 2,
     });
-    if (flip.count > 0) {
-      const payoutAccount = await this.prisma.payoutAccount.findFirst({
-        where: { provider: 'stripe_connect', destination: accountId, isActive: true },
-        select: { id: true, userId: true },
+    const exactMatches = candidates.filter((candidate) => {
+      try {
+        return (
+          tryDecryptPayoutDestination(candidate.destination, {
+            accountId: candidate.id,
+            userId: candidate.userId,
+            provider: candidate.provider,
+            currency: candidate.currency,
+          }) === accountId
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (exactMatches.length !== 1) {
+      this.logger.warn(
+        `account.updated for accountRef=${accountRef}: expected one eligible payout account, found ${exactMatches.length}`,
+      );
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: {
+          processingStatus: 'processed',
+          processedAt: new Date(),
+          error: exactMatches.length > 1 ? 'ambiguous_payout_account' : 'payout_account_not_found',
+        },
       });
-      if (payoutAccount) {
-        await this.audit.logStrict({
-          actorId: 'stripe_webhook',
-          actorRole: 'system',
-          action: 'stripe_connect_auto_verified',
-          targetType: 'payout_account',
-          targetId: payoutAccount.id,
-          beforeSnap: {
-            userId: payoutAccount.userId,
-            accountId,
+      return;
+    }
+
+    const payoutAccount = exactMatches[0];
+    const flipped = await this.prisma.$transaction(async (tx) => {
+      const flip = await tx.payoutAccount.updateMany({
+        where: {
+          id: payoutAccount.id,
+          provider: 'stripe_connect',
+          destinationHmac,
+          isVerified: false,
+          verificationRejectedAt: null,
+          isFrozen: false,
+          isActive: true,
+        },
+        data: { isVerified: true },
+      });
+      if (flip.count === 1) {
+        await this.audit.logStrict(
+          {
+            actorId: 'stripe_webhook',
+            actorRole: 'system',
+            action: 'stripe_connect_auto_verified',
+            targetType: 'payout_account',
+            targetId: payoutAccount.id,
+            beforeSnap: { accountRef },
           },
-        });
-        this.logger.log(
-          `Stripe Connect account ${accountId} auto-verified by account.updated webhook (user=${payoutAccount.userId})`,
+          tx,
         );
       }
-    } else {
-      // Either no matching active payout account, or it was already verified
-      // / admin-rejected. All are benign; ack the webhook.
+      return flip.count === 1;
+    });
+    if (flipped) {
+      const userRef = privacyPseudonym(payoutAccount.userId, 'stripe-connect-webhook-user').slice(
+        0,
+        12,
+      );
       this.logger.log(
-        `account.updated for ${accountId}: no pending unverified active payout account to verify (already verified, rejected, or unknown to us)`,
+        `Stripe Connect accountRef=${accountRef} auto-verified by account.updated webhook (userRef=${userRef})`,
+      );
+    } else {
+      this.logger.log(
+        `account.updated for accountRef=${accountRef}: payout account changed before verification`,
       );
     }
     await this.prisma.webhookEvent.updateMany({
@@ -1673,27 +1724,13 @@ export class StripeWebhookController implements OnModuleInit {
   }
 
   /**
-   * Stripe `payout.failed` — a Stripe Connect payout failed. Forward-
-   * compatible hook (see handlePayoutPaid). When a matching PayoutTransaction
-   * is found, delegate to `PayoutService.markPayoutFailed`, which is the same
-   * canonical transition the admin `POST /admin/payouts/:id/fail` and the
-   * provider-initiate failure path use: CAS-flip PayoutRequest from
-   * `approved`/`processing` → `failed`, stamp the failure reason on the
-   * PayoutTransaction, and delete the payout allocations so the reserved
-   * confirmed earnings become available for a fresh payout request. Earnings
-   * rows stay `confirmed` (they were never paid, just reserved). This is the
-   * same write shape as `markPayoutPaid`, mirrored for the failure direction
-   * so the two terminal transitions are symmetric.
-   *
-   * the previous handler logged a `requires_review` audit but did
-   * NOT flip the request, did NOT release the allocations, and did NOT stamp
-   * `PayoutTransaction.status = 'failed'`. That left the PayoutRequest stuck
-   * in `processing` and the allocations reserving earnings — the developer
-   * could not retry the payout because (a) `requestPayout` saw the
-   * still-`processing` PayoutRequest on the developer side and (b) the
-   * reserved earnings were blocked by the still-attached allocations. The
-   * `markPayoutFailed` delegation is the canonical, single-source-of-truth
-   * transition that closes both windows.
+   * Stripe `payout.failed` is a two-leg conservation problem. The bank payout
+   * failed, but the earlier platform -> connected-account transfer succeeded;
+   * Stripe returns the failed payout funds to the connected account, not the
+   * platform. We therefore freeze the destination and keep allocations
+   * reserved until the persisted funding transfer is conclusively reversed.
+   * Only after that proof may `markPayoutFailed` release earnings and restore
+   * the platform cash ledger.
    */
   private async handlePayoutFailed(event: Stripe.Event): Promise<void> {
     const payout = event.data.object as Stripe.Payout;
@@ -1701,7 +1738,19 @@ export class StripeWebhookController implements OnModuleInit {
 
     const tx = await this.prisma.payoutTransaction.findFirst({
       where: { provider: 'stripe_connect', providerTxId },
-      select: { id: true, payoutRequestId: true, provider: true },
+      select: {
+        id: true,
+        payoutRequestId: true,
+        provider: true,
+        providerFundingTxId: true,
+        payoutRequest: {
+          select: {
+            payoutAccountId: true,
+            requestedAmountMinor: true,
+            approvedAmountMinor: true,
+          },
+        },
+      },
     });
 
     if (!tx) {
@@ -1717,7 +1766,63 @@ export class StripeWebhookController implements OnModuleInit {
 
     const failureReason =
       `Stripe bank payout ${payout.id} reached ${payout.status}; ` +
-      'the preceding platform transfer may already be in the connected account and requires manual reconciliation';
+      'the preceding platform transfer must be reversed before local allocations can be released';
+
+    // Stop all further payouts to this destination before making the remote
+    // reversal call. The request and its allocations intentionally remain in
+    // processing until reversal proof exists.
+    await this.prisma.$transaction(async (db: Prisma.TransactionClient) => {
+      await db.payoutAccount.updateMany({
+        where: { id: tx.payoutRequest.payoutAccountId },
+        data: { isFrozen: true },
+      });
+      await db.payoutTransaction.updateMany({
+        where: { id: tx.id, status: { in: ['approved', 'processing'] } },
+        data: { failureReason },
+      });
+    });
+
+    if (!tx.providerFundingTxId) {
+      await this.audit.logStrict({
+        actorId: 'stripe_webhook',
+        actorRole: 'system',
+        action: 'stripe_payout_failed_requires_review',
+        targetType: 'payout_request',
+        targetId: tx.payoutRequestId,
+        beforeSnap: { providerTxId, reason: 'funding_transfer_reference_missing' },
+      });
+      await this.prisma.webhookEvent.updateMany({
+        where: { provider: 'stripe', eventId: event.id },
+        data: {
+          processingStatus: 'pending_review',
+          processedAt: null,
+          error: 'stripe_funding_transfer_reference_missing',
+        },
+      });
+      return;
+    }
+
+    const amountMinor =
+      tx.payoutRequest.approvedAmountMinor ?? tx.payoutRequest.requestedAmountMinor;
+    try {
+      await this.payout.stripeConnect.reverseFundingTransfer({
+        payoutRequestId: tx.payoutRequestId,
+        transferId: tx.providerFundingTxId,
+        amountMinor,
+      });
+    } catch (err: unknown) {
+      await this.audit.logStrict({
+        actorId: 'stripe_webhook',
+        actorRole: 'system',
+        action: 'stripe_payout_failed_requires_review',
+        targetType: 'payout_request',
+        targetId: tx.payoutRequestId,
+        beforeSnap: { providerTxId, reason: 'funding_transfer_reversal_unconfirmed' },
+      });
+      // Throw so the webhook remains retryable. The durable account freeze,
+      // failure reason and allocations make every retry safe.
+      throw err;
+    }
 
     try {
       await this.payout.markPayoutFailed(tx.payoutRequestId, {
@@ -1752,13 +1857,13 @@ export class StripeWebhookController implements OnModuleInit {
     }
 
     this.logger.log(
-      `Stripe payout.failed: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId} — PayoutRequest failed, allocations released`,
+      `Stripe payout.failed: payoutRequest=${tx.payoutRequestId}, providerTxId=${providerTxId} — funding transfer reversed, payout failed, allocations released`,
     );
 
     await this.audit.logStrict({
       actorId: 'stripe_webhook',
       actorRole: 'system',
-      action: 'stripe_payout_failed',
+      action: 'stripe_payout_failed_after_transfer_reversal',
       targetType: 'payout_request',
       targetId: tx.payoutRequestId,
       beforeSnap: { providerTxId, failureReason },

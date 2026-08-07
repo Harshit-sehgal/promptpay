@@ -9,7 +9,11 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, payoutApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 import { formatCurrency, formatCurrencyBreakdown, formatRelativeTime } from '@/lib/format';
-import { AVAILABLE_PAYOUT_PROVIDERS, COMING_SOON_PAYOUT_PROVIDERS } from '@/lib/payout-providers';
+import {
+  type PayoutProviderReadiness,
+  payoutProviderStatusLabel,
+  selectablePayoutProviders,
+} from '@/lib/payout-readiness';
 
 import {
   CURRENCY_POLICY,
@@ -25,6 +29,8 @@ interface PayoutAccount {
   currency: string;
   isActive: boolean;
   isVerified: boolean;
+  isFrozen?: boolean;
+  initiationPayoutId?: string | null;
 }
 
 interface PayoutInfo {
@@ -45,26 +51,6 @@ interface PayoutRequest {
   createdAt: string;
   paidAt?: string;
 }
-export interface PayoutProviderReadiness {
-  provider: string;
-  label: string;
-  status: 'available' | 'coming_soon';
-  note: string;
-  reason: string | null;
-}
-
-/**
- * Effective, selectable payout providers: only those the API reports as
- * `available` (not `coming_soon` and not missing). Fails closed to an empty
- * list when readiness could not be fetched (A-030).
- */
-export function selectablePayoutProviders(
-  readiness: PayoutProviderReadiness[] | undefined,
-): PayoutProviderReadiness[] {
-  if (!readiness) return [];
-  return readiness.filter((p) => p.status === 'available');
-}
-
 interface PayoutHistoryResponse {
   payouts: PayoutRequest[];
   total: number;
@@ -80,14 +66,20 @@ export default function DevPayoutsPage() {
   const [error, setError] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState<string | null>(null);
+  const [providerReadiness, setProviderReadiness] = useState<PayoutProviderReadiness[] | undefined>(
+    undefined,
+  );
+  const [providerReadinessError, setProviderReadinessError] = useState<string | null>(null);
 
   // Add payout method form
   const [showMethodForm, setShowMethodForm] = useState(false);
-  const [provider, setProvider] = useState('paypal_email');
+  const [provider, setProvider] = useState('');
   const [destination, setDestination] = useState('');
   const [methodCurrency, setMethodCurrency] = useState('USD');
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+  const [removingMethodId, setRemovingMethodId] = useState<string | null>(null);
 
   // Request payout form
   const [amount, setAmount] = useState('');
@@ -99,6 +91,10 @@ export default function DevPayoutsPage() {
     (info ? { [info.currency]: info.availableBalanceMinor } : {});
   const selectedAccount = info?.payoutAccounts.find((account) => account.id === selectedAccountId);
   const selectedCurrency = selectedAccount?.currency || info?.currency || 'USD';
+  const availableProviders = selectablePayoutProviders(providerReadiness);
+  const unavailableProviders = providerReadiness?.filter(
+    (entry) => !entry.available || entry.status !== 'available',
+  );
   // A-031: only offer currencies the selected provider can actually settle,
   // matching the server-side isProviderSupportedForCurrency check so the user
   // cannot submit an invalid provider/currency combination.
@@ -121,6 +117,15 @@ export default function DevPayoutsPage() {
   const { mode: launchMode } = useWaitLaunchMode();
   const earningsLive = earningsAreLive(launchMode);
 
+  // Readiness is runtime state: operator kill switches and provider credential
+  // health can change without rebuilding the web app. Never retain a provider
+  // selection that the latest API response does not mark available.
+  useEffect(() => {
+    const selectable = selectablePayoutProviders(providerReadiness);
+    if (selectable.some((entry) => entry.provider === provider)) return;
+    setProvider(selectable[0]?.provider ?? '');
+  }, [providerReadiness, provider]);
+
   // Keep the chosen currency valid for the (possibly changed) provider.
   useEffect(() => {
     if (supportedMethodCurrencies.length === 0) return;
@@ -131,13 +136,28 @@ export default function DevPayoutsPage() {
 
   const fetchData = () => {
     setLoading(true);
+    setError(null);
+    setProviderReadiness(undefined);
+    setProviderReadinessError(null);
+    setShowMethodForm(false);
+    const readinessRequest = payoutApi
+      .getProviders()
+      .then((res) => res.data.providers)
+      .catch(() => {
+        setProviderReadinessError(
+          'Live payout provider readiness could not be confirmed. Registration is disabled.',
+        );
+        return undefined;
+      });
     Promise.all([
       payoutApi.getInfo() as Promise<AxiosResponse<PayoutInfo>>,
       payoutApi.getHistory({ page: 1, limit: 20 }) as Promise<AxiosResponse<PayoutHistoryResponse>>,
+      readinessRequest,
     ])
-      .then(([infoRes, historyRes]) => {
+      .then(([infoRes, historyRes, readiness]) => {
         setInfo(infoRes.data);
         setRequests(historyRes.data.payouts || []);
+        setProviderReadiness(readiness);
       })
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load payout info')))
       .finally(() => setLoading(false));
@@ -182,6 +202,14 @@ export default function DevPayoutsPage() {
     setError(null);
     setSuccessMsg(null);
 
+    if (!availableProviders.some((entry) => entry.provider === provider)) {
+      setError(
+        'This provider is not confirmed ready by the live API. Refresh readiness before registering a payout method.',
+      );
+      setSubmitting(false);
+      return;
+    }
+
     // Stripe Connect uses hosted onboarding instead of a raw destination input.
     if (provider === 'stripe_connect') {
       try {
@@ -191,7 +219,7 @@ export default function DevPayoutsPage() {
           returnUrl: `${baseUrl}?stripe_status=success`,
           currency: methodCurrency.trim().toUpperCase() || 'USD',
         });
-        window.location.href = res.data.onboardingUrl;
+        window.location.assign(res.data.onboardingUrl);
       } catch (err: unknown) {
         setError(getErrorMessage(err, 'Failed to start Stripe onboarding'));
         setSubmitting(false);
@@ -222,6 +250,24 @@ export default function DevPayoutsPage() {
     }
   };
 
+  const handleRemoveMethod = async (payoutAccountId: string) => {
+    if (removingMethodId) return;
+    setRemovingMethodId(payoutAccountId);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      await payoutApi.removeMethod(payoutAccountId);
+      if (selectedAccountId === payoutAccountId) setSelectedAccountId('');
+      setRemoveConfirmId(null);
+      setSuccessMsg('Payout method removed.');
+      fetchData();
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to remove payout method'));
+    } finally {
+      setRemovingMethodId(null);
+    }
+  };
+
   const handleRequestPayout = async (e: FormEvent) => {
     e.preventDefault();
     setRequestError('');
@@ -247,6 +293,14 @@ export default function DevPayoutsPage() {
     }
     if (selectedAccount && !selectedAccount.isVerified) {
       setRequestError('This payout method is pending verification and cannot be used yet.');
+      return;
+    }
+    if (selectedAccount?.isFrozen) {
+      setRequestError(
+        selectedAccount.initiationPayoutId
+          ? 'This payout method is locked by an in-progress payout.'
+          : 'This payout method is frozen by an operator and cannot be used.',
+      );
       return;
     }
     if (info && amountMinor < info.minimumThresholdMinor) {
@@ -330,7 +384,7 @@ export default function DevPayoutsPage() {
         </div>
       )}
 
-      {error && !info && (
+      {error && (
         <div className="bg-red-50 border border-red-200/60 rounded-xl p-4 mb-6">
           <p className="text-red-600 text-sm font-normal">{error}</p>
         </div>
@@ -413,10 +467,22 @@ export default function DevPayoutsPage() {
                     >
                       <option value="">Select method...</option>
                       {info.payoutAccounts.map((acc) => (
-                        <option key={acc.id} value={acc.id} disabled={!acc.isVerified}>
+                        <option
+                          key={acc.id}
+                          value={acc.id}
+                          disabled={
+                            !acc.isVerified || acc.isFrozen || Boolean(acc.initiationPayoutId)
+                          }
+                        >
                           {acc.provider === 'paypal_email' ? 'PayPal' : acc.provider} —{' '}
                           {acc.destination} ({acc.currency})
-                          {acc.isVerified ? '' : ' (pending verification)'}
+                          {!acc.isVerified
+                            ? ' (pending verification)'
+                            : acc.initiationPayoutId
+                              ? ' (payout in progress)'
+                              : acc.isFrozen
+                                ? ' (operator frozen)'
+                                : ''}
                         </option>
                       ))}
                     </select>
@@ -458,17 +524,54 @@ export default function DevPayoutsPage() {
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-surface-900 font-bold text-[16px]">Payout methods</h2>{' '}
               <button
+                type="button"
                 onClick={() => {
                   setShowMethodForm(!showMethodForm);
                   setSuccessMsg(null);
                 }}
-                className="text-brand-600 hover:text-brand-700 text-sm font-semibold transition-colors"
+                disabled={!providerReadiness || availableProviders.length === 0}
+                title={
+                  !providerReadiness
+                    ? 'Live provider readiness is unavailable'
+                    : availableProviders.length === 0
+                      ? 'No payout provider is currently ready'
+                      : undefined
+                }
+                className="text-brand-600 hover:text-brand-700 disabled:text-surface-400 disabled:cursor-not-allowed text-sm font-semibold transition-colors"
               >
                 {showMethodForm ? 'Cancel' : '+ Add method'}
               </button>
             </div>
 
-            {showMethodForm && (
+            {providerReadinessError && (
+              <div
+                role="alert"
+                className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+              >
+                <p className="font-semibold">Payout method registration is temporarily disabled.</p>
+                <p className="mt-1 text-xs leading-5">{providerReadinessError}</p>
+                <button
+                  type="button"
+                  onClick={fetchData}
+                  disabled={loading}
+                  className="mt-3 text-xs font-semibold underline disabled:opacity-50"
+                >
+                  Retry readiness check
+                </button>
+              </div>
+            )}
+
+            {providerReadiness && availableProviders.length === 0 && (
+              <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="font-semibold">No payout provider is currently ready.</p>
+                <p className="mt-1 text-xs leading-5">
+                  Existing methods remain visible, but registration stays disabled until the API
+                  confirms a provider is configured, enabled, and healthy.
+                </p>
+              </div>
+            )}
+
+            {showMethodForm && providerReadiness && availableProviders.length > 0 && (
               <form
                 onSubmit={handleAddMethod}
                 className="space-y-4 mb-6 p-5 bg-slate-50/50 border border-slate-100/85 rounded-xl"
@@ -487,29 +590,31 @@ export default function DevPayoutsPage() {
                       className="w-full bg-white border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-sm font-normal"
                     >
                       <option value="">Select provider...</option>
-                      {AVAILABLE_PAYOUT_PROVIDERS.map((p) => (
+                      {availableProviders.map((p) => (
                         <option key={p.provider} value={p.provider}>
                           {p.label}
                         </option>
                       ))}
-                      <option disabled>──────────</option>
-                      <option disabled value="">
-                        Coming soon:
-                      </option>
-                      {COMING_SOON_PAYOUT_PROVIDERS.map((p) => (
-                        <option key={p.provider} value={p.provider} disabled>
-                          {p.label} — {p.note}
-                        </option>
-                      ))}
+                      {unavailableProviders && unavailableProviders.length > 0 && (
+                        <>
+                          <option disabled>──────────</option>
+                          <option disabled value="">
+                            Unavailable now:
+                          </option>
+                          {unavailableProviders.map((p) => (
+                            <option key={p.provider} value={p.provider} disabled>
+                              {p.label} — {payoutProviderStatusLabel(p.status, p.available)}
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
-                    {/* A-030: only available providers are selectable.
-                        Coming-soon providers are shown as disabled options with
-                        invite-only labels. Automated rails (PayPal Payouts,
-                        Stripe Connect, Wise) are invite-only at launch. */}
                     <p className="text-surface-500 text-xs mt-1.5 font-normal">
-                      {COMING_SOON_PAYOUT_PROVIDERS.length > 0
-                        ? `Automated providers (${COMING_SOON_PAYOUT_PROVIDERS.map((p) => p.label).join(', ')}) are invite-only at launch.`
-                        : 'Add a payout method to start receiving earnings.'}
+                      {unavailableProviders && unavailableProviders.length > 0
+                        ? `Unavailable now: ${unavailableProviders
+                            .map((entry) => entry.label)
+                            .join(', ')}.`
+                        : 'Every listed provider is confirmed ready by the live API.'}
                     </p>
                   </div>
                   {provider !== 'stripe_connect' && (
@@ -548,7 +653,7 @@ export default function DevPayoutsPage() {
                 </div>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || !provider}
                   className="bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white font-medium px-5 py-2.5 rounded-xl text-sm shadow-sm shadow-brand-500/10 transition-all"
                 >
                   {submitting
@@ -564,8 +669,7 @@ export default function DevPayoutsPage() {
 
             {info.payoutAccounts.length === 0 ? (
               <div className="text-surface-400 text-sm py-12 text-center border border-dashed border-surface-200 rounded-2xl font-normal">
-                No payout methods yet. Add a PayPal email or manual method to start receiving
-                payouts.
+                No payout methods yet. Add a currently available method to prepare for payouts.
               </div>
             ) : (
               <div className="space-y-3">
@@ -585,8 +689,46 @@ export default function DevPayoutsPage() {
                       </p>
                       <p className="text-surface-400 text-xs mt-0.5 font-normal">{acc.currency}</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-end gap-2">
                       <StatusBadge status={acc.isVerified ? 'approved' : 'pending'} />
+                      {acc.initiationPayoutId ? (
+                        <span className="text-[11px] font-medium text-amber-700">
+                          Locked by payout in progress
+                        </span>
+                      ) : acc.isFrozen ? (
+                        <span className="text-[11px] font-medium text-amber-700">
+                          Frozen by operator
+                        </span>
+                      ) : removeConfirmId === acc.id ? (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <span className="text-[11px] text-rose-700">Remove this method?</span>
+                          <button
+                            type="button"
+                            onClick={() => void handleRemoveMethod(acc.id)}
+                            disabled={removingMethodId !== null}
+                            className="text-xs font-semibold text-rose-700 underline disabled:opacity-50"
+                          >
+                            {removingMethodId === acc.id ? 'Removing…' : 'Confirm removal'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRemoveConfirmId(null)}
+                            disabled={removingMethodId !== null}
+                            className="text-xs text-surface-600 underline disabled:opacity-50"
+                          >
+                            Keep method
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setRemoveConfirmId(acc.id)}
+                          disabled={removingMethodId !== null || !acc.isActive}
+                          className="text-xs font-medium text-rose-600 underline disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

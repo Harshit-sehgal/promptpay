@@ -389,33 +389,38 @@ model UserSettings {
 // ══════════════════════════════════════════════════════════
 
 model PayoutAccount {
-  id                   String         @id @default(uuid())
-  userId               String
-  user                 User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  provider             PayoutProvider
-  destination          String
-  currency             String         @default("USD")
-  isVerified           Boolean        @default(false)
-  isActive             Boolean        @default(true)
+  id                     String         @id @default(uuid())
+  userId                 String
+  user                   User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  provider               PayoutProvider
+  destination            String
+  currency               String         @default("USD")
+  isVerified             Boolean        @default(false)
+  // Durable distinction between provider-pending verification and an
+  // explicit administrator rejection. Provider webhooks may auto-verify only
+  // rows where this remains null; an admin rejection must not be resurrected
+  // by a stale/redelivered provider event.
+  verificationRejectedAt DateTime?      @map("verification_rejected_at") @db.Timestamptz
+  isActive               Boolean        @default(true)
   // Deterministic HMAC of the destination for duplicate/fraud matching.
   // Computed server-side during addPayoutMethod. Used by
   // checkSharedPayoutDestination to detect shared destinations without
   // decrypting every account. It is deliberately non-unique: a shared
   // destination is a fraud signal that must be recorded and held for review,
   // not rejected before the detector can observe it.
-  destinationHmac      String?        @map("destination_hmac")
+  destinationHmac        String?        @map("destination_hmac")
   // Emergency freeze: operator-initiated block on a verified payout
   // destination. A frozen account cannot be used for payouts until an
   // admin explicitly unfreezes it, even if it remains verified and active.
-  isFrozen             Boolean        @default(false) @map("is_frozen")
+  isFrozen               Boolean        @default(false) @map("is_frozen")
   // Durable fence for an outbound provider call. It is cleared only after the
   // referenced payout reaches a reconciled outcome; there is intentionally no
   // automatic expiry for ambiguous money movement.
-  initiationPayoutId   String?        @map("initiation_payout_id")
+  initiationPayoutId     String?        @map("initiation_payout_id")
   // One-shot backfill tracker: set when a legacy plaintext destination has
   // been encrypted. Null for new accounts (already encrypted) and unmigrated
   // legacy accounts. Managed by scripts/encrypt-legacy-payout-destinations.ts.
-  encryptionMigratedAt DateTime?      @map("encryption_migrated_at") @db.Timestamptz
+  encryptionMigratedAt   DateTime?      @map("encryption_migrated_at") @db.Timestamptz
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1297,6 +1302,11 @@ model PayoutTransaction {
   payoutRequest   PayoutRequest  @relation(fields: [payoutRequestId], references: [id], onDelete: Restrict)
   provider        PayoutProvider
   providerTxId    String?
+  // Some providers move funds in more than one remote leg. Stripe Connect,
+  // for example, creates a platform -> connected-account transfer before the
+  // connected-account -> bank payout. Persist the funding leg so a later bank
+  // payout failure can be reversed before local allocations are released.
+  providerFundingTxId String?      @map("provider_funding_tx_id")
   status          PayoutStatus   @default(processing)
   paidAt          DateTime?
   failureReason   String?
@@ -1313,6 +1323,7 @@ model PayoutTransaction {
   @@index([payoutRequestId])
   // Single-column index for txId-only lookups from provider callbacks.
   @@index([providerTxId])
+  @@index([providerFundingTxId], map: "payout_transactions_provider_funding_tx_id_idx")
   @@map("payout_transactions")
 }
 

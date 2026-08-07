@@ -159,6 +159,18 @@ describe('safeDisplayDestination', () => {
     expect(safeDisplayDestination(encrypted)).toBe('dev***@example.com');
   });
 
+  it('decrypts and masks a bound v2 destination without exposing ciphertext', () => {
+    const binding = {
+      accountId: 'account-1',
+      userId: 'user-1',
+      provider: 'paypal_email',
+      currency: 'USD',
+    };
+    const encrypted = encryptPayoutDestination('developer@example.com', binding);
+    expect(safeDisplayDestination(encrypted, binding)).toBe('dev***@example.com');
+    expect(safeDisplayDestination(encrypted)).toBe('[encrypted]');
+  });
+
   it('masks a legacy plaintext destination directly', () => {
     expect(safeDisplayDestination('dev@example.com')).toBe('dev***@example.com');
   });

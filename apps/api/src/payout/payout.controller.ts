@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Post, Query, UseGuards, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { CurrentUser, Roles } from '../common/decorators';
@@ -40,6 +51,19 @@ export class PayoutController {
   @RequiredScopes('payout:write')
   addPayoutMethod(@CurrentUser('id') userId: string, @Body() dto: AddPayoutMethodDto) {
     return this.service.addPayoutMethod(userId, dto);
+  }
+
+  @ApiOperation({ summary: 'Remove a payout method' })
+  @Delete('method/:id')
+  @UseGuards(RejectApiKeyGuard, ActionStepUpGuard)
+  @ActionStepUp('payout:method')
+  @Roles('developer')
+  @RequiredScopes('payout:write')
+  removePayoutMethod(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) payoutAccountId: string,
+  ) {
+    return this.service.removePayoutMethod(userId, payoutAccountId);
   }
 
   @ApiOperation({ summary: 'Get payout info' })

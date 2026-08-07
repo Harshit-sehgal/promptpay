@@ -9,6 +9,8 @@ function makeConfig(overrides: Record<string, string | undefined> = {}): ConfigS
     STRIPE_SECRET_KEY: 'sk_test_xxx',
     STRIPE_WEBHOOK_SECRET: 'whsec_xxx',
     NODE_ENV: 'development',
+    WAITLAYER_ENVIRONMENT_KIND: 'test',
+    WAITLAYER_ENVIRONMENT_ID: 'stripe-provider-spec',
     ...overrides,
   };
   return {
@@ -21,7 +23,11 @@ type MockStripe = {
   webhooks: { constructEvent: ReturnType<typeof vi.fn> };
   accounts: { retrieve: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   accountLinks: { create: ReturnType<typeof vi.fn> };
-  transfers: { create: ReturnType<typeof vi.fn>; createReversal: ReturnType<typeof vi.fn> };
+  transfers: {
+    create: ReturnType<typeof vi.fn>;
+    createReversal: ReturnType<typeof vi.fn>;
+    retrieve: ReturnType<typeof vi.fn>;
+  };
   payouts: { create: ReturnType<typeof vi.fn>; retrieve: ReturnType<typeof vi.fn> };
 };
 
@@ -43,6 +49,7 @@ function makeMockStripe(status = 'paid'): MockStripe {
     webhooks: { constructEvent: vi.fn().mockReturnValue({ id: 'evt_1', type: 'x' }) },
     accounts: {
       retrieve: vi.fn().mockResolvedValue({
+        capabilities: { transfers: 'active' },
         charges_enabled: true,
         payouts_enabled: true,
         details_submitted: true,
@@ -55,6 +62,7 @@ function makeMockStripe(status = 'paid'): MockStripe {
     transfers: {
       create: vi.fn().mockResolvedValue({ id: 'tr_1' }),
       createReversal: vi.fn().mockResolvedValue({ id: 'trr_1' }),
+      retrieve: vi.fn().mockResolvedValue({ id: 'tr_1', reversed: false, amount_reversed: 0 }),
     },
     payouts: {
       create: vi.fn().mockResolvedValue({ id: 'po_1', status: 'paid' }),
@@ -120,7 +128,7 @@ describe('StripeProvider (deposit) enabled paths', () => {
 
     const v = await provider.retrieveConnectAccountVerification('acct_1');
     expect(v).toEqual({
-      chargesEnabled: true,
+      transfersActive: true,
       payoutsEnabled: true,
       detailsSubmitted: true,
     });
@@ -253,8 +261,35 @@ describe('StripeConnectPayoutProvider onboarding + status', () => {
     const res = await provider.createConnectAccount({ userId: 'u1', email: 'd@x.io' });
     expect(res).toEqual({ accountId: 'acct_1' });
     expect(mock.accounts.create).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'express', email: 'd@x.io' }),
+      expect.objectContaining({
+        type: 'express',
+        email: 'd@x.io',
+        capabilities: { transfers: { requested: true } },
+      }),
+      expect.objectContaining({ idempotencyKey: expect.stringMatching(/^waitlayer-connect-/) }),
     );
+
+    const firstKey = mock.accounts.create.mock.calls[0]?.[1]?.idempotencyKey;
+    await provider.createConnectAccount({ userId: 'u1', email: 'd@x.io' });
+    expect(mock.accounts.create.mock.calls[1]?.[1]?.idempotencyKey).toBe(firstKey);
+  });
+
+  it('does not report transfer readiness from unrelated charge capability state', async () => {
+    const provider = new StripeProvider(makeConfig());
+    const mock = makeMockStripe();
+    mock.accounts.retrieve.mockResolvedValue({
+      capabilities: { transfers: 'inactive' },
+      charges_enabled: true,
+      payouts_enabled: true,
+      details_submitted: true,
+    });
+    injectStripe(provider, mock);
+
+    await expect(provider.retrieveConnectAccountVerification('acct_1')).resolves.toEqual({
+      transfersActive: false,
+      payoutsEnabled: true,
+      detailsSubmitted: true,
+    });
   });
 
   it('creates an onboarding link and returns its url', async () => {

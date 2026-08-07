@@ -79,7 +79,10 @@ function loadEncryptionKey(): Buffer {
  *
  * Format: `v1:base64(iv + ciphertext + authTag)`
  */
-export function encryptPayoutDestination(plaintext: string, binding?: PayoutDestinationBinding): string {
+export function encryptPayoutDestination(
+  plaintext: string,
+  binding?: PayoutDestinationBinding,
+): string {
   const key = loadEncryptionKey();
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
@@ -101,7 +104,10 @@ export function encryptPayoutDestination(plaintext: string, binding?: PayoutDest
  * plaintext. Supports key rotation by reading the version prefix and using
  * the appropriate key (currently only v1 is supported).
  */
-export function decryptPayoutDestination(encrypted: string, binding?: PayoutDestinationBinding): string {
+export function decryptPayoutDestination(
+  encrypted: string,
+  binding?: PayoutDestinationBinding,
+): string {
   const version = encrypted.split(':')[0];
   if (version !== LEGACY_KEY_VERSION && version !== CURRENT_KEY_VERSION) {
     throw new Error(`Unsupported payout encryption key version: ${version}`);
@@ -138,6 +144,16 @@ export function decryptPayoutDestination(encrypted: string, binding?: PayoutDest
  */
 function loadHmacKey(): Buffer {
   return loadKey('PAYOUT_HMAC_KEY', 'payout-hmac');
+}
+
+/**
+ * Validate both payout-destination keys using the exact same canonical parser
+ * used by encryption/HMAC operations. Operator scripts call this before
+ * touching rows so a malformed key fails before a partial backfill can commit.
+ */
+export function assertPayoutDestinationKeysConfigured(): void {
+  loadEncryptionKey();
+  loadHmacKey();
 }
 
 /**
@@ -241,11 +257,14 @@ export function isEncryptedDestination(destination: string): boolean {
  * Legacy plaintext destinations are masked directly.
  * If decryption fails (wrong key, tampered data), returns '[encrypted]'.
  */
-export function safeDisplayDestination(destination: string | null | undefined): string {
+export function safeDisplayDestination(
+  destination: string | null | undefined,
+  binding?: PayoutDestinationBinding,
+): string {
   if (!destination) return '';
   try {
     const decrypted = isEncryptedDestination(destination)
-      ? decryptPayoutDestination(destination)
+      ? decryptPayoutDestination(destination, binding)
       : destination;
     return maskPayoutDestination(decrypted);
   } catch {
@@ -258,6 +277,11 @@ export function safeDisplayDestination(destination: string | null | undefined): 
 /**
  * Decrypt a destination if encrypted; pass through legacy plaintext.
  */
-export function tryDecryptPayoutDestination(destination: string, binding?: PayoutDestinationBinding): string {
-  return isEncryptedDestination(destination) ? decryptPayoutDestination(destination, binding) : destination;
+export function tryDecryptPayoutDestination(
+  destination: string,
+  binding?: PayoutDestinationBinding,
+): string {
+  return isEncryptedDestination(destination)
+    ? decryptPayoutDestination(destination, binding)
+    : destination;
 }
