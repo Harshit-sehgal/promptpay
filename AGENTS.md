@@ -617,6 +617,33 @@ Two smaller pipeline fixes came with it: `up -d web` fails on its
 diagnostics never fired and the only output was the one-line "is unhealthy" —
 it now dumps the health-probe history and api logs at the point of failure.
 
+**A-107 — the Stripe webhook's authenticity boundary was untested.**
+`stripe-webhook.controller.spec.ts` had 14 tests and is thorough on money
+reconciliation, but every one drives `processEvent`/the handlers directly, so
+`verifyWebhookSignature` was a mock that gated nothing. Measured, not asserted:
+with the signature check removed from `handleWebhook`, **18 of 19 tests still
+passed** — the suite was blind to the removal of the entire authenticity
+boundary on a money endpoint. Five tests now go through the HTTP entry point and
+assert both properties that matter — the request is refused _and_ nothing is
+recorded or moved (no `webhookEvent` row, no ledger entry): missing signature
+header, forged signature, raw-body substitution, Stripe unconfigured, and
+missing raw body. Both removals are now caught.
+
+**A-108 — secret scanning has never covered git history.** `gitleaks-action`
+picks its scope from the event: on `push`/`pull_request` it scans only that
+event's commits, so every green run has been incremental. The first full-history
+scan (triggered by the new `workflow_dispatch`) reported **23 findings**. All 23
+were verified benign at their flagged commits — `generated-32-plus-character-secret`
+and `ci-test-jwt-secret-at-least-32-chars-long-ok` placeholders, the
+`Aa1Bb2Cc3Dd4…` dev-only compose values that file already documents as dev-only,
+`__fixtures__/test-keys*.ts`, and a sample key in `.env.example`. **No real
+secret, nothing to rotate.** The gap is the scope, not the findings: a secret
+committed before the current push would never be caught. Closing it needs a
+precise per-fingerprint baseline (never a path-glob allowlist, which would blind
+the scanner to a real secret pasted into a spec file) — left for an explicit
+decision rather than added silently, because suppressions in a security scanner
+are exactly what this repo's rules protect.
+
 ## Resolved 2026-08-07 (fifth pass) — CI green, plus two self-audited gaps
 
 **CI on `main` is green for the first time: 12/12 jobs at `dbeec08`**, including

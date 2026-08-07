@@ -451,3 +451,120 @@ describe('StripeWebhookController money reconciliation', () => {
     });
   });
 });
+
+/**
+ * The authenticity boundary of a money endpoint.
+ *
+ * Every other test in this file drives `processEvent`/the handlers directly, so
+ * `verifyWebhookSignature` is a mock that never gates anything: delete the
+ * signature check from `handleWebhook` and all of them still pass. These tests
+ * go through the HTTP entry point instead, and assert the two properties that
+ * actually matter — the request is refused, and NOTHING is recorded or moved.
+ *
+ * Acknowledging an unverified event with a 2xx is the specific failure A-062
+ * describes: Stripe stops retrying, and an event we never authenticated is
+ * treated as settled.
+ */
+describe('StripeWebhookController authenticity boundary', () => {
+  function expectRejected(prisma: ReturnType<typeof makeController>['prisma']) {
+    // No event row, no ledger entry, no campaign reactivation — a forged or
+    // unsigned request must not leave a trace it could later be resumed from.
+    expect(prisma.webhookEvent.create).not.toHaveBeenCalled();
+    expect(prisma.webhookEvent.updateMany).not.toHaveBeenCalled();
+    expect(prisma.advertiserLedger.create).not.toHaveBeenCalled();
+    expect(prisma.platformLedger.create).not.toHaveBeenCalled();
+  }
+
+  it('refuses a request with no stripe-signature header, without recording anything', async () => {
+    const { controller, prisma, stripe } = makeController();
+    const req = { headers: {}, body: Buffer.from('{"id":"evt_forged"}') };
+
+    await expect(controller.handleWebhook(req)).rejects.toMatchObject({
+      status: 400,
+      response: { received: false, reason: 'missing_signature' },
+    });
+
+    // Never even attempted — an unsigned body must not reach the verifier.
+    expect(stripe.verifyWebhookSignature).not.toHaveBeenCalled();
+    expectRejected(prisma);
+  });
+
+  it('refuses a forged signature with 400, not a 2xx acknowledgement', async () => {
+    const { controller, prisma, stripe } = makeController();
+    stripe.verifyWebhookSignature.mockImplementation(() => {
+      throw new Error('No signatures found matching the expected signature for payload');
+    });
+    const req = {
+      headers: { 'stripe-signature': 't=1,v1=forged' },
+      body: Buffer.from('{"id":"evt_forged","type":"checkout.session.completed"}'),
+    };
+
+    await expect(controller.handleWebhook(req)).rejects.toMatchObject({
+      status: 400,
+      response: { received: false, reason: 'signature_verification_failed' },
+    });
+
+    expect(stripe.verifyWebhookSignature).toHaveBeenCalledOnce();
+    expectRejected(prisma);
+  });
+
+  it('verifies against the RAW body, so a re-serialized payload cannot be substituted', async () => {
+    // Stripe's HMAC is over the exact bytes received. If the controller ever
+    // passed a parsed-and-restringified object, every genuine event would fail
+    // verification and — worse — the bytes checked would not be the bytes read.
+    const { controller, stripe } = makeController();
+    const raw = Buffer.from('{"id":"evt_raw","type":"checkout.session.completed"}');
+    stripe.verifyWebhookSignature.mockReturnValue({
+      id: 'evt_raw',
+      type: 'unsupported.event',
+      data: { object: {} },
+    });
+
+    await controller.handleWebhook({
+      headers: { 'stripe-signature': 't=1,v1=good' },
+      rawBody: raw,
+      body: { id: 'evt_raw' },
+    });
+
+    const [passedBody, passedSig] = stripe.verifyWebhookSignature.mock.calls[0];
+    expect(passedBody).toBe(raw);
+    expect(passedSig).toBe('t=1,v1=good');
+  });
+
+  it('fails closed with 503 when Stripe is not configured, rather than acknowledging', async () => {
+    const { controller, prisma, stripe } = makeController();
+    stripe.isEnabled = () => false;
+
+    await expect(
+      controller.handleWebhook({
+        headers: { 'stripe-signature': 't=1,v1=whatever' },
+        body: Buffer.from('{}'),
+      }),
+    ).rejects.toMatchObject({
+      status: 503,
+      response: { received: false, reason: 'stripe_not_configured' },
+    });
+    expectRejected(prisma);
+  });
+
+  it('refuses when the raw body is missing, instead of verifying a parsed object', async () => {
+    // Raw-body middleware ordering is easy to break (a global JSON parser in
+    // front of the route consumes the stream). Failing closed here is what
+    // turns that misconfiguration into a loud 400 rather than silent
+    // verification against the wrong bytes.
+    const { controller, prisma, stripe } = makeController();
+
+    await expect(
+      controller.handleWebhook({
+        headers: { 'stripe-signature': 't=1,v1=good' },
+        body: { id: 'evt_parsed_object' },
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { received: false, reason: 'missing_raw_body' },
+    });
+
+    expect(stripe.verifyWebhookSignature).not.toHaveBeenCalled();
+    expectRejected(prisma);
+  });
+});
