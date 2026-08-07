@@ -689,6 +689,19 @@ cap that makes growing the baseline a reviewable act. Net effect: full-history
 scanning is possible for the first time. Mutation-tested — appending `*.spec.ts`
 fails the guard.
 
+That took the scan from 23 findings to 1, and the last one was the baseline
+itself: `.gitleaksignore` documents why each entry is benign, and doing that
+honestly means quoting the values being baselined, so the quoted
+`'test-secret-at-least-32-characters-long-0123456789'` in a COMMENT matched the
+same heuristic. Baselining that finding would not work — a fingerprint embeds
+the commit SHA, so it goes stale the next time anyone edits the file. A
+`.gitleaks.toml` therefore excludes that one path, and `useDefault = true` keeps
+every upstream rule active. A contract test asserts both: without `useDefault` a
+config REPLACES the default ruleset, so adding this file to exclude one path
+would have silently turned the scanner into a no-op that still reports green.
+Mutation-tested against dropping `useDefault` and against widening the allowlist
+to `*.spec.ts`.
+
 **A-110 — `/health/migrations` was unauthenticated, unthrottled, and published
 schema names.** A route sweep of all 159 API handlers found 141 guarded and 18
 unguarded; 17 are correctly public (auth entry points, JWKS, probes, the

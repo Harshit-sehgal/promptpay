@@ -352,3 +352,28 @@ test('runtime images drop to a non-root user, and do not rebuild ownership in a 
     }
   }
 });
+
+test('the gitleaks config extends the default rules and excludes only the baseline file', () => {
+  // A gitleaks config REPLACES the default ruleset unless it opts back in.
+  // Without `useDefault`, adding this file to exclude one path would silently
+  // disable every upstream secret rule — turning a scanner into a no-op while
+  // still reporting green.
+  const config = read('.gitleaks.toml');
+  assert.match(
+    config,
+    /^\s*useDefault\s*=\s*true\s*$/m,
+    'gitleaks config must extend the default ruleset, never replace it',
+  );
+
+  // The only allowlisted path may be the baseline file. Anything broader (a
+  // source directory, a *.spec.ts glob) would blind the scanner to real
+  // secrets — the exact failure this whole baseline is built to avoid.
+  const paths = [...config.matchAll(/'''([^']*)'''/g)].map(([, p]) => p);
+  assert.deepEqual(
+    paths,
+    ['^\\.gitleaksignore$'],
+    'the allowlist must cover exactly .gitleaksignore and nothing else',
+  );
+  assert.doesNotMatch(config, /^\s*stopwords\s*=/m, 'stopwords would mute rules globally');
+  assert.doesNotMatch(config, /^\s*regexes\s*=/m, 'a content regex allowlist would mute real secrets');
+});

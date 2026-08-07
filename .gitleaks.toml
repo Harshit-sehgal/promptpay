@@ -1,0 +1,31 @@
+# gitleaks configuration.
+#
+# EXTENDS the default ruleset — it never replaces it. `useDefault = true` keeps
+# every upstream rule active; this file only adds the one exclusion below.
+title = "WaitLayer secret scanning"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+Exclude the baseline file itself.
+
+.gitleaksignore documents WHY each of its 23 fingerprints is benign, and doing
+that honestly means quoting the values being baselined — e.g. the literal
+'test-secret-at-least-32-characters-long-0123456789'. Those quotes match the
+same generic-api-key heuristic that flagged the originals, so scanning the
+baseline reported the baseline as a leak (.gitleaksignore:24 — a comment line).
+
+Adding that finding to the baseline would not fix it: a fingerprint embeds the
+commit SHA, so it goes stale the moment anyone edits the file. Deleting the
+quoted examples would fix it only until the next person explains an entry.
+
+This is safe because the file cannot carry a usable secret by construction, and
+that is enforced rather than assumed: scripts/ci-package-contract.test.mjs
+asserts every non-comment entry matches ^[0-9a-f]{40}:[^:*?]+:[^:*?]+:\\d+$ —
+no free text, no globs — under a hard count cap.
+
+Scoped to this one path. Never widen it to source directories.
+"""
+paths = ['''^\.gitleaksignore$''']
