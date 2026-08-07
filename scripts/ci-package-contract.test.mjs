@@ -207,17 +207,22 @@ test('prisma CLI is a PRODUCTION dependency, and the image does not reinstall it
     'NODE_PATH was the workaround for the global install and is no longer needed',
   );
 
-  // npm is build-time only. Shipping it means shipping its bundled dependency
-  // tree (tar, sigstore, ip-address, brace-expansion, picomatch), which was 10
-  // of the 11 CRITICAL/HIGH findings in the image scan.
+  // npm and pnpm are build-time only. Shipping them means shipping their
+  // bundled dependency trees: npm's (tar, sigstore, ip-address,
+  // brace-expansion, picomatch) was 10 of the 11 findings in the first image
+  // scan, and pnpm's own `tar` 7.5.16 was the remaining CRITICAL + HIGH. That
+  // tar appears nowhere in pnpm-lock.yaml, so no override can reach it —
+  // removing the tool is the only fix that is not a suppression.
   const runtimeStages = dockerfile.split(/^FROM /m).filter((st) => /^base AS (api|web)\b/.test(st));
   assert.equal(runtimeStages.length, 2, 'expected an api and a web runtime stage');
   for (const stage of runtimeStages) {
-    assert.match(
-      stage,
-      /rm -rf \/usr\/local\/lib\/node_modules\/npm/,
-      'each runtime stage must remove npm after its installs complete',
-    );
+    for (const tool of ['npm', 'pnpm']) {
+      assert.match(
+        stage,
+        new RegExp(`rm -rf [^\\n]*/usr/local/lib/node_modules/${tool}(?![-\\w])`),
+        `each runtime stage must remove ${tool} after its installs complete`,
+      );
+    }
   }
 });
 

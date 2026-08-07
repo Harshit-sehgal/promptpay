@@ -617,6 +617,22 @@ Two smaller pipeline fixes came with it: `up -d web` fails on its
 diagnostics never fired and the only output was the one-line "is unhealthy" —
 it now dumps the health-probe history and api logs at the point of failure.
 
+**A-109 — the last 2 image CVEs came from pnpm, which the runtime never uses.**
+The image scans ran for the first time ever on 2026-08-08 (they had always been
+skipped, because `docker-build` failed earlier in the job). Result for the API
+image: **0 findings in Alpine OS packages** — the npm removal cleared all 11
+previous findings — and **2 node-pkg findings (1 CRITICAL, 1 HIGH) in `tar`
+7.5.16**. That version appears **nowhere in `pnpm-lock.yaml`**, so no override
+could reach it: it is pnpm's own bundled copy at
+`/usr/local/lib/node_modules/pnpm/dist/node_modules/tar`. Confirmed by
+installing pnpm 11.9.0 into a plain `node:22-alpine` and reading the version —
+7.5.16, an exact match, so the causal link is measured rather than assumed.
+pnpm is build-time only (it performs the `--prod` install; both runtime CMDs run
+`node` directly), so it is removed from both runtime stages alongside npm. That
+fixes both findings at the source instead of suppressing them. The contract
+guard now covers both tools, and was mutation-tested to confirm the npm
+assertion cannot be satisfied by the pnpm line.
+
 **A-107 — the Stripe webhook's authenticity boundary was untested.**
 `stripe-webhook.controller.spec.ts` had 14 tests and is thorough on money
 reconciliation, but every one drives `processEvent`/the handlers directly, so

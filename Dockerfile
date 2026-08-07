@@ -146,7 +146,19 @@ RUN chmod +x /app/docker-entrypoint.sh
 # app CMD runs `node`. npm is a BUILD-time tool only (it installs pnpm in the
 # base stage and the Prisma CLI above), so it is deleted here — after every
 # install has completed — rather than shipped as unreachable attack surface.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+#
+# pnpm goes with it, for exactly the same reason and by the same argument. The
+# first image scan that ever ran reported 0 OS-package findings but 2 node-pkg
+# findings (1 CRITICAL, 1 HIGH) in `tar` 7.5.16 — a version that appears
+# NOWHERE in pnpm-lock.yaml. It is pnpm's own bundled copy, at
+# /usr/local/lib/node_modules/pnpm/dist/node_modules/tar; confirmed by
+# installing pnpm 11.9.0 into a plain node:22-alpine and reading its version.
+# So an override cannot reach it — the package is not in our dependency graph.
+# pnpm is build-time only (it performs the --prod install above; the CMDs run
+# `node` directly), so removing it fixes both findings at the source rather
+# than suppressing them.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+  && rm -rf /usr/local/lib/node_modules/pnpm /usr/local/bin/pnpm /usr/local/bin/pnpx
 
 RUN chown -R node:node /app
 USER node
@@ -202,9 +214,12 @@ COPY --from=build /app/package.json /app/package.json
 # at /app and strips dev deps from the hoisted store.
 RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 
-# See the api stage: npm ships in the base image with its own vulnerable
-# dependency tree and nothing at runtime uses it (the CMD below runs `node`).
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+# See the api stage: npm and pnpm both ship their own bundled dependency trees
+# (npm's accounted for 10 of 11 findings; pnpm's bundled `tar` 7.5.16 for the
+# remaining CRITICAL + HIGH), and nothing at runtime uses either — the CMD
+# below runs `node` directly.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+  && rm -rf /usr/local/lib/node_modules/pnpm /usr/local/bin/pnpm /usr/local/bin/pnpx
 
 RUN chown -R node:node /app
 USER node
