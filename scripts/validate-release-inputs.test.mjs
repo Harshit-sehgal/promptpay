@@ -136,7 +136,7 @@ test('validates the exact public URLs and RSA key embedded in the production web
   }
 });
 
-test('release workflow configures Buildx before every attested image build', () => {
+test('release workflow configures Buildx and signs every pushed image digest', () => {
   const stagingJob = releaseWorkflow.slice(
     releaseWorkflow.indexOf('  staging-smoke:'),
     releaseWorkflow.indexOf('  cleanup-staging-schema:'),
@@ -148,11 +148,16 @@ test('release workflow configures Buildx before every attested image build', () 
     ['production', productionJob],
   ]) {
     const setup = job.indexOf('docker/setup-buildx-action@');
-    const attestedBuild = job.indexOf("DOCKER_ATTEST: 'true'");
+    const build = job.indexOf('docker compose -f docker-compose.yml build --push');
     assert.notEqual(setup, -1, `${name} image job must set up Buildx`);
-    assert.notEqual(attestedBuild, -1, `${name} image job must request attestations`);
-    assert.ok(setup < attestedBuild, `${name} Buildx setup must precede the attested build`);
-    assert.match(job, /docker compose -f docker-compose\.yml build --push/);
+    assert.notEqual(build, -1, `${name} image job must build and push in one step`);
+    assert.ok(setup < build, `${name} Buildx setup must precede the image build`);
+    // This previously asserted `DOCKER_ATTEST: 'true'`, but compose-level
+    // `provenance`/`sbom` keys are rejected outright by the compose plugin on
+    // ubuntu-latest, so that switch drove nothing and the assertion certified a
+    // capability the pipeline did not have. Assert the control that is real:
+    // the pushed digests are cosign-signed (keyless, GitHub OIDC).
+    assert.match(job, /cosign (sign|verify)/, `${name} images must be cosign-signed or verified`);
   }
 
   const digestValidation = stagingJob.indexOf('name: Validate resolved staging digests');

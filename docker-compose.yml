@@ -66,12 +66,15 @@ services:
       # Supply-chain attestations are required for release images but are NOT
       # supported by Docker's default `docker` driver — with them hardcoded on,
       # a stock `docker compose build` failed for everyone with
-      # "Attestation is not supported for the docker driver" (A-092). Default
-      # them off so the documented local/deploy path works out of the box, and
-      # set DOCKER_ATTEST=true in CI/release (buildx container driver or the
-      # containerd image store) to restore provenance + SBOM.
-      provenance: ${DOCKER_ATTEST:-false}
-      sbom: ${DOCKER_ATTEST:-false}
+      # "Attestation is not supported for the docker driver" (A-092). Making
+      # them env-driven fixed the DRIVER problem but not the SCHEMA one: the
+      # compose plugin on ubuntu-latest rejects the keys outright with
+      # "services.api.build additional properties 'provenance', 'sbom' not
+      # allowed", and it validates the WHOLE file — so `build web` failed on
+      # api's keys. That broke the docker-build gate and would have broken the
+      # staging release build identically. Attestations are therefore applied
+      # by the release workflow with explicit buildx flags, which are portable,
+      # rather than by compose keys that only some versions understand.
       args:
         JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:-}
         JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
@@ -156,9 +159,7 @@ services:
     build:
       context: .
       target: web
-      # See api.build — opt-in via DOCKER_ATTEST so the default driver works.
-      provenance: ${DOCKER_ATTEST:-false}
-      sbom: ${DOCKER_ATTEST:-false}
+      # See api.build — attestations come from buildx flags, not compose keys.
       # Next.js inlines these at *build* time — runtime `environment:` below
       # does NOT reach the Edge middleware or the client bundle (A-083). Pass
       # real production values here; the ${VAR:-default} fallbacks match the

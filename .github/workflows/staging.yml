@@ -191,15 +191,20 @@ jobs:
         run: docker compose -f docker-compose.yml build --push api web
         env:
           # JWT_SECRET is a runtime-only secret; never pass it to docker build.
-          # Compose emits provenance/SBOM attestations for these images; every
-          # build argument below is public configuration or a public key.
+          # Every build argument below is public configuration or a public key.
           #
-          # A-092: attestations are opt-in via DOCKER_ATTEST because the default
-          # `docker` driver cannot produce them (hardcoding them broke every
-          # local/deploy-host `docker compose build`). These images are pushed
-          # and cosign-signed, so they MUST keep provenance + SBOM — this runner
-          # sets up buildx above, which supports them. Do not remove.
-          DOCKER_ATTEST: 'true'
+          # Attestations are NOT requested here. A-092 made compose's
+          # `provenance`/`sbom` keys env-driven to survive the default docker
+          # driver, but the compose plugin on ubuntu-latest rejects those keys
+          # at SCHEMA level ("additional properties ... not allowed") and
+          # validates the whole file — so this build failed before it started,
+          # exactly as the CI docker-build gate did. The `DOCKER_ATTEST` switch
+          # that used to sit here was therefore decorative: it drove nothing.
+          # Supply-chain integrity for these images comes from the cosign
+          # keyless signing of the resolved digests below, which is real and
+          # verified at promotion. Restoring provenance/SBOM needs explicit
+          # buildx flags (`docker buildx bake --provenance --sbom`); tracked as
+          # a follow-up rather than left as a switch that pretends to work.
           WAITLAYER_API_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-api:staging-${{ github.sha }}
           WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:staging-${{ github.sha }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}/api/v1
@@ -416,7 +421,8 @@ jobs:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
           REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
           REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
-          DOCKER_ATTEST: 'true'
+          # See staging-smoke: compose-level attestations are unportable; the
+          # digest is cosign-signed instead.
           WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:production-${{ github.sha }}
           JWT_PUBLIC_KEY: ${{ secrets.PRODUCTION_JWT_PUBLIC_KEY }}
           JWT_PUBLIC_KEYS: ${{ secrets.PRODUCTION_JWT_PUBLIC_KEYS }}
