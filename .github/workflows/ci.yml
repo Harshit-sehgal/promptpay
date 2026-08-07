@@ -233,6 +233,20 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
           REDIS_URL: redis://localhost:6379
           WEB_BASE_URL: http://localhost:3000
+          # Never send real mail from a test API.
+          EMAIL_DRIVER: console
+          # TEST-ONLY throttle ceilings. The whole browser suite authenticates
+          # from ONE IP, and the production auth throttle (10/min) is exhausted
+          # part-way through, after which `loginAs` hangs until its 45s
+          # navigation timeout — surfacing as a "flaky" test rather than as
+          # rate limiting. `.e2e/run-e2e.sh` and `.e2e/run-e2e-production.sh`
+          # both raise these, which is precisely why the e2e-production job
+          # passes while this one flaked on the same suite.
+          # NEVER raise these on a public production API (see AGENTS.md).
+          THROTTLE_AUTH_SHORT_LIMIT: '200'
+          THROTTLE_AUTH_LONG_LIMIT: '500'
+          THROTTLE_EXTENSION_LIMIT: '600'
+          THROTTLE_DEFAULT_LIMIT: '1000'
       - name: Build and boot web for E2E
         run: |
           pnpm --filter "waitlayer-web..." build
@@ -444,8 +458,24 @@ jobs:
       # hard-fails when an explicit target is missing.
       - name: Scan web build output for embedded signing secrets
         run: |
-          img=$(docker compose -f docker-compose.yml config --images | grep -- '-web$' | head -1)
+          # Resolve the WEB service's image exactly. `config --images` prints
+          # every image including postgres/redis, and the old `grep -- '-web$'`
+          # never matched because the name carries a tag (`waitlayer-web:local`)
+          # — so this step aborted with "web image name could not be resolved".
+          # It had never run before: the job used to die earlier at compose
+          # schema validation, which hid this completely.
+          # Reading services.web.image is exact and honours WAITLAYER_WEB_IMAGE.
+          img=$(docker compose -f docker-compose.yml config --format json 2>/dev/null \
+            | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).services.web.image||'')}catch{process.stdout.write('')}})") || true
+          # Fallback for compose builds without `--format json`: match the image
+          # name allowing a registry prefix and a tag. The previous `-web$` never
+          # matched, because the name always carries one (`waitlayer-web:local`).
+          if [ -z "$img" ]; then
+            img=$(docker compose -f docker-compose.yml config --images \
+              | grep -E '(^|/)waitlayer-web(:|$)' | head -1)
+          fi
           test -n "$img" || { echo "web image name could not be resolved"; exit 1; }
+          echo "web image: $img"
           cid=$(docker create "$img")
           trap 'docker rm -f "$cid" >/dev/null' EXIT
           rm -rf "$RUNNER_TEMP/web-next-scan"

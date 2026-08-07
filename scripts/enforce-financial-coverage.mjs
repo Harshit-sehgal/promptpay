@@ -47,8 +47,8 @@ const DEFAULT_FLOORS = {
   'fraud/fraud.service.ts': 63,
   'advertiser/advertiser-campaign.trait.ts': 48,
   'advertiser/advertiser-dashboard.trait.ts': 65,
-  'payout/providers/wise.provider.ts': 73,
-  'payout/providers/paypal-payouts.provider.ts': 63,
+  'payout/providers/wise.provider.ts': 78,
+  'payout/providers/paypal-payouts.provider.ts': 70,
   'payout/providers/stripe.provider.ts': 33,
 };
 

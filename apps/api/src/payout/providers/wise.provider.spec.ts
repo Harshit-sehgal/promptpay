@@ -277,4 +277,59 @@ describe('WisePayoutProvider', () => {
       vi.unstubAllGlobals();
     });
   });
+  describe('fail-closed safety branches', () => {
+    it('refuses to stub a payout in production when Wise is unconfigured', async () => {
+      // The dev stub returns a fake providerTxId. Reaching that path in
+      // production would mark a payout as initiated while no money moved and
+      // no provider record exists, so it must throw instead.
+      const p = makeProvider({ nodeEnv: 'production' });
+      await expect(
+        p.initiate({
+          payoutRequestId: 'req_prod_unconfigured',
+          destination: 'dev@example.com',
+          amountMinor: 2500,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(/not configured for production/i);
+    });
+
+    it('reports a transfer lookup failure as processing rather than inventing an outcome', async () => {
+      // A non-OK status read is UNKNOWN, not failed. Returning 'failed' here
+      // would release the local allocations while Wise may still be paying —
+      // the classic double-payout setup.
+      const p = makeProvider({ token: 'tok', profileId: '123' });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({ ok: false, status: 503, text: async () => 'upstream down' })),
+      );
+      await expect(p.checkStatus('transfer_unreachable')).resolves.toMatchObject({
+        status: 'processing',
+      });
+      vi.unstubAllGlobals();
+    });
+
+    it('classifies pre-transfer setup failure as SAFE (no transfer was created)', async () => {
+      // Recipient/quote creation happens BEFORE any transfer exists. A failure
+      // there cannot have moved money, so it must surface as a safe failure the
+      // caller may retry — not an ambiguous one that freezes the destination.
+      const p = makeProvider({ token: 'tok', profileId: '123' });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({
+          ok: false,
+          status: 500,
+          text: async () => 'recipient service unavailable',
+        })),
+      );
+      await expect(
+        p.initiate({
+          payoutRequestId: 'req_setup_fail',
+          destination: 'dev@example.com',
+          amountMinor: 2500,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(/pre-transfer setup failed/i);
+      vi.unstubAllGlobals();
+    });
+  });
 });

@@ -5,7 +5,12 @@ import { Logger } from '@nestjs/common';
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { PayPalPayoutsProvider } from './paypal-payouts.provider';
 
-function makeProvider(opts: { clientId?: string; clientSecret?: string; mode?: string; nodeEnv?: string }) {
+function makeProvider(opts: {
+  clientId?: string;
+  clientSecret?: string;
+  mode?: string;
+  nodeEnv?: string;
+}) {
   const config = {
     get: (key: string, fallback?: string) => {
       switch (key) {
@@ -94,7 +99,9 @@ describe('PayPalPayoutsProvider', () => {
       const logSpy = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
       const fetchMock = vi.fn(async (url: string, init: any) => {
         if (url.includes('/v1/oauth2/token')) {
-          return new Response(JSON.stringify({ access_token: 'access-token', expires_in: 3600 }), { status: 200 });
+          return new Response(JSON.stringify({ access_token: 'access-token', expires_in: 3600 }), {
+            status: 200,
+          });
         }
         if (url.includes('/v1/payments/payouts')) {
           const body = JSON.parse(init.body);
@@ -228,6 +235,67 @@ describe('PayPalPayoutsProvider', () => {
       });
       expect(String(fetchMock.mock.calls[1][0])).toContain('/v1/payments/payouts/PBATCH-1?');
       expect(String(fetchMock.mock.calls[1][0])).not.toContain('payouts-item');
+    });
+  });
+  describe('fail-closed safety branches', () => {
+    it('refuses to stub a payout in production when PayPal is unconfigured', async () => {
+      // The dev stub returns a synthetic batch id. Taking that path in
+      // production would record a payout as initiated with no PayPal batch
+      // behind it — unreconcilable by design, so it must throw.
+      const p = makeProvider({ nodeEnv: 'production' });
+      await expect(
+        p.initiate({
+          payoutRequestId: 'req_prod_unconfigured',
+          destination: 'dev@example.com',
+          amountMinor: 2500,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(/not configured for production/i);
+    });
+
+    it('treats an unreadable batch status as processing, never as a terminal outcome', async () => {
+      // A failed status READ says nothing about the payout. Mapping it to
+      // failed would release the reserved earnings while PayPal may still be
+      // paying, which is how a duplicate payout gets funded.
+      const p = makeProvider({ clientId: 'id', clientSecret: 'secret' });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) =>
+          String(url).includes('/v1/oauth2/token')
+            ? { ok: true, json: async () => ({ access_token: 'tok', expires_in: 3600 }) }
+            : { ok: false, status: 503, text: async () => 'service unavailable' },
+        ),
+      );
+      await expect(p.checkStatus('batch_unreadable')).resolves.toMatchObject({
+        status: 'processing',
+      });
+    });
+
+    it('reports processing without calling PayPal when the provider is disabled', async () => {
+      // An unconfigured provider must not claim a terminal state for a payout
+      // it knows nothing about, and must not attempt a network call.
+      const p = makeProvider({});
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+      await expect(p.checkStatus('batch_x')).resolves.toMatchObject({ status: 'processing' });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('surfaces an OAuth failure as a safe failure so no payout is attempted', async () => {
+      // Authentication happens before any money instruction is sent.
+      const p = makeProvider({ clientId: 'id', clientSecret: 'secret' });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({ ok: false, status: 401, text: async () => 'invalid_client' })),
+      );
+      await expect(
+        p.initiate({
+          payoutRequestId: 'req_oauth_fail',
+          destination: 'dev@example.com',
+          amountMinor: 2500,
+          currency: 'USD',
+        }),
+      ).rejects.toThrow(/PayPal OAuth failed with status 401/i);
     });
   });
 });
