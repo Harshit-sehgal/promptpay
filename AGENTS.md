@@ -31,7 +31,7 @@
   and the gate fixes below. Typecheck 17/17 and lint 11/11 green on the landed
   tree; sandbox 18/18, placement 12/12, scenario suites 30/30, VSIX bundle +
   isolated smoke, web panels 4/4, referral/ledger 39/39, vscode 138/139.
-- Issues A-001…A-101 are resolved and gate-verified.
+- Issues A-001…A-102 are resolved and gate-verified.
 - **2026-08-07 launch audit.** A from-scratch launch-readiness audit disproved
   the previous claim that only external items remained ("no source edit can
   close them"). It found four source-fixable blockers no gate covered — two of
@@ -178,7 +178,7 @@ strings), enforces a minimum body length so an empty shell cannot pass, and
 checks the footer links resolve. **Prefer an assertion on rendered output over
 an assertion that a build succeeded.**
 
-## Resolved 2026-08-07 (second pass) — A-092…A-101, deployability
+## Resolved 2026-08-07 (second pass) — A-092…A-102, deployability
 
 Found by actually building the images and booting the stack in production mode
 rather than reasoning about it. **Nobody had ever done this**, and all three
@@ -378,6 +378,44 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
   developer and advertiser journeys through the real BFF (cookie issuance,
   identity-header HMAC signing, middleware JWT verification). No test changes
   were needed — the suite already avoids the dev-only mock-Google button.
+
+- **A-102 — the entire payout path and both GDPR erasure routes were
+  unreachable from the UI.** The most consequential finding after A-097, and
+  found the same way: by driving a real user journey against a production API
+  instead of reading code.
+  Seven routes are guarded by `ActionStepUpGuard`, which **unconditionally**
+  rejects any request lacking an `x-step-up-token` header:
+  `payout:method` (register/remove a payout account), `payout:request`,
+  `api_key:create`, `account:delete` (**developer** and **advertiser** — GDPR
+  Art. 17), and `2fa:disable`.
+  **Nothing ever sent that header.** Worse, `/auth/step-up` was not on the BFF
+  proxy allowlist, so the web could not even _request_ a token — and the proxy
+  builds an allowlisted header set, so the header would have been dropped even
+  if a client had sent one. Three independent breaks in the same chain.
+  **Consequence:** a developer could never register a payout account or request
+  a payout, nobody could create an API key, and **neither role could delete
+  their account** — a standing GDPR Article 17 exposure.
+  **Proven against a live production API** (the API itself is correct; the
+  defect was entirely client-side):
+
+  | step                                       | result                                       |
+  | ------------------------------------------ | -------------------------------------------- |
+  | `POST /payout/method` with no header       | **403** "Step-up authentication is required" |
+  | enable 2FA, `POST /auth/step-up`           | **200**, token issued                        |
+  | same `POST /payout/method` **with** header | **201** ✅                                   |
+
+  **Fix:** `/auth/step-up` added to the proxy allowlist; the proxy forwards
+  `x-step-up-token` (safe — the API verifies signature, audience, subject
+  binding, action scope and 5-minute expiry); an axios interceptor detects the
+  specific refusal, prompts via `StepUpProvider` (mounted in the developer,
+  advertiser and admin shells), exchanges the TOTP code for an action-scoped
+  token, and retries once. Tokens are deliberately **not** cached — caching one
+  would defeat the "prove MFA at the moment of the sensitive action" property.
+  **Gate:** `lib/api/step-up.spec.ts` (17 tests) pins the route→action map, so a
+  moved route that loses its mapping fails the suite instead of silently
+  becoming unreachable again. It also asserts the interceptor does **not**
+  swallow the _admin_ MFA refusal, which has a different message and a
+  different remedy.
 
 **Cold-start deploy verified end-to-end (2026-08-07).** The full first-deploy
 sequence was run against an **empty database** using the shipped

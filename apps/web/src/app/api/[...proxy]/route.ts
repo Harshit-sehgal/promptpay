@@ -59,6 +59,12 @@ export const ALLOWED_PATH_PREFIXES = [
   '/auth/verify-email/request',
   '/auth/2fa/setup',
   '/auth/2fa/enable',
+  // A-102: action-scoped MFA step-up. Seven endpoints (payout method, payout
+  // request, API key creation, account deletion for both roles, 2FA disable)
+  // are guarded by `ActionStepUpGuard` and reject any request without an
+  // `x-step-up-token` header. Without this entry the web could not even ask
+  // for a token, so every one of those actions was unreachable from the UI.
+  '/auth/step-up',
   '/auth/2fa/disable',
   '/auth/2fa/backup-codes/regenerate',
   '/auth/link/google',
@@ -193,6 +199,18 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
     const accessToken = readAuthCookie(req, COOKIE_ACCESS, isSecure(req.headers));
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    // A-102: forward the action-scoped MFA step-up token. This header set is
+    // an allowlist — anything not copied here is dropped — so without this the
+    // header never reached the API and every `ActionStepUpGuard` route
+    // (payouts, API keys, account deletion, 2FA disable) answered 403 forever.
+    // It is safe to forward: the API verifies its RS256 signature, audience,
+    // subject-vs-caller binding, action scope, and 5-minute expiry, so a forged
+    // or replayed value is rejected upstream.
+    const stepUpToken = req.headers.get('x-step-up-token');
+    if (stepUpToken) {
+      headers['x-step-up-token'] = stepUpToken;
     }
 
     // Pick up the refresh token for auth/refresh calls below

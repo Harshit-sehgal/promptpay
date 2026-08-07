@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+import { getStepUpPrompt, isStepUpRequired, stepUpActionFor } from './step-up';
+
 /**
  * Recursively coerce monetary fields serialized as strings back to BigInt.
  * The API serializes `bigint` values as JSON strings via
@@ -126,6 +128,35 @@ api.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+
+    // ── Step-up interceptor (A-102) ──
+    // Seven routes are guarded by `ActionStepUpGuard` and refuse any request
+    // without an `x-step-up-token` header. Nothing sent it, so the entire
+    // payout path and both GDPR erasure routes were permanently 403. On that
+    // specific refusal, obtain an action-scoped token and retry once.
+    if (
+      originalRequest &&
+      !originalRequest._stepUpRetry &&
+      isStepUpRequired(error.response?.status, error.response?.data?.message)
+    ) {
+      const action = stepUpActionFor(originalRequest.method ?? 'POST', originalRequest.url ?? '');
+      const ask = getStepUpPrompt();
+      if (action && ask) {
+        const code = await ask(action);
+        // A null code means the user dismissed the prompt — surface the
+        // original 403 rather than inventing a different failure.
+        if (code) {
+          const { data } = await api.post('/auth/step-up', { action, token: code });
+          originalRequest._stepUpRetry = true;
+          originalRequest.headers = {
+            ...(originalRequest.headers ?? {}),
+            'x-step-up-token': data.stepUpToken,
+          };
+          return api(originalRequest);
+        }
+      }
+      return Promise.reject(error);
+    }
 
     // Skip if not a 401 or already retried
     if (error.response?.status !== 401 || originalRequest._retry) {
