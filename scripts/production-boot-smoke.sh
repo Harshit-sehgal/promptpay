@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Local runner for the production-mode boot smoke (A-098).
+#
+# Boots the compiled API exactly the way a deployment does — NODE_ENV=production,
+# PEMs in the single-line `\n`-escaped form that Compose/--env-file require, a
+# stamped environment marker, a bootstrapped admin — then asserts a token can
+# actually be issued, verified, and accepted.
+#
+# Every other local gate runs the API in test or development mode with
+# multi-line PEMs, which is why A-097 (100% of logins returning HTTP 500 in
+# production) passed 1316 unit tests and 114 e2e tests.
+#
+# Uses the TEST database (:5433) and an isolated port so it never touches dev
+# state. Requires Postgres :5433 and Redis :6379.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+PORT="${SMOKE_PORT:-4105}"
+DB="${SMOKE_DATABASE_URL:-postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public}"
+ENV_ID="${SMOKE_ENVIRONMENT_ID:-local-smoke}"
+ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-smoke-admin@waitlayer.test}"
+ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-Str0ng!Passw0rd#2026}"
+WORK="$(mktemp -d)"
+trap 'kill "${API_PID:-}" 2>/dev/null || true; rm -rf "$WORK"' EXIT
+
+echo "→ generating ephemeral keys in the ESCAPED deployment form"
+openssl genrsa -out "$WORK/private.pem" 2048 2>/dev/null
+openssl rsa -in "$WORK/private.pem" -pubout -out "$WORK/public.pem" 2>/dev/null
+# awk (not sed) so the newline becomes a literal backslash-n, matching how a
+# real .env / --env-file carries a PEM.
+PRIV="$(awk '{printf "%s\\n", $0}' "$WORK/private.pem")"
+PUB="$(awk '{printf "%s\\n", $0}' "$WORK/public.pem")"
+case "$PRIV" in
+  *'\n'*) : ;;
+  *) echo "PEM is not escaped — this smoke would not reproduce A-097"; exit 1 ;;
+esac
+
+cat > "$WORK/env" <<ENVEOF
+NODE_ENV=production
+WAITLAYER_ENVIRONMENT_KIND=production
+WAITLAYER_ENVIRONMENT_ID=${ENV_ID}
+DATABASE_URL=${DB}
+REDIS_URL=redis://localhost:6379
+API_PORT=${PORT}
+API_BASE_URL=https://api.waitlayer.test
+WEB_BASE_URL=https://www.waitlayer.test
+JWT_ISSUER=waitlayer
+JWT_AUDIENCE=waitlayer-client
+JWT_PRIVATE_KEY=${PRIV}
+JWT_PUBLIC_KEY=${PUB}
+JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')
+TOTP_SECRET_ENCRYPTION_KEY=$(openssl rand -base64 48 | tr -d '\n')
+EMAIL_QUEUE_SECRET=$(openssl rand -hex 32)
+PAYOUT_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')
+PAYOUT_HMAC_KEY=$(openssl rand -base64 32 | tr -d '\n')
+PRIVACY_HASH_KEY=$(openssl rand -hex 32)
+PAYOUT_REQUIRE_2FA=true
+PAYOUT_DESTINATION_COOLDOWN_HOURS=24
+BFF_TRUST_PROXY_HOPS=1
+TRUST_PROXY_HOPS=1
+ALLOWED_COUNTRIES=US,GB
+ALLOWED_CURRENCIES=USD,GBP
+COOKIE_SECURE=true
+EMAIL_DRIVER=resend
+EMAIL_FROM=noreply@waitlayer.test
+RESEND_API_KEY=re_local_placeholder_never_sends
+OPS_ALERT_EMAIL=ops@waitlayer.test
+ENVEOF
+
+# Spawn helper: bash cannot `source` a file containing escaped PEMs without
+# mangling them (AGENTS.md, "never source an environ dump"), so parse in Node.
+cat > "$WORK/spawn.mjs" <<'SPAWNEOF'
+import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+const [, , envFile, cwd, ...cmd] = process.argv;
+const env = { ...process.env };
+for (const line of readFileSync(envFile, 'utf8').split('\n')) {
+  const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
+  if (m) env[m[1]] = m[2];
+}
+spawn(cmd[0], cmd.slice(1), { env, cwd, stdio: 'inherit' }).on('exit', (c) => process.exit(c ?? 0));
+SPAWNEOF
+
+echo "→ building API"
+pnpm --filter waitlayer-api build > /dev/null
+
+echo "→ migrating + stamping marker + bootstrapping admin (cold-start order)"
+(cd packages/db && DATABASE_URL="$DB" pnpm exec prisma migrate deploy > /dev/null)
+DATABASE_URL="$DB" WAITLAYER_ENVIRONMENT_KIND=production WAITLAYER_ENVIRONMENT_ID="$ENV_ID" \
+  node scripts/bootstrap-environment-marker.mjs --confirm-stamp
+DATABASE_URL="$DB" ADMIN_BOOTSTRAP_TOKEN=local-smoke-bootstrap-token \
+  node scripts/bootstrap-admin.mjs --token local-smoke-bootstrap-token \
+  --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" 2>&1 | head -2 || true
+
+echo "→ booting API in production mode on :$PORT"
+node "$WORK/spawn.mjs" "$WORK/env" "$PWD" node apps/api/dist/apps/api/src/main.js > "$WORK/api.log" 2>&1 &
+API_PID=$!
+for _ in $(seq 1 60); do
+  if curl -fsS "http://localhost:$PORT/api/v1/health" > /dev/null 2>&1; then break; fi
+  sleep 2
+done
+if ! curl -fsS "http://localhost:$PORT/api/v1/health" > /dev/null 2>&1; then
+  echo "API did not become healthy:"; tail -40 "$WORK/api.log"; exit 1
+fi
+
+echo "→ running smoke"
+API_BASE_URL="http://localhost:$PORT/api/v1" \
+SMOKE_ADMIN_EMAIL="$ADMIN_EMAIL" SMOKE_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+JWT_PUBLIC_KEY="$PUB" \
+  node scripts/production-boot-smoke.mjs

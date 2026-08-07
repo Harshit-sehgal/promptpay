@@ -556,6 +556,151 @@ jobs:
           node-version: 22
       - name: Verify AGENTS.md claims match code
         run: node scripts/audit-claims.mjs
+
+  # ── Production-mode boot smoke (A-098) ──────────────────────────────────
+  # Every other gate exercises the API in a mode no deployment uses: unit tests
+  # run NODE_ENV=test with multi-line PEMs, `.e2e/run-e2e.sh` runs the API in
+  # development, and the docker-build job above boots in development too and
+  # only checks that routes resolve.
+  #
+  # A-097 lived in exactly that gap — the RS256 signing key was never
+  # unescaped, so a correct production config booted healthy and then failed
+  # 100% of authentication with HTTP 500. 1316 unit + 114 e2e tests passed.
+  #
+  # This job runs the API the way production actually runs it: NODE_ENV=production,
+  # PEMs in the single-line `\n`-escaped form that Compose/--env-file require,
+  # a stamped environment marker, and a bootstrapped admin. Then it asserts a
+  # token can actually be ISSUED, VERIFIES against the public key, and is
+  # ACCEPTED by a protected route.
+  production-boot-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: waitlayer
+          POSTGRES_PASSWORD: waitlayer-ci
+          POSTGRES_DB: waitlayer_prodsmoke
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U waitlayer -d waitlayer_prodsmoke"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://waitlayer:waitlayer-ci@localhost:5432/waitlayer_prodsmoke?schema=public
+      REDIS_URL: redis://localhost:6379
+      API_PORT: '4002'
+      API_BASE_URL: https://api.waitlayer.test
+      WEB_BASE_URL: https://www.waitlayer.test
+      NODE_ENV: production
+      WAITLAYER_ENVIRONMENT_KIND: production
+      WAITLAYER_ENVIRONMENT_ID: ci-prod-smoke
+      JWT_ISSUER: waitlayer
+      JWT_AUDIENCE: waitlayer-client
+      PAYOUT_REQUIRE_2FA: 'true'
+      PAYOUT_DESTINATION_COOLDOWN_HOURS: '24'
+      BFF_TRUST_PROXY_HOPS: '1'
+      TRUST_PROXY_HOPS: '1'
+      ALLOWED_COUNTRIES: US,GB
+      ALLOWED_CURRENCIES: USD,GBP
+      COOKIE_SECURE: 'true'
+      EMAIL_DRIVER: resend
+      EMAIL_FROM: noreply@waitlayer.test
+      RESEND_API_KEY: re_ci_placeholder_never_sends
+      OPS_ALERT_EMAIL: ops@waitlayer.test
+      SMOKE_ADMIN_EMAIL: ci-prod-smoke@waitlayer.test
+      SMOKE_ADMIN_PASSWORD: Str0ng!Passw0rd#2026
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+
+      # PEMs are written in the SINGLE-LINE `\n`-escaped form on purpose: that
+      # is the only form Compose and `--env-file` can carry, and it is the form
+      # that broke A-097. Using a multi-line PEM here would silently restore
+      # the blind spot this job exists to close.
+      - name: Generate ephemeral RS256 keys in the escaped deployment form
+        run: |
+          openssl genrsa -out /tmp/ci-private.pem 2048 2>/dev/null
+          openssl rsa -in /tmp/ci-private.pem -pubout -out /tmp/ci-public.pem 2>/dev/null
+          {
+            echo "JWT_PRIVATE_KEY=$(awk '{printf "%s\\n", $0}' /tmp/ci-private.pem)"
+            echo "JWT_PUBLIC_KEY=$(awk '{printf "%s\\n", $0}' /tmp/ci-public.pem)"
+            echo "JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+            echo "TOTP_SECRET_ENCRYPTION_KEY=$(openssl rand -base64 48 | tr -d '\n')"
+            echo "EMAIL_QUEUE_SECRET=$(openssl rand -hex 32)"
+            echo "PAYOUT_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')"
+            echo "PAYOUT_HMAC_KEY=$(openssl rand -base64 32 | tr -d '\n')"
+            echo "PRIVACY_HASH_KEY=$(openssl rand -hex 32)"
+          } >> "$GITHUB_ENV"
+
+      - name: Assert the PEM really is in the escaped form
+        run: |
+          case "$JWT_PRIVATE_KEY" in
+            *'\n'*) echo "JWT_PRIVATE_KEY carries literal \\n escapes (deployment form)";;
+            *) echo "PEM is not escaped — this job would not reproduce A-097"; exit 1;;
+          esac
+
+      - name: Build API
+        run: pnpm --filter waitlayer-api build
+
+      - name: Apply migrations
+        run: cd packages/db && pnpm exec prisma migrate deploy
+
+      # Cold-start order (A-096/A-088): marker and admin both need the schema.
+      - name: Stamp environment marker
+        run: node scripts/bootstrap-environment-marker.mjs --confirm-stamp
+
+      - name: Bootstrap administrator
+        env:
+          ADMIN_BOOTSTRAP_TOKEN: ci-prod-smoke-bootstrap-token
+        run: |
+          node scripts/bootstrap-admin.mjs \
+            --token "$ADMIN_BOOTSTRAP_TOKEN" \
+            --email "$SMOKE_ADMIN_EMAIL" \
+            --password "$SMOKE_ADMIN_PASSWORD"
+
+      - name: Deploy preflight against the live environment
+        run: node scripts/deploy-preflight.mjs --with-db || true # admin has no TOTP in CI
+
+      - name: Boot the API in production mode
+        run: |
+          node apps/api/dist/apps/api/src/main.js > /tmp/prod-api.log 2>&1 &
+          echo $! > /tmp/prod-api.pid
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:4002/api/v1/health >/dev/null 2>&1; then
+              echo "production API healthy"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy:"; tail -40 /tmp/prod-api.log; exit 1
+
+      - name: Production boot smoke (A-098 — asserts a token can be issued)
+        env:
+          API_BASE_URL: http://localhost:4002/api/v1
+        run: node scripts/production-boot-smoke.mjs
+
+      - name: API log on failure
+        if: failure()
+        run: tail -100 /tmp/prod-api.log || true
+
+      - name: Stop API
+        if: always()
+        run: kill "$(cat /tmp/prod-api.pid)" 2>/dev/null || true
   # ── Security scanning (P1.22) ──
   # CodeQL, secret scanning, filesystem CVE scan, SBOM, and license check.
   # Blocking: a critical secret leak or CRITICAL/HIGH CVE must fail the

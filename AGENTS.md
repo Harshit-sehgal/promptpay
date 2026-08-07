@@ -31,7 +31,7 @@
   and the gate fixes below. Typecheck 17/17 and lint 11/11 green on the landed
   tree; sandbox 18/18, placement 12/12, scenario suites 30/30, VSIX bundle +
   isolated smoke, web panels 4/4, referral/ledger 39/39, vscode 138/139.
-- Issues A-001…A-097 are resolved and gate-verified.
+- Issues A-001…A-098 are resolved and gate-verified.
 - **2026-08-07 launch audit.** A from-scratch launch-readiness audit disproved
   the previous claim that only external items remained ("no source edit can
   close them"). It found four source-fixable blockers no gate covered — two of
@@ -178,7 +178,7 @@ strings), enforces a minimum body length so an empty shell cannot pass, and
 checks the footer links resolve. **Prefer an assertion on rendered output over
 an assertion that a build succeeded.**
 
-## Resolved 2026-08-07 (second pass) — A-092…A-097, deployability
+## Resolved 2026-08-07 (second pass) — A-092…A-098, deployability
 
 Found by actually building the images and booting the stack in production mode
 rather than reasoning about it. **Nobody had ever done this**, and all three
@@ -286,6 +286,40 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
 3. _A green health check is not a working service._ The API reported healthy
    while 100% of authentication was failing. Health checks should exercise a
    representative path, not just liveness.
+
+- **A-098 — no gate ever ran the API the way production runs it.** This is the
+  structural hole A-097 lived in, and closing it matters more than the bug did.
+  Every existing gate exercises a mode no deployment uses:
+  - unit/integration: `NODE_ENV=test`, **multi-line** PEMs injected by
+    `test-setup.ts`;
+  - `.e2e/run-e2e.sh`: exports `NODE_ENV=development` for the API (the web is
+    built for production, the API it talks to is not) — so all 114 e2e tests
+    ran against a development API;
+  - CI `docker-build`: boots the image in development (compose defaults
+    `NODE_ENV=development`) and asserts only that routes _resolve_
+    (login 400 / me 401 / docs 200) — never that a token can be **issued**.
+
+  **Proven, not asserted.** The A-097 fix was reverted in a compiled build and
+  both gates were run against that same binary:
+
+  | check                         | broken build                                                               |
+  | ----------------------------- | -------------------------------------------------------------------------- |
+  | `/health`                     | **200** ✅ (reports `database: connected`)                                 |
+  | `POST /auth/login` empty body | **400** ✅ (CI's existing assertion)                                       |
+  | `GET /auth/me`                | **401** ✅ (CI's existing assertion)                                       |
+  | `production-boot-smoke`       | **FAIL** — "login returned HTTP 500 — the API cannot sign tokens… (A-097)" |
+
+  Every pre-existing check passed on a build where 100% of authentication was
+  broken. **Fix:** `scripts/production-boot-smoke.mjs` +
+  `scripts/production-boot-smoke.sh` (`pnpm smoke:production`) + a
+  `production-boot-smoke` CI job. It runs `NODE_ENV=production` with PEMs in the
+  single-line `\n`-escaped form (the runner **asserts** the PEM is escaped, so
+  the blind spot cannot be silently restored), stamps a marker, bootstraps an
+  admin, then asserts a token is **issued**, **verifies against the configured
+  public key**, carries `RS256` + a `kid` + `aud: [audience, 'access']`, and is
+  **accepted** by a protected route — plus Swagger closed, mock-Google closed,
+  privileged-role signup refused, MFA step-up enforced, switches fail-closed.
+  19 assertions, green on the fixed build.
 
 **Cold-start deploy verified end-to-end (2026-08-07).** The full first-deploy
 sequence was run against an **empty database** using the shipped
