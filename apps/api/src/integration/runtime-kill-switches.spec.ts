@@ -343,8 +343,12 @@ describe('Runtime Kill Switches', () => {
         reason?: string;
       }>;
       const paypal = providers.find((p) => p.provider === 'paypal_email');
-      expect(paypal?.status).toBe('coming_soon');
-      expect(paypal?.reason).toMatch(/disabled/i);
+      expect(paypal).toMatchObject({
+        available: false,
+        status: 'temporarily_disabled',
+        reasonCode: 'operator_disabled',
+      });
+      expect(paypal?.reason).toMatch(/temporarily unavailable/i);
     });
 
     it('rejects payout method creation for a blocked provider', async () => {

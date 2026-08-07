@@ -307,6 +307,7 @@ const mockPrisma = {
 const prismaRef = mockPrisma as any;
 const mockGoogleVerifier = {
   verify: vi.fn(),
+  verifyRecent: vi.fn(),
 };
 
 // ── Shared in-memory ledger for cross-service assertions ──
@@ -2361,7 +2362,7 @@ describe('E2E Money Loop', () => {
         googleId: 'google-sub-123',
         email: 'social@example.com',
       });
-      mockGoogleVerifier.verify.mockResolvedValue({
+      mockGoogleVerifier.verifyRecent.mockResolvedValue({
         sub: 'google-sub-123',
         email: 'social@example.com',
         email_verified: true,
@@ -2380,7 +2381,7 @@ describe('E2E Money Loop', () => {
 
       expect(result.eventSecret).toEqual(expect.any(String));
       expect(result.eventSecret).not.toBe(oldSecret);
-      expect(mockGoogleVerifier.verify).toHaveBeenCalledWith('valid-google-token');
+      expect(mockGoogleVerifier.verifyRecent).toHaveBeenCalledWith('valid-google-token');
     });
 
     it('rejects Google-linked device-secret recovery when Google re-auth does not match the account', async () => {
@@ -2400,7 +2401,7 @@ describe('E2E Money Loop', () => {
         googleId: 'google-sub-123',
         email: 'social@example.com',
       });
-      mockGoogleVerifier.verify.mockResolvedValue({
+      mockGoogleVerifier.verifyRecent.mockResolvedValue({
         sub: 'different-google-sub',
         email: 'social@example.com',
         email_verified: true,

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { describe, expect, it, vi } from 'vitest';
 
+import { encryptPayoutDestination, hmacPayoutDestination } from '../common/utils/payout-encryption';
 import { StripeWebhookController } from './stripe-webhook.controller';
 
 function makeController(options: { depositDuplicate?: boolean } = {}) {
@@ -55,6 +56,10 @@ function makeController(options: { depositDuplicate?: boolean } = {}) {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     campaign: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
+    payoutAccount: {
+      findMany: vi.fn().mockResolvedValue([]),
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
     $executeRaw: vi.fn().mockResolvedValue(0),
     // The real handleRefund (and the Round 27 Fix 1 parent-restoration loop)
     // wrap each reversal in `$transaction`. Surface a pass-through mock so
@@ -360,14 +365,21 @@ describe('StripeWebhookController money reconciliation', () => {
     });
 
     it('dispatches account.updated to handleAccountUpdated and converges the event', async () => {
-      const { controller, prisma, stripe } = makeController();
+      const { controller, prisma, stripe, audit } = makeController();
+      const binding = {
+        accountId: 'pa-stripe',
+        userId: 'user-stripe',
+        provider: 'stripe_connect',
+        currency: 'USD',
+      };
+      const destination = encryptPayoutDestination('acct_disp', binding);
       stripe.retrieveConnectAccountVerification = vi
         .fn()
-        .mockResolvedValue({ chargesEnabled: true, payoutsEnabled: true, detailsSubmitted: true });
-      prisma.payoutAccount = {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        findFirst: vi.fn().mockResolvedValue(null),
-      };
+        .mockResolvedValue({ transfersActive: true, payoutsEnabled: true, detailsSubmitted: true });
+      prisma.payoutAccount.findMany.mockResolvedValue([
+        { ...binding, id: binding.accountId, destination },
+      ]);
+      prisma.payoutAccount.updateMany.mockResolvedValue({ count: 1 });
       await expect(
         controller.processEvent({
           id: 'evt_disp_acct',
@@ -375,7 +387,67 @@ describe('StripeWebhookController money reconciliation', () => {
           data: { object: { id: 'acct_disp' } },
         }),
       ).resolves.toBeUndefined();
-      expect(prisma.payoutAccount.updateMany).toHaveBeenCalled();
+      expect(prisma.payoutAccount.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            destinationHmac: hmacPayoutDestination('acct_disp'),
+            verificationRejectedAt: null,
+            isFrozen: false,
+          }),
+        }),
+      );
+      expect(prisma.payoutAccount.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: binding.accountId }),
+          data: { isVerified: true },
+        }),
+      );
+      // The audit row is mandatory and must be written INSIDE the same
+      // transaction as the isVerified flip, so a failed log rolls the
+      // verification back. Pin the transaction-client second argument: passing
+      // only the payload would silently accept a non-atomic `logStrict` call.
+      expect(audit.logStrict).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'stripe_connect_auto_verified',
+          beforeSnap: { accountRef: expect.any(String) },
+        }),
+        expect.objectContaining({ payoutAccount: expect.anything() }),
+      );
+      expect(JSON.stringify(audit.logStrict.mock.calls)).not.toContain('acct_disp');
+    });
+
+    it('does not auto-verify when the encrypted destination does not match the event account', async () => {
+      const { controller, prisma, stripe, audit } = makeController();
+      const binding = {
+        accountId: 'pa-stripe',
+        userId: 'user-stripe',
+        provider: 'stripe_connect',
+        currency: 'USD',
+      };
+      prisma.payoutAccount.findMany.mockResolvedValue([
+        {
+          ...binding,
+          id: binding.accountId,
+          destination: encryptPayoutDestination('acct_other', binding),
+        },
+      ]);
+      stripe.retrieveConnectAccountVerification = vi
+        .fn()
+        .mockResolvedValue({ transfersActive: true, payoutsEnabled: true, detailsSubmitted: true });
+
+      await controller.processEvent({
+        id: 'evt_wrong_account',
+        type: 'account.updated',
+        data: { object: { id: 'acct_disp' } },
+      });
+
+      expect(prisma.payoutAccount.updateMany).not.toHaveBeenCalled();
+      expect(audit.logStrict).not.toHaveBeenCalled();
+      expect(prisma.webhookEvent.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ error: 'payout_account_not_found' }),
+        }),
+      );
     });
   });
 });

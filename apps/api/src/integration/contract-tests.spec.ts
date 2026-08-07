@@ -24,6 +24,7 @@ import {
   MeResponse,
   PayoutAvailableResponse,
   PayoutMethodResponse,
+  PayoutProviderReadinessResponse,
   PayoutRequestResponse,
   QualifiedImpressionResponse,
   RefreshResponse,
@@ -814,6 +815,31 @@ describe('API Contract Tests', () => {
         .expect(201);
       expect(() => PayoutMethodResponse.parse(res.body)).not.toThrow();
       expect(res.body.id).toBeDefined();
+      expect(res.body.destination).toBe('con***@paypal.com');
+      expect(res.body.destination).not.toMatch(/^v[12]:/);
+      expect(res.body).not.toHaveProperty('destinationHmac');
+      expect(res.body).not.toHaveProperty('userId');
+    });
+
+    // The payouts UI gates method registration entirely on this endpoint
+    // (`selectablePayoutProviders` fails closed to an empty list). If the
+    // response shape drifts, registration silently disappears from the product
+    // rather than erroring — so assert the real HTTP body against the shared
+    // contract, not just the trait's return value.
+    it('GET /payout/providers → matches PayoutProviderReadinessResponse schema', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/payout/providers')
+        .set('Authorization', `Bearer ${devToken}`)
+        .expect(200);
+      expect(() => PayoutProviderReadinessResponse.parse(res.body)).not.toThrow();
+      const parsed = PayoutProviderReadinessResponse.parse(res.body);
+      // At least one rail must be selectable or no developer could ever be paid.
+      expect(parsed.providers.some((p) => p.available && p.status === 'available')).toBe(true);
+      // Operator credential details must never reach a developer-facing body.
+      const body = JSON.stringify(res.body);
+      for (const secretish of ['SECRET', 'TOKEN', 'API_KEY', 'PASSWORD']) {
+        expect(body.toUpperCase()).not.toContain(secretish);
+      }
     });
 
     it('GET /payout/available → matches PayoutAvailableResponse schema', async () => {

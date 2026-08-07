@@ -1,5 +1,7 @@
 import { Page } from '@playwright/test';
 
+import { generateTotp } from '@waitlayer/shared';
+
 /**
  * Test user credentials and API helpers for browser E2E tests.
  *
@@ -15,6 +17,31 @@ export interface TestUser {
 }
 
 const API_BASE_URL = process.env.E2E_API_URL ?? 'http://localhost:4002/api/v1';
+
+interface LoginApiResponse {
+  accessToken?: string;
+  user?: {
+    twoFactorEnabled?: boolean;
+  };
+}
+
+interface TwoFactorSetupResponse {
+  secret?: string;
+}
+
+interface StepUpResponse {
+  stepUpToken?: string;
+}
+
+async function responseDetail(response: Response): Promise<string> {
+  const body = await response.text().catch(() => 'unreadable response');
+  return body.slice(0, 500);
+}
+
+async function requireOk(response: Response, operation: string): Promise<void> {
+  if (response.ok) return;
+  throw new Error(`${operation} failed: ${response.status} ${await responseDetail(response)}`);
+}
 
 /** Generate a unique test user so repeated runs don't collide. */
 export function makeTestUser(role: 'developer' | 'advertiser'): TestUser {
@@ -98,29 +125,113 @@ export async function loginAs(page: Page, user: TestUser): Promise<void> {
 }
 
 /**
- * Delete a test user via the public delete-account API.
- * This is best-effort — the endpoint may require step-up re-auth in some
- * environments, in which case the user is left in the database. Unique emails
- * from {@link makeTestUser} prevent collisions across runs.
+ * Delete a test user through the same production security boundary as the UI.
+ *
+ * Account erasure requires both password re-authentication and an
+ * action-scoped MFA step-up. Cleanup therefore enrolls 2FA for ordinary test
+ * users before deleting them. If a test already enabled 2FA, pass the secret
+ * it received so cleanup can log in and obtain a fresh step-up token.
+ *
+ * A 401 at the initial login is the one tolerated outcome: the test either
+ * deleted the account itself or failed before signup completed. Every other
+ * failure is surfaced so cleanup cannot manufacture a green suite while rows
+ * accumulate in the database.
  */
-export async function deleteTestUser(user: TestUser): Promise<void> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: user.email, password: user.password }),
-    });
-    if (!res.ok) return;
-    const { access_token: token } = (await res.json()) as { access_token?: string };
-    if (!token) return;
+export async function deleteTestUser(
+  user: TestUser,
+  options: { totpSecret?: string } = {},
+): Promise<void> {
+  let totpSecret = options.totpSecret;
+  const loginRes = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: user.email,
+      password: user.password,
+      ...(totpSecret ? { twoFactorToken: generateTotp(totpSecret) } : {}),
+    }),
+  });
+  if (loginRes.status === 401) {
+    const detail = await responseDetail(loginRes);
+    if (/twoFactorRequired|two-factor authentication code required/i.test(detail)) {
+      throw new Error(
+        'E2E cleanup reached a 2FA-enabled user without a valid TOTP secret; pass totpSecret',
+      );
+    }
+    return;
+  }
+  await requireOk(loginRes, 'E2E cleanup login');
 
-    await fetch(`${API_BASE_URL}/developer/delete-account`, {
+  const login = (await loginRes.json()) as LoginApiResponse;
+  const accessToken = login.accessToken;
+  if (!accessToken) {
+    throw new Error('E2E cleanup login returned no accessToken');
+  }
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${accessToken}`,
+  };
+
+  if (login.user?.twoFactorEnabled !== true) {
+    const setupRes = await fetch(`${API_BASE_URL}/auth/2fa/setup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ confirmation: 'DELETE_MY_ACCOUNT' }),
+      headers: authHeaders,
+      body: JSON.stringify({ currentPassword: user.password }),
     });
-  } catch {
-    // Best-effort cleanup; don't fail the test suite.
+    await requireOk(setupRes, 'E2E cleanup 2FA setup');
+    const setup = (await setupRes.json()) as TwoFactorSetupResponse;
+    if (!setup.secret) {
+      throw new Error('E2E cleanup 2FA setup returned no secret');
+    }
+    totpSecret = setup.secret;
+
+    const enableRes = await fetch(`${API_BASE_URL}/auth/2fa/enable`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ token: generateTotp(totpSecret) }),
+    });
+    await requireOk(enableRes, 'E2E cleanup 2FA enable');
+  }
+
+  if (!totpSecret) {
+    throw new Error('E2E cleanup cannot delete a 2FA-enabled user without its TOTP secret');
+  }
+  const stepUpRes = await fetch(`${API_BASE_URL}/auth/step-up`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ action: 'account:delete', token: generateTotp(totpSecret) }),
+  });
+  await requireOk(stepUpRes, 'E2E cleanup account-delete step-up');
+  const stepUp = (await stepUpRes.json()) as StepUpResponse;
+  if (!stepUp.stepUpToken) {
+    throw new Error('E2E cleanup step-up response returned no stepUpToken');
+  }
+
+  const endpoint =
+    user.role === 'developer' ? 'developer/delete-account' : 'advertiser/delete-account';
+  const deleteRes = await fetch(`${API_BASE_URL}/${endpoint}`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'x-step-up-token': stepUp.stepUpToken },
+    body: JSON.stringify({
+      confirmation: 'DELETE_MY_ACCOUNT',
+      currentPassword: user.password,
+      forfeitBalance: true,
+    }),
+  });
+  await requireOk(deleteRes, `E2E cleanup ${user.role} account deletion`);
+}
+
+/** Assert that erased credentials can no longer create a session. */
+export async function assertTestUserCannotLogin(user: TestUser): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: user.email, password: user.password }),
+  });
+  if (response.status !== 401) {
+    throw new Error(
+      `Erased E2E user unexpectedly received login status ${response.status}: ${await responseDetail(response)}`,
+    );
   }
 }
 

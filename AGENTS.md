@@ -31,7 +31,14 @@
   and the gate fixes below. Typecheck 17/17 and lint 11/11 green on the landed
   tree; sandbox 18/18, placement 12/12, scenario suites 30/30, VSIX bundle +
   isolated smoke, web panels 4/4, referral/ledger 39/39, vscode 138/139.
-- Issues A-001…A-102 are resolved and gate-verified.
+- Issues A-001…A-105 are resolved and gate-verified.
+- **2026-08-07 third pass.** Running the e2e suites against the (then
+  uncommitted) hardening wave surfaced three defects no gate covered: a totally
+  broken email-queue failure path (A-103), GDPR erasure 500-ing under any
+  concurrency (A-104), and a serialization-retry classifier blind to the error
+  Prisma 7's pg adapter actually throws (A-105). Two were hidden by tests that
+  fed the code a row shape the database never returns. See "Resolved 2026-08-07
+  (third pass)" below.
 - **2026-08-07 launch audit.** A from-scratch launch-readiness audit disproved
   the previous claim that only external items remained ("no source edit can
   close them"). It found four source-fixable blockers no gate covered — two of
@@ -446,6 +453,128 @@ immediately before handover, and the current image demonstrably works — the
 risk outweighs the saving until someone can verify the runtime end-to-end after
 the change. Registry bandwidth and deploy latency are the costs of leaving it.
 
+## Resolved 2026-08-07 (third pass) — A-103…A-105
+
+Found by running the e2e suites after the uncommitted hardening wave, and by
+following each failure to its root cause instead of relaxing the assertion. All
+three were invisible to every existing gate; two were hidden by tests that fed
+the code a shape the database never produces.
+
+- **A-103 — the transactional email queue was entirely broken on the failure
+  path.** `EmailQueueCron` leases rows with `SELECT * FROM "email_queue"`, but
+  `retryCount` is `@map("retry_count")`, so the raw row carried `retry_count`
+  and `job.retryCount` was **`undefined`** at runtime. `EmailQueueRow` still
+  declared it `number` — a raw query's type parameter is an **unchecked
+  assertion**, so `tsc` was satisfied. The fallout compounded:
+  `job.retryCount + 1` → `NaN`; `retryCount >= MAX_RETRIES` never true (rows
+  retried forever); `2 ** NaN` → an **Invalid Date** for `nextRetryAt`; and the
+  failure-path `update()` then threw, aborting the **whole batch transaction**.
+  One undeliverable message stopped the entire queue — password-reset,
+  email-verification and payout-frozen alerts included. Delivery itself worked,
+  which is why nothing noticed: only the failure path was broken.
+  **Why nothing caught it:** every unit test mocks `$queryRaw` and returns a
+  **camelCase** row the database never returns, so the suite validated a shape
+  production never sees.
+  **Fix:** an explicit aliased projection (`"retry_count" AS "retryCount"`),
+  never `SELECT *`. **Gate:** `src/integration/email-queue-cron.spec.ts` runs
+  the cron against the **real** database (3 tests: increments the mapped column,
+  parks an exhausted row, and survives a poison row without aborting the batch),
+  plus a unit assertion pinning the projection. **Proven** by reverting the fix:
+  all three integration tests and the projection assertion fail; with the fix,
+  12/12 green and deterministic back-to-back.
+
+- **A-104 — GDPR Article 17 erasure failed with HTTP 500 under any concurrency.**
+  `eraseAccountIdentity` runs SERIALIZABLE and scrubbed audit rows with a single
+  `OR: [{ actorId: { in } }, { targetId: { in } }]`. Postgres cannot index a
+  disjunction across two columns, so it **sequentially scanned `audit_logs`** —
+  and a seq scan inside a SERIALIZABLE transaction takes a **relation-level
+  predicate lock**, which conflicts with the audit row that nearly _every_
+  request inserts. The transaction had **no retry at all**, so deletion returned
+  a bare 500 whenever the system was busy, and the failure rate grows with
+  `audit_logs` forever. `targetId` was only ever a trailing column
+  (`targetType, targetId`), so it could not seek either.
+  **Why nothing caught it:** the e2e fixture used to delete accounts
+  best-effort inside a `try/catch`. The uncommitted wave removed that swallow —
+  which is the only reason this surfaced, and a good argument for never letting
+  cleanup hide failures.
+  **Fix:** three parts — (1) migration `20260807040000_audit_logs_target_id_index`
+  adds `@@index([targetId])` (plan cost 137 → 19, Bitmap Index Scan); (2) the
+  `OR` is split into two separately indexed statements; (3) a bounded
+  serialization retry (8 attempts, exponential backoff with full jitter, capped
+  at 2s) — SSI aborts are retryable by design and the transaction is idempotent
+  (it re-reads the subject inside the advisory lock and returns early once
+  `status === 'deleted'`). **Verified:** browser e2e went 15 failures → 3 → 2 →
+  **0**, and production-mode e2e 4 → 1 → **0**.
+
+- **A-105 — the shared serialization-retry classifier missed the error Prisma 7
+  actually throws.** `isSerializationError` keyed entirely off `P2034`/`P2038`/
+  `P2010`. Inside an interactive `$transaction`, `@prisma/adapter-pg` converts
+  SQLSTATE `40001` into a raw `DriverAdapterError`
+  (`cause.kind = 'TransactionWriteConflict'`, `message` the bare kind string)
+  and throws it **with no `code` at all**. Every retry loop in the repo
+  therefore let a genuine serialization abort escape as a 500 — including
+  `auction.service.ts`, which is on the money path. `sandbox.service.ts` carried
+  its own even narrower `instanceof PrismaClientKnownRequestError && code ===
+'P2034'` copy with the same hole.
+  **Fix:** `isSerializationError` recognises the raw `DriverAdapterError`
+  envelope; the sandbox duplicate now delegates to it. **Gate:**
+  `src/common/utils/errors.spec.ts` (7 tests) pins the real adapter shape,
+  asserts it carries no `code` (so the test cannot stop testing the real
+  hazard), and asserts deterministic failures — unique-constraint, not-found,
+  `TableDoesNotExist`, a different `DriverAdapterError` kind — are **not**
+  classified retryable.
+
+**Also this pass:** a cross-boundary contract had no guard — the API generates
+2FA backup codes from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` while the browser
+(`two-factor-input.ts`) only forwards `[A-HJ-NP-Z2-9]{4}-…`; a drift on either
+side would make the client silently drop valid recovery codes with no server
+trace. `src/auth/backup-code-format.spec.ts` now generates 1000+ codes and
+asserts they match the browser's exact pattern (proven by mutating the
+alphabet). `GET /payout/providers` also gained a real-HTTP contract test — the
+payouts UI gates registration entirely on it and fails **closed**, so drift
+would delete the feature silently rather than erroring.
+
+**Rule this pass earns:** _a raw query's type parameter is a lie until a test
+runs it against the database._ `SELECT *` plus `@map` plus an unchecked generic
+produced `undefined` where the types promised a number, and every mock in the
+suite agreed with the types instead of the database.
+
+**Fresh gates after the third pass (all re-run green on this tree):** typecheck
+17/17, lint 11/11, build 11/11, API **1618/1618 across 155 files** (unit +
+all 22 integration files, `--no-file-parallelism`), web 253, cli 123, vscode
+142 + 1 opt-in skip, shared 77, config 13, browser e2e **114/114**
+(`.e2e/run-e2e.sh`), production-mode browser e2e **116/116**
+(`pnpm e2e:production`, includes the sensitive developer journey on both
+viewports), `test:release-gates` exit 0, `audit-claims` 13/13,
+`scan-build-secrets` PASS, `audit-dependencies` clean, `check-licenses` clean,
+`pnpm audit --prod` clean. Migrations **94**, dev (:5432) and test (:5433) both
+applied and `migrate diff --exit-code` drift-free.
+
+**Third harness defect found the same way (`pnpm smoke:production`, 21/21).**
+The smoke defaults to the SHARED `waitlayer_test` database, and the integration
+suites deliberately enable the money switches in their `beforeAll`. Running the
+smoke straight after `vitest run src/integration` therefore reported
+"money-switches unexpectedly ENABLED: payouts.requests" — a **deployment-blocking
+verdict on a perfectly good build**, five minutes into the run. The assertion is
+right and was left untouched; the runner now probes the switches BEFORE booting
+(`scripts/read-enabled-money-switches.mjs`) and exits 2 naming the leftover
+integration state and the `SMOKE_DATABASE_URL` escape hatch. Verified in both
+directions: it fires on a contaminated database and stays silent on a clean one.
+Same class as the Redis-index and port-hermeticity fixes — _a gate that
+false-fails trains people to ignore it._
+
+**The vscode live smoke now actually runs.**
+`apps/vscode-extension/test/api-client.live.spec.ts` is gated on
+`RUN_LIVE_TESTS=true`, which was set **nowhere** — no CI job, no script — so it
+had never executed once. It was not misleading (its header says it is opt-in)
+but it was not coverage either: the extension's only live ApiClient path was
+entirely unverified. The e2e job and `.e2e/run-e2e.sh` already have an API on
+:4002, which is the spec's default target, so both now run it there. It signs up
+a developer over real HTTP and asserts the balance deserializes to a **bigint**
+— the repo's money invariant, which the mocked unit tests cannot show. Verified
+live: passes against the running API, and fails with `ECONNREFUSED` when the API
+is down (so it cannot silently become a no-op again).
+
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
 1. **Independent wait attestation operation:** a real provider/bridge whose
@@ -676,7 +805,7 @@ pruned 2026-07-10; this index preserves the audit trail.
 - A-027 device recovery issuance (`admin.controller:184,190`; `devices/page.tsx`).
 - A-028 admin user lifecycle buttons (`admin/users/page.tsx:250-319`).
 - A-029 feedback backend submit (`feedback/page.tsx:20`; `feedback.service.ts`).
-- A-030 safe-seed payout provider catalogue (`payout-providers.ts`): `paypal_email` + `manual` available by default; `paypal_payouts`, `stripe_connect`, `wise`, `payoneer`, `razorpay` coming_soon; `applyPayoutProviderOverrides` + server-side `normalizePayoutMethod` gate via `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS`.
+- A-030 safe-seed payout provider catalogue (`payout-providers.ts`): `paypal_email` + `manual` available by default; automated rails remain gated; the API enforces `WAITLAYER_PAYOUT_PROVIDER_STATUS` and publishes runtime readiness to the web so no build-time client catalogue can drift.
 - A-031 currency helpers in UI (relocated to `@waitlayer/shared`: `formatMinorUnits`, `minorToMajorInputValue`, `depositMinimumMinor`, `payoutMinimumMinor`).
 - A-032 reports pagination bounds (`advertiser.service.ts:42-43`; `spec:237-295`).
 - A-033 comparison `Live` claims over 2 codebases (`comparison/page.tsx:37-51`) — **live-verified 2026-07-15** (browser E2E).

@@ -13,9 +13,11 @@
 #   - a stamped environment marker, full production config schema
 #   - mock Google auth OFF, Swagger closed, MFA step-up active
 #
-# The tests themselves need no changes: they create users through the public
-# signup API and log in with email/password, deliberately avoiding the
-# dev-only mock-Google button.
+# Most tests create users through the public signup API and log in with
+# email/password, deliberately avoiding the dev-only mock-Google button. The
+# production-only sensitive-journey contract additionally exercises UI signup,
+# password-reauthenticated 2FA enrolment, the real action-step-up BFF retry,
+# payout-method add/remove, and self-service account erasure.
 #
 # Uses isolated ports, its own Redis database index, and the TEST database so
 # it never touches dev state.
@@ -142,6 +144,7 @@ fi
 
 echo "→ booting web (production) on :$WEB_PORT"
 (cd apps/web && NODE_ENV=production \
+  WAITLAYER_REQUIRE_DEPLOY_ENV=1 \
   JWT_SECRET="$JWT_SECRET_VALUE" \
   JWT_PUBLIC_KEY="$PUB" JWT_ISSUER=waitlayer JWT_AUDIENCE=waitlayer-client \
   NEXT_PUBLIC_API_URL="http://localhost:${API_PORT}/api/v1" \
@@ -163,7 +166,8 @@ export E2E_API_URL="http://localhost:${API_PORT}/api/v1"
 cd apps/web
 set +e
 E2E_BASE_URL="http://localhost:${WEB_PORT}" \
-  pnpm exec playwright test --reporter=line
+  E2E_PRODUCTION_MODE=1 \
+  pnpm exec playwright test "$@" --reporter=line
 STATUS=$?
 set -e
 [ "$STATUS" -ne 0 ] && { echo "--- API log (tail) ---"; tail -60 "$WORK/api.log"; }

@@ -76,3 +76,11 @@ done
 
 # Run Playwright tests
 pnpm --filter waitlayer-web exec playwright test
+
+# The VS Code extension's ApiClient live smoke is gated on RUN_LIVE_TESTS, which
+# was set nowhere — so it had never run, and the extension's only live API path
+# was unverified. The API is already up on :4002, so prove it here: the spec
+# signs up a developer over HTTP and asserts the balance arrives as a BIGINT,
+# which the mocked unit tests cannot show.
+RUN_LIVE_TESTS=true WAITLAYER_API_URL="http://localhost:4002/api/v1" \
+  pnpm --filter waitlayer-vscode exec vitest run test/api-client.live.spec.ts

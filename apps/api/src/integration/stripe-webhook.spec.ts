@@ -1,6 +1,6 @@
 import { raw } from 'express';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
@@ -10,7 +10,7 @@ import { AppModule } from '../app.module';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { ThrottleByRouteGuard } from '../common/guards/throttle-by-route.guard';
 import { PrismaService } from '../config/prisma.service';
-import { StripeProvider } from '../payout/providers';
+import { StripeConnectPayoutProvider, StripeProvider } from '../payout/providers';
 
 /**
  * Integration tests for the Stripe webhook reconciliation path — the
@@ -41,11 +41,12 @@ const fakeStripe = {
   }),
 };
 
-const TEST_PROVIDER_TX_IDS = ['po_paid_1', 'po_fail_1'];
+const TEST_PROVIDER_TX_IDS = ['po_paid_1', 'po_fail_1', 'po_fail_2'];
 const TEST_PAYMENT_INTENT_IDS = ['pi_partial_freeze', 'pi_partial_won', 'pi_partial_lost'];
 const TEST_EVENT_IDS = [
   'evt_paid_1',
   'evt_fail_1',
+  'evt_fail_2',
   'evt_unhandled_1',
   'evt_partial_freeze_created',
   'evt_partial_won_created',
@@ -176,7 +177,11 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     process.env.REDIS_URL = previousRedisUrl;
   });
 
-  async function seedPaidScenario(providerTxId: string, payoutStatus: string) {
+  async function seedPaidScenario(
+    providerTxId: string,
+    payoutStatus: string,
+    options: { providerFundingTxId?: string } = {},
+  ) {
     const user = await prisma.user.create({
       data: {
         email: `wh-${providerTxId}@test.com`,
@@ -212,6 +217,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
         provider: 'stripe_connect',
         providerTxId,
         status: 'processing',
+        providerFundingTxId: options.providerFundingTxId ?? null,
       },
     });
 
@@ -241,7 +247,7 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     await prisma.payoutAllocation.create({
       data: { payoutRequestId: payout.id, earningsEntryId: e2.id, amountMinor: 400 },
     });
-    return { payoutId: payout.id, e1Id: e1.id, e2Id: e2.id };
+    return { payoutId: payout.id, e1Id: e1.id, e2Id: e2.id, accountId: account.id };
   }
 
   async function seedDisputeScenario(input: {
@@ -321,8 +327,15 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     expect(res.status).toBe(200);
   });
 
-  it('marks a payout failed and preserves earnings on payout.failed', async () => {
-    const { payoutId, e1Id } = await seedPaidScenario('po_fail_1', 'processing');
+  // A Stripe Connect payout is a TWO-leg movement: platform -> connected
+  // account (transfer), then connected account -> bank (payout). `payout.failed`
+  // only fails the second leg; the transferred funds are returned to the
+  // CONNECTED ACCOUNT, not to the platform. Releasing the local allocations at
+  // that point would let the developer re-request money that is still sitting in
+  // their Stripe balance. So the handler holds the request in `processing` and
+  // freezes the destination until the funding transfer is proven reversed.
+  it('holds allocations and freezes the destination when no funding transfer reference exists', async () => {
+    const { payoutId, e1Id, accountId } = await seedPaidScenario('po_fail_1', 'processing');
 
     const res = await postWebhook({
       id: 'evt_fail_1',
@@ -332,11 +345,67 @@ describe('Stripe Webhook Controller — reconciliation', () => {
     });
 
     expect(res.status).toBe(200);
+    // Deliberately NOT `failed`: the platform leg is unreconciled, so the
+    // reservation must survive for operator triage.
     const payout = await prisma.payoutRequest.findUnique({ where: { id: payoutId } });
-    expect(payout?.status).toBe('failed');
-    // Earnings stay confirmed (not paid) — they become available again for retry.
+    expect(payout?.status).toBe('processing');
+    const account = await prisma.payoutAccount.findUnique({ where: { id: accountId } });
+    expect(account?.isFrozen).toBe(true);
     const e1 = await prisma.earningsLedger.findUnique({ where: { id: e1Id } });
     expect(e1?.status).toBe('confirmed');
+    const allocs = await prisma.payoutAllocation.count({ where: { payoutRequestId: payoutId } });
+    expect(allocs).toBe(2);
+    // The event must not be marked processed — an operator has to act on it.
+    const evt = await prisma.webhookEvent.findUnique({
+      where: { provider_eventId: { provider: 'stripe', eventId: 'evt_fail_1' } },
+    });
+    expect(evt?.processingStatus).toBe('pending_review');
+    expect(evt?.error).toBe('stripe_funding_transfer_reference_missing');
+    const review = await prisma.auditLog.findFirst({
+      where: { action: 'stripe_payout_failed_requires_review', targetId: payoutId },
+    });
+    expect(review).toBeTruthy();
+  });
+
+  it('releases earnings on payout.failed once the funding transfer is reversed', async () => {
+    const { payoutId, e1Id, e2Id } = await seedPaidScenario('po_fail_2', 'processing', {
+      providerFundingTxId: 'tr_test_reversible',
+    });
+    const reverseFundingTransfer = vi
+      .fn()
+      .mockResolvedValue({ reversalId: 're_test_1', alreadyReversed: false });
+    const stripeConnect = app.get(StripeConnectPayoutProvider);
+    const originalReverse = stripeConnect.reverseFundingTransfer;
+    stripeConnect.reverseFundingTransfer = reverseFundingTransfer;
+
+    try {
+      const res = await postWebhook({
+        id: 'evt_fail_2',
+        type: 'payout.failed',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: 'po_fail_2', status: 'failed' } },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      stripeConnect.reverseFundingTransfer = originalReverse;
+    }
+
+    // The platform leg is now provably reversed, so the canonical
+    // `markPayoutFailed` transition may run: request fails and the reserved
+    // earnings are released for a fresh request.
+    expect(reverseFundingTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payoutRequestId: payoutId,
+        transferId: 'tr_test_reversible',
+        amountMinor: 1000n,
+      }),
+    );
+    const payout = await prisma.payoutRequest.findUnique({ where: { id: payoutId } });
+    expect(payout?.status).toBe('failed');
+    const e1 = await prisma.earningsLedger.findUnique({ where: { id: e1Id } });
+    const e2 = await prisma.earningsLedger.findUnique({ where: { id: e2Id } });
+    expect(e1?.status).toBe('confirmed');
+    expect(e2?.status).toBe('confirmed');
     const allocs = await prisma.payoutAllocation.count({ where: { payoutRequestId: payoutId } });
     expect(allocs).toBe(0);
   });

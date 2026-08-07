@@ -46,6 +46,14 @@
  */
 import { createPublicKey, createVerify } from 'node:crypto';
 
+import {
+  enabledMoneySwitches,
+  isExpectedAdminMfaRefusal,
+  isExpectedPrivilegedRoleRefusal,
+  isExpectedTwoFactorReauthRefusal,
+  responseMessage,
+} from './production-smoke-contract.mjs';
+
 const BASE = (process.env.API_BASE_URL ?? 'http://localhost:4002/api/v1').replace(/\/$/, '');
 const ADMIN_EMAIL = process.env.SMOKE_ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.SMOKE_ADMIN_PASSWORD;
@@ -163,8 +171,13 @@ async function checkPublicRoutes() {
 async function checkProductionGuards() {
   // Swagger must be closed in production unless explicitly opened.
   const docs = await http('/docs');
-  if (docs.status === 200 && process.env.SWAGGER_ENABLED !== 'true') {
-    fail('swagger-closed', '/docs is 200 in production without SWAGGER_ENABLED=true');
+  const swaggerEnabled = process.env.SWAGGER_ENABLED === 'true';
+  const expectedDocsStatus = swaggerEnabled ? 200 : 404;
+  if (docs.status !== expectedDocsStatus) {
+    fail(
+      'swagger-closed',
+      `/docs → ${docs.status}; expected ${expectedDocsStatus} when SWAGGER_ENABLED=${swaggerEnabled}`,
+    );
   } else {
     pass('swagger-closed', `/docs → ${docs.status}`);
   }
@@ -175,8 +188,11 @@ async function checkProductionGuards() {
     headers: jsonHeaders(),
     body: JSON.stringify({ email: 'attacker@example.test' }),
   });
-  if (mock.status === 200 || mock.status === 201) {
-    fail('mock-google-closed', `mock Google sign-in returned ${mock.status} in production`);
+  if (mock.status !== 404) {
+    fail(
+      'mock-google-closed',
+      `expected the production-only route to be absent (404), got ${mock.status}`,
+    );
   } else {
     pass('mock-google-closed', String(mock.status));
   }
@@ -194,8 +210,13 @@ async function checkProductionGuards() {
     }),
   });
   if (signup.throttled) throttleNote('privileged-role-refused');
-  else if (signup.status === 400) pass('privileged-role-refused', '400');
-  else fail('privileged-role-refused', `expected 400, got ${signup.status}`);
+  else if (isExpectedPrivilegedRoleRefusal(signup)) pass('privileged-role-refused', '400');
+  else {
+    fail(
+      'privileged-role-refused',
+      `expected the privileged-role validation refusal, got ${signup.status}: ${responseMessage(signup)}`,
+    );
+  }
 }
 
 function jsonHeaders() {
@@ -313,12 +334,15 @@ async function checkTwoFactorEnrolment(token) {
     headers: auth,
     body: '{}',
   });
-  // 401 without a proof is CORRECT — it is the security control. Only flag it
-  // if the endpoint has become permissive.
-  if (noProof.status === 200) {
-    fail('2fa-setup-requires-reauth', 'setup issued a secret with NO re-authentication proof');
+  // Require the exact security refusal. A 404/500 also blocks enrolment and
+  // must not be misreported as proof that reauthentication is enforced.
+  if (isExpectedTwoFactorReauthRefusal(noProof)) {
+    pass('2fa-setup-requires-reauth', '401');
   } else {
-    pass('2fa-setup-requires-reauth', String(noProof.status));
+    fail(
+      '2fa-setup-requires-reauth',
+      `expected the 401 reauthentication refusal, got ${noProof.status}: ${responseMessage(noProof)}`,
+    );
   }
 
   const withProof = await http('/auth/2fa/setup', {
@@ -351,27 +375,27 @@ async function checkAdminSurface(token) {
   if (overview.status === 200) pass('admin-read', '200');
   else fail('admin-read', `expected 200, got ${overview.status}`);
 
-  // Production MUST require recent 2FA for admin writes. A 200 here means the
-  // step-up guard is not active and any stolen admin token is fully powerful.
+  // Production MUST require the exact recent-2FA refusal. A 404/500 also
+  // blocks the write, but proves nothing about the guard and must fail.
   const write = await http('/admin/settings/ads/global/toggle', {
     method: 'POST',
     headers: { ...auth, ...jsonHeaders() },
     body: JSON.stringify({ enabled: false, reason: 'production boot smoke' }),
   });
-  if (write.status === 403) pass('admin-mfa-step-up', '403 without recent 2FA (correct)');
-  else if (write.status === 200)
-    fail('admin-mfa-step-up', 'admin write SUCCEEDED without recent 2FA — guard is not active');
-  else pass('admin-mfa-step-up', `blocked with ${write.status}`);
+  if (isExpectedAdminMfaRefusal(write)) {
+    pass('admin-mfa-step-up', '403 without recent 2FA (correct)');
+  } else {
+    fail(
+      'admin-mfa-step-up',
+      `expected the 403 recent-2FA refusal, got ${write.status}: ${responseMessage(write)}`,
+    );
+  }
 
   const settings = await http('/admin/settings', { headers: auth });
   if (settings.status !== 200) return fail('money-switches', `settings → ${settings.status}`);
-  const enabled = (Array.isArray(settings.json) ? settings.json : [])
-    .filter((s) => s?.value?.enabled === true)
-    .map((s) => `${s.scope}.${s.target}`);
-  pass(
-    'money-switches',
-    enabled.length === 0 ? 'all fail-closed' : `ENABLED: ${enabled.join(', ')}`,
-  );
+  const enabled = enabledMoneySwitches(settings.json);
+  if (enabled.length === 0) pass('money-switches', 'all fail-closed');
+  else fail('money-switches', `unexpectedly ENABLED: ${enabled.join(', ')}`);
 }
 
 async function main() {

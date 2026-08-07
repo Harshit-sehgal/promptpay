@@ -3,6 +3,11 @@ import { ForbiddenException } from '@nestjs/common';
 
 import { Prisma } from '@waitlayer/db';
 
+import {
+  decryptPayoutDestination,
+  encryptPayoutDestination,
+  hmacPayoutDestination,
+} from '../common/utils/payout-encryption';
 import { makePayoutService } from './test/payout-test-helper';
 
 describe('PayoutService.requestPayout payout-account verification', () => {
@@ -182,6 +187,48 @@ describe('PayoutService.requestPayout 2FA enforcement (A-035)', () => {
 });
 
 describe('PayoutService.getPayoutInfo payout policy metadata', () => {
+  it('decrypts a bound destination only long enough to return its masked display form', async () => {
+    const binding = {
+      accountId: 'acc1',
+      userId: 'u1',
+      provider: 'paypal_email',
+      currency: 'USD',
+    };
+    const storedDestination = encryptPayoutDestination('developer@example.com', binding);
+    const { service } = makePayoutService({
+      user: { findUnique: vi.fn().mockResolvedValue({ twoFactorEnabled: true }) },
+      payoutAccount: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: binding.accountId,
+            userId: binding.userId,
+            provider: binding.provider,
+            currency: binding.currency,
+            destination: storedDestination,
+            destinationHmac: 'must-not-cross-boundary',
+            encryptionMigratedAt: new Date(),
+            isVerified: true,
+            isActive: true,
+            isFrozen: false,
+            initiationPayoutId: null,
+            createdAt: new Date('2026-08-07T00:00:00.000Z'),
+            updatedAt: new Date('2026-08-07T00:00:00.000Z'),
+          },
+        ]),
+      },
+      payoutRequest: { findMany: vi.fn().mockResolvedValue([]) },
+      earningsLedger: { groupBy: vi.fn().mockResolvedValue([]) },
+    });
+
+    const info = await service.getPayoutInfo('u1');
+
+    expect(info.payoutAccounts[0]?.destination).toBe('dev***@example.com');
+    expect(info.payoutAccounts[0]?.destination).not.toContain(storedDestination);
+    expect(info.payoutAccounts[0]).not.toHaveProperty('userId');
+    expect(info.payoutAccounts[0]).not.toHaveProperty('destinationHmac');
+    expect(info.payoutAccounts[0]).not.toHaveProperty('encryptionMigratedAt');
+  });
+
   it('returns the payout 2FA policy and the user enrollment state', async () => {
     const { service } = makePayoutService(
       {
@@ -445,6 +492,114 @@ describe('PayoutService.processPayout partial approvals', () => {
     expect(persistedStatus).toBe('approved');
     expect(placeholderCreate).not.toHaveBeenCalled();
     expect(providerInitiate).not.toHaveBeenCalled();
+  });
+
+  it('rolls the claim back before provider I/O when destination AAD validation fails', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEncryptionKey = process.env.PAYOUT_ENCRYPTION_KEY;
+    const previousHmacKey = process.env.PAYOUT_HMAC_KEY;
+    // NODE_ENV=production is the point of this test: it exercises the strict
+    // path (encrypted + HMAC'd + migrated destinations only). Production also
+    // refuses the dev fallback keys, so supply canonical base64 256-bit keys —
+    // otherwise `loadKey` throws first and the test would "pass" on a key
+    // error inside the catch-all, proving nothing about AAD binding.
+    process.env.PAYOUT_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
+    process.env.PAYOUT_HMAC_KEY = Buffer.alloc(32, 9).toString('base64');
+    process.env.NODE_ENV = 'production';
+    try {
+      const foreignBinding = {
+        accountId: 'different-account',
+        userId: 'u1',
+        provider: 'manual',
+        currency: 'USD',
+      };
+      const encryptedForAnotherRow = encryptPayoutDestination('manual-destination', foreignBinding);
+      // Guard: the ciphertext is intact and decrypts under the binding it was
+      // sealed with. So the rejection below can only come from the AAD refusing
+      // a different accountId — not from a misconfigured key or corrupt blob.
+      expect(decryptPayoutDestination(encryptedForAnotherRow, foreignBinding)).toBe(
+        'manual-destination',
+      );
+      const payoutAccount = {
+        id: 'acc-corrupt',
+        userId: 'u1',
+        provider: 'manual',
+        destination: encryptedForAnotherRow,
+        destinationHmac: hmacPayoutDestination('manual-destination'),
+        encryptionMigratedAt: new Date(),
+        currency: 'USD',
+        isActive: true,
+        isVerified: true,
+        isFrozen: false,
+      };
+      const payoutForProcessing = {
+        id: 'payout-corrupt',
+        userId: 'u1',
+        user: { status: 'active' },
+        payoutAccount,
+        status: 'processing',
+        requestedAmountMinor: 0n,
+        approvedAmountMinor: 0n,
+        currency: 'USD',
+        allocations: [],
+      };
+      let persistedStatus = 'approved';
+      const placeholderCreate = vi.fn();
+      const fenceUpdate = vi.fn();
+      const providerInitiate = vi.fn();
+      const { service } = makePayoutService({
+        payoutRequest: {
+          findUnique: vi.fn().mockResolvedValue({
+            ...payoutForProcessing,
+            status: 'approved',
+          }),
+        },
+        $transaction: vi.fn(async (cb: (tx: Record<string, unknown>) => Promise<unknown>) => {
+          const statusBeforeTransaction = persistedStatus;
+          const tx = {
+            $executeRaw: vi.fn().mockResolvedValue(1),
+            payoutRequest: {
+              updateMany: vi.fn().mockImplementation(() => {
+                persistedStatus = 'processing';
+                return Promise.resolve({ count: 1 });
+              }),
+              findUnique: vi.fn().mockResolvedValue(payoutForProcessing),
+            },
+            payoutAccount: { updateMany: fenceUpdate },
+            payoutTransaction: { create: placeholderCreate },
+            fraudFlag: { count: vi.fn().mockResolvedValue(0) },
+          };
+          try {
+            return await cb(tx);
+          } catch (error) {
+            persistedStatus = statusBeforeTransaction;
+            throw error;
+          }
+        }),
+      });
+      (service as unknown as { providers: Record<string, unknown> }).providers = {
+        manual: {
+          readiness: () => ({ ok: true }),
+          initiate: providerInitiate,
+          checkStatus: vi.fn(),
+        },
+      };
+
+      await expect(service.processPayout('payout-corrupt')).rejects.toThrow(
+        'Payout destination failed integrity validation',
+      );
+      expect(persistedStatus).toBe('approved');
+      expect(fenceUpdate).not.toHaveBeenCalled();
+      expect(placeholderCreate).not.toHaveBeenCalled();
+      expect(providerInitiate).not.toHaveBeenCalled();
+    } finally {
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+      if (previousEncryptionKey === undefined) delete process.env.PAYOUT_ENCRYPTION_KEY;
+      else process.env.PAYOUT_ENCRYPTION_KEY = previousEncryptionKey;
+      if (previousHmacKey === undefined) delete process.env.PAYOUT_HMAC_KEY;
+      else process.env.PAYOUT_HMAC_KEY = previousHmacKey;
+    }
   });
 
   it('rolls an approved payout back when an escalated high-risk fraud review is active', async () => {

@@ -117,6 +117,28 @@ DATABASE_URL="$DB" ADMIN_BOOTSTRAP_TOKEN=local-smoke-bootstrap-token \
   node scripts/bootstrap-admin.mjs --token local-smoke-bootstrap-token \
   --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" 2>&1 | head -2 || true
 
+# The money-switch assertion below is a REAL deployment gate, so it must never
+# be relaxed — but it must also never fire for a reason that has nothing to do
+# with the build. The default target is the SHARED `waitlayer_test` database,
+# and the integration suites deliberately enable `ads.global`,
+# `wait.earnings`, `payouts.requests`, `payouts.auto` and `deposits.global` in
+# their `beforeAll`. Running this smoke straight after `vitest run src/integration`
+# therefore reported "money switch unexpectedly ENABLED" for a perfectly good
+# build. Detect that leftover state up front and name it, rather than letting it
+# surface as a deployment defect at the end of a five-minute run.
+# (Same class as the Redis-index and port-hermeticity harness fixes above.)
+LEFTOVER_SWITCHES="$(DATABASE_URL="$DB" node scripts/read-enabled-money-switches.mjs 2>/dev/null || true)"
+if [ -n "$LEFTOVER_SWITCHES" ]; then
+  echo "HARNESS ERROR: money switches are already enabled in the target database:"
+  echo "  $LEFTOVER_SWITCHES"
+  echo
+  echo "This is leftover state from the integration suites (they enable these in"
+  echo "beforeAll), NOT a defect in the build. A production database seeds them"
+  echo "disabled. Clear them, or point the smoke at its own database:"
+  echo "  SMOKE_DATABASE_URL=postgresql://.../waitlayer_smoke pnpm smoke:production"
+  exit 2
+fi
+
 # Free the port BEFORE booting. Each run mints a fresh key pair, so a leftover
 # API from an earlier run would answer the health check with the OLD keys and
 # the smoke would then verify a token against the NEW public key — reporting a

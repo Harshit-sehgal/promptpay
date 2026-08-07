@@ -253,6 +253,17 @@ jobs:
         run: pnpm --filter waitlayer-web e2e
         env:
           E2E_BASE_URL: http://localhost:3000
+      # The VS Code extension's ApiClient had NO live coverage anywhere: its
+      # smoke is gated on RUN_LIVE_TESTS, which was set in no job and no script,
+      # so it had never executed. The API is already up on :4002 here, so run it
+      # against the real thing — it signs up a developer over HTTP and asserts
+      # the balance deserializes to a BIGINT, which is the repo's money
+      # invariant and cannot be proven by the mocked unit tests.
+      - name: VS Code ApiClient live smoke against the running API
+        run: pnpm --filter waitlayer-vscode exec vitest run test/api-client.live.spec.ts
+        env:
+          RUN_LIVE_TESTS: 'true'
+          WAITLAYER_API_URL: http://localhost:4002/api/v1
       - name: Enforce health metrics
         run: pnpm --filter waitlayer-api exec node "$GITHUB_WORKSPACE/scripts/enforce-health-metrics.mjs"
         env:
