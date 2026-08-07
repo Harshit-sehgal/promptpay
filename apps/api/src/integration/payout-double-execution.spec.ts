@@ -292,4 +292,100 @@ describe('Payout double-execution safety (DB-backed)', () => {
     expect(initiations).toBe(1);
     expect(await prisma.payoutTransaction.count({ where: { payoutRequestId: payoutId } })).toBe(1);
   });
+  // DOUBLE SPENDING — distinct from the replay case that
+  // `payout-idempotency-race` covers. That suite races two calls carrying the
+  // SAME idempotency key (a retry). This races two DIFFERENT requests that both
+  // try to consume the SAME confirmed earnings, which is what two browser tabs
+  // or a double-submit actually produce.
+  //
+  // `payout_allocations` carries `@@unique([earningsEntryId])`, so Postgres
+  // makes it impossible for one earnings entry to fund two payouts. The open
+  // question is whether the LOSER gets a clean refusal or an unhandled 500 —
+  // an untranslated unique-constraint violation would leak a Prisma error to a
+  // developer and look like a platform fault rather than "already claimed".
+  it('lets only one of two competing requests consume the same earnings', async () => {
+    const devEmail = `dev-spend-${Date.now()}${Math.random().toString(36).slice(2, 8)}@waitlayer.com`;
+    const signup = await request(app.getHttpServer())
+      .post('/api/v1/auth/signup')
+      .send({
+        email: devEmail,
+        password: 'Password123!',
+        role: UserRole.DEVELOPER,
+        name: 'Spend Developer',
+        country: 'US',
+        ageConfirmed: true,
+        termsAccepted: true,
+      })
+      .expect(201);
+    const userId = signup.body.user.id;
+    await prisma.user.update({ where: { id: userId }, data: { emailVerified: true } });
+    const token = (
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({ email: devEmail, password: 'Password123!' })
+        .expect(200)
+    ).body.accessToken;
+
+    const account = await request(app.getHttpServer())
+      .post('/api/v1/payout/method')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        provider: 'paypal_email',
+        destination: `spend.${Date.now()}@paypal.com`,
+        currency: 'USD',
+      })
+      .expect(201);
+    await prisma.payoutAccount.update({
+      where: { id: account.body.id },
+      data: { isVerified: true },
+    });
+
+    const earning = await prisma.earningsLedger.create({
+      data: {
+        userId,
+        entryType: 'credit',
+        status: 'confirmed',
+        amountMinor: 4000n,
+        currency: 'USD',
+        availableAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        idempotencyKey: `spend-earnings-${Date.now()}`,
+        description: 'Single confirmed entry two requests will compete for',
+      },
+    });
+
+    // Distinct idempotency keys — these are genuinely different requests.
+    const attempt = (key: string) =>
+      request(app.getHttpServer())
+        .post('/api/v1/payout/request')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          payoutAccountId: account.body.id,
+          amountMinor: 4000,
+          currency: 'USD',
+          earningsEntryIds: [earning.id],
+          idempotencyKey: key,
+        });
+
+    const results = await Promise.all([attempt('spend-key-a'), attempt('spend-key-b')]);
+    const statuses = results.map((r) => r.status).sort();
+
+    // Exactly one wins. The other must fail CLEANLY — a 5xx here would mean a
+    // raw unique-constraint violation escaped to the developer.
+    expect(statuses.filter((s) => s === 201)).toHaveLength(1);
+    const loser = results.find((r) => r.status !== 201);
+    expect(loser, 'expected exactly one refusal').toBeDefined();
+    expect(
+      loser!.status,
+      `loser returned ${loser!.status}: ${JSON.stringify(loser!.body)}`,
+    ).toBeLessThan(500);
+
+    // And the money is allocated exactly once.
+    const allocations = await prisma.payoutAllocation.findMany({
+      where: { earningsEntryId: earning.id },
+    });
+    expect(allocations).toHaveLength(1);
+
+    const payouts = await prisma.payoutRequest.findMany({ where: { userId } });
+    expect(payouts).toHaveLength(1);
+  });
 });
