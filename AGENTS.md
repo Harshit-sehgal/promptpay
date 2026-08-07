@@ -442,16 +442,14 @@ documented as a cold-start table at the top of
 case (P2021) and say "run migrations first" instead of surfacing a bare
 Prisma "table does not exist".
 
-**Measured but deliberately NOT changed (follow-up, not a blocker):** the API
-runtime image is **4.75 GB**, and `RUN chown -R node:node /app` is a single
-**1.18 GB** layer that duplicates every file already copied — it also dominates
-build time (~15–20 min on this host, by far the slowest step). Switching the
-`COPY --from=build` lines to `COPY --chown=node:node` and dropping the
-recursive `chown` would remove that layer and most of the build time. It is not
-done here because it changes file-ownership semantics for a running container
-immediately before handover, and the current image demonstrably works — the
-risk outweighs the saving until someone can verify the runtime end-to-end after
-the change. Registry bandwidth and deploy latency are the costs of leaving it.
+**Measured, deferred, and now DONE (2026-08-08 — see A-112):** the API runtime
+image was **4.75 GB**, and `RUN chown -R node:node /app` was a single **1.18 GB**
+layer that duplicated every file already copied, also dominating build time. It
+was deferred with an explicit precondition — "until someone can verify the
+runtime end-to-end after the change". That precondition is now met: `docker-build`
+boots both images, asserts routes over TCP, asserts the container's own
+healthcheck, and scans both images. All 20 `COPY` lines in the two runtime
+stages now carry `--chown=node:node` and the recursive `chown` is gone.
 
 ## Resolved 2026-08-07 (third pass) — A-103…A-105
 
@@ -616,6 +614,30 @@ Two smaller pipeline fixes came with it: `up -d web` fails on its
 `depends_on: service_healthy` **before** the readiness loop, so the existing
 diagnostics never fired and the only output was the one-line "is unhealthy" —
 it now dumps the health-probe history and api logs at the point of failure.
+
+**A-111 — new HIGH advisory in a production dependency: `nanoid` <3.3.17.**
+Surfaced by the `pnpm audit --prod` gate, not by any code change (advisory
+databases move under you). A custom generator can loop indefinitely when `size`
+is zero. It reaches the tree only through build tooling
+(`@sentry/nextjs -> webpack -> terser-webpack-plugin -> postcss -> nanoid`, and
+`next -> postcss -> nanoid`), but `@sentry/nextjs` is a production dependency of
+`apps/web`, so the gate is right to block. Fixed with a security floor scoped to
+the `^3` range, matching the existing `brace-expansion`/`js-yaml` style — the
+tree resolves to a single `nanoid` today, and a bare override would also rewrite
+any future 5.x consumer. Verified locally: `nanoid@3.3.17`,
+`pnpm audit --prod --audit-level moderate` reports no known vulnerabilities, and
+`pnpm install --frozen-lockfile` (what CI runs) passes.
+
+**A-112 — the 1.18 GB ownership layer is gone.** See the third-pass note above:
+the recursive `chown` re-touched the inode of every file already copied, so
+overlayfs copied all of them up into one layer, on top of being the slowest
+build step. Ownership now comes from `COPY --chown=node:node` on all 20 runtime
+`COPY` lines, at no extra cost. Files created by the root-run steps (the `--prod`
+install, the engine fetch, `prisma generate`) stay root-owned deliberately: the
+app only reads them, root-created files are world-readable, and the runtime user
+consequently cannot rewrite its own dependencies. A contract test asserts both
+runtime stages still drop to `USER node`, carry no `RUN chown -R`, and give every
+`COPY` an explicit owner — mutation-tested against all three regressions.
 
 **A-109 — the last 2 image CVEs came from pnpm, which the runtime never uses.**
 The image scans ran for the first time ever on 2026-08-08 (they had always been

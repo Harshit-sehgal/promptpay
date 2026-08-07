@@ -323,3 +323,32 @@ test('the gitleaks baseline stays a precise fingerprint list, never a path allow
       'append without doing that.',
   );
 });
+
+test('runtime images drop to a non-root user, and do not rebuild ownership in a layer', () => {
+  const dockerfile = read('Dockerfile');
+  const stages = dockerfile.split(/^FROM /m).filter((st) => /^base AS (api|web)\b/.test(st));
+  assert.equal(stages.length, 2, 'expected an api and a web runtime stage');
+
+  for (const stage of stages) {
+    const name = stage.slice(0, stage.indexOf('\n'));
+
+    // The security property: neither image may run as root.
+    assert.match(stage, /^USER node$/m, `${name} must drop to the node user`);
+
+    // The performance property: a recursive chown re-touches every inode
+    // already copied, so overlayfs copies them all up — it was a single
+    // 1.18 GB layer and the slowest step of the build. Ownership belongs on
+    // the COPY lines instead.
+    assert.doesNotMatch(
+      stage,
+      /^RUN chown -R /m,
+      `${name} must set ownership via COPY --chown, not a recursive chown layer`,
+    );
+    for (const line of stage.split('\n').filter((l) => l.startsWith('COPY '))) {
+      assert.ok(
+        line.includes('--chown=node:node'),
+        `${name}: COPY without --chown would land root-owned: ${line}`,
+      );
+    }
+  }
+});
