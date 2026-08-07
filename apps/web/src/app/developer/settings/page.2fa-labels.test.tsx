@@ -68,10 +68,41 @@ describe('developer settings 2FA labels', () => {
   it('associates the setup verification code', async () => {
     render(<DevSettingsPage />);
 
+    // A-100: `POST /auth/2fa/setup` requires a re-authentication proof, so the
+    // flow now collects the current password before requesting a secret.
+    fireEvent.change(await screen.findByLabelText('Current password'), {
+      target: { value: 'correct-horse-battery' },
+    });
     fireEvent.click(await screen.findByRole('button', { name: 'Enable 2FA' }));
     const input = await screen.findByLabelText('Verification code');
     expect(input.id).toBe('two-factor-enable-code');
     expect(input.getAttribute('autocomplete')).toBe('one-time-code');
+  });
+
+  it('sends the re-authentication proof to setup2fa (A-100 regression)', async () => {
+    // Without `currentPassword` the API returns 401 "Reauthentication is
+    // required before setting up 2FA", which made 2FA enrolment impossible for
+    // every role — and therefore made admin writes and developer payouts
+    // impossible in production. Pin the call shape.
+    render(<DevSettingsPage />);
+
+    fireEvent.change(await screen.findByLabelText('Current password'), {
+      target: { value: 'correct-horse-battery' },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable 2FA' }));
+
+    await screen.findByLabelText('Verification code');
+    expect(authApi.setup2fa).toHaveBeenCalledWith({
+      currentPassword: 'correct-horse-battery',
+    });
+  });
+
+  it('does not call setup2fa without a password', async () => {
+    render(<DevSettingsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable 2FA' }));
+
+    expect(authApi.setup2fa).not.toHaveBeenCalled();
   });
 
   it('associates the disable verification code', async () => {
