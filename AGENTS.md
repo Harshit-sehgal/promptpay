@@ -575,6 +575,84 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
+## Resolved 2026-08-07 (fourth pass) — the CI-only defect class
+
+The first pass of this session verified everything locally and reported green.
+CI on that exact commit was **red in 6 of 12 jobs**. Everything below was
+invisible locally for the same reason: a previous `pnpm build` had left build
+output in the working tree, so the local runs never exercised a clean checkout.
+
+**One defect explained four of the six.** `pnpm --filter <pkg> build` does NOT
+build workspace dependencies, and `@waitlayer/db`'s package `main` is
+`./dist/index.js` — produced by `tsc`, not by `prisma generate`. Every job that
+RAN the compiled app only ran `generate`. The symptoms looked unrelated:
+
+| job                     | symptom                                               |
+| ----------------------- | ----------------------------------------------------- |
+| `e2e`                   | "API not ready" — never opened :4002                  |
+| `production-boot-smoke` | died stamping the environment marker                  |
+| `e2e-production`        | marker read failed, `\|\| true` swallowed it, harness |
+|                         | reported a misleading "marker mismatch"               |
+| `test`                  | 11 scenario runners import `apps/api/dist/...`        |
+
+Fixed with the dependency-aware `"pkg..."` filter the CLI/VSIX jobs already used
+correctly, plus ORDERING: both production harnesses read the environment marker
+~80 lines before their build step, so the build had to move earlier, not just
+gain a suffix. `backup-restore` passed throughout precisely because it is the
+one job that already ran `pnpm --filter @waitlayer/db build`.
+
+**Then fixing those revealed three more that had been shadowed.** This is the
+"one failure hides five" property in action — worth remembering that a red job
+is a _ceiling_ on what you know, not a complete list.
+
+- **`security` (Trivy HIGH).** `AsymmetricPrivateKey` at
+  `packages/config/src/index.spec.ts:17`. A deliberately fake, truncated key —
+  but Trivy's rule matches a complete PEM on one physical line, which is what a
+  single-line JS string with `\n` escapes is. (The real multi-line key in
+  `apps/api/src/auth/__fixtures__` spans lines and never matched — the opposite
+  of what you would guess.) Fixed by assembling the PEM at runtime, so no header
+  literal exists. No `.trivyignore`, no severity change. Verified both
+  directions with Trivy 0.55.2: the fixed file is clean, and a file containing
+  the original literal still reports HIGH.
+- **`docker-build`.** Compose rejected `provenance`/`sbom` under `build:` at
+  SCHEMA level and validates the whole file, so `build web` failed on `api`'s
+  keys. A-092 had made them env-driven, which fixed the DRIVER problem but not
+  this one. Removed; `DOCKER_ATTEST` went with them because it drove nothing —
+  and a release gate had been asserting that switch as proof the pipeline
+  "requests attestations", certifying a capability that did not exist. That
+  assertion now checks cosign keyless signing, which is real. Removing the keys
+  also un-breaks the staging release build, which issues the same command and
+  had simply never run.
+  Then the next-layer bug appeared: `config --images | grep -- '-web$'` can
+  never match, because the name always carries a tag (`waitlayer-web:local`).
+  Now reads `services.web.image` from `config --format json`.
+- **`e2e` (after the API booted).** 113 passed, 1 "flaky", and
+  `failOnFlakyTests` correctly failed the run. Not flakiness: `loginAs` hung to
+  its 45s navigation timeout partway through. The suite authenticates from ONE
+  IP against a 10/min production auth throttle. Both `.e2e` runners raise
+  test-only ceilings — which is exactly why `e2e-production` passed while this
+  job failed on the same specs. The CI job now sets the same ceilings.
+- **`test` coverage floors** (`wise` 72.97% < 73%, `paypal-payouts` 62.26% <
+  63%). This gate had never executed. Floors were NOT lowered; seven branch
+  tests were added for untested fail-closed behaviour — production refusing to
+  return a dev STUB, and an unreadable status mapping to `processing` rather
+  than a terminal state (treating unknown as failed releases reserved earnings
+  while the provider may still be paying). Coverage reached 79.72%/71.69% and
+  the floors were ratcheted to 78/70.
+
+**Double payout is now proven, not just reviewed.** `processPayout` had a CAS
+claim and a durable account fence, but nothing raced two workers on the same
+approved payout against a real database. `payout-double-execution.spec.ts`
+asserts the outcome that matters — the provider was asked to move money exactly
+once, one caller 2xx and one 4xx, one `payout_transaction` row, allocations
+unchanged — for both the concurrent race and the sequential replay. Verified by
+weakening the CAS: the replay test fails. The concurrent test still passed under
+that mutation because the fence caught it independently, so defence-in-depth is
+confirmed rather than assumed.
+
+**Rule this pass earns:** _a green local run on a dirty working tree proves
+nothing about a fresh checkout._ Delete build output before believing a gate.
+
 ## Branch state (2026-08-07, fourth pass)
 
 `integration/agent-beta` is the live line. Checked every branch rather than

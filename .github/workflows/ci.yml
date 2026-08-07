@@ -478,9 +478,20 @@ jobs:
           echo "web image: $img"
           cid=$(docker create "$img")
           trap 'docker rm -f "$cid" >/dev/null' EXIT
+          # Stream the build output as a tar instead of `docker cp`-ing the
+          # directory. `.next` contains a pnpm `node_modules` whose symlinks
+          # point OUTSIDE the copied tree (`../../../../node_modules/.pnpm/...`),
+          # and `docker cp` aborts on those with "invalid symlink". Excluding
+          # node_modules is also correct on the merits: this gate looks for OUR
+          # signing secrets inlined into OUR bundle, not third-party packages.
           rm -rf "$RUNNER_TEMP/web-next-scan"
-          docker cp "$cid":/app/apps/web/.next "$RUNNER_TEMP/web-next-scan"
-          node scripts/scan-build-secrets.mjs "$RUNNER_TEMP/web-next-scan"
+          mkdir -p "$RUNNER_TEMP/web-next-scan"
+          docker cp "$cid":/app/apps/web/.next - \
+            | tar -x -C "$RUNNER_TEMP/web-next-scan" \
+                --exclude='.next/node_modules' --exclude='*/node_modules/*'
+          test -d "$RUNNER_TEMP/web-next-scan/.next" \
+            || { echo "extracted .next is missing — the scan would pass vacuously"; exit 1; }
+          node scripts/scan-build-secrets.mjs "$RUNNER_TEMP/web-next-scan/.next"
       # Boot the COMPILED api image against real Postgres + Redis and confirm
       # it serves a real request over a socket (closes the standalone-404 gap
       # that the in-process suite could never catch).
