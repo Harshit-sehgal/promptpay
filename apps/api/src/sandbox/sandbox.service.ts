@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@waitlayer/db';
 
 import { AuditService } from '../audit/audit.service';
+import { isSerializationError } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';
 import type { SandboxDepositDto, SandboxPayoutDto } from './sandbox.dto';
 
@@ -857,5 +858,10 @@ function isBurnedEntry(entryType: string): boolean {
 }
 
 function isSerializationConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+  // Delegate to the shared classifier. The narrower `code === 'P2034'` check
+  // this replaced missed the raw `DriverAdapterError`
+  // (`kind: 'TransactionWriteConflict'`, no `code`) that @prisma/adapter-pg
+  // throws for SQLSTATE 40001 inside an interactive transaction, so a genuine
+  // serialization abort escaped the retry loop as a 500.
+  return isSerializationError(error);
 }

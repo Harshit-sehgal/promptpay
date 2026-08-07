@@ -65,8 +65,30 @@ function serializationDriverKind(error: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * A raw `DriverAdapterError` thrown straight out of the pg driver adapter,
+ * before Prisma wraps it in a `PrismaClientKnownRequestError`.
+ *
+ * Inside an interactive `$transaction`, `@prisma/adapter-pg` converts SQLSTATE
+ * `40001` to `new DriverAdapterError({ kind: 'TransactionWriteConflict' })` and
+ * throws it directly — it carries NO `code`, and its `message` is the bare
+ * string `'TransactionWriteConflict'`. None of the `P20xx` branches below match
+ * it, so a serialization abort escaped every retry loop in this codebase and
+ * surfaced as a 500. Observed on GDPR erasure under concurrent load.
+ */
+function isRawDriverAdapterWriteConflict(error: unknown): boolean {
+  const record = asRecord(error);
+  if (!record || record.name !== 'DriverAdapterError') return false;
+  const cause = asRecord(record.cause);
+  if (cause && typeof cause.kind === 'string') {
+    return cause.kind === 'TransactionWriteConflict';
+  }
+  return record.message === 'TransactionWriteConflict';
+}
+
 export function isSerializationError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
+  if (isRawDriverAdapterWriteConflict(error)) return true;
   const code =
     typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
   if (code === 'P2034' || code === 'P2038') return true;
