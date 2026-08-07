@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -143,5 +143,38 @@ test('packed CLI runs outside the monorepo without private runtime packages', ()
     assert.match(help.stdout, /Usage: waitlayer/);
   } finally {
     rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test('web runtime image ships every local file next.config.js requires at startup', () => {
+  // `next.config.js` is loaded by `next start`, so any `require('./...')` in it
+  // must exist in the RUNTIME image — not just the build stage. It did not:
+  // the shipped web container started, printed "Ready", then failed every
+  // request with "Cannot find module './src/lib/csp.js'". The docker-build gate
+  // never caught it because the job died several steps earlier.
+  const config = read('apps/web/next.config.js');
+  const dockerfile = read('Dockerfile');
+  const webStage = dockerfile.slice(dockerfile.indexOf('AS web'));
+
+  const localRequires = [...config.matchAll(/require\(['"](\.\/[^'"]+)['"]\)/g)].map((m) => m[1]);
+  assert.ok(localRequires.length > 0, 'expected next.config.js to require local files');
+
+  for (const rel of localRequires) {
+    const fromWebRoot = rel.replace(/^\.\//, '');
+    assert.ok(
+      existsSync(join(root, 'apps/web', fromWebRoot)),
+      `next.config.js requires ${rel}, which does not exist in the repo`,
+    );
+    // Match COPY INSTRUCTIONS only. Scanning the raw stage text would also
+    // match the explanatory comment above the COPY, so the guard would pass
+    // even after the instruction was deleted.
+    const copyLines = webStage
+      .split('\n')
+      .filter((line) => /^\s*COPY\s/.test(line) && !/^\s*#/.test(line));
+    assert.ok(
+      copyLines.some((line) => line.includes(fromWebRoot)),
+      `next.config.js requires ${rel}, but no COPY in the web runtime stage ships it — ` +
+        'the container will start and then fail to load its config',
+    );
   }
 });

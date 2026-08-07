@@ -151,6 +151,15 @@ COPY --from=build /app/apps/web/.next ./.next
 COPY --from=build /app/apps/web/node_modules ./node_modules
 COPY --from=build /app/apps/web/public ./public
 COPY --from=build /app/apps/web/next.config.* ./
+# `next.config.js` does `require('./src/lib/csp.js')` at STARTUP, so the runtime
+# image needs that one source file. Without it the container starts, prints
+# "Ready", then fails every request with
+#   ⨯ Failed to load next.config.js ... Cannot find module './src/lib/csp.js'
+# — i.e. the shipped web image could not serve at all. Copy just this file, not
+# `src/`, so the runtime image keeps only what it needs. `csp.js` is
+# self-contained (no local requires of its own); if next.config ever grows
+# another local require, this must grow with it.
+COPY --from=build /app/apps/web/src/lib/csp.js ./src/lib/csp.js
 COPY --from=build /app/apps/web/package.json ./package.json
 
 # Workspace metadata
