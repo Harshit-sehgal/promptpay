@@ -14,6 +14,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  # On-demand runs, matching the convention already used by staging.yml,
+  # publish-cli.yml and publish-vscode.yml. Without this, CI could only be
+  # exercised by pushing to `main` or opening a pull request — so a
+  # release-candidate branch could not be verified BEFORE it landed, which is
+  # precisely when the container-boot and image-scan gates matter most.
+  # This adds a trigger; it changes no job, gate or threshold.
+  workflow_dispatch:
 
 jobs:
   # ── Typecheck (isolated job: fastest feedback, runs in parallel) ──
