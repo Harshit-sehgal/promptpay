@@ -323,4 +323,51 @@ describe('RuntimeConfigService', () => {
       expect(service.getVerifiedDetectorVersions()).toBe('');
     });
   });
+  // Every money switch must deny when its row is ABSENT, not just when it is
+  // explicitly false. The integration kill-switch suite only ever sets rows to
+  // `false`, so the missing-row case — which is exactly the state of a freshly
+  // provisioned database, or one where a row was deleted — was asserted
+  // nowhere. `getBoolean` also used to DEFAULT to true, so a new switch added
+  // without an explicit default would have failed open.
+  describe('fail-closed money switches with no row present', () => {
+    const moneyGates: Array<[string, () => Promise<boolean>]> = [
+      ['ads.global', () => service.isAdsEnabled()],
+      ['wait.earnings', () => service.isWaitEarningsEnabled()],
+      ['deposits.global', () => service.isDepositsEnabled()],
+      ['payouts.requests', () => service.isPayoutRequestsEnabled()],
+      ['payouts.auto', () => service.isAutoPayoutProcessingEnabled()],
+    ];
+
+    for (const [name, read] of moneyGates) {
+      it(`${name} denies when the setting row does not exist`, async () => {
+        mockPrisma.systemSetting.findUnique.mockResolvedValue(null);
+        await expect(read()).resolves.toBe(false);
+      });
+
+      it(`${name} denies when the row exists with a malformed value`, async () => {
+        // A row whose JSON does not carry a usable boolean must not be read as
+        // permission to move money.
+        mockPrisma.systemSetting.findUnique.mockResolvedValue({
+          scope: 'x',
+          target: 'y',
+          value: { nonsense: true },
+        });
+        await expect(read()).resolves.toBe(false);
+      });
+    }
+
+    it('exposes every money switch in RUNTIME_CONFIG_KEYS', () => {
+      // Guard the guard: if a key is renamed this list must be revisited rather
+      // than silently testing fewer gates than exist.
+      for (const key of [
+        'ADS_GLOBAL',
+        'WAIT_EARNINGS',
+        'DEPOSITS_GLOBAL',
+        'PAYOUT_REQUESTS',
+        'PAYOUT_AUTO',
+      ]) {
+        expect(RUNTIME_CONFIG_KEYS[key as keyof typeof RUNTIME_CONFIG_KEYS]).toBeDefined();
+      }
+    });
+  });
 });

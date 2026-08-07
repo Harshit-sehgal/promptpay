@@ -180,7 +180,15 @@ export class RuntimeConfigService implements OnModuleInit, OnModuleDestroy {
 
   // ── Generic primitives ──
 
-  async getBoolean(key: RuntimeConfigKey, defaultValue = true): Promise<boolean> {
+  /**
+   * `defaultValue` is REQUIRED on purpose. It used to default to `true`, which
+   * is backwards for a system whose money switches are all fail-closed: a new
+   * switch added without an explicit default would have failed OPEN. Every
+   * existing caller already passes one, so making it required changes no
+   * behaviour — it just makes the omission a compile error instead of a
+   * silently permissive money path.
+   */
+  async getBoolean(key: RuntimeConfigKey, defaultValue: boolean): Promise<boolean> {
     const cached = this.getCached<boolean>(key.scope, key.target);
     if (cached !== undefined) return cached;
 
