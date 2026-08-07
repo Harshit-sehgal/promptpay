@@ -654,11 +654,35 @@ and `ci-test-jwt-secret-at-least-32-chars-long-ok` placeholders, the
 `Aa1Bb2Cc3Dd4…` dev-only compose values that file already documents as dev-only,
 `__fixtures__/test-keys*.ts`, and a sample key in `.env.example`. **No real
 secret, nothing to rotate.** The gap is the scope, not the findings: a secret
-committed before the current push would never be caught. Closing it needs a
-precise per-fingerprint baseline (never a path-glob allowlist, which would blind
-the scanner to a real secret pasted into a spec file) — left for an explicit
-decision rather than added silently, because suppressions in a security scanner
-are exactly what this repo's rules protect.
+committed before the current push would never be caught.
+
+`.gitleaksignore` now carries those 23 as **exact `commit:path:rule:line`
+fingerprints**, with the evidence for each group recorded in the file itself.
+This is a baseline, not a suppression rule — it pins 23 specific historical
+findings and nothing else, so a real secret committed to any of the same files
+(spec files included) still fails. A path glob such as `*.spec.ts` would blind
+the scanner to exactly the case it exists to catch, so a contract test asserts
+every entry is a full fingerprint with no glob characters, under a hard count
+cap that makes growing the baseline a reviewable act. Net effect: full-history
+scanning is possible for the first time. Mutation-tested — appending `*.spec.ts`
+fails the guard.
+
+**A-110 — `/health/migrations` was unauthenticated, unthrottled, and published
+schema names.** A route sweep of all 159 API handlers found 141 guarded and 18
+unguarded; 17 are correctly public (auth entry points, JWKS, probes, the
+signature-verified Stripe webhook, anonymous consent, throttled feedback). The
+18th was this one. `@SkipThrottle()` is applied controller-wide — correct for
+`/health` and `/health/ready`, since a 429 on a liveness probe gets the
+container killed — which left this ops endpoint doing an `fs.readdir` of the
+migrations directory plus a database query on **every unauthenticated request,
+with no limit of any kind**, and returning migration NAMES to anyone who asked.
+Its only consumer is the post-deploy canary in `staging.yml`, which reads just
+`upToDate` and `pendingCount`. It now re-enables the throttler for that route
+alone (30/min) and returns only those two fields. Three mutations caught:
+republishing the names, restoring the blanket skip, and throttling the readiness
+probe. Note the metadata keys are name-suffixed scalars
+(`THROTTLER:SKIPdefault`), read from the decorator source — the obvious guess
+reads back `undefined` and would have made the assertions vacuous.
 
 ## Resolved 2026-08-07 (fifth pass) — CI green, plus two self-audited gaps
 

@@ -1,0 +1,59 @@
+# gitleaks baseline — 23 verified-benign historical findings.
+#
+# WHY THIS FILE EXISTS
+# gitleaks-action picks its scope from the triggering event: on `push` and
+# `pull_request` it scans only that event's commits. So every green run this
+# repo has ever had was INCREMENTAL — a secret committed before the current
+# push would never have been caught. The first full-history scan (2026-08-08,
+# via the new workflow_dispatch trigger) reported these 23 findings.
+#
+# Each was opened at its flagged commit and verified to be a placeholder, a
+# test fixture, or documentation — NOT a real credential. Nothing was rotated
+# because there was nothing to rotate. Evidence, by group, below.
+#
+# THIS IS A BASELINE, NOT A SUPPRESSION RULE.
+# Entries are exact `commit:path:rule:line` fingerprints. They pin these 23
+# specific historical findings and nothing else: a real secret committed to any
+# of these same files — including the spec files — still fails the scan. Never
+# replace these with a path glob (e.g. `*.spec.ts`); that would blind the
+# scanner to exactly the case it exists to catch.
+#
+# Re-verify with:  gitleaks detect --redact -v
+
+# Test fixtures: RSA keypairs and 32+ char strings generated solely for unit
+# tests. e.g. TEST_JWT_PRIVATE_KEY, 'test-secret-at-least-32-characters-long-0123456789'.
+5caed5122a09162bfe3d4bc76c1ab5785c1f7566:apps/api/src/auth/__fixtures__/test-keys.ts:private-key:10
+5ccad552932e5f84fe3024991ebc517795691d9b:apps/api/src/auth/__fixtures__/test-keys-2.ts:private-key:6
+03d38159f1bd0aafc3c92a3c507e3d3374db0a1a:apps/api/src/integration/jwt-rotation.spec.ts:generic-api-key:129
+03d38159f1bd0aafc3c92a3c507e3d3374db0a1a:apps/api/src/integration/jwt-rotation.spec.ts:generic-api-key:161
+b9fdb14db4b8303d805a7e8af74987349ebd1010:apps/api/src/integration/sandbox-cross-tenant.spec.ts:generic-api-key:147
+f2b6fac0dbfa7c571df6cf091b5b3cab4d0c000a:apps/api/src/common/utils/privacy-hash.spec.ts:generic-api-key:15
+c64d87569d798d0b5102c2ac80fed7a0f097de9e:packages/config/src/index.spec.ts:generic-api-key:27
+c64d87569d798d0b5102c2ac80fed7a0f097de9e:packages/config/src/index.spec.ts:generic-api-key:31
+c64d87569d798d0b5102c2ac80fed7a0f097de9e:packages/config/src/index.spec.ts:private-key:16
+5caed5122a09162bfe3d4bc76c1ab5785c1f7566:apps/web/src/proxy.test.ts:generic-api-key:58
+5caed5122a09162bfe3d4bc76c1ab5785c1f7566:apps/web/src/proxy.test.ts:private-key:8
+b9733042e92f0ceb721bbb2d9f5174fcb47843cf:apps/web/src/middleware.test.ts:generic-api-key:7
+b9733042e92f0ceb721bbb2d9f5174fcb47843cf:apps/web/src/middleware.test.ts:generic-api-key:8
+
+# Scenario runners: literal sample values ('scenario-jwt-secret-that-is-long-enough-123456')
+# and a sample JWT used as canary bait in the privacy-leak scenario.
+ac3b80e0f984006bce655e724e8201d4aeb229cf:scenarios/sandbox/identity-consent.runner.mjs:generic-api-key:88
+f27beb2fe24ff08e3ad84053fe61873fc648ada6:scenarios/sandbox/identity-consent.runner.mjs:generic-api-key:88
+00ae5c13c49dc6a638b47706815309ad99dc2e85:scenarios/sandbox/privacy-canary-leak.runner.mjs:jwt:9
+
+# Dev-only and example values the files themselves already document as such:
+# .env.example placeholders ('generated-32-plus-character-secret') plus a sample
+# keypair, and the docker-compose 'Aa1Bb2Cc3Dd4...' values sitting directly under
+# that file's '── WARNING: Dev-only secrets ──' banner.
+9b914d05857b11e7af3b35154cc537a3a25f79fc:.env.example:generic-api-key:90
+9b914d05857b11e7af3b35154cc537a3a25f79fc:.env.example:generic-api-key:94
+5caed5122a09162bfe3d4bc76c1ab5785c1f7566:.env.example:private-key:38
+7559383ec279316b7a477108fe5042f313095ec6:docker-compose.yml:generic-api-key:30
+7559383ec279316b7a477108fe5042f313095ec6:docker-compose.yml:generic-api-key:33
+
+# CI test value and documentation prose, not credentials:
+# 'ci-test-jwt-secret-at-least-32-chars-long-ok', and an AGENTS.md sentence about
+# masking that happens to match the generic-api-key heuristic.
+fd7cd2f57bf8eb762596588463ba4417874535c0:.github/workflows/ci.yml:generic-api-key:53
+cc5e7241645032eaa9b5b206f59e5fc0d7846daa:AGENTS.md:generic-api-key:639

@@ -273,3 +273,61 @@ describe('HealthController readiness (A-042)', () => {
     await expect(controller.ready()).rejects.toMatchObject({ status: 503 });
   });
 });
+
+/**
+ * `/health/migrations` is not a probe — it is an ops endpoint that the
+ * post-deploy canary curls unauthenticated. It sits on a controller marked
+ * `@SkipThrottle()` (correct for `/health` and `/health/ready`: a 429 on a
+ * liveness probe gets the container killed), which left it doing an
+ * `fs.readdir` plus a database query per request with no limit at all, and
+ * publishing migration NAMES to anyone who asked.
+ */
+describe('HealthController /health/migrations exposure', () => {
+  // @nestjs/throttler v6 suffixes the metadata key with the throttler NAME and
+  // stores a scalar, not an object: `Reflect.defineMetadata(THROTTLER_SKIP + key, ...)`.
+  // Read from the decorator source rather than assumed — the obvious guess
+  // ('THROTTLER:SKIP' holding `{ default: false }`) reads back undefined and
+  // would have made these assertions silently vacuous.
+  const SKIP_DEFAULT = 'THROTTLER:SKIPdefault';
+  const LIMIT_DEFAULT = 'THROTTLER:LIMITdefault';
+
+  it('does not publish migration names, only the boolean and the count', async () => {
+    const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([{ migration_name: '20260101_init' }]),
+    };
+    const controller = new HealthController(
+      prisma as never,
+      { check: vi.fn() } as never,
+      { getWaitLaunchMode: vi.fn() } as never,
+    );
+
+    const result = await controller.migrations();
+
+    // The canary reads exactly these two fields — and nothing else may leak.
+    expect(Object.keys(result).sort()).toEqual(['pendingCount', 'upToDate']);
+    expect(result).not.toHaveProperty('pending');
+    expect(typeof result.upToDate).toBe('boolean');
+    expect(typeof result.pendingCount).toBe('number');
+  });
+
+  it('is exempt from the controller-wide throttle skip, and carries a real limit', () => {
+    const handler = HealthController.prototype.migrations;
+
+    // `@SkipThrottle({ default: false })` — re-enables the default throttler
+    // for this route only. `{ default: true }` (or no metadata, inheriting the
+    // class-level skip) would restore the unmetered endpoint.
+    expect(Reflect.getMetadata(SKIP_DEFAULT, handler)).toBe(false);
+
+    const limit = Reflect.getMetadata(LIMIT_DEFAULT, handler);
+    expect(limit).toBeGreaterThan(0);
+    expect(limit).toBeLessThanOrEqual(60);
+  });
+
+  it('leaves the liveness and readiness probes unthrottled', () => {
+    // Deliberate asymmetry: these two MUST NOT be throttled. Kubernetes/Docker
+    // treat a 429 as a failed probe and restart the container.
+    for (const probe of [HealthController.prototype.check, HealthController.prototype.ready]) {
+      expect(Reflect.getMetadata(SKIP_DEFAULT, probe)).toBeUndefined();
+    }
+  });
+});

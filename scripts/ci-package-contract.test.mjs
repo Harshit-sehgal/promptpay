@@ -291,3 +291,35 @@ test('the engine fetch can still resolve @prisma/engines through the production 
   );
   assert.deepEqual(foundEngines(dir).filter((n) => !n.startsWith(ENGINE_PREFIX)), []);
 });
+
+test('the gitleaks baseline stays a precise fingerprint list, never a path allowlist', () => {
+  // The baseline exists so full-history secret scanning can run at all (the
+  // action only scans the triggering event's commits, so history had never been
+  // scanned). That is only safe while every entry pins one exact historical
+  // finding. A path glob such as `*.spec.ts` would blind the scanner to a real
+  // secret pasted into a spec file — precisely the case it exists to catch.
+  const raw = read('.gitleaksignore');
+  const entries = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
+
+  assert.ok(entries.length > 0, 'baseline is empty — did the file move?');
+  for (const entry of entries) {
+    assert.match(
+      entry,
+      /^[0-9a-f]{40}:[^:*?]+:[^:*?]+:\d+$/,
+      `not an exact commit:path:rule:line fingerprint: ${entry}`,
+    );
+  }
+
+  // A cap, so growing the baseline is a deliberate act with a diff to review
+  // rather than something that quietly absorbs new findings.
+  const CAP = 23;
+  assert.ok(
+    entries.length <= CAP,
+    `baseline grew to ${entries.length} (cap ${CAP}). Verify each NEW finding is ` +
+      'benign at its flagged commit and raise the cap in the same commit — never ' +
+      'append without doing that.',
+  );
+});

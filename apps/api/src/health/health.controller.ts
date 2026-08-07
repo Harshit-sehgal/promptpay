@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 
 import { Roles } from '../common/decorators';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -78,18 +78,37 @@ export class HealthController {
 
   /**
    * Migration status endpoint — exposes whether the database has pending
-   * migrations. This is useful for deployment validation and ops dashboards
-   * (P1 #13). It does not fail; callers inspect `pending` and `upToDate`.
+   * migrations. Used by the staging/production post-deploy canary (P1 #13),
+   * which curls it unauthenticated and reads `upToDate` / `pendingCount`.
+   *
+   * Two things this endpoint must NOT do, both fixed here:
+   *
+   * 1. It must not skip throttling. `@SkipThrottle()` is applied to the whole
+   *    controller because a 429 on a liveness/readiness probe would get the
+   *    container killed — but that is an argument about `/health` and
+   *    `/health/ready`, not about this one. This is an ops endpoint, and every
+   *    unauthenticated call did an `fs.readdir` of the migrations directory
+   *    plus a database query with no limit of any kind. `default: false`
+   *    re-enables the throttler for this route only; the canary makes one call
+   *    per deploy, so the ceiling is generous by orders of magnitude.
+   *
+   * 2. It must not publish migration NAMES. Those describe the schema
+   *    (`..._add_payout_accounts`) to anyone on the internet, and no caller
+   *    ever used them — the canary reads only the boolean and the count. The
+   *    count still answers "are we up to date, and by how much"; an operator
+   *    who needs the names has the admin-guarded `/health/metrics` or the
+   *    database itself.
    */
   @ApiOperation({ summary: 'Migration status' })
   @Get('migrations')
+  @SkipThrottle({ default: false })
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   async migrations() {
     const pending = await verifyMigrationsApplied(this.prisma);
     return {
       upToDate: pending.length === 0,
       pendingCount: pending.length,
-      pending,
     };
   }
 
