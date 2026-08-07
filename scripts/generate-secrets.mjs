@@ -11,6 +11,7 @@
  *   - JWT_SECRET                         >= 32 chars, no placeholder tokens
  *   - TOTP_SECRET_ENCRYPTION_KEY         >= 32 chars (production-required)
  *   - EMAIL_QUEUE_SECRET                 >= 32 chars (production-required)
+ *   - PRIVACY_HASH_KEY                   >= 32 chars (sandbox/staging/production-required)
  *   - PAYOUT_ENCRYPTION_KEY              canonical base64 32-byte key
  *   - PAYOUT_HMAC_KEY                    canonical base64 32-byte key
  *
@@ -75,6 +76,15 @@ function validate() {
   const emailQueueSecret = randomUUID().replace(/-/g, '') + randomUUID().replace(/-/g, '');
   if (emailQueueSecret.length < 32) failures.push('EMAIL_QUEUE_SECRET too short');
 
+  // Keyed pseudonymization for IP addresses and other low-entropy values. The
+  // config schema REQUIRES this in sandbox/staging/production — a plain SHA-256
+  // of an IP is reversible by enumerating the IPv4 space. It was missing from
+  // this generator while being only a commented-out line in `.env.example`, so
+  // an operator following the documented bootstrap produced a secrets set the
+  // API then refused to boot with.
+  const privacyHashKey = randomBytes(48).toString('base64');
+  if (privacyHashKey.length < 32) failures.push('PRIVACY_HASH_KEY too short');
+
   const payoutEncryptionKey = randomBytes(32).toString('base64');
   const payoutHmacKey = randomBytes(32).toString('base64');
   if (!isCanonical256BitBase64(payoutEncryptionKey)) {
@@ -94,6 +104,7 @@ function validate() {
     JWT_SECRET: jwtSecret,
     TOTP_SECRET_ENCRYPTION_KEY: totpKey,
     EMAIL_QUEUE_SECRET: emailQueueSecret,
+    PRIVACY_HASH_KEY: privacyHashKey,
     PAYOUT_ENCRYPTION_KEY: payoutEncryptionKey,
     PAYOUT_HMAC_KEY: payoutHmacKey,
   };
