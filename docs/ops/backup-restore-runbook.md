@@ -30,10 +30,13 @@ export PGUSER="${POSTGRES_USER}"
 export PGPASSWORD="${POSTGRES_PASSWORD}"
 export PGDATABASE="${POSTGRES_DB}"
 
-DUMP_FILE="waitlayer-db-$(date -u +%Y%m%d-%H%M%S).sql.gz"
+BACKUP_DIR="$(mktemp -d)"
+trap 'rm -rf "$BACKUP_DIR"' EXIT
 
-pg_dump --format=custom --verbose --no-owner \
-  | gzip > "s3://waitlayer-backups/postgres/${DUMP_FILE}"
+# The repository script sets umask 077, uses pipefail, and emits a manifest.
+scripts/backup-db.sh "$BACKUP_DIR"
+aws s3 cp "$BACKUP_DIR/$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump.gz' -printf '%f\n' | head -1)" \
+  s3://waitlayer-backups/postgres/
 ```
 
 ### 3.2 Continuous WAL archiving (point-in-time recovery)
@@ -53,16 +56,24 @@ archive_command = 'aws s3 cp %p s3://waitlayer-backups/postgres/wal/%f'
    ```bash
    createdb -h "$PGHOST" -U "$PGUSER" waitlayer_restored
    ```
-3. Restore the dump:
+3. Download and restore the dump (an `s3://` URI is not a shell file path):
    ```bash
-   gunzip -c s3://waitlayer-backups/postgres/waitlayer-db-YYYYMMDD-HHMMSS.sql.gz \
-     | pg_restore --no-owner --no-privileges --dbname=waitlayer_restored
+   aws s3 cp \
+     s3://waitlayer-backups/postgres/waitlayer-db-YYYYMMDD-HHMMSS.dump.gz \
+     ./waitlayer-restore.dump.gz
+   scripts/restore-db.sh \
+     ./waitlayer-restore.dump.gz \
+     "postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/waitlayer_restored" \
+     --apply-migrations
    ```
-4. Run migrations to ensure schema is current:
+4. Verify every durable Prisma model and the ledger invariant against a
+   quiesced source (or a source snapshot taken at the same backup boundary):
    ```bash
-   pnpm --filter @waitlayer/db migrate deploy
+   SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" \
+   RESTORED_DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/waitlayer_restored" \
+     node scripts/verify-backup.mjs
    ```
-5. Verify row counts and critical health checks.
+5. Verify application health checks.
 6. Switch the application to the restored database.
 
 ## 4. Redis Backups
@@ -97,7 +108,9 @@ At least once a month:
 
 1. Restore the latest Postgres dump to a sandbox database.
 2. Run `pnpm --filter @waitlayer/db migrate deploy`.
-3. Run `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism` against the restored DB.
+3. Run `node scripts/verify-backup.mjs` with `SOURCE_DATABASE_URL` and
+   `RESTORED_DATABASE_URL`; it compares every durable Prisma model and the
+   financial invariant.
 4. Verify Redis restore by checking key counts.
 5. Verify object storage restore by listing and downloading sample objects.
 

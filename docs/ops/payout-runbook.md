@@ -169,9 +169,9 @@ them at `addPayoutMethod` / `normalizePayoutMethod` regardless of any override
 
 ### 8.2 Deploy-time gate (no code edit required)
 
-Set `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` (JSON map of
-`provider → "available" | "coming_soon"`) in the web build/env. Unknown or
-malformed keys are ignored. Example promoting the three real automated rails:
+Set `WAITLAYER_PAYOUT_PROVIDER_STATUS` (JSON map of
+`provider → "available" | "coming_soon"`) on the API. Unknown or malformed
+keys are ignored. Example promoting the three real automated rails:
 
 ```json
 {
@@ -181,8 +181,9 @@ malformed keys are ignored. Example promoting the three real automated rails:
 }
 ```
 
-The web UI list and the API (`normalizePayoutMethod` → `payoutProviderLaunchStatus`)
-both honour this gate, so a `coming_soon` provider cannot be registered
+The API enforces this gate and publishes its live, fail-closed readiness through
+`GET /payout/providers`; the web renders that response instead of carrying a
+second build-time configuration. A `coming_soon` provider cannot be registered
 server-side (throws `BadRequestException`).
 
 ### 8.3 Provider credentials (required once a rail is promoted)

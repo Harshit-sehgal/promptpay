@@ -19,7 +19,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality-gate:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+
   package-cli:
+    needs: quality-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -32,22 +40,65 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      - name: Verify release tag matches the CLI package version
+        if: github.event_name == 'release' || inputs.publish == true
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REF_TYPE" != "tag" ]; then
+            echo "Manual npm publication must be dispatched from a tag, not $REF_TYPE"
+            exit 1
+          fi
+          PACKAGE_VERSION=$(node -p "require('./apps/cli/package.json').version")
+          if [ "$RELEASE_TAG" != "v$PACKAGE_VERSION" ]; then
+            echo "Release tag $RELEASE_TAG does not match CLI version $PACKAGE_VERSION (expected v$PACKAGE_VERSION)"
+            exit 1
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
       - name: Build CLI
-        run: pnpm --filter waitlayer-cli build
+        run: pnpm --filter "waitlayer-cli..." build
       - name: Verify bin artifacts
         run: pnpm --filter waitlayer-cli pack:check
       - name: Pack CLI artifact
         run: |
           mkdir -p artifacts/cli
-          pnpm --filter waitlayer-cli pack --pack-destination ../../artifacts/cli
-      - name: Smoke install packaged CLI
+          pnpm --filter waitlayer-cli pack --pack-destination "$GITHUB_WORKSPACE/artifacts/cli"
+      - name: Verify packed manifest has no private runtime dependencies
+        shell: bash
         run: |
-          npm install --global ./artifacts/cli/*.tgz
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --version
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --help
+          shopt -s nullglob
+          TARBALLS=(artifacts/cli/*.tgz)
+          if [ "${#TARBALLS[@]}" -ne 1 ]; then
+            echo "Expected exactly one CLI tarball, found ${#TARBALLS[@]}"
+            exit 1
+          fi
+          tar -xOf "${TARBALLS[0]}" package/package.json | node -e '
+            let body = "";
+            process.stdin.on("data", (chunk) => (body += chunk));
+            process.stdin.on("end", () => {
+              const pkg = JSON.parse(body);
+              for (const section of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+                for (const [name, version] of Object.entries(pkg[section] || {})) {
+                  if (name.startsWith("@waitlayer/") || String(version).startsWith("workspace:")) {
+                    throw new Error(`packed ${section} contains unresolved ${name}@${version}`);
+                  }
+                }
+              }
+            });'
+      - name: Smoke install packaged CLI
+        shell: bash
+        run: |
+          CLI_INSTALL_ROOT="$RUNNER_TEMP/waitlayer-cli-install"
+          mkdir -p "$CLI_INSTALL_ROOT"
+          npm install --prefix "$CLI_INSTALL_ROOT" --ignore-scripts ./artifacts/cli/*.tgz
+          CLI_BIN="$CLI_INSTALL_ROOT/node_modules/.bin/waitlayer"
+          test -x "$CLI_BIN"
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --version
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --help
       - name: Upload CLI package artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -74,6 +125,25 @@ jobs:
         with:
           name: waitlayer-cli-package
           path: artifacts/cli
+      - name: Re-verify artifact version against the release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          shopt -s nullglob
+          TARBALLS=(artifacts/cli/*.tgz)
+          if [ "${#TARBALLS[@]}" -ne 1 ]; then
+            echo "Expected exactly one CLI tarball, found ${#TARBALLS[@]}"
+            exit 1
+          fi
+          PACKAGE_VERSION=$(tar -xOf "${TARBALLS[0]}" package/package.json | node -e '
+            let body = "";
+            process.stdin.on("data", (chunk) => (body += chunk));
+            process.stdin.on("end", () => process.stdout.write(JSON.parse(body).version));')
+          if [ "$RELEASE_TAG" != "v$PACKAGE_VERSION" ]; then
+            echo "Release tag $RELEASE_TAG does not match packed CLI version $PACKAGE_VERSION"
+            exit 1
+          fi
       - name: Publish CLI to npm
         run: npm publish ./artifacts/cli/*.tgz --access public --ignore-scripts
         env:

@@ -6,8 +6,8 @@ environment. Companion to `docs/ops/rollback.md`.
 ## Mental model
 
 - `prisma migrate deploy` **applies** migrations; it does not auto-rollback.
-- `prisma migrate down` exists but is destructive and **not safe for prod
-  data** — use only on throwaway/CI DBs.
+- Prisma Migrate has no `migrate down` command. Rollback requires a forward
+  compensating migration or restoring a pre-deploy backup.
 - Treat migrations as **one-way** unless you deliberately ship a paired
   down-migration. The safest "rollback" is often a **compensating migration**.
 
@@ -34,15 +34,14 @@ If the migration dropped data or broke the schema such that old code can't run:
 5. Reconcile any transactions lost in the gap via
    `docs/ops/ledger-reconciliation-runbook.md`.
 
-## Option C — `migrate down` (dev/CI only)
+## Option C — reset a throwaway dev/CI database
 
 ```sh
 pnpm --filter @waitlayer/db exec prisma migrate reset --force   # dev only
-# or, within a shadow/test DB:
-pnpm --filter @waitlayer/db exec prisma migrate down 1 --schema prisma/schema.prisma
 ```
 
-Never on production data.
+This recreates the whole database; it is not a rollback mechanism and must
+never be used on production data.
 
 ## Preventing drift
 

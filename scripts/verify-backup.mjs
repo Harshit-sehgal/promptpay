@@ -27,7 +27,7 @@ import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const apiRequire = createRequire(join(__dirname, '..', 'apps', 'api', 'package.json'));
-const { PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
+const { Prisma, PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
 
 const SOURCE_URL = process.env.SOURCE_DATABASE_URL;
 const RESTORED_URL = process.env.RESTORED_DATABASE_URL;
@@ -36,29 +36,20 @@ if (!SOURCE_URL || !RESTORED_URL) {
   process.exit(2);
 }
 
-// Tables (by Prisma model name, camelCase) whose row counts must match exactly
-// after a restore. Excludes time-sensitive/transient tables whose contents
-// shift between backup and verify (sessions, rate-limit counters, cron leases).
-const COUNTED_TABLES = [
-  'user',
-  'advertiser',
-  'campaign',
-  'adCreative',
-  'device',
-  'earningsLedger',
-  'advertiserLedger',
-  'platformLedger',
-  'payoutRequest',
-  'payoutAllocation',
-  'payoutAccount',
-  'adImpression',
-  'adClick',
-  'waitStateEvent',
-  'referralReward',
-  'recoveryDebtCase',
-  'fraudFlag',
-  'auditLog',
-];
+// Derive coverage from Prisma's live data model so adding a durable model can
+// never silently fall outside the DR proof. Only genuinely ephemeral rows are
+// excluded; their schemas still restore as part of the dump.
+const TRANSIENT_MODEL_EXCLUSIONS = new Set(['Session', 'CronLease']);
+const COUNTED_TABLES = Prisma.dmmf.datamodel.models
+  .filter((model) => !TRANSIENT_MODEL_EXCLUSIONS.has(model.name))
+  .map((model) => model.name.charAt(0).toLowerCase() + model.name.slice(1));
+
+if (
+  COUNTED_TABLES.length + TRANSIENT_MODEL_EXCLUSIONS.size !==
+  Prisma.dmmf.datamodel.models.length
+) {
+  throw new Error('Backup verification model coverage is internally inconsistent');
+}
 
 async function snapshot(url, label) {
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(url) });
@@ -136,7 +127,9 @@ function diffInvariant(src, dst) {
       continue;
     }
     if (s.advNet !== d.advNet || s.sum !== d.sum) {
-      mismatches.push(`${c}: advNet source=${s.advNet} restored=${d.advNet}; sum source=${s.sum} restored=${d.sum}`);
+      mismatches.push(
+        `${c}: advNet source=${s.advNet} restored=${d.advNet}; sum source=${s.sum} restored=${d.sum}`,
+      );
     }
     if (!s.ok || !d.ok) {
       mismatches.push(`${c}: invariant not preserved (source ok=${s.ok}, restored ok=${d.ok})`);
@@ -157,7 +150,13 @@ async function main() {
   if (countMismatches.length === 0 && invariantMismatches.length === 0) {
     console.log('\nBackup verification PASSED.');
     console.log('Row counts match for all %d tables.', COUNTED_TABLES.length);
-    console.log('Financial invariant (per-currency net advertiser spend == earnings + fee + reserve) preserved.');
+    console.log(
+      'Excluded transient models: %s.',
+      [...TRANSIENT_MODEL_EXCLUSIONS].sort().join(', '),
+    );
+    console.log(
+      'Financial invariant (per-currency net advertiser spend == earnings + fee + reserve) preserved.',
+    );
     process.exit(0);
   }
 

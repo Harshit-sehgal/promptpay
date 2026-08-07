@@ -27,19 +27,17 @@ command -v pg_restore>/dev/null 2>&1 || { echo "pg_restore not found" >&2; exit 
 # a different role than the source (CI/DR). --clean --if-exists makes the
 # restore idempotent against a partially-populated target.
 echo "Restoring $DUMP -> $TARGET_URL"
-RESTORE_EXIT=0
-gunzip -c "$DUMP" | pg_restore --no-owner --no-privileges --clean --if-exists --dbname="$TARGET_URL" || RESTORE_EXIT=$?
-
-# pg_restore exits non-zero on benign warnings (e.g. dropping a table that
-# doesn't exist yet under --clean --if-exists on a fresh DB). Distinguish a
-# real failure from warnings by verifying that table data actually landed.
-if [ "$RESTORE_EXIT" -ne 0 ]; then
-  echo "pg_restore reported non-zero; checking whether restore actually succeeded..." >&2
-  if ! psql "$TARGET_URL" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'" 2>/dev/null | grep -q '[1-9]'; then
-    echo "Restore verification failed: no tables found in target. Aborting." >&2
-    exit 1
-  fi
-fi
+# Any pg_restore error is fatal. The former fallback accepted a partial restore
+# whenever even one table existed, which could report success after dropping or
+# failing to restore most of the application. --if-exists suppresses harmless
+# missing-object drops; --exit-on-error stops at the first real restore error.
+gunzip -c "$DUMP" | pg_restore \
+  --no-owner \
+  --no-privileges \
+  --clean \
+  --if-exists \
+  --exit-on-error \
+  --dbname="$TARGET_URL"
 
 if [ "$APPLY_MIGRATIONS" -eq 1 ]; then
   echo "Applying migrations to restored DB..."

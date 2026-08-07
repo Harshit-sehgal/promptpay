@@ -21,8 +21,11 @@ what to watch and how to alert.
 
 ## Health & metrics
 
-- API exposes `GET /api/v1/health` (used by the Docker `HEALTHCHECK` and your
-  LB/ingress). Alert when it returns non-200 or latency is high.
+- API exposes `GET /api/v1/health` for diagnostics/liveness and
+  `GET /api/v1/health/ready` for traffic readiness. Configure the Docker
+  health check and LB/ingress against `/health/ready`; the liveness endpoint
+  intentionally returns diagnostic JSON with HTTP 200 even when a dependency
+  is unavailable. Alert when readiness is non-200 or latency is high.
 - Emit business metrics from key paths (use your APM / Prometheus exporter):
   - Auth success/failure rate (watch for credential-stuffing spikes — see
     `docs/rate-limiting.md`).

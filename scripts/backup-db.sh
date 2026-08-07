@@ -19,6 +19,10 @@
 #
 # Exit codes: 0 success, 1 dump failed, 2 missing deps, 3 bad args
 set -euo pipefail
+# Backups and verbose dump logs can contain sensitive schema/data metadata.
+# New files and directories created by this process must be owner-only even
+# when the invoking host has a permissive default umask.
+umask 077
 
 OUTPUT_DIR="${1:-./backups}"
 DATABASE_URL="${2:-${DATABASE_URL:-}}"

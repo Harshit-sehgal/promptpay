@@ -3,7 +3,7 @@
  * Operator secrets bootstrap generator.
  *
  * Generates every deployment secret the external launch items in
- * `docs/ops/remaining-open-items.md` require, in a form that passes the
+ * the deployment checklist and live AGENTS.md blocker register require, in a form that passes the
  * production validation rules in `packages/config/src/index.ts` and the web
  * preflight (`apps/web/scripts/verify-deploy-env.mjs`):
  *

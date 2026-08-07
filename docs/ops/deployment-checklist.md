@@ -24,6 +24,12 @@ running the whole sequence against an empty database using the shipped image:
 Steps 5–7 are unnecessary on a redeploy; steps 3 and 4 are one-shot and safely
 no-op or refuse on re-run.
 
+The manual `Staging Release Gate` workflow has an
+`initial_production_deploy` input for this one cold start. Select it only after
+the production environment approval and steps 1–4 above are complete. The
+workflow refuses that mode when predecessor containers already exist and
+records that automated rollback is unavailable for the first deployment.
+
 ## Step −1 — Run the deploy preflight
 
 One command, on the deploy host, with the production environment loaded. It
@@ -49,6 +55,9 @@ every blocking check passed.
 > Verified 2026-08-07 (A-093): `docker compose build api` produces an image
 > with the full repo source and **no** Prisma CLI — not the API runtime image.
 > Always deploy with an explicit `-f docs/ops/docker-compose.images.example.yml`.
+> The release workflow additionally requires `.env.staging` on the staging host
+> and `.env.production` on the production host, and passes each via
+> `--env-file`; neither deployment can auto-load the development override.
 
 ## Step 0a — Stamp the database environment marker (A-096)
 
@@ -125,6 +134,20 @@ DATABASE_URL=<production-url> \
       `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, `JWT_ISSUER`, and `JWT_AUDIENCE`.
 - [ ] Production positive `ALLOWED_COUNTRIES` and `ALLOWED_CURRENCIES` are
       selected by product/legal and configured in the API secret manager.
+- [ ] `.env.production` contains every fail-closed value required by
+      `docs/ops/docker-compose.images.example.yml`, including the stable
+      environment ID, payout encryption/HMAC keys, email secrets, and public
+      web configuration.
+- [ ] GitHub's production environment contains `PRODUCTION_JWT_PUBLIC_KEY`,
+      optional rotation keyset/issuer/audience, `PRODUCTION_API_URL`,
+      `PRODUCTION_WEB_URL`, and `PRODUCTION_GOOGLE_CLIENT_ID`. Next.js embeds
+      these public values at build time.
+- [ ] Release URL secrets use their exact contracts: `STAGING_API_URL` and
+      `STAGING_WEB_URL` are HTTPS origins with no trailing slash, while
+      `PRODUCTION_API_URL` ends exactly in `/api/v1` and
+      `PRODUCTION_WEB_URL` is an HTTPS origin. The release validator rejects
+      paths, credentials, loopback hosts, and malformed RSA public keys before
+      building an image.
 - [ ] `WAIT_ATTESTATION_ISSUERS` and
       `VERIFIED_WAIT_ATTESTATION_VERSIONS` reference an independently operated
       provider; `wait.earnings` remains disabled until its launch experiment is
@@ -137,7 +160,12 @@ DATABASE_URL=<production-url> \
 - [ ] Deploy DB migrations first (`prisma migrate deploy`) — the API image
       already does this on boot after waiting for Postgres, but run it
       explicitly against the prod `DIRECT_URL` for visibility.
-- [ ] Roll out API (web behind it). Use a rolling/canary deploy where possible.
+- [ ] Roll out the staging-tested, environment-neutral API digest and the
+      separately built production web digest. Never retag the staging web image
+      for production; its JWT verification key and `NEXT_PUBLIC_*` values are
+      staging build inputs.
+- [ ] On a Compose host, use
+      `docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml ...`.
 - [ ] Verify `migrate deploy` succeeded and the API started (health 200).
 
 ## Post-deploy

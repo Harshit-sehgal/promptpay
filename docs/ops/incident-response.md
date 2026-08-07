@@ -4,22 +4,23 @@ First-responder guide when production is degraded or down.
 
 ## Severity
 
-| Sev | Definition                                                | Response                       |
-| --- | --------------------------------------------------------- | ------------------------------ |
-| SEV1 | Full outage / data loss / security breach                 | Page on-call now; all-hands.   |
-| SEV2 | Major feature broken (auth, payouts, impressions)         | Page on-call; same-day fix.    |
-| SEV3 | Degraded performance / partial failure                    | On-call aware; next-business-day. |
-| SEV4 | Cosmetic / non-critical                                    | Track in backlog.              |
+| Sev  | Definition                                        | Response                          |
+| ---- | ------------------------------------------------- | --------------------------------- |
+| SEV1 | Full outage / data loss / security breach         | Page on-call now; all-hands.      |
+| SEV2 | Major feature broken (auth, payouts, impressions) | Page on-call; same-day fix.       |
+| SEV3 | Degraded performance / partial failure            | On-call aware; next-business-day. |
+| SEV4 | Cosmetic / non-critical                           | Track in backlog.                 |
 
 ## First 15 minutes
 
 1. **Acknowledge** in the alerting tool; declare the incident + severity.
 2. **Triage** using `docs/ops/monitoring.md`:
-   - Is `/api/v1/health` failing? (LB/instance down)
+   - Is `/api/v1/health/ready` failing? (instance cannot safely receive traffic)
    - Sentry error spike? (what route/tag?)
    - Postgres/Redis healthy? (connections, memory, lag)
-3. **Contain** if unsafe: enable a feature toggle (`LAUNCH_SPLIT_ENABLED`,
-   `WEBHOOK_ASYNC_PROCESSING`), or scale the bad revision to 0.
+3. **Contain** if unsafe: use the audited admin runtime controls to disable
+   `ads.global`, `wait.earnings`, `deposits.global`, `payouts.requests`, or
+   `payouts.auto` as appropriate, then scale the bad revision to 0 if needed.
 4. **Communicate** in the incident channel; assign a comms lead if SEV1/2.
 
 ## Common incidents → action

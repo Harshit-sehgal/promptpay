@@ -26,9 +26,12 @@ bad code first, then reconcile data**. Full runbook also at
   > `docker compose build api` produces the dev image, not the API runtime
   > image (A-093).
 
-- **Feature toggles:** prefer disabling via env (`LAUNCH_SPLIT_ENABLED`,
-  `WEBHOOK_ASYNC_PROCESSING`, `PAYOUT_REQUIRE_2FA`) and redeploy — no code
-  rollback needed for toggle-bound changes.
+- **Kill switches:** use the audited admin runtime controls to disable the
+  affected path (`ads.global`, `wait.earnings`, `deposits.global`,
+  `payouts.requests`, or `payouts.auto`). Do not weaken authentication controls
+  such as `PAYOUT_REQUIRE_2FA`, and do not rely on the legacy
+  `WEBHOOK_ASYNC_PROCESSING` compatibility flag (production accepts only
+  `false`).
 
 ## 2. Database migrations — the careful part
 
@@ -46,7 +49,8 @@ Never run `prisma migrate reset` or `db push` against production.
 
 ## 3. Verify
 
-- `GET /api/v1/health` 200.
+- `GET /api/v1/health/ready` 200; inspect `/api/v1/health` separately for
+  diagnostic dependency state.
 - Error rate in Sentry returns to baseline.
 - Business metrics (impressions, earnings, payouts) resume normally.
 - No orphaned ledger/payout rows from the bad deploy (check

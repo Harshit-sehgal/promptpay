@@ -6,20 +6,29 @@ name: waitlayer-production
 
 services:
   api:
-    image: ${WAITLAYER_API_IMAGE:?Set WAITLAYER_API_IMAGE to an immutable registry tag}
+    image: ${WAITLAYER_API_IMAGE:?Set WAITLAYER_API_IMAGE to an immutable image@sha256 digest}
     restart: unless-stopped
     stop_grace_period: 30s
     ports:
       - '${WAITLAYER_API_BIND_ADDRESS:-127.0.0.1}:${WAITLAYER_API_PORT:-4002}:4002'
     environment:
+      # This file runs shipped artifacts only. Staging uses the same optimized
+      # production Node semantics; product identity is selected separately by
+      # WAITLAYER_ENVIRONMENT_KIND.
       NODE_ENV: production
+      WAITLAYER_ENVIRONMENT_KIND: ${WAITLAYER_ENVIRONMENT_KIND:-production}
+      WAITLAYER_ENVIRONMENT_ID: ${WAITLAYER_ENVIRONMENT_ID:?Set a stable deployment identity}
+      ENABLE_STAGING_FAUCET: ${ENABLE_STAGING_FAUCET:-false}
       API_PORT: '4002'
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      DIRECT_URL: ${DIRECT_URL:-}
       REDIS_URL: ${REDIS_URL:?Set REDIS_URL}
       API_BASE_URL: ${API_BASE_URL:?Set API_BASE_URL to the public HTTPS origin}
       WEB_BASE_URL: ${WEB_BASE_URL:?Set WEB_BASE_URL to the public HTTPS origin}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       BFF_TRUST_PROXY_HOPS: ${BFF_TRUST_PROXY_HOPS:-1}
+      ALLOWED_COUNTRIES: ${ALLOWED_COUNTRIES:?Set the ISO alpha-2 launch allowlist}
+      ALLOWED_CURRENCIES: ${ALLOWED_CURRENCIES:?Set the ISO 4217 settlement allowlist}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?Set JWT_PRIVATE_KEY}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY}
       JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
@@ -30,17 +39,26 @@ services:
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
       TOTP_SECRET_ENCRYPTION_KEY: ${TOTP_SECRET_ENCRYPTION_KEY:?Set TOTP_SECRET_ENCRYPTION_KEY}
       PRIVACY_HASH_KEY: ${PRIVACY_HASH_KEY:?Set PRIVACY_HASH_KEY}
-      EMAIL_DRIVER: resend
+      EMAIL_DRIVER: ${EMAIL_DRIVER:-resend}
       EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM to a production sender}
       EMAIL_QUEUE_SECRET: ${EMAIL_QUEUE_SECRET:?Set EMAIL_QUEUE_SECRET}
       EMAIL_PROVIDER_TIMEOUT_MS: ${EMAIL_PROVIDER_TIMEOUT_MS:-10000}
       OPS_ALERT_EMAIL: ${OPS_ALERT_EMAIL:?Set OPS_ALERT_EMAIL}
       RESEND_API_KEY: ${RESEND_API_KEY:?Set RESEND_API_KEY}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?Set GOOGLE_CLIENT_ID}
-      GOOGLE_TOKENINFO_TIMEOUT_MS: ${GOOGLE_TOKENINFO_TIMEOUT_MS:-5000}
-      PAYOUT_REQUIRE_2FA: 'true'
+      GOOGLE_AUTH_TIMEOUT_MS: ${GOOGLE_AUTH_TIMEOUT_MS:-5000}
+      ALLOW_MOCK_GOOGLE: 'false'
+      MOCK_GOOGLE_ENABLED: '0'
+      PAYOUT_REQUIRE_2FA: ${PAYOUT_REQUIRE_2FA:-true}
       PAYOUT_DESTINATION_COOLDOWN_HOURS: ${PAYOUT_DESTINATION_COOLDOWN_HOURS:-24}
+      PAYOUT_ENCRYPTION_KEY: ${PAYOUT_ENCRYPTION_KEY:?Set a canonical base64 32-byte payout encryption key}
+      PAYOUT_HMAC_KEY: ${PAYOUT_HMAC_KEY:?Set a different canonical base64 32-byte payout HMAC key}
       WAITLAYER_PAYOUT_PROVIDER_STATUS: ${WAITLAYER_PAYOUT_PROVIDER_STATUS:-{}}
+      VERIFIED_DETECTOR_VERSIONS: ${VERIFIED_DETECTOR_VERSIONS:-}
+      # A null Compose mapping passes the value through when configured and
+      # omits it when absent. An empty string is invalid for this optional JSON.
+      WAIT_ATTESTATION_ISSUERS:
+      VERIFIED_WAIT_ATTESTATION_VERSIONS: ${VERIFIED_WAIT_ATTESTATION_VERSIONS:-}
       WEBHOOK_RECLAIM_CRON: 'true'
       WEBHOOK_ASYNC_PROCESSING: 'false'
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
@@ -58,22 +76,27 @@ services:
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
 
   web:
-    image: ${WAITLAYER_WEB_IMAGE:?Set WAITLAYER_WEB_IMAGE to an immutable registry tag}
+    image: ${WAITLAYER_WEB_IMAGE:?Set WAITLAYER_WEB_IMAGE to an immutable image@sha256 digest}
     restart: unless-stopped
     stop_grace_period: 30s
     ports:
       - '${WAITLAYER_WEB_BIND_ADDRESS:-127.0.0.1}:${WAITLAYER_WEB_PORT:-3000}:3000'
     environment:
       NODE_ENV: production
+      WAITLAYER_REQUIRE_DEPLOY_ENV: '1'
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4002/api/v1}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:?Set NEXT_PUBLIC_WEB_URL}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:?Set NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+      NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: ${NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND:-production}
+      NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY}
       JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
       JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
       BFF_TRUST_PROXY_HOPS: ${BFF_TRUST_PROXY_HOPS:-1}
-      COOKIE_SECURE: 'true'
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
     depends_on:

@@ -14,7 +14,7 @@ export default function ChangelogPage() {
       title: 'Automated Payouts & Enhanced DSP Controls',
       changes: [
         'Integrated automated PayPal Payouts & Wise provider endpoints.',
-        'Added NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS override configurations for operators.',
+        'Moved payout-provider availability to authenticated runtime readiness and fail-closed operator controls.',
         'Introduced server-side country targeting and DSP reservation validations.',
         'Refactored frontend to support full-page static builds and hydration checks.',
       ],

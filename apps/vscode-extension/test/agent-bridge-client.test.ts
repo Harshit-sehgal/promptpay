@@ -59,30 +59,41 @@ describe('AgentBridgeClient', () => {
   it('authenticates and receives a fragmented canonical event without sending it back', async () => {
     const paths = makePaths();
     fs.writeFileSync(paths.secretPath, `${'s'.repeat(43)}\n`, { mode: 0o600 });
+    let resolveConnectionClosed!: () => void;
+    let rejectConnectionClosed!: (error: Error) => void;
+    const connectionClosed = new Promise<void>((resolve, reject) => {
+      resolveConnectionClosed = resolve;
+      rejectConnectionClosed = reject;
+    });
     const server = net.createServer((socket) => {
       socket.setEncoding('utf8');
-      socket.on('data', (chunk) => {
+      socket.once('error', rejectConnectionClosed);
+      socket.once('close', resolveConnectionClosed);
+      socket.once('data', (chunk) => {
         expect(chunk).toContain('subscribe');
         socket.write('{"type":"subscribed","protocolVersion":1}\n');
         const payload = JSON.stringify({ type: 'agent_event', event: makeEvent() });
         socket.write(payload.slice(0, 12));
-        setTimeout(() => socket.write(`${payload.slice(12)}\n`), 1);
+        setTimeout(() => socket.end(`${payload.slice(12)}\n`), 1);
       });
     });
     sockets.push(server);
     await listen(server, paths.socketPath);
-    const received: AgentLifecycleEventV1[] = [];
+    let resolveEvent!: (event: AgentLifecycleEventV1) => void;
+    const received = new Promise<AgentLifecycleEventV1>((resolve) => {
+      resolveEvent = resolve;
+    });
     const client = new AgentBridgeClient({
       socketPath: paths.socketPath,
       secretPath: paths.secretPath,
       reconnect: false,
-      onEvent: (event) => received.push(event),
+      onEvent: resolveEvent,
     });
     client.start();
-    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    const event = await received;
+    await connectionClosed;
     client.dispose();
-    expect(received).toHaveLength(1);
-    expect(received[0]?.eventId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(event.eventId).toBe('11111111-1111-4111-8111-111111111111');
   });
 
   it('uses the default bridge event socket and can be disposed before reconnect', () => {

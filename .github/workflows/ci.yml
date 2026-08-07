@@ -271,6 +271,58 @@ jobs:
       - name: Verify CLI bin artifacts exist
         run: pnpm --filter waitlayer-cli pack:check
 
+  # Run the same browser suite against a production-mode API and production
+  # web build. This closes the configuration gap that let escaped deployment
+  # PEMs break every login while the development-mode browser job stayed green.
+  e2e-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: waitlayer_e2e_production
+          POSTGRES_USER: waitlayer
+          POSTGRES_PASSWORD: waitlayer-e2e-production
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U waitlayer -d waitlayer_e2e_production"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_PROD_DATABASE_URL: postgresql://waitlayer:waitlayer-e2e-production@localhost:5433/waitlayer_e2e_production?schema=public
+      E2E_PROD_REDIS_DB: '12'
+      E2E_PROD_ENVIRONMENT_ID: ci-production-browser
+      E2E_PROD_API_PORT: '4108'
+      E2E_PROD_WEB_PORT: '3100'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @waitlayer/db generate
+      - name: Install Playwright browsers
+        run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+      - name: Run browser E2E against the production-mode stack
+        run: pnpm e2e:production
+
   # Packaging smoke tests for distributed clients (A-043) — run without a DB.
   package-clients:
     runs-on: ubuntu-latest
@@ -294,10 +346,15 @@ jobs:
           mkdir -p artifacts/cli
           pnpm --filter waitlayer-cli pack --pack-destination "$GITHUB_WORKSPACE/artifacts/cli"
       - name: Smoke install packaged CLI
+        shell: bash
         run: |
-          npm install --global ./artifacts/cli/*.tgz
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --version
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 waitlayer --help
+          CLI_INSTALL_ROOT="$RUNNER_TEMP/waitlayer-cli-install"
+          mkdir -p "$CLI_INSTALL_ROOT"
+          npm install --prefix "$CLI_INSTALL_ROOT" --ignore-scripts ./artifacts/cli/*.tgz
+          CLI_BIN="$CLI_INSTALL_ROOT/node_modules/.bin/waitlayer"
+          test -x "$CLI_BIN"
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --version
+          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --help
       - name: Build VS Code extension with workspace dependencies
         run: pnpm --filter "waitlayer-vscode..." build
       - name: Package VS Code extension (no publish)
@@ -674,8 +731,34 @@ jobs:
             --email "$SMOKE_ADMIN_EMAIL" \
             --password "$SMOKE_ADMIN_PASSWORD"
 
-      - name: Deploy preflight against the live environment
-        run: node scripts/deploy-preflight.mjs --with-db || true # admin has no TOTP in CI
+      # This source checkout intentionally contains the local development
+      # compose override, and the one-shot CI admin has not enrolled TOTP yet.
+      # Assert those are the ONLY failures. A blanket `|| true` used to hide
+      # unrelated config, migration, database, and Redis failures here.
+      - name: Assert deploy preflight rejects only the known CI bootstrap gaps
+        shell: bash
+        run: |
+          set +e
+          PREFLIGHT_OUTPUT=$(node scripts/deploy-preflight.mjs --with-db 2>&1)
+          PREFLIGHT_STATUS=$?
+          set -e
+          printf '%s\n' "$PREFLIGHT_OUTPUT"
+
+          if [ "$PREFLIGHT_STATUS" -ne 1 ]; then
+            echo "Expected preflight to reject the intentionally incomplete CI bootstrap; got $PREFLIGHT_STATUS"
+            exit 1
+          fi
+
+          ACTUAL_FAILURES=$(printf '%s\n' "$PREFLIGHT_OUTPUT" | sed -n 's/^\[FAIL \] \([^[:space:]]*\).*/\1/p' | sort)
+          EXPECTED_FAILURES=$(printf '%s\n' administrator-mfa compose-override | sort)
+          if [ "$ACTUAL_FAILURES" != "$EXPECTED_FAILURES" ]; then
+            echo "Unexpected deploy-preflight failure set"
+            echo "Expected:"
+            printf '%s\n' "$EXPECTED_FAILURES"
+            echo "Actual:"
+            printf '%s\n' "$ACTUAL_FAILURES"
+            exit 1
+          fi
 
       - name: Boot the API in production mode
         run: |

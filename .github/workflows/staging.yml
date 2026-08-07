@@ -12,16 +12,23 @@ on:
         required: false
         type: boolean
         default: true
+      initial_production_deploy:
+        description: 'First production deploy only: allow no predecessor images after production approval'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   id-token: write
 
-# A new dispatch supersedes an in-flight one for the same environment target
-# so two operators cannot race the staging/promotion gate.
+# Serialize release mutations. Never cancel a run while it may be applying a
+# migration, replacing containers, or rolling back a failed canary.
 concurrency:
-  group: staging-release-${{ github.ref }}
-  cancel-in-progress: true
+  # The staging and production targets are shared across refs. A ref-scoped
+  # lock would still let a main dispatch race a release-branch dispatch.
+  group: waitlayer-release
+  cancel-in-progress: false
 
 jobs:
   # Re-run the complete CI/security/financial gate on the exact SHA selected
@@ -102,7 +109,7 @@ jobs:
   staging-smoke:
     needs: [ci-gate, migrate-staging, provision-staging-schema]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     environment: staging
     outputs:
       api_digest: ${{ steps.staging-images.outputs.api_digest }}
@@ -154,9 +161,11 @@ jobs:
           STAGING_WAIT_ATTESTATION_VERSIONS: ${{ secrets.STAGING_WAIT_ATTESTATION_VERSIONS }}
           STAGING_ALLOWED_COUNTRIES: ${{ secrets.STAGING_ALLOWED_COUNTRIES }}
           STAGING_ALLOWED_CURRENCIES: ${{ secrets.STAGING_ALLOWED_CURRENCIES }}
+          STAGING_GOOGLE_CLIENT_ID: ${{ secrets.STAGING_GOOGLE_CLIENT_ID }}
+          STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
           STAGING_DATABASE_SCHEMA: ${{ needs.provision-staging-schema.outputs.schema }}
         run: |
-          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_HOST STAGING_USER STAGING_DEPLOY_KEY STAGING_KNOWN_HOSTS STAGING_DEPLOY_PATH STAGING_WAIT_ATTESTATION_PROVIDER STAGING_WAIT_ATTESTATION_BRIDGE_URL STAGING_WAIT_ATTESTATION_ISSUERS STAGING_WAIT_ATTESTATION_VERSIONS STAGING_ALLOWED_COUNTRIES STAGING_ALLOWED_CURRENCIES STAGING_DATABASE_SCHEMA; do
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS STAGING_HOST STAGING_USER STAGING_DEPLOY_KEY STAGING_KNOWN_HOSTS STAGING_DEPLOY_PATH STAGING_WAIT_ATTESTATION_PROVIDER STAGING_WAIT_ATTESTATION_BRIDGE_URL STAGING_WAIT_ATTESTATION_ISSUERS STAGING_WAIT_ATTESTATION_VERSIONS STAGING_ALLOWED_COUNTRIES STAGING_ALLOWED_CURRENCIES STAGING_GOOGLE_CLIENT_ID STAGING_WEB_URL STAGING_DATABASE_SCHEMA; do
             if [ -z "${!required}" ]; then
               echo "$required secret is required for an actual staging release" >&2
               exit 1
@@ -164,6 +173,8 @@ jobs:
           done
       - name: Reject reference attestation and invalid promotion inputs
         env:
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+          STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
           STAGING_WAIT_ATTESTATION_PROVIDER: ${{ secrets.STAGING_WAIT_ATTESTATION_PROVIDER }}
           STAGING_WAIT_ATTESTATION_ISSUERS: ${{ secrets.STAGING_WAIT_ATTESTATION_ISSUERS }}
           STAGING_WAIT_ATTESTATION_VERSIONS: ${{ secrets.STAGING_WAIT_ATTESTATION_VERSIONS }}
@@ -174,8 +185,10 @@ jobs:
           REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
           REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
         run: echo "$REGISTRY_PASS" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+      - name: Set up Docker Buildx for attestations
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Build API + web images for staging
-        run: docker compose -f docker-compose.yml build api web
+        run: docker compose -f docker-compose.yml build --push api web
         env:
           # JWT_SECRET is a runtime-only secret; never pass it to docker build.
           # Compose emits provenance/SBOM attestations for these images; every
@@ -191,24 +204,32 @@ jobs:
           WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:staging-${{ github.sha }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}/api/v1
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.STAGING_GOOGLE_CLIENT_ID }}
-      - name: Resolve and push staging images to registry
+          NEXT_PUBLIC_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
+          NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: staging
+          NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'
+      - name: Resolve pushed staging image digests
         id: staging-images
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
         run: |
           API_IMG="$REGISTRY/waitlayer-api:staging-$GITHUB_SHA"
           WEB_IMG="$REGISTRY/waitlayer-web:staging-$GITHUB_SHA"
-          docker push "$API_IMG"
-          docker push "$WEB_IMG"
-          API_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$API_IMG")
-          WEB_DIGEST=$(docker image inspect --format '{{index .RepoDigests 0}}' "$WEB_IMG")
-          test -n "$API_DIGEST" || { echo "API image digest could not be resolved" >&2; exit 1; }
-          test -n "$WEB_DIGEST" || { echo "Web image digest could not be resolved" >&2; exit 1; }
+          API_HASH=$(docker buildx imagetools inspect "$API_IMG" --format '{{.Manifest.Digest}}')
+          WEB_HASH=$(docker buildx imagetools inspect "$WEB_IMG" --format '{{.Manifest.Digest}}')
+          test -n "$API_HASH" || { echo "API image digest could not be resolved" >&2; exit 1; }
+          test -n "$WEB_HASH" || { echo "Web image digest could not be resolved" >&2; exit 1; }
+          API_DIGEST="${API_IMG%:*}@$API_HASH"
+          WEB_DIGEST="${WEB_IMG%:*}@$WEB_HASH"
           echo "api_image=$API_IMG" >> "$GITHUB_OUTPUT"
           echo "web_image=$WEB_IMG" >> "$GITHUB_OUTPUT"
           echo "api_digest=$API_DIGEST" >> "$GITHUB_OUTPUT"
           echo "web_digest=$WEB_DIGEST" >> "$GITHUB_OUTPUT"
           echo "Pushed staging images by digest: $API_DIGEST, $WEB_DIGEST"
+      - name: Validate resolved staging digests
+        env:
+          STAGING_API_DIGEST: ${{ steps.staging-images.outputs.api_digest }}
+          STAGING_WEB_DIGEST: ${{ steps.staging-images.outputs.web_digest }}
+        run: node scripts/validate-release-inputs.mjs --promotion
       - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
       - name: Sign staging image digests with GitHub OIDC
         env:
@@ -248,7 +269,7 @@ jobs:
           ATTESTATION_VERSIONS_B64=$(printf '%s' "$STAGING_WAIT_ATTESTATION_VERSIONS" | base64 -w0)
           DATABASE_URL_B64=$(printf '%s' "$DATABASE_URL" | base64 -w0)
           ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
-            "set -e; cd '$STAGING_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export DATABASE_URL=\"\$(printf '%s' '$DATABASE_URL_B64' | base64 -d)\"; export ENABLE_STAGING_FAUCET=true; export ALLOWED_COUNTRIES='$STAGING_ALLOWED_COUNTRIES'; export ALLOWED_CURRENCIES='$STAGING_ALLOWED_CURRENCIES'; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose pull && docker compose up -d --wait"
+            "set -e; cd '$STAGING_DEPLOY_PATH'; test -f .env.staging; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export DATABASE_URL=\"\$(printf '%s' '$DATABASE_URL_B64' | base64 -d)\"; export DIRECT_URL=\"\$DATABASE_URL\"; export NODE_ENV=production; export WAITLAYER_ENVIRONMENT_KIND=staging; export WAITLAYER_ENVIRONMENT_ID='staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; export NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=staging; export NEXT_PUBLIC_ALLOW_MOCK_AUTH=false; export ALLOW_MOCK_GOOGLE=false; export MOCK_GOOGLE_ENABLED=0; export ENABLE_STAGING_FAUCET=true; export ALLOWED_COUNTRIES='$STAGING_ALLOWED_COUNTRIES'; export ALLOWED_CURRENCIES='$STAGING_ALLOWED_CURRENCIES'; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml up -d --wait"
       - name: Run staging smoke test against the deployed digest
         run: node scripts/staging-smoke.mjs
         env:
@@ -311,6 +332,7 @@ jobs:
     environment: production
     env:
       DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.PRODUCTION_DIRECT_URL }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
@@ -327,6 +349,11 @@ jobs:
             echo "PRODUCTION_DATABASE_URL is required before production promotion" >&2
             exit 1
           }
+          if [ -n "$DIRECT_URL" ]; then
+            echo "Production migrations will use PRODUCTION_DIRECT_URL."
+          else
+            echo "PRODUCTION_DIRECT_URL is unset; migrations will fall back to PRODUCTION_DATABASE_URL."
+          fi
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
       - name: Apply migrations to production before deploy
@@ -336,25 +363,27 @@ jobs:
           pnpm --filter @waitlayer/db migrate:status
           pnpm --filter @waitlayer/db migrate:drift
 
-  # Final approval gate before production. Requires the `production` environment
-  # to have required reviewers configured, so a second human sign-off is
-  # mandatory after the staging smoke passes. The promotion performs an actual
-  # deployment (pull the exact staging image digest that passed smoke tests) and
-  # a post-deploy canary that probes the production API for liveness and
-  # migration status.
+  # Final approval gate before production. The API artifact is environment-
+  # neutral and is promoted by the exact staging-tested digest. The Next.js web
+  # artifact is NOT environment-neutral: middleware verification keys and
+  # NEXT_PUBLIC_* values are embedded at build time, so production gets a new,
+  # attested image built only after the production environment approval.
   promote-production:
     needs: [staging-smoke, migrate-production]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     environment: production
     env:
       # PRODUCTION_API_URL must include the /api/v1 prefix.
       # Example: https://api.waitlayer.com/api/v1
       PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+      PRODUCTION_WEB_URL: ${{ secrets.PRODUCTION_WEB_URL }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Docker Buildx for the production web artifact
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
-      - name: Verify staging image signatures before promotion
+      - name: Verify staging image signatures before API promotion
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
           REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
@@ -381,7 +410,52 @@ jobs:
           STAGING_API_DIGEST: ${{ needs.staging-smoke.outputs.api_digest }}
           STAGING_WEB_DIGEST: ${{ needs.staging-smoke.outputs.web_digest }}
         run: node scripts/validate-release-inputs.mjs --promotion
-      - name: Promote production images (pull same digest as staging, tag, push, deploy)
+      - name: Build and push production-specific web image
+        id: production-web
+        env:
+          REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+          DOCKER_ATTEST: 'true'
+          WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:production-${{ github.sha }}
+          JWT_PUBLIC_KEY: ${{ secrets.PRODUCTION_JWT_PUBLIC_KEY }}
+          JWT_PUBLIC_KEYS: ${{ secrets.PRODUCTION_JWT_PUBLIC_KEYS }}
+          JWT_ISSUER: ${{ secrets.PRODUCTION_JWT_ISSUER || 'waitlayer' }}
+          JWT_AUDIENCE: ${{ secrets.PRODUCTION_JWT_AUDIENCE || 'waitlayer-client' }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.PRODUCTION_API_URL }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PRODUCTION_GOOGLE_CLIENT_ID }}
+          NEXT_PUBLIC_WEB_URL: ${{ secrets.PRODUCTION_WEB_URL }}
+          NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: production
+          NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'
+          NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.PRODUCTION_SENTRY_DSN }}
+          NEXT_PUBLIC_SENTRY_ENVIRONMENT: production
+        run: |
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS WAITLAYER_WEB_IMAGE JWT_PUBLIC_KEY NEXT_PUBLIC_API_URL NEXT_PUBLIC_GOOGLE_CLIENT_ID NEXT_PUBLIC_WEB_URL; do
+            if [ -z "${!required}" ]; then
+              echo "$required is required to build the production web artifact" >&2
+              exit 1
+            fi
+          done
+          node scripts/validate-release-inputs.mjs --production-web
+
+          echo "$REGISTRY_PASS" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          docker compose -f docker-compose.yml build --push web
+          WEB_HASH=$(docker buildx imagetools inspect "$WAITLAYER_WEB_IMAGE" --format '{{.Manifest.Digest}}')
+          test -n "$WEB_HASH" || { echo "Production web digest could not be resolved" >&2; exit 1; }
+          PRODUCTION_WEB_DIGEST="${WAITLAYER_WEB_IMAGE%:*}@$WEB_HASH"
+          echo "digest=$PRODUCTION_WEB_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Built production web image by digest: $PRODUCTION_WEB_DIGEST"
+      - name: Sign and verify the production web digest
+        env:
+          PRODUCTION_WEB_DIGEST: ${{ steps.production-web.outputs.digest }}
+        run: |
+          test -n "$PRODUCTION_WEB_DIGEST" || { echo "Cannot sign an empty production web digest" >&2; exit 1; }
+          cosign sign --yes "$PRODUCTION_WEB_DIGEST"
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/$GITHUB_WORKFLOW_REF" \
+            "$PRODUCTION_WEB_DIGEST"
+      - name: Deploy staged API plus production-specific web image
         id: promote
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
@@ -393,37 +467,22 @@ jobs:
           PROD_KNOWN_HOSTS: ${{ secrets.PRODUCTION_KNOWN_HOSTS }}
           PROD_DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
           STAGING_API_DIGEST: ${{ needs.staging-smoke.outputs.api_digest }}
-          STAGING_WEB_DIGEST: ${{ needs.staging-smoke.outputs.web_digest }}
+          PRODUCTION_WEB_DIGEST: ${{ steps.production-web.outputs.digest }}
+          INITIAL_PRODUCTION_DEPLOY: ${{ inputs.initial_production_deploy == true && '1' || '0' }}
         run: |
           SHA="$GITHUB_SHA"
-          for required in REGISTRY REGISTRY_USER REGISTRY_PASS PROD_HOST PROD_USER PROD_DEPLOY_KEY PROD_KNOWN_HOSTS PROD_DEPLOY_PATH STAGING_API_DIGEST STAGING_WEB_DIGEST; do
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS PROD_HOST PROD_USER PROD_DEPLOY_KEY PROD_KNOWN_HOSTS PROD_DEPLOY_PATH STAGING_API_DIGEST PRODUCTION_WEB_DIGEST; do
             if [ -z "${!required}" ]; then
-              echo "$required secret or staging output is required for production promotion" >&2
+              echo "$required secret or image output is required for production deployment" >&2
               exit 1
             fi
           done
 
-          PROD_API_TAG="$REGISTRY/waitlayer-api:production-$SHA"
-          PROD_WEB_TAG="$REGISTRY/waitlayer-web:production-$SHA"
-          PROD_API_LATEST="$REGISTRY/waitlayer-api:production-latest"
-          PROD_WEB_LATEST="$REGISTRY/waitlayer-web:production-latest"
-
           echo "Logging in to container registry $REGISTRY ..."
           echo "$REGISTRY_PASS" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
 
-          echo "Pulling the exact staging digests and tagging for production ..."
-          docker pull "$STAGING_API_DIGEST"
-          docker pull "$STAGING_WEB_DIGEST"
-          docker tag "$STAGING_API_DIGEST" "$PROD_API_TAG"
-          docker tag "$STAGING_WEB_DIGEST" "$PROD_WEB_TAG"
-          docker tag "$PROD_API_TAG" "$PROD_API_LATEST"
-          docker tag "$PROD_WEB_TAG" "$PROD_WEB_LATEST"
-          docker push "$PROD_API_TAG"
-          docker push "$PROD_WEB_TAG"
-          docker push "$PROD_API_LATEST"
-          docker push "$PROD_WEB_LATEST"
-
-          echo "Deploying the smoke-tested digests to production host $PROD_HOST ..."
+          echo "Deploying staging-tested API $STAGING_API_DIGEST"
+          echo "Deploying production-configured web $PRODUCTION_WEB_DIGEST"
           KEY_FILE="$RUNNER_TEMP/production_deploy_key"
           KNOWN_HOSTS_FILE="$RUNNER_TEMP/production_known_hosts"
           printf '%s\n' "$PROD_DEPLOY_KEY" > "$KEY_FILE"
@@ -432,21 +491,29 @@ jobs:
           SSH_OPTS=(-i "$KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN_HOSTS_FILE")
           printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
             "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
-          # Capture the running immutable image references before changing
-          # anything. A promotion without a known predecessor is not
-          # recoverable, so fail before deployment rather than leaving a
-          # comment-only rollback plan.
+
           PREVIOUS_API_IMAGE=$(ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; cid=\$(docker compose ps -q api); test -n \"\$cid\"; docker inspect --format '{{.Config.Image}}' \"\$cid\"")
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; cid=\$(WAITLAYER_API_IMAGE='$STAGING_API_DIGEST' WAITLAYER_WEB_IMAGE='$PRODUCTION_WEB_DIGEST' docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml ps -q api || true); if [ -n \"\$cid\" ]; then docker inspect --format '{{.Config.Image}}' \"\$cid\"; fi")
           PREVIOUS_WEB_IMAGE=$(ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; cid=\$(docker compose ps -q web); test -n \"\$cid\"; docker inspect --format '{{.Config.Image}}' \"\$cid\"")
-          test -n "$PREVIOUS_API_IMAGE" || { echo "No previous API image found; refusing non-recoverable promotion" >&2; exit 1; }
-          test -n "$PREVIOUS_WEB_IMAGE" || { echo "No previous web image found; refusing non-recoverable promotion" >&2; exit 1; }
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; cid=\$(WAITLAYER_API_IMAGE='$STAGING_API_DIGEST' WAITLAYER_WEB_IMAGE='$PRODUCTION_WEB_DIGEST' docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml ps -q web || true); if [ -n \"\$cid\" ]; then docker inspect --format '{{.Config.Image}}' \"\$cid\"; fi")
+
+          if [ "$INITIAL_PRODUCTION_DEPLOY" = "1" ]; then
+            if [ -n "$PREVIOUS_API_IMAGE" ] || [ -n "$PREVIOUS_WEB_IMAGE" ]; then
+              echo "initial_production_deploy was selected, but predecessor containers exist; use the normal deploy path" >&2
+              exit 1
+            fi
+            echo "::warning::Approved first production deploy has no automated rollback predecessor."
+            echo "rollback_available=false" >> "$GITHUB_OUTPUT"
+          else
+            test -n "$PREVIOUS_API_IMAGE" || { echo "No previous API image found; select the approval-gated initial_production_deploy input only for a true first deploy" >&2; exit 1; }
+            test -n "$PREVIOUS_WEB_IMAGE" || { echo "No previous web image found; select the approval-gated initial_production_deploy input only for a true first deploy" >&2; exit 1; }
+            echo "rollback_available=true" >> "$GITHUB_OUTPUT"
+            echo "Captured rollback images: $PREVIOUS_API_IMAGE, $PREVIOUS_WEB_IMAGE"
+          fi
           echo "previous_api_image=$PREVIOUS_API_IMAGE" >> "$GITHUB_OUTPUT"
           echo "previous_web_image=$PREVIOUS_WEB_IMAGE" >> "$GITHUB_OUTPUT"
-          echo "Captured rollback images: $PREVIOUS_API_IMAGE, $PREVIOUS_WEB_IMAGE"
           ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$STAGING_API_DIGEST'; export WAITLAYER_WEB_IMAGE='$STAGING_WEB_DIGEST'; docker compose pull && docker compose up -d --wait"
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export WAITLAYER_API_IMAGE='$STAGING_API_DIGEST'; export WAITLAYER_WEB_IMAGE='$PRODUCTION_WEB_DIGEST'; export WAITLAYER_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
 
           echo "=== Production image promotion complete ==="
           echo "Commit: ${SHA:0:12}"
@@ -473,17 +540,52 @@ jobs:
             echo "Production API reports pending migrations: $PENDING"; exit 1
           fi
           echo "Production API migrations are up to date (pendingCount=$PENDING)"
-      - name: Post-deploy canary — verify BFF + auth loop
+      - name: Post-deploy canary — verify deployed JWT public key matches the web build
+        env:
+          EXPECTED_JWT_PUBLIC_KEY: ${{ secrets.PRODUCTION_JWT_PUBLIC_KEY }}
         run: |
+          test -n "$EXPECTED_JWT_PUBLIC_KEY" || { echo "PRODUCTION_JWT_PUBLIC_KEY is required" >&2; exit 1; }
+          EXPECTED_KID=$(node -e '
+            const { createHash } = require("node:crypto");
+            const pem = process.env.EXPECTED_JWT_PUBLIC_KEY.replace(/\\n/g, "\n").trim();
+            process.stdout.write(createHash("sha256").update(pem).digest("hex").slice(0, 16));')
+          JWKS=$(curl --fail-with-body -sS "${PRODUCTION_API_URL}/auth/.well-known/jwks.json")
+          EXPECTED_KID="$EXPECTED_KID" JWKS="$JWKS" node -e '
+            const body = JSON.parse(process.env.JWKS);
+            const key = Array.isArray(body.keys)
+              ? body.keys.find((candidate) => candidate.kid === process.env.EXPECTED_KID)
+              : undefined;
+            if (!key || key.kty !== "RSA" || key.alg !== "RS256" || !key.n || !key.e) {
+              throw new Error("deployed API JWKS does not contain the production web build key");
+            }'
+          echo "Deployed API verification key matches the key embedded in the production web build"
+      - name: Post-deploy canary — verify BFF validation routing
+        run: |
+          WEB_ORIGIN="${PRODUCTION_WEB_URL%/}"
           STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
-            -X POST "${PRODUCTION_API_URL}/auth/login" \
+            -X POST "$WEB_ORIGIN/api/auth/login" \
             -H 'Content-Type: application/json' -d '{}')
           if [ "$STATUS" != "400" ]; then
-            echo "Auth controller returned unexpected status $STATUS (expected 400 for empty body)"; exit 1
+            echo "Web BFF returned unexpected status $STATUS (expected 400 for empty login body)"; exit 1
           fi
-          echo "Auth BFF resolves over TCP with expected validation"
+          echo "Web BFF reached the API and preserved expected input validation (token issuance is covered by the blocking production smoke/E2E gate)"
+      - name: Post-deploy canary — verify protected web middleware
+        run: |
+          WEB_ORIGIN="${PRODUCTION_WEB_URL%/}"
+          HEADERS="$RUNNER_TEMP/production-protected-headers"
+          STATUS=$(curl -sS -D "$HEADERS" -o /dev/null -w '%{http_code}' "$WEB_ORIGIN/developer")
+          case "$STATUS" in
+            302|303|307|308) ;;
+            *) echo "Protected web route returned $STATUS instead of an auth redirect" >&2; exit 1 ;;
+          esac
+          LOCATION=$(awk 'tolower($1) == "location:" { print $2 }' "$HEADERS" | tr -d '\r' | tail -1)
+          case "$LOCATION" in
+            */auth/login*) ;;
+            *) echo "Protected web route did not redirect to /auth/login: $LOCATION" >&2; exit 1 ;;
+          esac
+          echo "Protected web middleware redirected an anonymous request to login"
       - name: Rollback on canary failure
-        if: failure()
+        if: failure() && steps.promote.outputs.rollback_available == 'true'
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
           REGISTRY_USER: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
@@ -512,8 +614,12 @@ jobs:
           printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
             "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
           ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; export WAITLAYER_API_IMAGE='$PREVIOUS_API_IMAGE'; export WAITLAYER_WEB_IMAGE='$PREVIOUS_WEB_IMAGE'; docker compose pull && docker compose up -d --wait"
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export WAITLAYER_API_IMAGE='$PREVIOUS_API_IMAGE'; export WAITLAYER_WEB_IMAGE='$PREVIOUS_WEB_IMAGE'; export WAITLAYER_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
           echo "Rollback completed with the captured predecessor images."
+      - name: Record unavailable rollback for failed first deployment
+        if: failure() && inputs.initial_production_deploy == true && steps.promote.outputs.rollback_available != 'true'
+        run: |
+          echo "::error::The approved first production deployment failed and has no predecessor images to restore. Keep traffic closed and follow the cold-start recovery runbook."
       - name: Promote complete
         if: success()
         run: |

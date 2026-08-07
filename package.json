@@ -12,7 +12,7 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test && pnpm run test:release-gates",
-    "test:release-gates": "node --test scripts/validate-release-inputs.test.mjs scripts/generate-secrets.test.mjs scripts/release-evidence.test.mjs scripts/deploy-preflight.test.mjs",
+    "test:release-gates": "pnpm --filter \"waitlayer-cli...\" build && node --test --test-concurrency=1 scripts/validate-release-inputs.test.mjs scripts/generate-secrets.test.mjs scripts/release-evidence.test.mjs scripts/deploy-preflight.test.mjs scripts/check-licenses.test.mjs scripts/ci-package-contract.test.mjs scripts/compiled-runtime-entrypoints.test.mjs scripts/production-smoke-contract.test.mjs scripts/prometheus-alerts.test.mjs scripts/restore-db.test.mjs scripts/scenario-audit.test.mjs scripts/scenario-catalog.test.mjs scripts/scenario-coverage.test.mjs scripts/scenario-report.test.mjs scripts/scenario-runner.test.mjs scripts/scenario-repeat.test.mjs scripts/scenario-triage.test.mjs && pnpm scenario:check && pnpm scenario:catalog && pnpm scenario:coverage",
     "typecheck": "turbo run typecheck",
     "db:generate": "pnpm --filter @waitlayer/db generate",
     "db:migrate": "pnpm --filter @waitlayer/db migrate",

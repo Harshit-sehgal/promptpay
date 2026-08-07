@@ -53,17 +53,16 @@ Default shown where one exists.
 
 ## Web
 
-| Variable                                       | Req         | Default | Purpose                                                                                                                                                                                                                                                                                   |
-| ---------------------------------------------- | ----------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WEB_PORT`                                     | opt         | `3000`  | Next.js port.                                                                                                                                                                                                                                                                             |
-| `NEXT_PUBLIC_API_URL`                          | opt         | —       | Public API URL; required by the Vercel deployment preflight.                                                                                                                                                                                                                              |
-| `API_INTERNAL_URL`                             | opt         | —       | Server-only API URL preferred by BFF handlers.                                                                                                                                                                                                                                            |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID`                 | opt         | —       | Google OAuth client id; required by Vercel preflight.                                                                                                                                                                                                                                     |
-| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`                  | opt         | —       | Shows mock-auth UI in local development only.                                                                                                                                                                                                                                             |
-| `NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS` | opt         | —       | JSON provider launch-status map baked into the web build.                                                                                                                                                                                                                                 |
-| `BFF_TRUST_PROXY_HOPS`                         | opt         | `1`     | Trusted forwarding hops for BFF network identity (1-3).                                                                                                                                                                                                                                   |
-| `COOKIE_SECURE`                                | opt         | —       | Explicit secure-cookie override. `false` forces non-Secure cookies in every environment (operator escape hatch for plain-HTTP staging/CI hosts; emits a warning in production). The deploy preflight (`verify-deploy-env.mjs` / `web-env.ts`) still rejects `false` for real deployments. |
-| `BFF_TRUST_PROXY_HOPS`                         | req in prod | `1` dev | Forwarded-proxy hops trusted by the web BFF; keep aligned with the public edge topology.                                                                                                                                                                                                  |
+| Variable                       | Req         | Default | Purpose                                                                                                                                                                                                                                                                                   |
+| ------------------------------ | ----------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WEB_PORT`                     | opt         | `3000`  | Next.js port.                                                                                                                                                                                                                                                                             |
+| `NEXT_PUBLIC_API_URL`          | opt         | —       | Public API URL; required by the Vercel deployment preflight.                                                                                                                                                                                                                              |
+| `API_INTERNAL_URL`             | opt         | —       | Server-only API URL preferred by BFF handlers.                                                                                                                                                                                                                                            |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | opt         | —       | Google OAuth client id; required by Vercel preflight.                                                                                                                                                                                                                                     |
+| `NEXT_PUBLIC_ALLOW_MOCK_AUTH`  | opt         | —       | Shows mock-auth UI in local development only.                                                                                                                                                                                                                                             |
+| `BFF_TRUST_PROXY_HOPS`         | opt         | `1`     | Trusted forwarding hops for BFF network identity (1-3).                                                                                                                                                                                                                                   |
+| `COOKIE_SECURE`                | opt         | —       | Explicit secure-cookie override. `false` forces non-Secure cookies in every environment (operator escape hatch for plain-HTTP staging/CI hosts; emits a warning in production). The deploy preflight (`verify-deploy-env.mjs` / `web-env.ts`) still rejects `false` for real deployments. |
+| `BFF_TRUST_PROXY_HOPS`         | req in prod | `1` dev | Forwarded-proxy hops trusted by the web BFF; keep aligned with the public edge topology.                                                                                                                                                                                                  |
 
 ## Auth
 
@@ -176,10 +175,10 @@ Default shown where one exists.
 
 ## Privacy and OAuth verification
 
-| Variable                      | Req  | Default | Purpose                                                     |
-| ----------------------------- | ---- | ------- | ----------------------------------------------------------- |
-| `PRIVACY_HASH_KEY`            | opt* | —       | 32+ character keyed pseudonymization secret; prod required. |
-| `GOOGLE_TOKENINFO_TIMEOUT_MS` | opt  | `5000`  | Google token-info request timeout (1000-30000).             |
+| Variable                 | Req  | Default | Purpose                                                      |
+| ------------------------ | ---- | ------- | ------------------------------------------------------------ |
+| `PRIVACY_HASH_KEY`       | opt* | —       | 32+ character keyed pseudonymization secret; prod required.  |
+| `GOOGLE_AUTH_TIMEOUT_MS` | opt  | `5000`  | Google ID-token verification transport timeout (1000-30000). |
 
 ## Notes
 

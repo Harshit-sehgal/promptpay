@@ -42,6 +42,8 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createRequire } from 'module';
 
+import { firedCriticalAlertEvents } from './prometheus-alerts.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const apiRequire = createRequire(join(__dirname, '..', 'apps', 'api', 'package.json'));
 const jwtPkgPath = apiRequire.resolve('@nestjs/jwt/package.json');
@@ -706,16 +708,11 @@ async function main() {
     } else {
       const text = await metricsRes.text();
       const critical = [
-        'alert{event=ledger_discrepancy',
-        'alert{event=audit_dead_letter',
-        'alert{event=payout_paid_without_provider_tx',
+        'ledger_discrepancy',
+        'audit_dead_letter',
+        'payout_paid_without_provider_tx',
       ];
-      const fired = critical.filter((c) => {
-        const m = text.match(
-          new RegExp(`${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\{[^}]*\\}\\s+(\\d+)`),
-        );
-        return m && Number(m[1]) > 0;
-      });
+      const fired = firedCriticalAlertEvents(text, critical);
       if (fired.length) fail(`critical alerts fired in staging: ${fired.join(', ')}`);
       else ok('no critical alerts fired in staging');
     }

@@ -38,13 +38,11 @@ if [ "${DOCKER_BUILD:-0}" = "1" ]; then
       --build-arg JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
       --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}" \
       --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" \
-      --build-arg NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS="${NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS:-}" \
       .
     docker build -t waitlayer-web --target web \
       --build-arg JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
       --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}" \
       --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" \
-      --build-arg NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS="${NEXT_PUBLIC_WAITLAYER_PAYOUT_PROVIDER_STATUS:-}" \
       .
   fi
 fi
