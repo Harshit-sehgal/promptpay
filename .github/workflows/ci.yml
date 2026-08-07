@@ -503,7 +503,18 @@ jobs:
               echo "API healthy over TCP"; break
             fi
             if [ "$i" -eq 30 ]; then
-              echo "API container did not become ready within timeout"; exit 1
+              echo "API container did not become ready within timeout"
+              # Without this the failure is 30 identical curl errors and no
+              # cause. The container's own logs are the only evidence of why it
+              # died, and this step had never run before, so nothing had ever
+              # needed them.
+              echo "───────── docker compose ps ─────────"
+              docker compose -f docker-compose.yml ps || true
+              echo "───────── api logs ─────────"
+              docker compose -f docker-compose.yml logs --no-color --tail 200 api || true
+              echo "───────── postgres logs ─────────"
+              docker compose -f docker-compose.yml logs --no-color --tail 40 postgres || true
+              exit 1
             fi
             sleep 2
           done
@@ -551,7 +562,12 @@ jobs:
               echo "Web healthy over TCP"; break
             fi
             if [ "$i" -eq 30 ]; then
-              echo "Web container did not become healthy within timeout"; exit 1
+              echo "Web container did not become healthy within timeout"
+              echo "───────── docker compose ps ─────────"
+              docker compose -f docker-compose.yml ps || true
+              echo "───────── web logs ─────────"
+              docker compose -f docker-compose.yml logs --no-color --tail 200 web || true
+              exit 1
             fi
             sleep 2
           done
