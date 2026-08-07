@@ -116,9 +116,26 @@ export class EmailQueueCron implements OnApplicationBootstrap, OnModuleDestroy {
     // password-reset / verify emails sent twice) is worse than a slightly
     // longer-held lock.
     const outcome = await this.prisma.$transaction(async (tx) => {
+      // Select an EXPLICIT aliased column list, never `SELECT *`.
+      // `retryCount` is `@map("retry_count")`, so `SELECT *` returns
+      // `retry_count` and `job.retryCount` was `undefined` at runtime — while
+      // `EmailQueueRow` still declared it a `number`, because a raw query's
+      // type parameter is an unchecked assertion. The fallout was silent and
+      // total: `job.retryCount + 1` produced NaN, so `retryCount >= MAX_RETRIES`
+      // was never true (rows retried forever), the backoff computed an Invalid
+      // Date, and the failure-path `update()` then aborted the whole batch
+      // transaction — one undeliverable email stopped the entire queue,
+      // including password-reset and email-verification mail.
       const batch = (await tx.$queryRaw<EmailQueueRow[]>(
         Prisma.sql`
-          SELECT * FROM "email_queue"
+          SELECT
+            "id",
+            "to",
+            "subject",
+            "html",
+            "text",
+            "retry_count" AS "retryCount"
+          FROM "email_queue"
           WHERE "next_retry_at" <= NOW()
           ORDER BY "next_retry_at" ASC
           LIMIT ${this.BATCH_SIZE}

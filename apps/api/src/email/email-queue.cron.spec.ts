@@ -103,6 +103,17 @@ describe('EmailQueueCron', () => {
     const sql = rawQuery.strings.join('');
     expect(sql).toContain('FOR UPDATE SKIP LOCKED');
     expect(sql).toContain('email_queue');
+
+    // `retryCount` is `@map("retry_count")`. A raw query returns DB column
+    // names, and its `<EmailQueueRow[]>` type parameter is an UNCHECKED
+    // assertion — so `SELECT *` compiled fine while `job.retryCount` was
+    // `undefined` at runtime. That produced NaN arithmetic: the give-up branch
+    // never fired, backoff became an Invalid Date, and the failure-path update
+    // aborted the whole batch transaction, stopping the entire email queue.
+    // Every mock below hands the code a camelCase row the database never
+    // returns, so only asserting the projection can catch this.
+    expect(sql).toContain('"retry_count" AS "retryCount"');
+    expect(sql).not.toContain('SELECT *');
   });
 
   it('updates retry count when retry fails', async () => {
