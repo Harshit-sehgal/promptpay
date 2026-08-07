@@ -9,8 +9,10 @@ import {
   useRef,
   useState,
 } from 'react';
+import { ADMIN_MFA_RELOGIN_REQUIRED_KEY, isAdministratorRole } from '@/lib/admin-mfa';
 import api from '@/lib/api/client';
 import { getDashboardPath, SignupRole } from '@/lib/auth-routing';
+import { twoFactorProofForInput } from '@/lib/two-factor-input';
 
 interface User {
   id: string;
@@ -59,14 +61,15 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string, twoFactorToken?: string) => Promise<User>;
+  login: (email: string, password: string, twoFactorInput?: string) => Promise<User>;
   signup: (data: SignupPayload) => Promise<User>;
   googleLogin: (
     idToken: string,
     role?: string,
-    twoFactorToken?: string,
+    twoFactorInput?: string,
     consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
   ) => Promise<User>;
+  refreshUser: () => Promise<User>;
   logout: () => Promise<void>;
 }
 
@@ -123,15 +126,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (email: string, password: string, twoFactorToken?: string) => {
+  const login = useCallback(async (email: string, password: string, twoFactorInput?: string) => {
     const data = (await authFetch('/auth/login', {
       email,
       password,
-      ...(twoFactorToken ? { twoFactorToken } : {}),
+      ...twoFactorProofForInput(twoFactorInput),
     })) as { user: Record<string, unknown> };
     // The Route Handler already merged /auth/me into the user profile
     const fullUser = mapUser(data.user);
     localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+    if (isAdministratorRole(fullUser.role) && fullUser.twoFactorEnabled) {
+      localStorage.removeItem(ADMIN_MFA_RELOGIN_REQUIRED_KEY);
+    }
     generationRef.current += 1;
     setUser(fullUser);
     return fullUser;
@@ -153,13 +159,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (
       idToken: string,
       role?: string,
-      twoFactorToken?: string,
+      twoFactorInput?: string,
       consent?: { ageConfirmed?: boolean; termsAccepted?: boolean; policyVersion?: string },
     ) => {
       const data = (await authFetch('/auth/google', {
         idToken,
         role: role as 'developer' | 'advertiser' | undefined,
-        ...(twoFactorToken ? { twoFactorToken } : {}),
+        ...twoFactorProofForInput(twoFactorInput),
         ...(consent
           ? {
               ageConfirmed: consent.ageConfirmed,
@@ -170,12 +176,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })) as { user: Record<string, unknown> };
       const fullUser = mapUser(data.user);
       localStorage.setItem('lastDashboard', getDashboardPath(fullUser.role));
+      if (isAdministratorRole(fullUser.role) && fullUser.twoFactorEnabled) {
+        localStorage.removeItem(ADMIN_MFA_RELOGIN_REQUIRED_KEY);
+      }
       generationRef.current += 1;
       setUser(fullUser);
       return fullUser;
     },
     [],
   );
+
+  const refreshUser = useCallback(async () => {
+    const res = await api.get('/auth/me');
+    const fullUser = mapUser(res.data as Record<string, unknown>);
+    generationRef.current += 1;
+    setUser(fullUser);
+    return fullUser;
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -207,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         signup,
         googleLogin,
+        refreshUser,
         logout,
       }}
     >

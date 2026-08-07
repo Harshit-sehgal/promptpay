@@ -20,6 +20,7 @@ import { CreateCountryTargetingDto } from '../advertiser/dto';
 import { CurrentUser } from '../common/decorators';
 import { AllowApiKey, RequiredScopes } from '../common/decorators/allow-api-key.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
@@ -53,7 +54,7 @@ function resolveCampaignActor(req: CampaignRequest, userId: string, role: string
 
 @ApiTags('Campaign')
 @Controller('campaigns')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, AdminMfaStepUpGuard)
 export class CampaignController {
   constructor(
     private campaignService: CampaignService,

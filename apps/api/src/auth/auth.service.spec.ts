@@ -64,6 +64,7 @@ function makeService(overrides?: Record<string, string>) {
 
   const googleVerifier = {
     verify: vi.fn(),
+    verifyRecent: vi.fn(),
   } as any;
   const fraud = {
     computeTrustScore: vi.fn().mockResolvedValue(40),
@@ -1025,7 +1026,7 @@ describe('AuthService', () => {
         twoFactorSecret: null,
         googleId: 'g-setup',
       });
-      googleVerifier.verify.mockResolvedValue({
+      googleVerifier.verifyRecent.mockResolvedValue({
         email_verified: true,
         sub: 'g-setup',
         email: 'setup@test.com',
@@ -1037,6 +1038,7 @@ describe('AuthService', () => {
       expect(result.secret).toEqual(expect.any(String));
       expect(storedSecret).toEqual(expect.stringMatching(/^v1:/));
       expect(storedSecret).not.toBe(result.secret);
+      expect(googleVerifier.verifyRecent).toHaveBeenCalledWith('tok');
     });
 
     it('refuses to rotate an enabled TOTP secret without first disabling 2FA', async () => {

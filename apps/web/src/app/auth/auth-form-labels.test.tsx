@@ -40,6 +40,7 @@ vi.mock('@/lib/auth-context', () => ({
 describe('auth form label associations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, '', '/auth/login');
     vi.mocked(api.get).mockResolvedValue({
       data: { terms_of_service: '2026-07-16' },
     } as never);
@@ -57,13 +58,46 @@ describe('auth form label associations', () => {
     vi.unstubAllGlobals();
   });
 
-  it('associates every login field, including the 2FA code', async () => {
+  it('associates every login field, including the 2FA or backup code', async () => {
     render(<LoginPage />);
 
     expect(screen.getByLabelText('Email').id).toBe('login-email');
     expect(screen.getByLabelText('Password').id).toBe('login-password');
-    expect(screen.getByLabelText('2FA code').id).toBe('login-two-factor');
+    expect(screen.getByLabelText('2FA or backup code').id).toBe('login-two-factor');
     await waitFor(() => expect(fetch).toHaveBeenCalled());
+  });
+
+  it('renders a durable confirmation after account erasure', async () => {
+    window.history.replaceState(null, '', '/auth/login?deleted=1');
+    render(<LoginPage />);
+
+    expect((await screen.findByRole('status')).textContent).toContain(
+      'Your account identity was permanently erased. You have been signed out.',
+    );
+  });
+
+  it('preserves a canonical backup code when signing in with email and password', async () => {
+    login.mockResolvedValue({ role: 'developer' });
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: 'dev@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'correct-horse-battery-staple' },
+    });
+    fireEvent.change(screen.getByLabelText('2FA or backup code'), {
+      target: { value: 'abcd-efgh-jkmn' },
+    });
+    fireEvent.submit(screen.getByRole('form', { name: 'Sign in form' }));
+
+    await waitFor(() =>
+      expect(login).toHaveBeenCalledWith(
+        'dev@example.com',
+        'correct-horse-battery-staple',
+        'ABCD-EFGH-JKMN',
+      ),
+    );
   });
 
   it('associates signup fields for both account types', async () => {

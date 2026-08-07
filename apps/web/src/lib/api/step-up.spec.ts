@@ -9,7 +9,7 @@ import {
 } from './step-up';
 
 /**
- * A-102 regression. Seven API routes are guarded by `ActionStepUpGuard` and
+ * A-102 regression. Sensitive API routes are guarded by `ActionStepUpGuard` and
  * refuse any request without an `x-step-up-token` header. No client ever sent
  * it and `/auth/step-up` was not on the BFF proxy allowlist, so the entire
  * payout path and both GDPR erasure routes were permanently 403 from the UI.
@@ -23,11 +23,13 @@ describe('stepUpActionFor', () => {
   it.each([
     ['POST', '/payout/method', 'payout:method'],
     ['DELETE', '/payout/method/abc-123', 'payout:method'],
+    ['POST', '/payout/stripe-connect/onboarding', 'payout:method'],
     ['POST', '/payout/request', 'payout:request'],
     ['POST', '/developer/api-keys', 'api_key:create'],
     ['POST', '/developer/delete-account', 'account:delete'],
     ['POST', '/advertiser/delete-account', 'account:delete'],
     ['POST', '/auth/2fa/disable', '2fa:disable'],
+    ['POST', '/auth/2fa/backup-codes/regenerate', '2fa:regenerate'],
   ])('maps %s %s → %s', (method, url, expected) => {
     expect(stepUpActionFor(method, url)).toBe(expected);
   });
@@ -43,6 +45,8 @@ describe('stepUpActionFor', () => {
   it('returns null for routes that do not require step-up', () => {
     expect(stepUpActionFor('GET', '/developer/dashboard')).toBeNull();
     expect(stepUpActionFor('GET', '/developer/api-keys')).toBeNull(); // read is not gated
+    expect(stepUpActionFor('GET', '/payout/method')).toBeNull();
+    expect(stepUpActionFor('POST', '/payout/methodology')).toBeNull();
   });
 
   it('has a human-readable label for every mapped action', () => {
@@ -54,6 +58,7 @@ describe('stepUpActionFor', () => {
       'api_key:create',
       'account:delete',
       '2fa:disable',
+      '2fa:regenerate',
     ];
     for (const action of actions) {
       expect(STEP_UP_LABELS[action], `no label for ${action}`).toBeTruthy();

@@ -1,8 +1,11 @@
 import { createSign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { ConfigService } from '@nestjs/config';
 
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from './__fixtures__/test-keys';
-import { normalizePem } from './jwt-keys';
+import { TEST_JWT_PUBLIC_KEY_2 } from './__fixtures__/test-keys-2';
+import { createJwtModuleOptions } from './auth.module';
+import { normalizePem, validateJwtSigningKeyPair } from './jwt-keys';
 
 /**
  * A-097 regression: the RS256 **signing** key must tolerate the `\n`-escaped
@@ -61,5 +64,43 @@ describe('A-097 — RS256 signing tolerates escaped PEMs', () => {
   it('both PEM forms normalise to the same key material', () => {
     expect(normalizePem(escapedPrivate)).toBe(TEST_JWT_PRIVATE_KEY.trim());
     expect(normalizePem(escapedPublic)).toBe(TEST_JWT_PUBLIC_KEY.trim());
+  });
+});
+
+describe('RS256 signing key-pair startup validation', () => {
+  it('accepts a matching multiline private/public pair', () => {
+    expect(validateJwtSigningKeyPair(TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY)).toEqual({
+      privateKey: TEST_JWT_PRIVATE_KEY,
+      publicKey: TEST_JWT_PUBLIC_KEY,
+    });
+  });
+
+  it('accepts and normalises a matching literal-\\n escaped pair', () => {
+    const escapedPrivate = TEST_JWT_PRIVATE_KEY.replace(/\n/g, '\\n');
+    const escapedPublic = TEST_JWT_PUBLIC_KEY.replace(/\n/g, '\\n');
+
+    expect(validateJwtSigningKeyPair(escapedPrivate, escapedPublic)).toEqual({
+      privateKey: TEST_JWT_PRIVATE_KEY,
+      publicKey: TEST_JWT_PUBLIC_KEY,
+    });
+  });
+
+  it('rejects mismatched valid keys in their deployment escaped form', () => {
+    const escapedPrivate = TEST_JWT_PRIVATE_KEY.replace(/\n/g, '\\n');
+    const escapedWrongPublic = TEST_JWT_PUBLIC_KEY_2.replace(/\n/g, '\\n');
+    const config = new ConfigService({
+      JWT_PRIVATE_KEY: escapedPrivate,
+      JWT_PUBLIC_KEY: escapedWrongPublic,
+    });
+
+    expect(() => createJwtModuleOptions(config)).toThrow(
+      'JWT_PRIVATE_KEY does not match JWT_PUBLIC_KEY; refusing to start.',
+    );
+  });
+
+  it('rejects malformed PEM input without echoing key material', () => {
+    expect(() => validateJwtSigningKeyPair('not-a-private-key', TEST_JWT_PUBLIC_KEY)).toThrow(
+      'JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be valid RSA PEM keys.',
+    );
   });
 });

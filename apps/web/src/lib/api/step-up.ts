@@ -3,7 +3,7 @@
  *
  * WHY THIS EXISTS
  * ---------------
- * Seven API routes are guarded by `ActionStepUpGuard` and reject any request
+ * Sensitive API routes are guarded by `ActionStepUpGuard` and reject any request
  * that arrives without an `x-step-up-token` header:
  *
  *   payout:method    POST/DELETE /payout/method   (register / remove a payout account)
@@ -12,6 +12,7 @@
  *   account:delete   POST        /developer/delete-account   (GDPR Art. 17)
  *   account:delete   POST        /advertiser/delete-account  (GDPR Art. 17)
  *   2fa:disable      POST        /auth/2fa/disable
+ *   2fa:regenerate   POST        /auth/2fa/backup-codes/regenerate
  *
  * No client ever sent that header, and `/auth/step-up` was not even on the BFF
  * proxy allowlist — so the web could not request a token, let alone use one.
@@ -41,12 +42,21 @@
 export function stepUpActionFor(method: string, url: string): string | null {
   const m = method.toUpperCase();
   const path = url.replace(/^\/api/, '').split('?')[0];
-  if (path.startsWith('/payout/method')) return 'payout:method';
+  if (path === '/payout/stripe-connect/onboarding' && m === 'POST') {
+    return 'payout:method';
+  }
+  if (
+    (path === '/payout/method' && m === 'POST') ||
+    (path.startsWith('/payout/method/') && m === 'DELETE')
+  ) {
+    return 'payout:method';
+  }
   if (path.startsWith('/payout/request')) return 'payout:request';
   if (path.startsWith('/developer/api-keys') && m === 'POST') return 'api_key:create';
   if (path.startsWith('/developer/delete-account')) return 'account:delete';
   if (path.startsWith('/advertiser/delete-account')) return 'account:delete';
   if (path.startsWith('/auth/2fa/disable')) return '2fa:disable';
+  if (path.startsWith('/auth/2fa/backup-codes/regenerate')) return '2fa:regenerate';
   return null;
 }
 
@@ -84,4 +94,5 @@ export const STEP_UP_LABELS: Record<string, string> = {
   'api_key:create': 'create an API key',
   'account:delete': 'permanently delete this account',
   '2fa:disable': 'disable two-factor authentication',
+  '2fa:regenerate': 'replace your two-factor backup codes',
 };

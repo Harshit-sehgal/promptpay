@@ -5,10 +5,19 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import DevSettingsPage from './page';
 
+const { refreshUser, logout } = vi.hoisted(() => ({
+  refreshUser: vi.fn(),
+  logout: vi.fn(),
+}));
+
 vi.mock('qrcode', () => ({
   default: {
     toDataURL: vi.fn().mockResolvedValue('data:image/png;base64,qr'),
   },
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 vi.mock('@/components', () => ({
@@ -20,6 +29,8 @@ vi.mock('@/lib/api/services', () => ({
     setup2fa: vi.fn(),
     enable2fa: vi.fn(),
     disable2fa: vi.fn(),
+    regenerate2faBackupCodes: vi.fn(),
+    forgotPassword: vi.fn(),
   },
   developerApi: {
     getSettings: vi.fn(),
@@ -29,8 +40,15 @@ vi.mock('@/lib/api/services', () => ({
 
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => ({
-    user: { emailVerified: true },
+    user: {
+      email: 'developer@example.com',
+      emailVerified: true,
+      hasPassword: true,
+      twoFactorEnabled: false,
+    },
     isAuthenticated: true,
+    refreshUser,
+    logout,
   }),
 }));
 
@@ -74,8 +92,7 @@ describe('developer settings 2FA labels', () => {
       target: { value: 'correct-horse-battery' },
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Enable 2FA' }));
-    const input = await screen.findByLabelText('Verification code');
-    expect(input.id).toBe('two-factor-enable-code');
+    const input = await screen.findByLabelText('Authentication code');
     expect(input.getAttribute('autocomplete')).toBe('one-time-code');
   });
 
@@ -91,7 +108,7 @@ describe('developer settings 2FA labels', () => {
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Enable 2FA' }));
 
-    await screen.findByLabelText('Verification code');
+    await screen.findByLabelText('Authentication code');
     expect(authApi.setup2fa).toHaveBeenCalledWith({
       currentPassword: 'correct-horse-battery',
     });
@@ -105,7 +122,7 @@ describe('developer settings 2FA labels', () => {
     expect(authApi.setup2fa).not.toHaveBeenCalled();
   });
 
-  it('associates the disable verification code', async () => {
+  it('delegates disable verification to the shared step-up flow', async () => {
     vi.mocked(developerApi.getSettings).mockResolvedValue({
       data: { ...baseSettings, twoFactorEnabled: true },
     } as never);
@@ -113,8 +130,7 @@ describe('developer settings 2FA labels', () => {
     render(<DevSettingsPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Disable 2FA' }));
-    const input = screen.getByLabelText('Verification code');
-    expect(input.id).toBe('two-factor-disable-code');
-    expect(input.getAttribute('autocomplete')).toBe('one-time-code');
+    expect(screen.queryByLabelText('Authentication code')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Confirm disable' })).toBeTruthy();
   });
 });

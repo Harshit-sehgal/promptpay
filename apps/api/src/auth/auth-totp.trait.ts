@@ -57,7 +57,7 @@ export class AuthTotpTrait {
       reauthenticated = await bcrypt.compare(proof.currentPassword, user.passwordHash);
     }
     if (!reauthenticated && user.googleId && proof.googleIdToken) {
-      const google = await this.googleVerifier.verify(proof.googleIdToken);
+      const google = await this.googleVerifier.verifyRecent(proof.googleIdToken);
       reauthenticated =
         google.email_verified &&
         google.sub === user.googleId &&
@@ -127,16 +127,18 @@ export class AuthTotpTrait {
     return { twoFactorEnabled: true, backupCodes };
   }
 
-  async disableTwoFactor(userId: string, token: string) {
+  /**
+   * Disable 2FA after the controller's action-scoped step-up guard has proved
+   * a fresh TOTP or one-time backup code. Do not verify a second body token:
+   * doing so both double-prompted TOTP users and made backup-code recovery
+   * impossible because the step-up exchange consumes the backup code.
+   */
+  async disableTwoFactor(userId: string, currentJti?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
     if (!user.twoFactorEnabled || !user.twoFactorSecret) {
       // Already disabled — idempotent success.
       return { twoFactorEnabled: false };
-    }
-    const secret = this.decryptTotpSecret(user.twoFactorSecret);
-    if (!secret || !verifyTotp(secret, token)) {
-      throw new BadRequestException('Invalid or expired 2FA code');
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.user.update({
@@ -147,7 +149,10 @@ export class AuthTotpTrait {
           twoFactorBackupCodeHashes: [],
         },
       });
-      await tx.session.updateMany({ where: { userId }, data: { revoked: true } });
+      await tx.session.updateMany({
+        where: { userId, ...(currentJti ? { id: { not: currentJti } } : {}) },
+        data: { revoked: true },
+      });
       await this.audit.logStrict(
         {
           actorId: userId,
@@ -226,14 +231,11 @@ export class AuthTotpTrait {
     }
   }
 
-  async regenerateTwoFactorBackupCodes(userId: string, token: string, currentJti?: string) {
+  /** Regenerate codes after the `2fa:regenerate` action step-up guard. */
+  async regenerateTwoFactorBackupCodes(userId: string, currentJti?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
       throw new BadRequestException('Two-factor authentication is not enabled');
-    }
-    const secret = this.decryptTotpSecret(user.twoFactorSecret);
-    if (!secret || !verifyTotp(secret, token)) {
-      throw new UnauthorizedException('Invalid two-factor authentication code');
     }
     const backupCodes = this.generateBackupCodes();
     await this.prisma.$transaction(async (tx) => {

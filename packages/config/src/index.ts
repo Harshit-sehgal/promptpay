@@ -317,7 +317,7 @@ const envSchema = z
 
     // Google OAuth (extension + web sign-in)
     GOOGLE_CLIENT_ID: z.string().optional(),
-    GOOGLE_TOKENINFO_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(5_000),
+    GOOGLE_AUTH_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(5_000),
     // Mock Google is off by default. The verifier accepts either the current
     // MOCK_GOOGLE_ENABLED=1 flag or the legacy ALLOW_MOCK_GOOGLE=true alias,
     // and still requires NODE_ENV !== 'production'.
@@ -442,7 +442,15 @@ const envSchema = z
   })
   .refine(
     (env) => {
-      if (env.NODE_ENV === 'production' && env.WAITLAYER_ENVIRONMENT_KIND !== 'production') {
+      // Staging must run the same optimized/security-sensitive Node mode as
+      // production so its release evidence exercises fail-closed rate limits,
+      // MFA guards, key handling, email/provider checks, and disabled mocks.
+      // Product identity remains separate: only the real production database
+      // may declare WAITLAYER_ENVIRONMENT_KIND=production.
+      if (
+        env.NODE_ENV === 'production' &&
+        !['staging', 'production'].includes(env.WAITLAYER_ENVIRONMENT_KIND)
+      ) {
         return false;
       }
       if (env.WAITLAYER_ENVIRONMENT_KIND === 'production' && env.NODE_ENV !== 'production') {
@@ -452,7 +460,7 @@ const envSchema = z
     },
     {
       message:
-        'NODE_ENV=production requires WAITLAYER_ENVIRONMENT_KIND=production, and production environment kind requires NODE_ENV=production.',
+        'NODE_ENV=production requires a staging or production environment kind, and production environment kind requires NODE_ENV=production.',
       path: ['WAITLAYER_ENVIRONMENT_KIND'],
     },
   )

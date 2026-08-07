@@ -638,7 +638,7 @@ export class DeveloperService {
           'Google re-authentication is required to delete this account',
         );
       }
-      const payload = await this.googleVerifier.verify(options.googleIdToken);
+      const payload = await this.googleVerifier.verifyRecent(options.googleIdToken);
       if (
         !payload.email_verified ||
         payload.sub !== user.googleId ||

@@ -1,13 +1,14 @@
+import { OAuth2Client } from 'google-auth-library';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /**
  * Google ID Token verification service.
  *
- * Verifies Google ID tokens by calling Google's tokeninfo endpoint.
- * This is the recommended approach for server-side verification of
- * client-side Google Sign-In (GIS) ID tokens when you don't need
- * the full passport strategy overhead.
+ * Verifies Google ID tokens with Google's supported server-side library. The
+ * library verifies the signature against Google's cached signing keys and
+ * enforces the audience, issuer, and expiry claims locally. Google's tokeninfo
+ * endpoint is a debugging aid and must not be an authentication dependency.
  *
  * Decoded payload shape from Google:
  * {
@@ -28,18 +29,25 @@ export interface GoogleIdTokenPayload {
   picture?: string;
   aud: string;
   iss: string;
+  iat: number;
+  exp: number;
 }
 
 @Injectable()
 export class GoogleTokenVerifier {
   private readonly clientId: string;
   private readonly enabled: boolean;
-  private readonly timeoutMs: number;
+  private readonly googleClient: OAuth2Client;
 
   constructor(private config: ConfigService) {
     this.clientId = this.config.get<string>('GOOGLE_CLIENT_ID', '')!;
     this.enabled = !!this.clientId;
-    this.timeoutMs = this.config.get<number>('GOOGLE_TOKENINFO_TIMEOUT_MS', 5_000);
+    this.googleClient = new OAuth2Client({
+      clientId: this.clientId || undefined,
+      transporterOptions: {
+        timeout: this.config.get<number>('GOOGLE_AUTH_TIMEOUT_MS', 5_000),
+      },
+    });
   }
 
   /** Verify a Google ID token and return the decoded payload */
@@ -51,18 +59,23 @@ export class GoogleTokenVerifier {
     // mock-google-token-* identities.
     const mockEnabled =
       (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') &&
-      (process.env.MOCK_GOOGLE_ENABLED === '1' ||
-        process.env.ALLOW_MOCK_GOOGLE === 'true'); // legacy compat
+      (process.env.MOCK_GOOGLE_ENABLED === '1' || process.env.ALLOW_MOCK_GOOGLE === 'true'); // legacy compat
     const isMockToken = idToken.startsWith('mock-google-token-');
     if (isMockToken && !mockEnabled) {
-      throw new UnauthorizedException('Mock Google tokens are only allowed in local development or test environments');
+      throw new UnauthorizedException(
+        'Mock Google tokens are only allowed in local development or test environments',
+      );
     }
 
     if (isMockToken && mockEnabled) {
       const parts = idToken.split('-');
       const identifier = parts[3] || 'user';
       const email = `${identifier}@mock-google.com`;
-      const name = parts.slice(3).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ') || 'Mock User';
+      const name =
+        parts
+          .slice(3)
+          .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+          .join(' ') || 'Mock User';
       const sub = `mock-google-sub-${identifier}`;
       return {
         sub,
@@ -72,6 +85,8 @@ export class GoogleTokenVerifier {
         picture: 'https://lh3.googleusercontent.com/a/default-user',
         aud: this.clientId || 'mock-client-id',
         iss: 'accounts.google.com',
+        iat: Math.floor(Date.now() / 1_000),
+        exp: Math.floor(Date.now() / 1_000) + 3_600,
       };
     }
 
@@ -79,22 +94,31 @@ export class GoogleTokenVerifier {
       throw new UnauthorizedException('Google Sign-In is not configured');
     }
 
-    // Call Google's tokeninfo endpoint to verify the token
-    let response: Response;
+    let payload;
     try {
-      response = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
-        { signal: AbortSignal.timeout(this.timeoutMs) },
-      );
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: this.clientId,
+      });
+      payload = ticket.getPayload();
     } catch {
-      throw new UnauthorizedException('Google token verification is temporarily unavailable');
-    }
-
-    if (!response.ok) {
+      // Deliberately do not expose whether verification failed because of a bad
+      // signature/claim or an upstream key-refresh failure.
       throw new UnauthorizedException('Invalid Google ID token');
     }
 
-    const payload = (await response.json()) as GoogleIdTokenPayload;
+    if (!payload || typeof payload.sub !== 'string' || payload.sub.length === 0) {
+      throw new UnauthorizedException('Invalid Google ID token');
+    }
+
+    if (
+      !Number.isInteger(payload.iat) ||
+      !Number.isInteger(payload.exp) ||
+      (payload.iat ?? 0) <= 0 ||
+      (payload.exp ?? 0) <= 0
+    ) {
+      throw new UnauthorizedException('Google token contains invalid time claims');
+    }
 
     if (
       typeof payload.email !== 'string' ||
@@ -104,12 +128,9 @@ export class GoogleTokenVerifier {
       throw new UnauthorizedException('Google token contains an invalid email');
     }
 
-    // Google's tokeninfo endpoint returns `email_verified` as the STRING
-    // "true"/"false" (not a JSON boolean). The earlier interface typed it
-    // as `boolean` and the audit check `if (!payload.email_verified)` then
-    // incorrectly passed the truthy string "false" — silently treating
-    // unverified Google emails as verified. Coerce here at the boundary.
-    payload.email_verified = String(payload.email_verified) === 'true';
+    if (payload.email_verified !== true) {
+      throw new UnauthorizedException('Google account email is not verified');
+    }
 
     // Verify the token was issued for our app
     if (payload.aud !== this.clientId) {
@@ -117,13 +138,35 @@ export class GoogleTokenVerifier {
     }
 
     // Verify issuer
-    if (
-      payload.iss !== 'accounts.google.com' &&
-      payload.iss !== 'https://accounts.google.com'
-    ) {
+    if (payload.iss !== 'accounts.google.com' && payload.iss !== 'https://accounts.google.com') {
       throw new UnauthorizedException('Invalid Google token issuer');
     }
 
+    return {
+      sub: payload.sub,
+      email: payload.email,
+      email_verified: true,
+      name: payload.name,
+      picture: payload.picture,
+      aud: payload.aud,
+      iss: payload.iss,
+      iat: payload.iat,
+      exp: payload.exp,
+    };
+  }
+
+  /**
+   * Verify a Google token used as a fresh reauthentication proof. A valid ID
+   * token can otherwise be close to an hour old, which is too weak for account
+   * deletion, MFA enrollment, credential linking, or device recovery.
+   */
+  async verifyRecent(idToken: string, maxAgeSeconds = 300): Promise<GoogleIdTokenPayload> {
+    const payload = await this.verify(idToken);
+    const now = Math.floor(Date.now() / 1_000);
+    const age = now - payload.iat;
+    if (maxAgeSeconds <= 0 || age < -60 || age > maxAgeSeconds) {
+      throw new UnauthorizedException('Fresh Google reauthentication is required');
+    }
     return payload;
   }
 }

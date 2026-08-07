@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { GET, POST } from './route';
+import { DELETE, GET, POST } from './route';
 
 const BASE = 'https://app.example';
 
@@ -85,6 +85,62 @@ describe('proxy allowlist + response scrubbing (A-004, A-005, A-027)', () => {
     expect(res.status).toBe(200);
     const calledUrl = (fetchMock.mock.calls[0][0] as string) ?? '';
     expect(calledUrl).toContain('/admin/devices?search=dev%40example.com');
+  });
+
+  it('forwards runtime payout readiness', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ providers: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await GET(makeReq('/api/payout/providers'));
+
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls[0][0] as string).toContain('/payout/providers');
+  });
+
+  it('forwards Stripe onboarding with the action-scoped step-up token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        accountId: 'acct_123',
+        onboardingUrl: 'https://connect.stripe.com/setup/test',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await POST(
+      makeReq('/api/payout/stripe-connect/onboarding', {
+        body: JSON.stringify({
+          refreshUrl: 'https://app.example/developer/payouts?stripe_status=refresh',
+          returnUrl: 'https://app.example/developer/payouts?stripe_status=success',
+        }),
+        headers: { 'x-step-up-token': 'signed-step-up' },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls[0][0] as string).toContain('/payout/stripe-connect/onboarding');
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
+      'x-step-up-token': 'signed-step-up',
+    });
+  });
+
+  it('forwards payout method removal with the action-scoped step-up token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ removed: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await DELETE(
+      makeReq('/api/payout/method/550e8400-e29b-41d4-a716-446655440000', {
+        method: 'DELETE',
+        headers: { 'x-step-up-token': 'signed-step-up' },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(fetchMock.mock.calls[0][0] as string).toContain(
+      '/payout/method/550e8400-e29b-41d4-a716-446655440000',
+    );
+    expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
+      'x-step-up-token': 'signed-step-up',
+    });
   });
 
   it('rejects paths outside the allowlist with 403', async () => {

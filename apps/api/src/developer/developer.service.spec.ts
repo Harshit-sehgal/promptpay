@@ -68,6 +68,7 @@ const mockAudit = {
 } as any;
 const mockGoogleVerifier = {
   verify: vi.fn(),
+  verifyRecent: vi.fn(),
 } as any;
 const mockEmail = {
   sendAccountDeleted: vi.fn().mockResolvedValue(undefined),
@@ -242,7 +243,7 @@ describe('DeveloperService', () => {
         passwordHash: null,
         googleId: 'google-sub-123',
       });
-      mockGoogleVerifier.verify.mockResolvedValue({
+      mockGoogleVerifier.verifyRecent.mockResolvedValue({
         sub: 'google-sub-123',
         email: 'google@test.com',
         email_verified: true,
@@ -253,7 +254,7 @@ describe('DeveloperService', () => {
         googleIdToken: 'google-token',
       });
 
-      expect(mockGoogleVerifier.verify).toHaveBeenCalledWith('google-token');
+      expect(mockGoogleVerifier.verifyRecent).toHaveBeenCalledWith('google-token');
       expect(mockPrisma.user.update).toHaveBeenCalled();
     });
 

@@ -6,7 +6,9 @@ import {
   LedgerBalanceResponse,
   PayoutAvailableResponse,
   PayoutMethodResponse,
+  PayoutProviderReadinessResponse,
   PayoutRequestResponse,
+  RemovePayoutMethodResponse,
   StripeConnectOnboardingResponse,
 } from '@waitlayer/shared';
 
@@ -52,15 +54,17 @@ export const authApi = {
     api.post('/auth/password/reset', { token, newPassword }),
   confirmEmailVerification: (token: string) => api.post('/auth/verify-email/confirm', { token }),
   requestEmailVerification: () => api.post('/auth/verify-email/request'),
-  setup2fa: (data?: { currentPassword: string }) => api.post('/auth/2fa/setup', data),
-  enable2fa: (token: string) => api.post('/auth/2fa/enable', { token }),
-  disable2fa: (token: string) => api.post('/auth/2fa/disable', { token }),
+  setup2fa: (data: { currentPassword?: string; googleIdToken?: string }) =>
+    api.post<{ secret: string; otpauthUrl: string }>('/auth/2fa/setup', data),
+  enable2fa: (token: string) =>
+    api.post<{ twoFactorEnabled: true; backupCodes: string[] }>('/auth/2fa/enable', { token }),
+  disable2fa: () => api.post('/auth/2fa/disable', {}),
   linkGoogle: (idToken: string, currentPassword: string) =>
     api.post('/auth/link/google', { idToken, currentPassword }),
   revokeSession: (sessionId: string) => api.post(`/auth/sessions/${sessionId}/revoke`),
   revokeOtherSessions: () => api.post('/auth/sessions/revoke-others'),
-  regenerate2faBackupCodes: (token: string) =>
-    api.post('/auth/2fa/backup-codes/regenerate', { token }),
+  regenerate2faBackupCodes: () =>
+    api.post<{ backupCodes: string[] }>('/auth/2fa/backup-codes/regenerate', {}),
 };
 
 export const developerApi = {
@@ -75,6 +79,7 @@ export const developerApi = {
     confirmation: 'DELETE_MY_ACCOUNT';
     currentPassword?: string;
     googleIdToken?: string;
+    forfeitBalance?: boolean;
   }) => api.post('/developer/delete-account', data),
   listApiKeys: () => api.get('/developer/api-keys'),
   createLedgerApiKey: () =>
@@ -92,6 +97,7 @@ export const advertiserApi = {
     confirmation: 'DELETE_MY_ACCOUNT';
     currentPassword?: string;
     googleIdToken?: string;
+    forfeitBalance?: boolean;
   }) => api.post('/advertiser/delete-account', data),
   createCampaign: (data: Record<string, unknown>) =>
     api.post('/advertiser/campaigns', data).then((r) => ok(CreateCampaignResponse.parse(r.data))),
@@ -108,7 +114,6 @@ export const advertiserApi = {
   getReports: (params?: Record<string, unknown>) => api.get('/advertiser/reports', { params }),
   createDepositSession: (amountMinor: bigint | number, currency?: string) =>
     api.post('/advertiser/deposit-session', { amountMinor, currency }),
-  createApiKey: (scopes: string[]) => api.post('/advertiser/api-keys', { scopes }),
 };
 
 export const adminApi = {
@@ -203,6 +208,10 @@ export const adminApi = {
 export const payoutApi = {
   addMethod: (data: Record<string, unknown>) =>
     api.post('/payout/method', data).then((r) => ok(PayoutMethodResponse.parse(r.data))),
+  removeMethod: (id: string) =>
+    api
+      .delete(`/payout/method/${encodeURIComponent(id)}`)
+      .then((r) => ok(RemovePayoutMethodResponse.parse(r.data))),
   createStripeConnectOnboarding: (data: {
     refreshUrl: string;
     returnUrl: string;
@@ -217,7 +226,8 @@ export const payoutApi = {
   getHistory: (params?: Record<string, unknown>) => api.get('/payout/history', { params }),
   getAvailable: () =>
     api.get('/payout/available').then((r) => ok(PayoutAvailableResponse.parse(r.data))),
-  getProviders: () => api.get('/payout/providers'),
+  getProviders: () =>
+    api.get('/payout/providers').then((r) => ok(PayoutProviderReadinessResponse.parse(r.data))),
 };
 
 export const ledgerApi = {

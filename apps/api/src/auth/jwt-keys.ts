@@ -1,3 +1,4 @@
+import { createPrivateKey, createPublicKey, timingSafeEqual } from 'node:crypto';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -47,6 +48,55 @@ export interface VerificationKeySet {
  */
 export function normalizePem(raw: string): string {
   return raw.replace(/\\n/g, '\n').trim();
+}
+
+export interface JwtSigningKeyPair {
+  privateKey: string;
+  publicKey: string;
+}
+
+/**
+ * Normalise and validate the current RS256 signing pair before the API starts.
+ *
+ * Parsing each PEM independently is not enough: a valid private key combined
+ * with a different valid public key lets the API issue tokens that its own
+ * verification path (and every JWKS consumer) rejects. Compare canonical SPKI
+ * bytes so equivalent multiline and literal-`\\n` encodings are accepted while
+ * a mismatched pair fails closed during Nest module initialisation.
+ */
+export function validateJwtSigningKeyPair(
+  rawPrivateKey: string,
+  rawPublicKey: string,
+): JwtSigningKeyPair {
+  const privateKey = normalizePem(rawPrivateKey);
+  const publicKey = normalizePem(rawPublicKey);
+
+  let privateKeyObject: ReturnType<typeof createPrivateKey>;
+  let publicKeyObject: ReturnType<typeof createPublicKey>;
+  try {
+    privateKeyObject = createPrivateKey(privateKey);
+    publicKeyObject = createPublicKey(publicKey);
+  } catch {
+    throw new Error('JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be valid RSA PEM keys.');
+  }
+
+  if (privateKeyObject.asymmetricKeyType !== 'rsa' || publicKeyObject.asymmetricKeyType !== 'rsa') {
+    throw new Error('JWT_PRIVATE_KEY and JWT_PUBLIC_KEY must be valid RSA PEM keys.');
+  }
+
+  const derivedPublicKey = createPublicKey(privateKey).export({
+    type: 'spki',
+    format: 'der',
+  });
+  const configuredPublicKey = publicKeyObject.export({ type: 'spki', format: 'der' });
+  const keysMatch =
+    derivedPublicKey.length === configuredPublicKey.length &&
+    timingSafeEqual(derivedPublicKey, configuredPublicKey);
+  if (!keysMatch) {
+    throw new Error('JWT_PRIVATE_KEY does not match JWT_PUBLIC_KEY; refusing to start.');
+  }
+
+  return { privateKey, publicKey };
 }
 
 /**

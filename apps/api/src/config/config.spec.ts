@@ -64,6 +64,19 @@ describe('env validation (config module)', () => {
     expect(result.success).toBe(false);
   });
 
+  it('permits staging to exercise the production runtime controls', () => {
+    const result = envSchema.safeParse(
+      baseProdEnv({
+        WAITLAYER_ENVIRONMENT_KIND: 'staging',
+        BFF_TRUST_PROXY_HOPS: '1',
+        PAYOUT_DESTINATION_COOLDOWN_HOURS: '24',
+        PAYOUT_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64'),
+        PAYOUT_HMAC_KEY: Buffer.alloc(32, 9).toString('base64'),
+      }),
+    );
+    expect(result.success, result.success ? '' : JSON.stringify(result.error.flatten())).toBe(true);
+  });
+
   it('rejects production without explicit country and currency allowlists', () => {
     expect(envSchema.safeParse(baseProdEnv({ ALLOWED_COUNTRIES: '' })).success).toBe(false);
     expect(envSchema.safeParse(baseProdEnv({ ALLOWED_CURRENCIES: '' })).success).toBe(false);
@@ -259,17 +272,11 @@ describe('env validation (config module)', () => {
   });
 
   it('rejects THROTTLE_*_LIMIT overrides below 1', () => {
-    expect(() =>
-      loadEnv(baseDevEnv({ THROTTLE_AUTH_SHORT_LIMIT: '0' })),
-    ).toThrow();
-    expect(() =>
-      loadEnv(baseDevEnv({ THROTTLE_DEFAULT_LIMIT: '-5' })),
-    ).toThrow();
+    expect(() => loadEnv(baseDevEnv({ THROTTLE_AUTH_SHORT_LIMIT: '0' }))).toThrow();
+    expect(() => loadEnv(baseDevEnv({ THROTTLE_DEFAULT_LIMIT: '-5' }))).toThrow();
   });
 
   it('rejects malformed (non-numeric) THROTTLE_*_LIMIT overrides', () => {
-    expect(() =>
-      loadEnv(baseDevEnv({ THROTTLE_AUTH_SHORT_LIMIT: 'abc' })),
-    ).toThrow();
+    expect(() => loadEnv(baseDevEnv({ THROTTLE_AUTH_SHORT_LIMIT: 'abc' }))).toThrow();
   });
 });

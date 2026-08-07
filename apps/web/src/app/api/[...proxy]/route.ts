@@ -108,6 +108,8 @@ export const ALLOWED_PATH_PREFIXES = [
   '/admin/payout-accounts',
 
   // Payout
+  '/payout/providers',
+  '/payout/stripe-connect/onboarding',
   '/payout/method',
   '/payout/info',
   '/payout/request',

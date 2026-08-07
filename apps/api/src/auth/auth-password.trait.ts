@@ -125,7 +125,7 @@ export class AuthPasswordTrait {
     if (!user || !isActiveAccountStatus(user.status)) throw new UnauthorizedException();
     if (user.passwordHash) throw new ConflictException('This account already has a password');
     if (!user.googleId) throw new BadRequestException('A linked Google account is required');
-    const proof = await this.googleVerifier.verify(dto.googleIdToken);
+    const proof = await this.googleVerifier.verifyRecent(dto.googleIdToken);
     if (
       !proof.email_verified ||
       proof.sub !== user.googleId ||
@@ -162,7 +162,7 @@ export class AuthPasswordTrait {
         throw new UnauthorizedException('Current password is incorrect');
       }
     }
-    const proof = await this.googleVerifier.verify(dto.idToken);
+    const proof = await this.googleVerifier.verifyRecent(dto.idToken);
     if (
       !proof.email_verified ||
       normalizeAuthEmail(proof.email) !== normalizeAuthEmail(user.email)

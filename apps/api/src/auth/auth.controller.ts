@@ -32,8 +32,6 @@ import {
   SetSocialPasswordDto,
   SignUpDto,
   StepUpRequestDto,
-  TwoFactorBackupCodesRegenerateDto,
-  TwoFactorDisableDto,
   TwoFactorEnableDto,
   TwoFactorSetupDto,
   VerifyEmailConfirmDto,
@@ -287,14 +285,14 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Regenerate one-time two-factor backup codes' })
   @Post('2fa/backup-codes/regenerate')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActionStepUpGuard)
+  @ActionStepUp('2fa:regenerate')
   @HttpCode(HttpStatus.OK)
   regenerateTwoFactorBackupCodes(
     @CurrentUser('id') userId: string,
     @CurrentUser('jti') jti: string,
-    @Body() dto: TwoFactorBackupCodesRegenerateDto,
   ) {
-    return this.authService.regenerateTwoFactorBackupCodes(userId, dto.token, jti);
+    return this.authService.regenerateTwoFactorBackupCodes(userId, jti);
   }
 
   @ApiOperation({ summary: 'Disable two-factor auth' })
@@ -302,22 +300,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, ActionStepUpGuard)
   @ActionStepUp('2fa:disable')
   @HttpCode(HttpStatus.OK)
-  async disableTwoFactor(
-    @CurrentUser('id') userId: string,
-    @Body() dto: TwoFactorDisableDto,
-    @Req() req: Request,
-  ) {
-    try {
-      await BruteForceGuard.assertCanAttempt(req, userId);
-      const result = await this.authService.disableTwoFactor(userId, dto.token);
-      await BruteForceGuard.resetOnSuccess(req, userId);
-      return result;
-    } catch (err: unknown) {
-      if (isCredentialFailure(err)) {
-        await BruteForceGuard.recordFailure(req, userId);
-      }
-      throw err;
-    }
+  async disableTwoFactor(@CurrentUser('id') userId: string, @CurrentUser('jti') jti: string) {
+    return this.authService.disableTwoFactor(userId, jti);
   }
 
   @ApiOperation({ summary: 'Request password reset' })

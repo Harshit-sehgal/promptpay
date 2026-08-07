@@ -175,7 +175,7 @@ export class AdvertiserProfileTrait {
           'Google reauthentication is required to delete your account',
         );
       }
-      const payload = await this.googleVerifier.verify(options.googleIdToken);
+      const payload = await this.googleVerifier.verifyRecent(options.googleIdToken);
       if (payload.sub !== user.googleId) {
         throw new UnauthorizedException(
           'Google reauthentication token does not match this account',

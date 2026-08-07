@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth-context';
 import { resolvePostLoginPath } from '@/lib/auth-routing';
+import { isValidTwoFactorInput, normalizeTwoFactorInput } from '@/lib/two-factor-input';
 
 interface GoogleCredentialResponse {
   credential: string;
@@ -62,13 +63,14 @@ export default function LoginPage() {
   const { login, googleLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [twoFactorToken, setTwoFactorToken] = useState('');
+  const [twoFactorInput, setTwoFactorInput] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState('');
   const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [accountDeleted, setAccountDeleted] = useState(false);
   const googleInitialized = useRef(false);
-  const twoFactorTokenRef = useRef('');
+  const twoFactorInputRef = useRef('');
 
   const postLoginPath = (role: string | null | undefined) => {
     const returnTo = new URLSearchParams(window.location.search).get('returnTo');
@@ -76,14 +78,22 @@ export default function LoginPage() {
   };
 
   useEffect(() => {
-    twoFactorTokenRef.current = twoFactorToken;
-  }, [twoFactorToken]);
+    twoFactorInputRef.current = twoFactorInput;
+  }, [twoFactorInput]);
+
+  useEffect(() => {
+    setAccountDeleted(new URLSearchParams(window.location.search).get('deleted') === '1');
+  }, []);
 
   const handleMockGoogleLogin = async () => {
     setError('');
+    if (twoFactorInput && !isValidTwoFactorInput(twoFactorInput)) {
+      setError('Enter a 6-digit authenticator code or a backup code in XXXX-XXXX-XXXX format.');
+      return;
+    }
     setLoading(true);
     try {
-      const user = await googleLogin('mock-google-token-developer', undefined, twoFactorToken);
+      const user = await googleLogin('mock-google-token-developer', undefined, twoFactorInput);
       router.push(postLoginPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Mock Google login failed'));
@@ -133,9 +143,15 @@ export default function LoginPage() {
           client_id: googleClientId,
           callback: async (response: GoogleCredentialResponse) => {
             setError('');
+            if (twoFactorInputRef.current && !isValidTwoFactorInput(twoFactorInputRef.current)) {
+              setError(
+                'Enter a 6-digit authenticator code or a backup code in XXXX-XXXX-XXXX format.',
+              );
+              return;
+            }
             setLoading(true);
             const errorMsg = await handleGoogleCredential(response.credential, (idToken) =>
-              googleLogin(idToken, undefined, twoFactorTokenRef.current),
+              googleLogin(idToken, undefined, twoFactorInputRef.current),
             );
             setLoading(false);
             if (errorMsg.error) {
@@ -179,7 +195,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const user = await login(email, password, twoFactorToken);
+      if (twoFactorInput && !isValidTwoFactorInput(twoFactorInput)) {
+        setError('Enter a 6-digit authenticator code or a backup code in XXXX-XXXX-XXXX format.');
+        return;
+      }
+      const user = await login(email, password, twoFactorInput);
       router.push(postLoginPath(user.role));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Login failed'));
@@ -207,6 +227,17 @@ export default function LoginPage() {
             Welcome back
           </h1>
           <p className="text-surface-500 text-sm mb-8">Sign in to your account</p>
+
+          {accountDeleted && (
+            <div
+              role="status"
+              className="mb-5 rounded-xl border border-emerald-200/70 bg-emerald-50 p-3.5"
+            >
+              <p className="text-sm font-medium text-emerald-800">
+                Your account identity was permanently erased. You have been signed out.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div
@@ -271,18 +302,19 @@ export default function LoginPage() {
                 htmlFor="login-two-factor"
                 className="text-surface-700 text-sm font-medium mb-1.5 block"
               >
-                2FA code
+                2FA or backup code
               </label>
               <input
                 id="login-two-factor"
                 type="text"
-                value={twoFactorToken}
-                onChange={(e) => setTwoFactorToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                value={twoFactorInput}
+                onChange={(e) => setTwoFactorInput(normalizeTwoFactorInput(e.target.value))}
                 placeholder="Optional"
-                inputMode="numeric"
+                inputMode="text"
                 autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                maxLength={6}
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={14}
 
                 className="w-full rounded-xl border border-surface-200 bg-surface-50 px-4 py-3 text-sm text-surface-900 transition-all placeholder:text-surface-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
               />

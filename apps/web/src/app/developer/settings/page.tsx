@@ -1,9 +1,10 @@
 'use client';
-/* eslint-disable @next/next/no-img-element */
 
 import type { AxiosResponse } from 'axios';
 import { FormEvent, useEffect, useState } from 'react';
 import { LoadingSpinner } from '@/components';
+import { AccountErasure } from '@/components/account-erasure';
+import { TwoFactorEnrolment } from '@/components/two-factor-enrolment';
 import { stringifyApiData } from '@/lib/api/client';
 import { getErrorMessage } from '@/lib/api/errors';
 import { authApi, developerApi } from '@/lib/api/services';
@@ -101,7 +102,7 @@ function buildTimezoneOptions(common: string[]): Set<string> {
 }
 
 export default function DevSettingsPage() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, refreshUser } = useAuth();
   const [settings, setSettings] = useState<DevSettings | null>(null);
   const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,16 +129,6 @@ export default function DevSettingsPage() {
 
   // 2FA state
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [show2faSetup, setShow2faSetup] = useState(false);
-  const [totpSecret, setTotpSecret] = useState('');
-  const [otpauthUrl, setOtpauthUrl] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
-  const [twoFactorBusy, setTwoFactorBusy] = useState(false);
-  // A-100: re-authentication proof required by POST /auth/2fa/setup.
-  const [reauthPassword, setReauthPassword] = useState('');
-  const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [twoFactorSuccess, setTwoFactorSuccess] = useState<string | null>(null);
 
   const fetchSettings = () => {
     setLoading(true);
@@ -160,75 +151,6 @@ export default function DevSettingsPage() {
       })
       .catch((err: unknown) => setError(getErrorMessage(err, 'Failed to load settings')))
       .finally(() => setLoading(false));
-  };
-
-  const handleStart2faSetup = async () => {
-    // A-100: `POST /auth/2fa/setup` requires a re-authentication proof
-    // (`auth-totp.trait.ts`: "Reauthentication is required before setting up
-    // 2FA"). This used to call `setup2fa()` with no body, which always returned
-    // 401 — so NO user could ever enable 2FA. Because production requires
-    // `PAYOUT_REQUIRE_2FA=true`, that also meant no developer could ever
-    // request a payout.
-    if (!reauthPassword) {
-      setTwoFactorError('Enter your current password to confirm it is you.');
-      return;
-    }
-    setTwoFactorBusy(true);
-    setTwoFactorError(null);
-    setTwoFactorSuccess(null);
-    try {
-      const res = await authApi.setup2fa({ currentPassword: reauthPassword });
-      setReauthPassword('');
-      setTotpSecret(res.data.secret);
-      setOtpauthUrl(res.data.otpauthUrl);
-      // Lazy-load the QR renderer only when the setup flow is actually opened
-      // (keeps the qrcode package out of the settings page's initial bundle).
-      const { default: QRCode } = await import('qrcode');
-      QRCode.toDataURL(res.data.otpauthUrl)
-        .then(setQrDataUrl)
-        .catch(() => setQrDataUrl(null));
-      setShow2faSetup(true);
-    } catch (err: unknown) {
-      setTwoFactorError(getErrorMessage(err, 'Failed to initialize 2FA setup'));
-    } finally {
-      setTwoFactorBusy(false);
-    }
-  };
-
-  const handleConfirm2faEnable = async () => {
-    if (!verificationCode) return;
-    setTwoFactorBusy(true);
-    setTwoFactorError(null);
-    setTwoFactorSuccess(null);
-    try {
-      await authApi.enable2fa(verificationCode);
-      setTwoFactorEnabled(true);
-      setShow2faSetup(false);
-      setVerificationCode('');
-      setTwoFactorSuccess('Two-factor authentication enabled successfully.');
-    } catch (err: unknown) {
-      setTwoFactorError(getErrorMessage(err, 'Failed to verify code'));
-    } finally {
-      setTwoFactorBusy(false);
-    }
-  };
-
-  const handleConfirm2faDisable = async () => {
-    if (!verificationCode) return;
-    setTwoFactorBusy(true);
-    setTwoFactorError(null);
-    setTwoFactorSuccess(null);
-    try {
-      await authApi.disable2fa(verificationCode);
-      setTwoFactorEnabled(false);
-      setShow2faSetup(false);
-      setVerificationCode('');
-      setTwoFactorSuccess('Two-factor authentication disabled successfully.');
-    } catch (err: unknown) {
-      setTwoFactorError(getErrorMessage(err, 'Failed to disable 2FA'));
-    } finally {
-      setTwoFactorBusy(false);
-    }
   };
 
   useEffect(() => {
@@ -609,204 +531,18 @@ export default function DevSettingsPage() {
             </div>
           </div>
 
-          {/* Two-factor authentication */}
-          <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
-            <h2 className="text-surface-900 font-bold text-[16px] mb-5">
-              Two-factor authentication (2FA)
-            </h2>
-            <div className="space-y-6">
-              {twoFactorError && (
-                <div className="bg-red-50 border border-red-200/60 rounded-xl p-4">
-                  <p className="text-red-600 text-sm">{twoFactorError}</p>
-                </div>
-              )}
-              {twoFactorSuccess && (
-                <div className="bg-emerald-50 border border-emerald-200/60 rounded-xl p-4">
-                  <p className="text-emerald-600 text-sm">{twoFactorSuccess}</p>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-surface-900 font-semibold text-sm">
-                    Status: {twoFactorEnabled ? 'Enabled' : 'Disabled'}
-                  </p>
-                  <p className="text-surface-500 text-xs mt-0.5">
-                    Secure your account with TOTP two-factor authentication. Required for payouts.
-                  </p>
-                </div>
-                {!twoFactorEnabled && !show2faSetup && (
-                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
-                    {/* A-100: the API requires a password re-auth proof before
-                        issuing a TOTP secret. */}
-                    <input
-                      type="password"
-                      value={reauthPassword}
-                      onChange={(e) => setReauthPassword(e.target.value)}
-                      placeholder="Current password"
-                      autoComplete="current-password"
-                      aria-label="Current password"
-                      className="rounded-lg border border-surface-200 bg-white px-3 py-2 text-xs text-surface-900"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleStart2faSetup}
-                      disabled={twoFactorBusy}
-                      className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors disabled:opacity-40"
-                    >
-                      Enable 2FA
-                    </button>
-                  </div>
-                )}
-                {twoFactorEnabled && !show2faSetup && (
-                  <button
-                    type="button"
-                    onClick={() => setShow2faSetup(true)}
-                    className="text-rose-600 hover:text-rose-700 font-medium text-xs"
-                  >
-                    Disable 2FA
-                  </button>
-                )}
-              </div>
-
-              {/* Setup / Disable form */}
-              {show2faSetup && (
-                <div className="border-t border-surface-100 pt-5 mt-5 space-y-5">
-                  {!twoFactorEnabled ? (
-                    <>
-                      <p className="text-surface-900 font-semibold text-sm">
-                        Set up Authenticator app
-                      </p>
-                      <ol className="list-decimal pl-5 text-surface-600 text-xs space-y-2">
-                        <li>
-                          Scan the QR code below or manually enter the key into your authenticator
-                          app (Google Authenticator, Authy, etc.).
-                        </li>
-                        <li>Enter the 6-digit code from your app below to verify setup.</li>
-                      </ol>
-
-                      <div className="flex flex-col sm:flex-row items-center gap-6 py-3">
-                        {otpauthUrl && (
-                          <div className="bg-surface-50 border border-surface-200 rounded-xl shadow-sm p-3 max-w-xs">
-                            {qrDataUrl ? (
-                              <img
-                                src={qrDataUrl}
-                                alt="TOTP setup QR code"
-                                className="w-40 h-40 mb-3 rounded-md bg-white"
-                              />
-                            ) : null}
-                            <p className="text-surface-500 text-[11px] uppercase font-semibold mb-1">
-                              Setup URI
-                            </p>
-                            <code className="block break-all text-surface-900 text-[11px] font-mono select-all mb-2">
-                              {otpauthUrl}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => navigator.clipboard?.writeText(otpauthUrl)}
-                              className="text-brand-500 hover:text-brand-600 text-xs font-medium"
-                            >
-                              Copy setup URI
-                            </button>
-                          </div>
-                        )}
-                        <div className="space-y-2 text-center sm:text-left">
-                          <p className="text-surface-500 text-xs uppercase font-semibold">
-                            Secret Key
-                          </p>
-                          <code className="bg-surface-50 border border-surface-200 rounded-md px-3 py-1.5 text-surface-900 text-xs font-mono select-all block break-all">
-                            {totpSecret}
-                          </code>
-                        </div>
-                      </div>
-
-                      <div className="max-w-xs space-y-3">
-                        <label
-                          htmlFor="two-factor-enable-code"
-                          className="text-surface-700 text-sm font-medium block"
-                        >
-                          Verification code
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            id="two-factor-enable-code"
-                            type="text"
-                            placeholder="000000"
-                            maxLength={6}
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            pattern="[0-9]{6}"
-                            value={verificationCode}
-                            onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleConfirm2faEnable}
-                            disabled={twoFactorBusy || verificationCode.length !== 6}
-                            className="bg-surface-900 hover:bg-surface-800 disabled:opacity-50 text-white font-medium px-5 py-3 rounded-xl text-sm transition-colors shrink-0"
-                          >
-                            Verify
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="max-w-xs space-y-3">
-                      <p className="text-surface-900 font-semibold text-sm">
-                        Confirm Disabling 2FA
-                      </p>
-                      <p className="text-surface-500 text-xs">
-                        Enter the current code from your authenticator app to disable 2FA.
-                      </p>
-                      <label
-                        htmlFor="two-factor-disable-code"
-                        className="text-surface-700 text-sm font-medium block"
-                      >
-                        Verification code
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          id="two-factor-disable-code"
-                          type="text"
-                          placeholder="000000"
-                          maxLength={6}
-                          inputMode="numeric"
-                          autoComplete="one-time-code"
-                          pattern="[0-9]{6}"
-                          value={verificationCode}
-                          onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                          className="w-full bg-surface-50 border border-surface-200 rounded-xl px-4 py-3 text-surface-900 text-center font-mono font-bold tracking-[0.2em] focus:outline-none focus:ring-2 focus:ring-brand-400/20 focus:ring-offset-2 focus:ring-offset-white focus:border-brand-400"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleConfirm2faDisable}
-                          disabled={twoFactorBusy || verificationCode.length !== 6}
-                          className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-medium px-5 py-3 rounded-xl text-sm transition-colors shrink-0"
-                        >
-                          Disable
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end mt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShow2faSetup(false);
-                        setVerificationCode('');
-                        setTwoFactorError(null);
-                      }}
-                      className="text-surface-500 hover:text-surface-700 font-medium text-xs px-3 py-1.5 rounded-lg border border-surface-200 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Shared account security: all roles use the same API-accurate flow. */}
+          <TwoFactorEnrolment
+            initialEnabled={twoFactorEnabled}
+            hasPassword={user?.hasPassword === true}
+            accountEmail={user?.email ?? settings.email}
+            onChange={(nextEnabled) => {
+              setTwoFactorEnabled(nextEnabled);
+              void refreshUser().catch(() => {
+                // The mutation succeeded; the profile can recover on navigation.
+              });
+            }}
+          />
 
           {/* API keys */}
           <div className="bg-white border border-surface-200/80 rounded-2xl p-7 shadow-sm">
@@ -912,6 +648,13 @@ export default function DevSettingsPage() {
               your account, or request payouts.
             </p>
           </div>
+
+          <AccountErasure
+            role="developer"
+            hasPassword={user?.hasPassword === true}
+            twoFactorEnabled={twoFactorEnabled}
+            accountEmail={user?.email ?? settings.email}
+          />
 
           {/* Actions */}
           <p className="text-surface-400 text-xs leading-relaxed">

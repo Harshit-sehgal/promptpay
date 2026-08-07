@@ -329,7 +329,7 @@ export class ExtensionDeviceReportTrait {
           'Google re-authentication is not available for this account',
         );
       }
-      const googlePayload = await this.googleVerifier.verify(dto.recoveryGoogleIdToken);
+      const googlePayload = await this.googleVerifier.verifyRecent(dto.recoveryGoogleIdToken);
       if (
         !googlePayload.email_verified ||
         googlePayload.sub !== user.googleId ||

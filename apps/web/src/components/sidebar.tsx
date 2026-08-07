@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { LogoutButton } from './logout-button';
+
 interface NavItem {
   label: string;
   href: string;
@@ -73,13 +75,14 @@ export function Sidebar({
         })}
       </nav>
       <div
-        className={`hidden lg:block pt-4 mt-4 border-t ${
+        className={`mt-4 flex items-start justify-between gap-4 border-t pt-4 lg:block ${
           isLight ? 'border-surface-200/80' : 'border-ink-600/30'
         }`}
       >
+        <LogoutButton tone={isLight ? 'light' : 'dark'} />
         <Link
           href={backHref}
-          className={`text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 rounded ${
+          className={`rounded text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 lg:mt-2 lg:block ${
             isLight ? 'text-surface-500 hover:text-surface-900' : 'text-ink-300 hover:text-white'
           }`}
         >

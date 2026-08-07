@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { setStepUpPrompt, STEP_UP_LABELS } from '@/lib/api/step-up';
+import { isValidTwoFactorInput, normalizeTwoFactorInput } from '@/lib/two-factor-input';
 
 /**
  * Collects an MFA code when the API demands an action-scoped step-up (A-102).
@@ -32,6 +33,10 @@ export function StepUpProvider({ children }: { children: React.ReactNode }) {
     setStepUpPrompt(
       (nextAction: string) =>
         new Promise<string | null>((resolve) => {
+          // A second guarded request must never orphan the first request's
+          // promise. Cancel the older prompt before replacing it; the caller
+          // receives its original 403 and can retry deliberately.
+          resolverRef.current?.(null);
           resolverRef.current = resolve;
           setAction(nextAction);
         }),
@@ -60,7 +65,7 @@ export function StepUpProvider({ children }: { children: React.ReactNode }) {
               Confirm with two-factor authentication
             </h2>
             <p className="mt-1 text-sm leading-6 text-surface-600">
-              Enter the 6-digit code from your authenticator app to{' '}
+              Enter a 6-digit authenticator code or one of your backup codes to{' '}
               <strong className="text-surface-900">
                 {STEP_UP_LABELS[action] ?? 'complete this action'}
               </strong>
@@ -69,14 +74,17 @@ export function StepUpProvider({ children }: { children: React.ReactNode }) {
             <input
               autoFocus
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) => setCode(normalizeTwoFactorInput(e.target.value))}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && code.length === 6) settle(code);
+                if (e.key === 'Enter' && isValidTwoFactorInput(code)) settle(code);
                 if (e.key === 'Escape') settle(null);
               }}
-              placeholder="000000"
-              inputMode="numeric"
+              placeholder="000000 or XXXX-XXXX-XXXX"
+              inputMode="text"
               autoComplete="one-time-code"
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={14}
               aria-label="Two-factor authentication code"
               className="mt-4 w-full rounded-lg border border-surface-200 px-3 py-2 text-center text-lg tracking-[0.3em] text-surface-900"
             />
@@ -94,7 +102,7 @@ export function StepUpProvider({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => settle(code)}
-                disabled={code.length < 6}
+                disabled={!isValidTwoFactorInput(code)}
                 className="rounded-lg bg-surface-950 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-surface-800 disabled:opacity-40"
               >
                 Confirm

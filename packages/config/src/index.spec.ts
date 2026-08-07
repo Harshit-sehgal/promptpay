@@ -120,6 +120,15 @@ describe('@waitlayer/config env schema', () => {
     expect(minimal.NODE_ENV).toBe('production');
   });
 
+  it('accepts a production-mode staging runtime without claiming production identity', () => {
+    const staging = loadEnv({
+      ...fullProductionEnv(),
+      WAITLAYER_ENVIRONMENT_KIND: 'staging',
+    });
+    expect(staging.NODE_ENV).toBe('production');
+    expect(staging.WAITLAYER_ENVIRONMENT_KIND).toBe('staging');
+  });
+
   it('requires a dedicated privacy key outside development/test', () => {
     expect(() => loadEnv({ ...BASE_ENV, WAITLAYER_ENVIRONMENT_KIND: 'sandbox' })).toThrow(
       'Invalid environment configuration',
