@@ -154,6 +154,27 @@ function isProductionOrigin(value: string): boolean {
   }
 }
 
+/**
+ * Treat an EMPTY environment variable as "not configured".
+ *
+ * `z.string().refine(...).optional()` accepts `undefined` but NOT `''` — an
+ * empty string is defined, so it reaches the refine and fails. Every real
+ * deployment mechanism supplies empty rather than absent: `docker-compose.yml`
+ * uses `${VAR:-}`, `--env-file` keeps blank keys, and Kubernetes ConfigMaps
+ * render empty values. The shipped compose file therefore could not boot the
+ * API at all — it crash-looped on
+ * `WAIT_ATTESTATION_ISSUERS: must be a valid wait-attestation issuer array`.
+ *
+ * This does NOT weaken anything: for these allowlists, empty and unset mean the
+ * same thing — nothing is trusted. Fail-closed behaviour is unchanged, and the
+ * runtime settlement gate independently blocks earnings without a real issuer.
+ */
+const optionalAllowlist = (validate: (value: string) => boolean, message: string) =>
+  z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().refine(validate, message).optional(),
+  );
+
 const envSchema = z
   .object({
     // General
@@ -278,33 +299,27 @@ const envSchema = z
     // Wait-detector source allowlist. Comma-separated list of detector
     // versions that the platform treats as verified. Empty/missing means all
     // sources are unverified (fail-closed). Example: "1.0.0,1.1.0".
-    VERIFIED_DETECTOR_VERSIONS: z
-      .string()
-      .refine(
-        validVersionAllowlist,
-        'must be a comma-separated list of version tokens (a-z,0-9,.,_,-)',
-      )
-      .optional(),
+    VERIFIED_DETECTOR_VERSIONS: optionalAllowlist(
+      validVersionAllowlist,
+      'must be a comma-separated list of version tokens (a-z,0-9,.,_,-)',
+    ),
 
     // JSON array of independently operated wait-attestation issuers. Each
     // entry is { provider, issuer, audience, publicKeys: { kid: PEM } }.
     // This remains optional while wait.earnings is disabled; enabling real
     // money without it is blocked independently by the runtime settlement gate.
-    WAIT_ATTESTATION_ISSUERS: z
-      .string()
-      .refine(validWaitAttestationIssuers, 'must be a valid wait-attestation issuer array')
-      .optional(),
+    WAIT_ATTESTATION_ISSUERS: optionalAllowlist(
+      validWaitAttestationIssuers,
+      'must be a valid wait-attestation issuer array',
+    ),
 
     // Versions emitted by the separately operated attestation provider. This
     // is intentionally distinct from client detector versions: promoting a
     // packaged detector build must not implicitly trust an attester build.
-    VERIFIED_WAIT_ATTESTATION_VERSIONS: z
-      .string()
-      .refine(
-        validVersionAllowlist,
-        'must be a comma-separated allowlist of wait-attestation versions',
-      )
-      .optional(),
+    VERIFIED_WAIT_ATTESTATION_VERSIONS: optionalAllowlist(
+      validVersionAllowlist,
+      'must be a comma-separated allowlist of wait-attestation versions',
+    ),
 
     // Stripe (advertiser deposits)
     STRIPE_PUBLIC_KEY: z.string().optional(),
@@ -365,10 +380,10 @@ const envSchema = z
     // A-030: server-side mirror of the web's NEXT_PUBLIC_WAITLAYER_PAYOUT_
     // PROVIDER_STATUS gate. JSON map provider -> 'available' | 'coming_soon'.
     // Operators set this on the API so registration rejects gated providers.
-    WAITLAYER_PAYOUT_PROVIDER_STATUS: z
-      .string()
-      .refine(validProviderStatusJson, 'must be a valid known-provider status JSON map')
-      .optional(),
+    WAITLAYER_PAYOUT_PROVIDER_STATUS: optionalAllowlist(
+      validProviderStatusJson,
+      'must be a valid known-provider status JSON map',
+    ),
 
     // PayPal (payouts — later)
     PAYPAL_CLIENT_ID: z.string().optional(),

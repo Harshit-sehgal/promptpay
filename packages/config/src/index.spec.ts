@@ -222,4 +222,35 @@ describe('@waitlayer/config env schema', () => {
     const parsed = envSchema.safeParse(BASE_ENV);
     expect(parsed.success).toBe(true);
   });
+  // The shipped `docker-compose.yml` renders every unset optional as `${VAR:-}`,
+  // i.e. an EMPTY STRING. `z.string().refine(...).optional()` accepts undefined
+  // but not '', so the empty value reached the refine and failed — the API
+  // container crash-looped on "Invalid environment configuration" and the
+  // docker-build gate could never boot it. `--env-file` and Kubernetes
+  // ConfigMaps render empty the same way, so this is not compose-specific.
+  it('treats an empty allowlist as unset, exactly as compose renders it', () => {
+    const parsed = envSchema.parse({
+      ...BASE_ENV,
+      WAIT_ATTESTATION_ISSUERS: '',
+      VERIFIED_WAIT_ATTESTATION_VERSIONS: '',
+      VERIFIED_DETECTOR_VERSIONS: '',
+      WAITLAYER_PAYOUT_PROVIDER_STATUS: '',
+    });
+    expect(parsed.WAIT_ATTESTATION_ISSUERS).toBeUndefined();
+    expect(parsed.VERIFIED_WAIT_ATTESTATION_VERSIONS).toBeUndefined();
+    expect(parsed.VERIFIED_DETECTOR_VERSIONS).toBeUndefined();
+    expect(parsed.WAITLAYER_PAYOUT_PROVIDER_STATUS).toBeUndefined();
+  });
+
+  it('still rejects a NON-empty malformed allowlist', () => {
+    // Empty means "nothing trusted". Garbage still has to fail, or this fix
+    // would have turned a validation gate into a no-op.
+    expect(() => envSchema.parse({ ...BASE_ENV, WAIT_ATTESTATION_ISSUERS: 'not-json' })).toThrow();
+    expect(() =>
+      envSchema.parse({ ...BASE_ENV, WAITLAYER_PAYOUT_PROVIDER_STATUS: '{oops' }),
+    ).toThrow();
+    expect(() =>
+      envSchema.parse({ ...BASE_ENV, VERIFIED_DETECTOR_VERSIONS: 'has space!' }),
+    ).toThrow();
+  });
 });
