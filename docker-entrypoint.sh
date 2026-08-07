@@ -26,12 +26,17 @@ node scripts/wait-for-postgres.mjs
 # only discovers that config relative to the working directory. Invoked from
 # /app the CLI found no config and failed with "The datasource.url property is
 # required in your Prisma config file", so no containerized deploy could ever
-# migrate. `NODE_PATH` (set in the Dockerfile) makes the globally-installed
-# `prisma/config` module resolvable from here.
+# migrate.
+#
+# Invoke the CLI through packages/db's own bin rather than PATH. prisma is a
+# production dependency of packages/db, so it survives `pnpm install --prod`
+# and resolves `prisma/config` on the normal module chain — no global install
+# and no NODE_PATH. Using the explicit path also means this does not depend on
+# a package manager being present in the runtime image.
 #
 # Run in a subshell so the working directory change cannot leak into the exec
 # below — the app must still start from /app.
-(cd packages/db && prisma migrate deploy)
+(cd packages/db && ./node_modules/.bin/prisma migrate deploy)
 
 # 3. Hand off to the main process as PID 1.
 exec "$@"

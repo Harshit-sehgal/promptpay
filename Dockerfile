@@ -96,12 +96,14 @@ COPY --from=build /app/scripts/wait-for-postgres.mjs ./scripts/wait-for-postgres
 # Workspace metadata
 COPY --from=build /app/pnpm-workspace.yaml ./
 COPY --from=build /app/package.json ./
-# Install the Prisma CLI globally. It is needed both to (re)generate the
-# production Prisma client and to run migrations in the entrypoint. Installing
-# it globally keeps it out of node_modules (which is pruned of all dev deps).
-# A-075: carry the registry override into this stage too.
-ARG NPM_REGISTRY=https://registry.npmjs.org
-RUN npm config set registry "$NPM_REGISTRY" && npm install -g prisma@7.9.0
+# The Prisma CLI is a PRODUCTION dependency of packages/db, so it survives the
+# `pnpm install --prod` prune below and no global npm install is needed.
+#
+# It used to be installed with `npm install -g prisma@7.9.0`, which put it
+# outside pnpm's control: the workspace `find-my-way: 9.7.0` security override
+# could not reach it, so `@prisma/dev` resolved its exact pin of 9.6.0 and the
+# image shipped a HIGH CVE that the pnpm tree did not have. Managing the CLI
+# through the workspace fixes that at the source.
 
 # Drop devDependencies from the runtime image. `pnpm prune` does NOT prune a
 # workspace, so we reinstall production-only from the pnpm store inherited from
@@ -110,28 +112,44 @@ RUN npm config set registry "$NPM_REGISTRY" && npm install -g prisma@7.9.0
 # wired up; we regenerate the client explicitly below.
 RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 
-# Regenerate the Prisma client for the production dependency set (offline, using
-# the global CLI). Required because `--ignore-scripts` skipped it above and the
-# dev `prisma` CLI it would otherwise need was just pruned.
-RUN prisma generate --schema packages/db/prisma/schema.prisma
+# Regenerate the Prisma client for the production dependency set (offline).
+# Required because `--ignore-scripts` skipped it above. Run from packages/db and
+# via its own bin: Prisma 7 discovers `prisma.config.ts` relative to the working
+# directory (A-095), and the local bin needs no PATH or NODE_PATH wiring.
+RUN cd packages/db && ./node_modules/.bin/prisma generate
 
 # Entrypoint: wait for Postgres, apply migrations once, then exec the app.
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+# Remove npm from the RUNTIME image. npm ships inside the node:22-alpine base
+# and bundles its own dependency tree — `tar`, `sigstore`, `ip-address`,
+# `brace-expansion`, `picomatch` — which accounted for 10 of the 11
+# CRITICAL/HIGH findings the image scan reported (2 CRITICAL). Verified by
+# listing them in a PLAIN node:22-alpine with nothing installed: they live in
+# /usr/local/lib/node_modules/npm/node_modules and belong to npm, not to this
+# application or to the Prisma CLI.
+#
+# Nothing at runtime uses npm: the entrypoint runs `node` and `prisma`, and the
+# app CMD runs `node`. npm is a BUILD-time tool only (it installs pnpm in the
+# base stage and the Prisma CLI above), so it is deleted here — after every
+# install has completed — rather than shipped as unreachable attack surface.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 RUN chown -R node:node /app
 USER node
 
 ENV NODE_ENV=production
-# A-095: `packages/db/prisma.config.ts` does `import { defineConfig } from
-# 'prisma/config'`. The Prisma CLI is installed GLOBALLY above (to survive the
-# `pnpm install --prod` prune), and a global install is not on Node's
-# node_modules resolution chain — so loading the config failed with
-# "Cannot find module 'prisma/config'", the CLI fell back to a config with no
-# datasource, and every containerized boot died on
-# "The datasource.url property is required in your Prisma config file".
-# Without this the production image could never run migrations at all.
-ENV NODE_PATH=/usr/local/lib/node_modules
+# A-095 is resolved structurally rather than by NODE_PATH.
+# `packages/db/prisma.config.ts` does `import { defineConfig } from
+# 'prisma/config'`. When the CLI was installed globally it sat outside Node's
+# module-resolution chain, config loading failed, and the CLI fell back to a
+# datasource-less config — every containerized boot died on "The datasource.url
+# property is required in your Prisma config file". That was patched with
+# `ENV NODE_PATH=/usr/local/lib/node_modules`.
+# Now that prisma is an ordinary workspace dependency of packages/db, it
+# resolves on the normal chain and the NODE_PATH override is gone. Verified:
+# `require.resolve('prisma/config')` from packages/db succeeds with no NODE_PATH.
 EXPOSE 4002
 # 180s start period: the entrypoint applies all migrations before Nest boots,
 # and a cold database makes that the slowest part of the first start. Failures
@@ -171,6 +189,10 @@ COPY --from=build /app/package.json /app/package.json
 # Drop devDependencies (see api stage note). pnpm operates on the workspace root
 # at /app and strips dev deps from the hoisted store.
 RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
+
+# See the api stage: npm ships in the base image with its own vulnerable
+# dependency tree and nothing at runtime uses it (the CMD below runs `node`).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 RUN chown -R node:node /app
 USER node

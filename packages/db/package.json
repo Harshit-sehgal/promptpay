@@ -27,13 +27,13 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",
-    "pg": "^8.13.0"
+    "pg": "^8.13.0",
+    "prisma": "^7.9.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
     "@types/pg": "^8.11.0",
     "@waitlayer/eslint-config": "workspace:*",
-    "prisma": "^7.9.0",
     "typescript": "^5.9.2"
   }
 }

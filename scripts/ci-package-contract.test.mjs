@@ -178,3 +178,45 @@ test('web runtime image ships every local file next.config.js requires at startu
     );
   }
 });
+
+test('prisma CLI is a PRODUCTION dependency, and the image does not reinstall it globally', () => {
+  // Load-bearing for the runtime image. `pnpm install --prod` prunes
+  // devDependencies, so if prisma moves back to devDependencies the entrypoint
+  // loses `packages/db/node_modules/.bin/prisma` and no container can migrate.
+  //
+  // It also has to stay under pnpm's control: while it was installed with
+  // `npm install -g prisma`, the workspace `find-my-way: 9.7.0` security
+  // override could not reach it, `@prisma/dev` resolved its exact 9.6.0 pin,
+  // and the shipped image carried a HIGH CVE the pnpm tree did not have.
+  const db = JSON.parse(read('packages/db/package.json'));
+  assert.ok(db.dependencies?.prisma, 'prisma must be a production dependency of packages/db');
+  assert.ok(
+    !db.devDependencies?.prisma,
+    'prisma must not ALSO be a devDependency — the prod entry is what survives --prod',
+  );
+
+  const dockerfile = read('Dockerfile');
+  assert.doesNotMatch(
+    dockerfile,
+    /^\s*RUN[^\n]*npm install -g prisma/m,
+    'the image must not install the Prisma CLI globally — that bypasses pnpm overrides',
+  );
+  assert.doesNotMatch(
+    dockerfile,
+    /^\s*ENV NODE_PATH=/m,
+    'NODE_PATH was the workaround for the global install and is no longer needed',
+  );
+
+  // npm is build-time only. Shipping it means shipping its bundled dependency
+  // tree (tar, sigstore, ip-address, brace-expansion, picomatch), which was 10
+  // of the 11 CRITICAL/HIGH findings in the image scan.
+  const runtimeStages = dockerfile.split(/^FROM /m).filter((st) => /^base AS (api|web)\b/.test(st));
+  assert.equal(runtimeStages.length, 2, 'expected an api and a web runtime stage');
+  for (const stage of runtimeStages) {
+    assert.match(
+      stage,
+      /rm -rf \/usr\/local\/lib\/node_modules\/npm/,
+      'each runtime stage must remove npm after its installs complete',
+    );
+  }
+});
