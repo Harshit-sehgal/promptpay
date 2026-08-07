@@ -321,6 +321,21 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
   privileged-role signup refused, MFA step-up enforced, switches fail-closed.
   19 assertions, green on the fixed build.
 
+  **Two harness defects were found by running the gate itself** (a gate that
+  false-fails is worse than none — it trains people to ignore it):
+  1. Running the smoke straight after the e2e suite produced three 429s that
+     looked like broken routes. Throttle/brute-force counters live in Redis and
+     were shared with dev/e2e. Fixed: the runner takes its own Redis database
+     index (`SMOKE_REDIS_DB`, default 9), and the smoke retries 429 with
+     backoff then reports it **as a throttle**, never as a route defect.
+  2. The runner did not free its port first, so a leftover API from a previous
+     run answered the health check with the _old_ key pair while the smoke
+     verified against the _new_ one — a "key pair mismatch" that was an
+     artefact of the harness, not the build. The assertion was right; the
+     runner was not hermetic. Fixed: kill the port before boot, refuse to test
+     a process it did not start, and kill the port again on exit.
+     Now deterministic across back-to-back runs and immediately after e2e.
+
 **Cold-start deploy verified end-to-end (2026-08-07).** The full first-deploy
 sequence was run against an **empty database** using the shipped
 `--target api` image with nothing mounted:

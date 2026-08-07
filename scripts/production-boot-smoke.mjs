@@ -57,22 +57,55 @@ const pass = (name, detail = '') => results.push({ level: 'PASS', name, detail }
 const fail = (name, detail) => results.push({ level: 'FAIL', name, detail });
 const skip = (name, detail) => results.push({ level: 'SKIP', name, detail });
 
-async function http(path, init = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const res = await fetch(`${BASE}${path}`, { ...init, signal: controller.signal });
-    const text = await res.text();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * HTTP with transparent retry on 429.
+ *
+ * The auth throttle is deliberately tight in production (10/min). A smoke run
+ * that lands on a shared Redis right after another suite — or simply exercises
+ * several auth routes in a row — can exhaust it, and a 429 would otherwise be
+ * misreported as "this route is broken". That false failure is worse than no
+ * check: it trains people to ignore the gate. Retry with backoff, and if it
+ * still throttles, say so precisely rather than blaming the endpoint.
+ *
+ * Use `SMOKE_REDIS_DB` (see production-boot-smoke.sh) to give the smoke its own
+ * Redis keyspace so it does not share throttle counters at all.
+ */
+async function http(path, init = {}, { retries = 4 } = {}) {
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    let res, text;
+    try {
+      res = await fetch(`${BASE}${path}`, { ...init, signal: controller.signal });
+      text = await res.text();
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status === 429 && attempt < retries) {
+      const wait = Number(res.headers.get('retry-after')) * 1000 || 2000 * (attempt + 1);
+      await sleep(Math.min(wait, 15_000));
+      continue;
+    }
     let json;
     try {
       json = JSON.parse(text);
     } catch {
       /* non-JSON is fine for status-only checks */
     }
-    return { status: res.status, json, text };
-  } finally {
-    clearTimeout(timer);
+    return { status: res.status, json, text, throttled: res.status === 429 };
   }
+}
+
+/** Report a throttle distinctly — it is an environment condition, not a defect. */
+function throttleNote(name) {
+  fail(
+    name,
+    'still HTTP 429 after retries — the auth throttle is exhausted, which is an ' +
+      'environment condition rather than a defect in this route. Re-run against an ' +
+      'idle API, or set SMOKE_REDIS_DB to isolate the throttle counters.',
+  );
 }
 
 /** Decode a JWT without verifying — used only to read claims for assertions. */
@@ -119,8 +152,9 @@ async function checkPublicRoutes() {
     { path: '/health/ready', init: {}, expect: 200 },
   ];
   for (const c of cases) {
-    const { status } = await http(c.path, c.init);
+    const { status, throttled } = await http(c.path, c.init);
     if (status === 404) fail(`route ${c.path}`, 'resolved to 404 — controller did not load');
+    else if (throttled) throttleNote(`route ${c.path}`);
     else if (status !== c.expect) fail(`route ${c.path}`, `expected ${c.expect}, got ${status}`);
     else pass(`route ${c.path}`, String(status));
   }
@@ -159,7 +193,8 @@ async function checkProductionGuards() {
       termsAccepted: true,
     }),
   });
-  if (signup.status === 400) pass('privileged-role-refused', '400');
+  if (signup.throttled) throttleNote('privileged-role-refused');
+  else if (signup.status === 400) pass('privileged-role-refused', '400');
   else fail('privileged-role-refused', `expected 400, got ${signup.status}`);
 }
 
@@ -173,11 +208,16 @@ async function checkAuthentication() {
     return null;
   }
 
-  const { status, json, text } = await http('/auth/login', {
+  const { status, json, text, throttled } = await http('/auth/login', {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
   });
+
+  if (throttled) {
+    throttleNote('token-issuance');
+    return null;
+  }
 
   // THE A-097 ASSERTION. A 500 here is the exact signature of a signing key
   // the runtime cannot use.

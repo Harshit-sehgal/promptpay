@@ -17,11 +17,29 @@ cd "$(dirname "$0")/.."
 
 PORT="${SMOKE_PORT:-4105}"
 DB="${SMOKE_DATABASE_URL:-postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public}"
+# Own Redis database index. Throttle and brute-force counters live in Redis, so
+# sharing db 0 with dev/e2e means a preceding suite can exhaust the auth
+# throttle and make this smoke report a false failure (observed 2026-08-07:
+# running straight after the e2e suite produced three 429s that looked like
+# broken routes). An isolated index keeps the counters ours.
+REDIS_DB="${SMOKE_REDIS_DB:-9}"
+REDIS_URL="${SMOKE_REDIS_URL:-redis://localhost:6379/${REDIS_DB}}"
 ENV_ID="${SMOKE_ENVIRONMENT_ID:-local-smoke}"
 ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-smoke-admin@waitlayer.test}"
 ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-Str0ng!Passw0rd#2026}"
 WORK="$(mktemp -d)"
-trap 'kill "${API_PID:-}" 2>/dev/null || true; rm -rf "$WORK"' EXIT
+# Kill the whole process group: the API is launched through a Node spawn helper,
+# so killing only the helper's PID leaves the real server holding the port and
+# the next run would silently test a stale binary.
+cleanup() {
+  if [ -n "${API_PID:-}" ]; then
+    kill "$API_PID" 2>/dev/null || true
+    sleep 1
+  fi
+  command -v fuser > /dev/null 2>&1 && fuser -k "$PORT/tcp" > /dev/null 2>&1 || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
 
 echo "→ generating ephemeral keys in the ESCAPED deployment form"
 openssl genrsa -out "$WORK/private.pem" 2048 2>/dev/null
@@ -40,7 +58,7 @@ NODE_ENV=production
 WAITLAYER_ENVIRONMENT_KIND=production
 WAITLAYER_ENVIRONMENT_ID=${ENV_ID}
 DATABASE_URL=${DB}
-REDIS_URL=redis://localhost:6379
+REDIS_URL=${REDIS_URL}
 API_PORT=${PORT}
 API_BASE_URL=https://api.waitlayer.test
 WEB_BASE_URL=https://www.waitlayer.test
@@ -91,6 +109,20 @@ DATABASE_URL="$DB" WAITLAYER_ENVIRONMENT_KIND=production WAITLAYER_ENVIRONMENT_I
 DATABASE_URL="$DB" ADMIN_BOOTSTRAP_TOKEN=local-smoke-bootstrap-token \
   node scripts/bootstrap-admin.mjs --token local-smoke-bootstrap-token \
   --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" 2>&1 | head -2 || true
+
+# Free the port BEFORE booting. Each run mints a fresh key pair, so a leftover
+# API from an earlier run would answer the health check with the OLD keys and
+# the smoke would then verify a token against the NEW public key — reporting a
+# "key pair mismatch" that is an artefact of the harness, not the build.
+# (Observed 2026-08-07; the assertion was right, the runner was not hermetic.)
+if command -v fuser > /dev/null 2>&1; then
+  fuser -k "$PORT/tcp" > /dev/null 2>&1 || true
+  sleep 1
+fi
+if curl -fsS "http://localhost:$PORT/api/v1/health" > /dev/null 2>&1; then
+  echo "port $PORT is still serving after cleanup — refusing to test a process we did not start"
+  exit 1
+fi
 
 echo "→ booting API in production mode on :$PORT"
 node "$WORK/spawn.mjs" "$WORK/env" "$PWD" node apps/api/dist/apps/api/src/main.js > "$WORK/api.log" 2>&1 &
