@@ -1556,6 +1556,14 @@ model AuditLog {
   // sort+filter on createdAt, so Postgres would heap-filter every matching row.
   @@index([actorId, createdAt])
   @@index([targetType, targetId, createdAt])
+  // GDPR erasure scrubs every audit row referencing the subject by targetId
+  // WITHOUT knowing targetType. `targetId` is only ever a trailing column
+  // above, so that predicate degraded to a full index/relation scan — and
+  // under the SERIALIZABLE erasure transaction a full scan takes a
+  // relation-level predicate lock on audit_logs, which every concurrent audit
+  // INSERT then conflicts with. Erasure failed with a 40001 write conflict
+  // whenever the system was busy. This index makes it a seek.
+  @@index([targetId])
   @@map("audit_logs")
 }
 

@@ -1,0 +1,11 @@
+-- GDPR erasure (`eraseAccountIdentity`) scrubs every audit row that references
+-- the subject by "targetId", without knowing "targetType". Until now "targetId"
+-- was only ever a TRAILING column ("targetType","targetId"), so that predicate
+-- could not seek: Postgres fell back to scanning the whole relation/index.
+--
+-- The erasure transaction runs SERIALIZABLE, and a full scan there takes a
+-- RELATION-level predicate lock on audit_logs. Because nearly every request
+-- appends an audit row, any concurrent traffic then aborted the erasure with
+-- SQLSTATE 40001 — retries re-scanned and re-conflicted, so account deletion
+-- failed with a 500 under load and got worse as audit_logs grew.
+CREATE INDEX "audit_logs_targetId_idx" ON "audit_logs"("targetId");

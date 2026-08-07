@@ -4,6 +4,7 @@ import { Prisma } from '@waitlayer/db';
 
 import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../config/prisma.service';
+import { isSerializationError } from './errors';
 
 const EARNINGS_OBLIGATION_STATUSES = ['estimated', 'pending', 'confirmed', 'held'] as const;
 const NONTERMINAL_PAYOUT_STATUSES = [
@@ -40,6 +41,50 @@ export interface EraseAccountAuditInput {
  * preflight check, enabling GDPR erasure for users with sub-threshold balance.
  */
 export async function eraseAccountIdentity(
+  prisma: PrismaService,
+  userId: string,
+  options: EraseAccountOptions = {},
+  audit?: AuditService,
+  auditEntry?: EraseAccountAuditInput,
+): Promise<{ deleted: true; priorEmail: string }> {
+  // SERIALIZABLE is required here (the financial preflight and the erasure
+  // writes must see one consistent snapshot), which means Postgres may abort
+  // this transaction with a 40001 write conflict whenever an unrelated
+  // concurrent request writes an overlapping range — audit_logs in particular
+  // is appended to by nearly every request. That abort is retryable, not a
+  // failure: without this loop a GDPR Article 17 erasure surfaces as an
+  // unhandled 500 purely because the system was busy.
+  //
+  // Retrying is safe because the transaction re-reads the user inside the
+  // advisory lock and returns early once `status === 'deleted'`.
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await eraseAccountIdentityOnce(prisma, userId, options, audit, auditEntry);
+    } catch (error) {
+      if (!isSerializationError(error) || ++attempt >= ERASURE_MAX_SERIALIZATION_RETRIES) {
+        throw error;
+      }
+      // EXPONENTIAL backoff with full jitter. This transaction reads and writes
+      // a dozen tables and runs for the better part of a second, so Postgres's
+      // SSI can abort it on a read-write dependency cycle with unrelated
+      // traffic. A tight fixed delay just replays every retry inside the same
+      // contention burst — the retries must outlast it, not race it.
+      const ceiling = Math.min(
+        ERASURE_BACKOFF_BASE_MS * 2 ** (attempt - 1),
+        ERASURE_BACKOFF_CAP_MS,
+      );
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * ceiling));
+    }
+  }
+}
+
+/** Maximum SERIALIZABLE retries before an erasure is reported as failed. */
+const ERASURE_MAX_SERIALIZATION_RETRIES = 8;
+const ERASURE_BACKOFF_BASE_MS = 50;
+const ERASURE_BACKOFF_CAP_MS = 2_000;
+
+function eraseAccountIdentityOnce(
   prisma: PrismaService,
   userId: string,
   options: EraseAccountOptions = {},
@@ -96,14 +141,25 @@ export async function eraseAccountIdentity(
         },
         data: { isActive: false },
       });
-      await tx.payoutAccount.updateMany({
-        where: { userId },
-        data: {
-          destination: `deleted-${userId}`,
-          isActive: false,
-          isVerified: false,
-        },
-      });
+      // Remove the payout destination and every derived/storage-only value in
+      // one set-based write. A per-account tombstone preserves no subject id and
+      // stays unique enough for operator triage without retaining the original
+      // ciphertext or its deterministic HMAC. The financial preflight above has
+      // already ruled out nonterminal payouts, so any stale initiation fence can
+      // be cleared safely during erasure.
+      await tx.$executeRaw`
+        UPDATE "payout_accounts"
+        SET "destination" = 'deleted-' || "id",
+            "destination_hmac" = NULL,
+            "encryption_migrated_at" = NULL,
+            "verification_rejected_at" = NULL,
+            "initiation_payout_id" = NULL,
+            "isActive" = false,
+            "isVerified" = false,
+            "is_frozen" = false,
+            "updatedAt" = NOW()
+        WHERE "userId" = ${userId}
+      `;
       await tx.userSettings.updateMany({
         where: { userId },
         data: {
@@ -152,15 +208,26 @@ export async function eraseAccountIdentity(
       `;
 
       const auditIdentities = [userId, ...(advertiser ? [advertiser.id] : [])];
+      // Retain actor/action/target/time as de-identified forensic facts, but
+      // remove IP pseudonyms and arbitrary snapshots that can contain old
+      // contact text. The deletion audit written after this transaction must
+      // likewise omit ipHash at the interceptor boundary.
+      const auditScrub = { ipHash: null, beforeSnap: Prisma.DbNull, afterSnap: Prisma.DbNull };
+      // Deliberately TWO indexed statements rather than one `OR`. Postgres
+      // cannot use an index for a disjunction across two columns here and fell
+      // back to a sequential scan — which, under this SERIALIZABLE transaction,
+      // takes a RELATION-level predicate lock on audit_logs and conflicts with
+      // every concurrent audit INSERT (i.e. almost every other request). The
+      // erasure then aborted with a 40001 write conflict under any real load.
+      // Each statement below seeks its own index
+      // (`audit_logs_actorId_createdAt_idx`, `audit_logs_targetId_idx`).
       await tx.auditLog.updateMany({
-        where: {
-          OR: [{ actorId: { in: auditIdentities } }, { targetId: { in: auditIdentities } }],
-        },
-        // Retain actor/action/target/time as de-identified forensic facts, but
-        // remove IP pseudonyms and arbitrary snapshots that can contain old
-        // contact text. The deletion audit written after this transaction must
-        // likewise omit ipHash at the interceptor boundary.
-        data: { ipHash: null, beforeSnap: Prisma.DbNull, afterSnap: Prisma.DbNull },
+        where: { actorId: { in: auditIdentities } },
+        data: auditScrub,
+      });
+      await tx.auditLog.updateMany({
+        where: { targetId: { in: auditIdentities } },
+        data: auditScrub,
       });
 
       await tx.user.update({

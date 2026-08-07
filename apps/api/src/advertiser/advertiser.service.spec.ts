@@ -95,7 +95,10 @@ function makeService(prisma: ReturnType<typeof makePrisma>) {
   const campaignService = {
     validateCampaignCategory: vi.fn().mockResolvedValue(undefined),
   } as unknown as CampaignService;
-  const googleVerifier = { verify: vi.fn() } as unknown as GoogleTokenVerifier;
+  const googleVerifier = {
+    verify: vi.fn(),
+    verifyRecent: vi.fn(),
+  } as unknown as GoogleTokenVerifier;
   const runtimeConfig = createMockRuntimeConfig();
   return new AdvertiserService(
     prisma as any,
@@ -239,9 +242,25 @@ describe('AdvertiserService.deleteAccount financial preflight and erasure', () =
         stripeCustomerId: null,
       }),
     });
-    expect(prisma.payoutAccount.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+    // Payout erasure is a single set-based raw UPDATE (it must also clear the
+    // derived/storage-only columns Prisma's typed updateMany cannot express as
+    // a self-referential `'deleted-' || "id"` tombstone). Assert the statement
+    // itself, not merely that some write happened, so a future edit that stops
+    // scrubbing the ciphertext-derived columns fails here.
+    const payoutErasureCall = prisma.$executeRaw.mock.calls.find(([query]) =>
+      Array.from(query as TemplateStringsArray)
+        .join('')
+        .includes('UPDATE "payout_accounts"'),
     );
+    expect(payoutErasureCall).toBeDefined();
+    const payoutErasureSql = Array.from(payoutErasureCall?.[0] as TemplateStringsArray).join('');
+    expect(payoutErasureSql).toContain(`"destination" = 'deleted-' || "id"`);
+    expect(payoutErasureSql).toContain('"destination_hmac" = NULL');
+    expect(payoutErasureSql).toContain('"encryption_migrated_at" = NULL');
+    expect(payoutErasureSql).toContain('"initiation_payout_id" = NULL');
+    expect(payoutErasureSql).toContain('"isActive" = false');
+    expect(payoutErasureSql).toContain('"isVerified" = false');
+    expect(payoutErasureCall?.[1]).toBe('user-1');
   });
 
   it('blocks deletion while advertiser funds remain', async () => {

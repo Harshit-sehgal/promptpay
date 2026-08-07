@@ -114,14 +114,21 @@ describe('eraseAccountIdentity', () => {
     expect(tx.deviceRecoveryToken.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ revokedAt: expect.any(Date) }) }),
     );
-    expect(tx.payoutAccount.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
-      data: {
-        destination: 'deleted-user-1',
-        isActive: false,
-        isVerified: false,
-      },
-    });
+    const payoutErasureCall = tx.$executeRaw.mock.calls.find(([query]) =>
+      Array.from(query as TemplateStringsArray)
+        .join('')
+        .includes('UPDATE "payout_accounts"'),
+    );
+    expect(payoutErasureCall).toBeDefined();
+    const payoutErasureSql = Array.from(payoutErasureCall?.[0] as TemplateStringsArray).join('');
+    expect(payoutErasureSql).toContain(`"destination" = 'deleted-' || "id"`);
+    expect(payoutErasureSql).toContain('"destination_hmac" = NULL');
+    expect(payoutErasureSql).toContain('"encryption_migrated_at" = NULL');
+    expect(payoutErasureSql).toContain('"verification_rejected_at" = NULL');
+    expect(payoutErasureSql).toContain('"initiation_payout_id" = NULL');
+    expect(payoutErasureSql).toContain('"is_frozen" = false');
+    expect(payoutErasureSql).toContain('"updatedAt" = NOW()');
+    expect(payoutErasureCall?.[1]).toBe('user-1');
     expect(tx.advertiser.update).toHaveBeenCalledWith({
       where: { id: 'adv-1' },
       data: expect.objectContaining({
@@ -136,17 +143,30 @@ describe('eraseAccountIdentity', () => {
         twoFactorBackupCodeHashes: [],
       }),
     });
-    expect(tx.auditLog.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ ipHash: null }),
-      }),
-    );
+    // Both identity columns must be scrubbed, and as TWO separate indexed
+    // statements. A single `OR: [{actorId}, {targetId}]` cannot use an index,
+    // degrades to a sequential scan, and under this SERIALIZABLE transaction
+    // takes a relation-level predicate lock that every concurrent audit INSERT
+    // conflicts with — which made erasure fail with 40001 under load.
+    // Both the user id and the advertiser profile id are scrubbed — audit rows
+    // reference the subject under either identity.
+    expect(tx.auditLog.updateMany).toHaveBeenCalledWith({
+      where: { actorId: { in: ['user-1', 'adv-1'] } },
+      data: expect.objectContaining({ ipHash: null }),
+    });
+    expect(tx.auditLog.updateMany).toHaveBeenCalledWith({
+      where: { targetId: { in: ['user-1', 'adv-1'] } },
+      data: expect.objectContaining({ ipHash: null }),
+    });
+    for (const [call] of tx.auditLog.updateMany.mock.calls) {
+      expect(call.where).not.toHaveProperty('OR');
+    }
     expect(tx.waitStateEvent.updateMany).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
       data: { ipHash: null },
     });
-    // Advisory lock + device pseudonymization + consent metadata minimization.
-    expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
+    // Advisory lock + device pseudonymization + payout erasure + consent metadata minimization.
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(4);
   });
 
   it('forfeits sub-threshold earnings when forfeitBalance=true', async () => {
@@ -236,5 +256,55 @@ describe('eraseAccountIdentity', () => {
 
     expect(audit.logStrict).not.toHaveBeenCalled();
     expect(tx.user.update).toHaveBeenCalled();
+  });
+  // A GDPR Article 17 erasure runs SERIALIZABLE, so Postgres aborts it with a
+  // retryable 40001 write conflict whenever a concurrent request touches an
+  // overlapping range (audit_logs is appended to by nearly every request).
+  // Without a retry the user's deletion surfaces as a 500 purely because the
+  // system was busy — observed breaking 15 browser tests at once.
+  it('retries a serialization conflict instead of failing the erasure', async () => {
+    const { prisma, tx } = makePrisma();
+    const conflict = Object.assign(new Error('write conflict'), { code: 'P2034' });
+    let calls = 0;
+    prisma.$transaction = vi.fn((callback: (client: typeof tx) => unknown) => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(conflict);
+      return callback(tx);
+    });
+
+    await expect(eraseAccountIdentity(prisma, 'user-1')).resolves.toEqual({
+      deleted: true,
+      priorEmail: 'person@example.com',
+    });
+    expect(calls).toBe(2);
+    expect(tx.user.update).toHaveBeenCalled();
+  });
+
+  it('gives up after a bounded number of serialization conflicts', async () => {
+    const { prisma, tx } = makePrisma();
+    const conflict = Object.assign(new Error('write conflict'), { code: 'P2034' });
+    let calls = 0;
+    prisma.$transaction = vi.fn(() => {
+      calls += 1;
+      return Promise.reject(conflict);
+    });
+
+    await expect(eraseAccountIdentity(prisma, 'user-1')).rejects.toBe(conflict);
+    // Bounded: a permanently conflicting erasure must surface, not spin.
+    expect(calls).toBe(8);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  // The retry must not paper over real refusals: a financial-obligation block
+  // is a deliberate, non-retryable outcome.
+  it('does not retry a non-serialization refusal', async () => {
+    const { prisma, tx } = makePrisma();
+    tx.earningsLedger.aggregate.mockResolvedValue({ _sum: { amountMinor: 1n } });
+    tx.earningsLedger.groupBy.mockResolvedValue([
+      { currency: 'USD', _sum: { amountMinor: 5000n } },
+    ]);
+
+    await expect(eraseAccountIdentity(prisma, 'user-1')).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });
