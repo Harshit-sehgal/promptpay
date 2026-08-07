@@ -24,7 +24,14 @@ DB="${SMOKE_DATABASE_URL:-postgresql://waitlayer:waitlayer-test@localhost:5433/w
 # broken routes). An isolated index keeps the counters ours.
 REDIS_DB="${SMOKE_REDIS_DB:-9}"
 REDIS_URL="${SMOKE_REDIS_URL:-redis://localhost:6379/${REDIS_DB}}"
-ENV_ID="${SMOKE_ENVIRONMENT_ID:-local-smoke}"
+# Adopt whatever environment id the shared test database is already stamped
+# with, rather than insisting on our own. Both local production harnesses
+# (`smoke:production` and `e2e:production`) point at the same scratch DB, so a
+# fixed id meant whichever ran second hit "REFUSING TO OVERWRITE" and failed for
+# a harness reason rather than a real one. Adopting never overwrites, so the
+# wrong-database interlock is preserved.
+DETECTED_ENV_ID="$(DATABASE_URL="$DB" node scripts/read-environment-marker.mjs 2>/dev/null || true)"
+ENV_ID="${SMOKE_ENVIRONMENT_ID:-${DETECTED_ENV_ID:-local-production-harness}}"
 ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-smoke-admin@waitlayer.test}"
 ADMIN_PASSWORD="${SMOKE_ADMIN_PASSWORD:-Str0ng!Passw0rd#2026}"
 WORK="$(mktemp -d)"

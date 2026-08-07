@@ -401,14 +401,29 @@ step 5–7's failure modes into a checklist that fails before users see them.
 
 ### Phase 2 — Make the beta usable (weeks 2–3)
 
-9. B8 launch-mode banner + public endpoint. **Blocking for public signups.**
-10. Publish VS Code extension + CLI.
-11. B7 developer "Get started" panel + device-connected indicator.
-12. Advertiser waitlist (no billing yet).
+**Code-side work here is complete.** Verified 2026-08-07:
 
-**Exit:** a stranger can sign up, install, connect a device, and see verified wait
-telemetry — with the non-billable state stated plainly. **This is a launchable
-product.**
+- ~~B8 / A-089 launch-mode banner + public endpoint~~ ✅ published on `/health`,
+  rendered from the `/developer` layout, payout CTA gated.
+- ~~B7 / A-090 developer onboarding~~ ✅ `GET /developer/devices` + a Get Started
+  panel that self-hides once a client connects.
+- ~~A-099/A-100 — nobody could enable 2FA~~ ✅ this blocked _both_ admin writes
+  and developer payouts. `/admin/security` added; the re-auth proof is now sent.
+- ~~Clients build and package cleanly~~ ✅ CLI exercised against a live
+  production API (correct loopback warnings, commands resolve); VSIX packaged →
+  extracted → `verify-vsix-artifact` **PASS**, zero runtime dependencies,
+  `waitlayer.apiUrl` defaults to `https://api.waitlayer.com/api/v1`.
+
+Remaining, operator-only:
+
+10. **Publish the clients** — npm and the VS Code Marketplace both still 404.
+    The workflows and isolation gates exist; they need registry tokens. Then
+    flip `CLIENTS_PUBLISHED` in `components/developer-get-started.tsx` so the
+    panel links to real install targets instead of build-it-yourself instructions.
+11. Advertiser waitlist (no billing yet).
+
+**Exit:** a stranger can sign up, install, connect a device, and see verified
+wait telemetry — with the non-billable state stated plainly.
 
 ### Phase 3 — Turn on money (weeks 4–8)
 

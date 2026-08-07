@@ -26,6 +26,11 @@ API_PORT="${E2E_PROD_API_PORT:-4108}"
 WEB_PORT="${E2E_PROD_WEB_PORT:-3100}"
 DB="${E2E_PROD_DATABASE_URL:-postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public}"
 REDIS_DB="${E2E_PROD_REDIS_DB:-12}"
+# Adopt the existing environment-marker id (see production-boot-smoke.sh): both
+# local production harnesses share this scratch DB, and a fixed id made
+# whichever ran second fail with "REFUSING TO OVERWRITE" for a harness reason.
+DETECTED_ENV_ID="$(DATABASE_URL="$DB" node scripts/read-environment-marker.mjs 2>/dev/null || true)"
+ENV_ID="${E2E_PROD_ENVIRONMENT_ID:-${DETECTED_ENV_ID:-local-production-harness}}"
 WORK="$(mktemp -d)"
 
 cleanup() {
@@ -56,7 +61,7 @@ esac
 cat > "$WORK/api.env" <<ENVEOF
 NODE_ENV=production
 WAITLAYER_ENVIRONMENT_KIND=production
-WAITLAYER_ENVIRONMENT_ID=e2e-production
+WAITLAYER_ENVIRONMENT_ID=${ENV_ID}
 DATABASE_URL=${DB}
 REDIS_URL=redis://localhost:6379/${REDIS_DB}
 API_PORT=${API_PORT}
@@ -119,7 +124,7 @@ NEXT_PUBLIC_ALLOW_MOCK_AUTH=false \
 
 echo "→ cold-start: migrate → stamp marker"
 (cd packages/db && DATABASE_URL="$DB" pnpm exec prisma migrate deploy > /dev/null)
-DATABASE_URL="$DB" WAITLAYER_ENVIRONMENT_KIND=production WAITLAYER_ENVIRONMENT_ID=e2e-production \
+DATABASE_URL="$DB" WAITLAYER_ENVIRONMENT_KIND=production WAITLAYER_ENVIRONMENT_ID=${ENV_ID} \
   node scripts/bootstrap-environment-marker.mjs --confirm-stamp || {
   echo "marker mismatch — the test DB is claimed by another environment id."
   echo "Reset it or set E2E_PROD_DATABASE_URL to a dedicated database."; exit 1; }
