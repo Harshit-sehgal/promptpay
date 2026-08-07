@@ -12,8 +12,8 @@ fuser -k 3000/tcp 4002/tcp 2>/dev/null || true
 sleep 1
 
 # Build API and web so E2E tests run against the latest source
-pnpm --filter waitlayer-api build
-pnpm --filter waitlayer-web build
+pnpm --filter "waitlayer-api..." build
+pnpm --filter "waitlayer-web..." build
 
 # Load keys
 export JWT_PRIVATE_KEY="$(cat .e2e/jwt-private.pem)"

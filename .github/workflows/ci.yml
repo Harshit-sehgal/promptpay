@@ -219,7 +219,7 @@ jobs:
         run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
       - name: Boot API for E2E
         run: |
-          pnpm --filter waitlayer-api build
+          pnpm --filter "waitlayer-api..." build
           node apps/api/dist/apps/api/src/main.js &
           API_PID=$!
           for i in $(seq 1 30); do
@@ -235,7 +235,7 @@ jobs:
           WEB_BASE_URL: http://localhost:3000
       - name: Build and boot web for E2E
         run: |
-          pnpm --filter waitlayer-web build
+          pnpm --filter "waitlayer-web..." build
           pnpm --filter waitlayer-web start &
           WEB_PID=$!
           for i in $(seq 1 30); do
@@ -724,7 +724,7 @@ jobs:
           esac
 
       - name: Build API
-        run: pnpm --filter waitlayer-api build
+        run: pnpm --filter "waitlayer-api..." build
 
       - name: Apply migrations
         run: cd packages/db && pnpm exec prisma migrate deploy

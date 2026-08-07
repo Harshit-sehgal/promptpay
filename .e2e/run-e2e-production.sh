@@ -28,6 +28,16 @@ API_PORT="${E2E_PROD_API_PORT:-4108}"
 WEB_PORT="${E2E_PROD_WEB_PORT:-3100}"
 DB="${E2E_PROD_DATABASE_URL:-postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public}"
 REDIS_DB="${E2E_PROD_REDIS_DB:-12}"
+# Build the workspace packages BEFORE anything that loads them. The scripts
+# below (`read-environment-marker`, `bootstrap-environment-marker`) require
+# `@waitlayer/db`, whose package `main` is `./dist/index.js` — a file that only
+# exists after `tsc`. `pnpm --filter <pkg> build` does NOT build dependencies,
+# so on a clean checkout every one of those scripts died with MODULE_NOT_FOUND
+# and the harness reported it as "marker mismatch". It never reproduced locally
+# because a previous `pnpm build` had left `dist/` lying around.
+echo "→ building workspace packages"
+pnpm --filter "@waitlayer/db..." build > /dev/null
+
 # Adopt the existing environment-marker id (see production-boot-smoke.sh): both
 # local production harnesses share this scratch DB, and a fixed id made
 # whichever ran second fail with "REFUSING TO OVERWRITE" for a harness reason.
@@ -111,7 +121,7 @@ spawn(cmd[0], cmd.slice(1), { env, cwd, stdio: 'inherit' }).on('exit', (c) => pr
 SPAWNEOF
 
 echo "→ building API"
-pnpm --filter waitlayer-api build > /dev/null
+pnpm --filter "waitlayer-api..." build > /dev/null
 
 # The web middleware and client bundle inline JWT_PUBLIC_KEY and NEXT_PUBLIC_*
 # at BUILD time (A-083) — runtime env does not reach them. The web must
@@ -122,7 +132,7 @@ JWT_SECRET="$JWT_SECRET_VALUE" \
 JWT_ISSUER=waitlayer JWT_AUDIENCE=waitlayer-client \
 NEXT_PUBLIC_API_URL="http://localhost:${API_PORT}/api/v1" \
 NEXT_PUBLIC_ALLOW_MOCK_AUTH=false \
-  pnpm --filter waitlayer-web build > /dev/null
+  pnpm --filter "waitlayer-web..." build > /dev/null
 
 echo "→ cold-start: migrate → stamp marker"
 (cd packages/db && DATABASE_URL="$DB" pnpm exec prisma migrate deploy > /dev/null)

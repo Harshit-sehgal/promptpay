@@ -30,6 +30,17 @@ REDIS_URL="${SMOKE_REDIS_URL:-redis://localhost:6379/${REDIS_DB}}"
 # fixed id meant whichever ran second hit "REFUSING TO OVERWRITE" and failed for
 # a harness reason rather than a real one. Adopting never overwrites, so the
 # wrong-database interlock is preserved.
+#
+# Build the workspace packages FIRST. `read-environment-marker.mjs` requires
+# `@waitlayer/db`, whose package `main` is `./dist/index.js` — produced by
+# `tsc`, not by `prisma generate`. On a clean checkout that read failed with
+# MODULE_NOT_FOUND, was swallowed by `|| true`, and the harness then silently
+# fell back to `local-production-harness` — which collides with the marker
+# `e2e:production` leaves behind and aborts with "REFUSING TO OVERWRITE". The
+# interlock was right; the detection was blind because the package was unbuilt.
+echo "→ building workspace packages"
+pnpm --filter "@waitlayer/db..." build > /dev/null
+
 DETECTED_ENV_ID="$(DATABASE_URL="$DB" node scripts/read-environment-marker.mjs 2>/dev/null || true)"
 ENV_ID="${SMOKE_ENVIRONMENT_ID:-${DETECTED_ENV_ID:-local-production-harness}}"
 ADMIN_EMAIL="${SMOKE_ADMIN_EMAIL:-smoke-admin@waitlayer.test}"
@@ -107,7 +118,7 @@ spawn(cmd[0], cmd.slice(1), { env, cwd, stdio: 'inherit' }).on('exit', (c) => pr
 SPAWNEOF
 
 echo "→ building API"
-pnpm --filter waitlayer-api build > /dev/null
+pnpm --filter "waitlayer-api..." build > /dev/null
 
 echo "→ migrating + stamping marker + bootstrapping admin (cold-start order)"
 (cd packages/db && DATABASE_URL="$DB" pnpm exec prisma migrate deploy > /dev/null)

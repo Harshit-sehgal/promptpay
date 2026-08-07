@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -59,12 +59,43 @@ test('production preflight cannot be blanket-suppressed', () => {
   assert.match(workflow, /ACTUAL_FAILURES.*!=.*EXPECTED_FAILURES/);
 });
 
-test('release gates build CLI fixtures before running scenario tests without file-level races', () => {
+test('release gates build every fixture they execute, before running scenario tests', () => {
   const pkg = JSON.parse(read('package.json'));
+  const gates = pkg.scripts['test:release-gates'];
+  // The prebuild must cover BOTH consumer boundaries the scenario fixtures
+  // load, and must use the dependency-aware `...` suffix — `pnpm --filter <pkg>
+  // build` does NOT build workspace dependencies.
+  //
+  // 11 scenario runners import the COMPILED API (`apps/api/dist/...`). The
+  // prebuild used to cover only the CLI, so on a clean checkout the whole
+  // release-gate suite died with ERR_MODULE_NOT_FOUND. It never reproduced
+  // locally because an earlier `pnpm build` had left `dist/` behind.
   assert.match(
-    pkg.scripts['test:release-gates'],
-    /^pnpm --filter "waitlayer-cli\.\.\." build && node --test --test-concurrency=1 /,
+    gates,
+    /^pnpm --filter "waitlayer-cli\.\.\." --filter "waitlayer-api\.\.\." build && node --test --test-concurrency=1 /,
   );
+});
+
+test('scenario fixtures that import compiled output are covered by the prebuild', () => {
+  const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
+  const prebuild = gates.split('&&')[0];
+  // Derive the requirement from the fixtures instead of hardcoding it, so a new
+  // scenario that reaches into another package's dist fails here rather than in
+  // CI with an opaque module-resolution error.
+  const runners = execFileSync(
+    'grep',
+    ['-rlE', 'apps/api/dist|apps/cli/dist', 'scenarios'],
+    { encoding: 'utf8' },
+  )
+    .split('\n')
+    .filter(Boolean);
+  assert.ok(runners.length > 0, 'expected scenario runners importing compiled output');
+  if (runners.some((f) => read(f).includes('apps/api/dist'))) {
+    assert.match(prebuild, /waitlayer-api\.\.\./, 'API fixtures require the API in the prebuild');
+  }
+  if (runners.some((f) => read(f).includes('apps/cli/dist'))) {
+    assert.match(prebuild, /waitlayer-cli\.\.\./, 'CLI fixtures require the CLI in the prebuild');
+  }
 });
 
 test('CLI publication is gated by full CI, tag consistency, and isolated install smoke', () => {
