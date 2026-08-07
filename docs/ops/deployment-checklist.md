@@ -7,15 +7,15 @@ Run through this before and after every production deploy.
 These steps are **order-dependent** and the order is not obvious. Verified by
 running the whole sequence against an empty database using the shipped image:
 
-| #   | Step                                          | Why the order matters                                                                      |
-| --- | --------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 1   | `deploy:preflight` (env only, no `--with-db`) | Catches config/override problems before anything touches the database.                     |
-| 2   | `prisma migrate deploy`                       | **Creates the schema.** Everything below writes to tables that do not exist yet.           |
-| 3   | `bootstrap:env-marker --confirm-stamp`        | Needs `environment_markers`, which step 2 creates. The API will not boot without this row. |
-| 4   | `bootstrap:admin`                             | Needs `users`/`admin_users`, which step 2 creates.                                         |
-| 5   | Start the API                                 | Its entrypoint re-runs `migrate deploy` (idempotent, advisory-locked).                     |
-| 6   | Enrol TOTP on the admin                       | Until this, every admin write returns 403.                                                 |
-| 7   | `deploy:preflight --with-db`                  | Now it can verify admin + MFA + switch state.                                              |
+| #   | Step                                          | Why the order matters                                                                                                              |
+| --- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `deploy:preflight` (env only, no `--with-db`) | Catches config/override problems before anything touches the database.                                                             |
+| 2   | `prisma migrate deploy`                       | **Creates the schema.** Everything below writes to tables that do not exist yet.                                                   |
+| 3   | `bootstrap:env-marker --confirm-stamp`        | Needs `environment_markers`, which step 2 creates. The API will not boot without this row.                                         |
+| 4   | `bootstrap:admin`                             | Needs `users`/`admin_users`, which step 2 creates.                                                                                 |
+| 5   | Start the API                                 | Its entrypoint re-runs `migrate deploy` (idempotent, advisory-locked).                                                             |
+| 6   | Enrol TOTP at **`/admin/security`**           | Until this, every admin write returns 403 (A-099). You will be asked for your password — the API requires a re-auth proof (A-100). |
+| 7   | `deploy:preflight --with-db`                  | Now it can verify admin + MFA + switch state.                                                                                      |
 
 > Running step 3 or 4 before step 2 fails with
 > `The table public.environment_markers does not exist in the current database`.

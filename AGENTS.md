@@ -31,7 +31,7 @@
   and the gate fixes below. Typecheck 17/17 and lint 11/11 green on the landed
   tree; sandbox 18/18, placement 12/12, scenario suites 30/30, VSIX bundle +
   isolated smoke, web panels 4/4, referral/ledger 39/39, vscode 138/139.
-- Issues A-001…A-098 are resolved and gate-verified.
+- Issues A-001…A-100 are resolved and gate-verified.
 - **2026-08-07 launch audit.** A from-scratch launch-readiness audit disproved
   the previous claim that only external items remained ("no source edit can
   close them"). It found four source-fixable blockers no gate covered — two of
@@ -178,7 +178,7 @@ strings), enforces a minimum body length so an empty shell cannot pass, and
 checks the footer links resolve. **Prefer an assertion on rendered output over
 an assertion that a build succeeded.**
 
-## Resolved 2026-08-07 (second pass) — A-092…A-098, deployability
+## Resolved 2026-08-07 (second pass) — A-092…A-100, deployability
 
 Found by actually building the images and booting the stack in production mode
 rather than reasoning about it. **Nobody had ever done this**, and all three
@@ -335,6 +335,33 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
      runner was not hermetic. Fixed: kill the port before boot, refuse to test
      a process it did not start, and kill the port again on exit.
      Now deterministic across back-to-back runs and immediately after e2e.
+
+- **A-099 / A-100 — 2FA enrolment was impossible, so the platform was inert for
+  two more independent reasons.** Found by asking "can the admin `bootstrap-admin`
+  creates actually do step 6 of the cold-start?" — the answer was no.
+  - **A-099:** the only TOTP enrolment UI lived in `/developer/settings`, which
+    is wrapped in `<ProtectedRoute allowedRoles={['developer']}>`. An admin
+    navigating there got "Access denied — Your account role (super_admin) does
+    not have access to this page." **Fix:** new `/admin/security` page + shared
+    `components/two-factor-enrolment.tsx`, added to the admin nav.
+  - **A-100 (worse — affected every role):** the UI called
+    `POST /auth/2fa/setup` with **no body**, but the endpoint requires a
+    re-authentication proof (`auth-totp.trait.ts:66` — "Reauthentication is
+    required before setting up 2FA") and returns **401** without one. Proven
+    against a live production API: `setup2fa()` → **401**;
+    `setup2fa({currentPassword})` → **200 with a secret**. So _nobody_ — no
+    developer, no admin — could ever enable 2FA through the product.
+  - **Combined impact:** admins could never satisfy `AdminMfaStepUpGuard`, so
+    no campaign approval, no money switch, no payout processing — ever. And
+    because `PAYOUT_REQUIRE_2FA=true` is _required_ in production, **no
+    developer could ever request a payout**. Both surfaces now collect the
+    password and pass it.
+  - **Verified end-to-end** against a production-mode API: admin write **403**
+    before 2FA → `/auth/2fa/setup` **200** → `/auth/2fa/enable` **200** →
+    re-login with TOTP **200** → the same admin write **201**.
+  - **Gate:** the production smoke now asserts both halves — that setup
+    _requires_ a re-auth proof (the security control must not become permissive)
+    **and** that it _succeeds_ with one (enrolment must remain possible). 21/21.
 
 **Cold-start deploy verified end-to-end (2026-08-07).** The full first-deploy
 sequence was run against an **empty database** using the shipped

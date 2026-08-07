@@ -287,6 +287,58 @@ async function checkAuthentication() {
   return token;
 }
 
+/**
+ * Enrolment must be POSSIBLE (A-099/A-100).
+ *
+ * In production `AdminMfaStepUpGuard` blocks every admin write without recent
+ * 2FA, and `PAYOUT_REQUIRE_2FA=true` is mandatory — so if TOTP enrolment is
+ * broken, admins can never operate the platform and developers can never
+ * request a payout. Both were true simultaneously:
+ *   A-099 the only enrolment UI was role-gated to developers, so admins hit
+ *         "Access denied";
+ *   A-100 the UI called `POST /auth/2fa/setup` with no body, but the endpoint
+ *         requires a re-authentication proof and returns 401 without one — so
+ *         NO user of any role could enrol.
+ * Asserting "a secret can be issued" is the cheapest way to keep both closed.
+ */
+async function checkTwoFactorEnrolment(token) {
+  if (!token || !ADMIN_PASSWORD) {
+    skip('2fa-enrolment-possible', 'no token/password');
+    return;
+  }
+  const auth = { Authorization: `Bearer ${token}`, ...jsonHeaders() };
+
+  const noProof = await http('/auth/2fa/setup', {
+    method: 'POST',
+    headers: auth,
+    body: '{}',
+  });
+  // 401 without a proof is CORRECT — it is the security control. Only flag it
+  // if the endpoint has become permissive.
+  if (noProof.status === 200) {
+    fail('2fa-setup-requires-reauth', 'setup issued a secret with NO re-authentication proof');
+  } else {
+    pass('2fa-setup-requires-reauth', String(noProof.status));
+  }
+
+  const withProof = await http('/auth/2fa/setup', {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ currentPassword: ADMIN_PASSWORD }),
+  });
+  if (withProof.throttled) return throttleNote('2fa-enrolment-possible');
+  if (withProof.status === 200 && withProof.json?.secret) {
+    pass('2fa-enrolment-possible', 'setup issues a TOTP secret with a valid proof');
+  } else {
+    fail(
+      '2fa-enrolment-possible',
+      `setup returned ${withProof.status} with a valid re-auth proof — nobody can enrol 2FA, ` +
+        'so admins cannot perform any write (AdminMfaStepUpGuard) and developers cannot ' +
+        'request payouts (PAYOUT_REQUIRE_2FA). See A-099/A-100.',
+    );
+  }
+}
+
 async function checkAdminSurface(token) {
   if (!token) {
     skip('admin-mfa-step-up', 'no token');
@@ -328,6 +380,7 @@ async function main() {
   await checkPublicRoutes();
   await checkProductionGuards();
   const token = await checkAuthentication();
+  await checkTwoFactorEnrolment(token);
   await checkAdminSurface(token);
 
   const width = Math.max(...results.map((r) => r.name.length));

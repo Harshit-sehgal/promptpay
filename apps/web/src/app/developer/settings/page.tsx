@@ -133,6 +133,8 @@ export default function DevSettingsPage() {
   const [otpauthUrl, setOtpauthUrl] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [twoFactorBusy, setTwoFactorBusy] = useState(false);
+  // A-100: re-authentication proof required by POST /auth/2fa/setup.
+  const [reauthPassword, setReauthPassword] = useState('');
   const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [twoFactorSuccess, setTwoFactorSuccess] = useState<string | null>(null);
@@ -161,11 +163,22 @@ export default function DevSettingsPage() {
   };
 
   const handleStart2faSetup = async () => {
+    // A-100: `POST /auth/2fa/setup` requires a re-authentication proof
+    // (`auth-totp.trait.ts`: "Reauthentication is required before setting up
+    // 2FA"). This used to call `setup2fa()` with no body, which always returned
+    // 401 — so NO user could ever enable 2FA. Because production requires
+    // `PAYOUT_REQUIRE_2FA=true`, that also meant no developer could ever
+    // request a payout.
+    if (!reauthPassword) {
+      setTwoFactorError('Enter your current password to confirm it is you.');
+      return;
+    }
     setTwoFactorBusy(true);
     setTwoFactorError(null);
     setTwoFactorSuccess(null);
     try {
-      const res = await authApi.setup2fa();
+      const res = await authApi.setup2fa({ currentPassword: reauthPassword });
+      setReauthPassword('');
       setTotpSecret(res.data.secret);
       setOtpauthUrl(res.data.otpauthUrl);
       // Lazy-load the QR renderer only when the setup flow is actually opened
@@ -623,14 +636,27 @@ export default function DevSettingsPage() {
                   </p>
                 </div>
                 {!twoFactorEnabled && !show2faSetup && (
-                  <button
-                    type="button"
-                    onClick={handleStart2faSetup}
-                    disabled={twoFactorBusy}
-                    className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors"
-                  >
-                    Enable 2FA
-                  </button>
+                  <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+                    {/* A-100: the API requires a password re-auth proof before
+                        issuing a TOTP secret. */}
+                    <input
+                      type="password"
+                      value={reauthPassword}
+                      onChange={(e) => setReauthPassword(e.target.value)}
+                      placeholder="Current password"
+                      autoComplete="current-password"
+                      aria-label="Current password"
+                      className="rounded-lg border border-surface-200 bg-white px-3 py-2 text-xs text-surface-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleStart2faSetup}
+                      disabled={twoFactorBusy}
+                      className="bg-brand-500 hover:bg-brand-600 text-white font-medium px-4 py-2 rounded-lg text-xs transition-colors disabled:opacity-40"
+                    >
+                      Enable 2FA
+                    </button>
+                  </div>
                 )}
                 {twoFactorEnabled && !show2faSetup && (
                   <button

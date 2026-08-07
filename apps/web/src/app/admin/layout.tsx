@@ -16,6 +16,10 @@ const ADMIN_NAV = [
   { label: 'Ledger / Revenue', href: '/admin/ledger' },
   { label: 'Operations', href: '/admin/operations' },
   { label: 'Audit log', href: '/admin/audit' },
+  // A-099: admins need a reachable 2FA enrolment surface. The developer
+  // settings page is role-gated, so without this an administrator can never
+  // satisfy AdminMfaStepUpGuard and every admin write fails in production.
+  { label: 'Account security', href: '/admin/security' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
