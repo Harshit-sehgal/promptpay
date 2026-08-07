@@ -259,3 +259,30 @@ test('the API image bakes in the Prisma schema engine instead of downloading it 
     'ensure-prisma-engines must fail the build when the engine is missing',
   );
 });
+
+test('the engine fetch can still resolve @prisma/engines through the production chain', async () => {
+  // The fetch above is useless if it cannot find the package. Resolution walks
+  // packages/db -> prisma -> @prisma/engines, and every hop must survive
+  // `pnpm install --prod`: if prisma ever moves back to devDependencies the
+  // runtime image loses the CLI entirely, and this resolution is the first
+  // thing that breaks. Hermetic — no network, no download, just resolution.
+  const { resolveEnginesDir, foundEngines, ENGINE_PREFIX } = await import(
+    '../scripts/ensure-prisma-engines.mjs'
+  );
+
+  const dir = resolveEnginesDir(root);
+  assert.ok(
+    existsSync(join(dir, 'package.json')),
+    `resolved @prisma/engines to ${dir}, which has no package.json`,
+  );
+  const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+  assert.equal(pkg.name, '@prisma/engines');
+
+  // The binary is genuinely absent from the published tarball — that premise is
+  // the whole reason the fetch exists, so assert it rather than trusting it.
+  assert.ok(
+    !(pkg.files ?? []).some((f) => f.startsWith(ENGINE_PREFIX)),
+    'if @prisma/engines starts shipping the engine, the build-time fetch can go',
+  );
+  assert.deepEqual(foundEngines(dir).filter((n) => !n.startsWith(ENGINE_PREFIX)), []);
+});
