@@ -23,6 +23,12 @@ overrides:
   # a patch release, so drop this override once the direct parents raise their
   # own lower bounds.
   'js-yaml@^4.0.0': 4.3.1
+  # GHSA-pm4m-ph32-ghv5 (high): the same class of defect in the js-yaml 5 line,
+  # patched in 5.2.2. main never carried js-yaml 5 at all — @nestjs/swagger
+  # 11.4.6 is what introduces it, so the bump brings the advisory with it. The
+  # ^4 floor above cannot reach a 5.x resolution; ranges are scoped per major,
+  # exactly as with brace-expansion.
+  'js-yaml@^5.0.0': 5.2.2
   # GHSA / nanoid <3.3.17 (high): a custom generator can loop indefinitely when
   # `size` is zero. Reaches the tree only through build tooling
   # (@sentry/nextjs -> webpack -> terser-webpack-plugin -> postcss -> nanoid,
