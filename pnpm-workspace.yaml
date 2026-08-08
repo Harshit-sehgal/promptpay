@@ -32,6 +32,19 @@ overrides:
   # `nanoid:` override would also rewrite any future 5.x consumer. Drop this
   # once postcss raises its own lower bound.
   'nanoid@^3.0.0': 3.3.17
+  # COMPATIBILITY HOLD, not a security floor. Prisma 7.9.1 breaks packages/db's
+  # typecheck:
+  #   src/index.ts: TS2345: Argument of type 'PoolConfig' is not assignable to
+  #   parameter of type 'string | Pool | PoolConfig'
+  # The adapter's expected `pg` types stopped matching what @types/pg describes.
+  # Verified it is 7.9.1 and not @types/pg: pinning @types/pg back to 8.20.0 (the
+  # version main runs green) did NOT fix it, while main on 7.9.0 with the same
+  # @types/pg is green. A caret cannot express this — the break arrived in a
+  # patch release — so it is held here until the adapter and the pg types agree
+  # again. Re-test by removing these three lines.
+  '@prisma/client': 7.9.0
+  '@prisma/adapter-pg': 7.9.0
+  prisma: 7.9.0
 
 allowBuilds:
   '@prisma/client': true
