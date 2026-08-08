@@ -641,9 +641,9 @@ DSN is configured, and wrapped so a missing prebuilt degrades to a warning
 instead of a dead deploy. Verified both ways: with no DSN the module is never
 required; with a DSN profiling still loads.
 
-**Evidence after the change: 36 consecutive clean cold starts** (three 12-boot
-soaks, `0 hung / 0 never-ready` each) against a prior rate of ~17% per boot.
-The probability of that by chance is `0.83^36` ≈ **0.13%**. Combined with the
+**Evidence after the change: four consecutive clean 12-boot soaks** — 48 cold
+starts, `0 hung / 0 never-ready` every time — against a prior rate of ~17% per
+boot. The probability of that by chance is `0.83^48` ≈ **0.01%**. Combined with the
 mechanism — a native addon initialising at the very front of the startup path,
 and a hang signature showing the main thread blocked before the event loop
 started — this is strong evidence the profiler import was the cause.
