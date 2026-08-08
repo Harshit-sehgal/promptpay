@@ -238,8 +238,19 @@ test('prisma CLI is a PRODUCTION dependency, and the image does not reinstall it
   // scan, and pnpm's own `tar` 7.5.16 was the remaining CRITICAL + HIGH. That
   // tar appears nowhere in pnpm-lock.yaml, so no override can reach it —
   // removing the tool is the only fix that is not a suppression.
-  const runtimeStages = dockerfile.split(/^FROM /m).filter((st) => /^base AS (api|web)\b/.test(st));
+  // Keyed on the stage NAME, not its parent image: the runtime stages were
+  // rebased off `base` onto plain node:22-alpine to drop a 1.73 GB dev install
+  // they never use, and a guard tied to the parent would have silently stopped
+  // matching anything and passed vacuously.
+  const runtimeStages = ['api', 'web'].map((name) => dockerStage(name));
   assert.equal(runtimeStages.length, 2, 'expected an api and a web runtime stage');
+  for (const stage of runtimeStages) {
+    assert.doesNotMatch(
+      stage,
+      /^FROM /m,
+      'dockerStage should return a single stage body',
+    );
+  }
   for (const stage of runtimeStages) {
     for (const tool of ['npm', 'pnpm']) {
       assert.match(

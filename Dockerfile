@@ -175,7 +175,13 @@ RUN chmod +x /app/docker-entrypoint.sh
 # So the tree is assembled first and copied once, afterwards. Every file
 # lands node-owned in a single layer, nothing is created after the copy, and
 # the assembly stage keeps running as root with the offline pnpm store.
-FROM base AS api
+# NOT `FROM base`. `base` carries a full `pnpm install --frozen-lockfile` — a
+# 1.73 GB layer of dev dependencies — and layers are additive, so inheriting it
+# and then overwriting /app leaves that 1.73 GB in the shipped image forever.
+# The runtime stage needs none of it: everything it runs arrives in the single
+# COPY below. Measured by the image-size report added alongside A-112, which is
+# how this was found at all.
+FROM node:22-alpine AS api
 RUN apk add --no-cache wget
 WORKDIR /app
 COPY --from=assemble_api --chown=node:node /app /app
@@ -244,7 +250,9 @@ RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 # ── Runtime stage ────────────────────────────────────────────────────────────
 # Same split as the api stage (A-112): assemble as root, then one
 # ownership-correct copy so no recursive chown layer is needed.
-FROM base AS web
+# See the api stage: NOT `FROM base`, which would bake in a 1.73 GB dev install
+# the runtime never uses.
+FROM node:22-alpine AS web
 RUN apk add --no-cache wget
 WORKDIR /app/apps/web
 COPY --from=assemble_web --chown=node:node /app /app

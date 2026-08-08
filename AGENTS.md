@@ -658,6 +658,24 @@ win appears**, so `docker-build` now reports both images' sizes and largest
 layers, informational rather than gating — that number had never been measured
 in CI and there was no baseline to regress against.
 
+**A-113 — and that measurement immediately found a bigger one.** With the
+ownership layer gone, the largest remaining layer was **1.73 GB from `base`**:
+a full `pnpm install --frozen-lockfile` of every dev dependency. Both runtime
+stages were `FROM base`, and layers are additive — inheriting it and then
+overwriting `/app` leaves the 1.73 GB in the shipped image permanently. The
+runtime stages need none of it: everything they run arrives in the single
+`COPY --from=assemble_*`. They are now `FROM node:22-alpine`. The only thing
+lost with `base` is `ENV CI=true`, and nothing in the API, web or shared source
+reads `process.env.CI`. As a bonus, pnpm is no longer present in the runtime
+base at all, so the removal that fixed A-109 is now belt-and-braces rather than
+load-bearing. Measured before: API **2.9 GB**, web **3.0 GB** (already down from
+4.75 GB via A-112).
+
+The contract guard was rekeyed from the stage's PARENT (`base AS api`) to its
+NAME. Tied to the parent it would have silently matched nothing after this
+change and passed vacuously — the same failure mode as a test that stops
+asserting anything.
+
 **Attempt 1 (reverted).** Put `--chown=node:node` on each of the 20 runtime
 `COPY` lines and delete the recursive chown. It broke the API container:
 migrations still applied (2s), the entrypoint still printed
