@@ -21,14 +21,38 @@ function check(name, cond) {
 
 // A-075: Docker image runs as non-root.
 const dockerfile = read('Dockerfile');
-check('Dockerfile runs as non-root (USER node)', /^\s*USER node\b/m.test(dockerfile));
+// Assert against INSTRUCTIONS, never the prose around them. The prisma pin
+// below used to be checked against the raw file and silently went vacuous:
+// the global `npm install -g prisma@7.9.0` was removed, but a comment
+// explaining the removal still contained the string, so the claim kept
+// passing while verifying nothing. Negative assertions have the mirror-image
+// problem — a comment mentioning `ARG JWT_SECRET` would fail them for no
+// reason. Both directions are fixed by stripping comments first.
+const dockerfileLive = dockerfile
+  .split('\n')
+  .filter((line) => !/^\s*#/.test(line))
+  .join('\n');
+check('Dockerfile runs as non-root (USER node)', /^\s*USER node\b/m.test(dockerfileLive));
 check(
-  'Docker build tools are exact-version pinned and JWT signing secrets are not build args',
-  dockerfile.includes('ARG PNPM_VERSION=11.9.0') &&
-    dockerfile.includes('pnpm@${PNPM_VERSION}') &&
-    dockerfile.includes('prisma@7.9.0') &&
-    !dockerfile.includes('ARG JWT_SECRET') &&
-    !dockerfile.includes('ENV JWT_SECRET='),
+  'Docker build tools are version pinned and JWT signing secrets are not build args',
+  dockerfileLive.includes('ARG PNPM_VERSION=11.9.0') &&
+    dockerfileLive.includes('pnpm@${PNPM_VERSION}') &&
+    !dockerfileLive.includes('ARG JWT_SECRET') &&
+    !dockerfileLive.includes('ENV JWT_SECRET='),
+);
+// The Prisma CLI is no longer pinned in the Dockerfile at all — it is a
+// production dependency of packages/db, resolved through the committed
+// lockfile and installed with --frozen-lockfile. That is the real mechanism,
+// so that is what gets checked.
+const dbPkg = JSON.parse(read('packages/db/package.json'));
+const lockfile = read('pnpm-lock.yaml');
+check(
+  'Prisma CLI is pinned through the lockfile, not a global install',
+  Boolean(dbPkg.dependencies?.prisma) &&
+    !dbPkg.devDependencies?.prisma &&
+    /^\s+prisma:\n\s+specifier: [^\n]+\n\s+version: 7\./m.test(lockfile) &&
+    !/^\s*RUN[^\n]*npm install -g[^\n]*prisma/m.test(dockerfileLive) &&
+    dockerfileLive.includes('--frozen-lockfile'),
 );
 
 // A-018: web CSP allows the Google Identity frame-src.

@@ -22,9 +22,9 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
-## Current Status (snapshot 2026-08-07)
+## Current Status (snapshot 2026-08-08)
 
-- **91 migrations.** The sandbox XTS economy wave (7 logical commits,
+- **94 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of
   `25da3e1`: sandbox module + schema/migrations, extension non-cash placement
   path, web panels, VSIX packaging + attention promotion, scenario harness,
@@ -228,10 +228,17 @@ e2e needs a reachable npm registry") was a misdiagnosis: the registry is fine.
   container died on "The datasource.url property is required in your Prisma
   config file". Every containerized boot failed at the entrypoint — loudly
   (exit 1), but fatally.
-  **Fix:** `ENV NODE_PATH=/usr/local/lib/node_modules` in the api stage, and
-  the entrypoint runs `prisma migrate deploy` from `packages/db` (in a subshell
-  so the cwd cannot leak into the `exec`). **Verified:** all 91 migrations
-  applied from inside the container.
+  **Fix (original):** `ENV NODE_PATH=/usr/local/lib/node_modules` in the api
+  stage, and the entrypoint runs `prisma migrate deploy` from `packages/db`
+  (in a subshell so the cwd cannot leak into the `exec`). **Verified:** all
+  migrations applied from inside the container.
+  **SUPERSEDED 2026-08-08 — do not go looking for `NODE_PATH`, it is gone and a
+  contract test asserts its absence.** `NODE_PATH` was only needed because the
+  Prisma CLI was installed globally with npm, which put it outside Node's
+  resolution chain. The CLI is now an ordinary production dependency of
+  `packages/db`, so `prisma/config` resolves normally and the entrypoint calls
+  `./node_modules/.bin/prisma` directly. The subshell and the `packages/db`
+  working directory are still load-bearing; the environment variable is not.
   Same root cause as the `migrate status` gate-command defect noted above —
   Prisma 7 takes the URL from `prisma.config.ts`, not the schema, and only
   discovers that config relative to the working directory.
@@ -567,6 +574,47 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 — the repo's money invariant, which the mocked unit tests cannot show. Verified
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
+
+## Resolved 2026-08-08 (seventh pass) — A-114, the audit file auditing itself
+
+**A-114 — an audit claim went vacuous, and five documented facts had drifted.**
+This file is the first thing an agent reads, and its "Open Items" list is what
+an operator works through before launch. Both were wrong in ways that cost time
+in the expensive direction: work marked OUTSTANDING that was actually finished,
+and a machine check that had quietly stopped checking anything.
+
+- **The vacuous claim.** `audit-claims.mjs` asserted
+  `dockerfile.includes('prisma@7.9.0')` to prove the Prisma CLI was version
+  pinned. A-106 removed that global install — but a comment _explaining the
+  removal_ still contains the string, so the claim kept passing while verifying
+  nothing. Exactly the failure mode as the `next.config.js` guard that matched
+  its own comment. All Dockerfile assertions now run against a comment-stripped
+  view, which also fixes the mirror-image fragility in the negative checks (a
+  comment mentioning `ARG JWT_SECRET` would have failed them for no reason).
+  The claim now checks the mechanism that actually exists: prisma is a
+  production dependency of `packages/db`, the lockfile pins a concrete 7.x, no
+  `npm install -g prisma` survives, and the image installs `--frozen-lockfile`.
+  Mutation-tested three ways — moving prisma to devDependencies and
+  reintroducing the global install are both caught, and deleting the comment
+  now changes nothing.
+
+- **Drifted facts, corrected:** the status snapshot and the A-095 record both
+  said **91 migrations** (94); open item 4 said remaining Docker work included
+  running the attested build with `DOCKER_ATTEST=true` (that switch no longer
+  exists — attestations moved to explicit buildx flags and the release gate
+  asserts cosign); open item 9 said a green GitHub Actions run was unachievable
+  because `gh` was unavailable (it is available, and CI has run 12/12 green
+  repeatedly). Most importantly the A-095 entry still prescribed
+  `ENV NODE_PATH=...` as the fix — **removed in A-106, with a contract test
+  asserting its absence** — so an agent would have gone looking for it, not
+  found it, and concluded something had regressed. That entry is now marked
+  SUPERSEDED in place rather than deleted, because the subshell and the
+  `packages/db` working directory around it are still load-bearing.
+
+The lesson generalises: `audit-claims.mjs` covers 14 claims, but this file makes
+hundreds of assertions. Counts and "the fix is X" statements are the two kinds
+that rot, because the code they describe keeps moving. Prefer checking a
+mechanism over checking a string, and never assert against a file's prose.
 
 ## Verified green 2026-08-08 — 12/12, with the gates that never ran
 
@@ -1024,9 +1072,13 @@ these workflows and will conflict. Review them after the launch, not before.
    default Docker driver), A-093 (the auto-loaded dev override builds the wrong
    stage), and A-095 (the production image could not run migrations). All three
    are fixed and verified above; the API image now boots in production mode
-   with all 91 migrations applied. Remaining Docker work is genuinely external:
-   pushing to a real `CONTAINER_REGISTRY` (item 2) and running the attested
-   build in CI with `DOCKER_ATTEST=true`.
+   with all 94 migrations applied. **Updated 2026-08-08:** the only remaining
+   Docker work is external — pushing to a real `CONTAINER_REGISTRY` (item 2).
+   The old wording also said to run "the attested build in CI with
+   `DOCKER_ATTEST=true`"; that switch no longer exists. Compose rejects
+   `provenance`/`sbom` keys outright, so attestations moved to explicit buildx
+   flags in the release workflow and the release gate asserts cosign instead.
+   `DOCKER_ATTEST` survives only in comments explaining its removal.
 5. **Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
    settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
@@ -1056,8 +1108,14 @@ these workflows and will conflict. Review them after the launch, not before.
      `apps/api/src/integration/payout-sandbox-run.spec.ts` against sandbox
      credentials before promoting via the env override.
      `README.md` already described this split correctly; this file did not.
-9. **Green GitHub Actions SHA run:** `gh`/`act` unavailable in dev sandboxes;
-   every CI job category has a local equivalent.
+9. ~~**Green GitHub Actions SHA run:** `gh`/`act` unavailable in dev
+   sandboxes.~~ **CLOSED 2026-08-08.** `gh` is available (2.45.0) and CI has
+   run green end to end many times — `15ca0de`, `d3a6af1`, `f22544a`,
+   `bebe6e2`, `f3e7f4e`, all 12/12 including the container-boot and image-scan
+   gates that had never previously executed. CI also gained a
+   `workflow_dispatch` trigger, so a release candidate can be verified on a
+   branch before it reaches `main`:
+   `gh workflow run ci.yml --ref <branch>`.
 10. **Test-DB reset consent:** full `pnpm test` integration phase needs
     `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1` (operator-only action);
     individual specs run against the migrated `waitlayer_test` DB without it.
