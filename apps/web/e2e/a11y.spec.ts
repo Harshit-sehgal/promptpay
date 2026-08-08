@@ -12,6 +12,14 @@ import { expect, test } from '@playwright/test';
  * We scan the public (unauthenticated) pages because they are the entry point
  * for every visitor and carry the highest a11y liability. Authenticated pages
  * are covered by the component-level vitest suites + the smoke E2E.
+ *
+ * EVERY public page must be listed. This was a subset of 13 while 8 public
+ * pages — including all three /legal/* documents and the two policy pages —
+ * had shipped without ever being added. Legal and policy text is precisely
+ * where an accessibility failure matters most, since it is the content a
+ * screen-reader user is most likely to need. `a11y-coverage.test.ts` derives
+ * the expected set from the filesystem and fails if a public route is missing
+ * here, so the list cannot silently fall behind again.
  */
 
 const PAGES = [
@@ -24,10 +32,19 @@ const PAGES = [
   '/feedback',
   '/security',
   '/status',
+  '/faq',
+  '/manifesto',
+  '/changelog',
+  '/payout-policy',
+  '/advertiser-policy',
+  '/legal/cookie-policy',
+  '/legal/data-retention',
+  '/legal/gdpr-dpa',
   '/auth/login',
   '/auth/signup',
   '/auth/forgot-password',
   '/auth/reset-password?token=accessibility-check',
+  '/auth/verify-email?token=accessibility-check',
 ];
 
 for (const path of PAGES) {

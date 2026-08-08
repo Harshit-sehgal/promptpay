@@ -659,6 +659,32 @@ too few samples either to reproduce on demand or to trust a green run. The soak
 job is also the permanent gate for the class: the API must cold-start cleanly,
 every time, from an empty database.
 
+## Resolved 2026-08-08 (tenth pass) — A-118, the a11y sweep had fallen behind
+
+**A-118 — 9 public pages were never accessibility-scanned.** `a11y.spec.ts`
+runs axe-core against WCAG 2.1 AA and fails CI on serious/critical violations,
+which is good — but it scans a hard-coded list, and a hard-coded list cannot
+notice what is missing from it. It had fallen 9 pages behind: `/faq`,
+`/manifesto`, `/changelog`, `/payout-policy`, `/advertiser-policy`, all three
+`/legal/*` documents, and `/auth/verify-email`. Legal and policy text is
+precisely where an accessibility failure matters most — it is the content a
+screen-reader user is most likely to need and least able to skip.
+
+All 9 are now scanned (21 paths total). `a11y-coverage.test.ts` derives the
+expected set from the filesystem and fails when a public route is not covered,
+the same fix applied to the sitemap after it rotted identically. It also
+asserts the sweep does not point at deleted routes, and guards its own parse so
+a regex that matched nothing could not make both assertions vacuous.
+
+**The guard found a gap on its first run** — `/auth/verify-email` — which is the
+argument for deriving expectations from the filesystem rather than reviewing a
+list by eye. I had extended the list by hand from the same evidence and still
+missed one.
+
+Note this is a **coverage** fix, not a clean bill of health: the newly-scanned
+pages have never been through axe. If CI reports violations on them, they are
+real and pre-existing.
+
 ## Resolved 2026-08-08 (ninth pass) — A-117, 37 pages with no title
 
 **A-117 — every page but seven shipped with the marketing title.** 37 of ~44
