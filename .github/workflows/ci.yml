@@ -839,8 +839,12 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
       - name: Cold-start the API repeatedly from an empty database
         run: |
-          BOOTS="${SOAK_BOOTS:-5}"
+          # 12, not 5. At the observed rate (~2 in 5) a 5-boot run has a real
+          # chance of coming back clean by luck, and a clean run was being read
+          # as evidence. 12 cold starts is ~12 minutes inside a 30-minute job.
+          BOOTS="${SOAK_BOOTS:-12}"
           failures=0
+          recovered=0
           for n in $(seq 1 "$BOOTS"); do
             echo "═══════════ cold start $n/$BOOTS ═══════════"
             docker compose -f docker-compose.yml up -d api postgres redis
@@ -854,11 +858,29 @@ jobs:
               fi
               sleep 2
             done
-            if [ "$ready" = "1" ]; then
+            # The watchdog now RECOVERS a hung boot by killing the app so the
+            # restart policy restarts it. That means "became ready" is no longer
+            # proof the boot was healthy — it may have hung for 120s first and
+            # then been rescued. Reading the log is the only way to tell, and
+            # without this the gate would go green on the exact event it exists
+            # to catch.
+            hung=0
+            if docker compose -f docker-compose.yml logs --no-color api 2>/dev/null \
+              | grep -q '\[watchdog\] application did not bind'; then
+              hung=1
+            fi
+
+            if [ "$ready" = "1" ] && [ "$hung" = "0" ]; then
               echo "✓ boot $n became ready"
+            elif [ "$hung" = "1" ]; then
+              recovered=$((recovered + 1))
+              echo "⚠ boot $n HUNG and was recovered by the watchdog — A-115 reproduction"
+              echo "───────── watchdog dump (per-thread state is the payload) ─────────"
+              docker compose -f docker-compose.yml logs --no-color api 2>/dev/null \
+                | grep '\[watchdog\]' || true
             else
               failures=$((failures + 1))
-              echo "✗ boot $n NEVER became ready — this is the A-115 reproduction"
+              echo "✗ boot $n NEVER became ready and the watchdog did not rescue it"
               echo "───────── compose ps ─────────"
               docker compose -f docker-compose.yml ps || true
               echo "───────── api logs (watchdog output is the payload) ─────────"
@@ -876,12 +898,15 @@ jobs:
             docker compose -f docker-compose.yml down -v
           done
           echo "═══════════════════════════════════════"
-          echo "cold starts: $BOOTS, failures: $failures"
-          if [ "$failures" -gt 0 ]; then
-            echo "A-115 reproduced $failures/$BOOTS times. The dumps above are the evidence."
+          echo "cold starts: $BOOTS | hung-and-recovered: $recovered | never ready: $failures"
+          if [ "$failures" -gt 0 ] || [ "$recovered" -gt 0 ]; then
+            echo "A-115 reproduced $((failures + recovered))/$BOOTS times."
+            if [ "$failures" -gt 0 ]; then
+              echo "  $failures of those were NOT rescued — the watchdog mitigation did not hold."
+            fi
             exit 1
           fi
-          echo "All $BOOTS cold starts bound the port cleanly."
+          echo "All $BOOTS cold starts bound the port cleanly, with no watchdog intervention."
         env:
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
 
