@@ -83,13 +83,30 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date));
 }
 
-/** Format a relative time (e.g., "2d ago", "3w ago", "5mo ago") */
+/**
+ * Format a relative time, in either direction (e.g. "2d ago", "in 7d").
+ *
+ * FUTURE dates are the reason this handles both. Every branch below tests
+ * `> 0`, so a future timestamp made all of them fail and fell through to
+ * "just now". That is not cosmetic: the developer earnings table renders
+ * `availableAt` under a column headed "Available", and the API sets it to
+ * `Date.now() + holdDays` — always in the future while an entry is held. A
+ * developer saw "just now" against money locked for days, requested a payout,
+ * and was refused with no explanation the UI had given them.
+ *
+ * An unparseable date returns an em dash rather than "just now", which is the
+ * same distinction: absence of information should not render as a confident
+ * statement about the present.
+ */
 export function formatRelativeTime(date: string | Date): string {
-  const now = Date.now();
   const then = new Date(date).getTime();
-  const diffMs = now - then;
+  if (!Number.isFinite(then)) return '—';
 
-  const seconds = Math.floor(diffMs / 1000);
+  const diffMs = Date.now() - then;
+  const future = diffMs < 0;
+  const abs = Math.abs(diffMs);
+
+  const seconds = Math.floor(abs / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
@@ -97,12 +114,14 @@ export function formatRelativeTime(date: string | Date): string {
   const months = Math.floor(days / 30);
   const years = Math.floor(days / 365);
 
-  if (years > 0) return `${years}y ago`;
-  if (months > 0) return `${months}mo ago`;
-  if (weeks > 0) return `${weeks}w ago`;
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  if (seconds > 30) return `${seconds}s ago`;
+  const say = (value: number, unit: string) => (future ? `in ${value}${unit}` : `${value}${unit} ago`);
+
+  if (years > 0) return say(years, 'y');
+  if (months > 0) return say(months, 'mo');
+  if (weeks > 0) return say(weeks, 'w');
+  if (days > 0) return say(days, 'd');
+  if (hours > 0) return say(hours, 'h');
+  if (minutes > 0) return say(minutes, 'm');
+  if (seconds > 30) return say(seconds, 's');
   return 'just now';
 }
