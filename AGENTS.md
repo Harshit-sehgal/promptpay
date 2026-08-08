@@ -568,10 +568,11 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
-## Verified green 2026-08-08 — 12/12 at `15ca0de`, with the gates that never ran
+## Verified green 2026-08-08 — 12/12, with the gates that never ran
 
-`integration/agent-beta` @ `15ca0de`: **all 12 CI jobs green**, and for the first
-time that includes gates which had never actually executed:
+`integration/agent-beta`: **all 12 CI jobs green**, repeatedly — `15ca0de`,
+`d3a6af1`, `f22544a`, `bebe6e2`. For the first time that includes gates which had
+never actually executed:
 
 - **both runtime image scans** — `Total: 0 (HIGH: 0, CRITICAL: 0)` for the API
   and the web image. They had always been _skipped_, because `docker-build`
@@ -675,8 +676,20 @@ inherited `CI=true` from `base`, so removing it was an uncontrolled behaviour
 change rather than a cleanup. It is set explicitly in both runtime stages now,
 which keeps A-113 purely a size change. As a bonus, pnpm is no longer present in the runtime
 base at all, so the removal that fixed A-109 is now belt-and-braces rather than
-load-bearing. Measured before: API **2.9 GB**, web **3.0 GB** (already down from
-4.75 GB via A-112).
+load-bearing.
+
+**Measured end to end (CI `docker-build`, which now reports it):**
+
+| stage                                               | API image   |
+| --------------------------------------------------- | ----------- |
+| before                                              | **4.75 GB** |
+| after A-112 (assemble + one ownership-correct copy) | **2.9 GB**  |
+| after A-113 (runtime rebased off `base`)            | **1.3 GB**  |
+
+Web ends at **1.3 GB**. What remains is 1.13 GB of application tree, 151 MB of
+`node:22-alpine` and ~9 MB of tooling — the app itself now dominates and nothing
+is duplicated. CI build time was unchanged throughout; size was the whole win,
+which is why the report was added rather than the saving assumed.
 
 The contract guard was rekeyed from the stage's PARENT (`base AS api`) to its
 NAME. Tied to the parent it would have silently matched nothing after this
