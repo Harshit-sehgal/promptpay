@@ -82,20 +82,20 @@ RUN apk add --no-cache wget
 WORKDIR /app
 
 # Copy node_modules from build (full install; dev deps are stripped below)
-COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/packages ./packages
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages ./packages
 
 # Copy API build output
-COPY --from=build --chown=node:node /app/apps/api/dist ./apps/api/dist
-COPY --from=build --chown=node:node /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=build --chown=node:node /app/apps/api/package.json ./apps/api/package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 
 # Postgres-readiness wait script (runs before migrate deploy / start)
-COPY --from=build --chown=node:node /app/scripts/wait-for-postgres.mjs ./scripts/wait-for-postgres.mjs
+COPY --from=build /app/scripts/wait-for-postgres.mjs ./scripts/wait-for-postgres.mjs
 
 # Workspace metadata
-COPY --from=build --chown=node:node /app/pnpm-workspace.yaml ./
-COPY --from=build --chown=node:node /app/package.json ./
+COPY --from=build /app/pnpm-workspace.yaml ./
+COPY --from=build /app/package.json ./
 # The Prisma CLI is a PRODUCTION dependency of packages/db, so it survives the
 # `pnpm install --prod` prune below and no global npm install is needed.
 #
@@ -121,7 +121,7 @@ RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 # (272s of failing probes, then "dependency failed to start"), and an image
 # like that cannot start on a host without egress to that CDN.
 # Fetch it here, once, and fail the build if it is still missing.
-COPY --from=build --chown=node:node /app/scripts/ensure-prisma-engines.mjs ./scripts/ensure-prisma-engines.mjs
+COPY --from=build /app/scripts/ensure-prisma-engines.mjs ./scripts/ensure-prisma-engines.mjs
 RUN node scripts/ensure-prisma-engines.mjs
 
 # Regenerate the Prisma client for the production dependency set (offline).
@@ -131,7 +131,7 @@ RUN node scripts/ensure-prisma-engines.mjs
 RUN cd packages/db && ./node_modules/.bin/prisma generate
 
 # Entrypoint: wait for Postgres, apply migrations once, then exec the app.
-COPY --chown=node:node docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Remove npm from the RUNTIME image. npm ships inside the node:22-alpine base
@@ -160,16 +160,21 @@ RUN chmod +x /app/docker-entrypoint.sh
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
   && rm -rf /usr/local/lib/node_modules/pnpm /usr/local/bin/pnpm /usr/local/bin/pnpx
 
-# Ownership is set by the COPY lines above (`--chown=node:node`) rather than by
-# a `RUN chown -R node:node /app` afterwards. The recursive chown touched the
-# inode of every file already copied, so overlayfs copied all of them up into a
-# new layer: a single 1.18 GB layer on a 4.75 GB image, and the slowest step of
-# the build. `COPY --chown` sets the owner as the files land, at no extra cost.
-#
-# Files created by the root-run steps above (the --prod install, the engine
-# fetch, `prisma generate`) stay root-owned. That is intentional and safe: the
-# app only ever READS them, and root-created files are world-readable. It also
-# means the runtime user cannot rewrite its own dependencies.
+# A-112 (attempted 2026-08-08, REVERTED — do not retry without a plan for this):
+# this recursive chown is a measured 1.18 GB layer on a 4.75 GB image and the
+# slowest step of the build, because it re-touches the inode of every file
+# already copied and overlayfs copies them all up. Replacing it with
+# `COPY --chown=node:node` on all 20 runtime COPY lines is the obvious fix and
+# it BROKE THE CONTAINER: migrations still applied in 2s, the entrypoint still
+# reached "starting application", and then the Node process sat alive and
+# completely silent for 176s and never served. Not a timing budget — no output
+# at all. The difference is that the root-run steps (the --prod install, the
+# engine fetch, `prisma generate`) leave root-owned files that the recursive
+# chown used to sweep up. If you retry this, make the installs run AS node
+# (chown the single /app directory, then `USER node` before them) rather than
+# fixing up ownership afterwards — and budget a full docker-build cycle to
+# verify it, because nothing smaller reproduces this.
+RUN chown -R node:node /app
 USER node
 
 ENV NODE_ENV=production
@@ -197,14 +202,14 @@ RUN apk add --no-cache wget
 WORKDIR /app/apps/web
 
 # Copy node_modules from build (full install; dev deps are stripped below)
-COPY --from=build --chown=node:node /app/node_modules /app/node_modules
-COPY --from=build --chown=node:node /app/packages /app/packages
+COPY --from=build /app/node_modules /app/node_modules
+COPY --from=build /app/packages /app/packages
 
 # Copy web build output
-COPY --from=build --chown=node:node /app/apps/web/.next ./.next
-COPY --from=build --chown=node:node /app/apps/web/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/apps/web/public ./public
-COPY --from=build --chown=node:node /app/apps/web/next.config.* ./
+COPY --from=build /app/apps/web/.next ./.next
+COPY --from=build /app/apps/web/node_modules ./node_modules
+COPY --from=build /app/apps/web/public ./public
+COPY --from=build /app/apps/web/next.config.* ./
 # `next.config.js` does `require('./src/lib/csp.js')` at STARTUP, so the runtime
 # image needs that one source file. Without it the container starts, prints
 # "Ready", then fails every request with
@@ -213,12 +218,12 @@ COPY --from=build --chown=node:node /app/apps/web/next.config.* ./
 # `src/`, so the runtime image keeps only what it needs. `csp.js` is
 # self-contained (no local requires of its own); if next.config ever grows
 # another local require, this must grow with it.
-COPY --from=build --chown=node:node /app/apps/web/src/lib/csp.js ./src/lib/csp.js
-COPY --from=build --chown=node:node /app/apps/web/package.json ./package.json
+COPY --from=build /app/apps/web/src/lib/csp.js ./src/lib/csp.js
+COPY --from=build /app/apps/web/package.json ./package.json
 
 # Workspace metadata
-COPY --from=build --chown=node:node /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
-COPY --from=build --chown=node:node /app/package.json /app/package.json
+COPY --from=build /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
+COPY --from=build /app/package.json /app/package.json
 # Drop devDependencies (see api stage note). pnpm operates on the workspace root
 # at /app and strips dev deps from the hoisted store.
 RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
@@ -230,7 +235,8 @@ RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
   && rm -rf /usr/local/lib/node_modules/pnpm /usr/local/bin/pnpm /usr/local/bin/pnpx
 
-# See the api stage: ownership comes from `COPY --chown`, not a recursive chown.
+# See the api stage for why this recursive chown is still here (A-112).
+RUN chown -R node:node /app
 USER node
 
 ENV NODE_ENV=production
