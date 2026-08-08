@@ -723,6 +723,22 @@ jobs:
           echo "api=$api" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "scanning: $api and $web"
+
+      # Report image size and the largest layers. A-112 removed a duplicate
+      # copy of /app that a recursive `chown -R` had been creating; CI build
+      # time was unchanged by that fix, so SIZE is the only place the win shows
+      # up, and it was never actually measured before. Informational — this
+      # prints numbers, it does not gate. It gives the next person a baseline
+      # and makes a size regression visible in the log.
+      - name: Report runtime image sizes
+        run: |
+          for img in "${{ steps.images.outputs.api }}" "${{ steps.images.outputs.web }}"; do
+            bytes=$(docker image inspect "$img" --format '{{.Size}}')
+            echo "── $img: $(numfmt --to=iec --suffix=B "$bytes" 2>/dev/null || echo "${bytes} bytes")"
+            docker history "$img" --no-trunc --format '{{.Size}}\t{{.CreatedBy}}' \
+              | grep -vE '^0B' | head -5 | cut -c1-140 || true
+          done
+
       - name: Vulnerability scan — API runtime image (trivy)
         uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # v0.24.0
         with:

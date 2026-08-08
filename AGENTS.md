@@ -645,9 +645,18 @@ any future 5.x consumer. Verified locally: `nanoid@3.3.17`,
 `pnpm install --frozen-lockfile` (what CI runs) passes.
 
 **A-112 — the 1.18 GB ownership layer, fixed on the second attempt.**
-`RUN chown -R node:node /app` was a measured **1.18 GB** layer on a 4.75 GB image
-and the slowest build step, because a recursive chown re-touches the inode of
-every file already copied and overlayfs then copies all of them up again.
+`RUN chown -R node:node /app` was a measured **1.18 GB** layer on a 4.75 GB
+image, because a recursive chown re-touches the inode of every file already
+copied and overlayfs then copies all of them up again.
+
+**Correction to the earlier note:** it was also described as dominating build
+time (~15–20 min). That was a local-host observation and CI does not reproduce
+it — `docker-build` took 954s with the chown and 971s after removing it, i.e.
+unchanged within noise, because the assemble→runtime hand-off copies the tree
+once where the chown used to rewrite it once. **Image size is the only place the
+win appears**, so `docker-build` now reports both images' sizes and largest
+layers, informational rather than gating — that number had never been measured
+in CI and there was no baseline to regress against.
 
 **Attempt 1 (reverted).** Put `--chown=node:node` on each of the 20 runtime
 `COPY` lines and delete the recursive chown. It broke the API container:
