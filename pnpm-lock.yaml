@@ -395,8 +395,8 @@ importers:
         specifier: ^26.1.2
         version: 26.1.2
       '@types/pg':
-        specifier: ^8.20.4
-        version: 8.20.4
+        specifier: 8.20.0
+        version: 8.20.0
       '@waitlayer/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config
@@ -6966,7 +6966,7 @@ snapshots:
   '@prisma/adapter-pg@7.9.1':
     dependencies:
       '@prisma/driver-adapter-utils': 7.9.1
-      '@types/pg': 8.20.0
+      '@types/pg': 8.20.4
       pg: 8.22.0
       postgres-array: 3.0.4
     transitivePeerDependencies:
@@ -7902,13 +7902,13 @@ snapshots:
 
   '@types/pg@8.20.0':
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.1.2
       pg-protocol: 1.15.0
       pg-types: 2.2.0
 
   '@types/pg@8.20.4':
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.1.2
       pg-protocol: 1.15.0
       pg-types: 2.2.0
 
@@ -8546,7 +8546,7 @@ snapshots:
   browserslist@4.28.6:
     dependencies:
       baseline-browser-mapping: 2.10.43
-      caniuse-lite: 1.0.30001805
+      caniuse-lite: 1.0.30001809
       electron-to-chromium: 1.5.389
       node-releases: 2.0.51
       update-browserslist-db: 1.2.3(browserslist@4.28.6)
@@ -9644,7 +9644,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.1.2
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
