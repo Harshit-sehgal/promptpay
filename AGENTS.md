@@ -24,7 +24,7 @@
 
 ## Current Status (snapshot 2026-08-08)
 
-- **94 migrations.** The sandbox XTS economy wave (7 logical commits,
+- **95 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of
   `25da3e1`: sandbox module + schema/migrations, extension non-cash placement
   path, web panels, VSIX packaging + attention promotion, scenario harness,
@@ -581,7 +581,7 @@ is down (so it cannot silently become a no-op again).
 mitigation and gate retained.**
 
 Roughly **2 in 7** `docker-build` runs fail with an identical signature: Postgres
-comes up, all 94 migrations apply, the entrypoint prints
+comes up, all migrations apply, the entrypoint prints
 `starting application` — and then the Node process emits **nothing at all**,
 never listens on 4002, and the container sits at `health: starting` until the
 budget expires. No crash, no restart loop, no error. On the runs where it hits
@@ -702,6 +702,46 @@ dumping the same diagnostics. `docker-build` only boots twice per run, which is
 too few samples either to reproduce on demand or to trust a green run. The soak
 job is also the permanent gate for the class: the API must cold-start cleanly,
 every time, from an empty database.
+
+## Resolved 2026-08-08 (thirteenth pass) — A-122, the ad-serving hot path
+
+**A-122 — the ad-serving hot path had no index that matched its query.** A sweep
+for foreign keys with no covering index found four. Three needed nothing, and
+saying why matters more than the count:
+
+- `wait_attestation_sessions.deviceId` — already covered for reads by
+  `[userId, deviceId, waitStateId]`. It was flagged only because a foreign-key
+  check needs `deviceId` **leading**, and nothing deletes a device.
+- `campaign_approvals.reviewerId`, `agent_lifecycle_events.work_unit_id` —
+  referenced by **zero** queries, and their parents are never deleted. An index
+  here would be write cost for no read benefit. Deliberately not added.
+
+`ad_opportunities.deviceId` was different. Both queries on the ad-serving path
+filter `(userId, deviceId, state)` — the per-hour claim count and the candidate
+lookup — and the only `userId` index was `[userId, createdAt]`, which can
+satisfy neither `deviceId` nor `state` and cannot supply the `eligibleAt`
+ordering. Postgres therefore read **every** opportunity belonging to the user
+and sorted them.
+
+Measured rather than assumed, on 200k seeded rows:
+
+| indexes                                   | plan                 | time        |
+| ----------------------------------------- | -------------------- | ----------- |
+| `[userId, createdAt]` (today)             | `Limit > Sort`       | 0.84 ms     |
+| `+ [userId, deviceId, state, eligibleAt]` | `Limit > Index Scan` | **0.05 ms** |
+
+The absolute numbers are small at that size and that is not the point: the Sort
+plan grows with a developer's accumulated opportunities, the index scan does
+not. Added as migration `20260808000000_ad_opportunity_hot_path_index`, with
+`prisma migrate diff` confirming no schema drift.
+
+**And the fix immediately made four documents wrong.** Adding a migration
+invalidated every hardcoded "94 migrations" in AGENTS.md and ci.yml — the same
+drift class as A-114, recurring within hours of being fixed. The count is now
+**machine-checked**: `audit-claims.mjs` compares the number stated in Current
+Status against the migrations on disk, so a future migration cannot leave the
+document quietly wrong. Mutation-tested. The other references were rewritten to
+not carry a number at all, since they never needed one.
 
 ## Resolved 2026-08-08 (twelfth pass) — A-121, clamping that does not sanitise
 
@@ -892,7 +932,7 @@ and a machine check that had quietly stopped checking anything.
   now changes nothing.
 
 - **Drifted facts, corrected:** the status snapshot and the A-095 record both
-  said **91 migrations** (94); open item 4 said remaining Docker work included
+  said **91 migrations** when there were 94; open item 4 said remaining Docker work included
   running the attested build with `DOCKER_ATTEST=true` (that switch no longer
   exists — attestations moved to explicit buildx flags and the release gate
   asserts cosign); open item 9 said a green GitHub Actions run was unachievable
@@ -1365,7 +1405,7 @@ these workflows and will conflict. Review them after the launch, not before.
    default Docker driver), A-093 (the auto-loaded dev override builds the wrong
    stage), and A-095 (the production image could not run migrations). All three
    are fixed and verified above; the API image now boots in production mode
-   with all 94 migrations applied. **Updated 2026-08-08:** the only remaining
+   with all migrations applied. **Updated 2026-08-08:** the only remaining
    Docker work is external — pushing to a real `CONTAINER_REGISTRY` (item 2).
    The old wording also said to run "the attested build in CI with
    `DOCKER_ATTEST=true`"; that switch no longer exists. Compose rejects

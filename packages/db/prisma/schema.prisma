@@ -819,6 +819,14 @@ model AdOpportunity {
   createdAt              DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([userId, createdAt])
+  // Ad-serving hot path. Both the per-hour claim count and the candidate
+  // lookup filter on (userId, deviceId, state); only [userId, createdAt]
+  // existed, so Postgres fetched every opportunity for the user and sorted.
+  // Measured on 200k rows: plan went from `Limit > Sort` (0.84ms) to
+  // `Limit > Index Scan` (0.05ms). The absolute numbers are small at that
+  // size; the point is that the Sort plan degrades as a developer
+  // accumulates opportunities and the index scan does not.
+  @@index([userId, deviceId, state, eligibleAt])
   @@index([sessionId, placementType])
   @@index([state, expiresAt])
   @@index([claimIdempotencyKey], map: "ad_opportunities_claim_idempotency_key_idx")

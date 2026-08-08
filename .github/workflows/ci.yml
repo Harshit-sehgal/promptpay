@@ -551,7 +551,7 @@ jobs:
         run: |
           docker compose -f docker-compose.yml up -d api postgres redis
           # 90 x 2s = 180s. The old 60s budget was not enough for a COLD start:
-          # the entrypoint applies all 94 migrations to an empty database before
+          # the entrypoint applies every migration to an empty database before
           # Nest boots. This is a timing budget, not an assertion — the check
           # still requires the container to become ready and serve. Observed
           # failing at "Up 58 seconds (health: starting)" with

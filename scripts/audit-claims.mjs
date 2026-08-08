@@ -55,6 +55,19 @@ check(
     dockerfileLive.includes('--frozen-lockfile'),
 );
 
+// The migration count in AGENTS.md is prose, and prose drifts. It has now gone
+// stale twice (91 -> 94, then 94 -> 95 when the ad-opportunity hot-path index
+// landed), each time sending a reader to a number that is simply wrong. Rather
+// than correct it a third time, tie it to the filesystem.
+const migrationDirs = readdirSync(resolve(ROOT, 'packages/db/prisma/migrations')).filter(
+  (entry) => entry !== 'migration_lock.toml',
+);
+const statusCount = /- \*\*(\d+) migrations\.\*\*/.exec(read('AGENTS.md'));
+check(
+  `AGENTS.md states the real migration count (${migrationDirs.length})`,
+  Boolean(statusCount) && Number(statusCount[1]) === migrationDirs.length,
+);
+
 // A-018: web CSP allows the Google Identity frame-src.
 const nextConfig = read('apps/web/next.config.js');
 check(

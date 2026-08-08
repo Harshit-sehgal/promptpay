@@ -1,0 +1,22 @@
+-- Ad-serving hot path index.
+--
+-- Both queries on the ad-serving path filter (userId, deviceId, state):
+--   * the per-hour claim count  ... WHERE userId, deviceId, state, claimed_at >= ?
+--   * the candidate lookup      ... WHERE userId, deviceId, placement_type, state,
+--                                         eligible_at <= now(), expires_at > now()
+--                                   ORDER BY eligible_at DESC LIMIT 1
+--
+-- The only userId index was [userId, created_at], which cannot satisfy deviceId
+-- or state and cannot supply eligible_at ordering — so Postgres read every
+-- opportunity belonging to the user and sorted them. Measured on 200k rows the
+-- plan changed from `Limit > Sort` (0.84ms) to `Limit > Index Scan` (0.05ms).
+-- The absolute figures are small at that size; what matters is that the Sort
+-- plan grows with a developer's accumulated opportunities and the index scan
+-- does not.
+--
+-- CONCURRENTLY is deliberately NOT used: Prisma runs each migration inside a
+-- transaction and CREATE INDEX CONCURRENTLY cannot run in one. This table is
+-- empty at first deploy; if it is ever added to a large live table, build it
+-- out-of-band instead.
+CREATE INDEX "ad_opportunities_userId_deviceId_state_eligible_at_idx"
+  ON "ad_opportunities" ("userId", "deviceId", "state", "eligible_at");
