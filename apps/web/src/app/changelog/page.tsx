@@ -71,7 +71,10 @@ export default function ChangelogPage() {
                     fontFamily: "'IBM Plex Mono', monospace",
                     fontSize: '14px',
                     fontWeight: 600,
-                    color: 'var(--accent, #16a34a)',
+                    // --accent (#16a34a) measures 3.30:1 on white and fails WCAG AA
+                    // for 14px text. --accent-strong is the existing token for
+                    // accent-coloured TEXT and clears it comfortably.
+                    color: 'var(--accent-strong, #087443)',
                   }}
                 >
                   {release.version}

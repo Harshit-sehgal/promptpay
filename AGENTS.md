@@ -717,9 +717,25 @@ argument for deriving expectations from the filesystem rather than reviewing a
 list by eye. I had extended the list by hand from the same evidence and still
 missed one.
 
-Note this is a **coverage** fix, not a clean bill of health: the newly-scanned
-pages have never been through axe. If CI reports violations on them, they are
-real and pre-existing.
+It was a **coverage** fix, and the newly-scanned pages had never been through
+axe — so it immediately found two real, pre-existing **serious** WCAG 2.1 AA
+colour-contrast failures that had been shipping unnoticed:
+
+| page                 | element                                      | measured   | required |
+| -------------------- | -------------------------------------------- | ---------- | -------- |
+| `/changelog`         | version badge, `--accent` `#16a34a` on white | **3.30:1** | 4.5:1    |
+| `/auth/verify-email` | error text, `red-600` `#e7000b` on `red-50`  | **4.36:1** | 4.5:1    |
+
+Both fixed with tokens that already existed rather than invented colours:
+`--accent-strong` (`#087443`, 5.85:1) for the badge, `red-700` (5.91:1) for the
+error. The second is the instructive one — 4.36 against a 4.5 threshold is a
+near-miss no reviewer catches by eye, and only a measured check finds it.
+
+**The reporter had to be fixed first.** It printed only
+`color-contrast (serious) - 2 node(s)`, which is not enough to fix anything: my
+first guess at the culprit (`text-surface-500`) measured 4.74:1 and passes. axe
+already carries the CSS selector, both colours and the measured ratio for every
+failing node; printing them turned a guessing game into a one-line change.
 
 ## Resolved 2026-08-08 (ninth pass) — A-117, 37 pages with no title
 

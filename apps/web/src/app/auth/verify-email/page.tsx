@@ -46,7 +46,10 @@ function VerifyEmailContent() {
       )}
       {state === 'error' && (
         <div className="bg-red-50 border border-red-200/60 rounded-xl p-4">
-          <p className="text-red-600 text-sm">{message}</p>
+          {/* red-600 on the red-50 panel measures 4.36:1 — just under the 4.5:1
+              WCAG AA threshold, which is exactly the kind of near-miss no one
+              catches by eye. red-700 clears it at 5.91:1. */}
+          <p className="text-red-700 text-sm">{message}</p>
         </div>
       )}
     </>
