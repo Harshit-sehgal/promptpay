@@ -461,11 +461,47 @@ export class EmailService {
    * controlled string literals for these, but the gate here is the single-source
    * safety net. Dynamic values that go into `bodyHtml` MUST be escaped by each
    * builder BEFORE interpolating into the HTML string (see
-   * `buildPayoutAccountFrozenAlert` for the pattern). `ctaUrl` is a pre-built
-   * link from a controlled origin — it is NOT escaped (it's inside a `href`
-   * attribute, and the link builder `buildEmailVerification` already applies
-   * `encodeURIComponent`). `ctaLabel` is always a fixed literal.
+   * `buildPayoutAccountFrozenAlert` for the pattern). `ctaLabel` is always a
+   * fixed literal.
+   *
+   * `ctaUrl` used to be interpolated raw, on the stated grounds that every
+   * builder constructs it as `${webBaseUrl}/...?token=${encodeURIComponent(t)}`.
+   * That was true — both call sites were checked — but it was an invariant
+   * enforced only by this comment, on the emails that carry password-reset and
+   * email-verification tokens. A third builder passing a user-influenced URL
+   * would have injected into an `href` (`javascript:`) or broken out of the
+   * attribute, and nothing would have failed. `assertSafeCtaUrl` makes the
+   * invariant executable instead: the URL must parse, must be http(s), and must
+   * sit on the configured web origin.
    */
+  /**
+   * Enforce what the layout doc claims about `ctaUrl`.
+   *
+   * Throws rather than sanitising: a CTA link that is not on our own origin is
+   * a programming error in a builder, not user input to be cleaned up, and a
+   * transactional email is the wrong place to guess at intent. Failing here
+   * surfaces it at the call site; silently rewriting would hide it.
+   */
+  private assertSafeCtaUrl(ctaUrl: string): string {
+    let parsed: URL;
+    try {
+      parsed = new URL(ctaUrl);
+    } catch {
+      throw new Error(`Email CTA URL is not a valid absolute URL: ${ctaUrl}`);
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      // Blocks `javascript:` and `data:` in an href.
+      throw new Error(`Email CTA URL must be http(s), got ${parsed.protocol}`);
+    }
+    const base = new URL(this.webBaseUrl);
+    if (parsed.origin !== base.origin) {
+      throw new Error(
+        `Email CTA URL must be on the configured web origin (${base.origin}), got ${parsed.origin}`,
+      );
+    }
+    return ctaUrl;
+  }
+
   private layout(
     title: string,
     bodyHtml: string,
@@ -477,12 +513,18 @@ export class EmailService {
     const escapedFooter = htmlEscape(footer);
     const escapedCtaLabel = ctaLabel ? htmlEscape(ctaLabel) : null;
 
+    // Escaped as well as validated. `&` -> `&amp;` is the correct encoding for a
+    // URL inside an HTML attribute and browsers decode it, so the link still
+    // works; the second occurrence below is a TEXT node, where an unescaped
+    // `<` would inject markup regardless of how safe the href is.
+    const safeCtaUrl = ctaUrl ? htmlEscape(this.assertSafeCtaUrl(ctaUrl)) : null;
+
     const button =
-      ctaUrl && escapedCtaLabel
+      safeCtaUrl && escapedCtaLabel
         ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;"><tr><td style="border-radius:10px;background:#4f46e5;">
-             <a href="${ctaUrl}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;font-family:Arial,Helvetica,sans-serif;">${escapedCtaLabel}</a>
+             <a href="${safeCtaUrl}" style="display:inline-block;padding:12px 28px;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;font-family:Arial,Helvetica,sans-serif;">${escapedCtaLabel}</a>
            </td></tr></table>
-           <p style="font-size:12px;color:#6b7280;word-break:break-all;">Or copy this link: ${ctaUrl}</p>`
+           <p style="font-size:12px;color:#6b7280;word-break:break-all;">Or copy this link: ${safeCtaUrl}</p>`
         : '';
 
     return `<!doctype html>
