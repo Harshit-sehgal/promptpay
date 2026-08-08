@@ -575,6 +575,41 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
+## OPEN 2026-08-08 — A-115, an intermittent silent hang on API container start
+
+**This is the most important open defect in the repo. It is not fixed.**
+
+Roughly **2 in 7** `docker-build` runs fail with an identical signature: Postgres
+comes up, all 94 migrations apply, the entrypoint prints
+`starting application` — and then the Node process emits **nothing at all**,
+never listens on 4002, and the container sits at `health: starting` until the
+budget expires. No crash, no restart loop, no error. On the runs where it hits
+step 15 instead, it surfaces as
+`dependency failed to start: container waitlayer-api-1 is unhealthy` with the
+health probe reporting `ExitCode 4` (connection refused).
+
+**Two earlier mis-attributions, recorded so nobody repeats them.** This failure
+was blamed first on A-112 (`COPY --chown` leaving root-owned files) and then on
+A-113 (dropping `ENV CI=true`). Both explanations fit the single observation in
+front of them, and both were wrong: the hang later reproduced on `b428be9`, a
+**docs-only commit whose image is byte-identical to the green `f3e7f4e`**. A
+one-run correlation is not a cause. The `CI=true` restoration was kept anyway —
+preserving the environment every shipped image has always had is defensible on
+its own merits — but it is not a fix for this.
+
+**Why nothing in the log helps:** the hang happens before Nest writes its first
+line, so the container log ends at the entrypoint's own marker. Step 14's
+failure path now dumps the in-container process table, the Node process's
+state and `wchan` (what it is blocked in), whether the `node` binary runs at
+all, listening sockets, and available entropy — entropy starvation being a
+classic cause of exactly this shape. **Next step: run until it reproduces and
+read that dump.**
+
+**Do not treat green CI as proof this is gone.** At ~29% it takes several
+consecutive green runs to mean anything, and the same odds apply to a
+production cold start — a deploy that silently never comes up is the failure
+mode to expect.
+
 ## Resolved 2026-08-08 (seventh pass) — A-114, the audit file auditing itself
 
 **A-114 — an audit claim went vacuous, and five documented facts had drifted.**

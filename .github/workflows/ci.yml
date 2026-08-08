@@ -573,6 +573,34 @@ jobs:
               docker compose -f docker-compose.yml logs --no-color --tail 200 api || true
               echo "───────── postgres logs ─────────"
               docker compose -f docker-compose.yml logs --no-color --tail 40 postgres || true
+              # This failure is INTERMITTENT (~2 in 7 runs) and its signature is
+              # always the same: migrations apply, the entrypoint prints
+              # "starting application", and then the Node process produces no
+              # output at all and never listens. It was twice mis-attributed to
+              # whatever Dockerfile change happened to be in flight; it then
+              # reproduced on a docs-only commit with a byte-identical image, so
+              # it is neither of those. A hang before Nest's first log line
+              # leaves nothing in the container log, so the only way to learn
+              # what it is blocked on is to look at the process itself.
+              echo "───────── in-container process state ─────────"
+              docker compose -f docker-compose.yml exec -T api sh -c '
+                echo "--- process table ---"
+                ps -o pid,ppid,stat,etime,args -A 2>/dev/null || ps aux 2>/dev/null || true
+                echo "--- node process state (R=running S=sleep D=uninterruptible) ---"
+                for p in /proc/[0-9]*; do
+                  pid=${p#/proc/}
+                  grep -qs "apps/api/dist" "$p/cmdline" 2>/dev/null || continue
+                  echo "pid $pid stat: $(awk "{print \$3}" "$p/stat" 2>/dev/null)"
+                  echo "  blocked in: $(cat "$p/wchan" 2>/dev/null || echo n/a)"
+                  echo "  threads:    $(ls "$p/task" 2>/dev/null | wc -l)"
+                done
+                echo "--- is the node runtime itself usable? ---"
+                node -e "console.log(\"node OK\", process.version)" 2>&1 || echo "node FAILED to run"
+                echo "--- listening sockets ---"
+                head -5 /proc/net/tcp 2>/dev/null || true
+                echo "--- available entropy (a classic cause of silent startup hangs) ---"
+                cat /proc/sys/kernel/random/entropy_avail 2>/dev/null || echo n/a
+              ' || true
               exit 1
             fi
             sleep 2
