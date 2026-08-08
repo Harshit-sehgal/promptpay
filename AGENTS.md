@@ -610,6 +610,35 @@ consecutive green runs to mean anything, and the same odds apply to a
 production cold start — a deploy that silently never comes up is the failure
 mode to expect.
 
+**Reproduced on demand 2026-08-08: 2 of 5 cold starts.** The `container-boot-soak`
+job (below) reproduces it reliably enough to work with. First hard evidence from
+the hung process:
+
+```
+[watchdog] pid 1 state=S blocked_in=futex_do_wait
+[watchdog] entropy_avail=256
+```
+
+- **Entropy is ruled out.** 256 is a _full_ pool on modern kernels, not a
+  starved one. That was the leading hypothesis and it is wrong.
+- **The main thread is parked on a futex** — waiting on a lock or a libuv worker
+  — before Nest writes its first log line. Which worker is not yet known: the
+  process-level `wchan` cannot say. The watchdog now dumps **per-thread** state
+  (`/proc/<pid>/task/*/wchan`), which is where a stuck subsystem shows up.
+
+**First mitigation attempt was ineffective — `kill -9 1` does nothing.** The
+kernel discards signals sent to PID 1 of a PID namespace unless PID 1 installed
+a handler, and SIGKILL can never have one. The watchdog "fired" on both failed
+boots and the container stayed hung exactly as before, which is why the soak
+still reported them as never ready. Corrected: the app now runs as a **child**
+rather than via `exec`, so the watchdog signals an ordinary PID. `exec` had been
+providing PID-1 signal semantics for free, so SIGTERM/SIGINT forwarding and exit
+status propagation are reinstated explicitly — without them `docker stop` would
+kill the shell and deny the app its NestJS shutdown hooks (in-flight payouts,
+Redis disconnect, cron lease release). Verified locally both ways: a healthy app
+keeps running and shuts down gracefully on SIGTERM with status 143 propagated; a
+hanging app is killed at the deadline with status 137.
+
 **Mitigated (not fixed) 2026-08-08 — the hang is now recoverable.**
 `docker-entrypoint.sh` arms a start-up watchdog: a background subshell survives
 the `exec`, and if nothing is listening on the API port after
