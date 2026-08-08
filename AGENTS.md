@@ -610,6 +610,42 @@ consecutive green runs to mean anything, and the same odds apply to a
 production cold start — a deploy that silently never comes up is the failure
 mode to expect.
 
+**Rate and mitigation confirmed over 12 cold starts (2026-08-08):**
+`2 hung, 0 never-ready` — i.e. ~17% of cold starts hang, and **the watchdog now
+recovers every one of them**. Before the fix they stayed hung indefinitely. The
+soak was also hardened in the same pass: because the watchdog rescues a hung
+boot, "became ready" stopped being proof of health, so the gate now reads the
+container log for the watchdog marker and fails on a rescued boot too. Without
+that it would have gone green on the exact event it exists to catch.
+
+**Per-thread evidence, and the leading hypothesis.** All 11 threads dumped at
+the moment of the hang:
+
+```
+tid 78 (main) state=S blocked_in=futex_do_wait
+tid 81         state=S blocked_in=ep_poll
+tid 82..91     state=S blocked_in=futex_do_wait
+```
+
+A healthy Node process runs its event loop on the **main** thread, so main sits
+in `ep_poll`. Here main is parked on a futex while a _different_ thread holds
+the event loop — something blocked the main thread before the loop started.
+
+That points at a native addon initialising at import time, and there is exactly
+one on the path: `main.ts` imports `./instrument` first, which statically
+imported `@sentry/profiling-node` — a native module (`@sentry/node-cpu-profiler`)
+that was loaded and initialised on **every** boot, including the majority where
+`SENTRY_DSN` is unset and it can never be used. It is now `require`d only when a
+DSN is configured, and wrapped so a missing prebuilt degrades to a warning
+instead of a dead deploy. Verified both ways: with no DSN the module is never
+required; with a DSN profiling still loads.
+
+**This is a hypothesis under test, not a confirmed fix.** It is worth doing
+regardless — loading a CPU profiler you cannot use is waste at the front of
+every cold start — but whether it removes the hang needs several clean
+12-boot soaks. At ~17% per boot, one clean run of 12 is roughly a 1-in-9
+coincidence, so treat a single green soak as noise.
+
 **Reproduced on demand 2026-08-08: 2 of 5 cold starts.** The `container-boot-soak`
 job (below) reproduces it reliably enough to work with. First hard evidence from
 the hung process:
