@@ -442,9 +442,9 @@ documented as a cold-start table at the top of
 case (P2021) and say "run migrations first" instead of surfacing a bare
 Prisma "table does not exist".
 
-**Measured, deferred, ATTEMPTED 2026-08-08, and REVERTED — see A-112.** The
-recursive `chown` is still here. The obvious replacement breaks the container;
-read A-112 before trying again.
+**Measured, deferred, and RESOLVED 2026-08-08 on the second attempt — see A-112.**
+The first attempt broke the container; the fix was a structural one. Read A-112
+before touching image ownership.
 
 ## Resolved 2026-08-07 (third pass) — A-103…A-105
 
@@ -644,32 +644,37 @@ any future 5.x consumer. Verified locally: `nanoid@3.3.17`,
 `pnpm audit --prod --audit-level moderate` reports no known vulnerabilities, and
 `pnpm install --frozen-lockfile` (what CI runs) passes.
 
-**A-112 — the 1.18 GB ownership layer: attempted, REVERTED, and now
-characterised.** The theory was sound and the change was mechanical: put
-`--chown=node:node` on all 20 runtime `COPY` lines and drop
-`RUN chown -R node:node /app`, removing a layer that exists only because a
-recursive chown re-touches every inode already copied. **It broke the API
-container.** Evidence from `docker-build`: migrations still applied (in 2s), the
-entrypoint still printed `starting application` at 23:54:02 — and then the Node
-process sat **alive and completely silent for 176s** and never served. Not a
-timing budget; not a crash loop (`Up 2 minutes (health: starting)`, not
-`Restarting`); no output at all.
+**A-112 — the 1.18 GB ownership layer, fixed on the second attempt.**
+`RUN chown -R node:node /app` was a measured **1.18 GB** layer on a 4.75 GB image
+and the slowest build step, because a recursive chown re-touches the inode of
+every file already copied and overlayfs then copies all of them up again.
 
-The difference is that the root-run steps — the `--prod` install, the engine
-fetch, `prisma generate` — leave root-owned files that the recursive chown used
-to sweep up, and `COPY --chown` cannot reach them because they are created
-afterwards. Reverted rather than chased: this is an image-size optimisation, and
-it was trading a verified-good boot for it.
+**Attempt 1 (reverted).** Put `--chown=node:node` on each of the 20 runtime
+`COPY` lines and delete the recursive chown. It broke the API container:
+migrations still applied (2s), the entrypoint still printed
+`starting application` — and then the Node process sat **alive and completely
+silent for 176s** and never served. Not a timing budget; not a crash loop
+(`Up 2 minutes (health: starting)`, not `Restarting`); no output at all. Cause:
+the steps that run AFTER the copies — the `--prod` install, the engine fetch,
+`prisma generate` — leave root-owned files that `COPY --chown` cannot reach and
+the recursive chown used to sweep up.
 
-**If you retry:** do not fix ownership up after the fact. Make the installs run
-AS node — `chown` the single `/app` directory (one inode, no layer cost), then
-`USER node` BEFORE the install steps — so nothing is ever root-owned. Budget a
-full `docker-build` cycle to verify, because nothing smaller reproduces this:
-the failure needs the real image, the real user switch, and a real boot.
+**Attempt 2 (kept).** Stop fixing ownership up afterwards and remove the
+"afterwards" instead. Each image is now built in two stages: `assemble_api` /
+`assemble_web` create every file as root, with the pnpm store inherited from
+`base` so the `--prod` install stays offline; the runtime stage then takes the
+finished tree in **one** ownership-correct copy —
+`COPY --from=assemble_api --chown=node:node /app /app`. Ownership is set as the
+files land, in a single layer, and nothing is created after that point. npm and
+pnpm are still removed in the runtime stage, which is where they would otherwise
+ship.
 
-The one assertion kept from the attempt is that both runtime stages drop to
-`USER node` after their COPY steps. The ownership MECHANISM is deliberately not
-asserted, so a future fix is free to change it; running as root never is.
+The guard encodes the actual invariant rather than the mechanism: both runtime
+stages must drop to `USER node`, carry no `RUN chown -R`, and — the lesson from
+attempt 1 — run **no file-creating step after the ownership-setting COPY**.
+Mutation-tested four ways, including reintroducing the recursive chown and
+moving `prisma generate` back after the hand-off, which reproduces attempt 1's
+failure and is caught.
 
 **A-109 — the last 2 image CVEs came from pnpm, which the runtime never uses.**
 The image scans ran for the first time ever on 2026-08-08 (they had always been

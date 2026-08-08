@@ -7,6 +7,29 @@ import test from 'node:test';
 
 const root = resolve(import.meta.dirname, '..');
 
+/**
+ * Body of one Dockerfile stage. The image is built in two stages per target:
+ * `assemble_<name>` creates every file as root, and `<name>` takes the finished
+ * tree in one ownership-correct copy (A-112). So "is this file in the image?"
+ * is a question about the assemble stage plus the hand-off, not about a single
+ * stage.
+ */
+function dockerStage(name) {
+  const dockerfile = read('Dockerfile');
+  const start = dockerfile.search(new RegExp(`^FROM [^\\n]* AS ${name}$`, 'm'));
+  assert.notEqual(start, -1, `no Dockerfile stage named ${name}`);
+  const rest = dockerfile.slice(start + 1);
+  const next = rest.search(/^FROM /m);
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+function copyInstructions(stageBody) {
+  // COPY INSTRUCTIONS only. Scanning raw stage text would also match the
+  // explanatory comments above them, so a guard would pass after the
+  // instruction itself was deleted.
+  return stageBody.split('\n').filter((line) => /^\s*COPY\s/.test(line));
+}
+
 function read(relativePath) {
   return readFileSync(resolve(root, relativePath), 'utf8');
 }
@@ -153,8 +176,8 @@ test('web runtime image ships every local file next.config.js requires at startu
   // request with "Cannot find module './src/lib/csp.js'". The docker-build gate
   // never caught it because the job died several steps earlier.
   const config = read('apps/web/next.config.js');
-  const dockerfile = read('Dockerfile');
-  const webStage = dockerfile.slice(dockerfile.indexOf('AS web'));
+  const assemble = copyInstructions(dockerStage('assemble_web'));
+  const runtime = dockerStage('web');
 
   const localRequires = [...config.matchAll(/require\(['"](\.\/[^'"]+)['"]\)/g)].map((m) => m[1]);
   assert.ok(localRequires.length > 0, 'expected next.config.js to require local files');
@@ -165,18 +188,20 @@ test('web runtime image ships every local file next.config.js requires at startu
       existsSync(join(root, 'apps/web', fromWebRoot)),
       `next.config.js requires ${rel}, which does not exist in the repo`,
     );
-    // Match COPY INSTRUCTIONS only. Scanning the raw stage text would also
-    // match the explanatory comment above the COPY, so the guard would pass
-    // even after the instruction was deleted.
-    const copyLines = webStage
-      .split('\n')
-      .filter((line) => /^\s*COPY\s/.test(line) && !/^\s*#/.test(line));
     assert.ok(
-      copyLines.some((line) => line.includes(fromWebRoot)),
-      `next.config.js requires ${rel}, but no COPY in the web runtime stage ships it — ` +
+      assemble.some((line) => line.includes(fromWebRoot)),
+      `next.config.js requires ${rel}, but no COPY assembles it into the web image — ` +
         'the container will start and then fail to load its config',
     );
   }
+
+  // The assembled tree only reaches the shipped image through this hand-off.
+  // Without it every assertion above would be about a stage that is discarded.
+  assert.match(
+    runtime,
+    /^COPY --from=assemble_web --chown=node:node \/app \/app$/m,
+    'the web runtime stage must copy the assembled tree, ownership set at copy time',
+  );
 });
 
 test('prisma CLI is a PRODUCTION dependency, and the image does not reinstall it globally', () => {
@@ -236,23 +261,28 @@ test('the API image bakes in the Prisma schema engine instead of downloading it 
   // to 46s, one CI run never passed its healthcheck at all (272s of failing
   // probes, then "dependency failed to start"), and an image built this way
   // cannot start on a host with no egress to Prisma's CDN.
-  const dockerfile = read('Dockerfile');
-  const apiStage = dockerfile.split(/^FROM /m).find((st) => /^base AS api\b/.test(st));
-  assert.ok(apiStage, 'expected an api runtime stage');
+  const assemble = dockerStage('assemble_api');
 
-  const installIndex = apiStage.search(/^RUN[^\n]*pnpm install --prod/m);
-  const ensureIndex = apiStage.search(/^RUN[^\n]*ensure-prisma-engines\.mjs/m);
+  const installIndex = assemble.search(/^RUN[^\n]*pnpm install --prod/m);
+  const ensureIndex = assemble.search(/^RUN[^\n]*ensure-prisma-engines\.mjs/m);
   assert.ok(
     installIndex !== -1,
-    'the api stage must still do a production-only install',
+    'the api image must still do a production-only install',
   );
   assert.ok(
     ensureIndex !== -1,
-    'the api stage must run scripts/ensure-prisma-engines.mjs so the engine is in the image',
+    'the api image must run scripts/ensure-prisma-engines.mjs so the engine is baked in',
   );
   assert.ok(
     ensureIndex > installIndex,
     'the engine fetch must run AFTER the production install, or it resolves nothing',
+  );
+
+  // The engine is only in the shipped image if the assembled tree is handed off.
+  assert.match(
+    dockerStage('api'),
+    /^COPY --from=assemble_api --chown=node:node \/app \/app$/m,
+    'the api runtime stage must copy the assembled tree, ownership set at copy time',
   );
 
   // And the script itself must still fail closed. A version that logs a
@@ -324,23 +354,39 @@ test('the gitleaks baseline stays a precise fingerprint list, never a path allow
   );
 });
 
-test('runtime images drop to a non-root user', () => {
-  // The security property. Kept as its own assertion because A-112 (replacing
-  // the recursive chown with `COPY --chown`) was attempted, broke the container
-  // boot, and was reverted — the ownership MECHANISM is now allowed to change,
-  // but running as root never is.
-  const dockerfile = read('Dockerfile');
-  const stages = dockerfile.split(/^FROM /m).filter((st) => /^base AS (api|web)\b/.test(st));
-  assert.equal(stages.length, 2, 'expected an api and a web runtime stage');
+test('runtime images drop to a non-root user and carry no recursive chown layer', () => {
+  for (const name of ['api', 'web']) {
+    const stage = dockerStage(name);
 
-  for (const stage of stages) {
-    const name = stage.slice(0, stage.indexOf('\n'));
+    // The security property: neither image may run as root.
     assert.match(stage, /^USER node$/m, `${name} must drop to the node user`);
-    // Whatever sets ownership, it must run BEFORE the drop to node — otherwise
-    // the step would fail at build time or leave the app unable to read itself.
     assert.ok(
       stage.indexOf('USER node') > stage.lastIndexOf('COPY '),
       `${name}: USER node must come after the COPY steps`,
+    );
+
+    // The performance property (A-112): a recursive chown re-touches the inode
+    // of every file already copied, so overlayfs copies them all up — a
+    // measured 1.18 GB layer on a 4.75 GB image, and the slowest build step.
+    // Ownership belongs on the single hand-off COPY instead.
+    assert.doesNotMatch(
+      stage,
+      /^RUN chown -R /m,
+      `${name} must set ownership via COPY --chown on the assembled tree`,
+    );
+
+    // And nothing may CREATE files after that copy — that is exactly what broke
+    // the first attempt: the --prod install, engine fetch and `prisma generate`
+    // ran after the copies and left root-owned files the app could not use.
+    const afterCopy = stage.slice(stage.lastIndexOf('COPY '));
+    const creators = afterCopy
+      .split('\n')
+      .filter((line) => /^RUN /.test(line) && !/^RUN rm -rf /.test(line));
+    assert.deepEqual(
+      creators,
+      [],
+      `${name}: no step may create files after the ownership-setting COPY — ` +
+        `they would land root-owned and unreachable to the runtime user. Found: ${creators.join(' | ')}`,
     );
   }
 });

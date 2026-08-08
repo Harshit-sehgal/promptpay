@@ -77,8 +77,11 @@ ENV NODE_ENV=production
 RUN pnpm run build
 
 # ── API Runtime ──
-FROM base AS api
-RUN apk add --no-cache wget
+# Assembly stage: every step that CREATES files runs here, as root, with the
+# pnpm store inherited from `base` (so the --prod install stays offline). The
+# runtime stage below then takes the finished tree in ONE ownership-correct
+# copy. See A-112.
+FROM base AS assemble_api
 WORKDIR /app
 
 # Copy node_modules from build (full install; dev deps are stripped below)
@@ -157,24 +160,34 @@ RUN chmod +x /app/docker-entrypoint.sh
 # pnpm is build-time only (it performs the --prod install above; the CMDs run
 # `node` directly), so removing it fixes both findings at the source rather
 # than suppressing them.
+
+# ── Runtime stage ────────────────────────────────────────────────────────────
+# A-112: `RUN chown -R node:node /app` was a measured 1.18 GB layer on a 4.75 GB
+# image and the slowest build step — a recursive chown re-touches the inode of
+# every file already copied, so overlayfs copies all of them up again.
+#
+# The obvious fix (put `--chown` on each COPY and delete the recursive chown)
+# was tried and BROKE THE CONTAINER: the app booted silent and never served,
+# because the steps that run AFTER the copies — the --prod install, the engine
+# fetch, `prisma generate` — leave root-owned files that `COPY --chown` cannot
+# reach and the recursive chown used to sweep up.
+#
+# So the tree is assembled first and copied once, afterwards. Every file
+# lands node-owned in a single layer, nothing is created after the copy, and
+# the assembly stage keeps running as root with the offline pnpm store.
+FROM base AS api
+RUN apk add --no-cache wget
+WORKDIR /app
+COPY --from=assemble_api --chown=node:node /app /app
+
+# npm and pnpm ship in the base image with their own bundled dependency trees
+# (npm's was 10 of 11 image findings; pnpm's bundled `tar` 7.5.16 the remaining
+# CRITICAL + HIGH). Nothing at runtime uses either — the entrypoint runs `node`
+# and the local prisma bin, and the CMD runs `node`. Removed here, in the
+# runtime stage, because that is where they would otherwise ship.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
   && rm -rf /usr/local/lib/node_modules/pnpm /usr/local/bin/pnpm /usr/local/bin/pnpx
 
-# A-112 (attempted 2026-08-08, REVERTED — do not retry without a plan for this):
-# this recursive chown is a measured 1.18 GB layer on a 4.75 GB image and the
-# slowest step of the build, because it re-touches the inode of every file
-# already copied and overlayfs copies them all up. Replacing it with
-# `COPY --chown=node:node` on all 20 runtime COPY lines is the obvious fix and
-# it BROKE THE CONTAINER: migrations still applied in 2s, the entrypoint still
-# reached "starting application", and then the Node process sat alive and
-# completely silent for 176s and never served. Not a timing budget — no output
-# at all. The difference is that the root-run steps (the --prod install, the
-# engine fetch, `prisma generate`) leave root-owned files that the recursive
-# chown used to sweep up. If you retry this, make the installs run AS node
-# (chown the single /app directory, then `USER node` before them) rather than
-# fixing up ownership afterwards — and budget a full docker-build cycle to
-# verify it, because nothing smaller reproduces this.
-RUN chown -R node:node /app
 USER node
 
 ENV NODE_ENV=production
@@ -197,8 +210,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
 CMD ["sh", "/app/docker-entrypoint.sh", "node", "apps/api/dist/apps/api/src/main.js"]
 
 # ── Web Runtime ──
-FROM base AS web
-RUN apk add --no-cache wget
+# See the api stage for why this is split (A-112).
+FROM base AS assemble_web
 WORKDIR /app/apps/web
 
 # Copy node_modules from build (full install; dev deps are stripped below)
@@ -228,15 +241,19 @@ COPY --from=build /app/package.json /app/package.json
 # at /app and strips dev deps from the hoisted store.
 RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 
-# See the api stage: npm and pnpm both ship their own bundled dependency trees
-# (npm's accounted for 10 of 11 findings; pnpm's bundled `tar` 7.5.16 for the
-# remaining CRITICAL + HIGH), and nothing at runtime uses either — the CMD
-# below runs `node` directly.
+# ── Runtime stage ────────────────────────────────────────────────────────────
+# Same split as the api stage (A-112): assemble as root, then one
+# ownership-correct copy so no recursive chown layer is needed.
+FROM base AS web
+RUN apk add --no-cache wget
+WORKDIR /app/apps/web
+COPY --from=assemble_web --chown=node:node /app /app
+
+# See the api stage: npm and pnpm ship bundled dependency trees and nothing at
+# runtime uses either — the CMD below runs `node` directly.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
   && rm -rf /usr/local/lib/node_modules/pnpm /usr/local/bin/pnpm /usr/local/bin/pnpx
 
-# See the api stage for why this recursive chown is still here (A-112).
-RUN chown -R node:node /app
 USER node
 
 ENV NODE_ENV=production
