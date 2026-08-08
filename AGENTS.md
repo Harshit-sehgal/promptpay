@@ -665,8 +665,15 @@ stages were `FROM base`, and layers are additive — inheriting it and then
 overwriting `/app` leaves the 1.73 GB in the shipped image permanently. The
 runtime stages need none of it: everything they run arrives in the single
 `COPY --from=assemble_*`. They are now `FROM node:22-alpine`. The only thing
-lost with `base` is `ENV CI=true`, and nothing in the API, web or shared source
-reads `process.env.CI`. As a bonus, pnpm is no longer present in the runtime
+lost with `base` is `ENV CI=true` — and that turned out to matter. Dropping it
+produced a silent hang: migrations applied, the entrypoint printed
+`starting application`, and then the Node process sat with nothing listening
+(health probe `ExitCode 4`, connection refused, FailingStreak 10). No source
+file reads `process.env.CI`, which is why it looked safe, but LIBRARIES branch
+on it and some prompt or block when it is unset. Every previously-shipped image
+inherited `CI=true` from `base`, so removing it was an uncontrolled behaviour
+change rather than a cleanup. It is set explicitly in both runtime stages now,
+which keeps A-113 purely a size change. As a bonus, pnpm is no longer present in the runtime
 base at all, so the removal that fixed A-109 is now belt-and-braces rather than
 load-bearing. Measured before: API **2.9 GB**, web **3.0 GB** (already down from
 4.75 GB via A-112).

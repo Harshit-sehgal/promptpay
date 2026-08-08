@@ -183,6 +183,14 @@ RUN chmod +x /app/docker-entrypoint.sh
 # how this was found at all.
 FROM node:22-alpine AS api
 RUN apk add --no-cache wget
+# `base` set this and every previously-shipped image inherited it, so dropping
+# it when the runtime stages were rebased was an uncontrolled behaviour change,
+# not a cleanup. Libraries commonly branch on CI — some prompt or block when it
+# is unset, which is exactly the shape of the failure that followed: migrations
+# applied, the entrypoint printed "starting application", and then the Node
+# process sat silent with nothing listening. Keep it, so A-113 is purely a size
+# change and nothing about the running app differs.
+ENV CI=true
 WORKDIR /app
 COPY --from=assemble_api --chown=node:node /app /app
 
@@ -254,6 +262,14 @@ RUN HUSKY=0 pnpm install --prod --frozen-lockfile --ignore-scripts
 # the runtime never uses.
 FROM node:22-alpine AS web
 RUN apk add --no-cache wget
+# `base` set this and every previously-shipped image inherited it, so dropping
+# it when the runtime stages were rebased was an uncontrolled behaviour change,
+# not a cleanup. Libraries commonly branch on CI — some prompt or block when it
+# is unset, which is exactly the shape of the failure that followed: migrations
+# applied, the entrypoint printed "starting application", and then the Node
+# process sat silent with nothing listening. Keep it, so A-113 is purely a size
+# change and nothing about the running app differs.
+ENV CI=true
 WORKDIR /app/apps/web
 COPY --from=assemble_web --chown=node:node /app /app
 
