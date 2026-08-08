@@ -949,6 +949,37 @@ hundreds of assertions. Counts and "the fix is X" statements are the two kinds
 that rot, because the code they describe keeps moving. Prefer checking a
 mechanism over checking a string, and never assert against a file's prose.
 
+## Resolved 2026-08-08 (fourteenth pass) — A-123, an invariant held only by a comment
+
+**A-123 — the email CTA link was unescaped by design, and `EmailService` had no
+unit spec at all.** The queue around it was tested; the service that builds
+every transactional email — including the two that carry a token — was not.
+
+`layout()` interpolated `ctaUrl` straight into an `href`, with a comment
+explaining that every builder constructs it as
+`${webBaseUrl}/...?token=${encodeURIComponent(token)}`. **The claim was true** —
+both call sites were checked, and `webBaseUrl` is schema-validated. But it was
+an invariant enforced by prose, on the password-reset and email-verification
+messages, and prose does not fail a build. A third builder passing a
+user-influenced URL would have injected into the href (`javascript:`) or broken
+out of the attribute, with nothing to catch it.
+
+`assertSafeCtaUrl` makes it executable: the URL must parse, must be `http(s)`,
+and must sit on the configured web origin. It **throws rather than sanitising** —
+a CTA link off our own origin is a builder bug, not user input to be cleaned up,
+and quietly rewriting it would hide the mistake at the one moment someone should
+see it. The URL is now escaped as well as validated: `&` → `&amp;` is correct
+inside an attribute and browsers decode it, and the "Or copy this link:"
+paragraph is a TEXT node where an unescaped `<` injects regardless of how safe
+the href is. Six tests cover the real builders plus `javascript:`, a foreign
+origin, a non-URL, and same-origin markup.
+
+**Sweeps that came back clean** (recorded so they are not repeated): 11
+controllers have no direct spec, and that is fine — they are thin delegators
+(the largest has 8 decision points across 559 lines), their services are specced
+and e2e exercises the routes. Email bodies escape admin-supplied metadata
+correctly everywhere else via `htmlEscape`.
+
 ## Branch consolidation 2026-08-08 — what merged, what could not, and why
 
 `main` is at **d29e9df, all 13 jobs green on the push-triggered run**. Ten
