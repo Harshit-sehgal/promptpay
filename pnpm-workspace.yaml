@@ -62,6 +62,17 @@ overrides:
   # session and every webhook handler against the new shapes, re-run the
   # sandbox deposit flow), not a side effect of a routine bump.
   stripe: 22.3.1
+  # COMPATIBILITY HOLD. redis 6.2.0 stops honouring the connect timeout the way
+  # 6.1 did. `reliability-infrastructure` points RuntimeConfigService at a dead
+  # port with REDIS_CONNECT_TIMEOUT_MS=100 and asserts onModuleInit() returns
+  # inside 2s — 20x headroom — and under 6.2 it does not.
+  #
+  # That scenario is not incidental: it proves the API degrades gracefully when
+  # Redis is unreachable instead of hanging at startup. A-115 was an
+  # intermittent startup hang, and this is the same failure class, so adopting
+  # 6.2 needs its connect/retry behaviour verified deliberately rather than
+  # inherited from a bump.
+  redis: 6.1.0
 
 allowBuilds:
   '@prisma/client': true
