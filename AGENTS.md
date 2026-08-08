@@ -949,6 +949,34 @@ hundreds of assertions. Counts and "the fix is X" statements are the two kinds
 that rot, because the code they describe keeps moving. Prefer checking a
 mechanism over checking a string, and never assert against a file's prose.
 
+## Resolved 2026-08-09 (fifteenth pass) — A-124, held earnings looked available
+
+**A-124 — `formatRelativeTime` rendered every future date as "just now".** Each
+bucket tested `> 0`, so a future timestamp failed all of them and fell through.
+
+Not cosmetic. The developer earnings table renders `availableAt` under a column
+headed **"Available"**, and `ledger-earnings.trait.ts` sets it to
+`Date.now() + holdDays * 24h` — always in the future while an entry is held. A
+developer saw **"just now" against money locked for days**, requested a payout,
+and was refused with no explanation the UI had ever given them. The same helper
+feeds ~30 other call sites, so any future-dated field had the same problem.
+
+Now formats both directions ("in 7d" / "7d ago") with the bucket ordering the
+past direction already used, and returns an em dash for an unparseable date —
+absence of information should not render as a confident claim about the present.
+
+**Four of the new assertions were wrong on first write, and the implementation
+was right.** 7 days is `in 1w` because weeks are checked before days, and an
+exact `+20 * HOUR` floors to 19h because `Date.now()` advances between
+constructing the date and measuring it. Both were fixed by moving the cases off
+bucket boundaries rather than loosening the matcher — a looser assertion would
+have hidden the ordering behaviour the test exists to pin.
+
+**Money formatting itself came back clean:** one shared `formatMinorUnits`,
+per-currency exponents (JPY=0, USD=2, BHD=3), `currency` a required argument so
+a non-USD amount cannot silently render as `$`, and `bigintRatioPercent`
+computing percentages without narrowing 64-bit values to a JS number.
+
 ## Resolved 2026-08-08 (fourteenth pass) — A-123, an invariant held only by a comment
 
 **A-123 — the email CTA link was unescaped by design, and `EmailService` had no
