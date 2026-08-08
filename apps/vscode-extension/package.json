@@ -195,7 +195,7 @@
   "main": "./out/extension.js",
   "devDependencies": {
     "@waitlayer/agent-protocol": "workspace:*",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.9.2",
     "@waitlayer/eslint-config": "workspace:*",
