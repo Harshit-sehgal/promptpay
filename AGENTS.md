@@ -630,6 +630,33 @@ too few samples either to reproduce on demand or to trust a green run. The soak
 job is also the permanent gate for the class: the API must cold-start cleanly,
 every time, from an empty database.
 
+## Resolved 2026-08-08 (eighth pass) — A-116, crawler rules that never shipped
+
+**A-116 — `robots.ts` was dead code, and the sitemap had drifted to uselessness.**
+`apps/web/src/app/robots.ts` carefully disallows `/api/`, `/auth/`, `/admin/`,
+`/developer/` and `/advertiser/`. None of it was ever served. A static
+`apps/web/public/robots.txt` containing
+`User-agent: *` / `Allow: /` — no disallow rules at all — sat at the same path,
+and files in `public/` are served ahead of the App Router. Every rule in that
+file was written, reviewed, and silently overridden.
+
+The companion `public/sitemap.xml` was hand-maintained and had rotted the way
+hand-maintained lists do: **5 URLs listed, 12 public pages shipped without ever
+being added**, and it advertised a sitemap URL that returned 404 because no
+sitemap route existed.
+
+Both static files are deleted. `app/sitemap.ts` now generates the sitemap from
+an explicit, typed route list, and `robots.ts` points at it. The drift is
+guarded rather than trusted: `sitemap.test.ts` derives the expected set from the
+filesystem and fails if a public page is missing, if a listed route does not
+exist, or if an authenticated route leaks in — and asserts neither static file
+comes back. Mutation-tested four ways, including reproducing the original drift
+and restoring the shadowing `robots.txt`.
+
+One subtlety worth keeping: the trailing slash in `/advertiser/` is
+load-bearing. Without it the rule also blocks `/advertiser-policy`, a public
+page. A test pins that too.
+
 ## Resolved 2026-08-08 (seventh pass) — A-114, the audit file auditing itself
 
 **A-114 — an audit claim went vacuous, and five documented facts had drifted.**
