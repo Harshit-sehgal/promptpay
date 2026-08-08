@@ -568,6 +568,27 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
+## Verified green 2026-08-08 — 12/12 at `15ca0de`, with the gates that never ran
+
+`integration/agent-beta` @ `15ca0de`: **all 12 CI jobs green**, and for the first
+time that includes gates which had never actually executed:
+
+- **both runtime image scans** — `Total: 0 (HIGH: 0, CRITICAL: 0)` for the API
+  and the web image. They had always been _skipped_, because `docker-build`
+  failed earlier in the job. The 11 findings that prompted the npm removal and
+  the 2 that prompted the pnpm removal are gone.
+- **full-history secret scanning** — every previous green run scanned only the
+  triggering event's commits (A-108).
+- **the container's own healthcheck**, asserted directly rather than inferred
+  from a host-side probe — the blind spot that hid A-106.
+
+CI can now be run on demand (`gh workflow run ci.yml --ref <branch>`), so a
+release candidate is verifiable _before_ it lands on `main` rather than after.
+
+Sequence, for anyone reconstructing this: A-106 → A-109 → A-107 → A-108/A-110 →
+A-111 → A-112 (attempted, reverted). Each was found by a gate that the previous
+fix unblocked — a red job is a ceiling on what you know, not a complete list.
+
 ## Resolved 2026-08-08 (sixth pass) — A-106, the image that could not boot offline
 
 **A-106 — the runtime image downloaded a 22 MB Prisma binary on every container
