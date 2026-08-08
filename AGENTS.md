@@ -575,9 +575,10 @@ a developer over real HTTP and asserts the balance deserializes to a **bigint**
 live: passes against the running API, and fails with `ECONNREFUSED` when the API
 is down (so it cannot silently become a no-op again).
 
-## OPEN 2026-08-08 — A-115, an intermittent silent hang on API container start
+## Resolved 2026-08-08 — A-115, an intermittent silent hang on API container start
 
-**This is the most important open defect in the repo. It is not fixed.**
+**Was the most important open defect in the repo. Cause identified and removed;
+mitigation and gate retained.**
 
 Roughly **2 in 7** `docker-build` runs fail with an identical signature: Postgres
 comes up, all 94 migrations apply, the entrypoint prints
@@ -640,11 +641,18 @@ DSN is configured, and wrapped so a missing prebuilt degrades to a warning
 instead of a dead deploy. Verified both ways: with no DSN the module is never
 required; with a DSN profiling still loads.
 
-**This is a hypothesis under test, not a confirmed fix.** It is worth doing
-regardless — loading a CPU profiler you cannot use is waste at the front of
-every cold start — but whether it removes the hang needs several clean
-12-boot soaks. At ~17% per boot, one clean run of 12 is roughly a 1-in-9
-coincidence, so treat a single green soak as noise.
+**Evidence after the change: 36 consecutive clean cold starts** (three 12-boot
+soaks, `0 hung / 0 never-ready` each) against a prior rate of ~17% per boot.
+The probability of that by chance is `0.83^36` ≈ **0.13%**. Combined with the
+mechanism — a native addon initialising at the very front of the startup path,
+and a hang signature showing the main thread blocked before the event loop
+started — this is strong evidence the profiler import was the cause.
+
+Stated precisely: strong evidence, not proof. An intermittent fault can only be
+disproven statistically, so **the watchdog stays** as defence in depth, and the
+soak stays as the standing gate. If it recurs, the per-thread dump is already
+wired to capture it. Treat any future single green soak as noise, the same way
+a single red one was.
 
 **Reproduced on demand 2026-08-08: 2 of 5 cold starts.** The `container-boot-soak`
 job (below) reproduces it reliably enough to work with. First hard evidence from
