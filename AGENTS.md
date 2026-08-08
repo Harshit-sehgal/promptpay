@@ -703,6 +703,39 @@ too few samples either to reproduce on demand or to trust a green run. The soak
 job is also the permanent gate for the class: the API must cold-start cleanly,
 every time, from an empty database.
 
+## Resolved 2026-08-08 (twelfth pass) — A-121, clamping that does not sanitise
+
+**A-121 — `Math.min/Math.max` does not defend against `NaN`.** Ten list
+endpoints across the admin and advertiser controllers read a bare
+`@Query('limit') limit?: string` and passed `Number(limit)` to the service
+layer. There is no DTO, so the global `ValidationPipe` never sees these — it
+validates DTOs, and a bare string parameter is not one.
+
+The services then clamp with `Math.min(100, Math.max(1, value ?? 20))`, which
+reads as defensive and is not:
+
+```
+Math.max(1, NaN)   === NaN
+Math.min(100, NaN) === NaN
+```
+
+So `?limit=abc` reached the query layer as `take: NaN` and `skip: NaN`, and
+`?limit=1e999` reached it as `Infinity` by the same route — both straight past a
+clamp that looks like it bounds them.
+
+`parsePaginationParam` now parses these at the controller edge: non-numeric,
+`NaN`, `±Infinity`, zero and negative values all return `undefined`, so the
+endpoint's own default applies, and anything real is truncated to an integer and
+capped at the Postgres integer ceiling. Eight unit tests including a property
+check that runs every rejected input through the exact downstream clamp and
+asserts the result is always a finite integer in range.
+
+Severity is low — these routes are behind admin/advertiser auth and the worst
+outcome is a failure deep in the data layer rather than a clean 400 — but the
+pattern is worth remembering: **a clamp is not validation.** `Math.min`/`Math.max`
+propagate `NaN` silently, so they cannot be the first line of defence against
+untrusted input.
+
 ## Resolved 2026-08-08 (eleventh pass) — A-119/A-120
 
 **A-119 — `prisma generate` can exit 0 having produced an empty client.**

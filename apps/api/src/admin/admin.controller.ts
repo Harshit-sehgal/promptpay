@@ -18,6 +18,7 @@ import { AdminMfaStepUpGuard } from '../common/guards/admin-mfa-step-up.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuditInterceptor } from '../common/interceptors/audit.interceptor';
+import { parsePaginationParam } from '../common/utils/pagination-query';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { AdminService } from './admin.service';
 import {
@@ -95,8 +96,8 @@ export class AdminController {
     @Query('status') status?: string,
   ) {
     return this.service.getPendingCampaigns({
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
+      page: parsePaginationParam(page),
+      limit: parsePaginationParam(limit),
       status: (status as 'submitted' | 'approved' | undefined) ?? undefined,
     });
   }
@@ -380,8 +381,8 @@ export class AdminController {
   @Roles('admin', 'support', 'super_admin')
   getFencedAccounts(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.service.getFencedAccounts({
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
+      page: parsePaginationParam(page),
+      limit: parsePaginationParam(limit),
     });
   }
 
@@ -454,8 +455,8 @@ export class AdminController {
   @Roles('admin', 'support', 'super_admin')
   listDeadLetter(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.audit.listDeadLetter({
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
+      page: parsePaginationParam(page),
+      limit: parsePaginationParam(limit),
     });
   }
 

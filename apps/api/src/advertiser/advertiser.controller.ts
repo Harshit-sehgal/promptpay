@@ -29,6 +29,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
+import { parsePaginationParam } from '../common/utils/pagination-query';
 import { DeleteAccountDto } from '../developer/dto';
 import { StripeProvider } from '../payout/providers';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
@@ -127,8 +128,8 @@ export class AdvertiserController {
     const ctx = resolveApiContext(req);
     const advertiserId = ctx.advertiserId ?? (await this.service.getOrCreateProfile(ctx.userId)).id;
     return this.service.listCampaigns(advertiserId, {
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
+      page: parsePaginationParam(page),
+      limit: parsePaginationParam(limit),
       status:
         (status as
           | 'draft'
@@ -261,8 +262,8 @@ export class AdvertiserController {
     if (parsedTo && Number.isNaN(parsedTo.getTime())) {
       throw new BadRequestException(`Invalid 'to' date: ${to}`);
     }
-    const parsedPage = page ? Number(page) : undefined;
-    const parsedLimit = limit ? Number(limit) : undefined;
+    const parsedPage = parsePaginationParam(page);
+    const parsedLimit = parsePaginationParam(limit);
     return this.service.getReports(advertiserId, {
       campaignId,
       from,
