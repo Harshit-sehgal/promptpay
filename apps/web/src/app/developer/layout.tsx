@@ -1,4 +1,24 @@
-'use client';
+import type { Metadata } from 'next';
+
+/**
+ * Developer dashboard shell.
+ *
+ * Deliberately a Server Component. It has no hooks and no event handlers —
+ * it only composes client children, which a Server Component may do — and
+ * dropping `'use client'` is what allows it to export `metadata`. While it
+ * was a Client Component every page beneath it inherited the root layout's
+ * marketing title, so a user with several tabs open saw the same string on
+ * all of them.
+ *
+ * `title.template` lets any future Server Component page below set its own
+ * title and have it suffixed consistently.
+ */
+export const metadata: Metadata = {
+  title: { template: '%s · WaitLayer', default: 'Developer · WaitLayer' },
+  description: 'Earnings, payouts, referrals and trust for your WaitLayer developer account.',
+  // Defence in depth alongside robots.ts — an authenticated surface.
+  robots: { index: false, follow: false },
+};
 
 import { LaunchModeBanner } from '@/components/launch-mode-banner';
 import { ProtectedRoute } from '@/components/protected-route';

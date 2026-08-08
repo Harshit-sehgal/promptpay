@@ -630,6 +630,38 @@ too few samples either to reproduce on demand or to trust a green run. The soak
 job is also the permanent gate for the class: the API must cold-start cleanly,
 every time, from an empty database.
 
+## Resolved 2026-08-08 (ninth pass) — A-117, 37 pages with no title
+
+**A-117 — every page but seven shipped with the marketing title.** 37 of ~44
+pages defined no metadata at all. All of them are Client Components, and a
+Client Component cannot export `metadata`, so each inherited the root layout's
+`WaitLayer — private beta for AI wait-state verification`. Every browser tab,
+bookmark, history entry and shared link read the same string, including the
+authenticated dashboards.
+
+- **Public pages** (`/faq`, `/security`, `/privacy`, `/status`, `/feedback`) and
+  **auth pages** got a small Server Component `layout.tsx` carrying a real title
+  and description. The auth ones are additionally `robots: { index: false }`.
+- **Dashboard shells** (`/admin`, `/advertiser`, `/developer`) were
+  `'use client'` **for no reason** — no hooks, no event handlers, only
+  composition of client children, which a Server Component may do. Dropping the
+  directive lets them export `metadata`, which fixed ~25 pages by editing three
+  files, and adds `robots: { index: false, follow: false }` as defence in depth
+  behind robots.txt. `title.template` is set so any future Server Component page
+  below gets a consistent suffix.
+
+Verified with a real production build, not just a typecheck — the conversion is
+the kind that fails at build time or not at all.
+
+**The guard was vacuous on first write, and that is the point worth recording.**
+`metadata.test.ts` walks the layout chain the way Next.js does. Because the root
+layout always defines metadata, the walk reached it and every route "resolved a
+title" no matter what — deleting a page's own metadata layout still passed. The
+walk now stops **before** the root layout, with `/` as the one legitimate
+exception. Three mutations are caught: deleting a page's metadata layout,
+putting `'use client'` back on a dashboard shell (which makes Next silently
+ignore `metadata`), and removing a noindex.
+
 ## Resolved 2026-08-08 (eighth pass) — A-116, crawler rules that never shipped
 
 **A-116 — `robots.ts` was dead code, and the sitemap had drifted to uselessness.**
