@@ -695,6 +695,37 @@ too few samples either to reproduce on demand or to trust a green run. The soak
 job is also the permanent gate for the class: the API must cold-start cleanly,
 every time, from an empty database.
 
+## Resolved 2026-08-08 (eleventh pass) — A-119/A-120
+
+**A-119 — `prisma generate` can exit 0 having produced an empty client.**
+`docker-build`'s generate step reported **success**, and typecheck then failed
+with 40+ errors of the form
+`Module '"@prisma/client"' has no exported member 'PrismaClient'`. Eight CI jobs
+run that same generate step, so the failure surfaces far from its cause — in
+whichever job compiles first — as a wall of type errors that read like a source
+problem rather than a generation problem. Same family as A-106: Prisma's engines
+are fetched lazily, so a bad fetch degrades quietly instead of failing.
+
+`packages/db` now verifies its own output: `generate` runs
+`verify-generated-client.mjs`, which loads the client and asserts the expected
+exports plus a non-empty model list (54 today). Every caller gets it — the eight
+CI jobs, local development, and the Docker build — and a partial generation now
+fails at the step that caused it with a message that says so. Mutation-tested:
+an empty-model client exits 1.
+
+**A-120 — two more serious a11y violations, found by A-118's extended sweep.**
+Both legal pages wrapped a wide table in `overflow-x-auto` with no keyboard
+access (`scrollable-region-focusable`, serious): a keyboard user could see the
+table was cut off and had no way to scroll it. `LegalTable`'s wrapper is now
+focusable and exposed as a named region. `label` is a **required** prop, not
+optional — `role="region"` without an accessible name is itself a violation, and
+an optional prop invites exactly that.
+
+Worth noting how these surfaced: the first extended run reported `/changelog`
+and `/auth/verify-email`; only after those were fixed did the legal pages
+appear. Re-run an expanded sweep until it is clean rather than assuming the
+first report is the whole list.
+
 ## Resolved 2026-08-08 (tenth pass) — A-118, the a11y sweep had fallen behind
 
 **A-118 — 9 public pages were never accessibility-scanned.** `a11y.spec.ts`

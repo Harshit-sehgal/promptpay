@@ -63,7 +63,11 @@ export default function GdprDpaPage() {
       </ul>
 
       <LegalHeading>3. Purposes &amp; Legal Bases</LegalHeading>
-      <LegalTable head={['Purpose', 'Legal basis (GDPR Art.)']} rows={LEGAL_BASIS_ROWS} />
+      <LegalTable
+        head={['Purpose', 'Legal basis (GDPR Art.)']}
+        rows={LEGAL_BASIS_ROWS}
+        label="Legal basis for each processing purpose"
+      />
 
       <LegalHeading>4. Data Subject Rights</LegalHeading>
       <p>You may exercise the following rights at any time:</p>

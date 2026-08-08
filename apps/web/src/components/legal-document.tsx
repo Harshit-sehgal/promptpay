@@ -53,10 +53,29 @@ export function LegalHeading({ children }: { children: ReactNode }) {
  * Horizontally scrollable table wrapper. The retention schedule and the DPA
  * legal-basis table are both wider than a phone viewport; without this the
  * page body itself scrolls sideways.
+ *
+ * The wrapper is focusable on purpose. A scrollable region that cannot take
+ * focus is unreachable for anyone driving the page from a keyboard: they can
+ * see that the table is cut off and have no way to scroll it. axe reports this
+ * as `scrollable-region-focusable` (serious), and both legal pages were
+ * shipping it.
+ *
+ * `tabIndex={0}` alone silences the rule, but a focus stop that announces
+ * nothing is its own problem — so the region is named. `label` is required
+ * rather than optional: `role="region"` without an accessible name is itself a
+ * violation, and making it optional invites exactly that.
  */
-export function LegalTable({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
+export function LegalTable({
+  head,
+  rows,
+  label,
+}: {
+  head: string[];
+  rows: ReactNode[][];
+  label: string;
+}) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={label}>
       <table className="w-full min-w-[34rem] border-collapse text-left text-sm">
         <thead>
           <tr className="border-b border-surface-200">

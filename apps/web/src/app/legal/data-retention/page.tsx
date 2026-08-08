@@ -47,7 +47,11 @@ export default function DataRetentionPage() {
         Privacy Policy and applicable law.
       </p>
 
-      <LegalTable head={['Data', 'Retention', 'Notes']} rows={RETENTION_ROWS} />
+      <LegalTable
+        head={['Data', 'Retention', 'Notes']}
+        rows={RETENTION_ROWS}
+        label="Data retention schedule"
+      />
 
       <p>
         For data-subject requests (access, deletion, portability), contact the operator privacy

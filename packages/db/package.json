@@ -11,7 +11,7 @@
     "build": "prisma generate && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
-    "generate": "prisma generate",
+    "generate": "prisma generate && node scripts/verify-generated-client.mjs",
     "migrate": "prisma migrate dev",
     "push": "prisma db push",
     "studio": "prisma studio",
