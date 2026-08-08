@@ -610,6 +610,26 @@ consecutive green runs to mean anything, and the same odds apply to a
 production cold start — a deploy that silently never comes up is the failure
 mode to expect.
 
+**Mitigated (not fixed) 2026-08-08 — the hang is now recoverable.**
+`docker-entrypoint.sh` arms a start-up watchdog: a background subshell survives
+the `exec`, and if nothing is listening on the API port after
+`STARTUP_WATCHDOG_SECONDS` (default 120) it dumps the process table, the hung
+process's state and `wchan`, and available entropy, then kills PID 1 so the
+restart policy recovers. **A silent hang becomes a crash-and-restart**, which
+orchestrators already handle and which leaves evidence in the log. The budget
+only covers application boot — `wait-for-postgres` and `migrate deploy` have
+already finished by that line, and a healthy start binds in seconds — so 120s is
+roughly 10x headroom and cannot fire on a slow-but-fine boot. Verified both
+directions locally: it stands down against a listening server and fires against
+a dead port. Set `STARTUP_WATCHDOG_SECONDS=0` to disable.
+
+**Reproduction harness:** a `container-boot-soak` CI job cold-starts the API
+five times per run from an empty database and fails if any boot never binds,
+dumping the same diagnostics. `docker-build` only boots twice per run, which is
+too few samples either to reproduce on demand or to trust a green run. The soak
+job is also the permanent gate for the class: the API must cold-start cleanly,
+every time, from an empty database.
+
 ## Resolved 2026-08-08 (seventh pass) — A-114, the audit file auditing itself
 
 **A-114 — an audit claim went vacuous, and five documented facts had drifted.**

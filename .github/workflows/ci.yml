@@ -784,6 +784,76 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
 
+  # ── Cold-start soak (A-115) ──
+  # An intermittent silent hang on API container start: migrations finish, the
+  # entrypoint prints "starting application", and the app then emits nothing and
+  # never binds. Observed in ~2 of 7 docker-build runs, and twice mis-attributed
+  # to whatever Dockerfile change was in flight before it reproduced on a
+  # docs-only commit with a byte-identical image.
+  #
+  # docker-build boots the API twice per run, which is too few samples to either
+  # reproduce it on demand or to trust a green run as evidence it is gone. This
+  # job does nothing but cold-start the API over and over, so one run is worth
+  # several of those. It is also the permanent regression gate for the class:
+  # "the API must cold-start cleanly, every time, from an empty database".
+  container-boot-soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Build the API image once
+        run: docker compose -f docker-compose.yml build api
+        env:
+          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
+      - name: Cold-start the API repeatedly from an empty database
+        run: |
+          BOOTS="${SOAK_BOOTS:-5}"
+          failures=0
+          for n in $(seq 1 "$BOOTS"); do
+            echo "═══════════ cold start $n/$BOOTS ═══════════"
+            docker compose -f docker-compose.yml up -d api postgres redis
+            ready=0
+            # 150 x 2s. The watchdog in docker-entrypoint.sh fires at 120s, so a
+            # hung boot is detected and killed well inside this budget rather
+            # than stalling the job.
+            for _ in $(seq 1 150); do
+              if curl -fsS http://localhost:4002/api/v1/health/ready > /dev/null 2>&1; then
+                ready=1; break
+              fi
+              sleep 2
+            done
+            if [ "$ready" = "1" ]; then
+              echo "✓ boot $n became ready"
+            else
+              failures=$((failures + 1))
+              echo "✗ boot $n NEVER became ready — this is the A-115 reproduction"
+              echo "───────── compose ps ─────────"
+              docker compose -f docker-compose.yml ps || true
+              echo "───────── api logs (watchdog output is the payload) ─────────"
+              docker compose -f docker-compose.yml logs --no-color api || true
+              echo "───────── live process state, if still up ─────────"
+              docker compose -f docker-compose.yml exec -T api sh -c '
+                ps -o pid,ppid,stat,etime,args -A 2>/dev/null || true
+                for p in /proc/[0-9]*; do
+                  grep -qs "apps/api/dist" "$p/cmdline" 2>/dev/null || continue
+                  echo "pid ${p#/proc/} state=$(awk "{print \$3}" "$p/stat" 2>/dev/null) blocked_in=$(cat "$p/wchan" 2>/dev/null || echo n/a)"
+                done
+                echo "entropy_avail=$(cat /proc/sys/kernel/random/entropy_avail 2>/dev/null || echo n/a)"
+              ' || true
+            fi
+            docker compose -f docker-compose.yml down -v
+          done
+          echo "═══════════════════════════════════════"
+          echo "cold starts: $BOOTS, failures: $failures"
+          if [ "$failures" -gt 0 ]; then
+            echo "A-115 reproduced $failures/$BOOTS times. The dumps above are the evidence."
+            exit 1
+          fi
+          echo "All $BOOTS cold starts bound the port cleanly."
+        env:
+          JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
+
   # ── Backup & restore DR drill (mandatory priority) ──
   # Proves backups are demonstrably testable: seed the test DB, take a logical
   # dump, restore it into a FRESH database, apply migrations, and assert row

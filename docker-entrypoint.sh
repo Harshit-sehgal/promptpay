@@ -50,6 +50,50 @@ node scripts/wait-for-postgres.mjs
 phase "applying migrations"
 (cd packages/db && ./node_modules/.bin/prisma migrate deploy)
 
-# 3. Hand off to the main process as PID 1.
+# 3. Start-up watchdog (A-115).
+#
+# Roughly 1 boot in 7 hangs here: migrations finish, this script prints
+# "starting application", and then the application emits nothing at all and
+# never binds its port. No crash, no restart — the container sits "Up
+# (health: starting)" forever. That is the worst possible production failure
+# mode, because an orchestrator sees a running container and a deploy simply
+# never completes, with an empty log to debug from.
+#
+# The root cause is still open. This does not fix it; it makes it RECOVERABLE.
+# A background subshell survives the `exec` below (it is a separate process),
+# waits out a deliberately generous budget, and if the port never opened it
+# dumps what the hung process was doing and kills PID 1 so the restart policy
+# takes over. A silent hang becomes a crash-and-restart, which orchestrators
+# already handle and which leaves evidence behind.
+#
+# The budget only has to cover application boot: `wait-for-postgres` and
+# `migrate deploy` have already completed by this line. A healthy start binds
+# in a few seconds, so 120s is ~10x headroom and cannot fire on a slow-but-fine
+# boot. Set STARTUP_WATCHDOG_SECONDS=0 to disable.
+WATCHDOG_SECONDS="${STARTUP_WATCHDOG_SECONDS:-120}"
+WATCHDOG_PORT="${API_PORT:-4002}"
+
+if [ "$WATCHDOG_SECONDS" -gt 0 ] 2>/dev/null; then
+  (
+    sleep "$WATCHDOG_SECONDS"
+    if wget --no-verbose --tries=1 --spider \
+      "http://localhost:${WATCHDOG_PORT}/api/v1/health" > /dev/null 2>&1; then
+      exit 0
+    fi
+    echo "[watchdog] application did not bind :${WATCHDOG_PORT} within ${WATCHDOG_SECONDS}s (A-115)"
+    echo "[watchdog] ── process table ──"
+    ps -o pid,ppid,stat,etime,args -A 2>/dev/null || ps 2>/dev/null || true
+    for proc in /proc/[0-9]*; do
+      pid="${proc#/proc/}"
+      grep -qs "apps/api/dist" "$proc/cmdline" 2>/dev/null || continue
+      echo "[watchdog] pid ${pid} state=$(awk '{print $3}' "$proc/stat" 2>/dev/null) blocked_in=$(cat "$proc/wchan" 2>/dev/null || echo n/a)"
+    done
+    echo "[watchdog] entropy_avail=$(cat /proc/sys/kernel/random/entropy_avail 2>/dev/null || echo n/a)"
+    echo "[watchdog] killing PID 1 so the restart policy can recover"
+    kill -9 1
+  ) &
+fi
+
+# 4. Hand off to the main process as PID 1.
 phase "starting application"
 exec "$@"
