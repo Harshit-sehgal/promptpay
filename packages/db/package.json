@@ -34,6 +34,6 @@
     "@types/node": "^26.1.2",
     "@types/pg": "8.20.0",
     "@waitlayer/eslint-config": "workspace:*",
-    "typescript": "^5.9.2"
+    "typescript": "^7.0.2"
   }
 }
