@@ -19,6 +19,7 @@ overrides:
   '@prisma/client': 7.9.0
   '@prisma/adapter-pg': 7.9.0
   prisma: 7.9.0
+  stripe: 22.3.1
 
 importers:
 
@@ -142,8 +143,8 @@ importers:
         specifier: ^7.8.5
         version: 7.8.5
       stripe:
-        specifier: ^22.4.0
-        version: 22.4.0(@types/node@26.1.2)
+        specifier: 22.3.1
+        version: 22.3.1(@types/node@26.1.2)
     devDependencies:
       '@nestjs/cli':
         specifier: ^11.0.24
@@ -5285,8 +5286,8 @@ packages:
     resolution: {integrity: sha512-4gB8na07fecVVkOI6Rs4e7T6NOTki5EmL7TUduTs6bu3EdnSycntVJ4re8kgZA+wx9IueI2Y11bfbgwtzuE0KQ==}
     engines: {node: '>=0.10.0'}
 
-  stripe@22.4.0:
-    resolution: {integrity: sha512-LVJ+tcSYeqOSnXr3i+Kz2tZ7y0crLLdP2uwD/4wccrmEVyn0g/Heo0pF7as7rxS/sOjJzrb1lxgZY0Y0Dx1pSA==}
+  stripe@22.3.1:
+    resolution: {integrity: sha512-6XSLN0KK0IdfXqDHqMg6CDoO3eO62ye9dhzw0fZp55AUOzHR1YRJOqYHTsuCi4QJ4Ni/usEmXtq69c9ghKDmYw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/node': '>=18'
@@ -10794,7 +10795,7 @@ snapshots:
   strip-json-comments@2.0.1:
     optional: true
 
-  stripe@22.4.0(@types/node@26.1.2):
+  stripe@22.3.1(@types/node@26.1.2):
     optionalDependencies:
       '@types/node': 26.1.2
 
