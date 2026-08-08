@@ -802,6 +802,37 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Generate ephemeral RS256 keys
+        # The build stage asserts `test -n "$JWT_PUBLIC_KEY"` (A-083), so the
+        # image cannot be built without one. Identical generation and masking to
+        # the docker-build job — reused rather than reinvented so the private key
+        # cannot leak into this job's logs.
+        run: |
+          PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
+          PUBLIC_KEY=$(printf '%s\n' "$PRIVATE_KEY" | openssl rsa -pubout 2>/dev/null)
+          # Mask BEFORE the value can reach a log. GitHub does not auto-mask
+          # values written to GITHUB_ENV, and it prints every subsequent step's
+          # `env:` block — so this ephemeral private key was appearing in
+          # plaintext across several jobs. Multi-line secrets must be masked
+          # line by line. Only the base64 body is masked; the `-----BEGIN…`
+          # delimiters are public constants and masking them would redact
+          # unrelated log lines.
+          while IFS= read -r line; do
+            case "$line" in
+              -----*) ;;
+              *) [ "${#line}" -gt 20 ] && echo "::add-mask::$line" ;;
+            esac
+          done <<EOF
+          $PRIVATE_KEY
+          EOF
+          {
+            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            printf '%s\n' "$PRIVATE_KEY"
+            echo 'WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            printf '%s\n' "$PUBLIC_KEY"
+            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+          } >> "$GITHUB_ENV"
       - name: Build the API image once
         run: docker compose -f docker-compose.yml build api
         env:
