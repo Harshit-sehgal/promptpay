@@ -949,6 +949,64 @@ hundreds of assertions. Counts and "the fix is X" statements are the two kinds
 that rot, because the code they describe keeps moving. Prefer checking a
 mechanism over checking a string, and never assert against a file's prose.
 
+## Branch consolidation 2026-08-08 — what merged, what could not, and why
+
+`main` is at **d29e9df, all 13 jobs green on the push-triggered run**. Ten
+branches went in; four remain, each for a stated reason.
+
+**Merged.** `integration/agent-beta` (33 commits: A-106…A-122) fast-forwarded.
+Then the five GitHub Actions bumps were consolidated into one change — three of
+them (codeql-action init/analyze/autobuild) share a version and cannot move
+separately. gitleaks v2 → v3 was the one to watch, because the `security` job
+depends on the `.gitleaks.toml` config and the fingerprint baseline from
+A-108/A-116; it passed. Two `# v4` comments were left pointing at what is now
+the v7 checkout SHA and were corrected — a pin whose version comment lies is
+worse than no comment.
+
+**Merged, with four compatibility holds.** The non-major dependency batch was 33
+commits stale, so its version deltas were applied to today's manifests
+(upward-only, so nothing main had already raised got reverted) rather than
+merging its `package.json` files. 47 bumps landed. Four had to be held, each
+found by a gate and each recorded in `pnpm-workspace.yaml` with its evidence:
+
+| held at | why |
+| --- | --- |
+| `@prisma/*` 7.9.0 | 7.9.1 breaks `packages/db` typecheck — the adapter's expected `pg` types stop matching `@types/pg` |
+| `stripe` 22.3.1 | 22.4.0 moves the pinned API version to `2026-07-29.dahlia`. Trivial to silence by editing the string, and wrong to: API version changes object shapes and webhook payloads on a live payments path |
+| `redis` 6.1.0 | 6.2.0 stops honouring the connect timeout — the reliability scenario that proves the API degrades gracefully when Redis is down times out at 20x headroom. Same failure class as A-115 |
+| `@types/pg` 8.20.0 | the version main runs green |
+
+Also required a new security floor: `@nestjs/swagger` 11.4.6 pulls in js-yaml 5,
+and GHSA-pm4m-ph32-ghv5 (high) covers ≤5.2.1. main never carried js-yaml 5 at
+all. The existing `js-yaml@^4.0.0` floor cannot reach a 5.x resolution — override
+ranges are scoped per major, the same reason `brace-expansion` needs both a ^1
+and a ^5 entry.
+
+**Two lessons worth keeping.** A caret cannot exclude a break that shipped in a
+*patch* release: reverting `^7.9.1` to `^7.9.0` changed nothing, because the
+caret still permits 7.9.1 and main only resolved 7.9.0 because its lockfile
+predated the release. And the first diagnosis was wrong — the Prisma failure was
+blamed on `@types/pg` 8.20.4 and pinning it did not help, which is what ruled it
+out and pointed at the adapter.
+
+**Not merged — TypeScript 7 (`dependabot/npm_and_yarn/major-ce4fb72265`).** The
+compiler side is small: 3 distinct errors, all tsconfig modernisation
+(`baseUrl` removed, `moduleResolution=node10` removed, non-relative paths). The
+blocker is external — **typescript-eslint does not support TS 7.0** and hard
+errors on load, with upstream tracking support only for TS ≥7.1. Merging would
+mean disabling typed linting, which is the one thing this repo's rules forbid.
+Left for when typescript-eslint ships TS 7 support.
+
+**Not merged — PR #31 (`agent/complete-hardening-and-cleanup`).** 232 files, 88
+commits behind, 42 conflicts. Its content splits three ways: actively harmful
+(it restores `public/robots.txt` and `public/sitemap.xml`, reintroducing A-116 —
+`sitemap.test.ts` catches this, which is a good sign for the guard), superseded
+(its `payout-providers.ts` duplicates `packages/shared`; its `docs/legal/*.md`
+predate the pages main ships), and genuinely new but entangled (CLI `sandbox.ts`
+and VS Code `quiet-hours.ts`, both needing parent files that are among the
+conflicts). Those two features are worth porting deliberately against current
+main; they are not a merge.
+
 ## Verified green 2026-08-08 — 12/12, with the gates that never ran
 
 `integration/agent-beta`: **all 12 CI jobs green**, repeatedly — `15ca0de`,
