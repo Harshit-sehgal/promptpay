@@ -71,8 +71,22 @@ for (const path of PAGES) {
     }
 
     if (blocking.length > 0) {
+      // Name the offending ELEMENTS, not just the rule. The previous message
+      // reported "color-contrast (serious) - 2 node(s)" and nothing else, which
+      // is not enough to fix anything: the first guess at the culprit
+      // (`text-surface-500`) turned out to measure 4.74:1 and pass. axe already
+      // knows the selector and the measured ratio — printing them turns a
+      // guessing game into a one-line fix.
       const summary = blocking
-        .map((v) => `${v.id} (${v.impact}): ${v.help} - ${v.nodes.length} node(s)`)
+        .map((v) => {
+          const nodes = v.nodes
+            .map(
+              (n) =>
+                `      → ${n.target.join(' ')}\n        ${n.failureSummary?.replace(/\n/g, '\n        ') ?? ''}`,
+            )
+            .join('\n');
+          return `${v.id} (${v.impact}): ${v.help} - ${v.nodes.length} node(s)\n${nodes}`;
+        })
         .join('\n  ');
       throw new Error(`${blocking.length} blocking a11y violation(s) on ${path}:\n  ${summary}`);
     }
