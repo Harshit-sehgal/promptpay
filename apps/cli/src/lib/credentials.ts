@@ -285,11 +285,23 @@ export async function setCredentials(creds: Credentials): Promise<void> {
 /** Store the per-device event secret separately from the main credential file.
  *
  * Preferred path: the OS keychain (keytar), so the secret never touches disk
- * in plaintext-equivalent form. Fallback path: a local XOR-obfuscated file for
- * dev/CI only. Production fail-closed: when NODE_ENV=production AND no OS
- * keychain backend is available, refuse the weak fallback (it is recoverable
- * from `hostname + username` alone — see `hashDeviceSecretOnDisk`) and require
- * a proper keychain integration.
+ * in plaintext-equivalent form. Fallback path: a local XOR-obfuscated file,
+ * which is recoverable from `hostname + username` alone (see
+ * `hashDeviceSecretOnDisk`) and is therefore NOT a security boundary.
+ *
+ * FAIL-CLOSED BY DEFAULT. This used to be gated on `NODE_ENV === 'production'`,
+ * which made the protection unreachable for the exact people it existed for:
+ * npm does not set NODE_ENV for `bin` scripts, so a globally-installed CLI runs
+ * with it `undefined`. A user on a machine with no keychain backend — a headless
+ * Linux box, a container, WSL without a keyring daemon — silently got the weak
+ * fallback for their per-device HMAC signing key. And when keytar was absent
+ * entirely rather than failing, they did not even get the warning, because that
+ * warning only fires on a failed keychain WRITE.
+ *
+ * So the default is inverted: no keychain means refuse. Dev and CI opt in
+ * explicitly with `WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1`, which is a
+ * deliberate act that shows up in a shell history or a workflow file, rather
+ * than a condition that happens to be false on a user's laptop.
  */
 export async function storeDeviceEventSecret(secret: string): Promise<void> {
   const keytar = await loadKeytar();
@@ -298,23 +310,30 @@ export async function storeDeviceEventSecret(secret: string): Promise<void> {
       await keytar.setPassword(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, secret);
       return;
     } catch {
-      console.warn('[waitlayer] OS keychain write failed; using local fallback');
+      console.warn('[waitlayer] OS keychain write failed; falling back to local storage');
     }
   }
 
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE !== '1') {
     // The local XOR storage is recoverable from `hostname + username` alone
-    // (the key in `hashDeviceSecretOnDisk` derives from those two values,
-    // both fully discoverable to any local code). Shipping that to a
-    // production binary means the per-device HMAC signing key is, in
-    // practice, plaintext on disk to any process running as the same
-    // user. Production binaries must have an OS keychain; surface that as an
-    // explicit failure here, not a silent security regression.
+    // (the key in `hashDeviceSecretOnDisk` derives from those two values, both
+    // fully discoverable to any local code), so the per-device HMAC signing key
+    // would be plaintext-equivalent on disk to any process running as this
+    // user. Refuse by default and say exactly how to proceed.
     throw new Error(
-      'storeDeviceEventSecret does not support NODE_ENV=production without an OS keychain — ' +
-        'integrate keytar (GNOME Keyring / macOS Keychain / Windows CredMan) to ship this credential safely.',
+      'No OS keychain is available, so the device event secret cannot be stored securely.\n' +
+        'Install a keyring backend (GNOME Keyring / macOS Keychain / Windows Credential Manager),\n' +
+        'or, for development and CI only, set WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1 to accept\n' +
+        'local obfuscated storage that is recoverable by any process running as this user.',
     );
   }
+
+  // Reached only by explicit opt-in. Say so every time — this is not a
+  // condition anyone should get used to seeing without noticing.
+  console.warn(
+    '[waitlayer] WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1: storing the device event secret in ' +
+      'local obfuscated form. Any process running as this user can recover it.',
+  );
   const keyFile = path.join(CRED_DIR, '.event-secret');
   fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(keyFile, hashDeviceSecretOnDisk(secret), { mode: 0o600 });

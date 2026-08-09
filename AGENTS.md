@@ -949,6 +949,39 @@ hundreds of assertions. Counts and "the fix is X" statements are the two kinds
 that rot, because the code they describe keeps moving. Prefer checking a
 mechanism over checking a string, and never assert against a file's prose.
 
+## Resolved 2026-08-09 (seventeenth pass) — A-125, a guard that never fired
+
+**A-125 — the CLI's fail-closed credential guard was unreachable for the users
+it protected.** `storeDeviceEventSecret` stores the per-device HMAC signing key.
+It prefers the OS keychain and falls back to a local XOR-obfuscated file which,
+in the code's own words, is "recoverable from `hostname + username` alone".
+Refusing that fallback was gated on `NODE_ENV === 'production'`.
+
+**npm does not set `NODE_ENV` for `bin` scripts.** A globally-installed CLI runs
+with it `undefined` — verified, not assumed. So for every real user without a
+keychain backend (headless Linux, a container, WSL with no keyring daemon) the
+guard was dead code and the signing key silently landed on disk in a
+plaintext-equivalent form.
+
+It was quieter than that, too: the `console.warn` only fires when a keychain
+**write fails**. When keytar is absent entirely, `loadKeytar()` returns null, the
+whole block is skipped, and the user is told nothing at all.
+
+The default is now inverted — no keychain means refuse, and the error names both
+the risk and the way out. Development and CI opt in with
+`WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1`, a deliberate act visible in a shell
+history or a workflow file rather than a condition that happens to be false on
+someone's laptop. Taking the fallback now warns every time.
+
+Checked before changing the default: the packed-CLI smoke only runs
+`--version`, and the sole production caller is the device-registration flow, so
+nothing in CI depended on the permissive path.
+
+**`api-client.ts` uses the same `NODE_ENV === 'production'` test and is fine** —
+both branches return `PRODUCTION_API_URL`, so a packaged CLI can never fall back
+to localhost (A-013). Worth recording, because the condition looks identical and
+the next reader will wonder.
+
 ## Clean sweep 2026-08-09 (sixteenth pass) — the cron layer
 
 Swept all 10 background crons for the failure that matters on a money platform:

@@ -35,7 +35,11 @@ vi.mock('os', async () => {
   };
 });
 
-import { getCredentials, getOrCreateInstallationId } from './credentials';
+import {
+  getCredentials,
+  getOrCreateInstallationId,
+  storeDeviceEventSecret,
+} from './credentials';
 
 describe('getCredentials', () => {
   afterEach(() => {
@@ -200,5 +204,47 @@ describe('getCredentials', () => {
     await getCredentials();
 
     expect(keytarMock.setPassword).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The per-device HMAC signing key must not land on disk in a recoverable form
+ * without the operator explicitly accepting that.
+ *
+ * The guard used to be `NODE_ENV === 'production'`, which never fired for the
+ * people it protected: npm does not set NODE_ENV for `bin` scripts, so a
+ * globally-installed CLI runs with it undefined. Anyone without a keychain
+ * backend got the weak fallback silently — and got no warning at all when
+ * keytar was absent rather than failing, because the warning only covered a
+ * failed keychain write.
+ */
+describe('storeDeviceEventSecret fail-closed default', () => {
+  const ORIGINAL = process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
+    else process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE = ORIGINAL;
+  });
+
+  it('refuses to store the secret when no keychain is available and no opt-in is set', async () => {
+    delete process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
+    // NODE_ENV is deliberately NOT 'production' here — that is the exact
+    // condition a real `npm i -g` user runs under, and the old guard let it
+    // through.
+    await expect(storeDeviceEventSecret('super-secret')).rejects.toThrow(
+      /cannot be stored securely/,
+    );
+  });
+
+  it('names the opt-in and the risk in the error, so the fix is obvious', async () => {
+    delete process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
+    await expect(storeDeviceEventSecret('super-secret')).rejects.toThrow(
+      /WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1/,
+    );
+  });
+
+  it('stores it only when the operator has explicitly opted in', async () => {
+    process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE = '1';
+    await expect(storeDeviceEventSecret('super-secret')).resolves.toBeUndefined();
   });
 });
