@@ -949,6 +949,38 @@ hundreds of assertions. Counts and "the fix is X" statements are the two kinds
 that rot, because the code they describe keeps moving. Prefer checking a
 mechanism over checking a string, and never assert against a file's prose.
 
+## Clean sweep 2026-08-09 (sixteenth pass) — the cron layer
+
+Swept all 10 background crons for the failure that matters on a money platform:
+a job overlapping itself or another replica and double-processing. **Nothing was
+found to fix.** Recorded here so it is not re-run, and because the shape of the
+false positives is instructive.
+
+A crude grep for `acquireCronLease` and an `inFlight`-style flag flagged five
+crons. **All five were false positives** — the codebase uses four different
+concurrency mechanisms, each appropriate to its workload:
+
+| mechanism | used by |
+| --- | --- |
+| `cron_leases` table (TTL, cross-replica) | 7 crons |
+| `pg_try_advisory_xact_lock` | `session-cleanup`, `ComplianceService.runAllRetention` |
+| `FOR UPDATE SKIP LOCKED` | `email-queue.cron` |
+| in-process single-flight + a DB unique key | `AuditService.processOutbox` + `sourceOutboxId @unique` |
+
+Both "missing" guards existed one level down (`drainPromise`, not `inFlight`),
+and both "missing" leases were advisory locks, which are stronger. Also worth
+noting: these crons use `setInterval`, not `@Cron` — so there is no DST
+double-fire or skipped hour to worry about, which is the usual defect in this
+area.
+
+**The one real gap was documentation, at the exact place someone would look.**
+`acquireCronLease` permits the same owner to re-acquire — deliberately, so a
+long-running job can renew rather than lose its lease mid-run — which means it
+does **not** prevent a cron overlapping itself within one process. Every current
+caller has its own same-process guard, but that invariant was unwritten. A new
+cron calling only `acquireCronLease` would silently double-process. The caveat
+and the four mechanisms are now documented on the function itself.
+
 ## Resolved 2026-08-09 (fifteenth pass) — A-124, held earnings looked available
 
 **A-124 — `formatRelativeTime` rendered every future date as "just now".** Each
