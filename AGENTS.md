@@ -977,6 +977,15 @@ Checked before changing the default: the packed-CLI smoke only runs
 `--version`, and the sole production caller is the device-registration flow, so
 nothing in CI depended on the permissive path.
 
+**The first test suite for this was wrong, and CI caught it.** It called
+`storeDeviceEventSecret` and expected a throw — which passes only where no
+keyring module resolves. CI has `@napi-rs/keyring` installed, so the function
+returned from the keychain branch before reaching the guard and the assertions
+reported "promise resolved instead of rejecting". The environment, not the
+logic, was deciding the result. The decision is now an exported pure function
+(`assertInsecureSecretStoreAllowed`) tested directly, including that anything
+other than exactly `"1"` is not an opt-in.
+
 **`api-client.ts` uses the same `NODE_ENV === 'production'` test and is fine** —
 both branches return `PRODUCTION_API_URL`, so a packaged CLI can never fall back
 to localhost (A-013). Worth recording, because the condition looks identical and

@@ -282,6 +282,41 @@ export async function setCredentials(creds: Credentials): Promise<void> {
   enableBridge();
 }
 
+/**
+ * Decide whether the weak on-disk fallback may be used, and refuse by default.
+ *
+ * Exported and pure on purpose. The obvious test — "call
+ * `storeDeviceEventSecret` and expect a throw" — silently passes for the wrong
+ * reason in any environment where `@napi-rs/keyring` resolves, because the
+ * function returns from the keychain branch before ever reaching this decision.
+ * That is exactly what happened on the first attempt: the assertions ran in CI
+ * against a machine that HAS a keyring module and reported
+ * "promise resolved instead of rejecting". Testing the decision directly
+ * removes the environment from the question.
+ */
+export function assertInsecureSecretStoreAllowed(env: NodeJS.ProcessEnv): void {
+  if (env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE !== '1') {
+    // The local XOR storage is recoverable from `hostname + username` alone
+    // (the key in `hashDeviceSecretOnDisk` derives from those two values, both
+    // fully discoverable to any local code), so the per-device HMAC signing key
+    // would be plaintext-equivalent on disk to any process running as this
+    // user. Refuse by default and say exactly how to proceed.
+    throw new Error(
+      'No OS keychain is available, so the device event secret cannot be stored securely.\n' +
+        'Install a keyring backend (GNOME Keyring / macOS Keychain / Windows Credential Manager),\n' +
+        'or, for development and CI only, set WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1 to accept\n' +
+        'local obfuscated storage that is recoverable by any process running as this user.',
+    );
+  }
+
+  // Reached only by explicit opt-in. Say so every time — this is not a
+  // condition anyone should get used to seeing without noticing.
+  console.warn(
+    '[waitlayer] WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1: storing the device event secret in ' +
+      'local obfuscated form. Any process running as this user can recover it.',
+  );
+}
+
 /** Store the per-device event secret separately from the main credential file.
  *
  * Preferred path: the OS keychain (keytar), so the secret never touches disk
@@ -314,26 +349,7 @@ export async function storeDeviceEventSecret(secret: string): Promise<void> {
     }
   }
 
-  if (process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE !== '1') {
-    // The local XOR storage is recoverable from `hostname + username` alone
-    // (the key in `hashDeviceSecretOnDisk` derives from those two values, both
-    // fully discoverable to any local code), so the per-device HMAC signing key
-    // would be plaintext-equivalent on disk to any process running as this
-    // user. Refuse by default and say exactly how to proceed.
-    throw new Error(
-      'No OS keychain is available, so the device event secret cannot be stored securely.\n' +
-        'Install a keyring backend (GNOME Keyring / macOS Keychain / Windows Credential Manager),\n' +
-        'or, for development and CI only, set WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1 to accept\n' +
-        'local obfuscated storage that is recoverable by any process running as this user.',
-    );
-  }
-
-  // Reached only by explicit opt-in. Say so every time — this is not a
-  // condition anyone should get used to seeing without noticing.
-  console.warn(
-    '[waitlayer] WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1: storing the device event secret in ' +
-      'local obfuscated form. Any process running as this user can recover it.',
-  );
+  assertInsecureSecretStoreAllowed(process.env);
   const keyFile = path.join(CRED_DIR, '.event-secret');
   fs.mkdirSync(CRED_DIR, { recursive: true, mode: 0o700 });
   fs.writeFileSync(keyFile, hashDeviceSecretOnDisk(secret), { mode: 0o600 });

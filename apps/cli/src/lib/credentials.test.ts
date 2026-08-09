@@ -36,9 +36,9 @@ vi.mock('os', async () => {
 });
 
 import {
+  assertInsecureSecretStoreAllowed,
   getCredentials,
   getOrCreateInstallationId,
-  storeDeviceEventSecret,
 } from './credentials';
 
 describe('getCredentials', () => {
@@ -218,33 +218,47 @@ describe('getCredentials', () => {
  * keytar was absent rather than failing, because the warning only covered a
  * failed keychain write.
  */
-describe('storeDeviceEventSecret fail-closed default', () => {
-  const ORIGINAL = process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
+describe('insecure secret-store fail-closed default', () => {
+  // Tests the DECISION, not storeDeviceEventSecret itself. Calling that and
+  // expecting a throw passes for the wrong reason wherever @napi-rs/keyring
+  // resolves: it returns from the keychain branch first. The first version of
+  // this suite did exactly that and CI reported "promise resolved instead of
+  // rejecting" — the environment, not the logic, decided the result.
 
-  afterEach(() => {
-    if (ORIGINAL === undefined) delete process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
-    else process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE = ORIGINAL;
+  it('refuses the weak on-disk fallback by default', () => {
+    // No NODE_ENV involved. The old guard was `NODE_ENV === 'production'`,
+    // which npm never sets for a bin script, so it never fired for the
+    // globally-installed CLI it was written to protect.
+    expect(() => assertInsecureSecretStoreAllowed({})).toThrow(/cannot be stored securely/);
+    expect(() => assertInsecureSecretStoreAllowed({ NODE_ENV: 'production' })).toThrow();
+    expect(() => assertInsecureSecretStoreAllowed({ NODE_ENV: 'development' })).toThrow();
   });
 
-  it('refuses to store the secret when no keychain is available and no opt-in is set', async () => {
-    delete process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
-    // NODE_ENV is deliberately NOT 'production' here — that is the exact
-    // condition a real `npm i -g` user runs under, and the old guard let it
-    // through.
-    await expect(storeDeviceEventSecret('super-secret')).rejects.toThrow(
-      /cannot be stored securely/,
-    );
-  });
-
-  it('names the opt-in and the risk in the error, so the fix is obvious', async () => {
-    delete process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE;
-    await expect(storeDeviceEventSecret('super-secret')).rejects.toThrow(
+  it('names both the risk and the escape hatch in the error', () => {
+    expect(() => assertInsecureSecretStoreAllowed({})).toThrow(
       /WAITLAYER_ALLOW_INSECURE_SECRET_STORE=1/,
     );
+    expect(() => assertInsecureSecretStoreAllowed({})).toThrow(/keyring backend/);
   });
 
-  it('stores it only when the operator has explicitly opted in', async () => {
-    process.env.WAITLAYER_ALLOW_INSECURE_SECRET_STORE = '1';
-    await expect(storeDeviceEventSecret('super-secret')).resolves.toBeUndefined();
+  it('allows it only on explicit opt-in, and warns every time', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(() =>
+        assertInsecureSecretStoreAllowed({ WAITLAYER_ALLOW_INSECURE_SECRET_STORE: '1' }),
+      ).not.toThrow();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(String(warn.mock.calls[0][0])).toMatch(/recover it/);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('treats any value other than exactly "1" as not opted in', () => {
+    for (const value of ['0', 'true', 'yes', '', ' 1']) {
+      expect(() =>
+        assertInsecureSecretStoreAllowed({ WAITLAYER_ALLOW_INSECURE_SECRET_STORE: value }),
+      ).toThrow();
+    }
   });
 });
