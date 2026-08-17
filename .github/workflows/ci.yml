@@ -1197,7 +1197,7 @@ jobs:
         with:
           languages: javascript-typescript
       - name: Autobuild
-        uses: github/codeql-action/autobuild@e0647621c2984b5ed2f768cb892365bf2a616ad1 # v3
+        uses: github/codeql-action/autobuild@5595ccaf912efad79be6eef63a5619ff05969be3 # v3
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@e0647621c2984b5ed2f768cb892365bf2a616ad1 # v3
       - name: Secret scanning (gitleaks)
