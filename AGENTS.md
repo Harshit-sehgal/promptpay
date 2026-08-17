@@ -154,10 +154,12 @@ live until the operator answers §8.1–§8.5 of that plan.
   `checkPayments` pass: half-configured Stripe/Dodo, Dodo test endpoint in
   production, and `DEPOSIT_PROCESSOR=dodo` without full config all FAIL; the
   inactive-Stripe processor selection WARNs.
-- **Reclaim cron scoped to Stripe.** `WebhookReclaimCronService` now filters
-  `provider: 'stripe'` — it reconstructs events by id from Stripe, so a Dodo row
-  would have been incorrectly dispatched to Stripe's handler. Dodo recovers via
-  its own Standard-Webhooks retry, not this cron.
+- **Reclaim cron scoped to Stripe + skips when unconfigured.**
+  `WebhookReclaimCronService` now filters `provider: 'stripe'` — it reconstructs
+  events by id from Stripe, so a Dodo row would have been incorrectly dispatched
+  to Stripe's handler — and no-ops cleanly (skips the scan) when Stripe is
+  unconfigured (D2), instead of scanning legacy rows and warning per orphan.
+  Dodo recovers via its own Standard-Webhooks retry, not this cron.
 
 **Verification on this tree (run with Postgres :5432/:5433 and Redis :6379
 up):** typecheck 17/17, lint 11/11, build 11/11, `audit-claims` 15/15,

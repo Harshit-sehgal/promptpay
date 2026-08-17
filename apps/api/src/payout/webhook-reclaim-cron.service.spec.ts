@@ -29,6 +29,7 @@ function makeMocks() {
   // The persisted webhookEvent row stores only a minimized payload; the reclaim
   // cron reconstructs the full event from Stripe by id (P1.12).
   const stripe = {
+    isEnabled: () => true,
     getEvent: vi.fn((eventId: string) =>
       Promise.resolve({ id: eventId, type: 'checkout.session.completed', data: { object: {} } }),
     ),
@@ -73,6 +74,21 @@ describe('WebhookReclaimCronService (A-062)', () => {
 
     expect(result).toEqual({ found: 0, requeued: 0 });
     expect(prisma.webhookEvent.findMany).not.toHaveBeenCalled();
+    expect(eventBus.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('skips the scan entirely when Stripe is unconfigured (D2)', async () => {
+    process.env.WEBHOOK_RECLAIM_CRON = 'true';
+    const { prisma, eventBus, stripe } = makeMocks();
+    (stripe as { isEnabled: () => boolean }).isEnabled = () => false;
+    prisma.webhookEvent.seed([orphanRow('legacy', 40 * 60 * 1000)]);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
+
+    const result = await service.reclaimOrphanedWebhooks();
+
+    expect(result).toEqual({ found: 0, requeued: 0 });
+    expect(prisma.webhookEvent.findMany).not.toHaveBeenCalled();
+    expect(stripe.getEvent).not.toHaveBeenCalled();
     expect(eventBus.dispatch).not.toHaveBeenCalled();
   });
 

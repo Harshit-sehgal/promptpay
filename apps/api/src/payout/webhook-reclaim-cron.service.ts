@@ -96,6 +96,11 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
    */
   async reclaimOrphanedWebhooks(): Promise<{ found: number; requeued: number }> {
     if (!this.enabled) return { found: 0, requeued: 0 };
+    // Stripe is deactivated at launch (D2): with no STRIPE_SECRET_KEY there are
+    // no live webhook events to reconstruct, and getEvent() would return null
+    // for any legacy rows. Skip the scan entirely (W3) rather than scanning and
+    // logging a warning per orphan.
+    if (!this.stripe.isEnabled()) return { found: 0, requeued: 0 };
     if (this.reclaimInFlight) {
       this.logger.warn('Webhook reclaim already in flight — skipping overlapping run');
       return { found: 0, requeued: 0 };
