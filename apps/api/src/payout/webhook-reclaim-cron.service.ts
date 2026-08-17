@@ -25,6 +25,17 @@ import { StripeProvider } from '../payout/providers';
  * claim below prevents multiple replicas from dispatching the same orphan.
  */
 const WEBHOOK_EVENT = 'stripe.webhook';
+const DODO_WEBHOOK_EVENT = 'dodo.webhook';
+
+/** Minimal row shape the reclaim loop needs from `webhookEvent.findMany`. */
+interface ReclaimRow {
+  id: string;
+  provider: string;
+  eventId: string;
+  payload: unknown;
+  processingStatus: string;
+  updatedAt: Date;
+}
 
 @Injectable()
 export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -96,11 +107,6 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
    */
   async reclaimOrphanedWebhooks(): Promise<{ found: number; requeued: number }> {
     if (!this.enabled) return { found: 0, requeued: 0 };
-    // Stripe is deactivated at launch (D2): with no STRIPE_SECRET_KEY there are
-    // no live webhook events to reconstruct, and getEvent() would return null
-    // for any legacy rows. Skip the scan entirely (W3) rather than scanning and
-    // logging a warning per orphan.
-    if (!this.stripe.isEnabled()) return { found: 0, requeued: 0 };
     if (this.reclaimInFlight) {
       this.logger.warn('Webhook reclaim already in flight — skipping overlapping run');
       return { found: 0, requeued: 0 };
@@ -112,11 +118,7 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
     try {
       const orphans = await this.prisma.webhookEvent.findMany({
         where: {
-          // Reclaim reconstructs the full event from Stripe by id, so it can
-          // only ever reclaim Stripe rows. Dodo webhooks are recovered by
-          // Dodo's own retry (Standard Webhooks), not by this cron; a Dodo row
-          // here would be incorrectly dispatched to Stripe's handler.
-          provider: 'stripe',
+          provider: { in: ['stripe', 'dodo'] },
           processingStatus: { in: ['pending', 'processing'] },
           updatedAt: { lt: cutoff },
         },
@@ -129,40 +131,10 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
       this.logger.log(`Found ${orphans.length} orphaned webhook event(s) to reclaim.`);
       let requeued = 0;
       for (const row of orphans) {
-        // The persisted webhookEvent row stores only a MINIMIZED payload
-        // (id/type/created/dataObjectId/dataObjectStatus + SHA-256 rawHash),
-        // not the full Stripe event. Reconstruct the complete event from Stripe
-        // by id so runProcessing has the data.object it needs (P1.12).
-        const eventId = (row.payload as { id?: string } | null)?.id;
-        if (!eventId) {
-          this.logger.warn(
-            `Skipping webhook event ${row.id} (${row.eventId}) — minimized payload is missing an event id`,
-          );
-          continue;
-        }
-        const event = await this.stripe.getEvent(eventId);
-        if (!event) {
-          this.logger.warn(
-            `Skipping webhook event ${row.id} (${row.eventId}) — could not retrieve event ${eventId} from Stripe`,
-          );
-          continue;
-        }
-        // Exact compare-and-set claim: another replica may have changed this
-        // row after the scan. Only the winner dispatches the payload.
-        const claim = await this.prisma.webhookEvent.updateMany({
-          where: {
-            id: row.id,
-            processingStatus: row.processingStatus,
-            updatedAt: row.updatedAt,
-          },
-          data: { processingStatus: 'pending' },
-        });
-        if (claim.count === 0) continue;
-        // Re-run the controller's reconciliation handler via the shared bus.
-        // The handler performs its own failure recovery (resets to 'pending' on
-        // error) so a failed reprocessing stays reclaimable.
-        await this.eventBus.dispatch(WEBHOOK_EVENT, { event });
-        requeued++;
+        requeued +=
+          row.provider === 'dodo'
+            ? await this.reclaimDodoRow(row)
+            : await this.reclaimStripeRow(row);
       }
 
       if (requeued > 0) {
@@ -175,5 +147,67 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
     } finally {
       this.reclaimInFlight = false;
     }
+  }
+
+  /**
+   * Stripe rows are reconstructed from Stripe by id: the persisted payload is
+   * minimized and cannot be re-processed on its own (P1.12). When Stripe is
+   * deactivated at launch (D2, no STRIPE_SECRET_KEY) legacy rows cannot be
+   * reconstructed, so they are skipped cleanly.
+   */
+  private async reclaimStripeRow(row: ReclaimRow): Promise<number> {
+    if (!this.stripe.isEnabled()) return 0;
+    const eventId = (row.payload as { id?: string } | null)?.id;
+    if (!eventId) {
+      this.logger.warn(
+        `Skipping Stripe webhook event ${row.id} (${row.eventId}) — minimized payload is missing an event id`,
+      );
+      return 0;
+    }
+    const event = await this.stripe.getEvent(eventId);
+    if (!event) {
+      this.logger.warn(
+        `Skipping Stripe webhook event ${row.id} (${row.eventId}) — could not retrieve event ${eventId} from Stripe`,
+      );
+      return 0;
+    }
+    if (!(await this.claimRow(row))) return 0;
+    await this.eventBus.dispatch(WEBHOOK_EVENT, { event });
+    return 1;
+  }
+
+  /**
+   * Dodo rows re-process from the full event retained at receipt time (Dodo has
+   * no event-retrieval API). The controller's `runReclaimProcessing` is
+   * idempotent (ledger writes keyed by Dodo payment/refund/dispute id) and
+   * converges the row.
+   */
+  private async reclaimDodoRow(row: ReclaimRow): Promise<number> {
+    const event = (row.payload as { event?: unknown } | null)?.event;
+    if (!event) {
+      this.logger.warn(
+        `Skipping Dodo webhook event ${row.id} (${row.eventId}) — stored payload has no full event`,
+      );
+      return 0;
+    }
+    if (!(await this.claimRow(row))) return 0;
+    await this.eventBus.dispatch(DODO_WEBHOOK_EVENT, { event, webhookId: row.eventId });
+    return 1;
+  }
+
+  /**
+   * Exact compare-and-set claim: another replica may have changed this row
+   * after the scan. Only the winner dispatches the payload.
+   */
+  private async claimRow(row: ReclaimRow): Promise<boolean> {
+    const claim = await this.prisma.webhookEvent.updateMany({
+      where: {
+        id: row.id,
+        processingStatus: row.processingStatus,
+        updatedAt: row.updatedAt,
+      },
+      data: { processingStatus: 'pending' },
+    });
+    return claim.count > 0;
   }
 }

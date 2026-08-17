@@ -23,7 +23,11 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
   `lost`/`accepted` hold/restore/write-off lifecycle. Field names pinned from
   Dodo's generated Go SDK (`Refund`/`Dispute` structs). A refund overlapping an
   open dispute, and payout/subscription/unknown events, are retained
-  `pending_review` (never guessed, never silently dropped).
+  `pending_review` (never guessed, never silently dropped). The **reclaim cron
+  equivalent** is the generalized `WebhookReclaimCronService`: Dodo rows are
+  re-processed from the full event retained at receipt time (Dodo has no
+  event-retrieval API), and a duplicate delivery re-processes idempotently
+  instead of acknowledging.
 - **Migration** ✅ `20260817000000_dodo_payment_reference` adds
   `AdvertiserLedger.dodoPaymentId` + `dodoDisputeId`.
 - **W1.4** ✅ web surface: billing page redirects to the returned `url`

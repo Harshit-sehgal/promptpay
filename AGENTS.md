@@ -154,22 +154,26 @@ live until the operator answers §8.1–§8.5 of that plan.
   `checkPayments` pass: half-configured Stripe/Dodo, Dodo test endpoint in
   production, and `DEPOSIT_PROCESSOR=dodo` without full config all FAIL; the
   inactive-Stripe processor selection WARNs.
-- **Reclaim cron scoped to Stripe + skips when unconfigured.**
-  `WebhookReclaimCronService` now filters `provider: 'stripe'` — it reconstructs
-  events by id from Stripe, so a Dodo row would have been incorrectly dispatched
-  to Stripe's handler — and no-ops cleanly (skips the scan) when Stripe is
-  unconfigured (D2), instead of scanning legacy rows and warning per orphan.
-  Dodo recovers via its own Standard-Webhooks retry, not this cron.
+- **Webhook reclaim cron generalized to both rails (W1.3 reclaim equivalent).**
+  `WebhookReclaimCronService` now reclaims stalled `webhookEvent` rows for both
+  providers: Stripe rows are reconstructed by id from Stripe (skipped cleanly
+  when Stripe is unconfigured — D2), while Dodo rows are re-processed from the
+  **full event retained at receipt time** (Dodo has no event-retrieval API). The
+  Dodo controller subscribes to a `dodo.webhook` EventBus event, persists the
+  full payload alongside the minimized fields, and re-processes idempotently on
+  redelivery — a duplicate delivery id (P2002) now re-processes instead of
+  acknowledging a row that may still be `pending`.
 
 **Verification on this tree (run with Postgres :5432/:5433 and Redis :6379
 up):** typecheck 17/17, lint 11/11, build 11/11, `audit-claims` 15/15,
 `scan-build-secrets` PASS, `audit-dependencies` exit 0, `check-licenses` clean,
 `migrate diff --exit-code` drift-free. New/updated unit specs green:
-`standard-webhooks` 9, `dodo.provider` 7, `dodo-webhook.controller` 20 (A-107
-authenticity-boundary suite + refund/dispute lifecycle), `advertiser.controller`
-11, `deploy-preflight` 17, plus unchanged `stripe.provider` 25 /
-`stripe-connect` 16 / `payout.service` 46 / `webhook-reclaim-cron` 6. **API unit
-1458 passed (139 files); API integration 243 passed + 1 opt-in skipped (24 files)** — both DB-backed
+`standard-webhooks` 9, `dodo.provider` 7, `dodo-webhook.controller` 23 (A-107
+authenticity-boundary suite + refund/dispute lifecycle + reclaim path),
+`advertiser.controller` 11, `deploy-preflight` 17, plus unchanged
+`stripe.provider` 25 / `stripe-connect` 16 / `payout.service` 46 and
+`webhook-reclaim-cron` 9 (now covers both rails). **API unit
+1464 passed (139 files); API integration 243 passed + 1 opt-in skipped (24 files)** — both DB-backed
 suites now run green with the services up, including the previously-ENOTFOUND
 `auth-refresh`/`auth-logout`. `enforce-financial-coverage` exit 0 with new floors
 (dodo provider 78, dodo webhook 68, standard-webhooks 81). Browser e2e green:

@@ -44,6 +44,7 @@ function makeController(
     ...(overrides.prisma ?? {}),
   };
   const audit = { logStrict: vi.fn().mockResolvedValue(undefined) };
+  const eventBus = { on: vi.fn(), dispatch: vi.fn().mockResolvedValue(undefined) };
   const config = {
     get: vi.fn((key: string, fallback = '') => {
       const env = {
@@ -58,8 +59,9 @@ function makeController(
     prisma as unknown as PrismaService,
     audit as unknown as AuditService,
     config as unknown as ConfigService,
+    eventBus as never,
   );
-  return { controller, prisma, audit, tx };
+  return { controller, prisma, audit, tx, eventBus };
 }
 
 function signedRequest(body: unknown, id = 'msg_1') {
@@ -181,6 +183,68 @@ describe('DodoWebhookController authenticity boundary (A-107 parity)', () => {
     });
 
     await expect(controller.handleWebhook(req)).resolves.toEqual({ received: true });
+  });
+
+  it('re-processes an already-recorded delivery instead of blindly acknowledging', async () => {
+    const { controller, prisma } = makeController();
+    prisma.advertiser.findUnique = vi.fn().mockResolvedValue({
+      id: 'adv-1',
+      user: { status: 'active' },
+    });
+    prisma.webhookEvent.create = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
+    const { req } = signedRequest({
+      type: 'payment.succeeded',
+      data: {
+        payment_id: 'pay_1',
+        amount: 1000,
+        currency: 'usd',
+        metadata: { advertiserId: 'adv-1' },
+      },
+    });
+
+    await expect(controller.handleWebhook(req)).resolves.toEqual({
+      received: true,
+      reason: 'reprocessed',
+    });
+    // The deposit was re-processed idempotently rather than dropped.
+    expect(prisma.advertiserLedger.create).toHaveBeenCalled();
+  });
+
+  it('re-processes a stalled delivery from its stored payload (reclaim path)', async () => {
+    const { controller, prisma } = makeController();
+    prisma.advertiser.findUnique = vi.fn().mockResolvedValue({
+      id: 'adv-1',
+      user: { status: 'active' },
+    });
+
+    await controller.runReclaimProcessing(
+      {
+        type: 'payment.succeeded',
+        data: {
+          payment_id: 'pay_1',
+          amount: 1000,
+          currency: 'usd',
+          metadata: { advertiserId: 'adv-1' },
+        },
+      },
+      'msg_1',
+    );
+
+    expect(prisma.advertiserLedger.create).toHaveBeenCalled();
+    expect(prisma.webhookEvent.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { provider: 'dodo', eventId: 'msg_1', processingStatus: 'pending' },
+        data: expect.objectContaining({ processingStatus: 'processed' }),
+      }),
+    );
+  });
+
+  it('registers the dodo.webhook reclaim handler on module init', () => {
+    const { controller, eventBus } = makeController();
+    controller.onModuleInit();
+    expect(eventBus.on).toHaveBeenCalledWith('dodo.webhook', expect.any(Function));
   });
 
   it('routes an inactive advertiser to operator refund review without granting credit', async () => {
@@ -343,17 +407,15 @@ describe('DodoWebhookController authenticity boundary (A-107 parity)', () => {
 
   it('freezes the disputed slice on dispute.opened', async () => {
     const { controller, prisma, audit, tx } = makeController();
-    prisma.advertiserLedger.findMany = vi
-      .fn()
-      .mockResolvedValue([
-        {
-          id: 'entry-1',
-          advertiserId: 'adv-1',
-          campaignId: null,
-          amountMinor: 1000n,
-          currency: 'USD',
-        },
-      ]);
+    prisma.advertiserLedger.findMany = vi.fn().mockResolvedValue([
+      {
+        id: 'entry-1',
+        advertiserId: 'adv-1',
+        campaignId: null,
+        amountMinor: 1000n,
+        currency: 'USD',
+      },
+    ]);
     const { req } = signedRequest({
       type: 'dispute.opened',
       data: { dispute_id: 'dis_1', payment_id: 'pay_1', amount: '300', currency: 'usd' },

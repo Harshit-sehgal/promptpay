@@ -1,12 +1,22 @@
 import { createHash } from 'crypto';
 import { Request } from 'express';
-import { Controller, HttpCode, HttpException, HttpStatus, Logger, Post, Req } from '@nestjs/common';
+import {
+  Controller,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Logger,
+  OnModuleInit,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { Prisma } from '@waitlayer/db';
 
 import { AuditService } from '../audit/audit.service';
+import { EventBus } from '../common/events/event-bus';
 import { getErrorCode, getErrorMessage } from '../common/utils/errors';
 import { assertSafeJson } from '../common/utils/json-value';
 import { PrismaService } from '../config/prisma.service';
@@ -29,14 +39,39 @@ type RawBodyRequest = Request & { rawBody?: Buffer | string };
  */
 @ApiTags('Dodo Webhooks')
 @Controller('payout/dodo')
-export class DodoWebhookController {
+export class DodoWebhookController implements OnModuleInit {
   private readonly logger = new Logger(DodoWebhookController.name);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly config: ConfigService,
+    private readonly eventBus: EventBus,
   ) {}
+
+  onModuleInit() {
+    // Reclaim path: WebhookReclaimCronService re-queues a stalled Dodo
+    // delivery here from its stored payload. Dodo exposes no event-retrieval
+    // API, so (unlike Stripe) the full event is retained at receipt time
+    // rather than reconstructed by id.
+    this.eventBus.on('dodo.webhook', (payload) => {
+      const { event, webhookId } = payload as { event: DodoWebhookEvent; webhookId: string };
+      return this.runReclaimProcessing(event, webhookId);
+    });
+  }
+
+  /**
+   * Re-process a previously received (and signature-verified) delivery from its
+   * durable payload. Idempotent: the ledger writes are keyed by Dodo payment/
+   * refund/dispute id, and the converge step leaves `pending_review` rows alone.
+   */
+  async runReclaimProcessing(event: DodoWebhookEvent, webhookId: string): Promise<void> {
+    await this.processEvent(event, event.type ?? '', webhookId);
+    await this.prisma.webhookEvent.updateMany({
+      where: { provider: 'dodo', eventId: webhookId, processingStatus: 'pending' },
+      data: { processingStatus: 'processed', processedAt: new Date() },
+    });
+  }
 
   private isConfigured(): boolean {
     return Boolean(
@@ -135,6 +170,9 @@ export class DodoWebhookController {
       payoutId: stringifyOrNull(dataObject.payout_id),
       status: stringifyOrNull(dataObject.status),
       rawHash,
+      // Retain the full event so WebhookReclaimCronService can re-process a
+      // stalled delivery from durable storage (Dodo has no event-retrieval API).
+      event,
     };
     assertSafeJson(minimizedPayload, `dodo.${webhookId}`);
 
@@ -150,11 +188,12 @@ export class DodoWebhookController {
       });
     } catch (err: unknown) {
       if (getErrorCode(err) === 'P2002') {
-        // Delivery id collision is effectively impossible (webhook-id is unique
-        // per delivery), but treat it defensively: if this exact delivery was
-        // already recorded, acknowledge it so Dodo stops re-sending.
-        this.logger.warn(`Dodo webhook ${webhookId} already recorded — acknowledging`);
-        return { received: true, reason: 'already_recorded' };
+        // Same delivery id recorded twice (a network duplicate, or a crash
+        // between persist and the 200). Re-process idempotently rather than
+        // acknowledging a row that may still be 'pending'.
+        this.logger.warn(`Dodo webhook ${webhookId} already recorded — re-processing`);
+        await this.runReclaimProcessing(event, webhookId);
+        return { received: true, reason: 'reprocessed' };
       }
       this.logger.error(`Failed to persist Dodo webhook ${webhookId}: ${getErrorMessage(err)}`);
       throw err;

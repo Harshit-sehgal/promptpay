@@ -7,11 +7,15 @@ function makeMocks() {
     webhookEvent: {
       findMany: vi.fn((args: any) => {
         const statuses = args?.where?.processingStatus?.in ?? [];
+        const providers = args?.where?.provider?.in ?? [];
         const lt = args?.where?.updatedAt?.lt;
         const all = (prisma.webhookEvent as any)._rows ?? [];
         return Promise.resolve(
           all.filter(
-            (r: any) => statuses.includes(r.processingStatus) && (!lt || r.updatedAt < lt),
+            (r: any) =>
+              (providers.length === 0 || providers.includes(r.provider)) &&
+              statuses.includes(r.processingStatus) &&
+              (!lt || r.updatedAt < lt),
           ),
         );
       }),
@@ -46,6 +50,25 @@ const orphanRow = (id: string, ageMs: number) => ({
   updatedAt: new Date(Date.now() - ageMs),
 });
 
+const dodoOrphanRow = (id: string, ageMs: number) => ({
+  id,
+  provider: 'dodo',
+  eventId: `msg_${id}`,
+  processingStatus: 'pending',
+  payload: {
+    event: {
+      type: 'payment.succeeded',
+      data: {
+        payment_id: 'pay_1',
+        amount: 1000,
+        currency: 'usd',
+        metadata: { advertiserId: 'adv-1' },
+      },
+    },
+  },
+  updatedAt: new Date(Date.now() - ageMs),
+});
+
 const fullEvent = (id: string) => ({
   id: `evt_${id}`,
   type: 'checkout.session.completed',
@@ -77,18 +100,58 @@ describe('WebhookReclaimCronService (A-062)', () => {
     expect(eventBus.dispatch).not.toHaveBeenCalled();
   });
 
-  it('skips the scan entirely when Stripe is unconfigured (D2)', async () => {
+  it('skips Stripe rows when Stripe is unconfigured but still reclaims Dodo rows (D2)', async () => {
     process.env.WEBHOOK_RECLAIM_CRON = 'true';
     const { prisma, eventBus, stripe } = makeMocks();
     (stripe as { isEnabled: () => boolean }).isEnabled = () => false;
-    prisma.webhookEvent.seed([orphanRow('legacy', 40 * 60 * 1000)]);
+    prisma.webhookEvent.seed([
+      orphanRow('legacy-stripe', 40 * 60 * 1000),
+      dodoOrphanRow('stalled-dodo', 40 * 60 * 1000),
+    ]);
     const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
 
     const result = await service.reclaimOrphanedWebhooks();
 
-    expect(result).toEqual({ found: 0, requeued: 0 });
-    expect(prisma.webhookEvent.findMany).not.toHaveBeenCalled();
+    // The Stripe row is skipped (unconfigured); the Dodo row is re-queued from
+    // its stored payload.
+    expect(result).toEqual({ found: 2, requeued: 1 });
     expect(stripe.getEvent).not.toHaveBeenCalled();
+    expect(eventBus.dispatch).toHaveBeenCalledWith(
+      'dodo.webhook',
+      expect.objectContaining({ webhookId: 'msg_stalled-dodo' }),
+    );
+  });
+
+  it('re-queues a stalled Dodo row from its stored full event', async () => {
+    process.env.WEBHOOK_RECLAIM_CRON = 'true';
+    const { prisma, eventBus, stripe } = makeMocks();
+    prisma.webhookEvent.seed([dodoOrphanRow('stalled-dodo', 40 * 60 * 1000)]);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
+
+    const result = await service.reclaimOrphanedWebhooks();
+
+    expect(result).toEqual({ found: 1, requeued: 1 });
+    expect(eventBus.dispatch).toHaveBeenCalledWith(
+      'dodo.webhook',
+      expect.objectContaining({
+        webhookId: 'msg_stalled-dodo',
+        event: expect.objectContaining({ type: 'payment.succeeded' }),
+      }),
+    );
+    expect(stripe.getEvent).not.toHaveBeenCalled();
+  });
+
+  it('skips a Dodo row whose stored payload has no full event', async () => {
+    process.env.WEBHOOK_RECLAIM_CRON = 'true';
+    const { prisma, eventBus, stripe } = makeMocks();
+    prisma.webhookEvent.seed([
+      { ...dodoOrphanRow('no-event', 40 * 60 * 1000), payload: { id: 'msg_no-event' } },
+    ]);
+    const service = new WebhookReclaimCronService(prisma, eventBus, stripe);
+
+    const result = await service.reclaimOrphanedWebhooks();
+
+    expect(result).toEqual({ found: 1, requeued: 0 });
     expect(eventBus.dispatch).not.toHaveBeenCalled();
   });
 
