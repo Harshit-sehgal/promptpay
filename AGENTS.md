@@ -131,7 +131,13 @@ live until the operator answers §8.1–§8.5 of that plan.
   `DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`, `DODO_PRODUCT_ID`
   (added to `@waitlayer/config` schema + `.env.example`). Amounts pass the same
   `requireProviderSafeMinorAmount` guard as Stripe; `readiness()` reports the
-  rail for fail-closed billing UI.
+  rail for fail-closed billing UI. **`GET /health` now publishes a `deposits`
+  field** (`{ enabled, processor, ready }` — the `deposits.global` switch, the
+  resolved rail name, and the two combined) on the same public contract that
+  already carries `waitLaunchMode`; it fails closed to `ready: false` on an
+  unreadable config, never a confident claim about a money path.
+  (`HealthController` now injects `DepositProcessorService` via a
+  `HealthModule → PayoutModule` import.)
 - **W1.3 — `DodoWebhookController`** (`apps/api/src/payout/dodo-webhook.controller.ts`,
   route `POST /payout/dodo/webhook`, raw body mounted in `main.ts`). Verifies
   **Standard Webhooks** signatures (`webhook-id`/`webhook-signature`/
@@ -173,7 +179,7 @@ authenticity-boundary suite + refund/dispute lifecycle + reclaim path),
 `advertiser.controller` 11, `deploy-preflight` 17, plus unchanged
 `stripe.provider` 25 / `stripe-connect` 16 / `payout.service` 46 and
 `webhook-reclaim-cron` 9 (now covers both rails). **API unit
-1464 passed (139 files); API integration 243 passed + 1 opt-in skipped (24 files)** — both DB-backed
+1467 passed (139 files); API integration 243 passed + 1 opt-in skipped (24 files)** — both DB-backed
 suites now run green with the services up, including the previously-ENOTFOUND
 `auth-refresh`/`auth-logout`. `enforce-financial-coverage` exit 0 with new floors
 (dodo provider 78, dodo webhook 68, standard-webhooks 81). Browser e2e green:

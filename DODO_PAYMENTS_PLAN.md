@@ -16,7 +16,10 @@
 Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
 
 - **W1.1** ✅ deposit-processor abstraction (`DEPOSIT_PROCESSOR`), fail-closed 400.
-- **W1.2** ✅ `DodoProvider` (checkout over `fetch`) + config schema/env.
+- **W1.2** ✅ `DodoProvider` (checkout over `fetch`) + config schema/env +
+  `readiness()` surfaced on `GET /health` as a fail-closed `deposits` field
+  (`{ enabled, processor, ready }`), so a health-adjacent surface reports the
+  rail without attempting a checkout.
 - **W1.3** ✅ `DodoWebhookController` with **Standard Webhooks** signature
   verification + idempotent `payment.succeeded` deposit credit + A-019
   activation + `refund.succeeded` reversal + `dispute.opened`/`won`/`cancelled`/

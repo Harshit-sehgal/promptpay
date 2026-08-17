@@ -17,6 +17,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { verifyMigrationsApplied } from '../config/migration-check';
 import { PrismaService } from '../config/prisma.service';
 import { MINIMUM_WAIT_CONFIDENCE, SIGNAL_WEIGHTS } from '../extension/extension.constants';
+import { DepositProcessorService } from '../payout/deposit-processor';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { RedisHealthService } from './redis-health.service';
 
@@ -32,6 +33,7 @@ export class HealthController {
     private redis: RedisHealthService,
     private runtimeConfig: RuntimeConfigService,
     private config?: ConfigService,
+    private depositProcessors?: DepositProcessorService,
   ) {}
 
   @ApiOperation({ summary: 'Health check' })
@@ -59,6 +61,13 @@ export class HealthController {
     } catch {
       checks['waitLaunchMode'] = 'unknown';
     }
+
+    // W1.2: report the money-in (deposit) rail on the same public health
+    // contract, so ops and the web can tell whether deposits are configured
+    // without attempting a real checkout. Non-sensitive (rail name + switch
+    // state only, never credentials) and fail-closed: an unreadable config
+    // reports `ready: false`, never a confident "deposits work".
+    checks['deposits'] = await this.getDepositStatus();
 
     // Database connectivity check
     try {
@@ -237,6 +246,32 @@ export class HealthController {
     }
 
     return checks;
+  }
+
+  /**
+   * Resolve the deposit rail's externally-observable state: whether the
+   * `deposits.global` switch is on, which processor is configured, and whether
+   * the two combine into a ready rail. Mirrors `getWaitLaunchMode()`'s
+   * fail-soft contract — a runtime-config outage or an unwired processor must
+   * report `ready: false`, never a confident claim about a money path.
+   */
+  private async getDepositStatus(): Promise<{
+    enabled: boolean;
+    processor: string | null;
+    ready: boolean;
+  }> {
+    try {
+      const enabled = await this.runtimeConfig.isDepositsEnabled();
+      const processor = this.depositProcessors?.resolve() ?? null;
+      const configured = processor?.isEnabled() ?? false;
+      return {
+        enabled,
+        processor: processor?.name ?? null,
+        ready: enabled && configured,
+      };
+    } catch {
+      return { enabled: false, processor: null, ready: false };
+    }
   }
 
   /**

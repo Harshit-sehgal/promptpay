@@ -96,6 +96,77 @@ describe('HealthController wait launch mode (A-089)', () => {
   });
 });
 
+describe('HealthController deposit rail (W1.2)', () => {
+  const redisOk = { check: vi.fn().mockResolvedValue('connected') };
+  const config = { get: vi.fn((_key: string, fallback?: unknown) => fallback) };
+
+  function controllerWith(
+    runtimeConfig: {
+      getWaitLaunchMode: () => Promise<string>;
+      isDepositsEnabled: () => Promise<boolean>;
+    },
+    depositProcessors: {
+      resolve: () => { name: string; isEnabled: () => boolean } | null;
+    },
+  ) {
+    return new HealthController(
+      databaseProbePrisma('ok') as never,
+      redisOk as never,
+      runtimeConfig as never,
+      config as never,
+      depositProcessors as never,
+    );
+  }
+
+  it('reports the rail ready when the switch is on and the processor is configured', async () => {
+    const controller = controllerWith(
+      {
+        getWaitLaunchMode: vi.fn().mockResolvedValue('paused'),
+        isDepositsEnabled: vi.fn().mockResolvedValue(true),
+      },
+      {
+        resolve: () => ({ name: 'dodo', isEnabled: () => true }),
+      },
+    );
+
+    await expect(controller.check()).resolves.toMatchObject({
+      deposits: { enabled: true, processor: 'dodo', ready: true },
+    });
+  });
+
+  it('reports not-ready when the processor is unconfigured or unset', async () => {
+    const controller = controllerWith(
+      {
+        getWaitLaunchMode: vi.fn().mockResolvedValue('paused'),
+        isDepositsEnabled: vi.fn().mockResolvedValue(true),
+      },
+      { resolve: () => null },
+    );
+
+    await expect(controller.check()).resolves.toMatchObject({
+      deposits: { enabled: true, processor: null, ready: false },
+    });
+  });
+
+  it('fails closed to not-ready when the switch cannot be read', async () => {
+    const controller = controllerWith(
+      {
+        getWaitLaunchMode: vi.fn().mockResolvedValue('paused'),
+        isDepositsEnabled: vi.fn().mockRejectedValue(new Error('settings unavailable')),
+      },
+      {
+        resolve: () => ({ name: 'dodo', isEnabled: () => true }),
+      },
+    );
+
+    // A runtime-config outage must never let the probe claim deposits work.
+    await expect(controller.check()).resolves.toMatchObject({
+      status: 'ok',
+      deposits: { enabled: false, processor: null, ready: false },
+    });
+  });
+});
+
 describe('HealthController metrics endpoint', () => {
   function metricsPrisma() {
     const tx = {
