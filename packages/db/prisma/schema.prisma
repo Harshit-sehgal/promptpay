@@ -1193,6 +1193,12 @@ model AdvertiserLedger {
   // ensuring the row remains queryable by `advertiserId`/`createdAt`/etc.
   campaign              Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   stripePaymentIntentId String?
+  // Dodo Payments correlation columns — Dodo webhooks carry `payment_id` and
+  // `refund_id`/`dispute_id` instead of Stripe's PaymentIntent ids. The money-in
+  // deposit credit stores the Dodo payment id; the dispute hold/restore rows
+  // store the Dodo dispute id (mirroring stripePaymentIntentId/stripeDisputeId).
+  dodoPaymentId         String?
+  dodoDisputeId         String?
   // The Stripe Dispute id when this row participates in a dispute freeze.
   // Set on the `hold`/`hold-rev` rows created by the dispute webhook and on
   // the parent deposit credit row while it's flipped to `held` status. NULL
@@ -1213,6 +1219,9 @@ model AdvertiserLedger {
   @@index([createdAt])
   // Dispute lifecycle: the close handler locates held rows by dispute id.
   @@index([stripeDisputeId])
+  // Dodo refund/dispute correlation lookups.
+  @@index([dodoPaymentId])
+  @@index([dodoDisputeId])
   @@map("advertiser_ledger")
 }
 

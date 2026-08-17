@@ -107,6 +107,11 @@ export class WebhookReclaimCronService implements OnApplicationBootstrap, OnModu
     try {
       const orphans = await this.prisma.webhookEvent.findMany({
         where: {
+          // Reclaim reconstructs the full event from Stripe by id, so it can
+          // only ever reclaim Stripe rows. Dodo webhooks are recovered by
+          // Dodo's own retry (Standard Webhooks), not by this cron; a Dodo row
+          // here would be incorrectly dispatched to Stripe's handler.
+          provider: 'stripe',
           processingStatus: { in: ['pending', 'processing'] },
           updatedAt: { lt: cutoff },
         },

@@ -43,6 +43,7 @@ export function evaluateEnvironment(env, { skipComposeCheck = false } = {}) {
   if (!skipComposeCheck) checkComposeOverride();
   checkEnvironment(env);
   checkAttestation(env);
+  checkPayments(env);
   return results;
 }
 
@@ -161,7 +162,69 @@ function checkAttestation(env) {
   warn('attestation', 'a real issuer is configured; confirm the launch-gate experiment passed');
 }
 
-// ── 4. Live infrastructure + operator readiness ─────────────────────────────
+// ── 4. Payment-rail posture ────────────────────────────────────────────────
+// Half-configured rails are the accident class: a secret key without its
+// webhook secret (or product id) boots green and then fails on the first
+// webhook or deposit. Fail on the partial configuration, and fail on a test
+// Dodo endpoint reaching production.
+function checkPayments(env) {
+  const stripeSecret = env.STRIPE_SECRET_KEY;
+  const stripeWebhook = env.STRIPE_WEBHOOK_SECRET;
+  if (stripeSecret && !stripeWebhook) {
+    fail(
+      'stripe-half-configured',
+      'STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is not — Stripe webhooks ' +
+        'cannot be verified. Set both, or neither (Stripe is inactive at launch, D2).',
+    );
+  } else {
+    ok('stripe-half-configured', stripeSecret ? 'complete' : 'inactive (no credentials)');
+  }
+
+  const dodoKey = env.DODO_API_KEY;
+  const dodoWebhook = env.DODO_WEBHOOK_SECRET;
+  const dodoProduct = env.DODO_PRODUCT_ID;
+  const dodoBaseUrl = env.DODO_BASE_URL;
+  if (dodoKey && (!dodoWebhook || !dodoProduct)) {
+    const missing = [!dodoWebhook && 'DODO_WEBHOOK_SECRET', !dodoProduct && 'DODO_PRODUCT_ID']
+      .filter(Boolean)
+      .join(', ');
+    fail(
+      'dodo-half-configured',
+      `DODO_API_KEY is set but ${missing} is not — Dodo deposits cannot be verified/created. ` +
+        'Set the full Dodo config, or none of it.',
+    );
+  } else {
+    ok('dodo-half-configured', dodoKey ? 'complete' : 'inactive (no credentials)');
+  }
+
+  if (env.NODE_ENV === 'production' && /test\.dodopayments\.com|dodopayments\.com\/test/i.test(env.DODO_BASE_URL ?? '')) {
+    fail(
+      'dodo-test-endpoint',
+      'DODO_BASE_URL points at the Dodo TEST endpoint in production. A live key is required ' +
+        '(decision D3); never launch on the test base URL.',
+    );
+  } else {
+    ok('dodo-test-endpoint', 'not the test endpoint');
+  }
+
+  if (env.DEPOSIT_PROCESSOR === 'dodo' && (!dodoKey || !dodoWebhook || !dodoProduct || !dodoBaseUrl)) {
+    fail(
+      'deposit-processor',
+      'DEPOSIT_PROCESSOR=dodo but Dodo is not fully configured (DODO_API_KEY, DODO_BASE_URL, ' +
+        'DODO_PRODUCT_ID).',
+    );
+  } else if (env.DEPOSIT_PROCESSOR === 'stripe') {
+    warn(
+      'deposit-processor',
+      'DEPOSIT_PROCESSOR=stripe is selected but Stripe is inactive at launch (D2); confirm ' +
+        'this is intentional before enabling deposits.global.',
+    );
+  } else {
+    ok('deposit-processor', env.DEPOSIT_PROCESSOR || 'unset (deposits fail closed)');
+  }
+}
+
+// ── 5. Live infrastructure + operator readiness ─────────────────────────────
 async function checkDatabase(env) {
   const require = createRequire(join(ROOT, 'apps', 'api', 'package.json'));
   const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');

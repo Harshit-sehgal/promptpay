@@ -38,18 +38,19 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
-  // Raw body parsing for the Stripe webhook route — Stripe needs the raw
-  // request body for signature verification. Mount this before general JSON
-  // parsing so the webhook body is not consumed as an object first.
+  // Raw body parsing for the webhook routes — Stripe and Dodo both need the
+  // raw request body for signature verification. Mount this before general
+  // JSON parsing so the webhook body is not consumed as an object first.
   app.use('/api/v1/payout/stripe/webhook', raw({ type: 'application/json', limit: '256kb' }));
+  app.use('/api/v1/payout/dodo/webhook', raw({ type: 'application/json', limit: '256kb' }));
 
   // ── Body-parser size limits ─────────────────────────────────────────
   //    NestJS's default body-parser caps JSON at 100kb, but that default
-  //    is implicit and an unbounded Stripe webhook `raw()` mount would have no
+  //    is implicit and an unbounded webhook `raw()` mount would have no
   //    limit (potentially unbounded). An attacker submitting a large JSON
   //    body to any non-webhook route could amplify IO/CPU before the
   //    throttle guard reacts. Pin explicit limits so the cap is enforced
-  //    and visible: 100kb for general JSON, 256kb for Stripe webhooks,
+  //    and visible: 100kb for general JSON, 256kb for provider webhooks,
   //    100kb for urlencoded. These mount before Nest's own body-parser
   //    would otherwise engage with the implicit default.
   app.use(json({ limit: '100kb' }));

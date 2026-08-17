@@ -111,3 +111,71 @@ test('a clean environment produces no failures beyond the config schema', () => 
   const unexpected = findings.filter((f) => f.level === 'FAIL' && f.name !== 'config-schema');
   assert.deepEqual(unexpected, []);
 });
+
+test('fails on a half-configured Stripe rail (secret without webhook secret)', () => {
+  const findings = evaluateEnvironment(
+    { ...VALID, STRIPE_SECRET_KEY: 'sk_test_1', STRIPE_WEBHOOK_SECRET: '' },
+    { skipComposeCheck: true },
+  );
+  assert.equal(findingFor(findings, 'stripe-half-configured').level, 'FAIL');
+});
+
+test('passes on a fully-inactive Stripe rail', () => {
+  const findings = evaluateEnvironment(VALID, { skipComposeCheck: true });
+  assert.equal(findingFor(findings, 'stripe-half-configured').level, 'PASS');
+});
+
+test('fails on a half-configured Dodo rail (key without webhook secret or product id)', () => {
+  for (const dodo of [
+    { DODO_API_KEY: 'k', DODO_WEBHOOK_SECRET: '', DODO_PRODUCT_ID: 'pdt_1' },
+    { DODO_API_KEY: 'k', DODO_WEBHOOK_SECRET: 'whsec_1', DODO_PRODUCT_ID: '' },
+  ]) {
+    const findings = evaluateEnvironment({ ...VALID, ...dodo }, { skipComposeCheck: true });
+    assert.equal(
+      findingFor(findings, 'dodo-half-configured').level,
+      'FAIL',
+      JSON.stringify(dodo),
+    );
+  }
+});
+
+test('fails on the Dodo test endpoint in production', () => {
+  const findings = evaluateEnvironment(
+    { ...VALID, DODO_BASE_URL: 'https://test.dodopayments.com' },
+    { skipComposeCheck: true },
+  );
+  assert.equal(findingFor(findings, 'dodo-test-endpoint').level, 'FAIL');
+});
+
+test('fails when DEPOSIT_PROCESSOR=dodo but Dodo is not fully configured', () => {
+  const findings = evaluateEnvironment(
+    { ...VALID, DEPOSIT_PROCESSOR: 'dodo', DODO_API_KEY: 'k' },
+    { skipComposeCheck: true },
+  );
+  assert.equal(findingFor(findings, 'deposit-processor').level, 'FAIL');
+});
+
+test('warns when the inactive Stripe rail is selected as the deposit processor', () => {
+  const findings = evaluateEnvironment(
+    { ...VALID, DEPOSIT_PROCESSOR: 'stripe' },
+    { skipComposeCheck: true },
+  );
+  assert.equal(findingFor(findings, 'deposit-processor').level, 'WARN');
+});
+
+test('passes the payment checks for a complete Dodo configuration', () => {
+  const findings = evaluateEnvironment(
+    {
+      ...VALID,
+      DODO_API_KEY: 'k',
+      DODO_WEBHOOK_SECRET: 'whsec_1',
+      DODO_PRODUCT_ID: 'pdt_1',
+      DODO_BASE_URL: 'https://live.dodopayments.com',
+      DEPOSIT_PROCESSOR: 'dodo',
+    },
+    { skipComposeCheck: true },
+  );
+  assert.equal(findingFor(findings, 'dodo-half-configured').level, 'PASS');
+  assert.equal(findingFor(findings, 'dodo-test-endpoint').level, 'PASS');
+  assert.equal(findingFor(findings, 'deposit-processor').level, 'PASS');
+});

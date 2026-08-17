@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
 import { RejectApiKeyGuard } from '../common/guards/reject-api-key.guard';
-import { StripeProvider } from '../payout/providers';
+import { DepositProcessorService } from '../payout/deposit-processor';
 import { AdvertiserController } from './advertiser.controller';
 import { AdvertiserService } from './advertiser.service';
 
@@ -27,12 +27,17 @@ function makeController() {
     get: vi.fn((key: string) => (key === 'WEB_BASE_URL' ? 'http://localhost:3000' : undefined)),
   } as unknown as ConfigService;
 
+  const depositProcessors = {
+    resolve: vi.fn(),
+  } as unknown as DepositProcessorService;
+
   return {
     service,
     runtimeConfig,
+    depositProcessors,
     controller: new AdvertiserController(
       service as unknown as AdvertiserService,
-      {} as StripeProvider,
+      depositProcessors,
       config,
       runtimeConfig,
     ),
@@ -160,18 +165,18 @@ describe('AdvertiserController export/delete API-key boundary (A-044)', () => {
     });
   });
 
-  it('passes idempotencyKey through to the Stripe deposit session', async () => {
-    const { controller, service } = makeController();
+  it('passes idempotencyKey through to the resolved deposit processor', async () => {
+    const { controller, service, depositProcessors } = makeController();
     service.getOrCreateProfile = vi.fn().mockResolvedValue({ id: 'adv-1' });
     const createDepositSession = vi.fn().mockResolvedValue({
       sessionId: 'cs_test_123',
       url: 'https://checkout.stripe.com/test',
     });
-    (
-      controller as unknown as { stripe: { createDepositSession: typeof createDepositSession } }
-    ).stripe = {
+    (depositProcessors as unknown as { resolve: () => unknown }).resolve = () => ({
+      name: 'stripe',
+      isEnabled: () => true,
       createDepositSession,
-    };
+    });
 
     const result = await controller.createDepositSession(
       { user: { id: 'user-1' } } as unknown as Request,
@@ -186,5 +191,35 @@ describe('AdvertiserController export/delete API-key boundary (A-044)', () => {
     expect(createDepositSession).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'idem-deposit-1' }),
     );
+  });
+
+  it('fails closed with a 400 when no deposit processor is configured', async () => {
+    const { controller, service, depositProcessors } = makeController();
+    service.getOrCreateProfile = vi.fn().mockResolvedValue({ id: 'adv-1' });
+    (depositProcessors as unknown as { resolve: () => unknown }).resolve = () => null;
+
+    await expect(
+      controller.createDepositSession({ user: { id: 'user-1' } } as unknown as Request, {
+        amountMinor: 10000n,
+        currency: 'usd',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('fails closed with a 400 when the configured processor has no credentials', async () => {
+    const { controller, service, depositProcessors } = makeController();
+    service.getOrCreateProfile = vi.fn().mockResolvedValue({ id: 'adv-1' });
+    (depositProcessors as unknown as { resolve: () => unknown }).resolve = () => ({
+      name: 'dodo',
+      isEnabled: () => false,
+      createDepositSession: vi.fn(),
+    });
+
+    await expect(
+      controller.createDepositSession({ user: { id: 'user-1' } } as unknown as Request, {
+        amountMinor: 10000n,
+        currency: 'usd',
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

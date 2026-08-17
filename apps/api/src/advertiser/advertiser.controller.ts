@@ -31,7 +31,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Audit, AuditInterceptor } from '../common/interceptors/audit.interceptor';
 import { parsePaginationParam } from '../common/utils/pagination-query';
 import { DeleteAccountDto } from '../developer/dto';
-import { StripeProvider } from '../payout/providers';
+import { DepositProcessorService } from '../payout/deposit-processor';
 import { RuntimeConfigService } from '../runtime-config/runtime-config.service';
 import { AdvertiserService } from './advertiser.service';
 import {
@@ -74,7 +74,7 @@ function resolveApiContext(req: Request): AdvertiserContext {
 export class AdvertiserController {
   constructor(
     private service: AdvertiserService,
-    private stripe: StripeProvider,
+    private depositProcessors: DepositProcessorService,
     private config: ConfigService,
     private runtimeConfig: RuntimeConfigService,
   ) {}
@@ -322,7 +322,15 @@ export class AdvertiserController {
     if (amountMinor < BigInt(minimum)) {
       throw new BadRequestException(`Minimum deposit is ${minimum} minor units`);
     }
-    return this.stripe.createDepositSession({
+    // W1.1: resolve the configured money-in processor instead of calling
+    // Stripe directly. Unset/unknown processor or missing credentials fails
+    // closed with a clean 400 — never a 500 — so a half-migrated deployment
+    // cannot take deposits on an unexpected rail.
+    const processor = this.depositProcessors.resolve();
+    if (!processor || !processor.isEnabled()) {
+      throw new BadRequestException('Deposits are temporarily disabled');
+    }
+    return processor.createDepositSession({
       advertiserId,
       amountMinor,
       currency,

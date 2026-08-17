@@ -321,7 +321,7 @@ const envSchema = z
       'must be a comma-separated allowlist of wait-attestation versions',
     ),
 
-    // Stripe (advertiser deposits)
+    // Stripe (advertiser deposits — INACTIVE at launch, decision D2)
     STRIPE_PUBLIC_KEY: z.string().optional(),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
@@ -329,6 +329,20 @@ const envSchema = z
     // STRIPE_PUBLISHABLE_KEY. Accept both spellings so either variable can be
     // present without an Invalid env failure.
     STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+
+    // Dodo Payments (advertiser deposits — launch money-in rail, decision D1).
+    // Dodo is a Merchant of Record and supports money-IN (checkout) only; it
+    // has no third-party payout API (developer payouts run on platform rails).
+    DODO_API_KEY: z.string().optional(),
+    DODO_BASE_URL: z.string().optional(),
+    DODO_WEBHOOK_SECRET: z.string().optional(),
+    // Checkout is product-based; the operator creates a "wallet top-up"
+    // product (pay-what-you-want) in the Dodo dashboard and supplies its id.
+    DODO_PRODUCT_ID: z.string().optional(),
+
+    // Money-in processor selection. Unset means no deposit rail is configured
+    // and the deposit-session endpoint fails closed with a clean 400 (W1.1).
+    DEPOSIT_PROCESSOR: z.enum(['stripe', 'dodo']).optional(),
 
     // Google OAuth (extension + web sign-in)
     GOOGLE_CLIENT_ID: z.string().optional(),
@@ -674,6 +688,57 @@ const envSchema = z
       message:
         'STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is set — Stripe webhooks cannot be verified without it.',
       path: ['STRIPE_WEBHOOK_SECRET'],
+    },
+  )
+  .refine(
+    (env) => {
+      // A test Dodo key/base URL must never reach production when the Dodo
+      // rail is actually selected. D3 recorded the operator's key is a TEST
+      // key on https://test.dodopayments.com; a live key is still pending.
+      // Gated on DEPOSIT_PROCESSOR === 'dodo': a stray test base URL in a
+      // production env with the rail unselected is inert (the deposit endpoint
+      // fails closed), and must not break boot — the same rule as the
+      // completeness checks below.
+      if (
+        env.NODE_ENV === 'production' &&
+        env.DEPOSIT_PROCESSOR === 'dodo' &&
+        env.DODO_BASE_URL &&
+        /test\.dodopayments\.com|dodopayments\.com\/test/i.test(env.DODO_BASE_URL)
+      ) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        'DODO_BASE_URL must be the live endpoint (not the test base URL) when DEPOSIT_PROCESSOR=dodo in production.',
+      path: ['DODO_BASE_URL'],
+    },
+  )
+  .refine(
+    (env) => {
+      // Selecting the Dodo processor requires a complete Dodo configuration,
+      // otherwise the endpoint fails closed at runtime with no clear cause.
+      // DODO_WEBHOOK_SECRET is included: without it every legitimate webhook
+      // signature is rejected, so deposits would credit nothing. (A stray
+      // DODO_API_KEY with no processor selected is fine — the deposit endpoint
+      // fails closed because DEPOSIT_PROCESSOR is unset.)
+      if (env.DEPOSIT_PROCESSOR === 'dodo') {
+        if (
+          !env.DODO_API_KEY ||
+          !env.DODO_BASE_URL ||
+          !env.DODO_WEBHOOK_SECRET ||
+          !env.DODO_PRODUCT_ID
+        ) {
+          return false;
+        }
+      }
+      return true;
+    },
+    {
+      message:
+        'DEPOSIT_PROCESSOR=dodo requires DODO_API_KEY, DODO_BASE_URL, DODO_WEBHOOK_SECRET and DODO_PRODUCT_ID.',
+      path: ['DEPOSIT_PROCESSOR'],
     },
   )
   .refine(

@@ -52,8 +52,9 @@ export default function AdvertiserPolicyPage() {
             <h2 className="text-xl font-semibold text-surface-900 mb-4">3. Billing and Payments</h2>
             <p className="text-surface-600 leading-relaxed mb-4">
               Advertisers are billed per impression and per click based on their selected bid model.
-              All funds are deposited via Stripe before campaigns go live. Unused budget remains in
-              the advertiser balance and can be used for future campaigns or refunded upon request.
+              All funds are deposited via Dodo Payments before campaigns go live. Unused budget
+              remains in the advertiser balance and can be used for future campaigns or refunded
+              upon request.
             </p>
           </section>
 

@@ -150,6 +150,21 @@ Which automated payout rails are live at launch is an **operator decision**, not
 a code change. The code enforces a single source of truth
 (`packages/shared/src/payout-providers.ts`) and a deploy-time gate.
 
+### 8.0 Money-in (deposits) vs money-out (payouts) — decision D1/D2/D4
+
+This section is about **money-out** (developer payouts). **Money-in** (advertiser
+deposits) is a separate rail, decided 2026-08-17 (`DODO_PAYMENTS_PLAN.md`):
+
+- **Dodo Payments is the launch deposit rail (D1)** — selected via
+  `DEPOSIT_PROCESSOR=dodo`, configured with `DODO_API_KEY` / `DODO_BASE_URL` /
+  `DODO_WEBHOOK_SECRET` / `DODO_PRODUCT_ID`, and reconciled by
+  `DodoWebhookController` (Standard Webhooks). Dodo is a Merchant of Record and
+  has **no third-party payout API**, so it appears in the payout catalogue
+  below only as the stub `dodo_payments` row (rejected at registration).
+- **Stripe deposits are INACTIVE at launch (D2)** — `STRIPE_SECRET_KEY` stays
+  unset in production and every Stripe deposit surface fails closed.
+  `stripe_connect` (payout) below remains `coming_soon` independently of that.
+
 ### 8.1 Default catalogue (safe-seed)
 
 | Provider         | Default status | Notes                                |

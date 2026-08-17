@@ -130,7 +130,7 @@ export default function AdvertiserBillingPage() {
     try {
       const res = await advertiserApi.createDepositSession(amountMinor, depositCurrency);
       const { url } = res.data as { sessionId: string; url: string };
-      // Redirect to Stripe Checkout
+      // Redirect to the hosted checkout (Dodo Payments at launch — decision D1).
       window.location.assign(url);
     } catch (err: unknown) {
       setDepositError(getErrorMessage(err, 'Failed to create deposit session'));
@@ -204,7 +204,7 @@ export default function AdvertiserBillingPage() {
           <div className="bg-ink-800 border border-ink-600/30 rounded-xl p-6 mb-8">
             <h2 className="text-white font-semibold mb-2">Deposit funds</h2>
             <p className="text-ink-200 text-sm mb-5">
-              Add funds to your account via Stripe. Your balance is used to run ad campaigns.
+              Add funds to your account via Dodo Payments. Your balance is used to run ad campaigns.
             </p>
 
             <div className="mb-4">
@@ -314,7 +314,7 @@ export default function AdvertiserBillingPage() {
               className="w-full sm:w-auto"
             >
               {validAmount
-                ? `Deposit ${formatCurrency(validAmount, displayDepositCurrency)} via Stripe`
+                ? `Deposit ${formatCurrency(validAmount, displayDepositCurrency)} via Dodo Payments`
                 : 'Select an amount to deposit'}
             </Button>
 
@@ -334,7 +334,7 @@ export default function AdvertiserBillingPage() {
                 />
               </svg>
               <span>
-                Securely processed by Stripe. Funds are available immediately after payment.
+                Securely processed by Dodo Payments. Funds are available immediately after payment.
               </span>
             </div>
           </div>

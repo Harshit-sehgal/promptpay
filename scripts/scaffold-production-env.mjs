@@ -106,10 +106,20 @@ const SECTIONS = [
     ],
   ],
   [
+    'Money-in (deposits) — Dodo Payments is the launch rail (decision D1)',
+    [
+      ['DEPOSIT_PROCESSOR', 'dodo', 'Launch money-in rail (decision D1).'],
+      ['DODO_API_KEY', null, 'LIVE Dodo key — never the test key.'],
+      ['DODO_BASE_URL', 'https://live.dodopayments.com', 'Live endpoint.'],
+      ['DODO_WEBHOOK_SECRET', null, 'Standard Webhooks signing secret (Developer → Webhooks).'],
+      ['DODO_PRODUCT_ID', null, 'Wallet top-up product id (pay-what-you-want) from the dashboard.'],
+    ],
+  ],
+  [
     'Optional integrations — leave unset until you have credentials',
     [
       ['# GOOGLE_CLIENT_ID', '', 'Only needed for the Google sign-in button.'],
-      ['# STRIPE_SECRET_KEY', '', 'Advertiser deposits.'],
+      ['# STRIPE_SECRET_KEY', '', 'INACTIVE at launch (decision D2) — advertiser deposits moved to Dodo.'],
       ['# STRIPE_WEBHOOK_SECRET', '', ''],
       ['# PAYPAL_CLIENT_ID', '', 'Recommended first automated payout rail.'],
       ['# PAYPAL_CLIENT_SECRET', '', ''],

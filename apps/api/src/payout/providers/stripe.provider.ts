@@ -25,6 +25,9 @@ import { PayoutProviderSafeFailure, PayoutProviderUnsafeFailure } from '../payou
  */
 @Injectable()
 export class StripeProvider {
+  /** Stable processor id matching the DEPOSIT_PROCESSOR env value (W1.1). */
+  readonly name = 'stripe';
+
   private readonly logger = new Logger(StripeProvider.name);
   private readonly stripe: Stripe | null;
   private readonly enabled: boolean;

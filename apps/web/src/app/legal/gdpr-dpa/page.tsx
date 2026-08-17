@@ -106,8 +106,12 @@ export default function GdprDpaPage() {
           driver in development).
         </li>
         <li>
-          <strong className="text-surface-900">Payout providers</strong> — PayPal, Stripe, Wise,
-          Payoneer, Razorpay, as elected by the user.
+          <strong className="text-surface-900">Payment processor</strong> — Dodo Payments (Merchant
+          of Record for advertiser deposits).
+        </li>
+        <li>
+          <strong className="text-surface-900">Payout providers</strong> — PayPal, Wise, Payoneer,
+          Razorpay, as elected by the user. Stripe is currently inactive.
         </li>
       </ul>
       <p>

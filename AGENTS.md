@@ -24,7 +24,7 @@
 
 ## Current Status (snapshot 2026-08-08)
 
-- **95 migrations.** The sandbox XTS economy wave (7 logical commits,
+- **96 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of
   `25da3e1`: sandbox module + schema/migrations, extension non-cash placement
   path, web panels, VSIX packaging + attention promotion, scenario harness,
@@ -110,6 +110,119 @@
   `eb9e6d8` (dedup matrix + 2 migrations), `ab72971` (attention lease),
   `00ae5c1` (scenario harness), `e8e476f` (scan fix + const), `22c59b7`
   (e2e throttle).
+
+## Resolved 2026-08-17 — Dodo Payments workstream (W1.1–W1.3 structure + W3)
+
+First code landing from `DODO_PAYMENTS_PLAN.md`. The money-in rail is now wired
+end-to-end behind the fail-closed `DEPOSIT_PROCESSOR` gate; nothing here is
+live until the operator answers §8.1–§8.5 of that plan.
+
+- **W1.1 — deposit-processor abstraction.** New `DepositProcessorService` +
+  `DepositSessionProvider` interface (`apps/api/src/payout/deposit-processor.ts`)
+  resolve the configured money-in processor from `DEPOSIT_PROCESSOR`
+  (`stripe`|`dodo`). The advertiser controller no longer calls `StripeProvider`
+  directly; unset/unknown processor or missing credentials now returns a clean
+  **400** (`Deposits are temporarily disabled`), never a 500. `StripeProvider`
+  gained `readonly name = 'stripe'` to satisfy the interface (otherwise
+  untouched).
+- **W1.2 — `DodoProvider`** (`apps/api/src/payout/providers/dodo.provider.ts`)
+  creates Dodo Checkout Sessions over `fetch` (no SDK) at
+  `POST {DODO_BASE_URL}/checkouts`, returning `{ sessionId, url }`. Config:
+  `DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`, `DODO_PRODUCT_ID`
+  (added to `@waitlayer/config` schema + `.env.example`). Amounts pass the same
+  `requireProviderSafeMinorAmount` guard as Stripe; `readiness()` reports the
+  rail for fail-closed billing UI.
+- **W1.3 — `DodoWebhookController`** (`apps/api/src/payout/dodo-webhook.controller.ts`,
+  route `POST /payout/dodo/webhook`, raw body mounted in `main.ts`). Verifies
+  **Standard Webhooks** signatures (`webhook-id`/`webhook-signature`/
+  `webhook-timestamp`, HMAC-SHA256 over `<id>.<ts>.<body>` — implemented in
+  `apps/api/src/payout/standard-webhooks.ts` with `node:crypto`, no dependency).
+  `payment.succeeded` credits the advertiser ledger + platform cash
+  (idempotent by Dodo payment id) and reuses the A-019 campaign-activation SQL.
+  `refund.succeeded` reverses the deposit (A-063-style per-entry idempotency +
+  platform-cash mirror); `dispute.opened`/`won`/`cancelled`/`lost`/`accepted`
+  implement the hold/restore/write-off lifecycle. A refund overlapping an open
+  dispute is retained `pending_review` (never guessed). Events routed to
+  `pending_review` are NOT overwritten to `processed` (the converge step is
+  scoped to `processingStatus: 'pending'`). Payout/subscription/unknown types
+  are retained `pending_review`. Field names pinned from Dodo's generated Go
+  SDK (`Refund`: `refund_id`/`payment_id`/`amount`/`currency`/`status`;
+  `Dispute`: `dispute_id`/`payment_id`/`amount` (string)/`currency`/
+  `dispute_status`); the minor-vs-major amount unit still needs a live test
+  webhook (§8.5).
+- **W3 — Stripe fail-closed.** `scripts/deploy-preflight.mjs` gained a
+  `checkPayments` pass: half-configured Stripe/Dodo, Dodo test endpoint in
+  production, and `DEPOSIT_PROCESSOR=dodo` without full config all FAIL; the
+  inactive-Stripe processor selection WARNs.
+- **Reclaim cron scoped to Stripe.** `WebhookReclaimCronService` now filters
+  `provider: 'stripe'` — it reconstructs events by id from Stripe, so a Dodo row
+  would have been incorrectly dispatched to Stripe's handler. Dodo recovers via
+  its own Standard-Webhooks retry, not this cron.
+
+**Verification on this tree (run with Postgres :5432/:5433 and Redis :6379
+up):** typecheck 17/17, lint 11/11, build 11/11, `audit-claims` 15/15,
+`scan-build-secrets` PASS, `audit-dependencies` exit 0, `check-licenses` clean,
+`migrate diff --exit-code` drift-free. New/updated unit specs green:
+`standard-webhooks` 9, `dodo.provider` 7, `dodo-webhook.controller` 20 (A-107
+authenticity-boundary suite + refund/dispute lifecycle), `advertiser.controller`
+11, `deploy-preflight` 17, plus unchanged `stripe.provider` 25 /
+`stripe-connect` 16 / `payout.service` 46 / `webhook-reclaim-cron` 6. **API unit
+1458 passed (139 files); API integration 243 passed + 1 opt-in skipped (24 files)** — both DB-backed
+suites now run green with the services up, including the previously-ENOTFOUND
+`auth-refresh`/`auth-logout`. `enforce-financial-coverage` exit 0 with new floors
+(dodo provider 78, dodo webhook 68, standard-webhooks 81). Browser e2e green:
+**dev 136 passed / 2 skipped** (`.e2e/run-e2e.sh`, + vscode live smoke 1/1) and
+**production 138 passed** (`pnpm e2e:production`, incl. the sensitive developer
+journey).
+
+- **W1.5 codeable gates.** Opt-in Dodo deposit sandbox spec
+  (`apps/api/src/integration/dodo-deposit-sandbox.spec.ts`) exercises
+  `DodoProvider.createDepositSession` against the real Dodo TEST endpoint —
+  gated on `RUN_DODO_SANDBOX=1` + the §8.1/§8.3 credentials and product id, it
+  **skips cleanly otherwise** (verified: 1 skipped, no failure in a normal run).
+  Content-gate browser e2e (`apps/web/e2e/dodo-deposit.spec.ts`) proves the
+  billing page renders the Dodo rail and **fails closed with no processor
+  configured** (a deposit shows "temporarily disabled" and never redirects to a
+  hosted checkout) — green on both viewports in dev and production e2e.
+
+- **Config validation corrected (over-broad Dodo rule, twice).** The first cut
+  required `DODO_WEBHOOK_SECRET`/`DODO_PRODUCT_ID` whenever `DODO_API_KEY` was
+  present, and hard-failed a test `DODO_BASE_URL` in production whenever it was
+  set — either one broke a full-app boot (unit/integration for the first,
+  `pnpm e2e:production` for the second) as soon as the gitignored `.env` carried
+  the test key/base-URL without selecting the rail. Dodo completeness and the
+  test-endpoint guard are now gated on `DEPOSIT_PROCESSOR === 'dodo'` (the rail
+  actually being selected), with `DODO_WEBHOOK_SECRET` included in completeness;
+  a stray key/test-URL with no processor selected is inert — the deposit
+  endpoint still fails closed because `DEPOSIT_PROCESSOR` is unset.
+  `deploy-preflight`'s independent `checkPayments` still flags a half-configured
+  Dodo and a test endpoint in production regardless of processor.
+- **Two new advisories fixed in the same pass** (advisory DB moved, not caused
+  by this work): `nanoid <3.3.18` (`GHSA-2v37-7h3g-55p8` — the A-111 3.3.17 fix
+  was incomplete) raised the existing `^3` floor to 3.3.18, and
+  `deepmerge-ts <8.0.0` (`GHSA-ggr8-5vv4-36mx`, CWE-674 stack exhaustion) got a
+  bare `deepmerge-ts: 8.0.1` floor. `deepmerge-ts`'s sole consumer is
+  `@prisma/config` 7.9.0, which uses only the plain `deepmerge` default export
+  (verified against its compiled dist — no `deepmergeInto`/`metaMeta`/
+  `mergeInfo`), so the 8.0 breaking changes do not reach Prisma; `prisma
+generate` + `migrate status` re-verified green after the bump.
+
+- **Migration `20260817000000_dodo_payment_reference`** adds
+  `AdvertiserLedger.dodoPaymentId` + `dodoDisputeId` (with indexes), mirroring
+  the `stripePaymentIntentId`/`stripeDisputeId` pair so the Dodo refund/dispute
+  handlers locate deposits by payment id and holds by dispute id. Migration
+  count 95 → **96** (audit-claims machine-checks this).
+- **W5 legal copy:** GDPR DPA sub-processors list gained a "Payment processor —
+  Dodo Payments (Merchant of Record)" entry and marks Stripe inactive; the
+  advertiser-policy and advertiser billing page now name Dodo Payments instead
+  of Stripe.
+
+**Still open (operator, tracked in DODO_PAYMENTS_PLAN.md §8):** live Dodo key +
+webhook secret (§8.1), product/currencies (§8.3), MoR fee treatment (§8.5), and
+verifying the `payment.succeeded`/`refund.succeeded`/`dispute.*` payload amount
+units (minor vs major) against a real test webhook before enabling
+`deposits.global`. The refund/dispute handlers are wired and unit-tested but
+must be validated against a live test event once §8.1 is answered.
 
 ## Resolved 2026-08-07 — A-087…A-090 + A-091
 
@@ -983,7 +1096,7 @@ Fixed in three layers:
 Eleven cases pinned, including `file:`, `javascript:` and `ftp:` schemes, remote
 plain HTTP, and a malformed value. Note what is deliberately still allowed: any
 **https** origin. A user editing their own machine settings may point the
-extension anywhere they like; the vulnerability was that a *workspace* could.
+extension anywhere they like; the vulnerability was that a _workspace_ could.
 
 **The CLI's equivalent was already correct** — `resolveApiBaseUrl` returns the
 production origin on both branches and never reads workspace state. Only the
@@ -1042,11 +1155,11 @@ A crude grep for `acquireCronLease` and an `inFlight`-style flag flagged five
 crons. **All five were false positives** — the codebase uses four different
 concurrency mechanisms, each appropriate to its workload:
 
-| mechanism | used by |
-| --- | --- |
-| `cron_leases` table (TTL, cross-replica) | 7 crons |
-| `pg_try_advisory_xact_lock` | `session-cleanup`, `ComplianceService.runAllRetention` |
-| `FOR UPDATE SKIP LOCKED` | `email-queue.cron` |
+| mechanism                                  | used by                                                 |
+| ------------------------------------------ | ------------------------------------------------------- |
+| `cron_leases` table (TTL, cross-replica)   | 7 crons                                                 |
+| `pg_try_advisory_xact_lock`                | `session-cleanup`, `ComplianceService.runAllRetention`  |
+| `FOR UPDATE SKIP LOCKED`                   | `email-queue.cron`                                      |
 | in-process single-flight + a DB unique key | `AuditService.processOutbox` + `sourceOutboxId @unique` |
 
 Both "missing" guards existed one level down (`drainPromise`, not `inFlight`),
@@ -1142,12 +1255,12 @@ commits stale, so its version deltas were applied to today's manifests
 merging its `package.json` files. 47 bumps landed. Four had to be held, each
 found by a gate and each recorded in `pnpm-workspace.yaml` with its evidence:
 
-| held at | why |
-| --- | --- |
-| `@prisma/*` 7.9.0 | 7.9.1 breaks `packages/db` typecheck — the adapter's expected `pg` types stop matching `@types/pg` |
-| `stripe` 22.3.1 | 22.4.0 moves the pinned API version to `2026-07-29.dahlia`. Trivial to silence by editing the string, and wrong to: API version changes object shapes and webhook payloads on a live payments path |
-| `redis` 6.1.0 | 6.2.0 stops honouring the connect timeout — the reliability scenario that proves the API degrades gracefully when Redis is down times out at 20x headroom. Same failure class as A-115 |
-| `@types/pg` 8.20.0 | the version main runs green |
+| held at            | why                                                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@prisma/*` 7.9.0  | 7.9.1 breaks `packages/db` typecheck — the adapter's expected `pg` types stop matching `@types/pg`                                                                                                 |
+| `stripe` 22.3.1    | 22.4.0 moves the pinned API version to `2026-07-29.dahlia`. Trivial to silence by editing the string, and wrong to: API version changes object shapes and webhook payloads on a live payments path |
+| `redis` 6.1.0      | 6.2.0 stops honouring the connect timeout — the reliability scenario that proves the API degrades gracefully when Redis is down times out at 20x headroom. Same failure class as A-115             |
+| `@types/pg` 8.20.0 | the version main runs green                                                                                                                                                                        |
 
 Also required a new security floor: `@nestjs/swagger` 11.4.6 pulls in js-yaml 5,
 and GHSA-pm4m-ph32-ghv5 (high) covers ≤5.2.1. main never carried js-yaml 5 at
@@ -1156,7 +1269,7 @@ ranges are scoped per major, the same reason `brace-expansion` needs both a ^1
 and a ^5 entry.
 
 **Two lessons worth keeping.** A caret cannot exclude a break that shipped in a
-*patch* release: reverting `^7.9.1` to `^7.9.0` changed nothing, because the
+_patch_ release: reverting `^7.9.1` to `^7.9.0` changed nothing, because the
 caret still permits 7.9.1 and main only resolved 7.9.0 because its lockfile
 predated the release. And the first diagnosis was wrong — the Prisma failure was
 blamed on `@types/pg` 8.20.4 and pinning it did not help, which is what ruled it

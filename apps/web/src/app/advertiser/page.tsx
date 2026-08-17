@@ -66,7 +66,7 @@ export default function AdvertisersPage() {
   const searchParams = useSearchParams();
   const depositStatus = searchParams.get('deposit');
 
-  // Handle Stripe Checkout redirect (successUrl/cancelUrl in advertiser.controller.ts)
+  // Handle hosted-checkout redirect (successUrl/cancelUrl in advertiser.controller.ts)
   useEffect(() => {
     if (depositStatus === 'success') {
       setBanner({ type: 'success', visible: true });
@@ -101,7 +101,7 @@ export default function AdvertisersPage() {
         <p className="text-ink-200 text-sm">Your campaigns and performance</p>
       </div>
 
-      {/* Stripe Checkout redirect banners */}
+      {/* Hosted-checkout redirect banners */}
       {banner?.visible && (
         <div
           className={`mb-6 rounded-xl p-4 border ${

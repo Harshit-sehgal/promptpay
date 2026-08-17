@@ -29,15 +29,26 @@ overrides:
   # ^4 floor above cannot reach a 5.x resolution; ranges are scoped per major,
   # exactly as with brace-expansion.
   'js-yaml@^5.0.0': 5.2.2
-  # GHSA / nanoid <3.3.17 (high): a custom generator can loop indefinitely when
-  # `size` is zero. Reaches the tree only through build tooling
+  # GHSA-2v37-7h3g-55p8 / nanoid <3.3.18 (high): a custom generator can loop
+  # indefinitely when `size` is zero — the 3.3.17 fix (A-111) was incomplete
+  # and a second advisory with the same title was published against it,
+  # patched in 3.3.18. Reaches the tree only through build tooling
   # (@sentry/nextjs -> webpack -> terser-webpack-plugin -> postcss -> nanoid,
   # and next -> postcss -> nanoid), but @sentry/nextjs is a production
   # dependency of apps/web so `pnpm audit --prod` gates on it. Scoped to the ^3
-  # range: the whole tree resolves to a single nanoid 3.3.16 today, and a bare
+  # range: the whole tree resolves to a single nanoid 3.3.x today, and a bare
   # `nanoid:` override would also rewrite any future 5.x consumer. Drop this
   # once postcss raises its own lower bound.
-  'nanoid@^3.0.0': 3.3.17
+  'nanoid@^3.0.0': 3.3.18
+  # GHSA-ggr8-5vv4-36mx / deepmerge-ts <8.0.0 (high, CWE-674): stack exhaustion
+  # when merging recursive object graphs. Sole consumer is @prisma/config
+  # (prisma 7.9.0 -> @prisma/config 7.9.0 -> deepmerge-ts 7.1.5), which uses
+  # only the default `deepmerge` export on plain config objects. The 8.0.0
+  # breaking changes (deepmergeInto mutation semantics, metadata type renames,
+  # map-merge internals) are all in APIs @prisma/config does not call — verified
+  # against its compiled dist (no `deepmergeInto`/`metaMeta`/`mergeInfo`
+  # references). Drop this once Prisma raises its own lower bound.
+  'deepmerge-ts': 8.0.1
   # COMPATIBILITY HOLD, not a security floor. Prisma 7.9.1 breaks packages/db's
   # typecheck:
   #   src/index.ts: TS2345: Argument of type 'PoolConfig' is not assignable to
