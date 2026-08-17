@@ -316,7 +316,7 @@ Response: advertiser-ledger primary balance, per-currency balances, total confir
 
 Request: amountMinor, currency optional.
 
-Response: Stripe checkout session id and redirect URL.
+Response: hosted checkout session id and redirect URL. The launch processor is Dodo Payments (D1); the processor is selected by `DEPOSIT_PROCESSOR` and the endpoint fails closed when unset.
 
 ## Admin
 

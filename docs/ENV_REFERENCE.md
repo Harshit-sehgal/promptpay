@@ -82,7 +82,21 @@ Default shown where one exists.
 | `MOCK_GOOGLE_ENABLED`               | opt | —                  | `1` enables mock Google verifier (ignored in production).                                                                                |
 | `ALLOW_MOCK_GOOGLE`                 | opt | —                  | `true` legacy alias for `MOCK_GOOGLE_ENABLED` (ignored in prod).                                                                         |
 
-## Stripe (advertiser deposits)
+## Advertiser deposits (money-in)
+
+`DEPOSIT_PROCESSOR` selects the money-in rail. **Dodo Payments is the launch
+rail (decision D1); Stripe is inactive at launch (D2).** See
+`DODO_PAYMENTS_PLAN.md`.
+
+| Variable              | Req | Default | Purpose                                                                                                                                            |
+| --------------------- | --- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEPOSIT_PROCESSOR`   | opt | —       | `stripe` \| `dodo`. Unset = deposits fail closed (400).                                                                                            |
+| `DODO_API_KEY`        | opt | —       | Dodo API key. Required when `DEPOSIT_PROCESSOR=dodo`.                                                                                              |
+| `DODO_BASE_URL`       | opt | —       | `https://test.dodopayments.com` or `https://live.dodopayments.com`. Required when `DEPOSIT_PROCESSOR=dodo`; test endpoint forbidden in production. |
+| `DODO_WEBHOOK_SECRET` | opt | —       | Dodo webhook signing secret (Standard Webhooks). Required when `DEPOSIT_PROCESSOR=dodo`.                                                           |
+| `DODO_PRODUCT_ID`     | opt | —       | Wallet top-up product id (pay-what-you-want). Required when `DEPOSIT_PROCESSOR=dodo`.                                                              |
+
+## Stripe (inactive at launch — decision D2)
 
 | Variable                 | Req | Default | Purpose                         |
 | ------------------------ | --- | ------- | ------------------------------- |

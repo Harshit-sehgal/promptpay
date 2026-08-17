@@ -300,7 +300,7 @@ treated as an acceptable hour-long operating mode.
 - [ ] Docker images built and pushed
 - [ ] SSL certificates valid
 - [ ] Sentry DSN configured and test error captured
-- [ ] Stripe webhook endpoint configured in Stripe dashboard
+- [ ] Dodo webhook endpoint configured in the Dodo dashboard (money-in is Dodo at launch — decision D1; Stripe is inactive)
 - [ ] Health checks passing
 - [ ] Rollback procedure tested
 - [ ] Database backup verified

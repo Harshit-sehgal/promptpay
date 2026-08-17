@@ -123,7 +123,7 @@ Acceptance:
 - Build campaign creation form.
 - Build targeting form.
 - Build campaign submit/pause/resume.
-- Integrate Stripe deposit flow.
+- Integrate the configured deposit processor; launch implementation is Dodo Payments (D1), with Stripe retained but inactive at launch (D2).
 - Add advertiser reports.
 
 Acceptance:
@@ -236,4 +236,3 @@ Acceptance:
 
 - Required test suite passes.
 - Private beta can run with 100 developers and 2 advertisers.
-

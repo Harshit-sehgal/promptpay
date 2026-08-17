@@ -91,7 +91,7 @@ Deliverables:
 - Campaign submission.
 - Admin approval workflow.
 - Advertiser reports.
-- Stripe deposit flow.
+- Dodo Payments deposit flow (launch money-in rail, D1; Stripe remains inactive at launch).
 
 Definition of done:
 
@@ -225,4 +225,3 @@ Potential work:
 Expansion gate:
 
 - Do not add a new integration until the current VS Code and CLI surfaces are stable, measurable, and not creating support or fraud debt.
-

@@ -10,11 +10,11 @@
 
 ### Three-Ledger System
 
-| Ledger | Tracks | Entry Types |
-|--------|--------|-------------|
-| **EarningsLedger** | Developer earnings | `credit` (earnings), `debit` (recovery debt) |
-| **AdvertiserLedger** | Advertiser charges | `debit` (spend), `refund` (reversal), `credit` (deposit) |
-| **PlatformLedger** | Platform revenue | `credit` (fees), `reversal` (refunds), `refund` (cash out) |
+| Ledger               | Tracks             | Entry Types                                                |
+| -------------------- | ------------------ | ---------------------------------------------------------- |
+| **EarningsLedger**   | Developer earnings | `credit` (earnings), `debit` (recovery debt)               |
+| **AdvertiserLedger** | Advertiser charges | `debit` (spend), `refund` (reversal), `credit` (deposit)   |
+| **PlatformLedger**   | Platform revenue   | `credit` (fees), `reversal` (refunds), `refund` (cash out) |
 
 ### Entry States
 
@@ -27,11 +27,11 @@ estimated → pending → confirmed → paid
 
 ### Revenue Split (per billable impression/click)
 
-| Bucket | Share | Ledger |
-|--------|-------|--------|
-| Developer | 60% (80% launch incentive) | EarningsLedger |
-| Platform fee | 30% (10% launch) | PlatformLedger |
-| Fraud reserve | 10% | PlatformLedger |
+| Bucket        | Share                      | Ledger         |
+| ------------- | -------------------------- | -------------- |
+| Developer     | 60% (80% launch incentive) | EarningsLedger |
+| Platform fee  | 30% (10% launch)           | PlatformLedger |
+| Fraud reserve | 10%                        | PlatformLedger |
 
 ---
 
@@ -66,22 +66,22 @@ Sum(AdvertiserLedger debits) - Sum(AdvertiserLedger refunds)
 - `debit` entries = total campaign spend charged
 - `refund` entries = invalid traffic reversals + archive refunds
 - Net = gross spend - refunds = actual advertiser cost
-- `credit` entries = Stripe deposit amounts (linked to Stripe PI)
+- `credit` entries = Dodo deposit amounts (linked to Dodo payment id)
 
 #### PlatformLedger
 
 - `platform_fee` bucket = 30% of net spend (or 10% with launch split)
 - `fraud_reserve` bucket = 10% of net spend
-- `cash` bucket = Stripe payouts (outbound cash)
+- `cash` bucket = advertiser deposits (inbound cash), net of refunds/disputes returned to the rail (outbound)
 - `referral_bonus` bucket = $5 referral rewards
 
 ### 2.4 Manual Cross-Checks
 
-1. Export Stripe transaction report from Stripe dashboard
-2. Compare Stripe deposits against `AdvertiserLedger credit` entries
+1. Export Dodo settlement/transaction report from the Dodo dashboard
+2. Compare Dodo payments against `AdvertiserLedger credit` entries
 3. Export PayPal transaction report
 4. Compare PayPal payouts against `EarningsLedger paid` entries
-5. Check that `PlatformLedger cash` debits match PayPal + Stripe Connect outflows
+5. Check that `PlatformLedger cash` debits match Dodo refunds/disputes (and PayPal outflows for payouts)
 
 ---
 
@@ -100,14 +100,14 @@ Use these as a first-pass health check before diving into raw ledger data.
 
 ## 4. Common Discrepancies
 
-| Symptom | Likely Cause | Resolution |
-|---------|-------------|------------|
-| Earnings > 60% of spend | Launch incentive active (80% split) | Verify `LAUNCH_SPLIT_ENABLED` config |
-| Platform fee + reserve ≠ 40% | Reversals reduced net spend | Check reversal entries |
-| Advertiser refunds > 5% of spend | High fraud reversal rate | Review fraud dashboard |
-| EarningsLedger debits present | Recovery debt from post-payout fraud | Review `/admin/recovery-debt` |
-| Ledger doesn't balance | In-flight entries (estimated not yet confirmed) | Wait for maturation cycle |
-| Duplicate entries | Missing or broken idempotency | Check for P2002 errors in logs |
+| Symptom                          | Likely Cause                                    | Resolution                           |
+| -------------------------------- | ----------------------------------------------- | ------------------------------------ |
+| Earnings > 60% of spend          | Launch incentive active (80% split)             | Verify `LAUNCH_SPLIT_ENABLED` config |
+| Platform fee + reserve ≠ 40%     | Reversals reduced net spend                     | Check reversal entries               |
+| Advertiser refunds > 5% of spend | High fraud reversal rate                        | Review fraud dashboard               |
+| EarningsLedger debits present    | Recovery debt from post-payout fraud            | Review `/admin/recovery-debt`        |
+| Ledger doesn't balance           | In-flight entries (estimated not yet confirmed) | Wait for maturation cycle            |
+| Duplicate entries                | Missing or broken idempotency                   | Check for P2002 errors in logs       |
 
 ---
 
@@ -120,6 +120,7 @@ The `LedgerCronService` runs every 10 minutes and:
 3. Logs the count of matured entries
 
 **Hold periods by trust level:**
+
 - `new` / `low_trust`: 30 days
 - `normal`: 14 days
 - `high_trust`: 7 days
@@ -166,7 +167,7 @@ PLATFORM
 
 RECONCILIATION
   Net spend = earnings + fees + reserve? YES/NO
-  Stripe deposits match advertiser credits? YES/NO
+  Dodo payments match advertiser credits? YES/NO
   PayPal payouts match paid earnings? YES/NO
   Discrepancies found: N
 ```
