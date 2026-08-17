@@ -222,15 +222,30 @@ payouts and the implementation is already complete. Get sandbox credentials, run
 via env override. **Do not launch on `manual` at any volume** — it does not scale
 past ~20 payouts and has no reconciliation story.
 
+> **Updated 2026-08-17 by decision D4 in `DODO_PAYMENTS_PLAN.md`.** Dodo exposes
+> no third-party payout API (its payout surface is read-only and settles the
+> platform's own earnings), so developer payouts **cannot** run on Dodo. Launch
+> is therefore on `manual`/`paypal_email` (admin-processed, W2.B); PayPal
+> Payouts remains the recommended **first automated rail later**, once its
+> credentials are funded, but it is no longer the launch path.
+
 ### B5 — Advertiser funding is off
 
 `deposits.global` fails closed; no `STRIPE_SECRET_KEY`. The config schema
 correctly requires `STRIPE_WEBHOOK_SECRET` whenever the key is set
 (`packages/config/src/index.ts:652`).
 
-**Solution.** Stripe account → test-mode Checkout → verify deposit → webhook →
-campaign auto-activation (`stripe-webhook.controller.ts:429-456`) end to end →
-live keys → enable `deposits.global`.
+> **Superseded 2026-08-17 by decision D1/D2 in `DODO_PAYMENTS_PLAN.md`.** The
+> money-in rail is **Dodo Payments** (Merchant of Record), not Stripe; Stripe
+> stays in the tree but is **inactive at launch**. See that plan's W1 (Dodo
+> deposit rail + Standard-Webhooks reconciliation + reclaim cron) and §8 for the
+> remaining operator inputs (live key + webhook secret, wallet-top-up product,
+> MoR fee treatment).
+
+**Solution.** Dodo test → live: create the wallet-top-up product (§8.3), run
+`apps/api/src/integration/dodo-deposit-sandbox.spec.ts` against the test
+endpoint, verify `payment.succeeded`/`refund.succeeded`/`dispute.*` amount units
+against a real test webhook (§8.5), then enable `deposits.global`.
 
 ### B6 — Three legal pages ship "Content unavailable" in **every** build _(proven by execution — escalated 2026-08-07)_
 
@@ -427,8 +442,11 @@ wait telemetry — with the non-billable state stated plainly.
 
 ### Phase 3 — Turn on money (weeks 4–8)
 
-13. Stripe test → live; enable `deposits.global` (B5).
-14. PayPal Payouts sandbox → live; promote via override; enable `payouts.requests` (B4).
+13. **Dodo** test → live (per `DODO_PAYMENTS_PLAN.md` D1/D2 — Stripe is inactive
+    at launch); enable `deposits.global` (B5).
+14. Launch payouts on `manual`/`paypal_email` (W2.B); validate PayPal Payouts
+    sandbox → live as the first automated rail later; enable `payouts.requests`
+    (B4).
 15. First admin campaign approval; enable `ads.global` for a canary advertiser.
 
 **Exit:** advertisers can fund and run campaigns; developers can be paid — with
@@ -455,3 +473,6 @@ settlement still gated on attestation.
 3. **Launch geography and currencies** — `ALLOWED_COUNTRIES` and
    `ALLOWED_CURRENCIES` are required in production and gate KYC/tax scope.
 4. **First payout rail** — I recommend PayPal Payouts. Confirm or override.
+   _(Answered 2026-08-17: payouts launch on `manual`/`paypal_email` per D4/W2.B
+   in `DODO_PAYMENTS_PLAN.md`; PayPal Payouts is the first automated rail later
+   — see §8.2 of that plan.)_
