@@ -58,6 +58,10 @@
   probes the versioned API health route and Redis socket; `--with-db` performs
   read-only migration and switch checks. Contract coverage is wired into
   `test:release-gates`; no credential values or response bodies are printed.
+- **Dodo plan current-state documentation reconciled.** `DODO_PAYMENTS_PLAN.md`
+  now describes the implemented `DepositProcessorService`, Dodo webhook
+  reconciliation, and inactive Stripe rail instead of the superseded
+  Stripe-coupled deposit path.
 - **Repository privacy remains unresolved by design.** The repository is still
   public because Vercel authentication is invalid in the available CLI session;
   changing visibility before verifying Vercel access would violate the launch
