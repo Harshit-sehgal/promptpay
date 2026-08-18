@@ -17,6 +17,7 @@ import {
 } from './commands/integrations';
 import { runLogout } from './commands/logout';
 import { runSupervisedCommand } from './commands/run';
+import { runSandbox } from './commands/sandbox';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
 import { resolveApiBaseUrl } from './lib/api-client';
@@ -57,6 +58,15 @@ program
   .option('-e, --email <email>', 'Login email')
   .option('-s, --signup', 'Create a new account instead of logging in')
   .action((opts) => runAuth(opts));
+
+program
+  .command('sandbox [action]')
+  .description('Use test-only faucet, payout simulation, or status commands')
+  .option('--idempotency-key <key>', 'Stable key for an idempotent sandbox operation')
+  .option('--amount-minor <amount>', 'Sandbox payout amount in XTS minor units')
+  .option('--destination <alias>', 'Sandbox payout destination, for example sandbox:demo')
+  .option('--outcome <outcome>', 'Sandbox payout outcome')
+  .action((action: string | undefined, options) => runSandbox({ action, ...options }));
 
 program
   .command('status')

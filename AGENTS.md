@@ -1700,10 +1700,11 @@ assuming:
     lives in `apps/api/src/extension/quiet-hours.ts`.
   - `extension-ad-sandbox-placement.spec.ts` — present on beta as
     `extension-ad.sandbox-placement.spec.ts` (renamed, not lost).
-  - `apps/cli/src/commands/sandbox.ts` — a genuinely absent sandbox-only CLI
-    command (faucet/deposit/payout simulation), gated on
-    `environmentKind` ∈ {sandbox,test} so it cannot run in production. Not
-    launch-blocking; recover it if the sandbox economy gets used.
+  - `apps/cli/src/commands/sandbox.ts` — was the genuinely absent sandbox-only
+    CLI command (faucet/deposit/payout simulation); restored on
+    `feat/restore-sandbox-cli` with server-confirmed `environmentKind` gating,
+    bounded exact minor-unit validation, and idempotency tests. It remains
+    non-launch-blocking and test-credit-only.
   - **`ad-opportunity-expiry.cron.ts` — genuinely lost, and restored.** See
     below.
 
