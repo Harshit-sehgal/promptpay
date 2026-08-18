@@ -86,14 +86,15 @@
   rotation checklist. The local environment lacks the gitleaks executable, so
   the report deliberately does not claim a fresh full-history scan.
 - **Documentation drift gap closed 2026-08-18.** `docker-compose.yml` no longer
-  hardcodes a migration count, and the dated July security checklist is now
-  explicitly historical/superseded. `ci-package-contract.test.mjs` rejects a
-  numeric migration count in production Compose guidance so future schema
-  changes cannot silently make startup documentation false. Verified by
-  `node --test scripts/ci-package-contract.test.mjs` (14/14), release gates
-  (121/121), and `node scripts/audit-claims.mjs` (15/15).
+  hardcodes a migration count, the dated July security checklist is explicitly
+  historical/superseded, and `LAUNCH_PLAN.md` now carries the same status marker
+  so its resolved August 7 findings cannot be mistaken for live blockers.
+  `ci-package-contract.test.mjs` rejects numeric migration guidance and an
+  unmarked historical launch plan. Verified by
+  `node --test scripts/ci-package-contract.test.mjs` (15/15), release gates
+  (122/122), and `node scripts/audit-claims.mjs` (15/15).
 
-## Current Status (snapshot 2026-08-08)
+## Historical Status Snapshot (2026-08-08)
 
 - **96 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of

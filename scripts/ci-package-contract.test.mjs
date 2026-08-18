@@ -108,6 +108,15 @@ test('production Compose documentation does not hardcode a migration count', () 
   );
 });
 
+test('the dated launch plan cannot masquerade as current deployment status', () => {
+  const plan = read('LAUNCH_PLAN.md');
+  assert.match(plan, /^# WaitLayer Launch Plan — Historical Audit$/m);
+  assert.match(plan, /Status: SUPERSEDED \(2026-08-18\)/);
+  assert.match(plan, /Use `AGENTS\.md` for the live residual blocker register/);
+  assert.match(plan, /historical verified state/i);
+  assert.doesNotMatch(plan, /One real code bug is live right now/);
+});
+
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {
   const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
   const prebuild = gates.split('&&')[0];
