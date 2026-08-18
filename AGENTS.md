@@ -30,18 +30,25 @@
   squash-merged as `c73c33a`. Main CI run `32101767815` passed typecheck, lint,
   build, test, both E2E suites, package-clients, Docker build, backup/restore,
   audit claims, security, production boot smoke, and container-boot-soak.
-- **Obsolete branch cleanup completed.** PR #31 was closed as superseded; the
-  remote and local `integration/agent-beta` and
-  `agent/complete-hardening-and-cleanup` branches were deleted. The only
-  remaining remote branch is `main`, and there are no open pull requests.
+- **PR consolidation status (verified 2026-08-18).** PR #42
+  (`docs/record-repo-stabilization`), PR #43 (`feat/restore-sandbox-cli`), and
+  PR #44 (`test/developer-beta-onboarding-content`) are open and reported
+  `MERGEABLE` by GitHub. Their code CI jobs are green, but each currently has a
+  failed Vercel status and still requires review; they must not be described as
+  merged or fully green until that deployment check and review gate are
+  resolved. The current remote work branches are those three branches plus
+  `main`; local `main` contains their changes for verification, while
+  `origin/main` remains at `c73c33a` pending protected PR merges.
 - **Main protection is live and verified through the GitHub API.** `main`
   requires the ten CI jobs listed in `docs/ops/branch-protection.md`, one
   CODEOWNERS approval, stale-review dismissal, last-push reapproval, admin
   enforcement, conversation resolution, and prohibits force pushes and branch
-  deletion.
+  deletion. Direct pushes are rejected; changes must land through pull
+  requests.
 - **Operational backlog is now tracked in GitHub issues:** #39 Dodo
-  production readiness, #40 production infrastructure, and #41 staging-to-
-  production deployment and the stranger-user journey.
+  production readiness, #40 production infrastructure, #41 staging-to-
+  production deployment and the stranger-user journey, and #45 independent
+  wait attestation.
 - **Repository privacy remains unresolved by design.** The repository is still
   public because Vercel authentication is invalid in the available CLI session;
   changing visibility before verifying Vercel access would violate the launch
