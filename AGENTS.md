@@ -31,16 +31,18 @@
   build, test, both E2E suites, package-clients, Docker build, backup/restore,
   audit claims, security, production boot smoke, and container-boot-soak.
 - **PR consolidation status (verified 2026-08-18).** PR #42
-  (`docs/record-repo-stabilization`), PR #43 (`feat/restore-sandbox-cli`), and
-  PR #44 (`test/developer-beta-onboarding-content`) are open and reported
-  `MERGEABLE` by GitHub. Their code CI jobs are green, but each currently has a
-  failed Vercel status and still requires review; they must not be described as
-  merged or fully green until that deployment check and review gate are
-  resolved. PR44's Codex review thread was verified against the current test
+  (`docs/record-repo-stabilization`), PR #43 (`feat/restore-sandbox-cli`), PR #44
+  (`test/developer-beta-onboarding-content`), PR #46
+  (`docs/public-exposure-audit`), and PR #47
+  (`feat/consolidate-tested-launch-line`) are open and reported `MERGEABLE` by
+  GitHub. Their repository CI jobs are green on the current consolidation head;
+  Vercel still fails on the preview deployment and every PR requires review, so
+  none may be described as merged or fully green until those protected gates
+  are resolved. PR44's Codex review thread was verified against the current test
   head, replied to, and resolved; the test now mocks `/api/platform-health` to
-  pin `telemetry_only`. The current remote work branches are those three
-  branches plus `main`; local `main` contains their changes for verification,
-  while `origin/main` remains at `c73c33a` pending protected PR merges.
+  pin `telemetry_only`. PR #47 is the current remote consolidation branch for
+  the tested local launch line; `origin/main` remains at `c73c33a` pending
+  protected PR merges.
 - **Main protection is live and verified through the GitHub API.** `main`
   requires the ten CI jobs listed in `docs/ops/branch-protection.md`, one
   CODEOWNERS approval, stale-review dismissal, last-push reapproval, admin
