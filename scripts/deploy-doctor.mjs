@@ -16,6 +16,7 @@
  * reports the five money switches. It never changes settings.
  */
 import { createPrivateKey, createPublicKey } from 'node:crypto';
+import { readdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -368,6 +369,29 @@ async function probeRedis(env) {
   }
 }
 
+/**
+ * Migration-state verdict from the on-disk migration list and the applied/
+ * failed names recorded in `_prisma_migrations`. A database that is simply
+ * BEHIND has no rows for the migrations it never ran, so "finished_at IS
+ * NULL" alone cannot detect it (P1, PR #47): unapplied = on-disk − applied.
+ */
+export function diagnoseMigrationState({ onDisk, applied, failed }) {
+  const unapplied = onDisk.filter((name) => !applied.has(name));
+  if (failed.length > 0) {
+    return fail(
+      'database-migrations',
+      `${failed.length} migration(s) unfinished: ${failed.slice(0, 5).join(', ')}${failed.length > 5 ? ', …' : ''}`,
+    );
+  }
+  if (unapplied.length > 0) {
+    return fail(
+      'database-migrations',
+      `${unapplied.length} migration(s) not applied: ${unapplied.slice(0, 5).join(', ')}${unapplied.length > 5 ? ', …' : ''}`,
+    );
+  }
+  return pass('database-migrations', `${applied.size} migration(s) applied; schema up to date`);
+}
+
 async function probeDatabase(env) {
   if (!env.DATABASE_URL) return [fail('database-reachability', 'DATABASE_URL is unavailable')];
   try {
@@ -376,13 +400,27 @@ async function probeDatabase(env) {
     const prisma = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
     try {
       await prisma.$queryRaw`SELECT 1`;
-      const pending = await prisma.$queryRaw`SELECT count(*)::int AS n FROM _prisma_migrations WHERE finished_at IS NULL`;
-      const pendingCount = Number(Array.isArray(pending) ? pending[0]?.n ?? 0 : 0);
+      const appliedRows = await prisma.$queryRaw`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL`;
+      const failedRows = await prisma.$queryRaw`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL`;
+      const applied = new Set(
+        (Array.isArray(appliedRows) ? appliedRows : []).map((row) => row?.migration_name).filter(Boolean),
+      );
+      const failed = (Array.isArray(failedRows) ? failedRows : [])
+        .map((row) => row?.migration_name)
+        .filter(Boolean);
+      let onDisk = [];
+      let migrationReadError = null;
+      try {
+        const migrationsDir = new URL('../packages/db/prisma/migrations', import.meta.url);
+        onDisk = (await readdir(migrationsDir)).filter((name) => !name.startsWith('.'));
+      } catch {
+        migrationReadError = new Error('unable to read the migrations directory');
+      }
       const findings = [pass('database-reachability', 'PostgreSQL query succeeded')];
       findings.push(
-        pendingCount === 0
-          ? pass('database-migrations', 'no unfinished migrations')
-          : fail('database-migrations', `${pendingCount} migration(s) are unfinished`),
+        migrationReadError
+          ? fail('database-migrations', migrationReadError.message)
+          : diagnoseMigrationState({ onDisk, applied, failed }),
       );
       const settings = await prisma.systemSetting.findMany({
         where: { OR: MONEY_SWITCHES.map(([scope, target]) => ({ scope, target })) },

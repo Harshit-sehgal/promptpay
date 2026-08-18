@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildDodoReconciliationReport } from './dodo-reconciliation.mjs';
+import { buildDodoReconciliationReport, linkedReferences } from './dodo-reconciliation.mjs';
 
 const NOW = new Date('2026-08-18T12:00:00.000Z');
 
@@ -205,4 +205,131 @@ test('counts event types and excludes non-Dodo rows', () => {
   });
   assert.deepEqual(report.eventTypes, { 'payment.processing': 1 });
   assert.equal(report.scope.webhookEvents, 1);
+});
+
+test('a dispute lifecycle opened→won is not a duplicate and reconciles against the retired hold', () => {
+  const report = buildDodoReconciliationReport({
+    now: NOW,
+    webhookEvents: [
+      webhook('wh-pay', 'payment.succeeded', {
+        payment_id: 'pay-1',
+        amount: '1000',
+        currency: 'USD',
+      }),
+      webhook('wh-dis-open', 'dispute.opened', {
+        dispute_id: 'dis-1',
+        payment_id: 'pay-1',
+        amount: '250',
+        currency: 'USD',
+      }),
+      webhook('wh-dis-won', 'dispute.won', { dispute_id: 'dis-1', payment_id: 'pay-1' }),
+    ],
+    advertiserLedger: [
+      advertiserRow('adv-dep', { paymentId: 'pay-1' }),
+      {
+        ...advertiserRow('adv-hold-1', { paymentId: 'pay-1', disputeId: 'dis-1' }),
+        entryType: 'hold',
+        status: 'reversed',
+      },
+    ],
+    platformLedger: [platformRow('plat-dep', { paymentId: 'pay-1' })],
+  });
+  assert.equal(report.status, 'reconciled_platform_side');
+  assert.deepEqual(report.mismatches, []);
+  assert.equal(report.duplicates.disputes.length, 0);
+});
+
+test('only redeliveries of the SAME dispute event count as duplicate deliveries', () => {
+  const report = buildDodoReconciliationReport({
+    now: NOW,
+    webhookEvents: [
+      webhook('wh-dup-1', 'dispute.opened', {
+        dispute_id: 'dis-dup',
+        payment_id: 'pay-1',
+        amount: '250',
+        currency: 'USD',
+      }),
+      webhook('wh-dup-2', 'dispute.opened', {
+        dispute_id: 'dis-dup',
+        payment_id: 'pay-1',
+        amount: '250',
+        currency: 'USD',
+      }),
+    ],
+  });
+  assert.equal(report.duplicates.disputes.length, 1);
+  assert.equal(report.duplicates.disputes[0].id, 'dis-dup');
+});
+
+test('flags a terminal dispute whose hold was never retired', () => {
+  const report = buildDodoReconciliationReport({
+    now: NOW,
+    webhookEvents: [
+      webhook('wh-dis-open', 'dispute.opened', {
+        dispute_id: 'dis-2',
+        payment_id: 'pay-1',
+        amount: '250',
+        currency: 'USD',
+      }),
+      webhook('wh-dis-lost', 'dispute.lost', { dispute_id: 'dis-2', payment_id: 'pay-1' }),
+    ],
+    advertiserLedger: [
+      {
+        ...advertiserRow('adv-hold-2', { disputeId: 'dis-2' }),
+        entryType: 'hold',
+        status: 'held',
+      },
+    ],
+  });
+  assert.ok(report.mismatches.some((item) => item.code === 'dispute_hold_not_retired'));
+});
+
+test('won-dispute restoration credits do not double-count the deposit', () => {
+  const report = buildDodoReconciliationReport({
+    now: NOW,
+    webhookEvents: [
+      webhook('wh-pay', 'payment.succeeded', {
+        payment_id: 'pay-1',
+        amount: '1000',
+        currency: 'USD',
+      }),
+      webhook('wh-dis-open', 'dispute.opened', {
+        dispute_id: 'dis-1',
+        payment_id: 'pay-1',
+        amount: '250',
+        currency: 'USD',
+      }),
+      webhook('wh-dis-won', 'dispute.won', { dispute_id: 'dis-1', payment_id: 'pay-1' }),
+    ],
+    advertiserLedger: [
+      advertiserRow('adv-dep', { paymentId: 'pay-1' }),
+      {
+        ...advertiserRow('adv-restore', { paymentId: 'pay-1', disputeId: 'dis-1' }),
+        idempotencyKey: 'dodo_dispute_restore_dis-1_adv-hold-1',
+      },
+      {
+        ...advertiserRow('adv-hold-1', { paymentId: 'pay-1', disputeId: 'dis-1' }),
+        entryType: 'hold',
+        status: 'reversed',
+      },
+    ],
+    platformLedger: [platformRow('plat-dep', { paymentId: 'pay-1' })],
+  });
+  assert.equal(report.status, 'reconciled_platform_side');
+  assert.deepEqual(report.mismatches, []);
+  assert.equal(report.duplicates.advertiserPaymentCredits.length, 0);
+});
+
+test('linkedReferences covers every id the parity checks look up', () => {
+  const { paymentIds, disputeIds } = linkedReferences([
+    webhook('wh-1', 'payment.succeeded', { payment_id: 'pay-1', amount: '1' }),
+    webhook('wh-2', 'refund.succeeded', { refund_id: 'ref-1', payment_id: 'pay-2', amount: '1' }),
+    webhook('wh-3', 'dispute.opened', {
+      dispute_id: 'dis-1',
+      payment_id: 'pay-3',
+      amount: '1',
+    }),
+  ]);
+  assert.deepEqual([...paymentIds].sort(), ['pay-1', 'pay-2', 'pay-3']);
+  assert.deepEqual([...disputeIds], ['dis-1']);
 });

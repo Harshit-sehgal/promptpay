@@ -158,7 +158,10 @@ export class TrustedAttestationSimulator {
     const expiration = fault === 'expired' ? nowSeconds - 1 : nowSeconds + 300;
     const notBefore = fault === 'future_timestamps' ? nowSeconds + 120 : nowSeconds - 1;
     const signingKey = fault === 'bad_signature' ? this.badSignatureKey : undefined;
-    const kid = fault === 'unknown_key' ? `${this.kid}-unknown` : (signingKey?.kid ?? this.kid);
+    // `bad_signature` deliberately keeps the TRUSTED kid so a consumer that
+    // selects keys by kid exercises the signature check rather than reporting
+    // an unknown key; only `unknown_key` exposes an untrusted kid.
+    const kid = fault === 'unknown_key' ? `${this.kid}-unknown` : this.kid;
     const privateKey = await importPKCS8(signingKey?.privateKeyPem ?? this.privateKeyPem, 'RS256');
     const assertion = await this.sign(claims, privateKey, kid, expiration, notBefore);
 

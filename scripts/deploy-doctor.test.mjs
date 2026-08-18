@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   diagnoseEnvironment,
+  diagnoseMigrationState,
   diagnoseMoneySwitches,
   probeNetwork,
 } from './deploy-doctor.mjs';
@@ -102,6 +103,36 @@ test('reports enabled money switches without changing them', () => {
   assert.equal(result.level, 'FAIL');
   assert.match(result.detail, /deposits\.global/);
   assert.deepEqual(settings[0].value, { enabled: true });
+});
+
+test('migration probe passes only when every on-disk migration is applied', () => {
+  const applied = new Set(['0_init', '20260801000000_x', '20260802000000_y']);
+  const pass = diagnoseMigrationState({ onDisk: ['0_init', '20260801000000_x', '20260802000000_y'], applied, failed: [] });
+  assert.equal(pass.level, 'PASS');
+  assert.match(pass.detail, /3 migration\(s\) applied/);
+});
+
+test('migration probe fails on a database that is merely BEHIND (no failed rows)', () => {
+  const applied = new Set(['0_init', '20260801000000_x']);
+  const result = diagnoseMigrationState({
+    onDisk: ['0_init', '20260801000000_x', '20260802000000_y', '20260803000000_z'],
+    applied,
+    failed: [],
+  });
+  assert.equal(result.level, 'FAIL');
+  assert.match(result.detail, /2 migration\(s\) not applied/);
+  assert.match(result.detail, /20260802000000_y/);
+});
+
+test('migration probe fails on unfinished (failed) migrations', () => {
+  const applied = new Set(['0_init']);
+  const result = diagnoseMigrationState({
+    onDisk: ['0_init', '20260801000000_x'],
+    applied,
+    failed: ['20260801000000_x'],
+  });
+  assert.equal(result.level, 'FAIL');
+  assert.match(result.detail, /1 migration\(s\) unfinished/);
 });
 
 test('probes the versioned API health route without reading a response body', async () => {

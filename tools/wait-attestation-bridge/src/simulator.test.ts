@@ -76,9 +76,12 @@ describe('TrustedAttestationSimulator', () => {
 
   it('generates a bad-signature assertion that verification rejects', async () => {
     const simulator = new TrustedAttestationSimulator();
-    await expect(verify(simulator, await simulator.issue(INPUT, 'bad_signature'))).rejects.toThrow(
-      /signature verification failed/,
-    );
+    const assertion = await simulator.issue(INPUT, 'bad_signature');
+    // The token must carry the TRUSTED kid so a kid-selecting consumer fails
+    // on the signature, not on key lookup (P2: previously it exposed the
+    // alternate key's kid, which no consumer ever configured).
+    expect(decodeProtectedHeader(assertion).kid).toBe(simulator.kid);
+    await expect(verify(simulator, assertion)).rejects.toThrow(/signature verification failed/);
   });
 
   it.each([

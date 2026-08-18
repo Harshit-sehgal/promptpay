@@ -170,9 +170,23 @@ export function buildDodoReconciliationReport({
   const duplicateRefunds = [...groupIds(refundEvents, 'refundId').entries()]
     .filter(([, rows]) => rows.length > 1)
     .map(([id, rows]) => ({ id, eventIds: rows.map((row) => row.eventId) }));
-  const duplicateDisputes = [...groupIds(disputeEvents, 'disputeId').entries()]
+  // A dispute lifecycle is multiple DISTINCT events (opened → won/lost/...),
+  // so duplicates are grouped by (disputeId, event type): only redeliveries of
+  // the same event with the same dispute id are duplicates (P1, PR #47).
+  const disputeGroups = new Map();
+  for (const event of disputeEvents) {
+    if (!event.disputeId) continue;
+    const key = `${event.disputeId}|${event.type}`;
+    const rows = disputeGroups.get(key) ?? [];
+    rows.push(event);
+    disputeGroups.set(key, rows);
+  }
+  const duplicateDisputes = [...disputeGroups.entries()]
     .filter(([, rows]) => rows.length > 1)
-    .map(([id, rows]) => ({ id, eventIds: rows.map((row) => row.eventId) }));
+    .map(([key, rows]) => ({
+      id: key.slice(0, key.lastIndexOf('|')),
+      eventIds: rows.map((row) => row.eventId),
+    }));
 
   for (const duplicate of duplicatePayments) {
     mismatches.push(
@@ -202,12 +216,16 @@ export function buildDodoReconciliationReport({
     );
   }
 
-  const paymentLedger = groupIds(
-    advertiser.filter(
-      (row) => row.entryType === 'credit' && row.paymentId && row.status === 'confirmed',
-    ),
-    'paymentId',
-  );
+  // Deposit credits exclude dispute-restoration rows: a won/cancelled dispute
+  // writes a fresh confirmed credit carrying the ORIGINAL dodoPaymentId
+  // (`dodo_dispute_restore_…`), so including it would double-count the
+  // deposit in both the amount parity and the duplicate check (P2, PR #47).
+  const depositCredits = (row) =>
+    row.entryType === 'credit' &&
+    row.paymentId &&
+    row.status === 'confirmed' &&
+    !row.idempotencyKey.startsWith('dodo_dispute_restore_');
+  const paymentLedger = groupIds(advertiser.filter(depositCredits), 'paymentId');
   const paymentCash = groupIds(
     platform
       .filter(
@@ -330,10 +348,12 @@ export function buildDodoReconciliationReport({
   }
 
   const openedDisputes = disputeEvents.filter((event) => event.type === 'dispute.opened');
-  const holds = groupIds(
-    advertiser.filter((row) => row.entryType === 'hold' && row.status === 'held'),
-    'disputeId',
-  );
+  // Holds are retired (status `reversed`) inside the terminal-dispute
+  // transaction, so a settled dispute's hold is no longer `held`. Match the
+  // hold by dispute id across BOTH statuses, then judge per dispute state
+  // (P1, PR #47): an unsettled dispute must still hold the slice; a settled
+  // dispute must have retired it.
+  const holds = groupIds(advertiser.filter((row) => row.entryType === 'hold'), 'disputeId');
   for (const event of openedDisputes) {
     if (!event.disputeId) {
       mismatches.push(
@@ -342,12 +362,26 @@ export function buildDodoReconciliationReport({
       continue;
     }
     const rows = holds.get(event.disputeId) ?? [];
+    const settled = disputeEvents.some(
+      (item) => item.disputeId === event.disputeId && RESOLVED_DISPUTE_EVENTS.has(item.type),
+    );
     if (rows.length === 0) {
       mismatches.push(
         mismatch('missing_dispute_hold', event.disputeId, `webhook ${event.eventId}`),
       );
+    } else if (settled) {
+      if (!rows.some((row) => row.status === 'reversed')) {
+        mismatches.push(
+          mismatch(
+            'dispute_hold_not_retired',
+            event.disputeId,
+            `terminal event exists but hold row ${rows.map((row) => row.id).join(', ')} still held`,
+          ),
+        );
+      }
     } else if (event.amount) {
-      const total = sumStrings(rows.map((row) => row.amount));
+      const heldRows = rows.filter((row) => row.status === 'held');
+      const total = sumStrings(heldRows.map((row) => row.amount));
       if (total === null || total !== event.amount) {
         mismatches.push(
           mismatch(
@@ -401,10 +435,7 @@ export function buildDodoReconciliationReport({
     }));
 
   const ledgerPaymentDuplicates = [
-    ...groupIds(
-      advertiser.filter((row) => row.entryType === 'credit' && row.paymentId),
-      'paymentId',
-    ).entries(),
+    ...groupIds(advertiser.filter(depositCredits), 'paymentId').entries(),
   ]
     .filter(([, rows]) => rows.length > 1)
     .map(([id, rows]) => ({ id, ledgerRowIds: rows.map((row) => row.id) }));
@@ -465,6 +496,30 @@ function parseDate(value, flag) {
   return date;
 }
 
+/**
+ * Reference universe of a set of webhook events: every payment/dispute id the
+ * parity checks will look up in the ledger. Used to widen the window reads so
+ * a ledger row created just OUTSIDE `--since/--until` cannot masquerade as a
+ * missing credit for an event INSIDE the window (P1, PR #47).
+ */
+export function linkedReferences(webhookRows) {
+  const paymentIds = new Set();
+  const disputeIds = new Set();
+  for (const row of webhookRows) {
+    const record = eventRecord(row);
+    if (record.paymentId) paymentIds.add(record.paymentId);
+    if (record.disputeId) disputeIds.add(record.disputeId);
+    if (record.linkedPaymentId) paymentIds.add(record.linkedPaymentId);
+  }
+  return { paymentIds, disputeIds };
+}
+
+function mergeById(primary, linked) {
+  const byId = new Map(primary.map((row) => [row.id, row]));
+  for (const row of linked) if (!byId.has(row.id)) byId.set(row.id, row);
+  return [...byId.values()];
+}
+
 async function readFromDatabase({ since, until } = {}) {
   const require = createRequire(new URL('../apps/api/package.json', import.meta.url));
   const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
@@ -473,6 +528,26 @@ async function readFromDatabase({ since, until } = {}) {
   const date = {
     ...(since ? { gte: since } : {}),
     ...(until ? { lte: until } : {}),
+  };
+  const advertiserSelect = {
+    id: true,
+    entryType: true,
+    status: true,
+    amountMinor: true,
+    currency: true,
+    dodoPaymentId: true,
+    dodoDisputeId: true,
+    idempotencyKey: true,
+  };
+  const platformSelect = {
+    id: true,
+    entryType: true,
+    status: true,
+    amountMinor: true,
+    currency: true,
+    bucket: true,
+    referenceId: true,
+    idempotencyKey: true,
   };
   try {
     const [webhookEvents, advertiserLedger, platformLedger] = await Promise.all([
@@ -500,16 +575,7 @@ async function readFromDatabase({ since, until } = {}) {
           OR: [{ dodoPaymentId: { not: null } }, { dodoDisputeId: { not: null } }],
           ...(Object.keys(date).length > 0 ? { createdAt: date } : {}),
         },
-        select: {
-          id: true,
-          entryType: true,
-          status: true,
-          amountMinor: true,
-          currency: true,
-          dodoPaymentId: true,
-          dodoDisputeId: true,
-          idempotencyKey: true,
-        },
+        select: advertiserSelect,
         orderBy: { createdAt: 'asc' },
       }),
       prisma.platformLedger.findMany({
@@ -518,19 +584,46 @@ async function readFromDatabase({ since, until } = {}) {
           idempotencyKey: { startsWith: 'dodo_' },
           ...(Object.keys(date).length > 0 ? { createdAt: date } : {}),
         },
-        select: {
-          id: true,
-          entryType: true,
-          status: true,
-          amountMinor: true,
-          currency: true,
-          bucket: true,
-          referenceId: true,
-          idempotencyKey: true,
-        },
+        select: platformSelect,
         orderBy: { createdAt: 'asc' },
       }),
     ]);
+
+    // With a window set, also load the ledger rows referenced by in-window
+    // events regardless of their own createdAt, then merge so parity checks
+    // compare against the full reference universe (P1, PR #47).
+    if (Object.keys(date).length > 0) {
+      const { paymentIds, disputeIds } = linkedReferences(webhookEvents);
+      const referenceIds = [...paymentIds, ...disputeIds];
+      if (paymentIds.size > 0 || disputeIds.size > 0) {
+        const [linkedAdvertiser, linkedPlatform] = await Promise.all([
+          prisma.advertiserLedger.findMany({
+            where: {
+              OR: [
+                ...(paymentIds.size > 0 ? [{ dodoPaymentId: { in: [...paymentIds] } }] : []),
+                ...(disputeIds.size > 0 ? [{ dodoDisputeId: { in: [...disputeIds] } }] : []),
+              ],
+            },
+            select: advertiserSelect,
+            orderBy: { createdAt: 'asc' },
+          }),
+          prisma.platformLedger.findMany({
+            where: {
+              bucket: 'cash',
+              idempotencyKey: { startsWith: 'dodo_' },
+              referenceId: { in: referenceIds },
+            },
+            select: platformSelect,
+            orderBy: { createdAt: 'asc' },
+          }),
+        ]);
+        return {
+          webhookEvents,
+          advertiserLedger: mergeById(advertiserLedger, linkedAdvertiser),
+          platformLedger: mergeById(platformLedger, linkedPlatform),
+        };
+      }
+    }
     return { webhookEvents, advertiserLedger, platformLedger };
   } finally {
     await prisma.$disconnect();
