@@ -62,10 +62,12 @@
   now describes the implemented `DepositProcessorService`, Dodo webhook
   reconciliation, and inactive Stripe rail instead of the superseded
   Stripe-coupled deposit path.
-- **Attestation protocol simulator added.** The private
+- **Attestation protocol simulator and threat model added.** The private
   `@waitlayer/wait-attestation-bridge/simulator` subpath exposes an in-memory
   `TrustedAttestationSimulator` for valid, malformed, expired, replayed,
-  misbound, timing, unknown-key, and bad-signature assertions. It is test-only,
+  misbound, timing, unknown-key, and bad-signature assertions. The protocol and
+  threat-model documents define the opaque claim contract, key/replay rules,
+  privacy boundary, mitigations, and residual provider risks. It is test-only,
   never accepts prompt/output content, and cannot satisfy the independent
   provider launch gate or production issuer configuration. Tool tests cover
   18/18 cases.
