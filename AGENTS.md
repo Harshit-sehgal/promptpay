@@ -85,6 +85,13 @@
   passing build-artifact scan, and the operator-only GitHub/Vercel/provider
   rotation checklist. The local environment lacks the gitleaks executable, so
   the report deliberately does not claim a fresh full-history scan.
+- **Documentation drift gap closed 2026-08-18.** `docker-compose.yml` no longer
+  hardcodes a migration count, and the dated July security checklist is now
+  explicitly historical/superseded. `ci-package-contract.test.mjs` rejects a
+  numeric migration count in production Compose guidance so future schema
+  changes cannot silently make startup documentation false. Verified by
+  `node --test scripts/ci-package-contract.test.mjs` (14/14), release gates
+  (121/121), and `node scripts/audit-claims.mjs` (15/15).
 
 ## Current Status (snapshot 2026-08-08)
 

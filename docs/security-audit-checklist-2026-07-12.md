@@ -1,8 +1,11 @@
-# Security / Operational Audit Checklist
+# Security / Operational Audit Checklist — Historical
 
-> **Status:** Updated 2026-07-12 after the fix pass described in `AGENTS.md`.
-> All code-completable items below are implemented and verified by
-> `pnpm typecheck`, `pnpm lint`, and `pnpm --filter waitlayer-api exec vitest run --no-file-parallelism`.
+> **Status: SUPERSEDED (2026-08-18).** This dated checklist records the July
+> 2026 audit and is not a live backlog. Code-completable items listed below
+> were subsequently implemented or replaced by stronger gates. Use `AGENTS.md`
+> for the live audit register, `LAUNCH_PLAN.md` for historical sequencing, and
+> `docs/ops/deployment-checklist.md` for current deployment procedure. Fresh
+> `pnpm test` and the CI `docker-build` job outrank this document.
 
 ## ✅ Completed Fixes
 

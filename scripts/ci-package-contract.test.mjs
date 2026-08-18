@@ -99,6 +99,15 @@ test('release gates build every fixture they execute, before running scenario te
   );
 });
 
+test('production Compose documentation does not hardcode a migration count', () => {
+  const compose = read('docker-compose.yml');
+  assert.doesNotMatch(
+    compose,
+    /\b(?:all|applies|apply|applied)\s+\d+\s+migrations\b/i,
+    'Compose startup guidance must describe migrations generically; the schema count changes over time',
+  );
+});
+
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {
   const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
   const prebuild = gates.split('&&')[0];
