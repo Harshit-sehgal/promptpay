@@ -62,6 +62,13 @@
   now describes the implemented `DepositProcessorService`, Dodo webhook
   reconciliation, and inactive Stripe rail instead of the superseded
   Stripe-coupled deposit path.
+- **Attestation protocol simulator added.** The private
+  `@waitlayer/wait-attestation-bridge/simulator` subpath exposes an in-memory
+  `TrustedAttestationSimulator` for valid, malformed, expired, replayed,
+  misbound, timing, unknown-key, and bad-signature assertions. It is test-only,
+  never accepts prompt/output content, and cannot satisfy the independent
+  provider launch gate or production issuer configuration. Tool tests cover
+  18/18 cases.
 - **Repository privacy remains unresolved by design.** The repository is still
   public because Vercel authentication is invalid in the available CLI session;
   changing visibility before verifying Vercel access would violate the launch
