@@ -150,6 +150,19 @@ describe('@waitlayer/config env schema', () => {
     expect(() => loadEnv({ ...dodo, DODO_WEBHOOK_SECRET: 'whsec_test' })).not.toThrow();
   });
 
+  it('rejects an untrusted Dodo API base URL when the rail is selected', () => {
+    expect(() =>
+      loadEnv({
+        ...BASE_ENV,
+        DEPOSIT_PROCESSOR: 'dodo',
+        DODO_API_KEY: 'test-key',
+        DODO_BASE_URL: 'http://evil.example',
+        DODO_WEBHOOK_SECRET: 'whsec_test',
+        DODO_PRODUCT_ID: 'pdt_wallet_top_up',
+      }),
+    ).toThrow('Invalid environment configuration');
+  });
+
   it('accepts a production-mode staging runtime without claiming production identity', () => {
     const staging = loadEnv({
       ...fullProductionEnv(),

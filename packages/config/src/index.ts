@@ -134,6 +134,26 @@ function containsReferenceWaitAttestationVersion(value: string | undefined): boo
     .includes('stub-v1');
 }
 
+const DODO_API_HOSTS = new Set(['test.dodopayments.com', 'live.dodopayments.com']);
+
+function isValidDodoBaseUrl(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash &&
+      (url.pathname === '' || url.pathname === '/') &&
+      DODO_API_HOSTS.has(url.hostname.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 function isProductionOrigin(value: string): boolean {
   try {
     const url = new URL(value);
@@ -690,6 +710,11 @@ const envSchema = z
       path: ['STRIPE_WEBHOOK_SECRET'],
     },
   )
+  .refine((env) => env.DEPOSIT_PROCESSOR !== 'dodo' || isValidDodoBaseUrl(env.DODO_BASE_URL), {
+    message:
+      'DODO_BASE_URL must be https://test.dodopayments.com or https://live.dodopayments.com when DEPOSIT_PROCESSOR=dodo.',
+    path: ['DODO_BASE_URL'],
+  })
   .refine(
     (env) => {
       // A test Dodo key/base URL must never reach production when the Dodo

@@ -131,7 +131,9 @@ live until the operator answers §8.1–§8.5 of that plan.
   `DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`, `DODO_PRODUCT_ID`
   (added to `@waitlayer/config` schema + `.env.example`). The provider now
   requires all four at runtime: a checkout without a webhook secret could take
-  money that the ledger cannot safely reconcile. Amounts pass the same
+  money that the ledger cannot safely reconcile. The API base is restricted to
+  the documented HTTPS test/live Dodo hosts, and returned checkout URLs must be
+  public HTTPS URLs before reaching the browser. Amounts pass the same
   `requireProviderSafeMinorAmount` guard as Stripe; `readiness()` reports the
   rail for fail-closed billing UI. **`GET /health` now publishes a `deposits`
   field** (`{ enabled, processor, ready }` — the `deposits.global` switch, the

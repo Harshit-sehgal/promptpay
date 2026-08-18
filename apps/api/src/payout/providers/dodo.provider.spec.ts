@@ -44,6 +44,15 @@ describe('DodoProvider', () => {
     });
   });
 
+  it('fails closed when the API base URL is not the documented HTTPS Dodo host', () => {
+    const { provider } = makeProvider({ ...FULL_CONFIG, DODO_BASE_URL: 'http://evil.example' });
+    expect(provider.isEnabled()).toBe(false);
+    expect(provider.readiness()).toEqual({
+      ok: false,
+      reason: expect.stringContaining('https://test.dodopayments.com'),
+    });
+  });
+
   it('refuses to create a session when unconfigured', async () => {
     const { provider } = makeProvider();
     await expect(
@@ -107,6 +116,27 @@ describe('DodoProvider', () => {
         cancelUrl: 'https://example.com/cancel',
       }),
     ).rejects.toThrow(/HTTP 401/);
+  });
+
+  it('fails when Dodo returns an unsafe checkout URL', async () => {
+    const { provider } = makeProvider(FULL_CONFIG);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ session_id: 'cks_1', checkout_url: 'javascript:alert(1)' }),
+      }),
+    );
+
+    await expect(
+      provider.createDepositSession({
+        advertiserId: 'adv-1',
+        amountMinor: 1000n,
+        currency: 'usd',
+        successUrl: 'https://example.com/ok',
+        cancelUrl: 'https://example.com/cancel',
+      }),
+    ).rejects.toThrow(/unsafe checkout URL/);
   });
 
   it('fails when Dodo omits the checkout_url', async () => {

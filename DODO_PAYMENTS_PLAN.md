@@ -22,7 +22,9 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
   rail without attempting a checkout. Runtime readiness requires all four
   values (`DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`,
   `DODO_PRODUCT_ID`): a checkout without a webhook secret could take money
-  that the ledger cannot safely reconcile.
+  that the ledger cannot safely reconcile. `DODO_BASE_URL` is restricted to the
+  documented HTTPS test/live hosts, and the returned checkout URL is validated
+  as public HTTPS before the browser receives it.
 - **W1.3** ✅ `DodoWebhookController` with **Standard Webhooks** signature
   verification + idempotent `payment.succeeded` deposit credit + A-019
   activation + `refund.succeeded` reversal + `dispute.opened`/`won`/`cancelled`/
