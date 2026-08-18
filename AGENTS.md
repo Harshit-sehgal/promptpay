@@ -129,7 +129,9 @@ live until the operator answers §8.1–§8.5 of that plan.
   creates Dodo Checkout Sessions over `fetch` (no SDK) at
   `POST {DODO_BASE_URL}/checkouts`, returning `{ sessionId, url }`. Config:
   `DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`, `DODO_PRODUCT_ID`
-  (added to `@waitlayer/config` schema + `.env.example`). Amounts pass the same
+  (added to `@waitlayer/config` schema + `.env.example`). The provider now
+  requires all four at runtime: a checkout without a webhook secret could take
+  money that the ledger cannot safely reconcile. Amounts pass the same
   `requireProviderSafeMinorAmount` guard as Stripe; `readiness()` reports the
   rail for fail-closed billing UI. **`GET /health` now publishes a `deposits`
   field** (`{ enabled, processor, ready }` — the `deposits.global` switch, the

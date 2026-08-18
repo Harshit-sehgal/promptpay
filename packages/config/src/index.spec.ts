@@ -138,6 +138,18 @@ describe('@waitlayer/config env schema', () => {
     expect(minimal.NODE_ENV).toBe('production');
   });
 
+  it('requires the Dodo webhook secret when the Dodo deposit rail is selected', () => {
+    const dodo = {
+      ...BASE_ENV,
+      DEPOSIT_PROCESSOR: 'dodo',
+      DODO_API_KEY: 'test-key',
+      DODO_BASE_URL: 'https://test.dodopayments.com',
+      DODO_PRODUCT_ID: 'pdt_wallet_top_up',
+    };
+    expect(() => loadEnv(dodo)).toThrow('Invalid environment configuration');
+    expect(() => loadEnv({ ...dodo, DODO_WEBHOOK_SECRET: 'whsec_test' })).not.toThrow();
+  });
+
   it('accepts a production-mode staging runtime without claiming production identity', () => {
     const staging = loadEnv({
       ...fullProductionEnv(),

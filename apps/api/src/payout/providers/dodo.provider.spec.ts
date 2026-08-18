@@ -12,6 +12,7 @@ function makeProvider(config: Record<string, string> = {}) {
 const FULL_CONFIG = {
   DODO_API_KEY: 'test-key',
   DODO_BASE_URL: 'https://test.dodopayments.com',
+  DODO_WEBHOOK_SECRET: 'whsec_test',
   DODO_PRODUCT_ID: 'pdt_123',
 };
 
@@ -31,6 +32,16 @@ describe('DodoProvider', () => {
     const { provider } = makeProvider(FULL_CONFIG);
     expect(provider.isEnabled()).toBe(true);
     expect(provider.readiness()).toEqual({ ok: true });
+  });
+
+  it('fails closed when the webhook secret is missing', () => {
+    const { DODO_WEBHOOK_SECRET: _webhookSecret, ...checkoutOnlyConfig } = FULL_CONFIG;
+    const { provider } = makeProvider(checkoutOnlyConfig);
+    expect(provider.isEnabled()).toBe(false);
+    expect(provider.readiness()).toMatchObject({ ok: false });
+    expect(provider.readiness()).toMatchObject({
+      reason: expect.stringContaining('DODO_WEBHOOK_SECRET'),
+    });
   });
 
   it('refuses to create a session when unconfigured', async () => {

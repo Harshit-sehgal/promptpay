@@ -19,7 +19,10 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
 - **W1.2** ✅ `DodoProvider` (checkout over `fetch`) + config schema/env +
   `readiness()` surfaced on `GET /health` as a fail-closed `deposits` field
   (`{ enabled, processor, ready }`), so a health-adjacent surface reports the
-  rail without attempting a checkout.
+  rail without attempting a checkout. Runtime readiness requires all four
+  values (`DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`,
+  `DODO_PRODUCT_ID`): a checkout without a webhook secret could take money
+  that the ledger cannot safely reconcile.
 - **W1.3** ✅ `DodoWebhookController` with **Standard Webhooks** signature
   verification + idempotent `payment.succeeded` deposit credit + A-019
   activation + `refund.succeeded` reversal + `dispute.opened`/`won`/`cancelled`/
