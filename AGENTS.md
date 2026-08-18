@@ -156,7 +156,11 @@ live until the operator answers §8.1–§8.5 of that plan.
   creates Dodo Checkout Sessions over `fetch` (no SDK) at
   `POST {DODO_BASE_URL}/checkouts`, returning `{ sessionId, url }`. Config:
   `DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`, `DODO_PRODUCT_ID`
-  (added to `@waitlayer/config` schema + `.env.example`). Amounts pass the same
+  (added to `@waitlayer/config` schema + `.env.example`). The provider now
+  requires all four at runtime: a checkout without a webhook secret could take
+  money that the ledger cannot safely reconcile. The API base is restricted to
+  the documented HTTPS test/live Dodo hosts, and returned checkout URLs must be
+  public HTTPS URLs before reaching the browser. Amounts pass the same
   `requireProviderSafeMinorAmount` guard as Stripe; `readiness()` reports the
   rail for fail-closed billing UI. **`GET /health` now publishes a `deposits`
   field** (`{ enabled, processor, ready }` — the `deposits.global` switch, the
@@ -222,7 +226,9 @@ journey).
   Content-gate browser e2e (`apps/web/e2e/dodo-deposit.spec.ts`) proves the
   billing page renders the Dodo rail and **fails closed with no processor
   configured** (a deposit shows "temporarily disabled" and never redirects to a
-  hosted checkout) — green on both viewports in dev and production e2e.
+  hosted checkout) — green on both viewports in dev and production e2e. The
+  opt-in `pnpm dodo:verify-live` command checks the live `/products` endpoint
+  without printing secrets or enabling any money switch.
 
 - **Config validation corrected (over-broad Dodo rule, twice).** The first cut
   required `DODO_WEBHOOK_SECRET`/`DODO_PRODUCT_ID` whenever `DODO_API_KEY` was
@@ -1721,10 +1727,11 @@ assuming:
     lives in `apps/api/src/extension/quiet-hours.ts`.
   - `extension-ad-sandbox-placement.spec.ts` — present on beta as
     `extension-ad.sandbox-placement.spec.ts` (renamed, not lost).
-  - `apps/cli/src/commands/sandbox.ts` — a genuinely absent sandbox-only CLI
-    command (faucet/deposit/payout simulation), gated on
-    `environmentKind` ∈ {sandbox,test} so it cannot run in production. Not
-    launch-blocking; recover it if the sandbox economy gets used.
+  - `apps/cli/src/commands/sandbox.ts` — was the genuinely absent sandbox-only
+    CLI command (faucet/deposit/payout simulation); restored on
+    `feat/restore-sandbox-cli` with server-confirmed `environmentKind` gating,
+    bounded exact minor-unit validation, and idempotency tests. It remains
+    non-launch-blocking and test-credit-only.
   - **`ad-opportunity-expiry.cron.ts` — genuinely lost, and restored.** See
     below.
 

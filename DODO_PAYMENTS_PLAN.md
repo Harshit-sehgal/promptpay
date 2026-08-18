@@ -19,7 +19,12 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
 - **W1.2** ✅ `DodoProvider` (checkout over `fetch`) + config schema/env +
   `readiness()` surfaced on `GET /health` as a fail-closed `deposits` field
   (`{ enabled, processor, ready }`), so a health-adjacent surface reports the
-  rail without attempting a checkout.
+  rail without attempting a checkout. Runtime readiness requires all four
+  values (`DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`,
+  `DODO_PRODUCT_ID`): a checkout without a webhook secret could take money
+  that the ledger cannot safely reconcile. `DODO_BASE_URL` is restricted to the
+  documented HTTPS test/live hosts, and the returned checkout URL is validated
+  as public HTTPS before the browser receives it.
 - **W1.3** ✅ `DodoWebhookController` with **Standard Webhooks** signature
   verification + idempotent `payment.succeeded` deposit credit + A-019
   activation + `refund.succeeded` reversal + `dispute.opened`/`won`/`cancelled`/
@@ -42,7 +47,9 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
   specs; opt-in Dodo sandbox integration spec (`dodo-deposit-sandbox.spec.ts`,
   skips cleanly without `RUN_DODO_SANDBOX=1` + §8.1/§8.3 creds); content-gate
   browser e2e (`dodo-deposit.spec.ts`, asserts the Dodo rail renders + fails
-  closed with no processor configured); dev + production e2e suites green.
+  closed with no processor configured); dev + production e2e suites green. The
+  opt-in `pnpm dodo:verify-live` command checks the live `/products` endpoint
+  without printing secrets or enabling any money switch.
 
 Blocking before any real deposit: §8.1 (live key + webhook secret), §8.3
 (product + currencies), §8.5 (MoR fee treatment + confirming the
@@ -326,9 +333,9 @@ launch. Order matters — the cold-start sequence is documented in
 
 ## 7. Workstream W6 — deferred / non-blocking (recorded so it is not lost)
 
-- CLI `commands/sandbox.ts` and VS Code `quiet-hours.ts` were never ported
-  from `agent/complete-hardening-and-cleanup` (see AGENTS.md branch
-  consolidation). Only relevant if the sandbox economy gets used.
+- CLI `commands/sandbox.ts` was restored on 2026-08-18 with server-confirmed
+  sandbox/test gating, exact bounded XTS amount parsing, and focused command
+  tests. VS Code `quiet-hours.ts` remains unported and is still non-blocking.
 - TypeScript 7 branch: blocked on typescript-eslint ≥ TS 7.1 support.
 - 23 dependabot branches: review post-launch, not before.
 - `wait.earnings` attestation operator (open item #1) is the core-value-prop
