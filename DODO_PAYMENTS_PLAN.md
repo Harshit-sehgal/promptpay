@@ -47,7 +47,9 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
   specs; opt-in Dodo sandbox integration spec (`dodo-deposit-sandbox.spec.ts`,
   skips cleanly without `RUN_DODO_SANDBOX=1` + §8.1/§8.3 creds); content-gate
   browser e2e (`dodo-deposit.spec.ts`, asserts the Dodo rail renders + fails
-  closed with no processor configured); dev + production e2e suites green.
+  closed with no processor configured); dev + production e2e suites green. The
+  opt-in `pnpm dodo:verify-live` command checks the live `/products` endpoint
+  without printing secrets or enabling any money switch.
 
 Blocking before any real deposit: §8.1 (live key + webhook secret), §8.3
 (product + currencies), §8.5 (MoR fee treatment + confirming the

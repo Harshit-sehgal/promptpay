@@ -199,7 +199,9 @@ journey).
   Content-gate browser e2e (`apps/web/e2e/dodo-deposit.spec.ts`) proves the
   billing page renders the Dodo rail and **fails closed with no processor
   configured** (a deposit shows "temporarily disabled" and never redirects to a
-  hosted checkout) — green on both viewports in dev and production e2e.
+  hosted checkout) — green on both viewports in dev and production e2e. The
+  opt-in `pnpm dodo:verify-live` command checks the live `/products` endpoint
+  without printing secrets or enabling any money switch.
 
 - **Config validation corrected (over-broad Dodo rule, twice).** The first cut
   required `DODO_WEBHOOK_SECRET`/`DODO_PRODUCT_ID` whenever `DODO_API_KEY` was
