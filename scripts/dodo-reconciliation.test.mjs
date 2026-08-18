@@ -100,6 +100,8 @@ test('flags missing advertiser and platform references', () => {
 });
 
 test('checks refund references and amount parity', () => {
+  const advertiserRefundKey = ['dodo', 'refund', 'pay-1', 'ref-1', 'adv-deposit'].join('_');
+  const platformRefundKey = ['dodo', 'refund', 'plat', 'pay-1', 'ref-1'].join('_');
   const report = buildDodoReconciliationReport({
     now: NOW,
     webhookEvents: [
@@ -115,7 +117,7 @@ test('checks refund references and amount parity', () => {
         ...advertiserRow('adv-refund', {
           paymentId: 'pay-1',
           amountMinor: 300,
-          idempotencyKey: 'dodo_refund_pay-1_ref-1_adv-deposit',
+          idempotencyKey: advertiserRefundKey,
         }),
         entryType: 'refund',
       },
@@ -125,7 +127,7 @@ test('checks refund references and amount parity', () => {
         entryType: 'refund',
         paymentId: 'pay-1',
         amountMinor: 400,
-        idempotencyKey: 'dodo_refund_plat_pay-1_ref-1',
+        idempotencyKey: platformRefundKey,
       }),
     ],
   });
