@@ -51,6 +51,13 @@
   production readiness, #40 production infrastructure, #41 staging-to-
   production deployment and the stranger-user journey, and #45 independent
   wait attestation.
+- **Deployment diagnosis is now codeable and secret-safe.** `pnpm deploy:doctor`
+  validates production URL contracts, PostgreSQL/Redis configuration, escaped
+  RS256 key-pair matching, Google OAuth ID alignment, Dodo rail consistency,
+  mock-auth/throttle flags, and fail-closed money-switch posture. `--with-network`
+  probes the versioned API health route and Redis socket; `--with-db` performs
+  read-only migration and switch checks. Contract coverage is wired into
+  `test:release-gates`; no credential values or response bodies are printed.
 - **Repository privacy remains unresolved by design.** The repository is still
   public because Vercel authentication is invalid in the available CLI session;
   changing visibility before verifying Vercel access would violate the launch
