@@ -326,9 +326,9 @@ launch. Order matters — the cold-start sequence is documented in
 
 ## 7. Workstream W6 — deferred / non-blocking (recorded so it is not lost)
 
-- CLI `commands/sandbox.ts` and VS Code `quiet-hours.ts` were never ported
-  from `agent/complete-hardening-and-cleanup` (see AGENTS.md branch
-  consolidation). Only relevant if the sandbox economy gets used.
+- CLI `commands/sandbox.ts` was restored on 2026-08-18 with server-confirmed
+  sandbox/test gating, exact bounded XTS amount parsing, and focused command
+  tests. VS Code `quiet-hours.ts` remains unported and is still non-blocking.
 - TypeScript 7 branch: blocked on typescript-eslint ≥ TS 7.1 support.
 - 23 dependabot branches: review post-launch, not before.
 - `wait.earnings` attestation operator (open item #1) is the core-value-prop
