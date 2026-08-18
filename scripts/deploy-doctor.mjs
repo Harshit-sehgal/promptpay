@@ -87,7 +87,7 @@ function parseUrl(value, name, { production = false, path = null, allowInternalH
   return { url, finding: pass(name, `${url.protocol}//${hostname}${url.port ? `:${url.port}` : ''}`) };
 }
 
-function checkDatabaseUrl(env, production) {
+function checkDatabaseUrl(env) {
   const findings = [];
   for (const name of ['DATABASE_URL', 'DIRECT_URL']) {
     const value = env[name];
@@ -317,7 +317,7 @@ function checkEnvironment(env) {
   } else {
     findings.push(pass('environment-kind', env.WAITLAYER_ENVIRONMENT_KIND ?? 'unset'));
   }
-  findings.push(...checkDatabaseUrl(env, production));
+  findings.push(...checkDatabaseUrl(env));
   findings.push(...checkRedisUrl(env, production));
   findings.push(...checkJwt(env, production));
   findings.push(...checkUrls(env, production));
@@ -401,16 +401,16 @@ async function probeDatabase(env) {
 export async function probeNetwork(env, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const raw = env.API_INTERNAL_URL || env.API_BASE_URL;
   if (!raw) return fail('api-reachability', 'API_INTERNAL_URL/API_BASE_URL is unavailable');
-  let url;
-  try {
-    url = new URL(raw);
-    const basePath = url.pathname.replace(/\/$/, '');
-    url.pathname = `${basePath || '/api/v1'}/health`;
-    url.search = '';
-    url.hash = '';
-  } catch {
-    return fail('api-reachability', 'API URL is malformed; reachability was not attempted');
-  }
+  const parsed = parseUrl(raw, 'api-reachability', {
+    production: env.NODE_ENV === 'production',
+    allowInternalHttp: true,
+  });
+  if (!parsed.url) return parsed.finding;
+  const url = parsed.url;
+  const basePath = url.pathname.replace(/\/$/, '');
+  url.pathname = `${basePath || '/api/v1'}/health`;
+  url.search = '';
+  url.hash = '';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
