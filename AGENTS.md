@@ -36,9 +36,11 @@
   `MERGEABLE` by GitHub. Their code CI jobs are green, but each currently has a
   failed Vercel status and still requires review; they must not be described as
   merged or fully green until that deployment check and review gate are
-  resolved. The current remote work branches are those three branches plus
-  `main`; local `main` contains their changes for verification, while
-  `origin/main` remains at `c73c33a` pending protected PR merges.
+  resolved. PR44's Codex review thread was verified against the current test
+  head, replied to, and resolved; the test now mocks `/api/platform-health` to
+  pin `telemetry_only`. The current remote work branches are those three
+  branches plus `main`; local `main` contains their changes for verification,
+  while `origin/main` remains at `c73c33a` pending protected PR merges.
 - **Main protection is live and verified through the GitHub API.** `main`
   requires the ten CI jobs listed in `docs/ops/branch-protection.md`, one
   CODEOWNERS approval, stale-review dismissal, last-push reapproval, admin
