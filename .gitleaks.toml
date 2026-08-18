@@ -11,7 +11,7 @@ useDefault = true
 description = """
 Exclude the baseline file itself.
 
-.gitleaksignore documents WHY each of its 23 fingerprints is benign, and doing
+.gitleaksignore documents WHY each of its 26 fingerprints is benign, and doing
 that honestly means quoting the values being baselined — e.g. the literal
 'test-secret-at-least-32-characters-long-0123456789'. Those quotes match the
 same generic-api-key heuristic that flagged the originals, so scanning the

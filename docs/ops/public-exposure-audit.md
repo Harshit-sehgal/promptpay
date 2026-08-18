@@ -22,7 +22,7 @@ repository-local checks:
 The current build-artifact scan passes. The local environment does not have the
 `gitleaks` executable, so a new full-history scan was **not** represented as
 completed by this audit. The latest repository-recorded full-history scan is the
-CI run whose 24 exact benign fingerprints are recorded in `.gitleaksignore`.
+CI run whose 26 exact benign fingerprints are recorded in `.gitleaksignore`.
 CI remains the authoritative full-history secret gate.
 
 ## Findings
