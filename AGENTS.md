@@ -22,6 +22,33 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-18 — repository stabilization
+
+- **Main CI restored green.** Full-history gitleaks flagged one verified-benign
+  Dodo webhook test fixture in the run for `89c7203`; PR #38 added its exact
+  `commit:path:rule:line` fingerprint without widening the allowlist, and was
+  squash-merged as `c73c33a`. Main CI run `32101767815` passed typecheck, lint,
+  build, test, both E2E suites, package-clients, Docker build, backup/restore,
+  audit claims, security, production boot smoke, and container-boot-soak.
+- **Obsolete branch cleanup completed.** PR #31 was closed as superseded; the
+  remote and local `integration/agent-beta` and
+  `agent/complete-hardening-and-cleanup` branches were deleted. The only
+  remaining remote branch is `main`, and there are no open pull requests.
+- **Main protection is live and verified through the GitHub API.** `main`
+  requires the ten CI jobs listed in `docs/ops/branch-protection.md`, one
+  CODEOWNERS approval, stale-review dismissal, last-push reapproval, admin
+  enforcement, conversation resolution, and prohibits force pushes and branch
+  deletion.
+- **Operational backlog is now tracked in GitHub issues:** #39 Dodo
+  production readiness, #40 production infrastructure, and #41 staging-to-
+  production deployment and the stranger-user journey.
+- **Repository privacy remains unresolved by design.** The repository is still
+  public because Vercel authentication is invalid in the available CLI session;
+  changing visibility before verifying Vercel access would violate the launch
+  checklist. Re-authenticate Vercel, verify the project before and after the
+  visibility change, and rotate the previously exposed GitHub credential
+  separately; the credential rotation remains operator-only.
+
 ## Current Status (snapshot 2026-08-08)
 
 - **96 migrations.** The sandbox XTS economy wave (7 logical commits,
@@ -1768,8 +1795,11 @@ these workflows and will conflict. Review them after the launch, not before.
    `provenance`/`sbom` keys outright, so attestations moved to explicit buildx
    flags in the release workflow and the release gate asserts cosign instead.
    `DOCKER_ATTEST` survives only in comments explaining its removal.
-5. **Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
-   settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.
+5. ~~**Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
+   settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.~~
+   **RESOLVED 2026-08-18:** `main` protection is enabled and API-verified with
+   required CI, CODEOWNERS review, stale-review dismissal, last-push
+   reapproval, admin enforcement, no force pushes, and no branch deletion.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
 7. **Google OAuth credentials** for live Google sign-in (CSP `frame-src`
