@@ -49,12 +49,17 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
   browser e2e (`dodo-deposit.spec.ts`, asserts the Dodo rail renders + fails
   closed with no processor configured); dev + production e2e suites green. The
   opt-in `pnpm dodo:verify-live` command checks the live `/products` endpoint
-  without printing secrets or enabling any money switch.
+  without printing secrets or enabling any money switch. The read-only
+  `pnpm dodo:reconcile` command compares retained Dodo events with advertiser
+  and platform ledger references, flags duplicate/orphaned/mismatched rows,
+  and explicitly reports that a live provider balance comparison remains
+  unavailable until Dodo credentials and a provider-side export are supplied.
 
 Blocking before any real deposit: §8.1 (live key + webhook secret), §8.3
 (product + currencies), §8.5 (MoR fee treatment + confirming the
 `payment.succeeded`/`refund.succeeded`/`dispute.*` amount units against a live
-webhook).
+webhook). The reconciliation command is platform-side evidence only; it does
+not close those operator-owned live-provider checks.
 
 ---
 

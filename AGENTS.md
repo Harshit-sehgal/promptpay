@@ -61,7 +61,9 @@
 - **Dodo plan current-state documentation reconciled.** `DODO_PAYMENTS_PLAN.md`
   now describes the implemented `DepositProcessorService`, Dodo webhook
   reconciliation, and inactive Stripe rail instead of the superseded
-  Stripe-coupled deposit path.
+  Stripe-coupled deposit path. `pnpm dodo:reconcile` adds a read-only,
+  secret-safe platform-side report for retained Dodo events and ledger parity;
+  it deliberately does not claim live provider balance reconciliation.
 - **Attestation protocol simulator and threat model added.** The private
   `@waitlayer/wait-attestation-bridge/simulator` subpath exposes an in-memory
   `TrustedAttestationSimulator` for valid, malformed, expired, replayed,
