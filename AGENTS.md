@@ -79,6 +79,12 @@
   checklist. Re-authenticate Vercel, verify the project before and after the
   visibility change, and rotate the previously exposed GitHub credential
   separately; the credential rotation remains operator-only.
+- **Public-exposure audit recorded 2026-08-18.**
+  `docs/ops/public-exposure-audit.md` records the secret-safe current-tree and
+  history-path review, the exact benign gitleaks-baseline interpretation, the
+  passing build-artifact scan, and the operator-only GitHub/Vercel/provider
+  rotation checklist. The local environment lacks the gitleaks executable, so
+  the report deliberately does not claim a fresh full-history scan.
 
 ## Current Status (snapshot 2026-08-08)
 
