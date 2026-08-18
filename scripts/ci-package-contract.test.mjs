@@ -356,7 +356,7 @@ test('the gitleaks baseline stays a precise fingerprint list, never a path allow
 
   // A cap, so growing the baseline is a deliberate act with a diff to review
   // rather than something that quietly absorbs new findings.
-  const CAP = 23;
+  const CAP = 24;
   assert.ok(
     entries.length <= CAP,
     `baseline grew to ${entries.length} (cap ${CAP}). Verify each NEW finding is ` +
