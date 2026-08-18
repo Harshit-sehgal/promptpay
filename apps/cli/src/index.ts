@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { realpathSync } from 'fs';
 import { createRequire } from 'module';
 
 import { runAuth } from './commands/auth';
@@ -17,15 +18,23 @@ import {
 } from './commands/integrations';
 import { runLogout } from './commands/logout';
 import { runSupervisedCommand } from './commands/run';
+import { runSandbox } from './commands/sandbox';
 import { runStatus } from './commands/status';
 import { runWatch } from './commands/watch';
 import { resolveApiBaseUrl } from './lib/api-client';
 
 // Read the version from package.json at runtime (dist/index.js sits beside the
 // installed package.json) so the reported version can never drift from the
-// published artifact.
-const packageRequire = createRequire(__filename);
-const { version } = packageRequire('../package.json') as { version: string };
+// published artifact. The catch keeps the module importable from ESM test
+// runners where `__filename` does not exist; the version string is cosmetic.
+function loadPackageVersion(): string {
+  try {
+    return (createRequire(__filename)('../package.json') as { version: string }).version;
+  } catch {
+    return '0.0.0';
+  }
+}
+const version = loadPackageVersion();
 
 const API_URL = resolveApiBaseUrl();
 const API_HOSTNAME = (() => {
@@ -57,6 +66,17 @@ program
   .option('-e, --email <email>', 'Login email')
   .option('-s, --signup', 'Create a new account instead of logging in')
   .action((opts) => runAuth(opts));
+
+program
+  .command('sandbox [action]')
+  .description('Use test-only faucet, payout simulation, or status commands')
+  .option('--idempotency-key <key>', 'Stable key for an idempotent sandbox operation')
+  .option('--amount-minor <amount>', 'Sandbox payout amount in XTS minor units')
+  .option('--destination <alias>', 'Sandbox payout destination, for example sandbox:demo')
+  .option('--outcome <outcome>', 'Sandbox payout outcome')
+  .action((action: string | undefined, options) =>
+    runSandbox({ action, ...options, destinationAlias: options.destination }),
+  );
 
 program
   .command('status')
@@ -148,4 +168,21 @@ program
   .description('View and update settings (ads, quiet mode, frequency)')
   .action(() => runConfig());
 
-program.parse();
+// Only parse when run as the CLI entrypoint (direct node invocation or the
+// installed `waitlayer` bin symlink, both realpath-identical to this file).
+// Tests import `program` to exercise the commander wiring hermetically; under
+// an ESM test runner `__filename` is absent and the guard stays false.
+let isEntrypoint = false;
+try {
+  isEntrypoint =
+    typeof __filename !== 'undefined' &&
+    Boolean(process.argv[1]) &&
+    realpathSync(process.argv[1]) === realpathSync(__filename);
+} catch {
+  isEntrypoint = false;
+}
+if (isEntrypoint) {
+  program.parse();
+}
+
+export { program };

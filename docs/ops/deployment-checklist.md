@@ -36,9 +36,20 @@ One command, on the deploy host, with the production environment loaded. It
 fails closed on everything below that can be checked mechanically.
 
 ```bash
+pnpm deploy:doctor                   # secret-safe config diagnosis
+pnpm deploy:doctor --with-network    # also probe API health + Redis socket
+pnpm deploy:doctor --with-db         # also check migrations + money switches (read-only)
 pnpm deploy:preflight                # env/config only — safe before migrations
 pnpm deploy:preflight --with-db      # after migrations: probes Postgres/Redis + operator readiness
 ```
+
+`deploy:doctor` is diagnostic and read-only: it never prints secret values,
+creates a checkout, changes a database row, or enables a money switch. It
+checks URL contracts, PostgreSQL/Redis URL shape, escaped RS256 key parsing and
+pair matching, API/web OAuth ID alignment, Dodo rail consistency, mock-auth and
+throttle flags, and production HTTPS requirements. The optional probes are
+explicit so a config-only run is safe before networking or migrations are
+available.
 
 It checks: the dev-compose override trap (see the warning below), the full
 `@waitlayer/config` production schema, `COOKIE_SECURE`, every mock-auth flag,

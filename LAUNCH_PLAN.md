@@ -1,5 +1,12 @@
-# WaitLayer Launch Plan
+# WaitLayer Launch Plan — Historical Audit
 
+> **Status: SUPERSEDED (2026-08-18).** This document records a fresh code audit
+> performed on **2026-08-07** against `integration/agent-beta`; it is an audit
+> trail and historical sequencing record, not the current launch status. The
+> legal-page and admin-bootstrap findings described below were subsequently
+> fixed. Use `AGENTS.md` for the live residual blocker register and
+> `docs/ops/deployment-checklist.md` for the current deployment procedure.
+>
 > Built from a fresh code audit on **2026-08-07** against `integration/agent-beta`
 > @ `f5f69ec`. Every claim below was re-verified against source, a running
 > database, or a live HTTP probe. Where this document disagrees with `AGENTS.md`,
@@ -15,7 +22,7 @@ invariants are real and enforced, and the fail-closed design is honest. The
 problem is that **none of it is reachable, nobody can operate it, and the core
 value proposition is switched off with no supplier able to switch it on.**
 
-Four facts define the whole plan:
+Four historical facts defined the plan at the time:
 
 1. **The application has never been deployed.** `www.waitlayer.com` serves an
    ~10-day-cached marketing build with 8 pages. `/auth/login`, `/auth/signup`,
@@ -28,18 +35,19 @@ Four facts define the whole plan:
    independently-operated attestation issuer. No AI provider signs wait
    assertions today, and the only bridge in the repo is a stub that hardcodes a
    5-second duration. This is an architecture decision, not a config item.
-4. **One real code bug is live right now.** The three `/legal/*` pages — linked
+4. **One real code bug was live at the time.** The three `/legal/*` pages — linked
    from the footer of every page — have "Content unavailable" baked into their
    prerendered HTML in every build, including local. Proven by decoding the
    build artifact, not inferred (§B6). It is an hour's work and the only finding
    here with a regulatory edge.
 
-The one-sentence version: **the gates measure the code, and the code is fine;
-nothing measures the product, and the product does not run.**
+The historical one-sentence version: **the gates measured the code, while
+nothing measured the product, and the product did not yet run.** This is not a
+current deployment claim.
 
 ---
 
-## 1. Verified state (gates I ran today)
+## 1. Historical verified state (gates run on 2026-08-07)
 
 | Gate                                   | Result                        | Notes  |
 | -------------------------------------- | ----------------------------- | ------ |

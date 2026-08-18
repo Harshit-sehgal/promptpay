@@ -22,7 +22,81 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
-## Current Status (snapshot 2026-08-08)
+## Resolved 2026-08-18 — repository stabilization
+
+- **Main CI restored green.** Full-history gitleaks flagged one verified-benign
+  Dodo webhook test fixture in the run for `89c7203`; PR #38 added its exact
+  `commit:path:rule:line` fingerprint without widening the allowlist, and was
+  squash-merged as `c73c33a`. Main CI run `32101767815` passed typecheck, lint,
+  build, test, both E2E suites, package-clients, Docker build, backup/restore,
+  audit claims, security, production boot smoke, and container-boot-soak.
+- **PR consolidation status (verified 2026-08-18).** PR #42
+  (`docs/record-repo-stabilization`), PR #43 (`feat/restore-sandbox-cli`), PR #44
+  (`test/developer-beta-onboarding-content`), PR #46
+  (`docs/public-exposure-audit`), and PR #47
+  (`feat/consolidate-tested-launch-line`) are open and reported `MERGEABLE` by
+  GitHub. Their repository CI jobs are green on the current consolidation head;
+  Vercel still fails on the preview deployment and every PR requires review, so
+  none may be described as merged or fully green until those protected gates
+  are resolved. PR44's Codex review thread was verified against the current test
+  head, replied to, and resolved; the test now mocks `/api/platform-health` to
+  pin `telemetry_only`. PR #47 is the current remote consolidation branch for
+  the tested local launch line; `origin/main` remains at `c73c33a` pending
+  protected PR merges.
+- **Main protection is live and verified through the GitHub API.** `main`
+  requires the ten CI jobs listed in `docs/ops/branch-protection.md`, one
+  CODEOWNERS approval, stale-review dismissal, last-push reapproval, admin
+  enforcement, conversation resolution, and prohibits force pushes and branch
+  deletion. Direct pushes are rejected; changes must land through pull
+  requests.
+- **Operational backlog is now tracked in GitHub issues:** #39 Dodo
+  production readiness, #40 production infrastructure, #41 staging-to-
+  production deployment and the stranger-user journey, and #45 independent
+  wait attestation.
+- **Deployment diagnosis is now codeable and secret-safe.** `pnpm deploy:doctor`
+  validates production URL contracts, PostgreSQL/Redis configuration, escaped
+  RS256 key-pair matching, Google OAuth ID alignment, Dodo rail consistency,
+  mock-auth/throttle flags, and fail-closed money-switch posture. `--with-network`
+  probes the versioned API health route and Redis socket; `--with-db` performs
+  read-only migration and switch checks. Contract coverage is wired into
+  `test:release-gates`; no credential values or response bodies are printed.
+- **Dodo plan current-state documentation reconciled.** `DODO_PAYMENTS_PLAN.md`
+  now describes the implemented `DepositProcessorService`, Dodo webhook
+  reconciliation, and inactive Stripe rail instead of the superseded
+  Stripe-coupled deposit path. `pnpm dodo:reconcile` adds a read-only,
+  secret-safe platform-side report for retained Dodo events and ledger parity;
+  it deliberately does not claim live provider balance reconciliation.
+- **Attestation protocol simulator and threat model added.** The private
+  `@waitlayer/wait-attestation-bridge/simulator` subpath exposes an in-memory
+  `TrustedAttestationSimulator` for valid, malformed, expired, replayed,
+  misbound, timing, unknown-key, and bad-signature assertions. The protocol and
+  threat-model documents define the opaque claim contract, key/replay rules,
+  privacy boundary, mitigations, and residual provider risks. It is test-only,
+  never accepts prompt/output content, and cannot satisfy the independent
+  provider launch gate or production issuer configuration. Tool tests cover
+  18/18 cases.
+- **Repository privacy remains unresolved by design.** The repository is still
+  public because Vercel authentication is invalid in the available CLI session;
+  changing visibility before verifying Vercel access would violate the launch
+  checklist. Re-authenticate Vercel, verify the project before and after the
+  visibility change, and rotate the previously exposed GitHub credential
+  separately; the credential rotation remains operator-only.
+- **Public-exposure audit recorded 2026-08-18.**
+  `docs/ops/public-exposure-audit.md` records the secret-safe current-tree and
+  history-path review, the exact benign gitleaks-baseline interpretation, the
+  passing build-artifact scan, and the operator-only GitHub/Vercel/provider
+  rotation checklist. The local environment lacks the gitleaks executable, so
+  the report deliberately does not claim a fresh full-history scan.
+- **Documentation drift gap closed 2026-08-18.** `docker-compose.yml` no longer
+  hardcodes a migration count, the dated July security checklist is explicitly
+  historical/superseded, and `LAUNCH_PLAN.md` now carries the same status marker
+  so its resolved August 7 findings cannot be mistaken for live blockers.
+  `ci-package-contract.test.mjs` rejects numeric migration guidance and an
+  unmarked historical launch plan. Verified by
+  `node --test scripts/ci-package-contract.test.mjs` (15/15), release gates
+  (122/122), and `node scripts/audit-claims.mjs` (15/15).
+
+## Historical Status Snapshot (2026-08-08)
 
 - **96 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of
@@ -129,7 +203,11 @@ live until the operator answers §8.1–§8.5 of that plan.
   creates Dodo Checkout Sessions over `fetch` (no SDK) at
   `POST {DODO_BASE_URL}/checkouts`, returning `{ sessionId, url }`. Config:
   `DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`, `DODO_PRODUCT_ID`
-  (added to `@waitlayer/config` schema + `.env.example`). Amounts pass the same
+  (added to `@waitlayer/config` schema + `.env.example`). The provider now
+  requires all four at runtime: a checkout without a webhook secret could take
+  money that the ledger cannot safely reconcile. The API base is restricted to
+  the documented HTTPS test/live Dodo hosts, and returned checkout URLs must be
+  public HTTPS URLs before reaching the browser. Amounts pass the same
   `requireProviderSafeMinorAmount` guard as Stripe; `readiness()` reports the
   rail for fail-closed billing UI. **`GET /health` now publishes a `deposits`
   field** (`{ enabled, processor, ready }` — the `deposits.global` switch, the
@@ -195,7 +273,9 @@ journey).
   Content-gate browser e2e (`apps/web/e2e/dodo-deposit.spec.ts`) proves the
   billing page renders the Dodo rail and **fails closed with no processor
   configured** (a deposit shows "temporarily disabled" and never redirects to a
-  hosted checkout) — green on both viewports in dev and production e2e.
+  hosted checkout) — green on both viewports in dev and production e2e. The
+  opt-in `pnpm dodo:verify-live` command checks the live `/products` endpoint
+  without printing secrets or enabling any money switch.
 
 - **Config validation corrected (over-broad Dodo rule, twice).** The first cut
   required `DODO_WEBHOOK_SECRET`/`DODO_PRODUCT_ID` whenever `DODO_API_KEY` was
@@ -1694,10 +1774,11 @@ assuming:
     lives in `apps/api/src/extension/quiet-hours.ts`.
   - `extension-ad-sandbox-placement.spec.ts` — present on beta as
     `extension-ad.sandbox-placement.spec.ts` (renamed, not lost).
-  - `apps/cli/src/commands/sandbox.ts` — a genuinely absent sandbox-only CLI
-    command (faucet/deposit/payout simulation), gated on
-    `environmentKind` ∈ {sandbox,test} so it cannot run in production. Not
-    launch-blocking; recover it if the sandbox economy gets used.
+  - `apps/cli/src/commands/sandbox.ts` — was the genuinely absent sandbox-only
+    CLI command (faucet/deposit/payout simulation); restored on
+    `feat/restore-sandbox-cli` with server-confirmed `environmentKind` gating,
+    bounded exact minor-unit validation, and idempotency tests. It remains
+    non-launch-blocking and test-credit-only.
   - **`ad-opportunity-expiry.cron.ts` — genuinely lost, and restored.** See
     below.
 
@@ -1768,8 +1849,11 @@ these workflows and will conflict. Review them after the launch, not before.
    `provenance`/`sbom` keys outright, so attestations moved to explicit buildx
    flags in the release workflow and the release gate asserts cosign instead.
    `DOCKER_ATTEST` survives only in comments explaining its removal.
-5. **Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
-   settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.
+5. ~~**Branch protection / CODEOWNERS enforcement:** toggles in GitHub repo
+   settings (owner `Harshit-sehgal`); docs in `docs/ops/branch-protection.md`.~~
+   **RESOLVED 2026-08-18:** `main` protection is enabled and API-verified with
+   required CI, CODEOWNERS review, stale-review dismissal, last-push
+   reapproval, admin enforcement, no force pushes, and no branch deletion.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
 7. **Google OAuth credentials** for live Google sign-in (CSP `frame-src`

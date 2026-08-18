@@ -19,7 +19,12 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
 - **W1.2** ✅ `DodoProvider` (checkout over `fetch`) + config schema/env +
   `readiness()` surfaced on `GET /health` as a fail-closed `deposits` field
   (`{ enabled, processor, ready }`), so a health-adjacent surface reports the
-  rail without attempting a checkout.
+  rail without attempting a checkout. Runtime readiness requires all four
+  values (`DODO_API_KEY`, `DODO_BASE_URL`, `DODO_WEBHOOK_SECRET`,
+  `DODO_PRODUCT_ID`): a checkout without a webhook secret could take money
+  that the ledger cannot safely reconcile. `DODO_BASE_URL` is restricted to the
+  documented HTTPS test/live hosts, and the returned checkout URL is validated
+  as public HTTPS before the browser receives it.
 - **W1.3** ✅ `DodoWebhookController` with **Standard Webhooks** signature
   verification + idempotent `payment.succeeded` deposit credit + A-019
   activation + `refund.succeeded` reversal + `dispute.opened`/`won`/`cancelled`/
@@ -42,12 +47,19 @@ Landed in the tree (see `AGENTS.md` "Resolved 2026-08-17"):
   specs; opt-in Dodo sandbox integration spec (`dodo-deposit-sandbox.spec.ts`,
   skips cleanly without `RUN_DODO_SANDBOX=1` + §8.1/§8.3 creds); content-gate
   browser e2e (`dodo-deposit.spec.ts`, asserts the Dodo rail renders + fails
-  closed with no processor configured); dev + production e2e suites green.
+  closed with no processor configured); dev + production e2e suites green. The
+  opt-in `pnpm dodo:verify-live` command checks the live `/products` endpoint
+  without printing secrets or enabling any money switch. The read-only
+  `pnpm dodo:reconcile` command compares retained Dodo events with advertiser
+  and platform ledger references, flags duplicate/orphaned/mismatched rows,
+  and explicitly reports that a live provider balance comparison remains
+  unavailable until Dodo credentials and a provider-side export are supplied.
 
 Blocking before any real deposit: §8.1 (live key + webhook secret), §8.3
 (product + currencies), §8.5 (MoR fee treatment + confirming the
 `payment.succeeded`/`refund.succeeded`/`dispute.*` amount units against a live
-webhook).
+webhook). The reconciliation command is platform-side evidence only; it does
+not close those operator-owned live-provider checks.
 
 ---
 
@@ -67,34 +79,41 @@ start on Dodo credentials-dependent work until §8 items 1–3 are answered.
 
 ## 1. Verified current state (the rails as they exist today)
 
-### Money-in (advertiser deposits) — hardwired to Stripe
+### Money-in (advertiser deposits) — processor-selected, Dodo at launch
 
 - `POST /advertiser/deposit-session`
-  (`apps/api/src/advertiser/advertiser.controller.ts:295-333`) gates on
+  (`apps/api/src/advertiser/advertiser.controller.ts`) gates on
   `runtimeConfig.isDepositsEnabled()` (`deposits.global` switch), re-checks
-  per-currency minimums, then calls **`this.stripe.createDepositSession`**
-  directly. There is **no payment-processor abstraction** — the controller is
-  coupled to `StripeProvider`.
-- `StripeProvider.createDepositSession`
-  (`apps/api/src/payout/providers/stripe.provider.ts:47`) creates a Stripe
-  Checkout Session and returns `{ sessionId, url }`.
-- Reconciliation lives in `StripeWebhookController`
-  (`apps/api/src/payout/stripe-webhook.controller.ts`, route
-  `@Controller('payout/stripe')`, `POST /payout/stripe/webhook`):
-  signature verification on the raw body, idempotent ledger credit keyed by
-  paymentIntentId (`:452`), refund/dispute handling with hold/restore
-  (`:657,892-960`), duplicate-delivery safety on both checkout and refund
-  events, and deposit-triggered campaign auto-activation (`:429-456`).
+  per-currency minimums, and resolves the configured
+  `DepositProcessorService`. Unset, unknown, or incomplete configuration
+  fails closed with the existing clean 400; the controller is no longer
+  coupled directly to Stripe.
+- `DodoProvider.createDepositSession`
+  (`apps/api/src/payout/providers/dodo.provider.ts`) creates a Dodo Checkout
+  Session over `fetch` and returns `{ sessionId, url }`. Runtime readiness
+  requires `DEPOSIT_PROCESSOR=dodo` plus `DODO_API_KEY`, `DODO_BASE_URL`,
+  `DODO_WEBHOOK_SECRET`, and `DODO_PRODUCT_ID`; the base URL is restricted to
+  Dodo's HTTPS test/live hosts and the returned checkout URL is restricted to
+  public HTTPS before reaching the browser.
+- Reconciliation is handled by `DodoWebhookController`
+  (`apps/api/src/payout/dodo-webhook.controller.ts`,
+  `POST /payout/dodo/webhook`): Standard Webhooks signature verification on
+  the raw body, idempotent payment credit keyed by Dodo payment id,
+  refund/dispute hold/restore/write-off handling, and deposit-triggered
+  campaign activation. Unknown or ambiguous events remain `pending_review`.
 - `WebhookReclaimCron` (`apps/api/src/payout/webhook-reclaim-cron.service.ts`)
-  re-processes stalled/orphaned Stripe webhook events. Production may not
-  disable it (`WEBHOOK_RECLAIM_CRON`).
+  re-processes stalled events for both rails. Dodo retains the full event at
+  receipt because Dodo has no event-retrieval API; duplicate deliveries are
+  re-processed idempotently rather than acknowledged as complete.
 - Web UI: `apps/web/src/app/advertiser/billing/page.tsx` builds the amount,
   calls `POST /advertiser/deposit-session`
-  (`apps/web/src/lib/api/services.ts:116`) and redirects the browser to the
-  returned `url`; return handling on `apps/web/src/app/advertiser/page.tsx`
-  via `?deposit=success|cancelled`.
-- Stripe env: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-  `STRIPE_PUBLISHABLE_KEY` (`.env.example:91-93`).
+  (`apps/web/src/lib/api/services.ts`) and redirects the browser to the
+  provider-returned `url`; return handling remains on
+  `apps/web/src/app/advertiser/page.tsx` via `?deposit=success|cancelled`.
+- Stripe code remains available but inactive at launch under D2. A stray
+  Stripe configuration does not select the rail; production preflight rejects
+  half-configured Stripe and the selected processor must be Dodo before real
+  deposits can be enabled.
 
 ### Money-out (developer payouts) — Dodo is a stub today
 
@@ -326,9 +345,9 @@ launch. Order matters — the cold-start sequence is documented in
 
 ## 7. Workstream W6 — deferred / non-blocking (recorded so it is not lost)
 
-- CLI `commands/sandbox.ts` and VS Code `quiet-hours.ts` were never ported
-  from `agent/complete-hardening-and-cleanup` (see AGENTS.md branch
-  consolidation). Only relevant if the sandbox economy gets used.
+- CLI `commands/sandbox.ts` was restored on 2026-08-18 with server-confirmed
+  sandbox/test gating, exact bounded XTS amount parsing, and focused command
+  tests. VS Code `quiet-hours.ts` remains unported and is still non-blocking.
 - TypeScript 7 branch: blocked on typescript-eslint ≥ TS 7.1 support.
 - 23 dependabot branches: review post-launch, not before.
 - `wait.earnings` attestation operator (open item #1) is the core-value-prop

@@ -151,7 +151,7 @@ services:
       timeout: 5s
       retries: 10
       # The entrypoint runs `prisma migrate deploy` BEFORE Nest boots, and a
-      # cold database applies all 94 migrations first. `start_period` is the
+      # cold database applies all migrations first. `start_period` is the
       # window Docker provides for exactly this — failures inside it do not
       # count toward `retries`, so a slow first boot is not treated as a sick
       # container. At 30s a fresh database reported the api as unhealthy and

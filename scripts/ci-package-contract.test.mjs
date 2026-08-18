@@ -99,17 +99,33 @@ test('release gates build every fixture they execute, before running scenario te
   );
 });
 
+test('production Compose documentation does not hardcode a migration count', () => {
+  const compose = read('docker-compose.yml');
+  assert.doesNotMatch(
+    compose,
+    /\b(?:all|applies|apply|applied)\s+\d+\s+migrations\b/i,
+    'Compose startup guidance must describe migrations generically; the schema count changes over time',
+  );
+});
+
+test('the dated launch plan cannot masquerade as current deployment status', () => {
+  const plan = read('LAUNCH_PLAN.md');
+  assert.match(plan, /^# WaitLayer Launch Plan — Historical Audit$/m);
+  assert.match(plan, /Status: SUPERSEDED \(2026-08-18\)/);
+  assert.match(plan, /Use `AGENTS\.md` for the live residual blocker register/);
+  assert.match(plan, /historical verified state/i);
+  assert.doesNotMatch(plan, /One real code bug is live right now/);
+});
+
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {
   const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
   const prebuild = gates.split('&&')[0];
   // Derive the requirement from the fixtures instead of hardcoding it, so a new
   // scenario that reaches into another package's dist fails here rather than in
   // CI with an opaque module-resolution error.
-  const runners = execFileSync(
-    'grep',
-    ['-rlE', 'apps/api/dist|apps/cli/dist', 'scenarios'],
-    { encoding: 'utf8' },
-  )
+  const runners = execFileSync('grep', ['-rlE', 'apps/api/dist|apps/cli/dist', 'scenarios'], {
+    encoding: 'utf8',
+  })
     .split('\n')
     .filter(Boolean);
   assert.ok(runners.length > 0, 'expected scenario runners importing compiled output');
@@ -245,11 +261,7 @@ test('prisma CLI is a PRODUCTION dependency, and the image does not reinstall it
   const runtimeStages = ['api', 'web'].map((name) => dockerStage(name));
   assert.equal(runtimeStages.length, 2, 'expected an api and a web runtime stage');
   for (const stage of runtimeStages) {
-    assert.doesNotMatch(
-      stage,
-      /^FROM /m,
-      'dockerStage should return a single stage body',
-    );
+    assert.doesNotMatch(stage, /^FROM /m, 'dockerStage should return a single stage body');
   }
   for (const stage of runtimeStages) {
     for (const tool of ['npm', 'pnpm']) {
@@ -276,10 +288,7 @@ test('the API image bakes in the Prisma schema engine instead of downloading it 
 
   const installIndex = assemble.search(/^RUN[^\n]*pnpm install --prod/m);
   const ensureIndex = assemble.search(/^RUN[^\n]*ensure-prisma-engines\.mjs/m);
-  assert.ok(
-    installIndex !== -1,
-    'the api image must still do a production-only install',
-  );
+  assert.ok(installIndex !== -1, 'the api image must still do a production-only install');
   assert.ok(
     ensureIndex !== -1,
     'the api image must run scripts/ensure-prisma-engines.mjs so the engine is baked in',
@@ -312,9 +321,8 @@ test('the engine fetch can still resolve @prisma/engines through the production 
   // `pnpm install --prod`: if prisma ever moves back to devDependencies the
   // runtime image loses the CLI entirely, and this resolution is the first
   // thing that breaks. Hermetic — no network, no download, just resolution.
-  const { resolveEnginesDir, foundEngines, ENGINE_PREFIX } = await import(
-    '../scripts/ensure-prisma-engines.mjs'
-  );
+  const { resolveEnginesDir, foundEngines, ENGINE_PREFIX } =
+    await import('../scripts/ensure-prisma-engines.mjs');
 
   const dir = resolveEnginesDir(root);
   assert.ok(
@@ -330,7 +338,10 @@ test('the engine fetch can still resolve @prisma/engines through the production 
     !(pkg.files ?? []).some((f) => f.startsWith(ENGINE_PREFIX)),
     'if @prisma/engines starts shipping the engine, the build-time fetch can go',
   );
-  assert.deepEqual(foundEngines(dir).filter((n) => !n.startsWith(ENGINE_PREFIX)), []);
+  assert.deepEqual(
+    foundEngines(dir).filter((n) => !n.startsWith(ENGINE_PREFIX)),
+    [],
+  );
 });
 
 test('the gitleaks baseline stays a precise fingerprint list, never a path allowlist', () => {
@@ -356,7 +367,7 @@ test('the gitleaks baseline stays a precise fingerprint list, never a path allow
 
   // A cap, so growing the baseline is a deliberate act with a diff to review
   // rather than something that quietly absorbs new findings.
-  const CAP = 24;
+  const CAP = 26;
   assert.ok(
     entries.length <= CAP,
     `baseline grew to ${entries.length} (cap ${CAP}). Verify each NEW finding is ` +
@@ -424,5 +435,9 @@ test('the gitleaks config extends the default rules and excludes only the baseli
     'the allowlist must cover exactly .gitleaksignore and nothing else',
   );
   assert.doesNotMatch(config, /^\s*stopwords\s*=/m, 'stopwords would mute rules globally');
-  assert.doesNotMatch(config, /^\s*regexes\s*=/m, 'a content regex allowlist would mute real secrets');
+  assert.doesNotMatch(
+    config,
+    /^\s*regexes\s*=/m,
+    'a content regex allowlist would mute real secrets',
+  );
 });

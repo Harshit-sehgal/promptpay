@@ -12,6 +12,7 @@ function makeProvider(config: Record<string, string> = {}) {
 const FULL_CONFIG = {
   DODO_API_KEY: 'test-key',
   DODO_BASE_URL: 'https://test.dodopayments.com',
+  DODO_WEBHOOK_SECRET: 'whsec_test',
   DODO_PRODUCT_ID: 'pdt_123',
 };
 
@@ -31,6 +32,25 @@ describe('DodoProvider', () => {
     const { provider } = makeProvider(FULL_CONFIG);
     expect(provider.isEnabled()).toBe(true);
     expect(provider.readiness()).toEqual({ ok: true });
+  });
+
+  it('fails closed when the webhook secret is missing', () => {
+    const { DODO_WEBHOOK_SECRET: _webhookSecret, ...checkoutOnlyConfig } = FULL_CONFIG;
+    const { provider } = makeProvider(checkoutOnlyConfig);
+    expect(provider.isEnabled()).toBe(false);
+    expect(provider.readiness()).toMatchObject({ ok: false });
+    expect(provider.readiness()).toMatchObject({
+      reason: expect.stringContaining('DODO_WEBHOOK_SECRET'),
+    });
+  });
+
+  it('fails closed when the API base URL is not the documented HTTPS Dodo host', () => {
+    const { provider } = makeProvider({ ...FULL_CONFIG, DODO_BASE_URL: 'http://evil.example' });
+    expect(provider.isEnabled()).toBe(false);
+    expect(provider.readiness()).toEqual({
+      ok: false,
+      reason: expect.stringContaining('https://test.dodopayments.com'),
+    });
   });
 
   it('refuses to create a session when unconfigured', async () => {
@@ -96,6 +116,27 @@ describe('DodoProvider', () => {
         cancelUrl: 'https://example.com/cancel',
       }),
     ).rejects.toThrow(/HTTP 401/);
+  });
+
+  it('fails when Dodo returns an unsafe checkout URL', async () => {
+    const { provider } = makeProvider(FULL_CONFIG);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ session_id: 'cks_1', checkout_url: 'javascript:alert(1)' }),
+      }),
+    );
+
+    await expect(
+      provider.createDepositSession({
+        advertiserId: 'adv-1',
+        amountMinor: 1000n,
+        currency: 'usd',
+        successUrl: 'https://example.com/ok',
+        cancelUrl: 'https://example.com/cancel',
+      }),
+    ).rejects.toThrow(/unsafe checkout URL/);
   });
 
   it('fails when Dodo omits the checkout_url', async () => {

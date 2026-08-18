@@ -51,6 +51,17 @@ Configure `WAIT_ATTESTATION_ISSUERS` (issuer/public-key JSON) and the separate
 version or an existing `vscode.*`, `cli.*`, or heuristic adapter as an
 attestation-provider version merely because it has more client telemetry.
 
+### Local protocol simulator
+
+`@waitlayer/wait-attestation-bridge/simulator` exposes the test-only
+`TrustedAttestationSimulator`. It generates an in-memory RS256 issuer and
+opaque protocol assertions for valid, malformed, expired, replayed, misbound,
+future-timestamp, invalid-duration, unknown-key, and bad-signature cases.
+It never accepts prompts or model output, is not an HTTP provider, and must
+never be configured in `WAIT_ATTESTATION_ISSUERS` for staging or production.
+The simulator proves protocol and verifier behavior only; it cannot satisfy
+this independent-provider launch gate.
+
 ## Mandatory launch experiment
 
 Run this against a provider sandbox and a staged deployment using isolated,

@@ -142,6 +142,31 @@ test.describe('Developer dashboard (authenticated)', () => {
     await expect(page.getByText('Lifetime').first()).toBeVisible();
   });
 
+  test('discloses telemetry-only beta status and the client activation path', async ({ page }) => {
+    // Keep this content contract independent of the shared database's current
+    // kill-switch state (which may be `paused` in CI). The dashboard and
+    // device-registration read remain real; only the public health response is
+    // fixed to the beta mode this test is proving.
+    await page.route('**/api/platform-health', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ waitLaunchMode: 'telemetry_only' }),
+      }),
+    );
+    await page.goto('/developer');
+    await expect(page.getByRole('status', { name: /private beta.*no earnings/i })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole('heading', { name: 'Get started — connect a client' })).toBeVisible(
+      {
+        timeout: 15_000,
+      },
+    );
+    await expect(page.getByText(/install one below, sign in/i)).toBeVisible();
+    await expect(page.getByText(/Not yet published to npm/i)).toBeVisible();
+  });
+
   test('renders the trust and payout status section', async ({ page }) => {
     await page.goto('/developer');
     await expect(page.getByText('Trust & Payout Status').first()).toBeVisible({ timeout: 15_000 });

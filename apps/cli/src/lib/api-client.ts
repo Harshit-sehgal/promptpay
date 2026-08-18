@@ -136,6 +136,43 @@ export interface EnvironmentIdentity {
   environmentId: string;
 }
 
+export interface SandboxCreditsResponse {
+  mode: 'sandbox';
+  hasCashValue: false;
+  currency: 'XTS';
+  balanceMinor: string;
+  grantedMinor?: number;
+  duplicate?: boolean;
+  exhausted?: boolean;
+  environmentId: string;
+  label?: string;
+}
+
+export type SandboxPayoutOutcome =
+  | 'paid'
+  | 'processing'
+  | 'failed'
+  | 'ambiguous'
+  | 'reversed'
+  | 'callback_before_response'
+  | 'duplicate_callback'
+  | 'timeout'
+  | 'reconciliation_escalation';
+
+export interface SandboxPayoutSimulationResponse {
+  mode: 'sandbox';
+  hasCashValue: false;
+  simulationId: string;
+  status: string;
+  amountMinor: string;
+  currency: 'XTS';
+  balanceMinor: string;
+  providerTxId?: string | null;
+  duplicate: boolean;
+  environmentId: string;
+  label?: string;
+}
+
 export class ApiClient {
   private deviceUUID: string | null = null;
   private deviceEventSecret: string | null = null;
@@ -345,6 +382,39 @@ export class ApiClient {
 
   async getEnvironmentIdentity(): Promise<EnvironmentIdentity> {
     return this.raw<EnvironmentIdentity>('GET', '/health', undefined);
+  }
+
+  async getSandboxCredits(): Promise<SandboxCreditsResponse> {
+    return this.raw<SandboxCreditsResponse>('GET', '/sandbox/credits', undefined);
+  }
+
+  async claimSandboxFaucet(idempotencyKey: string): Promise<
+    SandboxCreditsResponse & {
+      grantedMinor: number;
+      duplicate: boolean;
+      exhausted: boolean;
+    }
+  > {
+    return this.raw('POST', '/sandbox/faucet', { idempotencyKey });
+  }
+
+  async simulateSandboxPayout(input: {
+    amountMinor: number;
+    destinationAlias: string;
+    outcome: SandboxPayoutOutcome;
+    idempotencyKey: string;
+  }): Promise<SandboxPayoutSimulationResponse> {
+    return this.raw<SandboxPayoutSimulationResponse>('POST', '/sandbox/payouts', input);
+  }
+
+  async listSandboxPayouts(): Promise<{
+    mode: 'sandbox';
+    hasCashValue: false;
+    environmentId: string;
+    payouts: Array<Record<string, unknown>>;
+    label?: string;
+  }> {
+    return this.raw('GET', '/sandbox/payouts', undefined);
   }
 
   async getRequiredConsentVersions(): Promise<Record<string, string> | null> {

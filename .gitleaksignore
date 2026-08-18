@@ -1,18 +1,19 @@
-# gitleaks baseline — 24 verified-benign historical findings.
+# gitleaks baseline — 26 verified-benign historical findings.
 #
 # WHY THIS FILE EXISTS
 # gitleaks-action picks its scope from the triggering event: on `push` and
 # `pull_request` it scans only that event's commits. So every green run this
 # repo has ever had was INCREMENTAL — a secret committed before the current
 # push would never have been caught. The first full-history scan (2026-08-08,
-# via the new workflow_dispatch trigger) reported these 24 findings.
+# via the new workflow_dispatch trigger) reported 24 findings; two later CI
+# scans added the reviewed Dodo reconciliation fixtures below.
 #
 # Each was opened at its flagged commit and verified to be a placeholder, a
 # test fixture, or documentation — NOT a real credential. Nothing was rotated
 # because there was nothing to rotate. Evidence, by group, below.
 #
 # THIS IS A BASELINE, NOT A SUPPRESSION RULE.
-# Entries are exact `commit:path:rule:line` fingerprints. They pin these 24
+# Entries are exact `commit:path:rule:line` fingerprints. They pin these 26
 # specific historical findings and nothing else: a real secret committed to any
 # of these same files — including the spec files — still fails the scan. Never
 # replace these with a path glob (e.g. `*.spec.ts`); that would blind the
@@ -55,6 +56,11 @@ f27beb2fe24ff08e3ad84053fe61873fc648ada6:scenarios/sandbox/identity-consent.runn
 # Dodo webhook tests: deterministic idempotency key used only as an assertion
 # fixture; gitleaks classifies the field name as a generic API key.
 fd0b06e4d58b3238ce5bde9e73d9d6233722d7a4:apps/api/src/payout/dodo-webhook.controller.spec.ts:generic-api-key:311
+
+# Dodo reconciliation tests: deterministic refund idempotency keys used only as
+# assertion fixtures; the current tests construct these values at runtime.
+4bb62da7afed1a9694b03d6c81926c7bacd54153:scripts/dodo-reconciliation.test.mjs:generic-api-key:118
+4bb62da7afed1a9694b03d6c81926c7bacd54153:scripts/dodo-reconciliation.test.mjs:generic-api-key:128
 
 # CI test value and documentation prose, not credentials:
 # 'ci-test-jwt-secret-at-least-32-chars-long-ok', and an AGENTS.md sentence about

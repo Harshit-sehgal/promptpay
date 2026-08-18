@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { parsePublicHttpsUrl } from '../../common/utils/external-url-policy';
 import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
 import type { DepositSessionProvider } from '../deposit-processor';
 
@@ -11,6 +12,28 @@ import type { DepositSessionProvider } from '../deposit-processor';
  * silent money change — reject instead).
  */
 export const DODO_MAX_MINOR_AMOUNT = 99_999_999n;
+
+const DODO_API_HOSTS = new Set(['test.dodopayments.com', 'live.dodopayments.com']);
+
+function normalizeDodoBaseUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      (url.pathname !== '' && url.pathname !== '/') ||
+      !DODO_API_HOSTS.has(url.hostname.toLowerCase())
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Dodo Payments deposit (money-in) provider.
@@ -38,13 +61,20 @@ export class DodoProvider implements DepositSessionProvider {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly productId: string;
+  private readonly webhookSecret: string;
   private readonly enabled: boolean;
+  private readonly baseUrlValid: boolean;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = this.config.get<string>('DODO_API_KEY', '');
-    this.baseUrl = this.config.get<string>('DODO_BASE_URL', '');
+    const configuredBaseUrl = this.config.get<string>('DODO_BASE_URL', '');
+    this.baseUrl = normalizeDodoBaseUrl(configuredBaseUrl) ?? '';
+    this.baseUrlValid = Boolean(this.baseUrl);
     this.productId = this.config.get<string>('DODO_PRODUCT_ID', '');
-    this.enabled = Boolean(this.apiKey && this.baseUrl && this.productId);
+    this.webhookSecret = this.config.get<string>('DODO_WEBHOOK_SECRET', '');
+    // A checkout without a verifiable webhook is not a usable deposit rail:
+    // the advertiser can pay, but WaitLayer cannot safely credit the ledger.
+    this.enabled = Boolean(this.apiKey && this.baseUrl && this.productId && this.webhookSecret);
   }
 
   isEnabled(): boolean {
@@ -52,11 +82,18 @@ export class DodoProvider implements DepositSessionProvider {
   }
 
   readiness(): { ok: true } | { ok: false; reason: string } {
+    if (!this.baseUrlValid) {
+      return {
+        ok: false,
+        reason:
+          'Dodo deposits are not configured: DODO_BASE_URL must be https://test.dodopayments.com or https://live.dodopayments.com.',
+      };
+    }
     if (!this.enabled) {
       return {
         ok: false,
         reason:
-          'Dodo deposits are not configured: set DODO_API_KEY, DODO_BASE_URL and DODO_PRODUCT_ID.',
+          'Dodo deposits are not configured: set DODO_API_KEY, DODO_BASE_URL, DODO_WEBHOOK_SECRET and DODO_PRODUCT_ID.',
       };
     }
     return { ok: true };
@@ -73,7 +110,7 @@ export class DodoProvider implements DepositSessionProvider {
   }): Promise<{ sessionId: string; url: string }> {
     if (!this.enabled) {
       throw new Error(
-        'Dodo is not configured (DODO_API_KEY/DODO_BASE_URL/DODO_PRODUCT_ID missing)',
+        'Dodo is not configured (DODO_API_KEY/DODO_BASE_URL/DODO_WEBHOOK_SECRET/DODO_PRODUCT_ID missing)',
       );
     }
 
@@ -134,6 +171,16 @@ export class DodoProvider implements DepositSessionProvider {
       throw new Error('Dodo did not return a checkout URL');
     }
 
-    return { sessionId: data.session_id, url: data.checkout_url };
+    let checkoutUrl: string;
+    try {
+      checkoutUrl = parsePublicHttpsUrl(data.checkout_url, 'Dodo checkout URL').value;
+    } catch (err: unknown) {
+      this.logger.error(
+        `Dodo checkout response returned an unsafe checkout URL: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new Error('Dodo returned an unsafe checkout URL');
+    }
+
+    return { sessionId: data.session_id, url: checkoutUrl };
   }
 }
