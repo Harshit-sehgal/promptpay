@@ -1,18 +1,18 @@
-# gitleaks baseline — 23 verified-benign historical findings.
+# gitleaks baseline — 24 verified-benign historical findings.
 #
 # WHY THIS FILE EXISTS
 # gitleaks-action picks its scope from the triggering event: on `push` and
 # `pull_request` it scans only that event's commits. So every green run this
 # repo has ever had was INCREMENTAL — a secret committed before the current
 # push would never have been caught. The first full-history scan (2026-08-08,
-# via the new workflow_dispatch trigger) reported these 23 findings.
+# via the new workflow_dispatch trigger) reported these 24 findings.
 #
 # Each was opened at its flagged commit and verified to be a placeholder, a
 # test fixture, or documentation — NOT a real credential. Nothing was rotated
 # because there was nothing to rotate. Evidence, by group, below.
 #
 # THIS IS A BASELINE, NOT A SUPPRESSION RULE.
-# Entries are exact `commit:path:rule:line` fingerprints. They pin these 23
+# Entries are exact `commit:path:rule:line` fingerprints. They pin these 24
 # specific historical findings and nothing else: a real secret committed to any
 # of these same files — including the spec files — still fails the scan. Never
 # replace these with a path glob (e.g. `*.spec.ts`); that would blind the
@@ -51,6 +51,10 @@ f27beb2fe24ff08e3ad84053fe61873fc648ada6:scenarios/sandbox/identity-consent.runn
 5caed5122a09162bfe3d4bc76c1ab5785c1f7566:.env.example:private-key:38
 7559383ec279316b7a477108fe5042f313095ec6:docker-compose.yml:generic-api-key:30
 7559383ec279316b7a477108fe5042f313095ec6:docker-compose.yml:generic-api-key:33
+
+# Dodo webhook tests: deterministic idempotency key used only as an assertion
+# fixture; gitleaks classifies the field name as a generic API key.
+fd0b06e4d58b3238ce5bde9e73d9d6233722d7a4:apps/api/src/payout/dodo-webhook.controller.spec.ts:generic-api-key:311
 
 # CI test value and documentation prose, not credentials:
 # 'ci-test-jwt-secret-at-least-32-chars-long-ok', and an AGENTS.md sentence about
