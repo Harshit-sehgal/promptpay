@@ -22,6 +22,70 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-18 — repository stabilization
+
+- **Main CI restored green.** Full-history gitleaks flagged one verified-benign
+  Dodo webhook test fixture in the run for `89c7203`; PR #38 added its exact
+  `commit:path:rule:line` fingerprint without widening the allowlist, and was
+  squash-merged as `c73c33a`. Main CI run `32101767815` passed typecheck, lint,
+  build, test, both E2E suites, package-clients, Docker build, backup/restore,
+  audit claims, security, production boot smoke, and container-boot-soak.
+- **PR consolidation status (verified 2026-08-18).** PR #42
+  (`docs/record-repo-stabilization`), PR #43 (`feat/restore-sandbox-cli`), and
+  PR #44 (`test/developer-beta-onboarding-content`) are open and reported
+  `MERGEABLE` by GitHub. Their code CI jobs are green, but each currently has a
+  failed Vercel status and still requires review; they must not be described as
+  merged or fully green until that deployment check and review gate are
+  resolved. PR44's Codex review thread was verified against the current test
+  head, replied to, and resolved; the test now mocks `/api/platform-health` to
+  pin `telemetry_only`. The current remote work branches are those three
+  branches plus `main`; local `main` contains their changes for verification,
+  while `origin/main` remains at `c73c33a` pending protected PR merges.
+- **Main protection is live and verified through the GitHub API.** `main`
+  requires the ten CI jobs listed in `docs/ops/branch-protection.md`, one
+  CODEOWNERS approval, stale-review dismissal, last-push reapproval, admin
+  enforcement, conversation resolution, and prohibits force pushes and branch
+  deletion. Direct pushes are rejected; changes must land through pull
+  requests.
+- **Operational backlog is now tracked in GitHub issues:** #39 Dodo
+  production readiness, #40 production infrastructure, #41 staging-to-
+  production deployment and the stranger-user journey, and #45 independent
+  wait attestation.
+- **Deployment diagnosis is now codeable and secret-safe.** `pnpm deploy:doctor`
+  validates production URL contracts, PostgreSQL/Redis configuration, escaped
+  RS256 key-pair matching, Google OAuth ID alignment, Dodo rail consistency,
+  mock-auth/throttle flags, and fail-closed money-switch posture. `--with-network`
+  probes the versioned API health route and Redis socket; `--with-db` performs
+  read-only migration and switch checks. Contract coverage is wired into
+  `test:release-gates`; no credential values or response bodies are printed.
+- **Dodo plan current-state documentation reconciled.** `DODO_PAYMENTS_PLAN.md`
+  now describes the implemented `DepositProcessorService`, Dodo webhook
+  reconciliation, and inactive Stripe rail instead of the superseded
+  Stripe-coupled deposit path. `pnpm dodo:reconcile` adds a read-only,
+  secret-safe platform-side report for retained Dodo events and ledger parity;
+  it deliberately does not claim live provider balance reconciliation.
+- **Attestation protocol simulator and threat model added.** The private
+  `@waitlayer/wait-attestation-bridge/simulator` subpath exposes an in-memory
+  `TrustedAttestationSimulator` for valid, malformed, expired, replayed,
+  misbound, timing, unknown-key, and bad-signature assertions. The protocol and
+  threat-model documents define the opaque claim contract, key/replay rules,
+  privacy boundary, mitigations, and residual provider risks. It is test-only,
+  never accepts prompt/output content, and cannot satisfy the independent
+  provider launch gate or production issuer configuration. Tool tests cover
+  18/18 cases.
+- **Repository privacy remains unresolved by design.** The repository is still
+  public because Vercel authentication is invalid in the available CLI session;
+  changing visibility before verifying Vercel access would violate the launch
+  checklist. Re-authenticate Vercel, verify the project before and after the
+  visibility change, and rotate the previously exposed GitHub credential
+  separately; the credential rotation remains operator-only.
+- **Public-exposure audit recorded 2026-08-18.**
+  `docs/ops/public-exposure-audit.md` records the secret-safe current-tree and
+  history-path review, the exact benign gitleaks-baseline interpretation, the
+  passing build-artifact scan, and the operator-only GitHub/Vercel/provider
+  rotation checklist. The local environment lacks the gitleaks executable, so
+  the report deliberately does not claim a fresh full-history scan.
+
 ## Current Status (snapshot 2026-08-08)
 
 - **96 migrations.** The sandbox XTS economy wave (7 logical commits,
