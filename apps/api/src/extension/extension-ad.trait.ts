@@ -284,6 +284,9 @@ export class ExtensionAdTrait {
     // unconsumed attestation attempt that was issued before this wait began.
     // Consumption intentionally happens after the operation; its durable
     // result is rechecked again immediately before ledger writes.
+    // Check both sides of the start window. Filtering only on the deadline
+    // would admit a session created after waitStart.createdAt as long as its
+    // five-minute deadline still extended beyond the already-recorded wait.
     const attestationSession = await this.prisma.waitAttestationSession.findFirst({
       where: {
         userId,
@@ -292,7 +295,8 @@ export class ExtensionAdTrait {
         waitStateId: dto.waitStateId,
         consumedAt: null,
         expiredAt: null,
-        operationStartDeadline: { gte: waitStart.createdAt },
+        createdAt: { lte: waitStart.createdAt },
+        operationStartDeadline: { gt: waitStart.createdAt },
         consumeDeadline: { gt: new Date() },
       },
       select: { id: true },

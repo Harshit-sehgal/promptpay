@@ -125,6 +125,24 @@ the Next 16.3 adapter's missing NFT-manifest failure.
 - Verification: Vercel build, Vercel Preview Comments, `node scripts/audit-claims.mjs`
   (15/15), focused replay integration (1/1), API typecheck, and API lint.
 
+## Resolved 2026-08-19 — pre-start attestation serving boundary
+
+The production ad-serving gate now enforces the complete attestation start
+window. It requires the provider session to have been created no later than
+the server-recorded wait start and requires its short operation-start deadline
+to still cover that wait start. The previous query checked only the deadline;
+a session created after a wait began could therefore be selected for serving,
+even though the later attestation consumer correctly rejected that session.
+
+- Source fix: `ExtensionAdTrait.requestAd()` filters
+  `createdAt <= waitStart.createdAt` and
+  `operationStartDeadline > waitStart.createdAt`.
+- Regression coverage: the auction-selection spec models a post-start session,
+  verifies it is refused before auction/budget reservation, and asserts both
+  temporal predicates are sent to Prisma.
+- Verification: focused API test **4/4**, API typecheck, API lint, Prettier,
+  and `git diff --check`.
+
 ## Resolved 2026-08-19 — superseded register pointers removed
 
 The active signup-flow evidence comment and the historical blueprint no longer
