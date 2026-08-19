@@ -120,6 +120,23 @@ v0.36.0 pin from PR #49. The new contract test requires each version-coupled
 group to remain internally consistent. Local verification is 16/16; fresh CI
 verification of the combined security job is pending.
 
+## In progress 2026-08-19 — sticky trust restrictions after device fraud
+
+Fresh CI run `32240939271` exposed a real race that the prior green run did not
+cover: duplicate-device registration correctly wrote `trustLevel=restricted`,
+but its asynchronous duplicate-account fraud flag could trigger a score
+recomputation that overwrote the user with `low_trust`. The same stale-write
+window existed for an operator-enforced `banned` level.
+
+- Trust-score recomputation now preserves `restricted` and `banned` as explicit
+  control states rather than treating them as score-derived levels.
+- Duplicate-device registration takes the per-user trust-score advisory lock
+  before changing the level, and never changes an already banned user to
+  restricted.
+- Verification: fraud/extension unit tests **61/61**, the real PostgreSQL
+  atomicity spec **3/3**, repeated three times; fresh CI verification of this
+  source fix is pending.
+
 ## Resolved 2026-08-18 — repository stabilization
 
 - **Main CI restored green.** Full-history gitleaks flagged one verified-benign
