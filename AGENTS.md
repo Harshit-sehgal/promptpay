@@ -1880,9 +1880,16 @@ without bound. Restored with its module registration and verified against the
 real schema — `rejection_reason` exists, `'expired'` is already a live state,
 and `EXPLAIN` shows the sweep is now an Index Scan on the previously dead index.
 
-**23 dependabot branches** are open and untouched by this pass. They are
-mechanical dependency bumps; several target actions already pinned to SHAs in
-these workflows and will conflict. Review them after the launch, not before.
+**Four Dependabot PRs** remain open as of 2026-08-19:
+[#48](https://github.com/Harshit-sehgal/promptpay/pull/48),
+[#49](https://github.com/Harshit-sehgal/promptpay/pull/49),
+[#50](https://github.com/Harshit-sehgal/promptpay/pull/50), and
+[#51](https://github.com/Harshit-sehgal/promptpay/pull/51). They are mechanical
+GitHub Action bumps rather than launch code. PR #49 passes all repository CI
+jobs but still has the external Vercel failure; PRs #48, #50, and #51 fail the
+CodeQL security job. Do not treat any of them as merged or release-ready until
+their action-specific failures and the Vercel deployment configuration are
+resolved.
 
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
