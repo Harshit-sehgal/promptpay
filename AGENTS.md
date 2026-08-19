@@ -102,8 +102,12 @@ where the development E2E job stalled in browser installation and consumed its
 - `node --test scripts/ci-package-contract.test.mjs` passes 15/15 and
   `pnpm exec prettier --check .github/workflows/ci.yml scripts/ci-package-contract.test.mjs`
   passes locally.
-- A fresh CI run using this workflow change is still required; the currently
-  pending retry was started from the pre-change commit and cannot verify it.
+- Fresh verification is complete on [CI run 32236328554](https://github.com/Harshit-sehgal/promptpay/actions/runs/32236328554)
+  at the post-fix SHA: both `e2e` and `e2e-production` passed, as did the full
+  test, Docker build, container boot soak, production boot smoke, security,
+  backup/restore, package-client, and audit-claims jobs. The separate Vercel
+  preview check remains an external deployment/configuration failure and is
+  not evidence against the repository-side CI fix.
 
 ## Resolved 2026-08-18 — repository stabilization
 
