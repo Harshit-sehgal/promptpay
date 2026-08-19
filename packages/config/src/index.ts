@@ -401,6 +401,18 @@ const envSchema = z
     // from silently repointing payouts to a fresh destination. Off (0) by
     // default so existing developer flows are unaffected until enabled.
     PAYOUT_DESTINATION_COOLDOWN_HOURS: z.coerce.number().int().min(0).max(720).default(0),
+    // Earnings hold periods (days) per trust tier — DODO_PAYMENTS_PLAN §8.11.
+    // Defaults match `PAYOUT_HOLD_DAYS` in @waitlayer/shared; an operator may
+    // lengthen them (e.g. to cover Dodo's settlement cycle) without a code
+    // change. The `RESTRICTED`/`BANNED` -1 ("indefinite") contract is NOT
+    // overridable — these keys only admit positive integers.
+    PAYOUT_HOLD_DAYS_NEW_ACCOUNT: z.coerce.number().int().min(1).max(365).default(30),
+    PAYOUT_HOLD_DAYS_NORMAL: z.coerce.number().int().min(1).max(365).default(14),
+    PAYOUT_HOLD_DAYS_HIGH_TRUST: z.coerce.number().int().min(1).max(365).default(7),
+    // Hold applied to earnings from unverified detector sources (see
+    // ledger-math getHoldDays); floored to the base tier, so a value below the
+    // trust tier's hold is a no-op by design.
+    PAYOUT_HOLD_DAYS_EXTENDED: z.coerce.number().int().min(1).max(365).default(60),
     // AES-256-GCM encryption key for payout destinations stored at rest.
     // Expected as a base64-encoded 32-byte (256-bit) key. Required in production
     // so a database-only leak does not expose raw payout destinations.
