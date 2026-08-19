@@ -8,8 +8,8 @@
 >
 > **Verification-status marker — split evidence.** The build-artifact scan was
 > rerun against the current tree on 2026-08-19 and passes. The required CI
-> security job also passed its current-HEAD full-history gitleaks scan in run
-> `32284838326`. The redacted local-container result below is retained as a
+> security job also passed the latest verified full-history gitleaks scan in run
+> `32287316349`. The redacted local-container result below is retained as a
 > historical supplementary snapshot at `407b001`; gitleaks is unavailable in
 > the current local environment.
 
@@ -27,8 +27,8 @@ CI security scan, plus a dated supplementary full-history gitleaks snapshot:
 - current remote URLs, checked for embedded credentials.
 
 The current build-artifact scan passes. The required GitHub security job passed
-the repository's current-HEAD full-history gitleaks action in CI run
-`32284838326`; that is the current scan evidence and no new baseline entries
+the repository's latest verified full-history gitleaks action in CI run
+`32287316349`; that is the latest scan evidence and no new baseline entries
 were added. Separately, an independent redacted gitleaks v8.24.3 scan was run
 from a read-only container against snapshot commit `407b001`, using the same
 `--no-merges --first-parent` history scope. It scanned 468 first-parent commits
@@ -70,8 +70,8 @@ at the provider, even if it no longer appears in the tree.
       records at the registrar, then recheck the rendered application routes.
 - [ ] Verify GitHub, Vercel, Dodo, OAuth, database, Redis, and webhook secret
       stores contain no stale or duplicated credentials.
-- [x] Run the required current-HEAD full-history gitleaks scan in CI run
-      `32284838326`; it reported no leaks and no new baseline entries.
+- [x] Run the latest verified full-history gitleaks scan in CI run
+      `32287316349`; it reported no leaks and no new baseline entries.
 - [x] Run a redacted supplementary full-history gitleaks scan against snapshot `407b001` from
       an environment with gitleaks installed; the v8.24.3 first-parent scan
       covered 468 commits and reported no leaks. No secret values were recorded.

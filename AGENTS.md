@@ -82,14 +82,14 @@ remain operational guidance.
 
 ## Resolved 2026-08-19 — current CI exposure scan evidence
 
-The public-exposure report now records that the required current-HEAD
-full-history gitleaks scan passed in CI run `32284838326`, while retaining the
+The public-exposure report now records that the latest verified full-history
+gitleaks scan passed in CI run `32287316349`, while retaining the
 older read-only-container scan at `407b001` as supplementary historical
 evidence. This closes the report's stale-evidence wording; credential rotation,
 Vercel access, and production secret verification remain operator tasks.
 
 - Verification: CI security job in
-  [32284838326](https://github.com/Harshit-sehgal/promptpay/actions/runs/32284838326),
+  [32287316349](https://github.com/Harshit-sehgal/promptpay/actions/runs/32287316349),
   `node --test scripts/ci-package-contract.test.mjs` 20/20,
   `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
 
