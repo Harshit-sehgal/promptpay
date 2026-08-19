@@ -454,13 +454,15 @@ wait telemetry — with the non-billable state stated plainly.
 
 13. **Dodo** test → live (per `DODO_PAYMENTS_PLAN.md` D1/D2 — Stripe is inactive
     at launch); enable `deposits.global` (B5).
-14. Launch payouts on `manual`/`paypal_email` (W2.B); validate PayPal Payouts
-    sandbox → live as the first automated rail later; enable `payouts.requests`
-    (B4).
+14. **Defer developer payouts at launch** (operator decision D5): keep
+    `payouts.requests` and `payouts.auto` OFF. Validate PayPal Payouts or Wise
+    sandbox → live as the first automated rail later, then enable only after
+    credentials, reconciliation ownership, and float/hold policy are approved.
 15. First admin campaign approval; enable `ads.global` for a canary advertiser.
 
-**Exit:** advertisers can fund and run campaigns; developers can be paid — with
-settlement still gated on attestation.
+**Exit:** advertisers can fund and run campaigns; developer payouts remain
+explicitly disabled until the later automated-rail approval, with settlement
+also gated on independent attestation.
 
 ### Phase 4 — Attestation and settlement (quarter)
 

@@ -60,10 +60,11 @@ advertiser interest capture while billing is closed.
 **Remaining (operator-only, unchanged):** Dodo live credentials + webhook
 semantics (#39), production infrastructure + release secrets (#40), staging-
 to-production deployment (#41), independent wait attestation operator (#45),
-GitHub credential rotation, Google OAuth decision, client publishing tokens,
-legal review, and the production payout-operator / float decisions (§8.9/
-§8.11). The Dodo third-party-payout question (§8.2) is resolved: Dodo cannot
-pay developers, so launch payouts use `manual`/`paypal_email` (D4/W2.B).
+GitHub credential rotation, Google OAuth credentials (decision D6), client
+publishing tokens, legal review, and the production payout-operator / float
+decisions (§8.9/§8.11). The Dodo third-party-payout question (§8.2) and launch
+policy are resolved: Dodo cannot pay developers, and developer payouts remain
+disabled until a later automated rail is credentialed and approved (D4/D5/W2.B).
 
 ## Resolved 2026-08-19 — configurable payout hold policy (DODO §8.11 code side)
 
@@ -1920,8 +1921,10 @@ these workflows and will conflict. Review them after the launch, not before.
    reapproval, admin enforcement, no force pushes, and no branch deletion.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
-7. **Google OAuth credentials** for live Google sign-in (CSP `frame-src`
-   verified live; only the ID-token callback needs real creds).
+7. **Google OAuth credentials** for live Google sign-in (decision D6: enable at
+   launch). CSP `frame-src` is verified live; provision matching
+   `GOOGLE_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` values, then verify
+   the ID-token callback.
 8. **PSP credentials/lifecycle (A-030):** which automated rails are enabled at
    the provider level; launch countries/currencies, KYC/tax/legal docs.
    Corrected 2026-08-07 — the prior wording ("`dodo_payments` is stub-only
@@ -1945,6 +1948,8 @@ these workflows and will conflict. Review them after the launch, not before.
      `apps/api/src/integration/payout-sandbox-run.spec.ts` against sandbox
      credentials before promoting via the env override.
      `README.md` already described this split correctly; this file did not.
+     **Operator decision D5 (2026-08-19):** do not enable `payouts.requests` or
+     `payouts.auto` at launch; the automated rail remains a later milestone.
 9. ~~**Green GitHub Actions SHA run:** `gh`/`act` unavailable in dev
    sandboxes.~~ **CLOSED 2026-08-08.** `gh` is available (2.45.0) and CI has
    run green end to end many times — `15ca0de`, `d3a6af1`, `f22544a`,

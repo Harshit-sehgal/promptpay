@@ -2,7 +2,9 @@
 
 **Owner:** Admin  
 **Frequency:** As payout requests arrive  
-**Scope:** Private beta (Phase 6) — all payouts are manually processed
+**Scope:** Private beta — payout requests remain disabled until an automated
+rail is credentialed, sandbox-verified, and approved (DODO D5). The manual
+processing procedure below is retained for a later operator-approved phase.
 
 ---
 
@@ -164,6 +166,11 @@ deposits) is a separate rail, decided 2026-08-17 (`DODO_PAYMENTS_PLAN.md`):
 - **Stripe deposits are INACTIVE at launch (D2)** — `STRIPE_SECRET_KEY` stays
   unset in production and every Stripe deposit surface fails closed.
   `stripe_connect` (payout) below remains `coming_soon` independently of that.
+
+Developer payout switches remain OFF at launch per D5. Do not process a payout
+just because `manual` or `paypal_email` appears as `available` in the provider
+catalogue; those entries describe implemented capabilities, not launch
+authorization.
 
 ### 8.0.1 Dodo Merchant-of-Record accounting
 
