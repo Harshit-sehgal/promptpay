@@ -1976,9 +1976,12 @@ resolved.
    Missing values fail the gate by design.
 3. **Public deployment — the application has never been deployed.** Corrected
    2026-08-07; the prior wording ("stale build, `/comparison` 404") understated
-   this by an order of magnitude. Live probe of 21 routes on
-   `www.waitlayer.com` (Vercel project `prj_V9GCWpyR3BctdDuEYgPcGusD8au9`,
-   `x-vercel-cache: HIT`, `age: 881782` ≈ 10.2 days):
+   this by an order of magnitude. A fresh read-only recheck on **2026-08-19**
+   confirms `www.waitlayer.com/` returns `200` from a cached Vercel response,
+   `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`, and
+   `/api/auth/config` return `404`, and `api.waitlayer.com` has no DNS record.
+   The 21-route enumeration below is retained as historical evidence; cache-age
+   values are intentionally not treated as current state:
    - `200` — `/`, `/pricing`, `/faq`, `/manifesto`, `/changelog`, `/contact`
    - `307` — `/terms`, `/privacy`
    - `404` — `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`,
