@@ -82,8 +82,8 @@ remain operational guidance.
 
 ## Resolved 2026-08-19 — current CI exposure scan evidence
 
-The public-exposure report now records that the latest verified full-history
-gitleaks scan passed in CI run `32287316349`, while retaining the
+The public-exposure report now records a verified full-history gitleaks scan
+that passed in CI run `32287316349`, while retaining the
 older read-only-container scan at `407b001` as supplementary historical
 evidence. This closes the report's stale-evidence wording; credential rotation,
 Vercel access, and production secret verification remain operator tasks.
