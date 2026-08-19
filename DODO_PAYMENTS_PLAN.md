@@ -353,9 +353,12 @@ launch. Order matters — the cold-start sequence is documented in
 
 - CLI `commands/sandbox.ts` was restored on 2026-08-18 with server-confirmed
   sandbox/test gating, exact bounded XTS amount parsing, and focused command
-  tests. VS Code `quiet-hours.ts` remains unported and is still non-blocking.
+  tests. VS Code quiet-hours evaluation is already implemented in
+  `apps/vscode-extension/src/config.ts`; the abandoned standalone
+  `quiet-hours.ts` branch file was dead code and is intentionally not ported.
 - TypeScript 7 branch: blocked on typescript-eslint ≥ TS 7.1 support.
-- 23 dependabot branches: review post-launch, not before.
+- Four Dependabot PRs are currently open; they are mechanical action bumps and
+  remain a review/disposition task rather than launch code.
 - `wait.earnings` attestation operator (open item #1) is the core-value-prop
   gap; it is an external dependency, not code — tracked in §8.4.
 
