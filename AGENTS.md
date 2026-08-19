@@ -125,6 +125,22 @@ the Next 16.3 adapter's missing NFT-manifest failure.
 - Verification: Vercel build, Vercel Preview Comments, `node scripts/audit-claims.mjs`
   (15/15), focused replay integration (1/1), API typecheck, and API lint.
 
+## Verified 2026-08-19 — waitlayer.com attached to the current Vercel project
+
+Using the authenticated Vercel project session, `waitlayer.com` and
+`www.waitlayer.com` were attached to `promptpay` and assigned to Production;
+Vercel configured the apex-to-`www` redirect. Both domains remain
+**Verification Required** because Vercel reports that they are linked to
+another Vercel account. Vercel's DNS panel requires the dashboard-provided
+`_vercel` TXT verification records, the current apex A target, and the current
+`www` CNAME target. The registrar session is not authenticated, so DNS
+publication remains operator-owned. No verification token is recorded here.
+
+- Current public probe still shows the old marketing deployment until DNS
+  verification completes; `api.waitlayer.com` remains without a DNS record.
+- Verification: authenticated Vercel domain panel, public DNS probe, and
+  `curl` route probes on 2026-08-19.
+
 ## Resolved 2026-08-19 — pre-start attestation serving boundary
 
 The production ad-serving gate now enforces the complete attestation start
@@ -2066,10 +2082,15 @@ Verification: the focused integration spec and the API typecheck/lint gates.
    Missing values fail the gate by design.
 3. **Public production deployment remains open.** The current Vercel Preview
    is now ready, but it is not the production domain and remains protected by
-   Vercel access controls. A fresh read-only recheck on **2026-08-19**
-   confirms `www.waitlayer.com/` returns `200` from a cached Vercel response,
-   `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`, and
-   `/api/auth/config` return `404`, and `api.waitlayer.com` has no DNS record.
+   Vercel access controls. `waitlayer.com` and `www.waitlayer.com` are now
+   attached to the current `promptpay` project but are still Verification
+   Required because Vercel reports another Vercel account association. A
+   fresh read-only recheck on **2026-08-19** confirms `www.waitlayer.com/`
+   returns `200` from the old cached marketing deployment, `/auth/login`,
+   `/auth/signup`, `/developer`, `/advertiser`, and `/api/auth/config` return
+   `404`, and `api.waitlayer.com` has no DNS record. Add the Vercel-provided
+   `_vercel` TXT records and current A/CNAME records at the registrar, then
+   recheck the rendered routes.
    The 21-route enumeration below is retained as historical evidence; cache-age
    values are intentionally not treated as current state:
    - `200` — `/`, `/pricing`, `/faq`, `/manifesto`, `/changelog`, `/contact`
