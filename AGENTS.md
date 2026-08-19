@@ -87,6 +87,24 @@ operators can lengthen earnings holds at deploy time without a code change.
 **Remaining operator decision:** choose production hold values or fund a float
 to cover Dodo's settlement cycle. No money switch is enabled by this change.
 
+## Resolved 2026-08-19 — Playwright E2E installer resilience
+
+The CI browser jobs now cache the Playwright browser directory with a pinned
+`actions/cache` release. A cache hit verifies the browser without re-running
+the slow OS-dependency installer; a miss retains the full
+`playwright install --with-deps chromium` setup. This closes the repository-side
+failure mode where the development E2E job stalled in browser installation and
+consumed its 30-minute job budget, while preserving dependency installation on
+new runners.
+
+- Both `e2e` and `e2e-production` use the same cache key derived from the lockfile
+  and web package manifest.
+- `node --test scripts/ci-package-contract.test.mjs` passes 15/15 and
+  `pnpm exec prettier --check .github/workflows/ci.yml scripts/ci-package-contract.test.mjs`
+  passes locally.
+- A fresh CI run using this workflow change is still required; the currently
+  pending retry was started from the pre-change commit and cannot verify it.
+
 ## Resolved 2026-08-18 — repository stabilization
 
 - **Main CI restored green.** Full-history gitleaks flagged one verified-benign

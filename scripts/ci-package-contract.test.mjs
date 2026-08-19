@@ -63,6 +63,26 @@ function assertNoPrivateRuntimeDependencies(pkg) {
 
 test('CI blocks on production browser E2E and recovered Playwright flakes', () => {
   const workflow = read('.github/workflows/ci.yml');
+  assert.equal(
+    (workflow.match(/actions\/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57/g) ?? []).length,
+    2,
+    'both browser jobs must cache their Playwright browser installation',
+  );
+  assert.equal(
+    (workflow.match(/id: playwright-cache/g) ?? []).length,
+    2,
+    'both browser jobs must expose the browser cache result',
+  );
+  assert.equal(
+    (workflow.match(/playwright install --with-deps chromium/g) ?? []).length,
+    2,
+    'cache misses must still install the OS dependencies',
+  );
+  assert.equal(
+    (workflow.match(/playwright install chromium/g) ?? []).length,
+    2,
+    'cache hits must verify the browser without re-running the OS installer',
+  );
   const productionJob = workflow.match(/\n  e2e-production:\n([\s\S]*?)\n  package-clients:/)?.[1];
   assert.ok(productionJob, 'missing blocking e2e-production job');
   assert.match(productionJob, /5433:5432/);

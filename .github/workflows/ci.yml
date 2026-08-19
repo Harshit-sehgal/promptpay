@@ -217,6 +217,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Cache Playwright browser
+        id: playwright-cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml', 'apps/web/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
@@ -252,8 +260,12 @@ jobs:
       # job's migrations do not persist across jobs).
       - name: Apply migrations
         run: pnpm --filter @waitlayer/db migrate:deploy
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers and OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+      - name: Verify cached Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter waitlayer-web exec playwright install chromium
       - name: Boot API for E2E
         run: |
           pnpm --filter "waitlayer-api..." build
@@ -377,11 +389,23 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Cache Playwright browser
+        id: playwright-cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml', 'apps/web/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm --filter @waitlayer/db generate
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers and OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+      - name: Verify cached Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter waitlayer-web exec playwright install chromium
       - name: Run browser E2E against the production-mode stack
         run: pnpm e2e:production
 
