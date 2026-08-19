@@ -212,6 +212,21 @@ window existed for an operator-enforced `banned` level.
   `node --test scripts/ci-package-contract.test.mjs` (15/15), release gates
   (122/122), and `node scripts/audit-claims.mjs` (15/15).
 
+## Resolved 2026-08-19 — deployed-web reachability diagnosis
+
+`pnpm deploy:doctor --with-network` now checks the web root, login route, and
+same-origin auth configuration endpoint in addition to the API health route and
+Redis socket. It records status only and never reads or prints response bodies,
+so a stale marketing deployment cannot be mistaken for a healthy application
+without creating a new secret or privacy exposure.
+
+- Focused verification: `scripts/deploy-doctor.test.mjs` 13/13, including
+  missing-route and network-failure cases.
+- The direct public probe found `/auth/login`, `/auth/signup`, `/developer`,
+  `/advertiser`, and `/api/auth/config` still return 404 while `/` returns 200;
+  this is an external deployment/configuration blocker, not a missing source
+  route. `api.waitlayer.com` also has no DNS answer.
+
 ## Historical Status Snapshot (2026-08-08)
 
 - **97 migrations.** The sandbox XTS economy wave (7 logical commits,
