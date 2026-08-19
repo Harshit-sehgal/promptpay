@@ -66,6 +66,20 @@ decisions (§8.9/§8.11). The Dodo third-party-payout question (§8.2) and launc
 policy are resolved: Dodo cannot pay developers, and developer payouts remain
 disabled until a later automated rail is credentialed and approved (D4/D5/W2.B).
 
+## Resolved 2026-08-19 — historical blueprint status marker
+
+`docs/waitlayer-implementation-blueprint.md` now explicitly labels its
+2026-08-04 verification basis as historical, points readers to this live
+register and the current operator issues, and preserves the architecture and
+release sequencing as planning guidance rather than current system state.
+
+- Verification: `node --test scripts/ci-package-contract.test.mjs` 17/17,
+  `node scripts/audit-claims.mjs` 15/15, and complete CI run
+  [32254361528](https://github.com/Harshit-sehgal/promptpay/actions/runs/32254361528)
+  passed on commit `6f11bcf`.
+- The Vercel preview failure remains an external deployment/configuration
+  blocker; it is not represented as a repository defect by this change.
+
 ## Resolved 2026-08-19 — configurable payout hold policy (DODO §8.11 code side)
 
 The code-side part of the Dodo settlement-cycle decision is now complete:
