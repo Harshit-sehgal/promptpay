@@ -262,7 +262,16 @@ jobs:
         run: pnpm --filter @waitlayer/db migrate:deploy
       - name: Install Playwright browsers and OS dependencies
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+        run: |
+          set +e
+          timeout 6m pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+          status=$?
+          if [ "$status" -eq 124 ]; then
+            echo 'Playwright OS-dependency installation timed out; falling back to browser-only installation.'
+            pnpm --filter waitlayer-web exec playwright install chromium
+            exit $?
+          fi
+          exit "$status"
       - name: Verify cached Playwright browser
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter waitlayer-web exec playwright install chromium
@@ -402,7 +411,16 @@ jobs:
         run: pnpm --filter @waitlayer/db generate
       - name: Install Playwright browsers and OS dependencies
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+        run: |
+          set +e
+          timeout 6m pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+          status=$?
+          if [ "$status" -eq 124 ]; then
+            echo 'Playwright OS-dependency installation timed out; falling back to browser-only installation.'
+            pnpm --filter waitlayer-web exec playwright install chromium
+            exit $?
+          fi
+          exit "$status"
       - name: Verify cached Playwright browser
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm --filter waitlayer-web exec playwright install chromium

@@ -74,12 +74,19 @@ test('CI blocks on production browser E2E and recovered Playwright flakes', () =
     'both browser jobs must expose the browser cache result',
   );
   assert.equal(
-    (workflow.match(/playwright install --with-deps chromium/g) ?? []).length,
+    (
+      workflow.match(
+        /timeout 6m pnpm --filter waitlayer-web exec playwright install --with-deps chromium/g,
+      ) ?? []
+    ).length,
     2,
     'cache misses must still install the OS dependencies',
   );
   assert.equal(
-    (workflow.match(/playwright install chromium/g) ?? []).length,
+    (
+      workflow.match(/^\s+run: pnpm --filter waitlayer-web exec playwright install chromium$/gm) ??
+      []
+    ).length,
     2,
     'cache hits must verify the browser without re-running the OS installer',
   );
