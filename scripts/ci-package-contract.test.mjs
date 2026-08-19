@@ -199,7 +199,7 @@ test('active evidence pointers do not use the superseded open-items register', (
 test('public exposure audit distinguishes current artifact scans from old gitleaks evidence', () => {
   const audit = read('docs/ops/public-exposure-audit.md');
   assert.match(audit, /Verification-status marker — split evidence/i);
-  assert.match(audit, /current-HEAD full-history gitleaks scan in run[\s>]+`32262946463`/i);
+  assert.match(audit, /current-HEAD full-history gitleaks scan in run[\s>]+`32284838326`/i);
   assert.match(audit, /historical supplementary snapshot at `407b001`/i);
   assert.match(audit, /historical supplementary evidence/i);
 });
