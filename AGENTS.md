@@ -22,6 +22,47 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-19 — advertiser waitlist (LAUNCH_PLAN Phase 2 step 11)
+
+The last missing code-side launch item is now implemented and gate-verified:
+advertiser interest capture while billing is closed.
+
+- **`POST /api/v1/marketing/waitlist`** (`apps/api/src/marketing/`) — public,
+  endpoint-throttled 5/min (same posture as feedback), honeypot spam guard,
+  `consent: true` mandatory (GDPR marketing consent stored per row), email
+  trimmed/lowercased at the DTO boundary and again in the service.
+  **Idempotent by email**: duplicates return 200 `alreadySignedUp` and never
+  overwrite an operator-set status (`pending → invited/onboarded/declined`);
+  a concurrent duplicate-create race (P2002) is treated as the duplicate it is.
+- **PII hygiene.** The email lives in exactly one table
+  (`advertiser_waitlist`); the audit trail records targetType
+  `advertiser_waitlist` + row id and deliberately omits the address, and
+  `ipHash` is a `privacyPseudonym`. `scripts/erase-waitlist-signup.mjs`
+  (`pnpm erase:waitlist --email <addr>`) performs GDPR Art. 17 erasure — row
+  delete + indexed audit scrub (afterSnap/beforeSnap/ipHash → null) in one
+  transaction — and refuses a production `NODE_ENV` without
+  `--confirm-production`.
+- **Admin surface:** `GET /api/v1/admin/waitlist` (admin/super_admin only,
+  bounded pagination, status filter, narrow select that cannot return
+  `ipHash`).
+- **Web:** `/advertisers` marketing page + `WaitlistSignup` client component
+  (toast on failure never fakes the recorded state, A-078 rule); homepage
+  "Reserve a sponsor slot" now points at the waitlist instead of a signup that
+  cannot yet spend. Added to the BFF proxy allowlist, sitemap, a11y sweep and
+  public-content gate.
+- **Gates:** API unit 8 (service), integration 4 (real DB: persist +
+  idempotency + consent refusal + admin 401), script tests 3
+  (`node --test scripts/erase-waitlist-signup.test.mjs`), browser e2e 2
+  (page render + form submit), web guard suites (proxy/sitemap/metadata/a11y)
+  green. Migration `20260819000000_advertiser_waitlist`; count 96 → **97**
+  (audit-claims machine-checks this). Dev + test DBs migrated, drift-free.
+
+**Remaining (operator-only, unchanged):** Dodo live credentials + webhook
+semantics (#39), production infrastructure + release secrets (#40), staging-
+to-production deployment (#41), independent wait attestation operator (#45),
+GitHub credential rotation, Google OAuth decision, client publishing tokens,
+legal review, and the §8.2/§8.11 payout decisions.
+
 ## Resolved 2026-08-18 — repository stabilization
 
 - **Main CI restored green.** Full-history gitleaks flagged one verified-benign
@@ -98,7 +139,7 @@
 
 ## Historical Status Snapshot (2026-08-08)
 
-- **96 migrations.** The sandbox XTS economy wave (7 logical commits,
+- **97 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of
   `25da3e1`: sandbox module + schema/migrations, extension non-cash placement
   path, web panels, VSIX packaging + attention promotion, scenario harness,

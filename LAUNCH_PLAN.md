@@ -443,7 +443,9 @@ Remaining, operator-only:
     The workflows and isolation gates exist; they need registry tokens. Then
     flip `CLIENTS_PUBLISHED` in `components/developer-get-started.tsx` so the
     panel links to real install targets instead of build-it-yourself instructions.
-11. Advertiser waitlist (no billing yet).
+11. ~~Advertiser waitlist (no billing yet).~~ **✅ done 2026-08-19** —
+    `/advertisers` marketing page + public `POST /marketing/waitlist` +
+    admin listing + GDPR erasure script; see the AGENTS.md resolved entry.
 
 **Exit:** a stranger can sign up, install, connect a device, and see verified
 wait telemetry — with the non-billable state stated plainly.

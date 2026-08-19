@@ -19,6 +19,7 @@ import type { MetadataRoute } from 'next';
 const PUBLIC_ROUTES = [
   { path: '/', priority: 1.0, changeFrequency: 'weekly' as const },
   { path: '/pricing', priority: 0.9, changeFrequency: 'weekly' as const },
+  { path: '/advertisers', priority: 0.8, changeFrequency: 'weekly' as const },
   { path: '/comparison', priority: 0.8, changeFrequency: 'monthly' as const },
   { path: '/manifesto', priority: 0.7, changeFrequency: 'monthly' as const },
   { path: '/faq', priority: 0.7, changeFrequency: 'monthly' as const },

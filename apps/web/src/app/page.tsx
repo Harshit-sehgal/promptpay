@@ -2174,7 +2174,7 @@ export default function HomePage() {
                       fontWeight: 600,
                       borderRadius: '9px',
                     }}
-                    href="/auth/signup?role=advertiser"
+                    href="/advertisers"
                   >
                     Reserve a sponsor slot
                   </Link>

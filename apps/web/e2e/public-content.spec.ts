@@ -84,6 +84,10 @@ const PUBLIC_ROUTES: PublicRoute[] = [
     expect: ['Ad Content Guidelines', 'truthful, non-deceptive'],
   },
   {
+    path: '/advertisers',
+    expect: ['Join the advertiser waitlist', 'founding sponsor', 'Billing is closed'],
+  },
+  {
     path: '/security',
     expect: ['Two-Factor Authentication', 'TOTP two-factor authentication'],
   },
