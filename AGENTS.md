@@ -140,6 +140,9 @@ even though the later attestation consumer correctly rejected that session.
 - Regression coverage: the auction-selection spec models a post-start session,
   verifies it is refused before auction/budget reservation, and asserts both
   temporal predicates are sent to Prisma.
+- The DB-backed money-loop fixtures also issue their seeded sessions before
+  `recordWaitStateStart`, keeping the real integration path aligned with this
+  temporal contract.
 - Verification: focused API test **4/4**, API typecheck, API lint, Prettier,
   and `git diff --check`.
 
