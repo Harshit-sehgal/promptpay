@@ -109,7 +109,7 @@ where the development E2E job stalled in browser installation and consumed its
   preview check remains an external deployment/configuration failure and is
   not evidence against the repository-side CI fix.
 
-## In progress 2026-08-19 — security action version cohesion
+## Resolved 2026-08-19 — security action version cohesion
 
 The three CodeQL action Dependabot PRs were independently unmergeable because
 the security job's `init`, `autobuild`, and `analyze` steps must share one action
@@ -117,10 +117,10 @@ version. Their logs showed a configuration mismatch when only one step moved to
 v4.37.7. The workflow now consolidates all three CodeQL steps on the pinned
 v4.37.7 commit and moves all three Trivy scans to the independently green
 v0.36.0 pin from PR #49. The new contract test requires each version-coupled
-group to remain internally consistent. Local verification is 16/16; fresh CI
-verification of the combined security job is pending.
+group to remain internally consistent. Local verification is 16/16. Fresh CI
+verification is complete on [run 32241885124](https://github.com/Harshit-sehgal/promptpay/actions/runs/32241885124): security and all other repository jobs passed.
 
-## In progress 2026-08-19 — sticky trust restrictions after device fraud
+## Resolved 2026-08-19 — sticky trust restrictions after device fraud
 
 Fresh CI run `32240939271` exposed a real race that the prior green run did not
 cover: duplicate-device registration correctly wrote `trustLevel=restricted`,
@@ -134,8 +134,9 @@ window existed for an operator-enforced `banned` level.
   before changing the level, and never changes an already banned user to
   restricted.
 - Verification: fraud/extension unit tests **61/61**, the real PostgreSQL
-  atomicity spec **3/3**, repeated three times; fresh CI verification of this
-  source fix is pending.
+  atomicity spec **3/3**, repeated three times; fresh CI run
+  `32241885124` passed the full test, E2E, Docker, security, and production
+  verification matrix.
 
 ## Resolved 2026-08-18 — repository stabilization
 
