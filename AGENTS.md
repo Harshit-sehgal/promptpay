@@ -103,7 +103,27 @@ release sequencing as planning guidance rather than current system state.
   [32254361528](https://github.com/Harshit-sehgal/promptpay/actions/runs/32254361528)
   passed on commit `6f11bcf`.
 - The Vercel preview failure remains an external deployment/configuration
-  blocker; it is not represented as a repository defect by this change.
+  blocker at the time of commit `6f11bcf`; it was subsequently resolved as
+  recorded below.
+
+## Resolved 2026-08-19 — Vercel Preview deployment compatibility
+
+The branch Preview failure was diagnosed and fixed end-to-end. The project
+variables `JWT_PUBLIC_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, and
+`NEXT_PUBLIC_API_URL` now include Preview scope, and `BFF_TRUST_PROXY_HOPS=1`
+is configured for Production and Preview. `apps/web/next.config.js` keeps
+`output: 'standalone'` for container builds but omits it on Vercel, avoiding
+the Next 16.3 adapter's missing NFT-manifest failure.
+
+- Source fix: commit `36802a0` (`fix(web): disable standalone output on Vercel`).
+- Vercel deployment `76PS12GyxL2bZ69XNwccfMxHndiL` is **Ready** and the PR's
+  Vercel checks pass.
+- The authenticated Preview homepage renders the current application and
+  correctly reports degraded backend status while `api.waitlayer.com` has no
+  DNS record. This closes the Vercel build blocker, not the production
+  infrastructure/deployment issue tracked in #40/#41.
+- Verification: Vercel build, Vercel Preview Comments, `node scripts/audit-claims.mjs`
+  (15/15), focused replay integration (1/1), API typecheck, and API lint.
 
 ## Resolved 2026-08-19 — superseded register pointers removed
 
@@ -1996,6 +2016,19 @@ CodeQL security job. Do not treat any of them as merged or release-ready until
 their action-specific failures and the Vercel deployment configuration are
 resolved.
 
+## Resolved 2026-08-19 — real-Postgres wait-attestation replay evidence
+
+The code-side concurrency item in the attestation threat model is now covered
+by `apps/api/src/integration/wait-attestation-replay.spec.ts`. It seeds a
+server-issued session and completed server wait, then sends the same signed
+assertion through two concurrent `WaitAttestationService.consume` calls against
+the real test database. Exactly one call succeeds, one receives a
+`ConflictException`, and exactly one minimized attestation row plus one
+`consumedAt` timestamp remains. This proves the database CAS/unique replay
+boundary; it does not replace the independent-provider or staging launch gate.
+
+Verification: the focused integration spec and the API typecheck/lint gates.
+
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
 1. **Independent wait attestation operation:** a real provider/bridge whose
@@ -2010,9 +2043,9 @@ resolved.
    analogous `PRODUCTION_*` values, plus the remote Compose `.env`
    (`NODE_ENV=production`, DB/Redis URLs, JWT keys, API URL, mock-auth off).
    Missing values fail the gate by design.
-3. **Public deployment — the application has never been deployed.** Corrected
-   2026-08-07; the prior wording ("stale build, `/comparison` 404") understated
-   this by an order of magnitude. A fresh read-only recheck on **2026-08-19**
+3. **Public production deployment remains open.** The current Vercel Preview
+   is now ready, but it is not the production domain and remains protected by
+   Vercel access controls. A fresh read-only recheck on **2026-08-19**
    confirms `www.waitlayer.com/` returns `200` from a cached Vercel response,
    `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`, and
    `/api/auth/config` return `404`, and `api.waitlayer.com` has no DNS record.
