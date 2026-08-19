@@ -7,15 +7,16 @@
 > remediation state only.
 >
 > **Verification-status marker — split evidence.** The build-artifact scan was
-> rerun against the current tree on 2026-08-19 and passes. The redacted
-> full-history gitleaks result below is a historical snapshot at `407b001`, not
-> the current HEAD; gitleaks is unavailable in the current local environment,
-> so this report deliberately does not claim a fresh current-HEAD scan.
+> rerun against the current tree on 2026-08-19 and passes. The required CI
+> security job also passed its current-HEAD full-history gitleaks scan in run
+> `32262946463`. The redacted local-container result below is retained as a
+> historical supplementary snapshot at `407b001`; gitleaks is unavailable in
+> the current local environment.
 
 ## Scope and evidence
 
-The audit covers the current tree with repository-local checks, plus a dated
-full-history gitleaks snapshot:
+The audit covers the current tree with repository-local checks and the required
+CI security scan, plus a dated supplementary full-history gitleaks snapshot:
 
 - `git ls-files` for tracked environment, key, credential, and secret-like paths;
 - Git history path inspection for exact `.env` files and key/credential-shaped
@@ -25,13 +26,13 @@ full-history gitleaks snapshot:
   baseline (`.gitleaks.toml`, `.gitleaksignore`);
 - current remote URLs, checked for embedded credentials.
 
-The current build-artifact scan passes. An independent redacted gitleaks
-v8.24.3 scan was run from a read-only container against snapshot commit
-`407b001`, using the same `--no-merges --first-parent` history scope as the
-repository's gitleaks action. It scanned 468 first-parent commits and reported
-no leaks. The matching GitHub security job also passed in CI run
-`32243174380`. No new baseline entries were added. This is historical evidence,
-not a current-HEAD full-history scan.
+The current build-artifact scan passes. The required GitHub security job passed
+the repository's current-HEAD full-history gitleaks action in CI run
+`32262946463`; that is the current scan evidence and no new baseline entries
+were added. Separately, an independent redacted gitleaks v8.24.3 scan was run
+from a read-only container against snapshot commit `407b001`, using the same
+`--no-merges --first-parent` history scope. It scanned 468 first-parent commits
+and reported no leaks; this remains historical supplementary evidence.
 
 ## Findings
 
@@ -62,7 +63,9 @@ at the provider, even if it no longer appears in the tree.
 - [ ] Authenticate Vercel and inspect all three failed preview deployments.
 - [ ] Verify GitHub, Vercel, Dodo, OAuth, database, Redis, and webhook secret
       stores contain no stale or duplicated credentials.
-- [x] Run a redacted full-history gitleaks scan against snapshot `407b001` from
+- [x] Run the required current-HEAD full-history gitleaks scan in CI run
+      `32262946463`; it reported no leaks and no new baseline entries.
+- [x] Run a redacted supplementary full-history gitleaks scan against snapshot `407b001` from
       an environment with gitleaks installed; the v8.24.3 first-parent scan
       covered 468 commits and reported no leaks. No secret values were recorded.
 - [x] Preserve the existing exact baseline only for findings re-verified as
@@ -72,7 +75,7 @@ at the provider, even if it no longer appears in the tree.
 
 ## Status
 
-This audit closes the **reporting/code** portion of the public-exposure task.
-It does not close credential rotation, Vercel authentication, repository
-visibility, or production secret verification; those require the operator with
-access to the external accounts.
+This audit closes the **reporting/code/current-CI-scan** portion of the
+public-exposure task. It does not close credential rotation, Vercel
+authentication, repository visibility, or production secret verification; those
+require the operator with access to the external accounts.

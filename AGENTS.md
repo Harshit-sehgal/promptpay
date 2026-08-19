@@ -80,6 +80,19 @@ remain operational guidance.
 - Verification: `node --test scripts/ci-package-contract.test.mjs` 20/20,
   `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
 
+## Resolved 2026-08-19 — current CI exposure scan evidence
+
+The public-exposure report now records that the required current-HEAD
+full-history gitleaks scan passed in CI run `32262946463`, while retaining the
+older read-only-container scan at `407b001` as supplementary historical
+evidence. This closes the report's stale-evidence wording; credential rotation,
+Vercel access, and production secret verification remain operator tasks.
+
+- Verification: CI security job in
+  [32262946463](https://github.com/Harshit-sehgal/promptpay/actions/runs/32262946463),
+  `node --test scripts/ci-package-contract.test.mjs` 20/20,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
 `docs/waitlayer-implementation-blueprint.md` now explicitly labels its
 2026-08-04 verification basis as historical, points readers to this live
 register and the current operator issues, and preserves the architecture and
