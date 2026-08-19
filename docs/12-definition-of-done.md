@@ -1,5 +1,10 @@
 # Definition of Done
 
+> **Status marker:** This is a product-definition and acceptance template, not
+> the live release register. Unchecked items are not claims about the current
+> source state; verify implementation against the source, fresh gates, and
+> [`AGENTS.md`](../AGENTS.md), which records the remaining launch blockers.
+
 ## MVP definition of done
 
 The MVP is done only when every item below is true and verified in the current product state.

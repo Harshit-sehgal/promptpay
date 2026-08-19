@@ -68,6 +68,18 @@ disabled until a later automated rail is credentialed and approved (D4/D5/W2.B).
 
 ## Resolved 2026-08-19 — historical blueprint status marker
 
+## Resolved 2026-08-19 — current documentation status pointers
+
+`README.md` now sends launch-readiness readers to the live residual register
+and marks the old launch plan as superseded. `docs/12-definition-of-done.md`
+now identifies its unchecked acceptance items as a planning template, and
+`docs/16-operational-runbooks.md` no longer presents the superseded foundation
+status document as its current companion. The runbook procedures themselves
+remain operational guidance.
+
+- Verification: `node --test scripts/ci-package-contract.test.mjs` 20/20,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
 `docs/waitlayer-implementation-blueprint.md` now explicitly labels its
 2026-08-04 verification basis as historical, points readers to this live
 register and the current operator issues, and preserves the architecture and

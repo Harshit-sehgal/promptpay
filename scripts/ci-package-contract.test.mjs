@@ -203,6 +203,31 @@ test('public exposure audit distinguishes current artifact scans from old gitlea
   assert.match(audit, /does not claim a fresh current-HEAD scan/i);
 });
 
+test('current documentation points to the live register', () => {
+  const readme = read('README.md');
+  assert.match(readme, /live residual register in \[`AGENTS\.md`\]\(AGENTS\.md\)/i);
+  assert.match(
+    readme,
+    /LAUNCH_PLAN\.md`? and the A-087…A-090 audit entries\s+are historical records/i,
+  );
+  assert.match(readme, /Launch Plan.*superseded 2026-08-18/i);
+
+  const definitionOfDone = read('docs/12-definition-of-done.md');
+  assert.match(definitionOfDone, /Status marker.*product-definition and acceptance template/i);
+  assert.match(
+    definitionOfDone,
+    /unchecked items are not claims about the current[\s>]+source state/i,
+  );
+  assert.match(definitionOfDone, /\[`AGENTS\.md`\]\(\.\.\/AGENTS\.md\)/i);
+
+  const runbooks = read('docs/16-operational-runbooks.md');
+  assert.match(runbooks, /former[\s>]+`FOUNDATION_STATUS\.md` companion is superseded/i);
+  assert.match(
+    runbooks,
+    /current release status and[\s>]+residual blockers live in \[`AGENTS\.md`\]/i,
+  );
+});
+
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {
   const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
   const prebuild = gates.split('&&')[0];
