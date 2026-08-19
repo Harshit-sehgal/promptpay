@@ -235,8 +235,8 @@ version. Their logs showed a configuration mismatch when only one step moved to
 v4.37.7. The workflow now consolidates all three CodeQL steps on the pinned
 v4.37.7 commit and moves all three Trivy scans to the independently green
 v0.36.0 pin from PR #49. The new contract test requires each version-coupled
-group to remain internally consistent. Local verification is 16/16. Fresh CI
-verification is complete on [run 32241885124](https://github.com/Harshit-sehgal/promptpay/actions/runs/32241885124): security and all other repository jobs passed.
+group to remain internally consistent. Local verification is 20/20. Fresh CI
+verification is also complete on [run 32281043215](https://github.com/Harshit-sehgal/promptpay/actions/runs/32281043215): security and every other required repository job passed.
 
 ## Resolved 2026-08-19 — sticky trust restrictions after device fraud
 
@@ -2042,16 +2042,16 @@ without bound. Restored with its module registration and verified against the
 real schema — `rejection_reason` exists, `'expired'` is already a live state,
 and `EXPLAIN` shows the sweep is now an Index Scan on the previously dead index.
 
-**Four Dependabot PRs** remain open as of 2026-08-19:
+**Four stale Dependabot PRs** remain open as of 2026-08-19:
 [#48](https://github.com/Harshit-sehgal/promptpay/pull/48),
 [#49](https://github.com/Harshit-sehgal/promptpay/pull/49),
 [#50](https://github.com/Harshit-sehgal/promptpay/pull/50), and
-[#51](https://github.com/Harshit-sehgal/promptpay/pull/51). They are mechanical
-GitHub Action bumps rather than launch code. PR #49 passes all repository CI
-jobs but still has the external Vercel failure; PRs #48, #50, and #51 fail the
-CodeQL security job. Do not treat any of them as merged or release-ready until
-their action-specific failures and the Vercel deployment configuration are
-resolved.
+[#51](https://github.com/Harshit-sehgal/promptpay/pull/51). Their isolated
+branches predate the cohesive action update in `c20218c` and the current Vercel
+configuration fix. Those action changes are already present and green on the
+current PR #53 head; the old PR checks are historical failures, not missing
+work on this branch. Do not merge them independently or treat them as
+release-ready; close or refresh them after the current line reaches `main`.
 
 ## Resolved 2026-08-19 — real-Postgres wait-attestation replay evidence
 
