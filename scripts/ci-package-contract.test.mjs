@@ -101,6 +101,41 @@ test('CI blocks on production browser E2E and recovered Playwright flakes', () =
   assert.match(playwright, /failOnFlakyTests:\s*!!process\.env\.CI/);
 });
 
+test('security workflow keeps version-coupled action pins coherent', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const codeqlPins = [
+    ...workflow.matchAll(
+      /github\/codeql-action\/(?:init|autobuild|analyze)@([0-9a-f]+)\s+#\s+(v[^\s]+)/g,
+    ),
+  ];
+  assert.equal(codeqlPins.length, 3, 'security must pin init, autobuild, and analyze');
+  assert.equal(
+    new Set(codeqlPins.map(([, sha]) => sha)).size,
+    1,
+    'CodeQL init, autobuild, and analyze must use one shared commit',
+  );
+  assert.equal(
+    new Set(codeqlPins.map(([, , version]) => version)).size,
+    1,
+    'CodeQL init, autobuild, and analyze must advertise one shared version',
+  );
+
+  const trivyPins = [
+    ...workflow.matchAll(/aquasecurity\/trivy-action@([0-9a-f]+)\s+#\s+(v[^\s]+)/g),
+  ];
+  assert.equal(trivyPins.length, 3, 'runtime and filesystem scans must all use Trivy');
+  assert.equal(
+    new Set(trivyPins.map(([, sha]) => sha)).size,
+    1,
+    'all Trivy scans must use one reviewed commit',
+  );
+  assert.equal(
+    new Set(trivyPins.map(([, , version]) => version)).size,
+    1,
+    'all Trivy scans must advertise one shared version',
+  );
+});
+
 test('production preflight cannot be blanket-suppressed', () => {
   const workflow = read('.github/workflows/ci.yml');
   assert.doesNotMatch(workflow, /deploy-preflight[^\n]*\|\|\s*true/);
