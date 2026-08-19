@@ -189,6 +189,13 @@ test('the implementation blueprint labels its audit basis as historical', () => 
   );
 });
 
+test('active evidence pointers do not use the superseded open-items register', () => {
+  const signupJourney = read('apps/web/e2e/signup-flow.spec.ts');
+  const blueprint = read('docs/waitlayer-implementation-blueprint.md');
+  assert.doesNotMatch(signupJourney, /docs\/ops\/remaining-open-items\.md/);
+  assert.doesNotMatch(blueprint, /docs\/ops\/remaining-open-items\.md/);
+});
+
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {
   const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
   const prebuild = gates.split('&&')[0];

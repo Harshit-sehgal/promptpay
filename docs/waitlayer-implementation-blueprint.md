@@ -71,7 +71,7 @@ The most important inspected sources were:
 - `.github/workflows/ci.yml`
 - `.github/workflows/staging.yml`
 - legal and policy pages under `apps/web/src/app`
-- `docs/ops/remaining-open-items.md`
+- `docs/ops/deployment-checklist.md`
 
 Current official lifecycle-hook documentation for Claude Code and Codex, and current VS Code shell-integration APIs, were also checked because those external interfaces can change.
 
@@ -3398,7 +3398,7 @@ Those are owner, legal, operational, or commercial decisions with explicit phase
 | `package.json`                                          | WaitLayer monorepo, Node/pnpm versions, gate scripts                                              |
 | `README.md`                                             | telemetry-only beta, no rewards, current CLI wrapper behavior                                     |
 | `AGENTS.md`                                             | previous source-audit closure, gate history, destructive-test warning, remaining external work    |
-| `docs/ops/remaining-open-items.md`                      | provider, credentials, branch protection, CI, legal, and infra operator items                     |
+| `docs/ops/deployment-checklist.md`                      | cold-start, bootstrap, migration, health, and rollback deployment procedure                       |
 | `packages/db/prisma/schema.prisma`                      | current event, wait, attestation, impression, campaign, ledger, payout, consent, and fraud models |
 | `apps/api/src/runtime-config/runtime-config.service.ts` | fail-closed launch mode and money switches                                                        |
 | `apps/api/src/extension/extension-wait.trait.ts`        | wait start/end ingestion, signed evidence, server classification, duration and idempotency        |

@@ -80,6 +80,17 @@ release sequencing as planning guidance rather than current system state.
 - The Vercel preview failure remains an external deployment/configuration
   blocker; it is not represented as a repository defect by this change.
 
+## Resolved 2026-08-19 — superseded register pointers removed
+
+The active signup-flow evidence comment and the historical blueprint no longer
+point readers at `docs/ops/remaining-open-items.md`, which is an explicitly
+superseded checklist. They now point to the live register or the current
+deployment checklist, and the CI contract suite prevents those stale pointers
+from returning.
+
+- Verification: `node --test scripts/ci-package-contract.test.mjs` 18/18,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
 ## Resolved 2026-08-19 — configurable payout hold policy (DODO §8.11 code side)
 
 The code-side part of the Dodo settlement-cycle decision is now complete:
