@@ -327,17 +327,20 @@ launch. Order matters — the cold-start sequence is documented in
 5. **Admin operation**: bootstrap via `pnpm bootstrap:admin`, TOTP enrolment
    (`/admin/security`), MFA step-up verified — needed for campaign approval
    and every money switch.
-6. **Branch protection / CODEOWNERS** (open item #5), **rotate the leaked
-   GitHub credential** (open item #6), Google OAuth decision (§8.8), CI
-   test-DB consent (open item #10).
+6. **Branch protection / CODEOWNERS** — resolved and API-verified on
+   2026-08-18. The leaked GitHub credential still needs rotation (open item
+   #6). Google OAuth is approved for launch (D6); matching credentials still
+   need provisioning. CI test-DB reset consent remains a deliberate local
+   test prerequisite, not a product-launch blocker.
 
 ---
 
 ## 6. Workstream W5 — legal & compliance
 
-- `apps/web/src/app/legal/gdpr-dpa/page.tsx:109` lists sub-processors
-  "PayPal, Stripe, Wise, …" — **add Dodo Payments**; decide with counsel
-  whether inactive Stripe stays listed (recommend: keep, marked inactive).
+- **Code-side DPA update is complete:**
+  `apps/web/src/app/legal/gdpr-dpa/page.tsx` lists Dodo Payments as the
+  Merchant of Record for advertiser deposits and marks Stripe inactive. Legal
+  review and the final processor/refund wording decision remain operator-owned.
 - Terms + `payout-policy`: Dodo as Merchant of Record changes who the
   seller of record is and how tax/VAT is handled on advertiser deposits.
   Refund policy must match what Dodo actually executes. Requires §8.10.
