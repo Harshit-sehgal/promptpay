@@ -1,6 +1,6 @@
 # Public-repository exposure audit
 
-> Audit date: 2026-08-18
+> Audit date: 2026-08-19
 >
 > This report intentionally contains no credential values, private keys, tokens,
 > webhook secrets, passwords, or private hostnames. It records categories and
@@ -19,11 +19,12 @@ repository-local checks:
   baseline (`.gitleaks.toml`, `.gitleaksignore`);
 - current remote URLs, checked for embedded credentials.
 
-The current build-artifact scan passes. The local environment does not have the
-`gitleaks` executable, so a new full-history scan was **not** represented as
-completed by this audit. The latest repository-recorded full-history scan is the
-CI run whose 26 exact benign fingerprints are recorded in `.gitleaksignore`.
-CI remains the authoritative full-history secret gate.
+The current build-artifact scan passes. An independent redacted gitleaks
+v8.24.3 scan was run from a read-only container against the current HEAD
+`407b001`, using the same `--no-merges --first-parent` history scope as the
+repository's gitleaks action. It scanned 468 first-parent commits and reported
+no leaks. The matching GitHub security job also passed in CI run
+`32243174380`. No new baseline entries were added.
 
 ## Findings
 
@@ -54,11 +55,11 @@ at the provider, even if it no longer appears in the tree.
 - [ ] Authenticate Vercel and inspect all three failed preview deployments.
 - [ ] Verify GitHub, Vercel, Dodo, OAuth, database, Redis, and webhook secret
       stores contain no stale or duplicated credentials.
-- [ ] Run a fresh full-history gitleaks scan from an environment with gitleaks
-      installed; compare only sanitized finding counts/fingerprints, never paste
-      secret values into an issue or report.
-- [ ] Preserve the existing exact baseline only for findings re-verified as
-      benign; do not add a broad path allowlist.
+- [x] Run a fresh full-history gitleaks scan from an environment with gitleaks
+      installed; the redacted v8.24.3 first-parent scan covered 468 commits and
+      reported no leaks. No secret values were recorded.
+- [x] Preserve the existing exact baseline only for findings re-verified as
+      benign; no new entries or broad path allowlists were added.
 - [ ] Re-run build-artifact scanning and the full release gates after any
       credential/configuration change.
 
