@@ -196,6 +196,13 @@ test('active evidence pointers do not use the superseded open-items register', (
   assert.doesNotMatch(blueprint, /docs\/ops\/remaining-open-items\.md/);
 });
 
+test('public exposure audit distinguishes current artifact scans from old gitleaks evidence', () => {
+  const audit = read('docs/ops/public-exposure-audit.md');
+  assert.match(audit, /Verification-status marker — split evidence/i);
+  assert.match(audit, /historical snapshot at `407b001`/i);
+  assert.match(audit, /does not claim a fresh current-HEAD scan/i);
+});
+
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {
   const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
   const prebuild = gates.split('&&')[0];

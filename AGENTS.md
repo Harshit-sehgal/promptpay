@@ -91,6 +91,17 @@ from returning.
 - Verification: `node --test scripts/ci-package-contract.test.mjs` 18/18,
   `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
 
+## Resolved 2026-08-19 — public exposure evidence boundary
+
+`docs/ops/public-exposure-audit.md` now distinguishes current-tree
+build-artifact scanning from the historical full-history gitleaks snapshot at
+`407b001`. The local environment has no gitleaks executable, so the report no
+longer implies that the current `HEAD` received a fresh full-history scan.
+
+- Verification: `node scripts/scan-build-secrets.mjs`,
+  `node --test scripts/ci-package-contract.test.mjs` 19/19,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
 ## Resolved 2026-08-19 — configurable payout hold policy (DODO §8.11 code side)
 
 The code-side part of the Dodo settlement-cycle decision is now complete:
