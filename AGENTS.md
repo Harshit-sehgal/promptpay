@@ -61,7 +61,30 @@ advertiser interest capture while billing is closed.
 semantics (#39), production infrastructure + release secrets (#40), staging-
 to-production deployment (#41), independent wait attestation operator (#45),
 GitHub credential rotation, Google OAuth decision, client publishing tokens,
-legal review, and the §8.2/§8.11 payout decisions.
+legal review, and the production payout-operator / float decisions (§8.9/
+§8.11). The Dodo third-party-payout question (§8.2) is resolved: Dodo cannot
+pay developers, so launch payouts use `manual`/`paypal_email` (D4/W2.B).
+
+## Resolved 2026-08-19 — configurable payout hold policy (DODO §8.11 code side)
+
+The code-side part of the Dodo settlement-cycle decision is now complete:
+operators can lengthen earnings holds at deploy time without a code change.
+
+- `PAYOUT_HOLD_DAYS_NEW_ACCOUNT`, `PAYOUT_HOLD_DAYS_NORMAL`,
+  `PAYOUT_HOLD_DAYS_HIGH_TRUST`, and `PAYOUT_HOLD_DAYS_EXTENDED` are validated
+  by `@waitlayer/config` as positive integers from 1 through 365.
+- `LedgerMathTrait.getHoldDays()` honours those values, keeps the shipped
+  defaults (30/14/7/60), floors unverified-source holds to the configured
+  extended value, and preserves restricted/banned `-1` as an unoverrideable
+  indefinite hold.
+- `.env.example`, `docs/ENV_REFERENCE.md`, and
+  `DODO_PAYMENTS_PLAN.md` §8.11 document the contract. Malformed runtime values
+  fall back to defaults rather than propagating `NaN` into ledger maturity.
+- Verification: `pnpm typecheck`, config 17/17, ledger/e2e-money-loop 100/100;
+  the full API suite was 1725 passed + 1 skipped before this doc-only update.
+
+**Remaining operator decision:** choose production hold values or fund a float
+to cover Dodo's settlement cycle. No money switch is enabled by this change.
 
 ## Resolved 2026-08-18 — repository stabilization
 

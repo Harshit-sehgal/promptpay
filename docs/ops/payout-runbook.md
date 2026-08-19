@@ -165,6 +165,19 @@ deposits) is a separate rail, decided 2026-08-17 (`DODO_PAYMENTS_PLAN.md`):
   unset in production and every Stripe deposit surface fails closed.
   `stripe_connect` (payout) below remains `coming_soon` independently of that.
 
+### 8.0.1 Dodo Merchant-of-Record accounting
+
+The platform ledger credits the **gross amount reported on the Dodo payment**.
+Dodo fees and taxes are treated as platform COGS; they do not reduce the
+advertiser's spendable balance. This is the implementation default documented
+in `DodoWebhookController` and preserves one consistent advertiser-facing
+amount across payment, refund, and dispute entries.
+
+Before enabling `deposits.global`, the operator must still verify the live test
+webhooks' amount units (minor versus major) and sign off the fee/tax treatment
+against Dodo's settlement report. Do not infer provider settlement net from a
+checkout or webhook payload.
+
 ### 8.1 Default catalogue (safe-seed)
 
 | Provider         | Default status | Notes                                |
