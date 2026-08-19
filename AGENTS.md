@@ -30,19 +30,19 @@
   squash-merged as `c73c33a`. Main CI run `32101767815` passed typecheck, lint,
   build, test, both E2E suites, package-clients, Docker build, backup/restore,
   audit claims, security, production boot smoke, and container-boot-soak.
-- **PR consolidation status (verified 2026-08-18).** PR #42
+- **PR consolidation status (verified 2026-08-18, MERGED).** PR #42
   (`docs/record-repo-stabilization`), PR #43 (`feat/restore-sandbox-cli`), PR #44
   (`test/developer-beta-onboarding-content`), PR #46
   (`docs/public-exposure-audit`), and PR #47
-  (`feat/consolidate-tested-launch-line`) are open and reported `MERGEABLE` by
-  GitHub. Their repository CI jobs are green on the current consolidation head;
-  Vercel still fails on the preview deployment and every PR requires review, so
-  none may be described as merged or fully green until those protected gates
-  are resolved. PR44's Codex review thread was verified against the current test
-  head, replied to, and resolved; the test now mocks `/api/platform-health` to
-  pin `telemetry_only`. PR #47 is the current remote consolidation branch for
-  the tested local launch line; `origin/main` remains at `c73c33a` pending
-  protected PR merges.
+  (`feat/consolidate-tested-launch-line`) are all **merged** into `main` at
+  `52ba3c1` (merge of PR #47, 2026-08-18). Their heads were consolidated onto a
+  single superset branch, all ten required CI checks were green on it, every
+  Codex review thread was addressed and resolved (including three real fixes
+  landed as `5c3f061`: the CLI `--destination`→`destinationAlias` mapping, the
+  dodo-reconciliation duplicate/hold/credit-accounting corrections, and the
+  deploy-doctor unapplied-migrations probe), and PRs #42/#43/#44/#46 closed as
+  merged by ancestry. Main CI run `32191050533` on the merged tree passed all
+  jobs. Vercel still fails on preview deployments; that does not gate merges.
 - **Main protection is live and verified through the GitHub API.** `main`
   requires the ten CI jobs listed in `docs/ops/branch-protection.md`, one
   CODEOWNERS approval, stale-review dismissal, last-push reapproval, admin
