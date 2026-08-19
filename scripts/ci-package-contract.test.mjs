@@ -179,6 +179,16 @@ test('the dated launch plan cannot masquerade as current deployment status', () 
   assert.doesNotMatch(plan, /One real code bug is live right now/);
 });
 
+test('the implementation blueprint labels its audit basis as historical', () => {
+  const blueprint = read('docs/waitlayer-implementation-blueprint.md');
+  assert.match(blueprint, /Verification-status marker — historical audit basis, current strategy/i);
+  assert.match(blueprint, /current[\s>]+live register is \[`AGENTS\.md`\]\(/i);
+  assert.match(
+    blueprint,
+    /architecture,\s*gap taxonomy, and[\s>]+release[\s>]+sequencing below remain planning guidance/i,
+  );
+});
+
 test('scenario fixtures that import compiled output are covered by the prebuild', () => {
   const gates = JSON.parse(read('package.json')).scripts['test:release-gates'];
   const prebuild = gates.split('&&')[0];
