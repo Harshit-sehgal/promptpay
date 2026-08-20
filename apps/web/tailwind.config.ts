@@ -5,17 +5,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Single green brand ramp. Steps 50-400 were already green while 500-900
+        // were teal, so `brand-500` and the `--accent` green in globals.css named
+        // two different colours; the logo mark used one and every link the other.
+        // The ramp is now one hue and monotonically darker as the number rises —
+        // 500->600 previously got *lighter* (5.47 -> 3.74 against white), which
+        // made `Button variant="brand"` drop below AA on hover.
         brand: {
           50: '#f0fdf4',
           100: '#dcfce7',
           200: '#bbf7d0',
           300: '#86efac',
           400: '#4ade80',
-          500: '#0f766e',
-          600: '#0d9488',
-          700: '#115e59',
-          800: '#134e4a',
-          900: '#0c3c3a',
+          500: '#0d7a3f', // 5.42:1 on white - white text passes AA
+          600: '#0a6836', // 6.89:1
+          700: '#0b5c3a', // 8.06:1
+          800: '#08492e', // 10.49:1
+          900: '#063a25', // 12.81:1
         },
         surface: {
           0: '#ffffff',
@@ -44,6 +50,10 @@ const config: Config = {
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+        // Without this key `font-serif` fell through to Tailwind's default
+        // (Georgia), so the Instrument Serif face imported in globals.css only
+        // ever rendered where a page hardcoded it in an inline style.
+        serif: ['Instrument Serif', 'Georgia', 'Cambria', 'serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.6s ease-out forwards',

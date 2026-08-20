@@ -21,7 +21,13 @@ export function StatusBadge({ status }: { status: string }) {
       case 'paused':
       case 'held':
       case 'low_trust':
-        return 'bg-amber-50 border-amber-200/60 text-amber-700';
+        // Yellow rather than amber: amber-700 (#b45309) against rose-700
+        // (#be123c) separates by only ΔE 11.5 for NORMAL colour vision, under
+        // the ΔE 15 floor, so "pending" and "rejected" read as the same colour.
+        // yellow-700 (#a16207) lifts that to 15.6. Red/yellow still converge
+        // under deuteranopia; the badge's text label is the mitigation, which
+        // is why status colour is never the sole carrier of meaning here.
+        return 'bg-yellow-50 border-yellow-200/60 text-yellow-700';
 
       // Error / Critical
       case 'rejected':
