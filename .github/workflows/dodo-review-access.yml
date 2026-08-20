@@ -1,0 +1,83 @@
+name: Dodo Review Access
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      bootstrap_account:
+        description: 'Create the dedicated review advertiser before running the smoke test'
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: dodo-review-access-production
+  cancel-in-progress: false
+
+jobs:
+  review-access:
+    name: Provision and verify reviewer access
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      REVIEW_BASE_URL: ${{ secrets.PRODUCTION_WEB_URL }}
+      REVIEW_EMAIL: ${{ secrets.DODO_REVIEW_EMAIL }}
+      REVIEW_ACCOUNT_PASSWORD: ${{ secrets.DODO_REVIEW_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Require production review secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in DATABASE_URL REVIEW_BASE_URL REVIEW_EMAIL REVIEW_ACCOUNT_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not configured in the protected production environment"
+              exit 1
+            fi
+          done
+          echo "Review configuration present (values intentionally not printed)."
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build database dependencies
+        run: |
+          pnpm --filter @waitlayer/db generate
+          pnpm --filter @waitlayer/shared build
+          pnpm --filter @waitlayer/db build
+
+      - name: Create dedicated advertiser review account
+        if: ${{ inputs.bootstrap_account }}
+        run: |
+          pnpm bootstrap:review-advertiser -- \
+            --email "$REVIEW_EMAIL" \
+            --name "Dodo Payments Reviewer" \
+            --company "Dodo Payments Review" \
+            --country "US" \
+            --website "$REVIEW_BASE_URL"
+
+      - name: Verify deployed reviewer journey
+        run: pnpm review:smoke
+
+      - name: Review handoff summary
+        run: |
+          echo "### Dodo product review access" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Auth configuration: verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Advertiser login: verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Draft review campaign: verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Advertiser dashboard: verified" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Money switches: unchanged by this workflow" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Credentials remain in protected GitHub environment secrets and are never printed by the workflow." >> "$GITHUB_STEP_SUMMARY"
