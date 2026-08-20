@@ -22,7 +22,7 @@ const require = createRequire(
 );
 const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
 const bcrypt = require('bcryptjs');
-const { passwordValidationError, PASSWORD_RULES } = require('@waitlayer/shared');
+const { passwordValidationError } = require('@waitlayer/shared');
 
 const BCRYPT_COST = 12;
 const DEFAULT_NAME = 'External Reviewer';
@@ -94,8 +94,12 @@ async function main() {
 
   const envPassword = process.env.REVIEW_ACCOUNT_PASSWORD;
   const password = envPassword || args.password || (await promptHidden('Review account password (hidden): '));
-  const passwordError = passwordValidationError(password);
-  if (passwordError) fail(`password rejected — ${passwordError}\n${PASSWORD_RULES}`);
+  if (passwordValidationError(password)) {
+    // Keep validation feedback intentionally generic: the password itself and
+    // any validator-derived detail are credential-adjacent data and must never
+    // be written to CI or operator logs.
+    fail('password does not satisfy the WaitLayer password policy');
+  }
 
   const name = String(args.name ?? DEFAULT_NAME).trim();
   const company = String(args.company ?? DEFAULT_COMPANY).trim();
