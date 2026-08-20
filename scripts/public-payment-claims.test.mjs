@@ -20,9 +20,23 @@ const PROHIBITED_PUBLIC_CLAIMS = [
   { pattern: /media spend goes to you/i, label: 'pass-through media-spend claim' },
 ];
 
+/**
+ * Collapse whitespace so the gate reads the prose the page actually renders.
+ * These are JSX sources: a sentence is wrapped across lines at whatever column
+ * the formatter chose, so matching the raw file would both miss prohibited
+ * claims that happen to straddle a line break and fail on required wording for
+ * the same reason.
+ */
+function normalize(source) {
+  return source.replace(/\s+/g, ' ');
+}
+
 test('public payment messaging matches the separated beta money flow', async () => {
   const pages = await Promise.all(
-    PUBLIC_PAYMENT_PAGES.map(async (path) => ({ path, content: await readFile(path, 'utf8') })),
+    PUBLIC_PAYMENT_PAGES.map(async (path) => ({
+      path,
+      content: normalize(await readFile(path, 'utf8')),
+    })),
   );
 
   for (const { path, content } of pages) {

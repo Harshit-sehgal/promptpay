@@ -69,7 +69,7 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   },
   {
     path: '/pricing',
-    expect: ['Private beta, not commercial pricing', 'Trust score & fraud protection'],
+    expect: ['Beta access, not commercial pricing', 'Current beta controls'],
   },
   {
     path: '/faq',
@@ -77,11 +77,11 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   },
   {
     path: '/payout-policy',
-    expect: ['Earnings Release', 'estimated, confirmed, and held'],
+    expect: ['Release and fraud review', 'estimated, confirmed, held'],
   },
   {
     path: '/advertiser-policy',
-    expect: ['Ad Content Guidelines', 'truthful, non-deceptive'],
+    expect: ['Sponsored content', 'truthful, non-deceptive'],
   },
   {
     path: '/security',

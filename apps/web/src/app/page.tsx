@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-
 import { BackendStatus } from '@/components/backend-status';
 import { EarningsCalculator } from '@/components/earnings-calculator';
 import { useAuth } from '@/lib/auth-context';
@@ -23,7 +22,10 @@ export default function HomePage() {
     <div className="min-h-screen bg-white text-surface-950 antialiased">
       <header className="sticky top-0 z-50 border-b border-surface-200/80 bg-white/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-[1180px] items-center justify-between px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2.5 rounded focus-visible:ring-2 focus-visible:ring-brand-600">
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 rounded focus-visible:ring-2 focus-visible:ring-brand-600"
+          >
             <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden="true">
               <rect x="0" y="1.5" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
               <rect x="0" y="6.8" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
@@ -33,16 +35,29 @@ export default function HomePage() {
           </Link>
 
           <nav className="hidden items-center gap-8 text-sm text-surface-600 md:flex">
-            <a href="#how-it-works" className="hover:text-surface-950">How it works</a>
-            <a href="#developers" className="hover:text-surface-950">Developers</a>
-            <a href="#sponsors" className="hover:text-surface-950">Sponsors</a>
-            <a href="#trust" className="hover:text-surface-950">Trust</a>
-            <Link href="/pricing" className="hover:text-surface-950">Pricing</Link>
+            <a href="#how-it-works" className="hover:text-surface-950">
+              How it works
+            </a>
+            <a href="#developers" className="hover:text-surface-950">
+              Developers
+            </a>
+            <a href="#sponsors" className="hover:text-surface-950">
+              Sponsors
+            </a>
+            <a href="#trust" className="hover:text-surface-950">
+              Trust
+            </a>
+            <Link href="/pricing" className="hover:text-surface-950">
+              Pricing
+            </Link>
           </nav>
 
           <div className="flex items-center gap-2">
             {!isAuthenticated && (
-              <Link href="/auth/login" className="hidden px-3 py-2 text-sm font-medium text-surface-600 sm:inline-flex">
+              <Link
+                href="/auth/login"
+                className="hidden px-3 py-2 text-sm font-medium text-surface-600 sm:inline-flex"
+              >
                 Log in
               </Link>
             )}
@@ -74,7 +89,8 @@ export default function HomePage() {
               <p className="mt-6 max-w-2xl text-lg leading-relaxed text-surface-600">
                 WaitLayer lets explicitly integrated AI-agent applications show a small, clearly
                 labeled sponsored unit during eligible waiting periods. The beta is validating the
-                measurement and fraud controls before any reward or live campaign billing is enabled.
+                measurement and fraud controls before any reward or live campaign billing is
+                enabled.
               </p>
 
               <div className="mt-8 flex flex-wrap gap-3">
@@ -85,7 +101,11 @@ export default function HomePage() {
                   {isAuthenticated ? 'Open dashboard' : 'Join developer beta'}
                 </Link>
                 <Link
-                  href={isAuthenticated && user?.role === 'advertiser' ? '/advertiser' : '/auth/signup?role=advertiser'}
+                  href={
+                    isAuthenticated && user?.role === 'advertiser'
+                      ? '/advertiser'
+                      : '/auth/signup?role=advertiser'
+                  }
                   className="inline-flex h-12 items-center rounded-lg border border-surface-300 px-6 text-sm font-semibold text-surface-800"
                 >
                   Review advertiser tooling
@@ -105,10 +125,16 @@ export default function HomePage() {
                 <span>beta telemetry</span>
               </div>
               <div className="font-mono text-sm leading-7 text-white/80">
-                <p><span className="text-white/40">agent</span> running tests…</p>
+                <p>
+                  <span className="text-white/60">agent</span> running tests…
+                </p>
                 <div className="my-5 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-                  <p className="text-[11px] uppercase tracking-wider text-white/40">Sponsored · example</p>
-                  <p className="mt-1 font-sans text-base font-medium text-white">Developer infrastructure for AI-native teams</p>
+                  <p className="text-[11px] uppercase tracking-wider text-white/60">
+                    Sponsored · example
+                  </p>
+                  <p className="mt-1 font-sans text-base font-medium text-white">
+                    Developer infrastructure for AI-native teams
+                  </p>
                 </div>
                 <p className="text-emerald-400">✓ rendered in eligible session</p>
                 <p className="text-emerald-400">✓ visibility + duplicate checks passed</p>
@@ -119,11 +145,18 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="how-it-works" className="border-b border-surface-200 bg-surface-50/70 px-6 py-20">
+        <section
+          id="how-it-works"
+          className="border-b border-surface-200 bg-surface-50/70 px-6 py-20"
+        >
           <div className="mx-auto max-w-[1180px]">
             <div className="max-w-2xl">
-              <p className="font-mono text-xs uppercase tracking-widest text-surface-500">Verification</p>
-              <h2 className="mt-3 font-serif text-4xl text-surface-950">A view counts only after it passes the checks.</h2>
+              <p className="font-mono text-xs uppercase tracking-widest text-surface-500">
+                Verification
+              </p>
+              <h2 className="mt-3 font-serif text-4xl text-surface-950">
+                A view counts only after it passes the checks.
+              </h2>
               <p className="mt-4 leading-relaxed text-surface-600">
                 A verified impression is recorded by the integration when the sponsored unit is
                 actually rendered in an eligible session. It is not a participant self-report.
@@ -132,8 +165,10 @@ export default function HomePage() {
             <div className="mt-10 grid gap-4 md:grid-cols-5">
               {verificationSteps.map((step, index) => (
                 <div key={step} className="rounded-xl border border-surface-200 bg-white p-5">
-                  <p className="font-mono text-xs text-brand-600">0{index + 1}</p>
-                  <p className="mt-3 text-sm font-medium leading-relaxed text-surface-800">{step}</p>
+                  <p className="font-mono text-xs text-brand-700">0{index + 1}</p>
+                  <p className="mt-3 text-sm font-medium leading-relaxed text-surface-800">
+                    {step}
+                  </p>
                 </div>
               ))}
             </div>
@@ -143,8 +178,12 @@ export default function HomePage() {
         <section id="developers" className="border-b border-surface-200 px-6 py-20">
           <div className="mx-auto grid max-w-[1180px] gap-10 md:grid-cols-2">
             <div>
-              <p className="font-mono text-xs uppercase tracking-widest text-surface-500">For developers</p>
-              <h2 className="mt-3 font-serif text-4xl text-surface-950">Validate the signal first.</h2>
+              <p className="font-mono text-xs uppercase tracking-widest text-surface-500">
+                For developers
+              </p>
+              <h2 className="mt-3 font-serif text-4xl text-surface-950">
+                Validate the signal first.
+              </h2>
               <p className="mt-5 max-w-xl leading-relaxed text-surface-600">
                 The beta measures eligible wait states with explicit consent. It does not accrue a
                 cash balance. If participant compensation launches later, WaitLayer will publish an
@@ -164,11 +203,18 @@ export default function HomePage() {
           <EarningsCalculator />
         </section>
 
-        <section id="sponsors" className="border-b border-surface-200 bg-surface-950 px-6 py-20 text-white">
+        <section
+          id="sponsors"
+          className="border-b border-surface-200 bg-surface-950 px-6 py-20 text-white"
+        >
           <div className="mx-auto max-w-[1180px]">
             <div className="max-w-3xl">
-              <p className="font-mono text-xs uppercase tracking-widest text-white/50">For advertisers</p>
-              <h2 className="mt-3 font-serif text-4xl">Buy verified campaign delivery from WaitLayer.</h2>
+              <p className="font-mono text-xs uppercase tracking-widest text-white/50">
+                For advertisers
+              </p>
+              <h2 className="mt-3 font-serif text-4xl">
+                Buy verified campaign delivery from WaitLayer.
+              </h2>
               <p className="mt-5 leading-relaxed text-white/65">
                 The planned advertiser flow is straightforward: the advertiser pays WaitLayer for
                 campaign delivery; Dodo Payments processes that customer transaction and settles it
@@ -178,14 +224,23 @@ export default function HomePage() {
             </div>
             <div className="mt-10 grid gap-5 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
-                <p className="font-mono text-xs uppercase tracking-wider text-white/40">Money in</p>
+                <p className="font-mono text-xs uppercase tracking-wider text-white/60">Money in</p>
                 <p className="mt-3 text-xl font-semibold">Advertiser → Dodo Payments → WaitLayer</p>
-                <p className="mt-3 text-sm leading-relaxed text-white/55">Full customer transaction settles to WaitLayer. No automatic participant split.</p>
+                <p className="mt-3 text-sm leading-relaxed text-white/55">
+                  Full customer transaction settles to WaitLayer. No automatic participant split.
+                </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
-                <p className="font-mono text-xs uppercase tracking-wider text-white/40">Future money out</p>
-                <p className="mt-3 text-xl font-semibold">WaitLayer → separate payout provider → participant</p>
-                <p className="mt-3 text-sm leading-relaxed text-white/55">Independent fiat compensation only after the payout rail and reward program are approved.</p>
+                <p className="font-mono text-xs uppercase tracking-wider text-white/60">
+                  Future money out
+                </p>
+                <p className="mt-3 text-xl font-semibold">
+                  WaitLayer → separate payout provider → participant
+                </p>
+                <p className="mt-3 text-sm leading-relaxed text-white/55">
+                  Independent fiat compensation only after the payout rail and reward program are
+                  approved.
+                </p>
               </div>
             </div>
           </div>
@@ -194,23 +249,39 @@ export default function HomePage() {
         <section id="trust" className="px-6 py-20">
           <div className="mx-auto max-w-[1180px]">
             <div className="max-w-2xl">
-              <p className="font-mono text-xs uppercase tracking-widest text-surface-500">Trust boundary</p>
-              <h2 className="mt-3 font-serif text-4xl text-surface-950">Measure the wait, not the work.</h2>
+              <p className="font-mono text-xs uppercase tracking-widest text-surface-500">
+                Trust boundary
+              </p>
+              <h2 className="mt-3 font-serif text-4xl text-surface-950">
+                Measure the wait, not the work.
+              </h2>
             </div>
             <div className="mt-10 grid gap-5 md:grid-cols-2">
               <div className="rounded-2xl border border-rose-100 bg-rose-50/60 p-7">
                 <p className="font-semibold text-surface-900">Never required for an impression</p>
-                <p className="mt-4 text-sm leading-7 text-surface-600">Source code · prompts · completions · terminal output · file contents · repository names · secrets or environment variables</p>
+                <p className="mt-4 text-sm leading-7 text-surface-600">
+                  Source code · prompts · completions · terminal output · file contents · repository
+                  names · secrets or environment variables
+                </p>
               </div>
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-7">
                 <p className="font-semibold text-surface-900">Narrow verification data</p>
-                <p className="mt-4 text-sm leading-7 text-surface-600">Session/request identifiers · eligible duration · render/visibility events · timestamps · duplicate controls · fraud signals · campaign identifiers</p>
+                <p className="mt-4 text-sm leading-7 text-surface-600">
+                  Session/request identifiers · eligible duration · render/visibility events ·
+                  timestamps · duplicate controls · fraud signals · campaign identifiers
+                </p>
               </div>
             </div>
             <div className="mt-8 flex flex-wrap gap-4">
-              <Link href="/privacy" className="text-sm font-semibold text-brand-600">Privacy policy →</Link>
-              <Link href="/advertiser-policy" className="text-sm font-semibold text-brand-600">Advertiser policy →</Link>
-              <Link href="/payout-policy" className="text-sm font-semibold text-brand-600">Payout policy →</Link>
+              <Link href="/privacy" className="text-sm font-semibold text-brand-700">
+                Privacy policy →
+              </Link>
+              <Link href="/advertiser-policy" className="text-sm font-semibold text-brand-700">
+                Advertiser policy →
+              </Link>
+              <Link href="/payout-policy" className="text-sm font-semibold text-brand-700">
+                Payout policy →
+              </Link>
             </div>
           </div>
         </section>

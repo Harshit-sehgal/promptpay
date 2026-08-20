@@ -60,7 +60,10 @@ export default function PricingPage() {
             <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="/auth/login" className="text-surface-600 hover:text-surface-900 text-sm font-medium px-3 py-1.5">
+            <Link
+              href="/auth/login"
+              className="text-surface-600 hover:text-surface-900 text-sm font-medium px-3 py-1.5"
+            >
               Log in
             </Link>
             <Link
@@ -83,9 +86,9 @@ export default function PricingPage() {
               Beta access, not commercial pricing
             </h1>
             <p className="text-surface-500 text-lg max-w-2xl mx-auto">
-              Wait-state verification is free during beta. Advertisers can evaluate campaign tooling,
-              but live billing and participant payouts stay disabled until their production reviews
-              are complete.
+              Wait-state verification is free during beta. Advertisers can evaluate campaign
+              tooling, but live billing and participant payouts stay disabled until their production
+              reviews are complete.
             </p>
           </div>
         </section>
@@ -93,9 +96,13 @@ export default function PricingPage() {
         <section className="px-6 pb-20">
           <div className="mx-auto max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white border-2 border-surface-200/80 rounded-2xl p-8">
-              <p className="text-xs uppercase tracking-wider text-brand-600 font-semibold mb-4">Developers</p>
+              <p className="text-xs uppercase tracking-wider text-brand-700 font-semibold mb-4">
+                Developers
+              </p>
               <p className="text-5xl font-bold text-surface-900 mb-2">Free</p>
-              <p className="text-surface-400 text-sm mb-8">No card required for the private beta.</p>
+              <p className="text-surface-400 text-sm mb-8">
+                No card required for the private beta.
+              </p>
               <Link
                 href="/auth/signup?role=developer"
                 className="block w-full text-center bg-surface-900 hover:bg-surface-700 text-white font-medium px-6 py-3 rounded-xl text-sm transition-colors mb-8"
@@ -105,7 +112,9 @@ export default function PricingPage() {
               <ul className="space-y-4">
                 {DEVELOPER_FEATURES.map((feature) => (
                   <li key={feature} className="flex items-center gap-3 text-sm text-surface-700">
-                    <span className="text-emerald-500 shrink-0"><IconCheck /></span>
+                    <span className="text-emerald-500 shrink-0">
+                      <IconCheck />
+                    </span>
                     {feature}
                   </li>
                 ))}
@@ -113,7 +122,9 @@ export default function PricingPage() {
             </div>
 
             <div className="bg-surface-900 rounded-2xl p-8 relative overflow-hidden">
-              <p className="text-xs uppercase tracking-wider text-brand-300 font-semibold mb-4">Advertisers</p>
+              <p className="text-xs uppercase tracking-wider text-brand-300 font-semibold mb-4">
+                Advertisers
+              </p>
               <p className="text-4xl font-bold text-white mb-2">Review access</p>
               <p className="text-white/60 text-sm mb-8">
                 Create and inspect campaigns without enabling live spend.
@@ -127,7 +138,9 @@ export default function PricingPage() {
               <ul className="space-y-4">
                 {ADVERTISER_FEATURES.map((feature) => (
                   <li key={feature} className="flex items-center gap-3 text-sm text-white">
-                    <span className="text-emerald-400 shrink-0"><IconCheck /></span>
+                    <span className="text-emerald-400 shrink-0">
+                      <IconCheck />
+                    </span>
                     {feature}
                   </li>
                 ))}
@@ -142,21 +155,26 @@ export default function PricingPage() {
               How money will move after approval
             </h2>
             <p className="text-surface-500 text-center max-w-2xl mx-auto mb-12">
-              Advertiser billing and participant compensation are intentionally separate. There is no
-              automatic customer-payment split.
+              Advertiser billing and participant compensation are intentionally separate. There is
+              no automatic customer-payment split.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white border border-surface-200 rounded-2xl p-7">
                 <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money in</p>
-                <h3 className="font-semibold text-surface-900 text-lg mb-3">Advertiser → Dodo → WaitLayer</h3>
+                <h3 className="font-semibold text-surface-900 text-lg mb-3">
+                  Advertiser → Dodo → WaitLayer
+                </h3>
                 <p className="text-surface-600 text-sm leading-relaxed">
-                  An advertiser purchases campaign delivery from WaitLayer. Dodo Payments handles that
-                  customer transaction and settles it to WaitLayer. Dodo does not pay participants.
+                  An advertiser purchases campaign delivery from WaitLayer. Dodo Payments handles
+                  that customer transaction and settles it to WaitLayer. Dodo does not pay
+                  participants.
                 </p>
               </div>
               <div className="bg-white border border-surface-200 rounded-2xl p-7">
                 <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money out</p>
-                <h3 className="font-semibold text-surface-900 text-lg mb-3">WaitLayer → separate payout provider → participant</h3>
+                <h3 className="font-semibold text-surface-900 text-lg mb-3">
+                  WaitLayer → separate payout provider → participant
+                </h3>
                 <p className="text-surface-600 text-sm leading-relaxed">
                   If rewards launch, WaitLayer independently calculates eligible fiat compensation
                   after verification and pays it through a separately approved payout provider.
@@ -168,9 +186,12 @@ export default function PricingPage() {
 
         <section className="py-20 px-6">
           <div className="mx-auto max-w-4xl">
-            <h2 className="text-2xl font-bold text-surface-900 text-center mb-4">Current beta controls</h2>
+            <h2 className="text-2xl font-bold text-surface-900 text-center mb-4">
+              Current beta controls
+            </h2>
             <p className="text-surface-500 text-center text-sm mb-10">
-              These values describe policy/configuration, not currently available real-money actions.
+              These values describe policy/configuration, not currently available real-money
+              actions.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
@@ -179,8 +200,13 @@ export default function PricingPage() {
                 { label: 'Configured currencies', value: supportedCurrencies.join(', ') },
                 { label: 'Beta money state', value: 'Disabled' },
               ].map((item) => (
-                <div key={item.label} className="bg-surface-50 rounded-xl p-5 text-center border border-surface-100">
-                  <p className="text-surface-400 text-[11px] uppercase tracking-wider mb-2">{item.label}</p>
+                <div
+                  key={item.label}
+                  className="bg-surface-50 rounded-xl p-5 text-center border border-surface-100"
+                >
+                  <p className="text-surface-400 text-[11px] uppercase tracking-wider mb-2">
+                    {item.label}
+                  </p>
                   <p className="text-surface-900 font-semibold text-sm">{item.value}</p>
                 </div>
               ))}
@@ -192,14 +218,21 @@ export default function PricingPage() {
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-3xl font-bold mb-4">Validate the product before monetization</h2>
             <p className="text-white/60 mb-8">
-              The beta is designed to prove the wait-state signal, advertiser workflow, fraud controls,
-              and reporting before any participant reward or live campaign billing is enabled.
+              The beta is designed to prove the wait-state signal, advertiser workflow, fraud
+              controls, and reporting before any participant reward or live campaign billing is
+              enabled.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
-              <Link href="/auth/signup?role=developer" className="rounded-lg bg-white text-surface-900 px-5 py-3 text-sm font-semibold">
+              <Link
+                href="/auth/signup?role=developer"
+                className="rounded-lg bg-white text-surface-900 px-5 py-3 text-sm font-semibold"
+              >
                 Join developer beta
               </Link>
-              <Link href="/auth/signup?role=advertiser" className="rounded-lg border border-white/30 px-5 py-3 text-sm font-semibold text-white">
+              <Link
+                href="/auth/signup?role=advertiser"
+                className="rounded-lg border border-white/30 px-5 py-3 text-sm font-semibold text-white"
+              >
                 Review advertiser tooling
               </Link>
             </div>
