@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Manifesto — WaitLayer',
   description:
-    'WaitLayer Manifesto — developer attention is sacred, privacy is non-negotiable, and creators deserve 60% of the value they generate.',
+    'WaitLayer Manifesto — developer attention is respected, privacy is non-negotiable, and participant compensation must be transparent and independently defined.',
 };
 
 export default function ManifestoPage() {
@@ -19,11 +19,7 @@ export default function ManifestoPage() {
         </Link>
         <h1
           className="text-4.5xl font-bold text-surface-900 tracking-tight mb-10"
-          style={{
-            fontFamily: "'Instrument Serif', Georgia, serif",
-            fontSize: '42px',
-            fontWeight: 400,
-          }}
+          style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '42px', fontWeight: 400 }}
         >
           The WaitLayer Manifesto
         </h1>
@@ -37,60 +33,57 @@ export default function ManifestoPage() {
               paddingLeft: '16px',
             }}
           >
-            "Developer attention is sacred. Privacy is absolute. Revenue should go to those who
-            build, not just those who distribute."
+            “Developer attention should be respected. Privacy is absolute. Any reward system must be
+            transparent, verifiable, and separate from customer payment custody.”
           </p>
 
           <h2
             className="text-xl font-semibold text-surface-900 mt-10 mb-3"
-            style={{
-              fontFamily: "'Instrument Serif', Georgia, serif",
-              fontSize: '28px',
-              fontWeight: 400,
-            }}
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
           >
-            1. Attention is the Ultimate Resource
+            1. Attention is a scarce resource
           </h2>
           <p>
-            In the modern era of software engineering, we spend hours waiting for AI coding models,
-            builds, tests, and deployments to compile. This wait state is a highly valuable
-            micro-moment of human attention. We believe developers should own this attention and get
-            rewarded directly for it, rather than having it sold behind their backs.
+            AI coding agents, builds, tests, and deployments create natural waiting periods. WaitLayer
+            is exploring whether a small, clearly labeled sponsor surface can fit those moments without
+            interrupting the developer or pretending to be part of the agent output.
           </p>
 
           <h2
             className="text-xl font-semibold text-surface-900 mt-10 mb-3"
-            style={{
-              fontFamily: "'Instrument Serif', Georgia, serif",
-              fontSize: '28px',
-              fontWeight: 400,
-            }}
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
           >
-            2. Privacy is Non-Negotiable
+            2. Privacy is non-negotiable
           </h2>
           <p>
-            Ad networks have historically spied on users, tracked search histories, and read local
-            files. We reject this. WaitLayer does not inspect your code, does not record your
-            prompts, and does not capture your terminal context. We enforce a strictly-governed,
-            local allowlist that guarantees zero personal data or source code ever leaves your
-            machine.
+            WaitLayer does not need source code, prompts, terminal output, file contents, secrets, or
+            repository names to verify an eligible wait state. The product is designed around a narrow
+            telemetry allowlist and explicit user consent.
           </p>
 
           <h2
             className="text-xl font-semibold text-surface-900 mt-10 mb-3"
-            style={{
-              fontFamily: "'Instrument Serif', Georgia, serif",
-              fontSize: '28px',
-              fontWeight: 400,
-            }}
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
           >
-            3. The 60% Revenue Share Standard
+            3. Compensation should be explicit, not pass-through
           </h2>
           <p>
-            Platforms take too much. We commit to a permanent model where the developers receive 60%
-            of every sponsor dollar spent. By rewarding engineers fairly, we build a sustainable
-            attention marketplace where sponsors reach highly-engaged professionals, and builders
-            offset their tooling costs.
+            If participant rewards launch, WaitLayer will publish a reward schedule based on verified
+            eligible activity. That schedule is independent from advertiser campaign pricing. Advertisers
+            purchase a service from WaitLayer; WaitLayer separately bears the cost of participant
+            compensation through an approved fiat payout provider.
+          </p>
+
+          <h2
+            className="text-xl font-semibold text-surface-900 mt-10 mb-3"
+            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
+          >
+            4. Verification comes before monetization
+          </h2>
+          <p>
+            The private beta is telemetry-only. Rewards and live campaign billing remain disabled until
+            the relevant verification, fraud, payment, and payout controls are independently reviewed and
+            production-ready.
           </p>
         </div>
       </div>
