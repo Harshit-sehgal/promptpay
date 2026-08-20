@@ -20,6 +20,7 @@
     "db:studio": "pnpm --filter @waitlayer/db studio",
     "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
     "bootstrap:env-marker": "node scripts/bootstrap-environment-marker.mjs",
+    "bootstrap:review-advertiser": "node scripts/bootstrap-review-advertiser.mjs",
     "deploy:preflight": "node scripts/deploy-preflight.mjs",
     "deploy:doctor": "node scripts/deploy-doctor.mjs",
     "dodo:verify-live": "node scripts/verify-dodo-live.mjs",
