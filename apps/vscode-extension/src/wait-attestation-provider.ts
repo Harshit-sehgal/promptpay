@@ -1,18 +1,18 @@
 import * as vscode from 'vscode';
 
-import { WaitAssertionProvider } from '@waitlayer/shared';
+import { WaitAssertionProvider } from '@ateva/shared';
 
 /** A configured HTTPS bridge to an independently operated attester. The
  * extension sends a server-issued nonce; it never possesses signing material. */
 const ATTESTATION_REQUEST_TIMEOUT_MS = 10_000;
 
 export function createVsCodeWaitAssertionProvider(): WaitAssertionProvider | null {
-  const config = vscode.workspace.getConfiguration('waitlayer');
+  const config = vscode.workspace.getConfiguration('ateva');
   const provider = config.get<string>('attestationProvider')?.trim();
   const url = config.get<string>('attestationProviderUrl')?.trim();
   if (!provider || !url) return null;
   if (!/^https:\/\//i.test(url)) {
-    throw new Error('WaitLayer attestation provider URL must use HTTPS');
+    throw new Error('Ateva attestation provider URL must use HTTPS');
   }
   return {
     provider,
@@ -27,9 +27,7 @@ export function createVsCodeWaitAssertionProvider(): WaitAssertionProvider | nul
           signal: controller.signal,
         });
         if (!response.ok)
-          throw new Error(
-            `Wait attestation provider rejected the operation (${response.status})`,
-          );
+          throw new Error(`Wait attestation provider rejected the operation (${response.status})`);
         const responseBody = (await response.json()) as { assertion?: unknown };
         if (typeof responseBody.assertion !== 'string' || responseBody.assertion.length < 32) {
           throw new Error('Wait attestation provider returned no usable assertion');

@@ -14,7 +14,7 @@ function delay(ms: number): Promise<void> {
  * is NO Prisma mock on the money path. The request shape mirrors the real VS
  * Code extension (deviceId, sessionId, toolType, waitStateId, idempotencyKey,
  * signals, detectorVersion, signature) and is signed with
- * `signPayload(payload, deviceEventSecret)` from '@waitlayer/shared'.
+ * `signPayload(payload, deviceEventSecret)` from '@ateva/shared'.
  *
  * `runMoneyLoop(variant)` drives the full sequence:
  *   -> register user -> register device -> detector emits wait start (signed signals)
@@ -35,8 +35,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerStorage } from '@nestjs/throttler';
 
-import { BidType, ToolType, UserRole } from '@waitlayer/shared';
-import { signPayload } from '@waitlayer/shared';
+import { BidType, ToolType, UserRole } from '@ateva/shared';
+import { signPayload } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
@@ -56,7 +56,7 @@ const ATTESTATION_SESSION = `${BASE}/wait-attestation/session`;
 const ATTESTATION_CONSUME = `${BASE}/wait-attestation/consume`;
 const ATTESTATION_PROVIDER = 'integration-attestor';
 const ATTESTATION_ISSUER = 'https://integration-attestor.example.test';
-const ATTESTATION_AUDIENCE = 'waitlayer-integration';
+const ATTESTATION_AUDIENCE = 'ateva-integration';
 const ATTESTATION_KID = 'integration-attestor-key';
 const ATTESTATION_VERSION = 'integration-v1';
 
@@ -203,12 +203,12 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
 
     // Defensive: ensure no stale admin user from a prior run remains. This
     // makes the beforeAll idempotent even when test-isolation cleanup races.
-    await prisma.user.deleteMany({ where: { email: 'admin-money@waitlayer.com' } });
+    await prisma.user.deleteMany({ where: { email: 'admin-money@ateva.com' } });
 
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'admin-money@waitlayer.com',
+        email: 'admin-money@ateva.com',
         passwordHash: adminPasswordHash,
         name: 'Money Admin',
         role: UserRole.ADMIN,
@@ -219,7 +219,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
 
     const adminRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'admin-money@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'admin-money@ateva.com', password: 'Password123!' })
       .expect(200);
     adminToken = adminRes.body.accessToken;
     const meRes = await request(app.getHttpServer())
@@ -285,7 +285,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
 
   async function seedMoneyLoop(tag: string, opts: SeedOpts): Promise<LoopCtx> {
     // Developer (the extension owner / earnings recipient)
-    const devEmail = `dev-${tag}@waitlayer.com`;
+    const devEmail = `dev-${tag}@ateva.com`;
     const devRes = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
       .send({
@@ -320,7 +320,7 @@ describe('Extension Money-Loop E2E (real app, real DB)', () => {
       .expect(200);
 
     // Advertiser (the spender)
-    const advEmail = `adv-${tag}@waitlayer.com`;
+    const advEmail = `adv-${tag}@ateva.com`;
     const advRes = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
       .send({

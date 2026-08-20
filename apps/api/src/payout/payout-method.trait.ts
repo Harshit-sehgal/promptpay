@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { PayoutProvider as DbPayoutProvider, Prisma } from '@waitlayer/db';
+import { PayoutProvider as DbPayoutProvider, Prisma } from '@ateva/db';
 import {
   isProviderSupportedForCurrency,
   PAYOUT_PROVIDERS,
   PayoutProvider,
   payoutProviderLaunchStatus,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import {
@@ -262,7 +262,7 @@ export class PayoutMethodTrait {
         `Payout provider "${dto.provider}" is not available for registration.`,
       );
     }
-    const launchOverrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+    const launchOverrides = this.config.get<string>('ATEVA_PAYOUT_PROVIDER_STATUS');
     if (payoutProviderLaunchStatus(dto.provider, launchOverrides) === 'coming_soon') {
       throw new BadRequestException(
         `Payout provider "${dto.provider}" is not available for registration (launch status: coming_soon).`,
@@ -352,7 +352,7 @@ export class PayoutMethodTrait {
       return;
     }
 
-    const allowed = this.config.get<string>('WAITLAYER_STRIPE_CONNECT_RETURN_DOMAINS');
+    const allowed = this.config.get<string>('ATEVA_STRIPE_CONNECT_RETURN_DOMAINS');
     if (!allowed) return;
     const allowedHosts = allowed.split(',').map((h) => h.trim().toLowerCase());
     if (allowedHosts.length === 0) return;
@@ -445,7 +445,7 @@ export class PayoutMethodTrait {
     if (!(await this.runtimeConfig.isProviderEnabled('stripe_connect'))) {
       throw new BadRequestException('Payout provider "stripe_connect" is currently disabled');
     }
-    const launchOverrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+    const launchOverrides = this.config.get<string>('ATEVA_PAYOUT_PROVIDER_STATUS');
     if (payoutProviderLaunchStatus('stripe_connect', launchOverrides) === 'coming_soon') {
       throw new BadRequestException(
         'Payout provider "stripe_connect" is not available for registration (launch status: coming_soon).',
@@ -562,7 +562,7 @@ export class PayoutMethodTrait {
   }
 
   async getPayoutProviderAvailability() {
-    const overrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+    const overrides = this.config.get<string>('ATEVA_PAYOUT_PROVIDER_STATUS');
     const blockedProviders = await this.runtimeConfig.getStringArray(
       RUNTIME_CONFIG_KEYS.BLOCKED_PAYOUT_PROVIDERS,
       [],

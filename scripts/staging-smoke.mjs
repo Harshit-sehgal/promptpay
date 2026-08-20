@@ -49,17 +49,17 @@ const apiRequire = createRequire(join(__dirname, '..', 'apps', 'api', 'package.j
 const jwtPkgPath = apiRequire.resolve('@nestjs/jwt/package.json');
 const jwtRequire = createRequire(jwtPkgPath);
 const jwt = jwtRequire('jsonwebtoken');
-const { PrismaClient, createPrismaAdapter } = apiRequire('@waitlayer/db');
-const { signPayload } = apiRequire('@waitlayer/shared');
+const { PrismaClient, createPrismaAdapter } = apiRequire('@ateva/db');
+const { signPayload } = apiRequire('@ateva/shared');
 
 const API_BASE_URL = process.env.STAGING_API_URL ?? 'http://localhost:4002';
 // P0 #7: the financial loop is MANDATORY — opt out only for local debugging
 // (STAGING_FULL_FLOW=0), and even then the script hard-fails below so a
 // release gate can never pass on the short path.
 const FULL_FLOW = process.env.STAGING_FULL_FLOW !== '0';
-const STAGING_ADMIN_EMAIL = 'staging-smoke-admin@waitlayer.com';
-const STAGING_ADV_EMAIL = 'staging-smoke-advertiser@waitlayer.com';
-const STAGING_DEV_EMAIL = 'staging-smoke-developer@waitlayer.com';
+const STAGING_ADMIN_EMAIL = 'staging-smoke-admin@ateva.com';
+const STAGING_ADV_EMAIL = 'staging-smoke-advertiser@ateva.com';
+const STAGING_DEV_EMAIL = 'staging-smoke-developer@ateva.com';
 const STAGING_COUNTRY = (process.env.STAGING_ALLOWED_COUNTRIES ?? 'US')
   .split(',')[0]
   .trim()
@@ -98,8 +98,8 @@ function signToken(user, privateKey, sessionId, expiresIn = '10m') {
       sub: user.id,
       role: user.role,
       jti: sessionId,
-      aud: ['waitlayer-client', 'access'],
-      iss: 'waitlayer',
+      aud: ['ateva-client', 'access'],
+      iss: 'ateva',
     },
     privateKey,
     { algorithm: 'RS256', expiresIn, keyid: deriveKid(privateKey) },
@@ -182,7 +182,7 @@ async function main() {
 
   const prisma = new PrismaClient({ adapter: createPrismaAdapter(databaseUrl) });
   const evidence = {
-    format: 'waitlayer-staging-smoke-v1',
+    format: 'ateva-staging-smoke-v1',
     commit: process.env.GITHUB_SHA ?? null,
     runId: process.env.GITHUB_RUN_ID ?? null,
     runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
@@ -379,8 +379,8 @@ async function main() {
         const creative = await api('POST', `/campaigns/${campaignId}/creatives`, advToken, {
           title: 'Staging smoke creative',
           sponsoredMessage: 'A staging-only API-contract smoke creative.',
-          destinationUrl: 'https://waitlayer.com',
-          displayDomain: 'waitlayer.com',
+          destinationUrl: 'https://ateva.com',
+          displayDomain: 'ateva.com',
           ctaText: 'Learn more',
         });
         creativeId = creative.json?.id ?? null;

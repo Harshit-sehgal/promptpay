@@ -572,12 +572,12 @@ export default function DeveloperDashboard() {
                 {
                   label: 'Set independently',
                   detail:
-                    'If rewards launch, WaitLayer publishes a rate for verified eligible activity. It is not a percentage of what an advertiser pays.',
+                    'If rewards launch, Ateva publishes a rate for verified eligible activity. It is not a percentage of what an advertiser pays.',
                 },
                 {
                   label: 'Paid separately',
                   detail:
-                    'An advertiser payment settles in full to WaitLayer. Your compensation is a separate payment through an approved fiat payout provider.',
+                    'An advertiser payment settles in full to Ateva. Your compensation is a separate payment through an approved fiat payout provider.',
                 },
                 {
                   label: 'Verified first',

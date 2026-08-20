@@ -5,8 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { Prisma, ToolTypeEnum } from '@waitlayer/db';
-import { DetectorEvidence, verifyEvidence } from '@waitlayer/shared';
+import { Prisma, ToolTypeEnum } from '@ateva/db';
+import { DetectorEvidence, verifyEvidence } from '@ateva/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { FraudService } from '../fraud/fraud.service';

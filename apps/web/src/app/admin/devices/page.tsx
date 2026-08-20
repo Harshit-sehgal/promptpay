@@ -6,7 +6,7 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { formatRelativeTime } from '@/lib/format';
 
-import { useToast } from '@waitlayer/ui';
+import { useToast } from '@ateva/ui';
 
 interface AdminDevice {
   id: string;
@@ -187,7 +187,8 @@ export default function AdminDevicesPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {devices.map((device) => (                <div key={device.id} className="border border-surface-200/80 rounded-xl p-4">
+              {devices.map((device) => (
+                <div key={device.id} className="border border-surface-200/80 rounded-xl p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">

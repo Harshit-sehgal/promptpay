@@ -26,8 +26,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      '@waitlayer/shared': path.resolve(__dirname, '../../packages/shared/src'),
-      '@waitlayer/ui': path.resolve(__dirname, '../../packages/ui/src'),
+      '@ateva/shared': path.resolve(__dirname, '../../packages/shared/src'),
+      '@ateva/ui': path.resolve(__dirname, '../../packages/ui/src'),
     },
   },
 });

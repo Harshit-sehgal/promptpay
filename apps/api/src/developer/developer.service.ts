@@ -7,8 +7,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
-import { LedgerStatus, PayoutStatus, primaryCurrency } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { LedgerStatus, PayoutStatus, primaryCurrency } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';

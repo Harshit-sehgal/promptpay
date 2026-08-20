@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 
-import { BidType } from '@waitlayer/db';
+import { BidType } from '@ateva/db';
 
 import { AuctionCampaign, AuctionService } from './auction.service';
 

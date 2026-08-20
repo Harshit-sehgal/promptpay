@@ -10,8 +10,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-import { ToolTypeEnum } from '@waitlayer/db';
-import { PROHIBITED_DATA_FIELDS, verifySignature } from '@waitlayer/shared';
+import { ToolTypeEnum } from '@ateva/db';
+import { PROHIBITED_DATA_FIELDS, verifySignature } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { GoogleTokenVerifier } from '../auth/strategies/google-token-verifier';

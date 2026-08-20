@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { agentLifecycleEventSchema, AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
+import { agentLifecycleEventSchema, AgentLifecycleEventV1 } from '@ateva/agent-protocol';
 
 import {
   claimAgentEventBatch,
@@ -45,7 +45,7 @@ function makeEvent(overrides: Partial<AgentLifecycleEventV1> = {}): AgentLifecyc
 }
 
 function paths() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-spool-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-spool-'));
   directories.push(directory);
   return getSpoolPaths(directory);
 }

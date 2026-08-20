@@ -7,7 +7,7 @@ vi.mock('./commands/sandbox', () => ({
 import { runSandbox } from './commands/sandbox';
 import { program } from './index';
 
-describe('waitlayer sandbox commander wiring', () => {
+describe('ateva sandbox commander wiring', () => {
   beforeEach(() => {
     vi.mocked(runSandbox).mockReset();
   });

@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { RecoveryDebtCaseStatus } from '@waitlayer/db';
+import { RecoveryDebtCaseStatus } from '@ateva/db';
 
 /**
  * Declarative RecoveryDebtCase lifecycle (P2.2 — unified state machine).

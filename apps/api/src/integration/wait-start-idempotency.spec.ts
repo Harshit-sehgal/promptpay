@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { signPayload, UserRole } from '@waitlayer/shared';
+import { signPayload, UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -83,7 +83,7 @@ describe('wait-start idempotency ordering (P1 #20)', () => {
     await request(app.getHttpServer())
       .patch('/api/v1/developer/settings')
       .set('Authorization', `Bearer ${devToken}`)
-        .send({ adsEnabled: true, waitTelemetryEnabled: true })
+      .send({ adsEnabled: true, waitTelemetryEnabled: true })
       .expect(200);
 
     const device = await request(app.getHttpServer())

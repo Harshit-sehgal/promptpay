@@ -8,7 +8,7 @@ import test from 'node:test';
 const restoreScript = resolve('scripts/restore-db.sh');
 
 test('restore fails closed when pg_restore reports a partial failure', async () => {
-  const fixtureRoot = await mkdtemp(join(tmpdir(), 'waitlayer-restore-test-'));
+  const fixtureRoot = await mkdtemp(join(tmpdir(), 'ateva-restore-test-'));
   try {
     const fakeBin = join(fixtureRoot, 'bin');
     await mkdir(fakeBin);

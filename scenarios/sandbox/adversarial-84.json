@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "renamed_process_attacker",
   "environment": "sandbox",
-  "seed": "waitlayer-adversarial-v1",
+  "seed": "ateva-adversarial-v1",
   "reporting": {
     "deterministic": true,
     "severity": "critical",

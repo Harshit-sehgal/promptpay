@@ -1,6 +1,6 @@
 # Branch Protection (P1.21 / P0.5)
 
-The repository is hosted on GitHub (`https://github.com/Harshit-sehgal/promptpay.git`); the product is branded **WaitLayer** while the repository/remote retains the `promptpay` name (see "Naming" below).
+The repository is hosted on GitHub (`https://github.com/Harshit-sehgal/promptpay.git`); the product is branded **Ateva** while the repository/remote retains the `promptpay` name (see "Naming" below).
 Branch protection is configured in GitHub repo **Settings → Branches**, not via
 a file. Apply these settings to `main` (and any release branches):
 
@@ -56,7 +56,7 @@ a file. Apply these settings to `main` (and any release branches):
   P0.5/P1.21 (see `.github/workflows/ci.yml`); the "verified green run" is
   produced by the GitHub Actions workflow against the exact commit.
 - **Naming (P2.6):** the product, homepage, package names, API defaults and
-  domains are intentionally **WaitLayer**. The repository directory and Git
+  domains are intentionally **Ateva**. The repository directory and Git
   remote retain **promptpay** (`Harshit-sehgal/promptpay`). This divergence is a
   known, pending product/branding decision — not a defect. Rename only via a
   deliberate, repo-wide change (package names, Docker image names, env vars,

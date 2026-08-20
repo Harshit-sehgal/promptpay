@@ -193,8 +193,8 @@ export function AccountErasure({
             {busy ? 'Deleting…' : 'Permanently delete my account'}
           </button>
           <p className="text-[11px] leading-4 text-surface-500">
-            On submit, WaitLayer asks for a fresh authenticator or backup code. The proof is scoped
-            to account deletion and expires after five minutes.
+            On submit, Ateva asks for a fresh authenticator or backup code. The proof is scoped to
+            account deletion and expires after five minutes.
           </p>
         </div>
       )}

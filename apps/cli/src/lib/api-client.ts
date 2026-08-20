@@ -8,8 +8,8 @@ import {
   AGENT_PROTOCOL_VERSION_HEADER,
   AgentLifecycleEventV1,
   canonicalAgentBatchPayload,
-} from '@waitlayer/agent-protocol';
-import { DETECTOR_VERSION, DetectorEvidence, signEvidence } from '@waitlayer/shared';
+} from '@ateva/agent-protocol';
+import { DETECTOR_VERSION, DetectorEvidence, signEvidence } from '@ateva/shared';
 
 import {
   clearTokens,
@@ -36,18 +36,18 @@ function readManifestVersion(): string {
 }
 const CLI_MANIFEST_VERSION: string = readManifestVersion();
 
-const PRODUCTION_API_URL = 'https://api.waitlayer.com/api/v1';
+const PRODUCTION_API_URL = 'https://api.ateva.com/api/v1';
 
 /**
  * Resolve the API base URL for the CLI. Packaged/distributed clients default
  * to the production SaaS origin so an installed CLI can reach the real API
  * without manual configuration. Local development overrides via
- * `WAITLAYER_API_URL`, and `NODE_ENV=production` is an explicit opt-in to the
+ * `ATEVA_API_URL`, and `NODE_ENV=production` is an explicit opt-in to the
  * production origin (A-013). We never fall back to localhost for a packaged
  * install — that would silently point real users at their own machine.
  */
 export function resolveApiBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.WAITLAYER_API_URL) return env.WAITLAYER_API_URL;
+  if (env.ATEVA_API_URL) return env.ATEVA_API_URL;
   if (env.NODE_ENV === 'production') return PRODUCTION_API_URL;
   return PRODUCTION_API_URL;
 }
@@ -68,7 +68,7 @@ function parseCurrencyTotals(
 /**
  * Detect a loopback/localhost API origin. A packaged CLI should point at the
  * production SaaS origin; reaching loopback means the user is either doing
- * local development (via WAITLAYER_API_URL) or has a misconfiguration that
+ * local development (via ATEVA_API_URL) or has a misconfiguration that
  * will silently fail to reach the real API. Surface it loudly (A-013).
  */
 function isLoopbackUrl(url: string): boolean {
@@ -84,9 +84,9 @@ function isLoopbackUrl(url: string): boolean {
 
 if (isLoopbackUrl(API_URL)) {
   console.warn(
-    `[WaitLayer] WARNING: the CLI is pointed at a loopback address (${API_URL}). ` +
-      'It will not reach the production WaitLayer API. Set WAITLAYER_API_URL to the ' +
-      'production origin (https://api.waitlayer.com/api/v1) unless you are running a local API.',
+    `[Ateva] WARNING: the CLI is pointed at a loopback address (${API_URL}). ` +
+      'It will not reach the production Ateva API. Set ATEVA_API_URL to the ' +
+      'production origin (https://api.ateva.com/api/v1) unless you are running a local API.',
   );
 }
 
@@ -193,7 +193,7 @@ export class ApiClient {
     }
     if (!this.deviceEventSecret) {
       throw new Error(
-        'WaitLayer device is not registered with an event secret. Run device registration again.',
+        'Ateva device is not registered with an event secret. Run device registration again.',
       );
     }
     return signPayload(payload, this.deviceEventSecret);
@@ -237,8 +237,8 @@ export class ApiClient {
       Boolean(this.deviceUUID) && !this.deviceEventSecret && !hadPersistedInstallationId;
     const fingerprint = legacySecretRecovery
       ? createLegacyFingerprint()
-      : createHash('sha256').update(`waitlayer-installation:${installationId}`).digest('hex');
-    const recoverySupportToken = process.env.WAITLAYER_DEVICE_RECOVERY_TOKEN?.trim();
+      : createHash('sha256').update(`ateva-installation:${installationId}`).digest('hex');
+    const recoverySupportToken = process.env.ATEVA_DEVICE_RECOVERY_TOKEN?.trim();
     const registrationPayload = {
       toolType: 'terminal',
       // Keep fingerprintHash for legacy server/client compatibility while the
@@ -275,7 +275,7 @@ export class ApiClient {
         if (isDeviceRecoveryError(err) && !recoverySupportToken) {
           throw new Error(
             `${getRequestErrorMessage(err)}. ` +
-              'If support issued a device recovery token, rerun with WAITLAYER_DEVICE_RECOVERY_TOKEN set to that one-time token.',
+              'If support issued a device recovery token, rerun with ATEVA_DEVICE_RECOVERY_TOKEN set to that one-time token.',
           );
         }
         throw err;
@@ -310,7 +310,7 @@ export class ApiClient {
   }> {
     const payload = {
       schemaVersion: 1 as const,
-      environmentId: process.env.WAITLAYER_ENVIRONMENT_ID ?? 'local',
+      environmentId: process.env.ATEVA_ENVIRONMENT_ID ?? 'local',
       installationId: input.installationId,
       deviceId: input.deviceId,
       events: input.events,
@@ -772,7 +772,7 @@ export class ApiClient {
     const { promise, resolve, reject } = Promise.withResolvers<T>();
 
     // No header signature: the body already carries `signature`, and the API
-    // does not verify an X-WaitLayer-Signature header. Emitting one would
+    // does not verify an X-Ateva-Signature header. Emitting one would
     // leak the per-device HMAC signing key to anyone reading headers
     // (proxies, browser DevTools, server access logs that capture headers).
     const requestHostname =
@@ -787,7 +787,7 @@ export class ApiClient {
       reject(
         new Error(
           `CLI refuses to send credentials over ${url.protocol}. ` +
-            'Set WAITLAYER_API_URL to an https:// endpoint, or http://localhost for local development.',
+            'Set ATEVA_API_URL to an https:// endpoint, or http://localhost for local development.',
         ),
       );
       return promise;

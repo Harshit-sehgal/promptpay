@@ -13,7 +13,7 @@
  * on every critical financial module; raise these floors as branch tests are
  * added until each reaches 90.
  *
- * Usage (from repo root, after `pnpm --filter waitlayer-api test:cov`):
+ * Usage (from repo root, after `pnpm --filter ateva-api test:cov`):
  *   node scripts/enforce-financial-coverage.mjs
  *
  * Env:
@@ -73,7 +73,7 @@ function loadSummary() {
     raw = readFileSync(summaryPath, 'utf8');
   } catch {
     console.error(`Coverage summary not found at ${summaryPath}.
-Run \`pnpm --filter waitlayer-api test:cov\` first (it emits json-summary).`);
+Run \`pnpm --filter ateva-api test:cov\` first (it emits json-summary).`);
     process.exit(2);
   }
   return JSON.parse(raw);

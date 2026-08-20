@@ -1,7 +1,7 @@
 # ADR 0006: Fail-Closed Multi-Provider Payout Architecture
 
 - **Status:** Accepted (2026)
-- **Deciders:** WaitLayer engineering
+- **Deciders:** Ateva engineering
 
 ## Context
 

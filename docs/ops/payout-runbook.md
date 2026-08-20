@@ -184,7 +184,7 @@ them at `addPayoutMethod` / `normalizePayoutMethod` regardless of any override
 
 ### 8.2 Deploy-time gate (no code edit required)
 
-Set `WAITLAYER_PAYOUT_PROVIDER_STATUS` (JSON map of
+Set `ATEVA_PAYOUT_PROVIDER_STATUS` (JSON map of
 `provider → "available" | "coming_soon"`) on the API. Unknown or malformed
 keys are ignored. Example promoting the three real automated rails:
 

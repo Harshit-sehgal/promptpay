@@ -148,10 +148,10 @@ function main() {
 
   // Also scan any locally-built Docker images referenced by compose. Compose
   // names images <project>-<service> (this checkout: `promptpay-*`); older
-  // local builds used `waitlayer-*`. Missing images are skipped.
+  // local builds used `ateva-*`. Missing images are skipped.
   const imageNames = process.env.SCAN_IMAGE_NAMES
     ? process.env.SCAN_IMAGE_NAMES.split(/\s+/).filter(Boolean)
-    : ['promptpay-api', 'promptpay-web', 'waitlayer-api', 'waitlayer-web'];
+    : ['promptpay-api', 'promptpay-web', 'ateva-api', 'ateva-web'];
   for (const image of imageNames) {
     allFindings.push(...scanDockerImageHistory(image));
   }

@@ -1,4 +1,4 @@
-# WaitLayer API Changelog
+# Ateva API Changelog
 
 All notable changes to the public REST API (`/api/v1`) are documented here.
 The API follows a pragmatic versioning scheme: the global prefix is `api/v1`

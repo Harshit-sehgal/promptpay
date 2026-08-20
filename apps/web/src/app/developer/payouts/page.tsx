@@ -20,7 +20,7 @@ import {
   majorToMinor,
   minorToMajorInputValue,
   PayoutProvider,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 interface PayoutAccount {
   id: string;

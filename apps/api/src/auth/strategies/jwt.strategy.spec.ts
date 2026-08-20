@@ -145,15 +145,15 @@ describe('JwtStrategy key rotation (kid-aware verification)', () => {
     const { strategy } = makeStrategy({
       JWT_PUBLIC_KEY: TEST_JWT_PUBLIC_KEY_2,
       JWT_PUBLIC_KEYS: TEST_JWT_PUBLIC_KEY,
-      JWT_ISSUER: 'waitlayer',
-      JWT_AUDIENCE: 'waitlayer-client',
+      JWT_ISSUER: 'ateva',
+      JWT_AUDIENCE: 'ateva-client',
     });
     const oldToken = sign(TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY, {
       sub: 'u1',
       role: 'developer',
       jti: 'sess',
       aud: 'access',
-      iss: 'waitlayer',
+      iss: 'ateva',
     });
     // The strategy's key resolver (used by secretOrKeyProvider) selects the
     // previous public key for the old kid — proving pre-rotation tokens still
@@ -165,15 +165,15 @@ describe('JwtStrategy key rotation (kid-aware verification)', () => {
   it('rejects a token whose kid is not in the accepted set', async () => {
     const { strategy } = makeStrategy({
       JWT_PUBLIC_KEY: TEST_JWT_PUBLIC_KEY,
-      JWT_ISSUER: 'waitlayer',
-      JWT_AUDIENCE: 'waitlayer-client',
+      JWT_ISSUER: 'ateva',
+      JWT_AUDIENCE: 'ateva-client',
     });
     const foreignToken = sign(TEST_JWT_PRIVATE_KEY_2, TEST_JWT_PUBLIC_KEY_2, {
       sub: 'u1',
       role: 'developer',
       jti: 'sess',
       aud: 'access',
-      iss: 'waitlayer',
+      iss: 'ateva',
     });
     expect(() => strategy.resolveVerificationKey(foreignToken)).toThrow(UnauthorizedException);
   });

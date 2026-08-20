@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { UserStatus } from '@waitlayer/shared';
+import { UserStatus } from '@ateva/shared';
 
 import { isActiveAccountStatus } from './account-status';
 

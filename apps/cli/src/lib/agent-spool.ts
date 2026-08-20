@@ -7,7 +7,7 @@ import {
   agentLifecycleEventSchema,
   AgentLifecycleEventV1,
   scanForbiddenAgentFields,
-} from '@waitlayer/agent-protocol';
+} from '@ateva/agent-protocol';
 
 const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const MAX_QUEUE_EVENTS = 10_000;
@@ -64,15 +64,15 @@ export type FlushResult = {
   remaining: number;
 };
 
-export function getWaitLayerDataDirectory(
+export function getAtevaDataDirectory(
   env: NodeJS.ProcessEnv = process.env,
   homeDirectory = os.homedir(),
 ): string {
-  if (process.platform === 'win32' && env.APPDATA) return path.join(env.APPDATA, 'WaitLayer');
-  return path.join(env.XDG_CONFIG_HOME ?? path.join(homeDirectory, '.config'), 'waitlayer');
+  if (process.platform === 'win32' && env.APPDATA) return path.join(env.APPDATA, 'Ateva');
+  return path.join(env.XDG_CONFIG_HOME ?? path.join(homeDirectory, '.config'), 'ateva');
 }
 
-export function getSpoolPaths(directory = getWaitLayerDataDirectory()): SpoolPaths {
+export function getSpoolPaths(directory = getAtevaDataDirectory()): SpoolPaths {
   return {
     directory,
     queueFile: path.join(directory, 'agent-events.jsonl'),
@@ -81,11 +81,11 @@ export function getSpoolPaths(directory = getWaitLayerDataDirectory()): SpoolPat
     lockFile: path.join(directory, 'agent-events.lock'),
     bridgeSocket:
       process.platform === 'win32'
-        ? '\\\\.\\pipe\\waitlayer-bridge'
+        ? '\\\\.\\pipe\\ateva-bridge'
         : path.join(directory, 'bridge.sock'),
     bridgeEventsSocket:
       process.platform === 'win32'
-        ? '\\\\.\\pipe\\waitlayer-bridge-events'
+        ? '\\\\.\\pipe\\ateva-bridge-events'
         : path.join(directory, 'bridge-events.sock'),
     bridgeSecretFile: path.join(directory, 'bridge.secret'),
     bridgeDisabledFile: path.join(directory, 'bridge.disabled'),
@@ -123,7 +123,7 @@ export function enqueueAgentEvent(
   withAgentSpoolLock(paths, () => {
     ensureDirectory(paths.directory);
     if (fs.existsSync(paths.bridgeDisabledFile)) {
-      throw new Error('WaitLayer agent telemetry is disabled until the next successful login');
+      throw new Error('Ateva agent telemetry is disabled until the next successful login');
     }
     const records = readRecords(paths.queueFile, paths, now);
     const inFlight = readRecords(paths.inFlightFile, paths, now);
@@ -139,14 +139,14 @@ export function enqueueAgentEvent(
       return;
     }
     if (records.length >= MAX_QUEUE_EVENTS) {
-      throw new Error('WaitLayer agent event queue is full');
+      throw new Error('Ateva agent event queue is full');
     }
     const line = `${JSON.stringify(record)}\n`;
     if (fileSize(paths.queueFile) + Buffer.byteLength(line) > MAX_QUEUE_BYTES) {
-      throw new Error('WaitLayer agent event queue has reached its storage limit');
+      throw new Error('Ateva agent event queue has reached its storage limit');
     }
     if (spoolBytes(paths) + Buffer.byteLength(line) > MAX_TOTAL_STORAGE_BYTES) {
-      throw new Error('WaitLayer agent spool has reached its total storage limit');
+      throw new Error('Ateva agent spool has reached its total storage limit');
     }
     appendDurably(paths.queueFile, line);
   });
@@ -240,7 +240,7 @@ export function completeAgentEventBatch(
     if (quarantined.length > 0) {
       const quarantineContent = quarantined.map((record) => `${JSON.stringify(record)}\n`).join('');
       if (spoolBytes(paths) + Buffer.byteLength(quarantineContent) > MAX_TOTAL_STORAGE_BYTES) {
-        throw new Error('WaitLayer agent spool quarantine has reached its storage limit');
+        throw new Error('Ateva agent spool quarantine has reached its storage limit');
       }
       appendDurably(paths.quarantineFile, quarantineContent);
     }
@@ -360,7 +360,7 @@ function readRecords(
   if (malformed.length > 0) {
     const quarantineContent = malformed.map((record) => `${JSON.stringify(record)}\n`).join('');
     if (spoolBytes(paths) + Buffer.byteLength(quarantineContent) > MAX_TOTAL_STORAGE_BYTES) {
-      throw new Error('WaitLayer agent spool quarantine has reached its storage limit');
+      throw new Error('Ateva agent spool quarantine has reached its storage limit');
     }
     appendDurably(paths.quarantineFile, quarantineContent);
   }
@@ -446,7 +446,7 @@ export function withAgentSpoolLock<T>(paths: SpoolPaths, callback: () => T): T {
       } catch {
         // A concurrent writer may have removed the lock; retry below.
       }
-      if (Date.now() >= deadline) throw new Error('WaitLayer local event spool is busy');
+      if (Date.now() >= deadline) throw new Error('Ateva local event spool is busy');
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }
   }

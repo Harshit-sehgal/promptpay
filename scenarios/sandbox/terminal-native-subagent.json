@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "terminal_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-terminal-subagent-v1",
+  "seed": "ateva-terminal-subagent-v1",
   "reporting": {
     "deterministic": true,
     "severity": "medium",

@@ -81,7 +81,7 @@
 ```bash
 pnpm typecheck
 pnpm lint
-pnpm --filter waitlayer-api exec vitest run --no-file-parallelism
+pnpm --filter ateva-api exec vitest run --no-file-parallelism
 ```
 
 Last verified: 2026-07-12 — all green.

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { canonicalAgentBatchPayload } from '@waitlayer/agent-protocol';
-import { signPayload } from '@waitlayer/shared';
+import { canonicalAgentBatchPayload } from '@ateva/agent-protocol';
+import { signPayload } from '@ateva/shared';
 
 import { AgentService } from './agent.service';
 
@@ -55,8 +55,8 @@ function makeService() {
     prisma as never,
     {
       get: vi.fn((key: string, fallback: string) => {
-        if (key === 'WAITLAYER_ENVIRONMENT_KIND') return 'test';
-        if (key === 'WAITLAYER_ENVIRONMENT_ID') return 'test-run';
+        if (key === 'ATEVA_ENVIRONMENT_KIND') return 'test';
+        if (key === 'ATEVA_ENVIRONMENT_ID') return 'test-run';
         return fallback;
       }),
     } as never,
@@ -101,9 +101,7 @@ describe('AgentService', () => {
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'agent_protocol_invalid_version' }),
     });
-    await expect(
-      service.ingestBatch(USER_ID, signedBatch([event()]), '2'),
-    ).rejects.toMatchObject({
+    await expect(service.ingestBatch(USER_ID, signedBatch([event()]), '2')).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'agent_protocol_unsupported_version' }),
     });
     await expect(
@@ -219,9 +217,7 @@ describe('AgentService', () => {
 
     const result = await service.ingestBatch(USER_ID, signedBatch([event()]));
 
-    expect(result.rejected).toEqual([
-      { eventId: event().eventId, reason: 'abandoned_session' },
-    ]);
+    expect(result.rejected).toEqual([{ eventId: event().eventId, reason: 'abandoned_session' }]);
     expect(tx.agentLifecycleEvent.create).not.toHaveBeenCalled();
   });
 

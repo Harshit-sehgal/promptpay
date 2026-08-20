@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 
 const extensionRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const outputArgument = process.argv.slice(2).find((argument) => argument !== '--');
-const outputPath = resolve(outputArgument || join(extensionRoot, 'waitlayer-vscode.vsix'));
+const outputPath = resolve(outputArgument || join(extensionRoot, 'ateva-vscode.vsix'));
 const sourceManifestPath = join(extensionRoot, 'package.json');
 const sourceOut = join(extensionRoot, 'out');
 const sourceLicense = join(extensionRoot, 'LICENSE');
@@ -23,7 +23,7 @@ if (!existsSync(sourceIgnore)) {
   throw new Error(`Missing VSIX inclusion rules at ${sourceIgnore}`);
 }
 
-const stagingRoot = await mkdtemp(join(tmpdir(), 'waitlayer-vsix-'));
+const stagingRoot = await mkdtemp(join(tmpdir(), 'ateva-vsix-'));
 try {
   const manifest = JSON.parse(await readFile(sourceManifestPath, 'utf8'));
   // The bundle is self-contained. Development/workspace dependencies are

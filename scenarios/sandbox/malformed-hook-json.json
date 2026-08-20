@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "reliability_tester",
   "environment": "sandbox",
-  "seed": "waitlayer-malformed-hook-v1",
+  "seed": "ateva-malformed-hook-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

@@ -9,7 +9,7 @@ const tempDirs: string[] = [];
 let originalNodeEnv: string | undefined;
 
 async function makeMigrationDir(names = ['20240101000000_init']): Promise<string> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'waitlayer-migrations-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ateva-migrations-'));
   tempDirs.push(dir);
   await Promise.all(names.map((name) => fs.mkdir(path.join(dir, name))));
   return dir;
@@ -47,7 +47,7 @@ describe('findPendingMigrations (A-012)', () => {
 describe('verifyMigrationsApplied production safety', () => {
   it('fails closed when the migration directory is absent in production', async () => {
     process.env.NODE_ENV = 'production';
-    const missing = path.join(os.tmpdir(), `missing-waitlayer-migrations-${Date.now()}`);
+    const missing = path.join(os.tmpdir(), `missing-ateva-migrations-${Date.now()}`);
 
     const error = await verifyMigrationsApplied({} as never, missing).catch((caught) => caught);
     expect(error).toBeInstanceOf(Error);
@@ -58,7 +58,7 @@ describe('verifyMigrationsApplied production safety', () => {
   it('fails closed when _prisma_migrations cannot be read in production', async () => {
     process.env.NODE_ENV = 'production';
     const dir = await makeMigrationDir();
-    const secret = 'postgresql://secret-user:secret-password@private-db.internal/waitlayer';
+    const secret = 'postgresql://secret-user:secret-password@private-db.internal/ateva';
     const prisma = { $queryRaw: vi.fn().mockRejectedValue(new Error(secret)) };
 
     const error = await verifyMigrationsApplied(prisma as never, dir).catch((caught) => caught);

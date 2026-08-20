@@ -48,7 +48,7 @@ export function generateTotpSecret(byteLength = 20): string {
   return base32Encode(crypto.randomBytes(byteLength));
 }
 
-export function buildOtpAuthUrl(secret: string, account: string, issuer = 'WaitLayer'): string {
+export function buildOtpAuthUrl(secret: string, account: string, issuer = 'Ateva'): string {
   const label = encodeURIComponent(`${issuer}:${account}`);
   const params = new URLSearchParams({
     secret,

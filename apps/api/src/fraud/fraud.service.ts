@@ -11,8 +11,8 @@ import {
   FraudSeverity as DbFraudSeverity,
   Prisma,
   TrustLevel,
-} from '@waitlayer/db';
-import { FraudFlagType, FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@waitlayer/shared';
+} from '@ateva/db';
+import { FraudFlagType, FraudSeverity, RATE_LIMITS, TRUST_SCORE } from '@ateva/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
@@ -528,10 +528,7 @@ export class FraudService {
       if (signalKey(rowSignals) === currentKey) {
         identicalPayloadCount++;
       }
-      if (
-        rowSignals.length === 1 &&
-        ANOMALY_PRIMARY_SIGNALS.has(rowSignals[0]?.type ?? '')
-      ) {
+      if (rowSignals.length === 1 && ANOMALY_PRIMARY_SIGNALS.has(rowSignals[0]?.type ?? '')) {
         singlePrimaryCount++;
       }
     }

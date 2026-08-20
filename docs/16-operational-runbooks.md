@@ -10,26 +10,28 @@ The ledger, payout, fraud, and recovery-debt tables are the financial source
 of truth. **Back them up before every deploy and on a scheduled cadence.**
 
 ### Automated (recommended)
+
 Schedule a `pg_dump` from a secondary/cron pod or the host:
 
 ```bash
 # Daily logical dump, compressed, with a 14-day retention
 PGPASSWORD="$DB_PASSWORD" pg_dump \
-  -h "$DB_HOST" -U "$DB_USER" -d waitlayer \
-  -Fc -Z 9 -f "/backups/waitlayer-$(date +%F).dump"
+  -h "$DB_HOST" -U "$DB_USER" -d ateva \
+  -Fc -Z 9 -f "/backups/ateva-$(date +%F).dump"
 # Prune dumps older than 14 days
-find /backups -name 'waitlayer-*.dump' -mtime +14 -delete
+find /backups -name 'ateva-*.dump' -mtime +14 -delete
 ```
 
 For point-in-time recovery, run Postgres in WAL archiving / managed
 (replica) mode and snapshot the volume (`pgdata`) rather than logical dumps.
 
 ### Docker Compose (local/dev)
+
 The compose `postgres` service persists to the `pgdata` volume. Snapshot the
 volume, or run `pg_dump` against the running container:
 
 ```bash
-docker compose exec postgres pg_dump -U waitlayer -Fc waitlayer > waitlayer.dump
+docker compose exec postgres pg_dump -U ateva -Fc ateva > ateva.dump
 ```
 
 > Never rely on the `pgdata` volume alone for production — volumes are not
@@ -40,8 +42,8 @@ docker compose exec postgres pg_dump -U waitlayer -Fc waitlayer > waitlayer.dump
 ```bash
 # Restore into a fresh database (drops existing objects)
 PGPASSWORD="$DB_PASSWORD" pg_restore \
-  -h "$DB_HOST" -U "$DB_USER" -d waitlayer \
-  --clean --if-exists /backups/waitlayer-YYYY-MM-DD.dump
+  -h "$DB_HOST" -U "$DB_USER" -d ateva \
+  --clean --if-exists /backups/ateva-YYYY-MM-DD.dump
 ```
 
 After restore, re-apply any migrations that post-date the dump (migrations
@@ -55,12 +57,12 @@ confirm the `earnings_ledger` confirmed/paid totals match the
 `RetentionCronService` (compliance module) enforces operator-tunable retention
 windows stored in `data_retention_config` (days). Categories:
 
-| Category        | Default | Purged when older than |
-|-----------------|---------|------------------------|
-| `webhook_events`| 90d     | `createdAt`            |
-| `audit_logs`    | 365d    | `createdAt`            |
-| `sessions`      | 30d     | `expiresAt`            |
-| `export_cache`  | 7d      | (no server-side table) |
+| Category         | Default | Purged when older than |
+| ---------------- | ------- | ---------------------- |
+| `webhook_events` | 90d     | `createdAt`            |
+| `audit_logs`     | 365d    | `createdAt`            |
+| `sessions`       | 30d     | `expiresAt`            |
+| `export_cache`   | 7d      | (no server-side table) |
 
 - Seeds defaults on bootstrap (`ensureRetentionDefaults`) and runs every 24h.
 - `retainDays = null` means **retain indefinitely** (never purge).

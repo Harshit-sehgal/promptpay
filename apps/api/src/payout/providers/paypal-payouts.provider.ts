@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { minorToMajorInputValue } from '@waitlayer/shared';
+import { minorToMajorInputValue } from '@ateva/shared';
 
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
@@ -155,9 +155,8 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
       body: JSON.stringify({
         sender_batch_header: {
           sender_batch_id: `batch_${params.payoutRequestId}`,
-          email_subject: 'You have a payout from WaitLayer',
-          email_message:
-            'You have received a payout from WaitLayer. Thanks for your participation!',
+          email_subject: 'You have a payout from Ateva',
+          email_message: 'You have received a payout from Ateva. Thanks for your participation!',
         },
         items: [
           {
@@ -168,7 +167,7 @@ export class PayPalPayoutsProvider implements PayoutProviderHandler {
             },
             receiver: email,
             sender_item_id: senderItemId,
-            note: 'WaitLayer developer payout',
+            note: 'Ateva developer payout',
           },
         ],
       }),

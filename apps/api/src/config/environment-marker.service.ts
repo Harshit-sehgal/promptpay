@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { PrismaService } from './prisma.service';
 
@@ -15,8 +15,8 @@ export class EnvironmentMarkerService {
   ) {}
 
   async verify(): Promise<void> {
-    const environmentKind = this.config.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development');
-    const environmentId = this.config.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local');
+    const environmentKind = this.config.get<string>('ATEVA_ENVIRONMENT_KIND', 'development');
+    const environmentId = this.config.get<string>('ATEVA_ENVIRONMENT_ID', 'local');
     const marker = await this.prisma.environmentMarker.findUnique({ where: { id: 1 } });
 
     if (!marker) {

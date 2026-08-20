@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { Prisma, UserRole, UserStatus } from '@waitlayer/db';
+import { Prisma, UserRole, UserStatus } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';

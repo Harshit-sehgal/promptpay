@@ -22,7 +22,7 @@ run() {
   "$@"
 }
 
-run pnpm --filter @waitlayer/db run generate
+run pnpm --filter @ateva/db run generate
 run pnpm typecheck
 run pnpm lint
 run pnpm test
@@ -34,12 +34,12 @@ if [ "${DOCKER_BUILD:-0}" = "1" ]; then
   else
     echo ""
     echo "==> docker build (api + web)"
-    docker build -t waitlayer-api --target api \
+    docker build -t ateva-api --target api \
       --build-arg JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
       --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}" \
       --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" \
       .
-    docker build -t waitlayer-web --target web \
+    docker build -t ateva-web --target web \
       --build-arg JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" \
       --build-arg NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:4002/api/v1}" \
       --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID="${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}" \

@@ -50,7 +50,7 @@ export class EmailQueueService {
     } else {
       // Dev/test deterministic fallback so local tests pass without env churn.
       this.encryptionKey = createHash('sha256')
-        .update('waitlayer-dev-email-queue-secret-32-bytes-min')
+        .update('ateva-dev-email-queue-secret-32-bytes-min')
         .digest();
     }
   }

@@ -10,7 +10,7 @@ Conventions:
   `migrate deploy` / `db push` against production without the staging gate
   (P1.23).
 - `curl` examples assume an admin `Authorization: Bearer <ADMIN_JWT>` header.
-  Replace `<APP>` with the API base URL (e.g. `https://api.waitlayer.com`).
+  Replace `<APP>` with the API base URL (e.g. `https://api.ateva.com`).
 - Runtime kill-switches use `POST /admin/runtime-config/:key` with
   `{ "enabled": false }`. The `:key` value MUST match a key in the
   `RuntimeConfigKey` enum (`packages/shared/src/enums.ts` / the
@@ -221,10 +221,10 @@ campaign (diff = 0).
 # 1. Take a fresh backup of the current (broken) state for forensics
 pg_dump "$DATABASE_URL" > "forensics-$(date -u +%Y%m%dT%H%M%SZ).sql"
 # 2. Restore the last known-good dump into a temp DB and smoke-test it
-createdb waitlayer_restore
+createdb ateva_restore
 psql "$RESTORE_URL" -f "good-<TIMESTAMP>.sql"
 # 3. Repoint the app at the restored DB (env: DATABASE_URL) and migrate
-pnpm --filter @waitlayer/db exec prisma migrate deploy
+pnpm --filter @ateva/db exec prisma migrate deploy
 # 4. Boot the app, run GET /health/ready, then shift traffic.
 ```
 
@@ -247,10 +247,10 @@ pnpm --filter @waitlayer/db exec prisma migrate deploy
 # Identify last-good image digest / git SHA
 git log --oneline -10
 # Redeploy previous image (Docker / k8s / your orchestrator)
-kubectl rollout undo deployment/waitlayer-api   # or pin the previous tag
+kubectl rollout undo deployment/ateva-api   # or pin the previous tag
 ```
 
-For the **web/BFF**, redeploy the prior `@waitlayer/web` image.
+For the **web/BFF**, redeploy the prior `@ateva/web` image.
 
 **Verification:** `GET /health/ready` (api) and `GET /` (web) respond;
 `/observability/metrics` error rate returns to baseline.
@@ -269,11 +269,11 @@ For the **web/BFF**, redeploy the prior `@waitlayer/web` image.
 
 ```bash
 # Check applied state
-pnpm --filter @waitlayer/db exec prisma migrate status
+pnpm --filter @ateva/db exec prisma migrate status
 # If a migration is marked failed but the schema change actually landed:
-pnpm --filter @waitlayer/db exec prisma migrate resolve --applied <migration_name>
+pnpm --filter @ateva/db exec prisma migrate resolve --applied <migration_name>
 # If it did NOT land, re-run deploy (idempotent for NOT VALID / safe DDL):
-pnpm --filter @waitlayer/db exec prisma migrate deploy
+pnpm --filter @ateva/db exec prisma migrate deploy
 ```
 
 **Verification:** `prisma migrate status` → "all migrations applied";

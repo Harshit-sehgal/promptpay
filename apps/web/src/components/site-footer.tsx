@@ -49,7 +49,7 @@ export default function SiteFooter() {
                 />
               </svg>
               <span style={{ fontSize: '16px', fontWeight: 600, letterSpacing: '-.01em' }}>
-                WaitLayer
+                Ateva
               </span>
             </Link>
             <p
@@ -67,7 +67,7 @@ export default function SiteFooter() {
           <div>
             <div
               style={{
-                fontFamily: "'IBM Plex Mono', monospace",
+                fontFamily: 'var(--font-mono), ui-monospace, monospace',
                 fontSize: '11px',
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
@@ -134,7 +134,7 @@ export default function SiteFooter() {
           <div>
             <div
               style={{
-                fontFamily: "'IBM Plex Mono', monospace",
+                fontFamily: 'var(--font-mono), ui-monospace, monospace',
                 fontSize: '11px',
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
@@ -237,7 +237,7 @@ export default function SiteFooter() {
           <div>
             <div
               style={{
-                fontFamily: "'IBM Plex Mono', monospace",
+                fontFamily: 'var(--font-mono), ui-monospace, monospace',
                 fontSize: '11px',
                 letterSpacing: '.1em',
                 textTransform: 'uppercase',
@@ -299,7 +299,11 @@ export default function SiteFooter() {
           }}
         >
           <span
-            style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: '#6b6b6b' }}
+            style={{
+              fontFamily: 'var(--font-mono), ui-monospace, monospace',
+              fontSize: '12px',
+              color: '#6b6b6b',
+            }}
           >
             No code access. No prompt access. No terminal-output collection.
           </span>
@@ -307,7 +311,7 @@ export default function SiteFooter() {
             type="button"
             onClick={openCookieSettings}
             style={{
-              fontFamily: "'IBM Plex Mono', monospace",
+              fontFamily: 'var(--font-mono), ui-monospace, monospace',
               fontSize: '12px',
               color: '#555',
               background: 'none',
@@ -320,9 +324,13 @@ export default function SiteFooter() {
             Cookie Settings
           </button>
           <span
-            style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: '#6b6b6b' }}
+            style={{
+              fontFamily: 'var(--font-mono), ui-monospace, monospace',
+              fontSize: '12px',
+              color: '#6b6b6b',
+            }}
           >
-            © {new Date().getFullYear()} WaitLayer
+            © {new Date().getFullYear()} Ateva
           </span>
         </div>
       </div>

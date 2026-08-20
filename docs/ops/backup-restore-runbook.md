@@ -6,7 +6,7 @@
 
 ## 1. Objectives
 
-This runbook describes how to create, validate, and restore backups for the WaitLayer platform. Backups protect against operator error, application bugs, data corruption, and infrastructure failures.
+This runbook describes how to create, validate, and restore backups for the Ateva platform. Backups protect against operator error, application bugs, data corruption, and infrastructure failures.
 
 ## 2. What Must Be Backed Up
 
@@ -36,7 +36,7 @@ trap 'rm -rf "$BACKUP_DIR"' EXIT
 # The repository script sets umask 077, uses pipefail, and emits a manifest.
 scripts/backup-db.sh "$BACKUP_DIR"
 aws s3 cp "$BACKUP_DIR/$(find "$BACKUP_DIR" -maxdepth 1 -name '*.dump.gz' -printf '%f\n' | head -1)" \
-  s3://waitlayer-backups/postgres/
+  s3://ateva-backups/postgres/
 ```
 
 ### 3.2 Continuous WAL archiving (point-in-time recovery)
@@ -46,7 +46,7 @@ Ensure `postgresql.conf` contains:
 ```text
 wal_level = replica
 archive_mode = on
-archive_command = 'aws s3 cp %p s3://waitlayer-backups/postgres/wal/%f'
+archive_command = 'aws s3 cp %p s3://ateva-backups/postgres/wal/%f'
 ```
 
 ### 3.3 Restore from logical dump
@@ -54,23 +54,23 @@ archive_command = 'aws s3 cp %p s3://waitlayer-backups/postgres/wal/%f'
 1. Stop application traffic (scale web/API pods to 0 or enable maintenance mode).
 2. Create a fresh database:
    ```bash
-   createdb -h "$PGHOST" -U "$PGUSER" waitlayer_restored
+   createdb -h "$PGHOST" -U "$PGUSER" ateva_restored
    ```
 3. Download and restore the dump (an `s3://` URI is not a shell file path):
    ```bash
    aws s3 cp \
-     s3://waitlayer-backups/postgres/waitlayer-db-YYYYMMDD-HHMMSS.dump.gz \
-     ./waitlayer-restore.dump.gz
+     s3://ateva-backups/postgres/ateva-db-YYYYMMDD-HHMMSS.dump.gz \
+     ./ateva-restore.dump.gz
    scripts/restore-db.sh \
-     ./waitlayer-restore.dump.gz \
-     "postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/waitlayer_restored" \
+     ./ateva-restore.dump.gz \
+     "postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/ateva_restored" \
      --apply-migrations
    ```
 4. Verify every durable Prisma model and the ledger invariant against a
    quiesced source (or a source snapshot taken at the same backup boundary):
    ```bash
    SOURCE_DATABASE_URL="$SOURCE_DATABASE_URL" \
-   RESTORED_DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/waitlayer_restored" \
+   RESTORED_DATABASE_URL="postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/ateva_restored" \
      node scripts/verify-backup.mjs
    ```
 5. Verify application health checks.
@@ -83,7 +83,7 @@ archive_command = 'aws s3 cp %p s3://waitlayer-backups/postgres/wal/%f'
 ```bash
 redis-cli BGSAVE
 # Copy the resulting dump.rdb to durable storage.
-aws s3 cp /var/lib/redis/dump.rdb s3://waitlayer-backups/redis/dump-$(date -u +%Y%m%d-%H%M%S).rdb
+aws s3 cp /var/lib/redis/dump.rdb s3://ateva-backups/redis/dump-$(date -u +%Y%m%d-%H%M%S).rdb
 ```
 
 ### 4.2 Restore Redis
@@ -107,7 +107,7 @@ If creative assets or export files are stored in S3 / GCS / R2:
 At least once a month:
 
 1. Restore the latest Postgres dump to a sandbox database.
-2. Run `pnpm --filter @waitlayer/db migrate deploy`.
+2. Run `pnpm --filter @ateva/db migrate deploy`.
 3. Run `node scripts/verify-backup.mjs` with `SOURCE_DATABASE_URL` and
    `RESTORED_DATABASE_URL`; it compares every durable Prisma model and the
    financial invariant.

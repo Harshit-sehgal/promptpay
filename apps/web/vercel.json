@@ -1,7 +1,7 @@
 {
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm --filter waitlayer-web build",
+  "buildCommand": "cd ../.. && pnpm --filter ateva-web build",
   "git": {
     "deploymentEnabled": {
       "main": true

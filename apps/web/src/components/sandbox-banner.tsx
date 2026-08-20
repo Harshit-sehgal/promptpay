@@ -13,14 +13,18 @@ type SandboxBannerProps = {
 };
 
 export default function SandboxBanner({ environmentKind }: SandboxBannerProps = {}) {
-  const localKind = environmentKind ?? process.env.NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND;
-  const [serverKind, setServerKind] = useState<string | null>(environmentKind ? environmentKind : null);
+  const localKind = environmentKind ?? process.env.NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND;
+  const [serverKind, setServerKind] = useState<string | null>(
+    environmentKind ? environmentKind : null,
+  );
 
   useEffect(() => {
     if (environmentKind !== undefined) return;
     let active = true;
     void fetch('/api/platform-health', { cache: 'no-store' })
-      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('health unavailable'))))
+      .then((response) =>
+        response.ok ? response.json() : Promise.reject(new Error('health unavailable')),
+      )
       .then((health: { environmentKind?: string }) => {
         if (active) setServerKind(health.environmentKind ?? null);
       })

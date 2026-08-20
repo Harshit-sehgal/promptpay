@@ -17,12 +17,12 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { BidType, depositMinimumMinor, Money } from '@waitlayer/shared';
+import { BidType, depositMinimumMinor, Money } from '@ateva/shared';
 
 import { toBigIntOrOriginal } from '../../common/transforms/bigint.transform';
 import { IsBigInt, MinBigInt } from '../../common/validators/bigint.validators';
 
-// Single source of truth: @waitlayer/shared CURRENCY_POLICY. Keep aligned to
+// Single source of truth: @ateva/shared CURRENCY_POLICY. Keep aligned to
 // the shared policy table — otherwise a deposit could be requested for a
 // currency the platform doesn't support, and Stripe would silently reject.
 const DEPOSIT_CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud', 'inr', 'jpy', 'brl'] as const;
@@ -159,7 +159,7 @@ export class CreateCountryTargetingDto {
 /** Deposit-session body was previously unvalidated raw `{ amountMinor, currency }`
  *  — a zero/negative/float amount could reach Stripe's unit_amount.
  *  This DTO enforces the global integer floor; the per-currency minimum
- *  (see `depositMinimumMinor()` in @waitlayer/shared) is re-checked in the
+ *  (see `depositMinimumMinor()` in @ateva/shared) is re-checked in the
  *  controller/service once the currency is normalized, where the dynamic
  *  policy value can be read safely. class-validator's `@Min` takes a static
  *  number, not a per-field-value callback. */

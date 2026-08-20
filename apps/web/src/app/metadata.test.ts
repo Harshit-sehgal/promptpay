@@ -11,7 +11,7 @@ const APP_DIR = resolve(__dirname);
  * Client Components, and a Client Component cannot export `metadata`, so each
  * one silently inherited the root layout's marketing string — every tab, every
  * bookmark and every shared link read
- * "WaitLayer — private beta for AI wait-state verification".
+ * "Ateva — private beta for AI wait-state verification".
  *
  * A title comes from the page itself or from any `layout.tsx` between it and
  * the app root. This walks that chain the way Next.js does, so the check

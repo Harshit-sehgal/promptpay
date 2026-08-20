@@ -76,7 +76,7 @@ function execFileAsync(
 
 /**
  * Build a Prisma CLI runner. Tries `prisma` directly (global install in the
- * Docker runtime image, on PATH) and then `pnpm --filter @waitlayer/db exec
+ * Docker runtime image, on PATH) and then `pnpm --filter @ateva/db exec
  * prisma` (local dev + CI). The first strategy that launches wins; non-zero
  * exits are surfaced as `{ code }` rather than thrown, so callers decide how to
  * react. `cwd` is set to the db package directory so Prisma finds
@@ -85,7 +85,7 @@ function execFileAsync(
 export function createPrismaCli(cwd: string = resolveDbPackageDir()): PrismaCli {
   const strategies: Array<() => { cmd: string; args: string[] }> = [
     () => ({ cmd: 'prisma', args: [] }),
-    () => ({ cmd: 'pnpm', args: ['--filter', '@waitlayer/db', 'exec', 'prisma'] }),
+    () => ({ cmd: 'pnpm', args: ['--filter', '@ateva/db', 'exec', 'prisma'] }),
   ];
 
   return {
@@ -101,7 +101,7 @@ export function createPrismaCli(cwd: string = resolveDbPackageDir()): PrismaCli 
         }
       }
       throw new Error(
-        '[migration-validation] Could not locate the Prisma CLI (tried `prisma` on PATH and `pnpm --filter @waitlayer/db exec prisma`).',
+        '[migration-validation] Could not locate the Prisma CLI (tried `prisma` on PATH and `pnpm --filter @ateva/db exec prisma`).',
         { cause: lastErr },
       );
     },

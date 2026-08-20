@@ -18,10 +18,10 @@ import { createTestUser, deleteTestUser, loginAs, makeTestUser, TestUser } from 
  * callback still requires live credentials (see docs/ops/remaining-open-items.md).
  *
  * Required stack (same as smoke.spec.ts):
- *   pnpm --filter waitlayer-web build && pnpm --filter waitlayer-web start
- *   pnpm --filter waitlayer-api build && node apps/api/dist/apps/api/src/main.js
+ *   pnpm --filter ateva-web build && pnpm --filter ateva-web start
+ *   pnpm --filter ateva-api build && node apps/api/dist/apps/api/src/main.js
  *
- * Run with: pnpm --filter waitlayer-web e2e
+ * Run with: pnpm --filter ateva-web e2e
  */
 
 const user: TestUser = makeTestUser('developer');

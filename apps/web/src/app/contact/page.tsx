@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Contact & Support — WaitLayer',
+  title: 'Contact & Support — Ateva',
   description:
-    'Get help with your WaitLayer account, payouts, campaigns, or trust score. Reach the support team or browse policy pages.',
+    'Get help with your Ateva account, payouts, campaigns, or trust score. Reach the support team or browse policy pages.',
 };
 
 export default function ContactPage() {
@@ -16,7 +16,7 @@ export default function ContactPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link
@@ -51,10 +51,10 @@ export default function ContactPage() {
                 For account, payout, and campaign questions.
               </p>
               <a
-                href="mailto:support@waitlayer.com"
+                href="mailto:support@ateva.com"
                 className="text-brand-700 font-medium text-sm hover:underline"
               >
-                support@waitlayer.com
+                support@ateva.com
               </a>
             </div>
             <div className="bg-white border border-surface-200/80 rounded-2xl p-7">
@@ -63,10 +63,10 @@ export default function ContactPage() {
                 Report vulnerabilities or abuse responsibly.
               </p>
               <a
-                href="mailto:security@waitlayer.com"
+                href="mailto:security@ateva.com"
                 className="text-brand-700 font-medium text-sm hover:underline"
               >
-                security@waitlayer.com
+                security@ateva.com
               </a>
             </div>
             <div className="bg-white border border-surface-200/80 rounded-2xl p-7">
@@ -77,10 +77,10 @@ export default function ContactPage() {
                 Questions about trust scores or hold periods.
               </p>
               <a
-                href="mailto:trust@waitlayer.com"
+                href="mailto:trust@ateva.com"
                 className="text-brand-700 font-medium text-sm hover:underline"
               >
-                trust@waitlayer.com
+                trust@ateva.com
               </a>
             </div>
           </div>
@@ -129,7 +129,7 @@ export default function ContactPage() {
 
           <p className="text-surface-400 text-xs mt-8 leading-relaxed">
             Response times are typically within two business days. Never share your password or
-            two-factor codes with anyone — WaitLayer support will never ask for them.
+            two-factor codes with anyone — Ateva support will never ask for them.
           </p>
         </div>
       </main>

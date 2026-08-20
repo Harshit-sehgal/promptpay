@@ -7,7 +7,7 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { adminApi } from '@/lib/api/services';
 import { bigintRatioPercent, formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 
-import { CURRENCY_POLICY } from '@waitlayer/shared';
+import { CURRENCY_POLICY } from '@ateva/shared';
 
 // ── Types ──
 

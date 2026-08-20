@@ -4,7 +4,7 @@ import {
   applyPayoutProviderOverrides,
   PAYOUT_PROVIDERS,
   payoutProviderLaunchStatus,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 const base = PAYOUT_PROVIDERS;
 

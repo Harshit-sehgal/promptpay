@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-import { FraudFlagStatus } from '@waitlayer/db';
+import { FraudFlagStatus } from '@ateva/db';
 
 /** Fraud-review states that remain active until an operator resolves the flag. */
 export const ACTIVE_FRAUD_FLAG_STATUSES: FraudFlagStatus[] = [

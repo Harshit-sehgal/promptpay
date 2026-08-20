@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ArgumentsHost, HttpStatus } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { PrismaExceptionFilter } from './prisma-exception.filter';
 

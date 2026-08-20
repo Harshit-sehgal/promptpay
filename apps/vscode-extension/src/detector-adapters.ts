@@ -16,7 +16,7 @@ import type { WaitSignal } from './wait-detector';
  * Codex, Cline, and Aider do not expose runtime lifecycle events to this VS
  * Code extension, so a tool name here reflects a user-reported or inferred
  * wait cause, never a confirmed "this tool is actively generating" signal.
- * The `waitlayer.triggerManualWait` command is the honest user-facing path
+ * The `ateva.triggerManualWait` command is the honest user-facing path
  * for reporting a wait.
  */
 export interface DetectorAdapter {

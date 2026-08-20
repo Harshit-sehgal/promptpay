@@ -1,6 +1,6 @@
 # Wait-attestation launch gate
 
-WaitLayer must not enable `wait.earnings` until this gate is satisfied. Device
+Ateva must not enable `wait.earnings` until this gate is satisfied. Device
 HMACs, client telemetry, local CLI supervision, and VS Code lifecycle events
 are useful beta signals, but a user can modify a client that holds its device
 secret. They are not independent financial proof.
@@ -8,20 +8,20 @@ secret. They are not independent financial proof.
 ## Required trust boundary
 
 The billable assertion must come from a provider or service whose signing key
-is not available to the WaitLayer client. The API verifies the assertion using
+is not available to the Ateva client. The API verifies the assertion using
 an allowlisted issuer/key set or a server-to-server authenticated callback. A
 client may transport the assertion, but must never be able to create or alter
 it.
 
 An accepted assertion must bind all of the following:
 
-- the WaitLayer user and registered device (use stable opaque identifiers or
+- the Ateva user and registered device (use stable opaque identifiers or
   hashes, never terminal contents);
 - a server-issued, single-use wait-session nonce;
 - provider/tool identity and attestation version;
 - a provider event id that is unique and durable;
 - start/end timestamps and a bounded measured duration;
-- the expected WaitLayer audience/environment; and
+- the expected Ateva audience/environment; and
 - the provider's signature/key id, issuer, expiry, and not-before claims.
 
 The API rejects an assertion if its issuer, audience, signature, key, nonce,
@@ -53,7 +53,7 @@ attestation-provider version merely because it has more client telemetry.
 
 ### Local protocol simulator
 
-`@waitlayer/wait-attestation-bridge/simulator` exposes the test-only
+`@ateva/wait-attestation-bridge/simulator` exposes the test-only
 `TrustedAttestationSimulator`. It generates an in-memory RS256 issuer and
 opaque protocol assertions for valid, malformed, expired, replayed, misbound,
 future-timestamp, invalid-duration, unknown-key, and bad-signature cases.

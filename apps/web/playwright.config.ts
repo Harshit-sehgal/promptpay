@@ -4,15 +4,15 @@ import path from 'path';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for WaitLayer browser E2E tests.
+ * Playwright configuration for Ateva browser E2E tests.
  *
  * Tests run against the built web app (next start) on port 3000.
  * The API must be running on port 4002 for API-dependent tests.
  *
  * Usage:
- *   pnpm --filter waitlayer-web build
- *   pnpm --filter waitlayer-web start &
- *   pnpm --filter waitlayer-web e2e
+ *   pnpm --filter ateva-web build
+ *   pnpm --filter ateva-web start &
+ *   pnpm --filter ateva-web e2e
  */
 
 /**

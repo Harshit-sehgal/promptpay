@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
-import type { Prisma } from '@waitlayer/db';
+import type { Prisma } from '@ateva/db';
 
 import { AuditService } from '../../audit/audit.service';
 import { PrismaService } from '../../config/prisma.service';

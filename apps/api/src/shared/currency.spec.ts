@@ -10,8 +10,8 @@ import {
   minorUnitExponent,
   payoutMinimumMinor,
   primaryCurrency,
-} from '@waitlayer/shared';
-import { PayoutProvider } from '@waitlayer/shared';
+} from '@ateva/shared';
+import { PayoutProvider } from '@ateva/shared';
 
 describe('currency policy table', () => {
   it('treats USD as 2-decimal with a 1000 minor payout floor', () => {

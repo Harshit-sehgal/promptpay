@@ -19,7 +19,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 
-import { depositMinimumMinor } from '@waitlayer/shared';
+import { depositMinimumMinor } from '@ateva/shared';
 
 import { AdvertiserContext, AuthenticatedPrincipal } from '../common/auth/principal';
 import { CurrentUser, Roles } from '../common/decorators';

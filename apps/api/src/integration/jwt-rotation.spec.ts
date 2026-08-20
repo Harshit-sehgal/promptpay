@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from '../auth/__fixtures__/test-keys';
@@ -58,7 +58,7 @@ async function buildApp() {
 async function login(app: INestApplication) {
   const res = await request(app.getHttpServer())
     .post('/api/v1/auth/login')
-    .send({ email: 'rotation@waitlayer.com', password: 'Password123!' })
+    .send({ email: 'rotation@ateva.com', password: 'Password123!' })
     .expect(200);
   return res.body.accessToken as string;
 }
@@ -92,7 +92,7 @@ describe('JWT key rotation end-to-end', () => {
     const passwordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'rotation@waitlayer.com',
+        email: 'rotation@ateva.com',
         passwordHash,
         name: 'Rotation User',
         role: UserRole.DEVELOPER,

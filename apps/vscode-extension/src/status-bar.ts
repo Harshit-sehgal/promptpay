@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { formatMinorUnits } from '@waitlayer/shared';
+import { formatMinorUnits } from '@ateva/shared';
 
 export class StatusBar {
   private bar?: vscode.StatusBarItem;
@@ -24,9 +24,9 @@ export class StatusBar {
   showEnvironmentMismatch(clientKind: string, serverKind: string): void {
     this.environmentMismatch = true;
     if (!this.bar) return;
-    this.bar.text = '$(warning) WaitLayer: ENVIRONMENT MISMATCH';
+    this.bar.text = '$(warning) Ateva: ENVIRONMENT MISMATCH';
     this.bar.tooltip = `Environment mismatch: client=${clientKind}, server=${serverKind}. Check the API URL and environment setting.`;
-    this.bar.command = 'waitlayer.openDashboard';
+    this.bar.command = 'ateva.openDashboard';
   }
 
   showRewardsUnavailable() {
@@ -34,14 +34,14 @@ export class StatusBar {
       this.bar.text = this.environmentMismatch
         ? this.mismatchLabel()
         : this.sandbox
-        ? '$(info) WaitLayer [SANDBOX]: test credits only'
-        : '$(info) WaitLayer: rewards unavailable';
+          ? '$(info) Ateva [SANDBOX]: test credits only'
+          : '$(info) Ateva: rewards unavailable';
       this.bar.tooltip = this.environmentMismatch
         ? 'Environment mismatch: check the API URL and environment setting.'
         : this.sandbox
           ? 'Sandbox: test credits only; no cash value.'
           : 'Wait detected. Rewards are not enabled in this launch mode.';
-      this.bar.command = 'waitlayer.showEarnings';
+      this.bar.command = 'ateva.showEarnings';
     }
   }
 
@@ -58,8 +58,8 @@ export class StatusBar {
     this.bar.text = this.environmentMismatch ? this.mismatchLabel() : this.label('idle');
     this.bar.tooltip = this.sandbox
       ? 'Sandbox: test credits only; no cash value. Click for details.'
-      : 'WaitLayer click to view earnings';
-    this.bar.command = 'waitlayer.showEarnings';
+      : 'Ateva click to view earnings';
+    this.bar.command = 'ateva.showEarnings';
   }
 
   /**
@@ -72,28 +72,30 @@ export class StatusBar {
       this.bar.text = this.environmentMismatch
         ? this.mismatchLabel()
         : this.sandbox
-        ? `$(zap) WaitLayer [SANDBOX]: ${formatMinorUnits(amountMinor, currency)}`
-        : `$(zap) WaitLayer: ${formatMinorUnits(amountMinor, currency)}`;
+          ? `$(zap) Ateva [SANDBOX]: ${formatMinorUnits(amountMinor, currency)}`
+          : `$(zap) Ateva: ${formatMinorUnits(amountMinor, currency)}`;
       this.bar.tooltip = this.sandbox
         ? `Sandbox test credits only; no cash value. Click for balance details.`
         : `Click for balance details`;
-      this.bar.command = 'waitlayer.showEarnings';
+      this.bar.command = 'ateva.showEarnings';
     }
   }
 
   setLoggedOut() {
     if (this.bar) {
       this.bar.text = this.environmentMismatch ? this.mismatchLabel() : this.label('logged out');
-      this.bar.tooltip = this.sandbox ? 'Sandbox environment — log in for test credits.' : 'Log in to WaitLayer';
-      this.bar.command = 'waitlayer.login';
+      this.bar.tooltip = this.sandbox
+        ? 'Sandbox environment — log in for test credits.'
+        : 'Log in to Ateva';
+      this.bar.command = 'ateva.login';
     }
   }
 
   private label(state: string): string {
-    return this.sandbox ? `$(zap) WaitLayer [SANDBOX]: ${state}` : `$(zap) WaitLayer: ${state}`;
+    return this.sandbox ? `$(zap) Ateva [SANDBOX]: ${state}` : `$(zap) Ateva: ${state}`;
   }
 
   private mismatchLabel(): string {
-    return '$(warning) WaitLayer: ENVIRONMENT MISMATCH';
+    return '$(warning) Ateva: ENVIRONMENT MISMATCH';
   }
 }

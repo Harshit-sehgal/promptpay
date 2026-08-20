@@ -48,7 +48,7 @@ export interface WaitStateEvent {
   shadow?: boolean;
   /**
    * When true the wait was reported manually by the user (P1 #12:
-   * `waitlayer.triggerManualWait`). Manual waits are ALWAYS shadow waits —
+   * `ateva.triggerManualWait`). Manual waits are ALWAYS shadow waits —
    * they are a diagnostics / shadow-mode feedback channel and must never
    * become billable automatically.
    */
@@ -405,7 +405,7 @@ export class WaitStateDetector {
         l(signal);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`[WaitLayer] Detector signal listener error: ${msg}`);
+        console.warn(`[Ateva] Detector signal listener error: ${msg}`);
         /* never let a listener disrupt detector */
       }
     }
@@ -418,7 +418,7 @@ export class WaitStateDetector {
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
 
-        console.warn(`[WaitLayer] Detector listener error: ${msg}`);
+        console.warn(`[Ateva] Detector listener error: ${msg}`);
         /* never let a listener disrupt detector */
       }
     }

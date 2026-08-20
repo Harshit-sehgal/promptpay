@@ -1,7 +1,7 @@
 # ADR 0002: Three-Ledger Double-Entry Accounting
 
 - **Status:** Accepted (2026)
-- **Deciders:** WaitLayer engineering
+- **Deciders:** Ateva engineering
 
 ## Context
 

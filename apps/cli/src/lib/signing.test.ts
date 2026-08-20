@@ -4,7 +4,7 @@ import { signPayload } from './signing';
 
 // The CLI re-implements HMAC request signing locally in `signing.ts` as a
 // deliberate duplicate of `packages/shared/src/signing.ts`. The CLI package does
-// NOT depend on `@waitlayer/shared` (intentional — see apps/cli/package.json),
+// NOT depend on `@ateva/shared` (intentional — see apps/cli/package.json),
 // so we cannot import the shared signer here. Instead we lock the CLI signer to
 // an independently computed, known-good HMAC-SHA256 value for a fixed payload +
 // secret. If the two implementations ever diverge, this assertion fails.

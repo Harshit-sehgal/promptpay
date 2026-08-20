@@ -4,10 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 
-import {
-  agentLifecycleEventSchema,
-  type AgentLifecycleEventV1,
-} from '@waitlayer/agent-protocol';
+import { agentLifecycleEventSchema, type AgentLifecycleEventV1 } from '@ateva/agent-protocol';
 
 const MAX_LINE_BYTES = 256 * 1024;
 const AUTH_TIMEOUT_MS = 2_000;
@@ -66,7 +63,7 @@ export class AgentBridgeClient implements vscode.Disposable {
     let secret: string;
     try {
       secret = (await fs.promises.readFile(this.secretPath, 'utf8')).trim();
-      if (secret.length < 32) throw new Error('WaitLayer bridge secret is invalid');
+      if (secret.length < 32) throw new Error('Ateva bridge secret is invalid');
     } catch {
       this.scheduleReconnect();
       return;
@@ -82,7 +79,7 @@ export class AgentBridgeClient implements vscode.Disposable {
     this.buffer = '';
     let settled = false;
     const authTimer = setTimeout(() => {
-      if (!settled) socket.destroy(new Error('WaitLayer bridge subscription timed out'));
+      if (!settled) socket.destroy(new Error('Ateva bridge subscription timed out'));
     }, AUTH_TIMEOUT_MS);
 
     socket.setEncoding('utf8');
@@ -117,7 +114,7 @@ export class AgentBridgeClient implements vscode.Disposable {
   private readChunk(chunk: string): void {
     this.buffer += chunk;
     if (Buffer.byteLength(this.buffer, 'utf8') > MAX_LINE_BYTES) {
-      this.socket?.destroy(new Error('WaitLayer bridge message is too large'));
+      this.socket?.destroy(new Error('Ateva bridge message is too large'));
       return;
     }
 
@@ -136,16 +133,16 @@ export class AgentBridgeClient implements vscode.Disposable {
     try {
       raw = JSON.parse(line);
     } catch {
-      this.socket?.destroy(new Error('WaitLayer bridge sent invalid JSON'));
+      this.socket?.destroy(new Error('Ateva bridge sent invalid JSON'));
       return;
     }
     if (!isRecord(raw) || (raw.type !== 'subscribed' && raw.type !== 'agent_event')) {
-      this.socket?.destroy(new Error('WaitLayer bridge sent an unknown message'));
+      this.socket?.destroy(new Error('Ateva bridge sent an unknown message'));
       return;
     }
     if (raw.type === 'subscribed') {
       if (raw.protocolVersion !== 1) {
-        this.socket?.destroy(new Error('WaitLayer bridge protocol version is unsupported'));
+        this.socket?.destroy(new Error('Ateva bridge protocol version is unsupported'));
         return;
       }
       this.authenticated = true;
@@ -153,7 +150,7 @@ export class AgentBridgeClient implements vscode.Disposable {
       return;
     }
     if (!this.authenticated) {
-      this.socket?.destroy(new Error('WaitLayer bridge sent an event before authentication'));
+      this.socket?.destroy(new Error('Ateva bridge sent an event before authentication'));
       return;
     }
     const parsed = agentLifecycleEventSchema.safeParse(raw.event);
@@ -187,12 +184,12 @@ export function getDefaultBridgePaths(
 ): { socketPath: string; secretPath: string } {
   const directory =
     process.platform === 'win32' && env.APPDATA
-      ? path.join(env.APPDATA, 'WaitLayer')
-      : path.join(env.XDG_CONFIG_HOME ?? path.join(homeDirectory, '.config'), 'waitlayer');
+      ? path.join(env.APPDATA, 'Ateva')
+      : path.join(env.XDG_CONFIG_HOME ?? path.join(homeDirectory, '.config'), 'ateva');
   return {
     socketPath:
       process.platform === 'win32'
-        ? '\\\\.\\pipe\\waitlayer-bridge-events'
+        ? '\\\\.\\pipe\\ateva-bridge-events'
         : path.join(directory, 'bridge-events.sock'),
     secretPath: path.join(directory, 'bridge.secret'),
   };

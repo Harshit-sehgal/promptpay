@@ -11,8 +11,8 @@ import { ActionStepUpGuard } from './action-step-up.guard';
 function guard(env: Record<string, string | undefined> = {}): ActionStepUpGuard {
   return new ActionStepUpGuard({
     get: (key: string, fallback?: unknown) => {
-      if (key === 'JWT_ISSUER') return 'waitlayer';
-      if (key === 'JWT_AUDIENCE') return 'waitlayer-client';
+      if (key === 'JWT_ISSUER') return 'ateva';
+      if (key === 'JWT_AUDIENCE') return 'ateva-client';
       if (key === 'JWT_PUBLIC_KEY') return env.JWT_PUBLIC_KEY ?? TEST_JWT_PUBLIC_KEY;
       if (key === 'JWT_PUBLIC_KEYS') return env.JWT_PUBLIC_KEYS;
       return fallback;
@@ -37,7 +37,7 @@ async function makeToken(
     signOptions: { algorithm: 'RS256', expiresIn, keyid: deriveKeyId(signingKey.publicKey) },
   });
   return jwt.signAsync(
-    { sub, action, aud: ['waitlayer-client', 'step-up'], iss: 'waitlayer' },
+    { sub, action, aud: ['ateva-client', 'step-up'], iss: 'ateva' },
     { expiresIn },
   );
 }

@@ -5,7 +5,7 @@ import {
   EvidenceSignalType,
   evidenceToWaitSignal,
   isPrimaryEvidenceType,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 // ── Wait-detection confidence scoring ──
 //

@@ -1,4 +1,4 @@
-import { LedgerStatus, primaryCurrency } from '@waitlayer/shared';
+import { LedgerStatus, primaryCurrency } from '@ateva/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { PLATFORM_BUCKETS } from './ledger.constants';

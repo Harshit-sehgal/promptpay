@@ -8,7 +8,7 @@
 #
 # This runs the SAME suite against an API configured the way a deployment
 # configures it:
-#   - NODE_ENV=production + WAITLAYER_ENVIRONMENT_KIND=production
+#   - NODE_ENV=production + ATEVA_ENVIRONMENT_KIND=production
 #   - PEMs in the single-line `\n`-escaped form (--env-file/Compose format)
 #   - a stamped environment marker, full production config schema
 #   - mock Google auth OFF, Swagger closed, MFA step-up active
@@ -26,17 +26,17 @@ cd "$(dirname "$0")/.."
 
 API_PORT="${E2E_PROD_API_PORT:-4108}"
 WEB_PORT="${E2E_PROD_WEB_PORT:-3100}"
-DB="${E2E_PROD_DATABASE_URL:-postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public}"
+DB="${E2E_PROD_DATABASE_URL:-postgresql://ateva:ateva-test@localhost:5433/ateva_test?schema=public}"
 REDIS_DB="${E2E_PROD_REDIS_DB:-12}"
 # Build the workspace packages BEFORE anything that loads them. The scripts
 # below (`read-environment-marker`, `bootstrap-environment-marker`) require
-# `@waitlayer/db`, whose package `main` is `./dist/index.js` — a file that only
+# `@ateva/db`, whose package `main` is `./dist/index.js` — a file that only
 # exists after `tsc`. `pnpm --filter <pkg> build` does NOT build dependencies,
 # so on a clean checkout every one of those scripts died with MODULE_NOT_FOUND
 # and the harness reported it as "marker mismatch". It never reproduced locally
 # because a previous `pnpm build` had left `dist/` lying around.
 echo "→ building workspace packages"
-pnpm --filter "@waitlayer/db..." build > /dev/null
+pnpm --filter "@ateva/db..." build > /dev/null
 
 # Adopt the existing environment-marker id (see production-boot-smoke.sh): both
 # local production harnesses share this scratch DB, and a fixed id made
@@ -72,15 +72,15 @@ esac
 
 cat > "$WORK/api.env" <<ENVEOF
 NODE_ENV=production
-WAITLAYER_ENVIRONMENT_KIND=production
-WAITLAYER_ENVIRONMENT_ID=${ENV_ID}
+ATEVA_ENVIRONMENT_KIND=production
+ATEVA_ENVIRONMENT_ID=${ENV_ID}
 DATABASE_URL=${DB}
 REDIS_URL=redis://localhost:6379/${REDIS_DB}
 API_PORT=${API_PORT}
-API_BASE_URL=https://api.waitlayer.test
-WEB_BASE_URL=https://www.waitlayer.test
-JWT_ISSUER=waitlayer
-JWT_AUDIENCE=waitlayer-client
+API_BASE_URL=https://api.ateva.test
+WEB_BASE_URL=https://www.ateva.test
+JWT_ISSUER=ateva
+JWT_AUDIENCE=ateva-client
 JWT_PRIVATE_KEY=${PRIV}
 JWT_PUBLIC_KEY=${PUB}
 JWT_SECRET=${JWT_SECRET_VALUE}
@@ -97,9 +97,9 @@ ALLOWED_COUNTRIES=US,GB
 ALLOWED_CURRENCIES=USD,GBP
 COOKIE_SECURE=true
 EMAIL_DRIVER=resend
-EMAIL_FROM=noreply@waitlayer.test
+EMAIL_FROM=noreply@ateva.test
 RESEND_API_KEY=re_e2e_placeholder_never_sends
-OPS_ALERT_EMAIL=ops@waitlayer.test
+OPS_ALERT_EMAIL=ops@ateva.test
 THROTTLE_AUTH_SHORT_LIMIT=200
 THROTTLE_AUTH_LONG_LIMIT=500
 THROTTLE_EXTENSION_LIMIT=600
@@ -121,7 +121,7 @@ spawn(cmd[0], cmd.slice(1), { env, cwd, stdio: 'inherit' }).on('exit', (c) => pr
 SPAWNEOF
 
 echo "→ building API"
-pnpm --filter "waitlayer-api..." build > /dev/null
+pnpm --filter "ateva-api..." build > /dev/null
 
 # The web middleware and client bundle inline JWT_PUBLIC_KEY and NEXT_PUBLIC_*
 # at BUILD time (A-083) — runtime env does not reach them. The web must
@@ -129,14 +129,14 @@ pnpm --filter "waitlayer-api..." build > /dev/null
 echo "→ building web against this run's public key (build-time inlining)"
 JWT_PUBLIC_KEY="$PUB" \
 JWT_SECRET="$JWT_SECRET_VALUE" \
-JWT_ISSUER=waitlayer JWT_AUDIENCE=waitlayer-client \
+JWT_ISSUER=ateva JWT_AUDIENCE=ateva-client \
 NEXT_PUBLIC_API_URL="http://localhost:${API_PORT}/api/v1" \
 NEXT_PUBLIC_ALLOW_MOCK_AUTH=false \
-  pnpm --filter "waitlayer-web..." build > /dev/null
+  pnpm --filter "ateva-web..." build > /dev/null
 
 echo "→ cold-start: migrate → stamp marker"
 (cd packages/db && DATABASE_URL="$DB" pnpm exec prisma migrate deploy > /dev/null)
-DATABASE_URL="$DB" WAITLAYER_ENVIRONMENT_KIND=production WAITLAYER_ENVIRONMENT_ID=${ENV_ID} \
+DATABASE_URL="$DB" ATEVA_ENVIRONMENT_KIND=production ATEVA_ENVIRONMENT_ID=${ENV_ID} \
   node scripts/bootstrap-environment-marker.mjs --confirm-stamp || {
   echo "marker mismatch — the test DB is claimed by another environment id."
   echo "Reset it or set E2E_PROD_DATABASE_URL to a dedicated database."; exit 1; }
@@ -154,9 +154,9 @@ fi
 
 echo "→ booting web (production) on :$WEB_PORT"
 (cd apps/web && NODE_ENV=production \
-  WAITLAYER_REQUIRE_DEPLOY_ENV=1 \
+  ATEVA_REQUIRE_DEPLOY_ENV=1 \
   JWT_SECRET="$JWT_SECRET_VALUE" \
-  JWT_PUBLIC_KEY="$PUB" JWT_ISSUER=waitlayer JWT_AUDIENCE=waitlayer-client \
+  JWT_PUBLIC_KEY="$PUB" JWT_ISSUER=ateva JWT_AUDIENCE=ateva-client \
   NEXT_PUBLIC_API_URL="http://localhost:${API_PORT}/api/v1" \
   API_INTERNAL_URL="http://localhost:${API_PORT}/api/v1" \
   BFF_TRUST_PROXY_HOPS=1 \

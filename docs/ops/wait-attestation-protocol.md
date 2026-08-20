@@ -1,6 +1,6 @@
 # Wait-attestation protocol
 
-This document defines the protocol boundary used by WaitLayer before an
+This document defines the protocol boundary used by Ateva before an
 independent wait assertion can contribute to settlement. It is a protocol
 contract, not evidence that an independent provider is operating. Until the
 launch gate in `wait-attestation-launch-gate.md` is complete,
@@ -35,7 +35,7 @@ The payload contains only minimized protocol metadata:
 
 | Claim                 | Requirement                                                              |
 | --------------------- | ------------------------------------------------------------------------ |
-| `sub`                 | WaitLayer user identifier; must match the authenticated consumer.        |
+| `sub`                 | Ateva user identifier; must match the authenticated consumer.            |
 | `device_id`           | Registered device identifier; must belong to `sub`.                      |
 | `nonce`               | Raw server-issued session nonce; the database stores only its digest.    |
 | `session_id`          | Opaque client operation/session identifier.                              |
@@ -47,7 +47,7 @@ The payload contains only minimized protocol metadata:
 | `ended_at_ms`         | Provider-observed operation end in milliseconds.                         |
 | `duration_ms`         | Positive measured duration; must equal end minus start within tolerance. |
 | `iss`                 | Allowlisted issuer URL.                                                  |
-| `aud`                 | Expected WaitLayer audience.                                             |
+| `aud`                 | Expected Ateva audience.                                                 |
 | `iat`                 | JWT issue time.                                                          |
 | `nbf`                 | Not-before time.                                                         |
 | `exp`                 | Expiration time.                                                         |
@@ -115,7 +115,7 @@ must never be promoted as independent issuers.
 
 ## Test support
 
-`@waitlayer/wait-attestation-bridge/simulator` generates valid and adversarial
+`@ateva/wait-attestation-bridge/simulator` generates valid and adversarial
 protocol fixtures in memory. It covers malformed, expired, replayed,
 misbound, future-timestamp, invalid-duration, unknown-key, and bad-signature
 cases. It proves verifier behavior only; it does not prove provider

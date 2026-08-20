@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { CURRENT_CONSENT_VERSIONS, SIGNUP_CONSENT_PURPOSES } from '../compliance/consent-versions';
@@ -104,7 +104,7 @@ export class AuthEmailTrait {
     // the private key and verifiable with the public key. This closes the
     // security gap where a shared JWT_SECRET compromise could forge email-
     // verification tokens.
-    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
+    const issuer = this.config.get<string>('JWT_ISSUER', 'ateva');
     const token = await this.jwt.signAsync(
       {
         sub: user.id,
@@ -142,7 +142,7 @@ export class AuthEmailTrait {
       // Verify with RS256 using the public key (asymmetric verification).
       payload = await this.jwt.verifyAsync(token, {
         algorithms: ['RS256'],
-        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
+        issuer: this.config.get<string>('JWT_ISSUER', 'ateva'),
         audience: 'email-verification',
       });
     } catch {

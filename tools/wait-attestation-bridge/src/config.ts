@@ -39,9 +39,9 @@ export function loadConfig(): BridgeConfig {
 
   return {
     port: Number.parseInt(getEnv('PORT', '4003'), 10),
-    provider: getEnv('ATTESTATION_PROVIDER', 'waitlayer-stub-bridge'),
-    issuer: getEnv('ISSUER', 'https://waitlayer.local/attestation'),
-    audience: getEnv('AUDIENCE', 'waitlayer-client'),
+    provider: getEnv('ATTESTATION_PROVIDER', 'ateva-stub-bridge'),
+    issuer: getEnv('ISSUER', 'https://ateva.local/attestation'),
+    audience: getEnv('AUDIENCE', 'ateva-client'),
     attestationVersion: getEnv('ATTESTATION_VERSION', 'stub-v1'),
     bridgeToken,
     privateKeyPath: join(process.cwd(), privateKeyPath),

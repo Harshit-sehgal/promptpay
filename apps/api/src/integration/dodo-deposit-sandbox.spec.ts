@@ -24,7 +24,7 @@ import { DodoProvider } from '../payout/providers/dodo.provider';
  *   DODO_BASE_URL=https://test.dodopayments.com \
  *   DODO_WEBHOOK_SECRET=<test webhook secret> \
  *   DODO_PRODUCT_ID=<wallet-top-up product id> \
- *   pnpm --filter waitlayer-api exec vitest run src/integration/dodo-deposit-sandbox.spec.ts
+ *   pnpm --filter ateva-api exec vitest run src/integration/dodo-deposit-sandbox.spec.ts
  */
 const sandboxConfigured = Boolean(
   process.env.RUN_DODO_SANDBOX === '1' &&

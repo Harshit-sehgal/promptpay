@@ -80,7 +80,7 @@ async function getJwtPublicKeys(): Promise<CryptoKey[]> {
   if (pems.length === 0) {
     if (process.env.NODE_ENV === 'production') {
       console.error(
-        '[waitlayer] JWT_PUBLIC_KEY/JWT_PUBLIC_KEYS are missing in the web middleware. ' +
+        '[ateva] JWT_PUBLIC_KEY/JWT_PUBLIC_KEYS are missing in the web middleware. ' +
           'Verification keys must be present at build time (Edge runtime inlines env vars). ' +
           'All protected routes will fail closed.',
       );
@@ -95,7 +95,7 @@ async function getJwtPublicKeys(): Promise<CryptoKey[]> {
         try {
           return await importSPKI(pem, 'RS256');
         } catch (err) {
-          console.error('[waitlayer] JWT verification key is invalid SPKI/PEM:', err);
+          console.error('[ateva] JWT verification key is invalid SPKI/PEM:', err);
           return null;
         }
       }),
@@ -164,8 +164,8 @@ export async function middleware(request: NextRequest) {
     try {
       const { payload, protectedHeader } = await verifyJwtWithConfiguredKeys(refreshCookie.value, {
         algorithms: ['RS256'],
-        issuer: process.env.JWT_ISSUER || 'waitlayer',
-        audience: process.env.JWT_AUDIENCE || 'waitlayer-client',
+        issuer: process.env.JWT_ISSUER || 'ateva',
+        audience: process.env.JWT_AUDIENCE || 'ateva-client',
         clockTolerance: '30s',
       });
       if (protectedHeader.typ !== 'JWT' || !protectedHeader.kid) {
@@ -197,8 +197,8 @@ export async function middleware(request: NextRequest) {
     // not bounce users. If no configured key verifies, fail closed.
     const { payload, protectedHeader } = await verifyJwtWithConfiguredKeys(token, {
       algorithms: ['RS256'],
-      issuer: process.env.JWT_ISSUER || 'waitlayer',
-      audience: process.env.JWT_AUDIENCE || 'waitlayer-client',
+      issuer: process.env.JWT_ISSUER || 'ateva',
+      audience: process.env.JWT_AUDIENCE || 'ateva-client',
       clockTolerance: '30s',
     });
     if (protectedHeader.typ !== 'JWT' || !protectedHeader.kid) {

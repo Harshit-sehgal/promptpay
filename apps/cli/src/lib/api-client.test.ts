@@ -57,7 +57,7 @@ describe('ApiClient transport policy', () => {
     );
     const payload = request.mock.calls[0]?.[2] as { fingerprintHash: string };
     const expectedFingerprint = createHash('sha256')
-      .update('waitlayer-installation:d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b')
+      .update('ateva-installation:d7c4d9c5-4b73-4f98-9f33-54d6f8f0132b')
       .digest('hex');
     expect(payload.fingerprintHash).toBe(expectedFingerprint);
   });
@@ -111,7 +111,7 @@ describe('ApiClient transport policy', () => {
 
   it('sends the agent protocol version header for lifecycle batches', async () => {
     const server = http.createServer((request, response) => {
-      expect(request.headers['x-waitlayer-agent-protocol-version']).toBe('1');
+      expect(request.headers['x-ateva-agent-protocol-version']).toBe('1');
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end('{}');
     });
@@ -119,13 +119,15 @@ describe('ApiClient transport policy', () => {
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Test server did not bind');
     try {
-      const rawRequest = (new ApiClient(creds) as unknown as {
-        raw<T>(
-          method: 'GET' | 'POST' | 'PATCH',
-          path: string,
-          body?: Record<string, unknown>,
-        ): Promise<T>;
-      }).raw;
+      const rawRequest = (
+        new ApiClient(creds) as unknown as {
+          raw<T>(
+            method: 'GET' | 'POST' | 'PATCH',
+            path: string,
+            body?: Record<string, unknown>,
+          ): Promise<T>;
+        }
+      ).raw;
       await expect(
         rawRequest.call(
           new ApiClient(creds),
@@ -135,7 +137,9 @@ describe('ApiClient transport policy', () => {
         ),
       ).resolves.toEqual({});
     } finally {
-      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     }
   });
 
@@ -153,30 +157,30 @@ describe('ApiClient transport policy', () => {
 });
 
 describe('resolveApiBaseUrl (A-013)', () => {
-  const base = { WAITLAYER_API_URL: undefined, NODE_ENV: undefined };
+  const base = { ATEVA_API_URL: undefined, NODE_ENV: undefined };
 
   it('defaults to the production origin for a packaged install', () => {
-    expect(resolveApiBaseUrl({ ...base })).toBe('https://api.waitlayer.com/api/v1');
+    expect(resolveApiBaseUrl({ ...base })).toBe('https://api.ateva.com/api/v1');
   });
 
-  it('honours an explicit WAITLAYER_API_URL override (local dev)', () => {
-    expect(resolveApiBaseUrl({ ...base, WAITLAYER_API_URL: 'http://localhost:4002/api/v1' })).toBe(
+  it('honours an explicit ATEVA_API_URL override (local dev)', () => {
+    expect(resolveApiBaseUrl({ ...base, ATEVA_API_URL: 'http://localhost:4002/api/v1' })).toBe(
       'http://localhost:4002/api/v1',
     );
   });
 
   it('uses the production origin when NODE_ENV=production', () => {
     expect(resolveApiBaseUrl({ ...base, NODE_ENV: 'production' })).toBe(
-      'https://api.waitlayer.com/api/v1',
+      'https://api.ateva.com/api/v1',
     );
   });
 
-  it('prefers WAITLAYER_API_URL even when NODE_ENV=production', () => {
+  it('prefers ATEVA_API_URL even when NODE_ENV=production', () => {
     expect(
       resolveApiBaseUrl({
         ...base,
         NODE_ENV: 'production',
-        WAITLAYER_API_URL: 'http://localhost:4002/api/v1',
+        ATEVA_API_URL: 'http://localhost:4002/api/v1',
       }),
     ).toBe('http://localhost:4002/api/v1');
   });

@@ -14,8 +14,8 @@ import type { Metadata } from 'next';
  * title and have it suffixed consistently.
  */
 export const metadata: Metadata = {
-  title: { template: '%s · WaitLayer', default: 'Advertiser · WaitLayer' },
-  description: 'Campaigns, billing and reporting for your WaitLayer advertiser account.',
+  title: { template: '%s · Ateva', default: 'Advertiser · Ateva' },
+  description: 'Campaigns, billing and reporting for your Ateva advertiser account.',
   // Defence in depth alongside robots.ts — an authenticated surface.
   robots: { index: false, follow: false },
 };
@@ -39,7 +39,7 @@ export default function AdvertiserLayout({ children }: { children: React.ReactNo
       <StepUpProvider>
         <div className="dark min-h-screen bg-ink-900 flex flex-col lg:flex-row">
           <Sidebar
-            brand="WaitLayer"
+            brand="Ateva"
             brandLetter="W"
             brandColor="bg-brand-500"
             navItems={ADVERTISER_NAV}

@@ -1,8 +1,8 @@
 {
-  "name": "waitlayer-vscode",
-  "displayName": "WaitLayer",
+  "name": "ateva-vscode",
+  "displayName": "Ateva",
   "version": "0.0.1",
-  "publisher": "waitlayer",
+  "publisher": "ateva",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
@@ -17,123 +17,123 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:waitlayer.login",
-    "onCommand:waitlayer.logout",
-    "onCommand:waitlayer.showEarnings",
-    "onCommand:waitlayer.toggleAds",
-    "onCommand:waitlayer.toggleWaitTelemetry",
-    "onCommand:waitlayer.openDashboard",
-    "onCommand:waitlayer.reportFalseWait",
-    "onCommand:waitlayer.showExperimentAssignment",
-    "onCommand:waitlayer.toggleDetectorSource",
-    "onCommand:waitlayer.triggerManualWait"
+    "onCommand:ateva.login",
+    "onCommand:ateva.logout",
+    "onCommand:ateva.showEarnings",
+    "onCommand:ateva.toggleAds",
+    "onCommand:ateva.toggleWaitTelemetry",
+    "onCommand:ateva.openDashboard",
+    "onCommand:ateva.reportFalseWait",
+    "onCommand:ateva.showExperimentAssignment",
+    "onCommand:ateva.toggleDetectorSource",
+    "onCommand:ateva.triggerManualWait"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "waitlayer.login",
-        "title": "WaitLayer: Login"
+        "command": "ateva.login",
+        "title": "Ateva: Login"
       },
       {
-        "command": "waitlayer.logout",
-        "title": "WaitLayer: Logout"
+        "command": "ateva.logout",
+        "title": "Ateva: Logout"
       },
       {
-        "command": "waitlayer.showEarnings",
-        "title": "WaitLayer: Show Earnings"
+        "command": "ateva.showEarnings",
+        "title": "Ateva: Show Earnings"
       },
       {
-        "command": "waitlayer.toggleAds",
-        "title": "WaitLayer: Toggle Ads"
+        "command": "ateva.toggleAds",
+        "title": "Ateva: Toggle Ads"
       },
       {
-        "command": "waitlayer.toggleWaitTelemetry",
-        "title": "WaitLayer: Toggle Wait Telemetry"
+        "command": "ateva.toggleWaitTelemetry",
+        "title": "Ateva: Toggle Wait Telemetry"
       },
       {
-        "command": "waitlayer.openDashboard",
-        "title": "WaitLayer: Open Dashboard"
+        "command": "ateva.openDashboard",
+        "title": "Ateva: Open Dashboard"
       },
       {
-        "command": "waitlayer.reportFalseWait",
-        "title": "WaitLayer: Report false wait detection"
+        "command": "ateva.reportFalseWait",
+        "title": "Ateva: Report false wait detection"
       },
       {
-        "command": "waitlayer.showExperimentAssignment",
-        "title": "WaitLayer: Show detector experiment assignment"
+        "command": "ateva.showExperimentAssignment",
+        "title": "Ateva: Show detector experiment assignment"
       },
       {
-        "command": "waitlayer.toggleDetectorSource",
-        "title": "WaitLayer: Toggle detector source"
+        "command": "ateva.toggleDetectorSource",
+        "title": "Ateva: Toggle detector source"
       },
       {
-        "command": "waitlayer.triggerManualWait",
-        "title": "WaitLayer: Report a wait (manual detection)"
+        "command": "ateva.triggerManualWait",
+        "title": "Ateva: Report a wait (manual detection)"
       }
     ],
     "configuration": {
-      "title": "WaitLayer",
+      "title": "Ateva",
       "properties": {
-        "waitlayer.adsEnabled": {
+        "ateva.adsEnabled": {
           "type": "boolean",
           "default": false,
           "description": "Show ads during opted-in AI wait telemetry"
         },
-        "waitlayer.waitTelemetryEnabled": {
+        "ateva.waitTelemetryEnabled": {
           "type": "boolean",
           "default": false,
-          "description": "Send detected AI wait-state telemetry to WaitLayer. Disabled by default; enable only after reviewing the privacy notice."
+          "description": "Send detected AI wait-state telemetry to Ateva. Disabled by default; enable only after reviewing the privacy notice."
         },
-        "waitlayer.attestationProvider": {
+        "ateva.attestationProvider": {
           "type": "string",
           "default": "",
           "description": "Independent wait-attestation provider identifier. Required only for earning-enabled waits.",
           "scope": "machine"
         },
-        "waitlayer.attestationProviderUrl": {
+        "ateva.attestationProviderUrl": {
           "type": "string",
           "default": "",
           "description": "HTTPS endpoint for the independently operated wait-attestation provider.",
           "scope": "machine"
         },
-        "waitlayer.maxAdsPerHour": {
+        "ateva.maxAdsPerHour": {
           "type": "number",
           "default": 6,
           "minimum": 1,
           "maximum": 30,
           "description": "Maximum ads shown per hour"
         },
-        "waitlayer.inactivityTimeoutMs": {
+        "ateva.inactivityTimeoutMs": {
           "type": "number",
           "default": 15000,
           "minimum": 3000,
           "maximum": 120000,
           "description": "Milliseconds of inactivity before detecting a wait state"
         },
-        "waitlayer.quietMode.enabled": {
+        "ateva.quietMode.enabled": {
           "type": "boolean",
           "default": false,
           "description": "Enable quiet hours \u2014 no ads shown during specified times"
         },
-        "waitlayer.quietMode.start": {
+        "ateva.quietMode.start": {
           "type": "string",
           "default": "22:00",
           "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
           "description": "Quiet hours start time (HH:MM, 24h)"
         },
-        "waitlayer.quietMode.end": {
+        "ateva.quietMode.end": {
           "type": "string",
           "default": "08:00",
           "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$",
           "description": "Quiet hours end time (HH:MM, 24h)"
         },
-        "waitlayer.apiUrl": {
+        "ateva.apiUrl": {
           "type": "string",
-          "default": "https://api.waitlayer.com/api/v1",
-          "description": "WaitLayer API base URL",
+          "default": "https://api.ateva.com/api/v1",
+          "description": "Ateva API base URL",
           "scope": "machine"
         },
-        "waitlayer.environmentKind": {
+        "ateva.environmentKind": {
           "type": "string",
           "enum": [
             "development",
@@ -146,19 +146,19 @@
           "description": "Deployment environment label. Sandbox shows a persistent test-credits marker.",
           "scope": "machine"
         },
-        "waitlayer.preferredDisplayCurrency": {
+        "ateva.preferredDisplayCurrency": {
           "type": "string",
           "default": "",
           "description": "Preferred display currency for earnings (e.g. USD, EUR, JPY). Empty uses the derived primary currency. Only used when present in your balance; otherwise the primary currency is shown with a note."
         },
-        "waitlayer.detectorRolloutPercent": {
+        "ateva.detectorRolloutPercent": {
           "type": "number",
           "default": 100,
           "minimum": 0,
           "maximum": 100,
           "description": "Staged rollout percentage (0-100) for detector experiments. Default 100 enrolls everyone."
         },
-        "waitlayer.disabledDetectorSources": {
+        "ateva.disabledDetectorSources": {
           "type": "array",
           "items": {
             "type": "string"
@@ -166,7 +166,7 @@
           "default": [],
           "description": "Detector signal sources to disable (e.g. inactivity, terminal, task, editor_idle)."
         },
-        "waitlayer.falsePositiveSuppressionMinutes": {
+        "ateva.falsePositiveSuppressionMinutes": {
           "type": "number",
           "default": 30,
           "minimum": 0,
@@ -177,7 +177,7 @@
     },
     "keybindings": [
       {
-        "command": "waitlayer.reportFalseWait",
+        "command": "ateva.reportFalseWait",
         "key": "ctrl+alt+f",
         "mac": "cmd+alt+f",
         "when": "editorTextFocus"
@@ -186,7 +186,7 @@
   },
   "scripts": {
     "vscode:prepublish": "pnpm run bundle",
-    "bundle": "pnpm --filter @waitlayer/shared build && node ./scripts/build.mjs && node ./scripts/verify-bundle.cjs",
+    "bundle": "pnpm --filter @ateva/shared build && node ./scripts/build.mjs && node ./scripts/verify-bundle.cjs",
     "compile": "tsc -p ./tsconfig.json",
     "watch": "tsc -watch -p ./tsconfig.json",
     "lint": "eslint src/ test/",
@@ -194,16 +194,16 @@
     "build": "pnpm run bundle",
     "test": "vitest run",
     "package:vsix": "node ./scripts/package-vsix.mjs",
-    "publish:vsix": "node ./scripts/package-vsix.mjs /tmp/waitlayer-vscode.vsix && vsce publish --packagePath /tmp/waitlayer-vscode.vsix"
+    "publish:vsix": "node ./scripts/package-vsix.mjs /tmp/ateva-vscode.vsix && vsce publish --packagePath /tmp/ateva-vscode.vsix"
   },
   "main": "./out/extension.js",
   "devDependencies": {
-    "@waitlayer/agent-protocol": "workspace:*",
+    "@ateva/agent-protocol": "workspace:*",
     "@types/node": "^26.1.2",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.9.2",
-    "@waitlayer/eslint-config": "workspace:*",
-    "@waitlayer/shared": "workspace:*",
+    "@ateva/eslint-config": "workspace:*",
+    "@ateva/shared": "workspace:*",
     "esbuild": "^0.28.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
@@ -211,12 +211,12 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Ads, telemetry and API access are disabled in an untrusted workspace: this extension holds a WaitLayer access token and sends it to a configurable API origin, so an untrusted folder must not be able to influence where it connects.",
+      "description": "Ads, telemetry and API access are disabled in an untrusted workspace: this extension holds a Ateva access token and sends it to a configurable API origin, so an untrusted folder must not be able to influence where it connects.",
       "restrictedConfigurations": [
-        "waitlayer.apiUrl",
-        "waitlayer.attestationProvider",
-        "waitlayer.attestationProviderUrl",
-        "waitlayer.environmentKind"
+        "ateva.apiUrl",
+        "ateva.attestationProvider",
+        "ateva.attestationProviderUrl",
+        "ateva.environmentKind"
       ]
     }
   }

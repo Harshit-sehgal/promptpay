@@ -4,8 +4,8 @@ import { BadRequestException, Logger, UnauthorizedException } from '@nestjs/comm
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
-import { Prisma } from '@waitlayer/db';
-import { buildOtpAuthUrl, generateTotpSecret, verifyTotp } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { buildOtpAuthUrl, generateTotpSecret, verifyTotp } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
@@ -272,7 +272,7 @@ export class AuthTotpTrait {
 
   hashBackupCode(code: string): string {
     return createHmac('sha256', this.totpEncryptionKey)
-      .update(`waitlayer-2fa-backup-v1:${code.trim().toUpperCase()}`)
+      .update(`ateva-2fa-backup-v1:${code.trim().toUpperCase()}`)
       .digest('hex');
   }
 
@@ -392,8 +392,8 @@ export class AuthTotpTrait {
       throw new UnauthorizedException('Invalid two-factor authentication code');
     }
 
-    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
-    const audience = this.config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
+    const issuer = this.config.get<string>('JWT_ISSUER', 'ateva');
+    const audience = this.config.get<string>('JWT_AUDIENCE', 'ateva-client');
     const stepUpToken = await this.jwt.signAsync(
       { sub: userId, action, aud: [audience, 'step-up'], iss: issuer },
       { expiresIn: '5m' },

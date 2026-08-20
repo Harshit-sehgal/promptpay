@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { DETECTOR_VERSION, signEvidence } from '@waitlayer/shared';
+import { DETECTOR_VERSION, signEvidence } from '@ateva/shared';
 
 import { AlertsService } from '../observability/alerts.service';
 import { MetricsService } from '../observability/metrics.service';
@@ -62,7 +62,9 @@ describe('ExtensionWaitTrait.flagFalsePositive', () => {
       adImpression: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn() },
       ...overrides,
     };
-    (prisma as any).$transaction = vi.fn((callback: (tx: typeof prisma) => unknown) => callback(prisma));
+    (prisma as any).$transaction = vi.fn((callback: (tx: typeof prisma) => unknown) =>
+      callback(prisma),
+    );
     const trait = new ExtensionWaitTrait();
     (trait as unknown as { prisma: typeof prisma }).prisma = prisma as never;
     return { prisma, trait };
@@ -432,7 +434,7 @@ describe('ExtensionWaitTrait.recordWaitStateStart — evidence verification (P0)
     prisma.waitStateEvent.findUnique.mockResolvedValue(null);
 
     const item = signedEvidence('ai_generation');
-    item.adapterId = 'malicious.adapter';  // Not in KNOWN_ADAPTERS or KNOWN_ADAPTER_PREFIXES
+    item.adapterId = 'malicious.adapter'; // Not in KNOWN_ADAPTERS or KNOWN_ADAPTER_PREFIXES
     item.signature = signEvidence(item, secret);
 
     await expect(

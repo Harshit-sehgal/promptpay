@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../auth/_lib/cookies', () => ({
-  apiBaseUrl: () => 'https://api.waitlayer.test/api/v1',
+  apiBaseUrl: () => 'https://api.ateva.test/api/v1',
 }));
 
 import { GET } from './route';
@@ -29,7 +29,7 @@ describe('GET /api/platform-health', () => {
     const response = await GET();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.waitlayer.test/api/v1/health',
+      'https://api.ateva.test/api/v1/health',
       expect.objectContaining({ cache: 'no-store' }),
     );
     expect(response.status).toBe(200);

@@ -2,7 +2,7 @@
 // database, or nothing when all are fail-closed.
 //
 // The production boot smoke asserts every switch is disabled — a real
-// deployment gate. But its default target is the SHARED `waitlayer_test`
+// deployment gate. But its default target is the SHARED `ateva_test`
 // database, and the integration suites deliberately enable these switches in
 // their `beforeAll`. Running the smoke straight after the integration suite
 // therefore reported a "money switch unexpectedly ENABLED" failure for a
@@ -11,7 +11,7 @@
 import { createRequire } from 'node:module';
 
 const require = createRequire(process.cwd() + '/apps/api/package.json');
-const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
 
 const prisma = new PrismaClient({ adapter: createPrismaAdapter(process.env.DATABASE_URL) });
 try {

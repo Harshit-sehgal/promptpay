@@ -35,10 +35,10 @@ interface DeviceSummary {
 // truth. Flip `CLIENTS_PUBLISHED` when publish-vscode.yml / publish-cli.yml
 // have actually shipped an artifact.
 const CLIENTS_PUBLISHED = false;
-const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=waitlayer.waitlayer';
-const CLI_INSTALL = 'npm install -g waitlayer-cli';
-const CLI_LOGIN = 'waitlayer login';
-const CLI_RUN = 'waitlayer run -- <your AI command>';
+const MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=ateva.ateva';
+const CLI_INSTALL = 'npm install -g ateva-cli';
+const CLI_LOGIN = 'ateva login';
+const CLI_RUN = 'ateva run -- <your AI command>';
 
 function CodeLine({ children }: { children: string }) {
   const [copied, setCopied] = useState(false);
@@ -120,7 +120,7 @@ export function DeveloperGetStarted() {
         Get started — connect a client
       </h2>
       <p className="mt-1 text-sm leading-6 text-surface-600">
-        Your account is ready, but nothing is reporting yet. WaitLayer detects AI wait states from a
+        Your account is ready, but nothing is reporting yet. Ateva detects AI wait states from a
         client running on your machine — install one below, sign in, and this dashboard will start
         showing verified activity.
       </p>
@@ -143,8 +143,8 @@ export function DeveloperGetStarted() {
           ) : (
             <p className="mt-3 rounded-lg bg-surface-100 px-3 py-2 text-xs leading-5 text-surface-600">
               Not yet published to the Marketplace. Build it locally with{' '}
-              <code className="text-[11px]">pnpm --filter waitlayer-vscode package</code> and
-              install the resulting <code className="text-[11px]">.vsix</code> via{' '}
+              <code className="text-[11px]">pnpm --filter ateva-vscode package</code> and install
+              the resulting <code className="text-[11px]">.vsix</code> via{' '}
               <span className="whitespace-nowrap">Extensions → Install from VSIX…</span>
             </p>
           )}
@@ -161,7 +161,7 @@ export function DeveloperGetStarted() {
             ) : (
               <p className="rounded-lg bg-surface-100 px-3 py-2 text-xs leading-5 text-surface-600">
                 Not yet published to npm. Build locally with{' '}
-                <code className="text-[11px]">pnpm --filter waitlayer-cli build</code>.
+                <code className="text-[11px]">pnpm --filter ateva-cli build</code>.
               </p>
             )}
             <CodeLine>{CLI_LOGIN}</CodeLine>

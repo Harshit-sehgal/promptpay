@@ -27,7 +27,7 @@ permissions:
 concurrency:
   # The staging and production targets are shared across refs. A ref-scoped
   # lock would still let a main dispatch race a release-branch dispatch.
-  group: waitlayer-release
+  group: ateva-release
   cancel-in-progress: false
 
 jobs:
@@ -95,13 +95,13 @@ jobs:
       - name: Resolve isolated staging schema URL
         run: echo "DATABASE_URL=$(node scripts/staging-database.mjs url)" >> "$GITHUB_ENV"
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Apply migrations to staging
-        run: pnpm --filter @waitlayer/db migrate:deploy
+        run: pnpm --filter @ateva/db migrate:deploy
       - name: Assert no pending migrations
-        run: pnpm --filter @waitlayer/db migrate:status
+        run: pnpm --filter @ateva/db migrate:status
       - name: Assert migration-built schema has no drift
-        run: pnpm --filter @waitlayer/db migrate:drift
+        run: pnpm --filter @ateva/db migrate:drift
 
   # Boot/deploy the staging build and run the end-to-end smoke (deploy staging,
   # run migrations, create a test campaign, run extension->ledger flow, process
@@ -140,9 +140,9 @@ jobs:
       - name: Resolve isolated staging schema URL
         run: echo "DATABASE_URL=$(node scripts/staging-database.mjs url)" >> "$GITHUB_ENV"
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Build workspace packages
-        # Smoke test imports built @waitlayer/shared and @waitlayer/db packages,
+        # Smoke test imports built @ateva/shared and @ateva/db packages,
         # so they must be compiled before the script runs.
         run: pnpm run build
       - name: Validate staging deployment configuration
@@ -205,20 +205,20 @@ jobs:
           # verified at promotion. Restoring provenance/SBOM needs explicit
           # buildx flags (`docker buildx bake --provenance --sbom`); tracked as
           # a follow-up rather than left as a switch that pretends to work.
-          WAITLAYER_API_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-api:staging-${{ github.sha }}
-          WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:staging-${{ github.sha }}
+          ATEVA_API_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/ateva-api:staging-${{ github.sha }}
+          ATEVA_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/ateva-web:staging-${{ github.sha }}
           NEXT_PUBLIC_API_URL: ${{ secrets.STAGING_API_URL }}/api/v1
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.STAGING_GOOGLE_CLIENT_ID }}
           NEXT_PUBLIC_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
-          NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: staging
+          NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: staging
           NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'
       - name: Resolve pushed staging image digests
         id: staging-images
         env:
           REGISTRY: ${{ secrets.CONTAINER_REGISTRY }}
         run: |
-          API_IMG="$REGISTRY/waitlayer-api:staging-$GITHUB_SHA"
-          WEB_IMG="$REGISTRY/waitlayer-web:staging-$GITHUB_SHA"
+          API_IMG="$REGISTRY/ateva-api:staging-$GITHUB_SHA"
+          WEB_IMG="$REGISTRY/ateva-web:staging-$GITHUB_SHA"
           API_HASH=$(docker buildx imagetools inspect "$API_IMG" --format '{{.Manifest.Digest}}')
           WEB_HASH=$(docker buildx imagetools inspect "$WEB_IMG" --format '{{.Manifest.Digest}}')
           test -n "$API_HASH" || { echo "API image digest could not be resolved" >&2; exit 1; }
@@ -274,7 +274,7 @@ jobs:
           ATTESTATION_VERSIONS_B64=$(printf '%s' "$STAGING_WAIT_ATTESTATION_VERSIONS" | base64 -w0)
           DATABASE_URL_B64=$(printf '%s' "$DATABASE_URL" | base64 -w0)
           ssh "${SSH_OPTS[@]}" "$STAGING_USER@$STAGING_HOST" \
-            "set -e; cd '$STAGING_DEPLOY_PATH'; test -f .env.staging; export WAITLAYER_API_IMAGE='$API_DIGEST'; export WAITLAYER_WEB_IMAGE='$WEB_DIGEST'; export DATABASE_URL=\"\$(printf '%s' '$DATABASE_URL_B64' | base64 -d)\"; export DIRECT_URL=\"\$DATABASE_URL\"; export NODE_ENV=production; export WAITLAYER_ENVIRONMENT_KIND=staging; export WAITLAYER_ENVIRONMENT_ID='staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; export NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=staging; export NEXT_PUBLIC_ALLOW_MOCK_AUTH=false; export ALLOW_MOCK_GOOGLE=false; export MOCK_GOOGLE_ENABLED=0; export ENABLE_STAGING_FAUCET=true; export ALLOWED_COUNTRIES='$STAGING_ALLOWED_COUNTRIES'; export ALLOWED_CURRENCIES='$STAGING_ALLOWED_CURRENCIES'; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml up -d --wait"
+            "set -e; cd '$STAGING_DEPLOY_PATH'; test -f .env.staging; export ATEVA_API_IMAGE='$API_DIGEST'; export ATEVA_WEB_IMAGE='$WEB_DIGEST'; export DATABASE_URL=\"\$(printf '%s' '$DATABASE_URL_B64' | base64 -d)\"; export DIRECT_URL=\"\$DATABASE_URL\"; export NODE_ENV=production; export ATEVA_ENVIRONMENT_KIND=staging; export ATEVA_ENVIRONMENT_ID='staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT'; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=staging; export NEXT_PUBLIC_ALLOW_MOCK_AUTH=false; export ALLOW_MOCK_GOOGLE=false; export MOCK_GOOGLE_ENABLED=0; export ENABLE_STAGING_FAUCET=true; export ALLOWED_COUNTRIES='$STAGING_ALLOWED_COUNTRIES'; export ALLOWED_CURRENCIES='$STAGING_ALLOWED_CURRENCIES'; export WAIT_ATTESTATION_ISSUERS=\"\$(printf '%s' '$ATTESTATION_ISSUERS_B64' | base64 -d)\"; export VERIFIED_WAIT_ATTESTATION_VERSIONS=\"\$(printf '%s' '$ATTESTATION_VERSIONS_B64' | base64 -d)\"; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.staging -f docs/ops/docker-compose.images.example.yml up -d --wait"
       - name: Run staging smoke test against the deployed digest
         run: node scripts/staging-smoke.mjs
         env:
@@ -360,13 +360,13 @@ jobs:
             echo "PRODUCTION_DIRECT_URL is unset; migrations will fall back to PRODUCTION_DATABASE_URL."
           fi
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Apply migrations to production before deploy
-        run: pnpm --filter @waitlayer/db migrate:deploy
+        run: pnpm --filter @ateva/db migrate:deploy
       - name: Assert production has no pending migrations or drift
         run: |
-          pnpm --filter @waitlayer/db migrate:status
-          pnpm --filter @waitlayer/db migrate:drift
+          pnpm --filter @ateva/db migrate:status
+          pnpm --filter @ateva/db migrate:drift
 
   # Final approval gate before production. The API artifact is environment-
   # neutral and is promoted by the exact staging-tested digest. The Next.js web
@@ -380,7 +380,7 @@ jobs:
     environment: production
     env:
       # PRODUCTION_API_URL must include the /api/v1 prefix.
-      # Example: https://api.waitlayer.com/api/v1
+      # Example: https://api.ateva.com/api/v1
       PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
       PRODUCTION_WEB_URL: ${{ secrets.PRODUCTION_WEB_URL }}
     steps:
@@ -423,20 +423,20 @@ jobs:
           REGISTRY_PASS: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
           # See staging-smoke: compose-level attestations are unportable; the
           # digest is cosign-signed instead.
-          WAITLAYER_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/waitlayer-web:production-${{ github.sha }}
+          ATEVA_WEB_IMAGE: ${{ secrets.CONTAINER_REGISTRY }}/ateva-web:production-${{ github.sha }}
           JWT_PUBLIC_KEY: ${{ secrets.PRODUCTION_JWT_PUBLIC_KEY }}
           JWT_PUBLIC_KEYS: ${{ secrets.PRODUCTION_JWT_PUBLIC_KEYS }}
-          JWT_ISSUER: ${{ secrets.PRODUCTION_JWT_ISSUER || 'waitlayer' }}
-          JWT_AUDIENCE: ${{ secrets.PRODUCTION_JWT_AUDIENCE || 'waitlayer-client' }}
+          JWT_ISSUER: ${{ secrets.PRODUCTION_JWT_ISSUER || 'ateva' }}
+          JWT_AUDIENCE: ${{ secrets.PRODUCTION_JWT_AUDIENCE || 'ateva-client' }}
           NEXT_PUBLIC_API_URL: ${{ secrets.PRODUCTION_API_URL }}
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.PRODUCTION_GOOGLE_CLIENT_ID }}
           NEXT_PUBLIC_WEB_URL: ${{ secrets.PRODUCTION_WEB_URL }}
-          NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: production
+          NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: production
           NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'
           NEXT_PUBLIC_SENTRY_DSN: ${{ secrets.PRODUCTION_SENTRY_DSN }}
           NEXT_PUBLIC_SENTRY_ENVIRONMENT: production
         run: |
-          for required in REGISTRY REGISTRY_USER REGISTRY_PASS WAITLAYER_WEB_IMAGE JWT_PUBLIC_KEY NEXT_PUBLIC_API_URL NEXT_PUBLIC_GOOGLE_CLIENT_ID NEXT_PUBLIC_WEB_URL; do
+          for required in REGISTRY REGISTRY_USER REGISTRY_PASS ATEVA_WEB_IMAGE JWT_PUBLIC_KEY NEXT_PUBLIC_API_URL NEXT_PUBLIC_GOOGLE_CLIENT_ID NEXT_PUBLIC_WEB_URL; do
             if [ -z "${!required}" ]; then
               echo "$required is required to build the production web artifact" >&2
               exit 1
@@ -446,9 +446,9 @@ jobs:
 
           echo "$REGISTRY_PASS" | docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
           docker compose -f docker-compose.yml build --push web
-          WEB_HASH=$(docker buildx imagetools inspect "$WAITLAYER_WEB_IMAGE" --format '{{.Manifest.Digest}}')
+          WEB_HASH=$(docker buildx imagetools inspect "$ATEVA_WEB_IMAGE" --format '{{.Manifest.Digest}}')
           test -n "$WEB_HASH" || { echo "Production web digest could not be resolved" >&2; exit 1; }
-          PRODUCTION_WEB_DIGEST="${WAITLAYER_WEB_IMAGE%:*}@$WEB_HASH"
+          PRODUCTION_WEB_DIGEST="${ATEVA_WEB_IMAGE%:*}@$WEB_HASH"
           echo "digest=$PRODUCTION_WEB_DIGEST" >> "$GITHUB_OUTPUT"
           echo "Built production web image by digest: $PRODUCTION_WEB_DIGEST"
       - name: Sign and verify the production web digest
@@ -499,9 +499,9 @@ jobs:
             "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
 
           PREVIOUS_API_IMAGE=$(ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; cid=\$(WAITLAYER_API_IMAGE='$STAGING_API_DIGEST' WAITLAYER_WEB_IMAGE='$PRODUCTION_WEB_DIGEST' docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml ps -q api || true); if [ -n \"\$cid\" ]; then docker inspect --format '{{.Config.Image}}' \"\$cid\"; fi")
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; cid=\$(ATEVA_API_IMAGE='$STAGING_API_DIGEST' ATEVA_WEB_IMAGE='$PRODUCTION_WEB_DIGEST' docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml ps -q api || true); if [ -n \"\$cid\" ]; then docker inspect --format '{{.Config.Image}}' \"\$cid\"; fi")
           PREVIOUS_WEB_IMAGE=$(ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; cid=\$(WAITLAYER_API_IMAGE='$STAGING_API_DIGEST' WAITLAYER_WEB_IMAGE='$PRODUCTION_WEB_DIGEST' docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml ps -q web || true); if [ -n \"\$cid\" ]; then docker inspect --format '{{.Config.Image}}' \"\$cid\"; fi")
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; cid=\$(ATEVA_API_IMAGE='$STAGING_API_DIGEST' ATEVA_WEB_IMAGE='$PRODUCTION_WEB_DIGEST' docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml ps -q web || true); if [ -n \"\$cid\" ]; then docker inspect --format '{{.Config.Image}}' \"\$cid\"; fi")
 
           if [ "$INITIAL_PRODUCTION_DEPLOY" = "1" ]; then
             if [ -n "$PREVIOUS_API_IMAGE" ] || [ -n "$PREVIOUS_WEB_IMAGE" ]; then
@@ -519,7 +519,7 @@ jobs:
           echo "previous_api_image=$PREVIOUS_API_IMAGE" >> "$GITHUB_OUTPUT"
           echo "previous_web_image=$PREVIOUS_WEB_IMAGE" >> "$GITHUB_OUTPUT"
           ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export WAITLAYER_API_IMAGE='$STAGING_API_DIGEST'; export WAITLAYER_WEB_IMAGE='$PRODUCTION_WEB_DIGEST'; export WAITLAYER_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export ATEVA_API_IMAGE='$STAGING_API_DIGEST'; export ATEVA_WEB_IMAGE='$PRODUCTION_WEB_DIGEST'; export ATEVA_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
 
           echo "=== Production image promotion complete ==="
           echo "Commit: ${SHA:0:12}"
@@ -620,7 +620,7 @@ jobs:
           printf '%s\n' "$REGISTRY_PASS" | ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
             "docker login '$REGISTRY' -u '$REGISTRY_USER' --password-stdin"
           ssh "${SSH_OPTS[@]}" "$PROD_USER@$PROD_HOST" \
-            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export WAITLAYER_API_IMAGE='$PREVIOUS_API_IMAGE'; export WAITLAYER_WEB_IMAGE='$PREVIOUS_WEB_IMAGE'; export WAITLAYER_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
+            "set -e; cd '$PROD_DEPLOY_PATH'; test -f .env.production; export ATEVA_API_IMAGE='$PREVIOUS_API_IMAGE'; export ATEVA_WEB_IMAGE='$PREVIOUS_WEB_IMAGE'; export ATEVA_ENVIRONMENT_KIND=production; export NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=production; export ENABLE_STAGING_FAUCET=false; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml config --quiet; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml pull; docker compose --env-file .env.production -f docs/ops/docker-compose.images.example.yml up -d --wait"
           echo "Rollback completed with the captured predecessor images."
       - name: Record unavailable rollback for failed first deployment
         if: failure() && inputs.initial_production_deploy == true && steps.promote.outputs.rollback_available != 'true'

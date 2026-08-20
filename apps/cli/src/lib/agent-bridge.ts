@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 
-import { AgentLifecycleEventV1, canonicalAgentBatchPayload } from '@waitlayer/agent-protocol';
+import { AgentLifecycleEventV1, canonicalAgentBatchPayload } from '@ateva/agent-protocol';
 
 import {
   enqueueAgentEvent,
@@ -37,7 +37,7 @@ export function getOrCreateBridgeSecret(paths: SpoolPaths = getSpoolPaths()): st
   return withAgentSpoolLock(paths, () => {
     fs.mkdirSync(paths.directory, { recursive: true, mode: 0o700 });
     if (fs.existsSync(paths.bridgeDisabledFile)) {
-      throw new Error('WaitLayer bridge is disabled until the next successful login');
+      throw new Error('Ateva bridge is disabled until the next successful login');
     }
     try {
       const existing = fs.readFileSync(paths.bridgeSecretFile, 'utf8').trim();
@@ -58,7 +58,7 @@ export function getOrCreateBridgeSecret(paths: SpoolPaths = getSpoolPaths()): st
     } catch (error: unknown) {
       if (!isFileSystemError(error, 'EEXIST')) throw error;
       const winner = fs.readFileSync(paths.bridgeSecretFile, 'utf8').trim();
-      if (winner.length < 32) throw new Error('WaitLayer bridge secret is invalid');
+      if (winner.length < 32) throw new Error('Ateva bridge secret is invalid');
       return winner;
     }
   });
@@ -111,11 +111,11 @@ export async function startAgentBridge(options: {
   const upload = () => {
     try {
       if (fs.readFileSync(paths.bridgeSecretFile, 'utf8').trim() !== secret) {
-        throw new Error('WaitLayer bridge credentials were cleared; restart the bridge');
+        throw new Error('Ateva bridge credentials were cleared; restart the bridge');
       }
     } catch (error) {
       if (isFileSystemError(error, 'ENOENT')) {
-        throw new Error('WaitLayer bridge credentials were cleared; restart the bridge');
+        throw new Error('Ateva bridge credentials were cleared; restart the bridge');
       }
       throw error;
     }
@@ -357,21 +357,20 @@ async function sendIpcPayload(
       else resolve();
     };
     const timer = setTimeout(() => {
-      finish(new Error('WaitLayer local bridge timed out'));
+      finish(new Error('Ateva local bridge timed out'));
       socket.destroy();
     }, timeoutMs);
     socket.on('data', (chunk: Buffer) => {
       response += chunk.toString('utf8');
       if (response.includes('ok\n')) finish();
       if (response.includes('rejected\n')) {
-        finish(new Error('WaitLayer local bridge rejected the event'));
+        finish(new Error('Ateva local bridge rejected the event'));
       }
     });
     socket.once('connect', () => socket.end(payload));
     socket.once('error', (error) => finish(error));
     socket.once('close', () => {
-      if (!settled)
-        finish(new Error('WaitLayer local bridge closed before acknowledging the event'));
+      if (!settled) finish(new Error('Ateva local bridge closed before acknowledging the event'));
     });
   });
 }
@@ -408,7 +407,7 @@ async function removeStaleBridgeSocket(socketPath: string): Promise<void> {
       probe.once('connect', () => {
         clearTimeout(timer);
         probe.end();
-        reject(new Error('WaitLayer bridge is already running'));
+        reject(new Error('Ateva bridge is already running'));
       });
       probe.once('error', (error: NodeJS.ErrnoException) => {
         clearTimeout(timer);
@@ -424,7 +423,7 @@ async function removeStaleBridgeSocket(socketPath: string): Promise<void> {
       });
     });
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === 'WaitLayer bridge is already running') {
+    if (error instanceof Error && error.message === 'Ateva bridge is already running') {
       throw error;
     }
     if (

@@ -20,7 +20,7 @@ import {
   FALSE_POSITIVE_REASONS,
   FalsePositiveReason,
   ToolType,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 export class WaitSignalDto {
   @ApiProperty({

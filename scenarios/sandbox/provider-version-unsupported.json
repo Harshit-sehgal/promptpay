@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "fail_closed_operator",
   "environment": "sandbox",
-  "seed": "waitlayer-codex-unsupported-v1",
+  "seed": "ateva-codex-unsupported-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { CURRENCY_POLICY, formatMinorUnits, payoutMinimumMinor } from '@waitlayer/shared';
+import { CURRENCY_POLICY, formatMinorUnits, payoutMinimumMinor } from '@ateva/shared';
 
 export const metadata: Metadata = {
-  title: 'Payout Policy — WaitLayer',
+  title: 'Payout Policy — Ateva',
   description:
-    'WaitLayer planned participant compensation policy for the future independently attested rewards launch.',
+    'Ateva planned participant compensation policy for the future independently attested rewards launch.',
 };
 
 export default function PayoutPolicyPage() {
@@ -21,7 +21,7 @@ export default function PayoutPolicyPage() {
             <div className="w-7 h-7 rounded-md bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
         </div>
       </nav>
@@ -39,26 +39,32 @@ export default function PayoutPolicyPage() {
 
         <div className="prose prose-surface max-w-none">
           <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-4">1. Independent compensation</h2>
+            <h2 className="text-xl font-semibold text-surface-900 mb-4">
+              1. Independent compensation
+            </h2>
             <p className="text-surface-600 leading-relaxed mb-4">
-              If rewards launch, WaitLayer will define a participant compensation schedule for
-              verified eligible activity. The reward rate is independent from the price an
-              advertiser pays for a campaign and is accounted for as a WaitLayer operating cost,
-              not as a claim on a specific advertiser payment.
+              If rewards launch, Ateva will define a participant compensation schedule for verified
+              eligible activity. The reward rate is independent from the price an advertiser pays
+              for a campaign and is accounted for as a Ateva operating cost, not as a claim on a
+              specific advertiser payment.
             </p>
           </section>
 
           <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-4">2. Fiat-only payout rail</h2>
+            <h2 className="text-xl font-semibold text-surface-900 mb-4">
+              2. Fiat-only payout rail
+            </h2>
             <p className="text-surface-600 leading-relaxed mb-4">
               The initial rewards launch, if approved, will use fiat payouts only through a
-              separately approved payout provider. Dodo Payments is the advertiser money-in rail
-              and is not used to distribute participant rewards or split customer transactions.
+              separately approved payout provider. Dodo Payments is the advertiser money-in rail and
+              is not used to distribute participant rewards or split customer transactions.
             </p>
           </section>
 
           <section className="mb-10">
-            <h2 className="text-xl font-semibold text-surface-900 mb-4">3. Release and fraud review</h2>
+            <h2 className="text-xl font-semibold text-surface-900 mb-4">
+              3. Release and fraud review
+            </h2>
             <p className="text-surface-600 leading-relaxed mb-4">
               Eligible rewards can move through estimated, confirmed, held, and paid states. The
               current planned hold periods are 30 days for new accounts, 14 days for normal trust,
@@ -81,15 +87,18 @@ export default function PayoutPolicyPage() {
             <h2 className="text-xl font-semibold text-surface-900 mb-4">5. Separation of funds</h2>
             <p className="text-surface-600 leading-relaxed mb-4">
               Advertiser payment flow and participant payout flow are separate transactions:
-              advertiser payment → WaitLayer, then independently WaitLayer → separate payout
-              provider → eligible participant. WaitLayer does not instruct Dodo Payments to forward
-              a portion of an advertiser transaction to a participant.
+              advertiser payment → Ateva, then independently Ateva → separate payout provider →
+              eligible participant. Ateva does not instruct Dodo Payments to forward a portion of an
+              advertiser transaction to a participant.
             </p>
           </section>
         </div>
 
         <div className="mt-12 pt-8 border-t border-surface-200">
-          <Link href="/" className="text-brand-500 hover:text-brand-600 font-medium transition-colors">
+          <Link
+            href="/"
+            className="text-brand-500 hover:text-brand-600 font-medium transition-colors"
+          >
             Return to homepage
           </Link>
         </div>

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { AuditService } from '../audit/audit.service';
 import { isSerializationError } from '../common/utils/errors';
@@ -31,8 +31,8 @@ export class SandboxService {
     private readonly audit: AuditService,
     config: ConfigService,
   ) {
-    this.environmentKind = config.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development');
-    this.environmentId = config.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local');
+    this.environmentKind = config.get<string>('ATEVA_ENVIRONMENT_KIND', 'development');
+    this.environmentId = config.get<string>('ATEVA_ENVIRONMENT_ID', 'local');
     this.resetToken = config.get<string>('SANDBOX_RESET_TOKEN');
   }
 

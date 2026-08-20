@@ -77,7 +77,7 @@ async function runPrisma(args) {
   const cwd = resolveDbPackageDir();
   const tries = [
     ['prisma', args],
-    ['pnpm', ['--filter', '@waitlayer/db', 'exec', 'prisma', ...args]],
+    ['pnpm', ['--filter', '@ateva/db', 'exec', 'prisma', ...args]],
   ];
   let lastErr;
   for (const [cmd, a] of tries) {
@@ -89,7 +89,7 @@ async function runPrisma(args) {
     }
   }
   throw new Error(
-    'Could not locate the Prisma CLI (tried `prisma` on PATH and `pnpm --filter @waitlayer/db exec prisma`).',
+    'Could not locate the Prisma CLI (tried `prisma` on PATH and `pnpm --filter @ateva/db exec prisma`).',
     { cause: lastErr },
   );
 }
@@ -148,7 +148,7 @@ async function main() {
       console.error(`  - unapplied migrations: ${pending.join(', ')}`);
     }
     if (detail) console.error(detail);
-    console.error("Run 'pnpm --filter @waitlayer/db exec prisma migrate deploy' before starting.");
+    console.error("Run 'pnpm --filter @ateva/db exec prisma migrate deploy' before starting.");
     process.exit(1);
   }
 

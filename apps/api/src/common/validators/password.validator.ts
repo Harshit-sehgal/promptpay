@@ -11,9 +11,9 @@ import {
   PASSWORD_RULES,
   passwordUtf8Bytes,
   passwordValidationError,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
-export { PASSWORD_RULES } from '@waitlayer/shared';
+export { PASSWORD_RULES } from '@ateva/shared';
 
 @ValidatorConstraint({ name: 'isStrongPassword', async: false })
 export class IsStrongPasswordConstraint implements ValidatorConstraintInterface {
@@ -42,7 +42,9 @@ export function IsStrongPassword(validationOptions?: ValidationOptions) {
 export class IsBcryptPasswordLengthConstraint implements ValidatorConstraintInterface {
   validate(value: unknown): boolean {
     return (
-      typeof value === 'string' && value.length > 0 && passwordUtf8Bytes(value) <= PASSWORD_MAX_UTF8_BYTES
+      typeof value === 'string' &&
+      value.length > 0 &&
+      passwordUtf8Bytes(value) <= PASSWORD_MAX_UTF8_BYTES
     );
   }
 

@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "offline_client",
   "environment": "sandbox",
-  "seed": "waitlayer-api-offline-v1",
+  "seed": "ateva-api-offline-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

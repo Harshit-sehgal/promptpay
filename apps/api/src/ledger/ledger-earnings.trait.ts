@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
-import { LedgerStatus } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { LedgerStatus } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';

@@ -23,7 +23,7 @@ describe('TwoFactorEnrolment', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(authApi.setup2fa).mockResolvedValue({
-      data: { secret: 'TESTSECRET', otpauthUrl: 'otpauth://totp/WaitLayer:test' },
+      data: { secret: 'TESTSECRET', otpauthUrl: 'otpauth://totp/Ateva:test' },
     } as never);
     vi.mocked(authApi.enable2fa).mockResolvedValue({
       data: {

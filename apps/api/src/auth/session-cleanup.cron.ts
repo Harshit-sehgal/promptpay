@@ -66,7 +66,7 @@ export class SessionCleanupCron implements OnApplicationBootstrap, OnModuleDestr
       const result = await this.prisma.$transaction(
         async (tx) => {
           const lockRows = await tx.$queryRaw<Array<{ acquired: boolean }>>`
-            SELECT pg_try_advisory_xact_lock(hashtext('waitlayer-session-cleanup')) AS "acquired"
+            SELECT pg_try_advisory_xact_lock(hashtext('ateva-session-cleanup')) AS "acquired"
           `;
           if (!lockRows[0]?.acquired) return { acquired: false, deleted: 0 };
 

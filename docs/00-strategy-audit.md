@@ -1,10 +1,10 @@
-# WaitLayer Strategy Audit
+# Ateva Strategy Audit
 
 ## Positioning
 
 Working positioning: "Earn from AI wait time, globally, transparently, and safely."
 
-WaitLayer should not position itself as "ads in your IDE." The professional framing is a compliant reward marketplace for opted-in developer attention during AI wait states. The product earns trust by being explicit about what it collects, what it never collects, how earnings move from estimated to confirmed, and how invalid traffic protects advertisers.
+Ateva should not position itself as "ads in your IDE." The professional framing is a compliant reward marketplace for opted-in developer attention during AI wait states. The product earns trust by being explicit about what it collects, what it never collects, how earnings move from estimated to confirmed, and how invalid traffic protects advertisers.
 
 ## Current competitor observations
 
@@ -33,7 +33,7 @@ Developer-tool advertisers may like the novelty but still need repeatable ROI. E
 
 3. Payout access
 
-"Global payouts" cannot mean every user in every country can immediately withdraw. PayPal, Stripe Connect, Wise, Payoneer, Razorpay, banks, tax requirements, sanctions, and local rules vary. WaitLayer should say "global-first payout roadmap" until coverage is proven.
+"Global payouts" cannot mean every user in every country can immediately withdraw. PayPal, Stripe Connect, Wise, Payoneer, Razorpay, banks, tax requirements, sanctions, and local rules vary. Ateva should say "global-first payout roadmap" until coverage is proven.
 
 4. Fraud economics
 
@@ -90,4 +90,3 @@ Some developers cannot run ad/reward software on company devices. The product mu
 - Obvious fraud simulations are flagged before payout.
 - Less than 5% traffic is suspicious after manual review.
 - No credible privacy complaint involving code, prompts, completions, or filenames.
-

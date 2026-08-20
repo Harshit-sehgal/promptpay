@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { backgroundJobsEnabled } from '../common/utils/background-jobs';
 import { acquireCronLease } from '../common/utils/cron-lease';

@@ -60,18 +60,18 @@ export function rateLimitIdentity(req: {
     .filter(Boolean);
   const networkSource = forwarded[Math.max(0, forwarded.length - hops)] ?? 'unknown';
   const networkHash = createHmac('sha256', secret)
-    .update(`waitlayer-bff-network-v1:${networkSource}`)
+    .update(`ateva-bff-network-v1:${networkSource}`)
     .digest('hex');
   const signature = createHmac('sha256', secret)
-    .update(`waitlayer-bff-client-v2:${clientId}:${networkHash}`)
+    .update(`ateva-bff-client-v2:${clientId}:${networkHash}`)
     .digest('hex');
   return {
     clientId,
     isNew: !validExisting,
     headers: {
-      'x-waitlayer-client-id': clientId,
-      'x-waitlayer-client-network': networkHash,
-      'x-waitlayer-client-signature': `v2.${signature}`,
+      'x-ateva-client-id': clientId,
+      'x-ateva-client-network': networkHash,
+      'x-ateva-client-signature': `v2.${signature}`,
     },
   };
 }
@@ -223,7 +223,7 @@ export function isSecure(headers: Headers): boolean {
   if (process.env.COOKIE_SECURE === 'false') {
     if (process.env.NODE_ENV === 'production') {
       console.warn(
-        '[waitlayer] COOKIE_SECURE=false: issuing non-Secure auth cookies because NODE_ENV=production ' +
+        '[ateva] COOKIE_SECURE=false: issuing non-Secure auth cookies because NODE_ENV=production ' +
           'but the override is set. Only safe if the web is served over plain HTTP (e.g. an internal ' +
           'staging host or CI). For any internet-facing deploy, terminate TLS and remove this override.',
       );
@@ -339,7 +339,7 @@ export function apiBaseUrl(): string {
       !(url.protocol === 'http:' && (isLoopback || isSingleLabelInternal)))
   ) {
     throw new Error(
-      'WaitLayer web refuses to send credentials to an unsafe API endpoint. ' +
+      'Ateva web refuses to send credentials to an unsafe API endpoint. ' +
         'Use HTTPS, loopback HTTP, or a single-label internal service URL without credentials/query/hash.',
     );
   }

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { majorToMinor, minorToMajorInputValue } from '@waitlayer/shared';
+import { majorToMinor, minorToMajorInputValue } from '@ateva/shared';
 
 import { privacyPseudonym } from '../../common/utils/privacy-hash';
 import { requireProviderSafeMinorAmount } from '../../common/utils/provider-amount';
@@ -81,7 +81,7 @@ export class WisePayoutProvider implements PayoutProviderHandler {
     return {
       Authorization: `Bearer ${this.token}`,
       'Content-Type': 'application/json',
-      'User-Agent': 'WaitLayer/1.0',
+      'User-Agent': 'Ateva/1.0',
     };
   }
 
@@ -237,7 +237,7 @@ export class WisePayoutProvider implements PayoutProviderHandler {
         quoteUuid,
         customerTransactionId: `wl_${params.payoutRequestId}`,
         details: {
-          reference: `WaitLayer payout ${params.payoutRequestId}`,
+          reference: `Ateva payout ${params.payoutRequestId}`,
           sourceOfFunds: 'other',
         },
         sourceOfFunds: 'balances',

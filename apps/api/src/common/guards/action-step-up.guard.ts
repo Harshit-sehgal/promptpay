@@ -49,8 +49,8 @@ export class ActionStepUpGuard implements CanActivate {
   private readonly keySet: VerificationKeySet;
 
   constructor(config: ConfigService) {
-    this.issuer = config.get<string>('JWT_ISSUER', 'waitlayer');
-    this.audience = config.get<string>('JWT_AUDIENCE', 'waitlayer-client');
+    this.issuer = config.get<string>('JWT_ISSUER', 'ateva');
+    this.audience = config.get<string>('JWT_AUDIENCE', 'ateva-client');
     // Honour the token `kid` so step-up tokens issued just before a key
     // rotation keep verifying during the grace window (consistent with the
     // access-token JwtStrategy).

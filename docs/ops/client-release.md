@@ -1,20 +1,20 @@
 # Client Release Runbook
 
-This runbook covers the distributed WaitLayer clients: `waitlayer-cli` on npm and
-the `waitlayer-vscode` VS Code extension.
+This runbook covers the distributed Ateva clients: `ateva-cli` on npm and
+the `ateva-vscode` VS Code extension.
 
 ## Artifacts
 
 - CLI release workflow: `.github/workflows/publish-cli.yml`
-  - Packages `apps/cli` into `waitlayer-cli-*.tgz`.
-  - Smoke-installs the tarball and runs `waitlayer --version` and
-    `waitlayer --help` with `WAITLAYER_API_URL=https://api.waitlayer.com/api/v1`.
-  - Uploads the tarball as the `waitlayer-cli-package` workflow artifact.
+  - Packages `apps/cli` into `ateva-cli-*.tgz`.
+  - Smoke-installs the tarball and runs `ateva --version` and
+    `ateva --help` with `ATEVA_API_URL=https://api.ateva.com/api/v1`.
+  - Uploads the tarball as the `ateva-cli-package` workflow artifact.
 - VS Code release workflow: `.github/workflows/publish-vscode.yml`
-  - Packages `apps/vscode-extension` into `waitlayer-vscode.vsix`.
-  - Checks the VSIX metadata keeps `waitlayer.apiUrl` defaulted to
-    `https://api.waitlayer.com/api/v1`.
-  - Uploads the VSIX as the `waitlayer-vscode-vsix` workflow artifact.
+  - Packages `apps/vscode-extension` into `ateva-vscode.vsix`.
+  - Checks the VSIX metadata keeps `ateva.apiUrl` defaulted to
+    `https://api.ateva.com/api/v1`.
+  - Uploads the VSIX as the `ateva-vscode-vsix` workflow artifact.
 
 Release-published events build and upload artifacts but do not publish to npm or
 Marketplace automatically. Real publication is a manual `workflow_dispatch` run
@@ -37,7 +37,7 @@ Required secrets:
 ## CLI installation identity and device migration
 
 Current CLI installs generate a random UUID on first device registration and
-store it in the protected WaitLayer credential metadata. The identity is stable
+store it in the protected Ateva credential metadata. The identity is stable
 across CLI upgrades and contains no hostname, username, home directory, OS
 release, architecture, or memory information. The API converts it to a
 server-keyed pseudonym before storing the device fingerprint.
@@ -61,9 +61,9 @@ credential policy.
 ## Local agent bridge and spool
 
 The CLI’s Release 0.2 agent lifecycle path is local-first. A normalized event is
-sent to `waitlayer bridge start` over an installation-local Unix socket (or a
+sent to `ateva bridge start` over an installation-local Unix socket (or a
 Windows named pipe), authenticated with a random secret stored under the
-protected WaitLayer config directory. The bridge acknowledges an event only
+protected Ateva config directory. The bridge acknowledges an event only
 after it has been persisted to the local JSONL spool.
 
 If the bridge is not running, the client writes directly to the same spool. The
@@ -73,7 +73,7 @@ loss. Successful API acknowledgements remove events; explicit per-event
 rejections are quarantined for diagnostics. Uploads use the signed
 `POST /api/v1/agent-events/batch` endpoint and have no financial side effects.
 The endpoint accepts protocol version `1` and the CLI sends
-`X-WaitLayer-Agent-Protocol-Version: 1`; mismatched or malformed versions are
+`X-Ateva-Agent-Protocol-Version: 1`; mismatched or malformed versions are
 rejected with machine-readable `agent_protocol_unsupported_version` or
 `agent_protocol_invalid_version` errors. The response includes the negotiated
 `protocolVersion`. Older clients may omit the header during rollout, but they
@@ -92,10 +92,10 @@ returns `financialSideEffects: false`.
 Useful commands:
 
 ```bash
-waitlayer bridge start
-waitlayer bridge status
-waitlayer bridge flush
-waitlayer bridge clear
+ateva bridge start
+ateva bridge status
+ateva bridge flush
+ateva bridge clear
 ```
 
 The bridge is telemetry infrastructure only. It never authorizes permissions,
@@ -122,7 +122,7 @@ The fast local hook path is available as:
 
 ```bash
 printf '%s' '{"session_id":"provider-session","timestamp":"2026-08-04T12:00:00.000Z"}' \
-  | waitlayer hooks ingest --provider claude_code --event SessionStart
+  | ateva hooks ingest --provider claude_code --event SessionStart
 ```
 
 `hooks ingest` reads bounded JSON from stdin, projects only an explicit metadata
@@ -132,15 +132,15 @@ a synchronous API request and returns success/failure without printing provider
 payloads. Claude Code lifecycle normalization is now handled by the local adapter (`claude-code-0.0.1`). It maps supported lifecycle names to canonical events, keeps only coarse allowlisted metadata, and discards prompts, transcript paths, tool input/output, commands, CWDs, and raw tool names before bridge delivery. Provider-specific configuration ownership remains managed separately:
 
 ```bash
-waitlayer integrations install claude-code
-waitlayer integrations status
-waitlayer integrations repair claude-code
-waitlayer integrations uninstall claude-code
+ateva integrations install claude-code
+ateva integrations status
+ateva integrations repair claude-code
+ateva integrations uninstall claude-code
 ```
 
 `integrations status` reports a stable capability tier for automation and human
 operators: `native` means the verified Claude hook set is active, `wrapper`
-means no native hook is installed and `waitlayer run -- ...` remains the safe
+means no native hook is installed and `ateva run -- ...` remains the safe
 fallback, `degraded` means hooks are present but incomplete/unverified or the
 configuration is malformed, and `disabled` means collection is explicitly
 turned off. Use `integrations disable claude-code` / `integrations enable
@@ -150,7 +150,7 @@ installed. A degraded, disabled, or managed status exits non-zero so CI and
 setup scripts cannot mistake an unhealthy integration for success.
 
 Installation is additive and idempotent. Existing provider hooks are preserved;
-WaitLayer-owned entries carry a stable marker and are the only entries repair or
+Ateva-owned entries carry a stable marker and are the only entries repair or
 uninstall may change. Existing files are backed up with owner-only permissions
 before modification. Invalid JSON or configurations marked as managed/locked are
 reported as degraded/managed and are never overwritten. Project-level hooks and
@@ -161,7 +161,7 @@ payloads because no authoritative Codex CLI hook schema and trust contract have
 been verified. Codex support must not be enabled by guessing a config format;
 this remains the explicit WL-045 follow-up.
 
-The generic wrapper path (`waitlayer run -- <command>`) now also emits canonical
+The generic wrapper path (`ateva run -- <command>`) now also emits canonical
 `generic_wrapper` lifecycle events to the local bridge: process start, optional
 cancellation, and process end. It records only a coarse executable family,
 result category, and duration bucket; executable paths, command arguments,

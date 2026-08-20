@@ -1,3 +1,3 @@
-import config from '@waitlayer/eslint-config';
+import config from '@ateva/eslint-config';
 
 export default config;

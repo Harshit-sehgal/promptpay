@@ -8,8 +8,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { BidType, CampaignStatus, CreativeStatus, Prisma } from '@waitlayer/db';
-import { MINIMUM_VISIBLE_DURATION_MS } from '@waitlayer/shared';
+import { BidType, CampaignStatus, CreativeStatus, Prisma } from '@ateva/db';
+import { MINIMUM_VISIBLE_DURATION_MS } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isActiveAccountStatus } from '../common/utils/account-status';

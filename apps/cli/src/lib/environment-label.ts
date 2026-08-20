@@ -2,13 +2,7 @@ import chalk from 'chalk';
 
 import type { EnvironmentIdentity } from './api-client';
 
-const ENVIRONMENT_KINDS = new Set([
-  'development',
-  'test',
-  'sandbox',
-  'staging',
-  'production',
-]);
+const ENVIRONMENT_KINDS = new Set(['development', 'test', 'sandbox', 'staging', 'production']);
 
 /**
  * Print a sandbox marker only after the API confirms the same environment.
@@ -19,7 +13,7 @@ export async function printSandboxBanner(
   client?: { getEnvironmentIdentity?: () => Promise<EnvironmentIdentity> },
   output: NodeJS.WritableStream = process.stdout,
 ): Promise<void> {
-  const localKind = process.env.WAITLAYER_ENVIRONMENT_KIND;
+  const localKind = process.env.ATEVA_ENVIRONMENT_KIND;
   const getIdentity = client?.getEnvironmentIdentity;
   if (typeof getIdentity !== 'function') return;
 
@@ -45,5 +39,7 @@ export async function printSandboxBanner(
 }
 
 function writeSandbox(output: NodeJS.WritableStream): void {
-  output.write(`${chalk.bgYellow.black(' SANDBOX ')} ${chalk.yellow('Test credits only — no cash value')}\n`);
+  output.write(
+    `${chalk.bgYellow.black(' SANDBOX ')} ${chalk.yellow('Test credits only — no cash value')}\n`,
+  );
 }

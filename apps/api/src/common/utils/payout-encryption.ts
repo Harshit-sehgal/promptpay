@@ -35,7 +35,7 @@ export interface PayoutDestinationBinding {
 
 export function payoutDestinationAad(binding: PayoutDestinationBinding): Buffer {
   return Buffer.from(
-    `waitlayer:payout-account:${binding.accountId}:${binding.userId}:${binding.provider}:${binding.currency}`,
+    `ateva:payout-account:${binding.accountId}:${binding.userId}:${binding.provider}:${binding.currency}`,
     'utf8',
   );
 }
@@ -64,7 +64,7 @@ function loadKey(
   }
   // Dev/test fallback — deterministic, never used in production.
   return createHmac('sha256', `${fallbackPurpose}-dev-fallback`)
-    .update(`waitlayer-${fallbackPurpose}`)
+    .update(`ateva-${fallbackPurpose}`)
     .digest();
 }
 
@@ -170,7 +170,7 @@ export function assertPayoutDestinationKeysConfigured(): void {
 export function hmacPayoutDestination(destination: string): string {
   const key = loadHmacKey();
   return createHmac('sha256', key)
-    .update(`waitlayer-payout-dest:v1:${destination.toLowerCase().trim()}`)
+    .update(`ateva-payout-dest:v1:${destination.toLowerCase().trim()}`)
     .digest('hex');
 }
 

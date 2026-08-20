@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const requireVscodeDependency = createRequire(new URL('../../apps/vscode-extension/package.json', import.meta.url));
 const { build } = requireVscodeDependency('esbuild');
 const mode = process.argv[2];
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-adversarial-signal-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-adversarial-signal-'));
 const output = path.join(directory, 'adapters.mjs');
 await build({ entryPoints: ['apps/vscode-extension/src/detector-adapters.ts'], outfile: output, bundle: true, format: 'esm', platform: 'node' });
 const { resolveAdapter } = await import(pathToFileURL(output));

@@ -14,7 +14,7 @@ import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from './auth/__fixtures__/t
 // by default, with an explicit TEST_DATABASE_URL escape hatch for CI.
 process.env.DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
-  'postgresql://waitlayer:waitlayer-test@localhost:5433/waitlayer_test?schema=public';
+  'postgresql://ateva:ateva-test@localhost:5433/ateva_test?schema=public';
 process.env.BACKGROUND_JOBS_ENABLED = 'false';
 
 // Tests must never run under NODE_ENV=production: the config validator's

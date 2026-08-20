@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const AGENT_PROTOCOL_VERSION = 1 as const;
 export const AGENT_SUPPORTED_SCHEMA_VERSIONS = [AGENT_PROTOCOL_VERSION] as const;
-export const AGENT_PROTOCOL_VERSION_HEADER = 'X-WaitLayer-Agent-Protocol-Version' as const;
+export const AGENT_PROTOCOL_VERSION_HEADER = 'X-Ateva-Agent-Protocol-Version' as const;
 export const AGENT_ADAPTER_VERSION = '0.0.1';
 
 export type AgentProtocolCompatibility =

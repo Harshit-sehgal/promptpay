@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { PayoutProviderReadinessResponse } from '@waitlayer/shared';
+import { PayoutProviderReadinessResponse } from '@ateva/shared';
 
 import { StubPayoutProvider } from './payout.constants';
 import { PayoutMethodTrait } from './payout-method.trait';
@@ -39,7 +39,7 @@ describe('PayoutMethodTrait provider availability', () => {
       } as never,
       {
         get: vi.fn((key: string) =>
-          key === 'WAITLAYER_PAYOUT_PROVIDER_STATUS'
+          key === 'ATEVA_PAYOUT_PROVIDER_STATUS'
             ? JSON.stringify({ stripe_connect: 'available', payoneer: 'available' })
             : undefined,
         ),

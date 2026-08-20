@@ -6,14 +6,14 @@ the independent-provider launch experiment passes.
 
 ## Assets and trust boundaries
 
-| Asset                                   | Protection boundary                                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------------------- |
-| Advertiser funds and developer earnings | API/database transaction and money-switch gates.                                      |
-| Attestation private key                 | Independent provider operations; never shipped to clients or WaitLayer client builds. |
-| Public issuer key set                   | WaitLayer API configuration, reviewed and rotated by operators.                       |
-| Session nonce and event identity        | API-generated session plus database uniqueness/CAS.                                   |
-| User/device/wait linkage                | Authenticated API, device ownership, and server-recorded lifecycle.                   |
-| Privacy-sensitive operation data        | Deliberately excluded from assertions and persisted evidence.                         |
+| Asset                                   | Protection boundary                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------- |
+| Advertiser funds and developer earnings | API/database transaction and money-switch gates.                                  |
+| Attestation private key                 | Independent provider operations; never shipped to clients or Ateva client builds. |
+| Public issuer key set                   | Ateva API configuration, reviewed and rotated by operators.                       |
+| Session nonce and event identity        | API-generated session plus database uniqueness/CAS.                               |
+| User/device/wait linkage                | Authenticated API, device ownership, and server-recorded lifecycle.               |
+| Privacy-sensitive operation data        | Deliberately excluded from assertions and persisted evidence.                     |
 
 ## Threats and mitigations
 

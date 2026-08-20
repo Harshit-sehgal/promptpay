@@ -8,7 +8,7 @@ import { WaitAttestationService } from './wait-attestation.service';
 
 const PROVIDER = 'approved-provider';
 const ISSUER = 'https://attestor.example.test';
-const AUDIENCE = 'waitlayer-attestation';
+const AUDIENCE = 'ateva-attestation';
 const KID = 'attestor-key-1';
 const nonce = 'server-issued-single-use-nonce';
 const now = Date.now();

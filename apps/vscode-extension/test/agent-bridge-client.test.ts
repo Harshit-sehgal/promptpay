@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { AgentLifecycleEventV1 } from '@waitlayer/agent-protocol';
+import type { AgentLifecycleEventV1 } from '@ateva/agent-protocol';
 
 import { AgentBridgeClient } from '../src/agent-bridge-client';
 
@@ -36,7 +36,7 @@ function makeEvent(): AgentLifecycleEventV1 {
 }
 
 function makePaths() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-vscode-bridge-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-vscode-bridge-'));
   directories.push(directory);
   return {
     socketPath: path.join(directory, 'events.sock'),

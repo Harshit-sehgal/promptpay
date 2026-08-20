@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ConflictException } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
+import { Prisma } from '@ateva/db';
 
 import { makePayoutService } from './test/payout-test-helper';
 
@@ -86,17 +86,15 @@ describe('PayoutService.requestPayout idempotency replay', () => {
           }
           return Promise.resolve({ _sum: { amountMinor: 30_00n } });
         }),
-        findMany: vi
-          .fn()
-          .mockResolvedValueOnce([
-            {
-              id: 'earn-1',
-              amountMinor: 3000n,
-              currency: 'USD',
-              entryType: 'credit',
-              status: 'confirmed',
-            },
-          ]),
+        findMany: vi.fn().mockResolvedValueOnce([
+          {
+            id: 'earn-1',
+            amountMinor: 3000n,
+            currency: 'USD',
+            entryType: 'credit',
+            status: 'confirmed',
+          },
+        ]),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         create: vi.fn().mockResolvedValue({ id: 'earn-new' }),
       },
@@ -147,17 +145,15 @@ describe('PayoutService.requestPayout idempotency replay', () => {
           }
           return Promise.resolve({ _sum: { amountMinor: 30_00n } });
         }),
-        findMany: vi
-          .fn()
-          .mockResolvedValueOnce([
-            {
-              id: 'earn-1',
-              amountMinor: 3000n,
-              currency: 'USD',
-              entryType: 'credit',
-              status: 'confirmed',
-            },
-          ]),
+        findMany: vi.fn().mockResolvedValueOnce([
+          {
+            id: 'earn-1',
+            amountMinor: 3000n,
+            currency: 'USD',
+            entryType: 'credit',
+            status: 'confirmed',
+          },
+        ]),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         create: vi.fn().mockResolvedValue({ id: 'earn-new' }),
       },
@@ -209,17 +205,15 @@ describe('PayoutService.requestPayout idempotency replay', () => {
           }
           return Promise.resolve({ _sum: { amountMinor: 30_00n } });
         }),
-        findMany: vi
-          .fn()
-          .mockResolvedValueOnce([
-            {
-              id: 'earn-1',
-              amountMinor: 3000n,
-              currency: 'USD',
-              entryType: 'credit',
-              status: 'confirmed',
-            },
-          ]),
+        findMany: vi.fn().mockResolvedValueOnce([
+          {
+            id: 'earn-1',
+            amountMinor: 3000n,
+            currency: 'USD',
+            entryType: 'credit',
+            status: 'confirmed',
+          },
+        ]),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         create: vi.fn().mockResolvedValue({ id: 'earn-new' }),
       },

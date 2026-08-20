@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 // A-033: The comparison page marks six tools as "Live": VS Code Extension,
 // Cursor, Windsurf, Cline, Claude Code, and Terminal. These are marketing
 // assertions layered over just TWO real client codebases:
-//   - 'vscode-extension' — the WaitLayer VS Code extension. Cursor, Windsurf,
+//   - 'vscode-extension' — the Ateva VS Code extension. Cursor, Windsurf,
 //     and Cline are VS Code forks/extensions that run this same extension.
-//   - 'cli'              — the WaitLayer CLI. Claude Code and Terminal are both
+//   - 'cli'              — the Ateva CLI. Claude Code and Terminal are both
 //     driven by this same CLI codebase.
 //
 // This test codifies that mapping so the "Live" claims stay anchored to code

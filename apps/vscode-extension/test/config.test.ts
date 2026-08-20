@@ -72,7 +72,7 @@ describe('ConfigurationManager — settings parsing & validation', () => {
     expect(mgr.getApiUrl()).toBe('https://api.example.com/api/v1');
 
     delete mock.config['apiUrl'];
-    expect(mgr.getApiUrl()).toBe('https://api.waitlayer.com/api/v1');
+    expect(mgr.getApiUrl()).toBe('https://api.ateva.com/api/v1');
   });
 
   it('reads adsEnabled as a boolean and defaults to disabled (opt-in required)', async () => {
@@ -198,7 +198,7 @@ describe('ConfigurationManager — device fingerprint', () => {
     // Second call returns the same value (read from persisted SecretStorage).
     const second = await mgr.getDeviceFingerprint();
     expect(second).toBe(first);
-    expect(mock.secrets['waitlayer.deviceFingerprint']).toBe(first);
+    expect(mock.secrets['ateva.deviceFingerprint']).toBe(first);
   });
 });
 

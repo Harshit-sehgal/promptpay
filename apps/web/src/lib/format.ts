@@ -1,4 +1,4 @@
-import { formatMinorUnits } from '@waitlayer/shared';
+import { formatMinorUnits } from '@ateva/shared';
 
 /** Re-export the shared exact minor-unit formatter so web components get all
  * money formatting from one module. */
@@ -114,7 +114,8 @@ export function formatRelativeTime(date: string | Date): string {
   const months = Math.floor(days / 30);
   const years = Math.floor(days / 365);
 
-  const say = (value: number, unit: string) => (future ? `in ${value}${unit}` : `${value}${unit} ago`);
+  const say = (value: number, unit: string) =>
+    future ? `in ${value}${unit}` : `${value}${unit} ago`;
 
   if (years > 0) return say(years, 'y');
   if (months > 0) return say(months, 'mo');

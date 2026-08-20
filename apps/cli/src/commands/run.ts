@@ -16,7 +16,7 @@ const FORWARDED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
 /**
  * Run an AI command under direct CLI supervision.
  *
- * Unlike `waitlayer watch`, this path observes an actual child process start
+ * Unlike `ateva watch`, this path observes an actual child process start
  * and exit rather than trusting a user-written marker file. The resulting
  * telemetry is still deliberately non-billable: a client-held device secret
  * cannot independently attest that an unmodified CLI observed the process.
@@ -26,12 +26,12 @@ const FORWARDED_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
  */
 export async function runSupervisedCommand(command: string[]): Promise<number> {
   if (command.length === 0 || !command[0]) {
-    throw new Error('Usage: waitlayer run -- <AI command> [arguments...]');
+    throw new Error('Usage: ateva run -- <AI command> [arguments...]');
   }
 
   const creds = await getCredentials();
   if (!creds) {
-    throw new Error('Not logged in. Run `waitlayer auth` first.');
+    throw new Error('Not logged in. Run `ateva auth` first.');
   }
 
   const api = new ApiClient(creds);
@@ -47,7 +47,7 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
   const deviceId = await api.getOrRegisterDevice();
 
   // Start the child before reporting it. A failed spawn must never produce a
-  // synthetic wait state. stdio is inherited so `waitlayer run` preserves the
+  // synthetic wait state. stdio is inherited so `ateva run` preserves the
   // wrapped tool's normal interactive behavior.
   const child = spawn(executable, args, {
     stdio: 'inherit',
@@ -67,15 +67,17 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
   // wrapper must never hang or miss its end event in that race.
   let exitResult: { code: number; signal: NodeJS.Signals | null } | undefined;
   let endedAt: Date | undefined;
-  const exitPromise = new Promise<{ code: number; signal: NodeJS.Signals | null }>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code, signal) => {
-      endedAt = new Date();
-      const result = { code: signal ? signalExitCode(signal) : (code ?? 1), signal };
-      exitResult = result;
-      resolve(result);
-    });
-  });
+  const exitPromise = new Promise<{ code: number; signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once('error', reject);
+      child.once('close', (code, signal) => {
+        endedAt = new Date();
+        const result = { code: signal ? signalExitCode(signal) : (code ?? 1), signal };
+        exitResult = result;
+        resolve(result);
+      });
+    },
+  );
 
   const installationId = creds.installationId;
   let wrapperStarted = false;
@@ -97,7 +99,7 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
     } catch (error: unknown) {
       // The wrapper remains useful when the local bridge/spool is unavailable;
       // never turn optional analytics into a broken coding-agent command.
-      console.warn(chalk.yellow(`WaitLayer wrapper telemetry unavailable: ${getErrorMessage(error)}`));
+      console.warn(chalk.yellow(`Ateva wrapper telemetry unavailable: ${getErrorMessage(error)}`));
     }
   }
 
@@ -136,7 +138,7 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
   } catch (error: unknown) {
     // The wrapped tool remains usable if telemetry is temporarily unavailable;
     // never turn an analytics outage into a broken developer command.
-    console.warn(chalk.yellow(`WaitLayer telemetry unavailable: ${getErrorMessage(error)}`));
+    console.warn(chalk.yellow(`Ateva telemetry unavailable: ${getErrorMessage(error)}`));
   }
 
   const removeSignalHandlers = () => {
@@ -166,7 +168,7 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
           }),
         }).catch((error: unknown) => {
           console.warn(
-            chalk.yellow(`WaitLayer cancellation telemetry unavailable: ${getErrorMessage(error)}`),
+            chalk.yellow(`Ateva cancellation telemetry unavailable: ${getErrorMessage(error)}`),
           );
         });
       }
@@ -197,9 +199,7 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
           }),
         });
       } catch (error: unknown) {
-        console.warn(
-          chalk.yellow(`WaitLayer wrapper end was not recorded: ${getErrorMessage(error)}`),
-        );
+        console.warn(chalk.yellow(`Ateva wrapper end was not recorded: ${getErrorMessage(error)}`));
       }
     }
     if (started) {
@@ -207,18 +207,17 @@ export async function runSupervisedCommand(command: string[]): Promise<number> {
       try {
         await api.endWaitState({ waitStateId, durationSeconds });
       } catch (error: unknown) {
-        console.warn(
-          chalk.yellow(`WaitLayer wait end was not recorded: ${getErrorMessage(error)}`),
-        );
+        console.warn(chalk.yellow(`Ateva wait end was not recorded: ${getErrorMessage(error)}`));
       }
     }
-    const outcome = terminationSignal || exitResult?.signal || exitResult?.code !== 0 ? 'failed' : 'completed';
+    const outcome =
+      terminationSignal || exitResult?.signal || exitResult?.code !== 0 ? 'failed' : 'completed';
     const telemetry = started ? 'recorded' : 'unavailable';
     // Completion summaries belong on stderr so the wrapped agent's stdout
     // remains byte-for-byte compatible for pipes, scripts, and IDE terminals.
     console.error(
       chalk.dim(
-        `WaitLayer: supervised session ${outcome} (${toolType}); telemetry ${telemetry}; rewards are not enabled.`,
+        `Ateva: supervised session ${outcome} (${toolType}); telemetry ${telemetry}; rewards are not enabled.`,
       ),
     );
   }

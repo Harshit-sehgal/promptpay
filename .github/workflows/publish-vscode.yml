@@ -33,29 +33,29 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Build VS Code extension
-        run: pnpm --filter waitlayer-vscode build
+        run: pnpm --filter ateva-vscode build
       - name: Package VSIX
         run: |
           mkdir -p "$GITHUB_WORKSPACE/artifacts/vscode"
-          pnpm run package:vsix -- "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
+          pnpm run package:vsix -- "$GITHUB_WORKSPACE/artifacts/vscode/ateva-vscode.vsix"
         working-directory: apps/vscode-extension
       - name: Smoke test VSIX metadata
         run: |
-          test -s artifacts/vscode/waitlayer-vscode.vsix
-          rm -rf /tmp/waitlayer-vsix
-          mkdir -p /tmp/waitlayer-vsix
-          unzip -q artifacts/vscode/waitlayer-vscode.vsix -d /tmp/waitlayer-vsix
-          cp /tmp/waitlayer-vsix/extension/package.json /tmp/waitlayer-vscode-package.json
-          node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
-          node scripts/verify-vsix-artifact.cjs /tmp/waitlayer-vsix/extension
-          node apps/vscode-extension/scripts/verify-isolated-artifact.cjs /tmp/waitlayer-vsix/extension
+          test -s artifacts/vscode/ateva-vscode.vsix
+          rm -rf /tmp/ateva-vsix
+          mkdir -p /tmp/ateva-vsix
+          unzip -q artifacts/vscode/ateva-vscode.vsix -d /tmp/ateva-vsix
+          cp /tmp/ateva-vsix/extension/package.json /tmp/ateva-vscode-package.json
+          node -e "const pkg = require('/tmp/ateva-vscode-package.json'); const url = pkg.contributes.configuration.properties['ateva.apiUrl'].default; if (url !== 'https://api.ateva.com/api/v1') throw new Error('Unexpected ateva.apiUrl default: ' + url);"
+          node scripts/verify-vsix-artifact.cjs /tmp/ateva-vsix/extension
+          node apps/vscode-extension/scripts/verify-isolated-artifact.cjs /tmp/ateva-vsix/extension
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: waitlayer-vscode-vsix
-          path: artifacts/vscode/waitlayer-vscode.vsix
+          name: ateva-vscode-vsix
+          path: artifacts/vscode/ateva-vscode.vsix
           if-no-files-found: error
 
   publish-marketplace:
@@ -71,9 +71,9 @@ jobs:
       - name: Download VSIX artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: waitlayer-vscode-vsix
+          name: ateva-vscode-vsix
           path: artifacts/vscode
       - name: Publish VSIX to Marketplace
-        run: npx --yes @vscode/vsce@3.9.2 publish --packagePath artifacts/vscode/waitlayer-vscode.vsix
+        run: npx --yes @vscode/vsce@3.9.2 publish --packagePath artifacts/vscode/ateva-vscode.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}

@@ -70,4 +70,4 @@ export class Logger {
   }
 }
 
-export const logger = new Logger('waitlayer-web');
+export const logger = new Logger('ateva-web');

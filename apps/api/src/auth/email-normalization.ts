@@ -2,7 +2,7 @@
  * Canonical form used for authentication identifiers.
  *
  * Email local parts are technically case-sensitive, but consumer identity
- * providers and the rest of WaitLayer treat an email address as a single
+ * providers and the rest of Ateva treat an email address as a single
  * account identifier. Normalising at every auth boundary prevents duplicate
  * accounts and login/reset mismatches caused solely by casing or whitespace.
  */

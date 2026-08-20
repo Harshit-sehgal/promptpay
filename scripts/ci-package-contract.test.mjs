@@ -51,7 +51,7 @@ function run(command, args, options = {}) {
 function assertNoPrivateRuntimeDependencies(pkg) {
   for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
     for (const [name, version] of Object.entries(pkg[section] ?? {})) {
-      assert.equal(name.startsWith('@waitlayer/'), false, `${section} contains private ${name}`);
+      assert.equal(name.startsWith('@ateva/'), false, `${section} contains private ${name}`);
       assert.equal(
         String(version).startsWith('workspace:'),
         false,
@@ -95,7 +95,7 @@ test('release gates build every fixture they execute, before running scenario te
   // locally because an earlier `pnpm build` had left `dist/` behind.
   assert.match(
     gates,
-    /^pnpm --filter "waitlayer-cli\.\.\." --filter "waitlayer-api\.\.\." build && node --test --test-concurrency=1 /,
+    /^pnpm --filter "ateva-cli\.\.\." --filter "ateva-api\.\.\." build && node --test --test-concurrency=1 /,
   );
 });
 
@@ -110,7 +110,7 @@ test('production Compose documentation does not hardcode a migration count', () 
 
 test('the dated launch plan cannot masquerade as current deployment status', () => {
   const plan = read('LAUNCH_PLAN.md');
-  assert.match(plan, /^# WaitLayer Launch Plan — Historical Audit$/m);
+  assert.match(plan, /^# Ateva Launch Plan — Historical Audit$/m);
   assert.match(plan, /Status: SUPERSEDED \(2026-08-18\)/);
   assert.match(plan, /Use `AGENTS\.md` for the live residual blocker register/);
   assert.match(plan, /historical verified state/i);
@@ -130,10 +130,10 @@ test('scenario fixtures that import compiled output are covered by the prebuild'
     .filter(Boolean);
   assert.ok(runners.length > 0, 'expected scenario runners importing compiled output');
   if (runners.some((f) => read(f).includes('apps/api/dist'))) {
-    assert.match(prebuild, /waitlayer-api\.\.\./, 'API fixtures require the API in the prebuild');
+    assert.match(prebuild, /ateva-api\.\.\./, 'API fixtures require the API in the prebuild');
   }
   if (runners.some((f) => read(f).includes('apps/cli/dist'))) {
-    assert.match(prebuild, /waitlayer-cli\.\.\./, 'CLI fixtures require the CLI in the prebuild');
+    assert.match(prebuild, /ateva-cli\.\.\./, 'CLI fixtures require the CLI in the prebuild');
   }
 });
 
@@ -142,7 +142,7 @@ test('CLI publication is gated by full CI, tag consistency, and isolated install
   assert.match(workflow, /quality-gate:\n\s+uses: \.\/\.github\/workflows\/ci\.yml/);
   assert.match(workflow, /package-cli:\n\s+needs: quality-gate/);
   assert.match(workflow, /RELEASE_TAG.*v\$PACKAGE_VERSION/);
-  assert.match(workflow, /pnpm --filter "waitlayer-cli\.\.\." build/);
+  assert.match(workflow, /pnpm --filter "ateva-cli\.\.\." build/);
   assert.match(workflow, /npm install --prefix "\$CLI_INSTALL_ROOT"/);
 });
 
@@ -150,11 +150,11 @@ test('packed CLI runs outside the monorepo without private runtime packages', ()
   const manifest = JSON.parse(read('apps/cli/package.json'));
   assertNoPrivateRuntimeDependencies(manifest);
 
-  run('pnpm', ['--filter', 'waitlayer-cli', 'pack:check']);
+  run('pnpm', ['--filter', 'ateva-cli', 'pack:check']);
 
-  const work = mkdtempSync(join(tmpdir(), 'waitlayer-cli-package-test-'));
+  const work = mkdtempSync(join(tmpdir(), 'ateva-cli-package-test-'));
   try {
-    run('pnpm', ['--filter', 'waitlayer-cli', 'pack', '--pack-destination', work]);
+    run('pnpm', ['--filter', 'ateva-cli', 'pack', '--pack-destination', work]);
     const tarballs = readdirSync(work).filter((name) => name.endsWith('.tgz'));
     assert.equal(tarballs.length, 1, 'expected exactly one packed CLI tarball');
 
@@ -171,7 +171,7 @@ test('packed CLI runs outside the monorepo without private runtime packages', ()
     const isolatedEnv = {
       ...process.env,
       NODE_PATH: '',
-      WAITLAYER_API_URL: 'https://api.waitlayer.com/api/v1',
+      ATEVA_API_URL: 'https://api.ateva.com/api/v1',
     };
     const version = run(process.execPath, [cli, '--version'], {
       cwd: work,
@@ -179,7 +179,7 @@ test('packed CLI runs outside the monorepo without private runtime packages', ()
     });
     assert.equal(version.stdout.trim(), packedManifest.version);
     const help = run(process.execPath, [cli, '--help'], { cwd: work, env: isolatedEnv });
-    assert.match(help.stdout, /Usage: waitlayer/);
+    assert.match(help.stdout, /Usage: ateva/);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

@@ -1,6 +1,6 @@
 # Monitoring & Alerting
 
-WaitLayer ships with Sentry wired in for error monitoring. This doc describes
+Ateva ships with Sentry wired in for error monitoring. This doc describes
 what to watch and how to alert.
 
 ## Error monitoring (Sentry)

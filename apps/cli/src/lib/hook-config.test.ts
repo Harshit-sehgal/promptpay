@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { HookConfigManager, WAITLAYER_HOOK_MARKER } from './hook-config';
+import { ATEVA_HOOK_MARKER, HookConfigManager } from './hook-config';
 
 const temporaryDirectories: string[] = [];
 
@@ -11,7 +11,7 @@ function makeManager(
   initial: Record<string, unknown> | string | undefined,
   provider: 'claude-code' | 'codex' = 'claude-code',
 ) {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-hooks-'));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-hooks-'));
   temporaryDirectories.push(home);
   const configPath = path.join(
     home,
@@ -27,9 +27,9 @@ function makeManager(
   return {
     manager: new HookConfigManager({
       homeDir: home,
-      stateDir: path.join(home, '.config', 'waitlayer'),
+      stateDir: path.join(home, '.config', 'ateva'),
       configPaths: { [provider]: configPath },
-      executable: '/opt/waitlayer',
+      executable: '/opt/ateva',
       now: () => new Date('2026-08-04T12:00:00.000Z'),
     }),
     configPath,
@@ -56,7 +56,7 @@ describe('HookConfigManager', () => {
       hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
     };
     expect(Object.keys(saved.hooks)).toHaveLength(result.expectedEvents.length);
-    expect(JSON.stringify(saved)).toContain(WAITLAYER_HOOK_MARKER);
+    expect(JSON.stringify(saved)).toContain(ATEVA_HOOK_MARKER);
     expect(JSON.stringify(saved)).not.toContain('prompt');
   });
 
@@ -78,7 +78,7 @@ describe('HookConfigManager', () => {
     const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as typeof existing;
     expect(saved.permissions).toEqual(existing.permissions);
     expect(saved.hooks.SessionStart[0].hooks[0].command).toBe('custom-start');
-    expect(JSON.stringify(saved)).toContain(WAITLAYER_HOOK_MARKER);
+    expect(JSON.stringify(saved)).toContain(ATEVA_HOOK_MARKER);
     expect(fs.statSync(result.backupPath as string).mode & 0o777).toBe(0o600);
   });
 
@@ -101,7 +101,7 @@ describe('HookConfigManager', () => {
     expect(JSON.stringify(JSON.parse(fs.readFileSync(configPath, 'utf8')))).toContain('custom');
   });
 
-  it('uninstalls only WaitLayer-owned commands and leaves custom hooks', () => {
+  it('uninstalls only Ateva-owned commands and leaves custom hooks', () => {
     const { manager, configPath } = makeManager(undefined);
     manager.install('claude-code');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
@@ -115,7 +115,7 @@ describe('HookConfigManager', () => {
     const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
       hooks: { SessionStart: unknown[] };
     };
-    expect(JSON.stringify(saved)).not.toContain(WAITLAYER_HOOK_MARKER);
+    expect(JSON.stringify(saved)).not.toContain(ATEVA_HOOK_MARKER);
     expect(JSON.stringify(saved)).toContain('custom-after');
   });
 
@@ -154,9 +154,9 @@ describe('HookConfigManager', () => {
 
     const second = new HookConfigManager({
       homeDir: first.home,
-      stateDir: path.join(first.home, '.config', 'waitlayer'),
+      stateDir: path.join(first.home, '.config', 'ateva'),
       configPaths: { 'claude-code': first.configPath },
-      executable: '/opt/waitlayer',
+      executable: '/opt/ateva',
       now: () => new Date('2026-08-04T12:00:00.000Z'),
     });
     expect(second.status('claude-code')).toMatchObject({

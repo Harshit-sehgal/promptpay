@@ -9,8 +9,8 @@ function makeConfig(overrides: Record<string, string | undefined> = {}): ConfigS
     STRIPE_SECRET_KEY: 'sk_test_xxx',
     STRIPE_WEBHOOK_SECRET: 'whsec_xxx',
     NODE_ENV: 'development',
-    WAITLAYER_ENVIRONMENT_KIND: 'test',
-    WAITLAYER_ENVIRONMENT_ID: 'stripe-provider-spec',
+    ATEVA_ENVIRONMENT_KIND: 'test',
+    ATEVA_ENVIRONMENT_ID: 'stripe-provider-spec',
     ...overrides,
   };
   return {
@@ -266,7 +266,7 @@ describe('StripeConnectPayoutProvider onboarding + status', () => {
         email: 'd@x.io',
         capabilities: { transfers: { requested: true } },
       }),
-      expect.objectContaining({ idempotencyKey: expect.stringMatching(/^waitlayer-connect-/) }),
+      expect.objectContaining({ idempotencyKey: expect.stringMatching(/^ateva-connect-/) }),
     );
 
     const firstKey = mock.accounts.create.mock.calls[0]?.[1]?.idempotencyKey;

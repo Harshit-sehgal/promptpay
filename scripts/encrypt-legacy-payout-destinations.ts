@@ -19,7 +19,7 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PrismaClient } from '@waitlayer/db';
+import { PrismaClient } from '@ateva/db';
 
 import {
   assertPayoutDestinationKeysConfigured,

@@ -1,4 +1,4 @@
-const baseConfig = require('@waitlayer/eslint-config');
+const baseConfig = require('@ateva/eslint-config');
 const nextPlugin = require('@next/eslint-plugin-next');
 const reactHooksPlugin = require('eslint-plugin-react-hooks');
 const path = require('path');

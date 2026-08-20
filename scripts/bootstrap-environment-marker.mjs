@@ -6,7 +6,7 @@
  * ---------------
  * `EnvironmentMarkerService.verify()` runs at API boot and refuses to start a
  * **production** deployment unless `environment_markers` row 1 already exists
- * and matches `WAITLAYER_ENVIRONMENT_KIND` / `WAITLAYER_ENVIRONMENT_ID`.
+ * and matches `ATEVA_ENVIRONMENT_KIND` / `ATEVA_ENVIRONMENT_ID`.
  * Non-production environments auto-create the row; production deliberately does
  * not, because auto-stamping would destroy the interlock it exists to provide —
  * an API accidentally pointed at a fresh or wrong database would cheerfully
@@ -34,8 +34,8 @@
  *     stamping a populated database you did not expect is the dangerous case.
  *
  * USAGE
- *   DATABASE_URL=<url> WAITLAYER_ENVIRONMENT_KIND=production \
- *   WAITLAYER_ENVIRONMENT_ID=<id> \
+ *   DATABASE_URL=<url> ATEVA_ENVIRONMENT_KIND=production \
+ *   ATEVA_ENVIRONMENT_ID=<id> \
  *     node scripts/bootstrap-environment-marker.mjs --confirm-stamp
  */
 import { createRequire } from 'node:module';
@@ -45,7 +45,7 @@ import { dirname, join } from 'node:path';
 const require = createRequire(
   join(dirname(fileURLToPath(import.meta.url)), '..', 'apps', 'api', 'package.json'),
 );
-const { PrismaClient, createPrismaAdapter } = require('@waitlayer/db');
+const { PrismaClient, createPrismaAdapter } = require('@ateva/db');
 
 const args = new Set(process.argv.slice(2));
 
@@ -55,12 +55,12 @@ function fail(message) {
 }
 
 const databaseUrl = process.env.DATABASE_URL;
-const environmentKind = process.env.WAITLAYER_ENVIRONMENT_KIND;
-const environmentId = process.env.WAITLAYER_ENVIRONMENT_ID;
+const environmentKind = process.env.ATEVA_ENVIRONMENT_KIND;
+const environmentId = process.env.ATEVA_ENVIRONMENT_ID;
 
 if (!databaseUrl) fail('DATABASE_URL is required');
-if (!environmentKind) fail('WAITLAYER_ENVIRONMENT_KIND is required');
-if (!environmentId) fail('WAITLAYER_ENVIRONMENT_ID is required');
+if (!environmentKind) fail('ATEVA_ENVIRONMENT_KIND is required');
+if (!environmentId) fail('ATEVA_ENVIRONMENT_ID is required');
 if (!args.has('--confirm-stamp')) {
   fail(
     'pass --confirm-stamp to claim this database as ' +

@@ -1,5 +1,5 @@
 /**
- * Content-Security-Policy builder for WaitLayer.
+ * Content-Security-Policy builder for Ateva.
  *
  * Kept in a standalone JavaScript module so `next.config.js` (CommonJS) and
  * unit tests can import it without booting the entire Next.js/Sentry

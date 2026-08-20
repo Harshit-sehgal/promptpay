@@ -8,7 +8,7 @@ if (!fs.existsSync(entryPath)) throw new Error(`Missing packaged entry at ${entr
 
 const originalResolve = Module._resolveFilename;
 Module._resolveFilename = function resolve(request, parent, isMain, options) {
-  if (request.startsWith('@waitlayer/') || request.startsWith('workspace:')) {
+  if (request.startsWith('@ateva/') || request.startsWith('workspace:')) {
     throw new Error(`Packaged extension attempted to resolve workspace module: ${request}`);
   }
   return originalResolve.call(this, request, parent, isMain, options);

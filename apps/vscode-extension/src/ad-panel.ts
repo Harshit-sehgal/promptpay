@@ -41,8 +41,8 @@ export class AdPanel {
     this.active = undefined;
 
     const panel = vscode.window.createWebviewPanel(
-      'waitlayerAd',
-      'WaitLayer ad',
+      'atevaAd',
+      'Ateva ad',
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,

@@ -73,7 +73,7 @@ const PUBLIC_ROUTES: PublicRoute[] = [
   },
   {
     path: '/faq',
-    expect: ['Frequently Asked Questions', 'What can I do in the WaitLayer beta?'],
+    expect: ['Frequently Asked Questions', 'What can I do in the Ateva beta?'],
   },
   {
     path: '/payout-policy',

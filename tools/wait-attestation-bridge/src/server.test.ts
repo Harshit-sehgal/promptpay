@@ -11,7 +11,7 @@ function createTestConfig(overrides?: Partial<BridgeConfig>): BridgeConfig {
     port: 0,
     provider: 'stub-bridge',
     issuer: 'https://test.local/attestation',
-    audience: 'waitlayer-client',
+    audience: 'ateva-client',
     attestationVersion: 'stub-v1',
     bridgeToken: BRIDGE_TOKEN,
     privateKeyPath: '.keys/test-private.pem',
@@ -74,7 +74,7 @@ describe('wait-attestation bridge', () => {
     const publicKey = await importSPKI(publicKeyPem, 'RS256');
     const { payload } = await jwtVerify(body.assertion!, publicKey, {
       issuer: 'https://test.local/attestation',
-      audience: 'waitlayer-client',
+      audience: 'ateva-client',
     });
     expect(payload.sub).toBe('user-123');
     expect(payload.device_id).toBe('device-123');

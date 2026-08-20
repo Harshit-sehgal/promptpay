@@ -9,7 +9,7 @@ Purpose: explain the category and collect developer and advertiser interest.
 Required content:
 
 - Headline: "Earn from AI wait time."
-- Subheadline: "WaitLayer helps developers earn from opt-in sponsored messages shown during AI coding assistant wait states, with PayPal-first payouts, transparent earnings, and privacy-first integrations."
+- Subheadline: "Ateva helps developers earn from opt-in sponsored messages shown during AI coding assistant wait states, with PayPal-first payouts, transparent earnings, and privacy-first integrations."
 - Developer benefits.
 - Advertiser benefits.
 - Privacy-first proof points.
@@ -65,8 +65,8 @@ Sections:
 
 Sections:
 
-- What WaitLayer collects.
-- What WaitLayer does not collect.
+- What Ateva collects.
+- What Ateva does not collect.
 - How events are used.
 - Data export and deletion.
 - Security controls.
@@ -95,8 +95,8 @@ Required pages:
 
 Topics:
 
-- Does WaitLayer read my code?
-- Does WaitLayer read my prompts?
+- Does Ateva read my code?
+- Does Ateva read my prompts?
 - Can I disable ads?
 - How do earnings work?
 - Why are earnings held?
@@ -106,7 +106,7 @@ Topics:
 
 ### Comparison page
 
-Purpose: compare WaitLayer against alternatives without unsupported claims.
+Purpose: compare Ateva against alternatives without unsupported claims.
 
 Rules:
 

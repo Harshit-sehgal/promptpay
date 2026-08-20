@@ -7,11 +7,11 @@ import { fileURLToPath } from 'node:url';
 /**
  * Public payment-claim gate.
  *
- * WaitLayer's advertiser money-in rail (advertiser → Dodo Payments → WaitLayer)
+ * Ateva's advertiser money-in rail (advertiser → Dodo Payments → Ateva)
  * is deliberately separate from any future participant money-out rail
- * (WaitLayer → approved payout provider → participant). Public pages must not
+ * (Ateva → approved payout provider → participant). Public pages must not
  * describe a participant reward as a percentage of, or a claim on, an
- * individual advertiser transaction — that would describe WaitLayer as
+ * individual advertiser transaction — that would describe Ateva as
  * splitting customer funds, which is not what it does and not what its payment
  * provider is approved for.
  *
@@ -169,7 +169,7 @@ test('the money-flow pages state the separated flow explicitly', () => {
 
   const advertiserPolicy = pageContent(surface, '/advertiser-policy');
   assert.match(advertiserPolicy, /Dodo Payments/i);
-  assert.match(advertiserPolicy, /settled to WaitLayer/i);
+  assert.match(advertiserPolicy, /settled to Ateva/i);
   assert.match(advertiserPolicy, /separate payout provider/i);
 
   const payoutPolicy = pageContent(surface, '/payout-policy');
@@ -178,7 +178,7 @@ test('the money-flow pages state the separated flow explicitly', () => {
   assert.match(payoutPolicy, /Dodo Payments/i);
 
   const terms = pageContent(surface, '/terms');
-  assert.match(terms, /set independently by WaitLayer/i);
+  assert.match(terms, /set independently by Ateva/i);
   assert.match(terms, /not a percentage of/i);
 });
 

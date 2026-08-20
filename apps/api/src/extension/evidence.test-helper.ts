@@ -3,7 +3,7 @@ import {
   DetectorEvidence,
   EvidenceSignalType,
   signEvidence,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 export const TEST_DEVICE_SECRET = 'test-device-secret-do-not-use-in-production';
 

@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "privacy_conscious_user",
   "environment": "sandbox",
-  "seed": "waitlayer-privacy-large-v1",
+  "seed": "ateva-privacy-large-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

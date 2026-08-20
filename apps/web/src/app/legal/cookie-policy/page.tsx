@@ -2,15 +2,15 @@ import type { Metadata } from 'next';
 import { LegalDocument, LegalHeading } from '@/components/legal-document';
 
 export const metadata: Metadata = {
-  title: 'Cookie Policy — WaitLayer',
+  title: 'Cookie Policy — Ateva',
   description:
-    'How WaitLayer uses essential and analytics cookies, and what it deliberately does not do.',
+    'How Ateva uses essential and analytics cookies, and what it deliberately does not do.',
 };
 
 export default function CookiePolicyPage() {
   return (
     <LegalDocument title="Cookie Policy" lastUpdated="2026-07-19">
-      <p>WaitLayer uses cookies and similar technologies as described below.</p>
+      <p>Ateva uses cookies and similar technologies as described below.</p>
 
       <LegalHeading>Essential cookies</LegalHeading>
       <p>

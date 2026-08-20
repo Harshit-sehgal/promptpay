@@ -4,7 +4,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../config/prisma.service';
@@ -16,7 +16,7 @@ import { AuthService } from './auth.service';
 import { GoogleTokenVerifier } from './strategies/google-token-verifier';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
-const EMAIL = 'refresh-rotate@waitlayer.com';
+const EMAIL = 'refresh-rotate@ateva.com';
 const PASSWORD = 'Password123!';
 
 describe('Auth refresh / JWT rotation (P1 #15)', () => {
@@ -111,8 +111,8 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
         role: UserRole.DEVELOPER,
         family: 'f',
         jti: 'j-expired',
-        iss: 'waitlayer',
-        aud: ['waitlayer-client', 'refresh'],
+        iss: 'ateva',
+        aud: ['ateva-client', 'refresh'],
       },
       { expiresIn: -10 },
     );
@@ -131,8 +131,8 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
         role: UserRole.DEVELOPER,
         family: 'f',
         jti: 'j-rogue',
-        iss: 'waitlayer',
-        aud: ['waitlayer-client', 'refresh'],
+        iss: 'ateva',
+        aud: ['ateva-client', 'refresh'],
       },
       { expiresIn: '30d' },
     );
@@ -148,7 +148,7 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
         sub: userId,
         role: UserRole.DEVELOPER,
         jti: oldJti,
-        aud: ['waitlayer-client', 'access'],
+        aud: ['ateva-client', 'access'],
       }),
     ).resolves.toBeDefined();
 
@@ -163,7 +163,7 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
         sub: userId,
         role: UserRole.DEVELOPER,
         jti: oldJti,
-        aud: ['waitlayer-client', 'access'],
+        aud: ['ateva-client', 'access'],
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -178,7 +178,7 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
         sub: userId,
         role: UserRole.DEVELOPER,
         jti: oldJti,
-        aud: ['waitlayer-client', 'access'],
+        aud: ['ateva-client', 'access'],
       }),
     ).resolves.toBeDefined();
 
@@ -199,8 +199,8 @@ describe('Auth refresh / JWT rotation (P1 #15)', () => {
         sub: userId,
         role: UserRole.DEVELOPER,
         jti: 'j-wrong-aud',
-        iss: 'waitlayer',
-        aud: ['waitlayer-client', 'step-up'],
+        iss: 'ateva',
+        aud: ['ateva-client', 'step-up'],
       },
       { expiresIn: '30d' },
     );

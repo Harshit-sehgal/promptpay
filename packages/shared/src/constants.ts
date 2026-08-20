@@ -1,18 +1,12 @@
 import { UserRole } from './enums';
 
-/** Revenue split defaults */
-export const REVENUE_SPLIT = {
-  USER: 0.6, // 60% to developer
-  PLATFORM: 0.3, // 30% to platform
-  RESERVE: 0.1, // 10% fraud/payment reserve
-} as const;
-
-/** Launch incentive split */
-export const LAUNCH_INCENTIVE_SPLIT = {
-  USER: 0.8, // 80% to developer for first 3 months
-  PLATFORM: 0.1, // 10% to platform
-  RESERVE: 0.1, // 10% fraud/payment reserve
-} as const;
+/*
+ * The float `REVENUE_SPLIT` / `LAUNCH_INCENTIVE_SPLIT` constants were removed:
+ * nothing imported them, and they duplicated — in lossy floating point — the
+ * integer basis points that `LedgerMathTrait.calculateSplit` is the single
+ * source of truth for. Two copies of a money rule is one too many; the ledger
+ * keeps the authoritative integer version.
+ */
 
 /** Minimum visible duration in ms for a qualified impression */
 export const MINIMUM_VISIBLE_DURATION_MS = 5000;

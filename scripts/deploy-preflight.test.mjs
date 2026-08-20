@@ -81,7 +81,7 @@ test('rejects the reference attestation bridge as an issuer', () => {
   // The stub bridge signs a fixed duration and its key is not independent of
   // the client. Allowing it would let the launch gate be satisfied by a
   // rubber stamp.
-  for (const value of ['waitlayer-stub-bridge', '{"provider":"stub-v1"}']) {
+  for (const value of ['ateva-stub-bridge', '{"provider":"stub-v1"}']) {
     const findings = evaluateEnvironment(
       { ...VALID, WAIT_ATTESTATION_ISSUERS: value },
       { skipComposeCheck: true },
@@ -104,7 +104,7 @@ test('warns rather than fails on a real configured issuer', () => {
 });
 
 test('a clean environment produces no failures beyond the config schema', () => {
-  // The full @waitlayer/config schema needs DB/JWT/etc, which this unit test
+  // The full @ateva/config schema needs DB/JWT/etc, which this unit test
   // deliberately does not supply; assert that every *other* check passes so a
   // future edit cannot make a check silently permissive.
   const findings = evaluateEnvironment(VALID, { skipComposeCheck: true });

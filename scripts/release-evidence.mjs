@@ -53,9 +53,9 @@ function packageVersions() {
 
 const strict = args.includes('--strict') || process.env.RELEASE_EVIDENCE_STRICT === '1';
 const explicitEnvironment =
-  args.includes('--environment') || Boolean(process.env.WAITLAYER_ENVIRONMENT_KIND);
-const environmentKind = valueAfter('--environment', process.env.WAITLAYER_ENVIRONMENT_KIND);
-const environmentId = valueAfter('--environment-id', process.env.WAITLAYER_ENVIRONMENT_ID);
+  args.includes('--environment') || Boolean(process.env.ATEVA_ENVIRONMENT_KIND);
+const environmentKind = valueAfter('--environment', process.env.ATEVA_ENVIRONMENT_KIND);
+const environmentId = valueAfter('--environment-id', process.env.ATEVA_ENVIRONMENT_ID);
 const protocolVersion = Number(valueAfter('--protocol', '1'));
 const output = resolve(ROOT, valueAfter('--output', 'artifacts/release-evidence.json'));
 const gateResults = Object.fromEntries(
@@ -96,7 +96,7 @@ if (strict) {
 const manifest = {
   manifestVersion: 1,
   generatedAt: new Date().toISOString(),
-  repository: 'WaitLayer',
+  repository: 'Ateva',
   git: {
     sha: git(['rev-parse', 'HEAD']),
     branch: git(['branch', '--show-current']),

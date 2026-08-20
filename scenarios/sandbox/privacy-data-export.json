@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "privacy_conscious_user",
   "environment": "sandbox",
-  "seed": "waitlayer-data-export-v1",
+  "seed": "ateva-data-export-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

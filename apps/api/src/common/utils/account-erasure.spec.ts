@@ -132,7 +132,7 @@ describe('eraseAccountIdentity', () => {
     expect(tx.advertiser.update).toHaveBeenCalledWith({
       where: { id: 'adv-1' },
       data: expect.objectContaining({
-        billingEmail: 'deleted-user-1@waitlayer.com',
+        billingEmail: 'deleted-user-1@ateva.com',
         stripeCustomerId: null,
       }),
     });

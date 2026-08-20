@@ -8,7 +8,7 @@ import { getErrorMessage } from '@/lib/api/errors';
 import { advertiserApi } from '@/lib/api/services';
 import { useAuth } from '@/lib/auth-context';
 
-import { useToast } from '@waitlayer/ui';
+import { useToast } from '@ateva/ui';
 
 interface SelfServiceExportPayload {
   exportMeta?: {
@@ -35,7 +35,7 @@ export default function AdvertiserSettingsPage() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = 'waitlayer-advertiser-export.json';
+      anchor.download = 'ateva-advertiser-export.json';
       anchor.click();
       URL.revokeObjectURL(url);
       if (exportData.exportMeta?.truncated) {

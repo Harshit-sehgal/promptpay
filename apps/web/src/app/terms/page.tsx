@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service — WaitLayer',
+  title: 'Terms of Service — Ateva',
   description:
-    'WaitLayer terms of service — developer and advertiser obligations, fraud policy, and payout terms.',
+    'Ateva terms of service — developer and advertiser obligations, fraud policy, and payout terms.',
 };
 
 export default function TermsPage() {
@@ -36,7 +36,7 @@ export default function TermsPage() {
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">1. Acceptance</h2>
           <p>
-            By using WaitLayer, you agree to these terms. If you disagree, please do not use the
+            By using Ateva, you agree to these terms. If you disagree, please do not use the
             service.
           </p>
 
@@ -44,7 +44,7 @@ export default function TermsPage() {
             2. Service description
           </h2>
           <p>
-            WaitLayer is currently a privacy-first private beta for AI tool wait-state verification.
+            Ateva is currently a privacy-first private beta for AI tool wait-state verification.
             Rewards and advertiser billing are disabled during the beta. If rewards are approved and
             enabled, developers may receive compensation for verified eligible activity under a
             separately published schedule, and advertisers may reach a high-intent developer
@@ -81,11 +81,11 @@ export default function TermsPage() {
             6. Participant compensation
           </h2>
           <p>
-            Participant rewards are disabled during the private beta. If rewards launch, WaitLayer
-            will publish a compensation schedule for verified eligible activity. That reward rate is
-            set independently by WaitLayer and is not a percentage of, or a claim on, any individual
-            advertiser payment: an advertiser transaction settles in full to WaitLayer, and
-            participant compensation is a separate WaitLayer obligation. See the{' '}
+            Participant rewards are disabled during the private beta. If rewards launch, Ateva will
+            publish a compensation schedule for verified eligible activity. That reward rate is set
+            independently by Ateva and is not a percentage of, or a claim on, any individual
+            advertiser payment: an advertiser transaction settles in full to Ateva, and participant
+            compensation is a separate Ateva obligation. See the{' '}
             <Link href="/payout-policy" className="text-brand-700 font-medium hover:underline">
               Payout Policy
             </Link>{' '}
@@ -103,7 +103,7 @@ export default function TermsPage() {
 
           <h2 className="text-xl font-semibold text-surface-900 mt-10 mb-3">8. Disclaimer</h2>
           <p>
-            WaitLayer is provided "as is" without warranty. We are not liable for any losses from
+            Ateva is provided "as is" without warranty. We are not liable for any losses from
             service interruptions, fraud, or payment processing delays.
           </p>
         </div>

@@ -1,4 +1,4 @@
-# WaitLayer Implementation Blueprint
+# Ateva Implementation Blueprint
 
 ## Sandbox-to-Beta Product, Architecture, Security, Testing, and Delivery Strategy
 
@@ -13,7 +13,7 @@
 
 ## 1. Purpose of this document
 
-This document converts the current WaitLayer codebase and the product decisions made so far into an implementation-ready delivery strategy.
+This document converts the current Ateva codebase and the product decisions made so far into an implementation-ready delivery strategy.
 
 Its purpose is not to decide every future business question before development starts. Its purpose is to:
 
@@ -27,7 +27,7 @@ Its purpose is not to decide every future business question before development s
 
 The immediate objective is:
 
-> Build a complete, production-shaped WaitLayer sandbox in which real coding agents can use WaitLayer through VS Code and terminal workflows, see test advertising placements, accumulate unmistakably simulated rewards, exercise simulated advertiser and operator flows, and generate reproducible quality, fraud, reliability, and accounting evidence.
+> Build a complete, production-shaped Ateva sandbox in which real coding agents can use Ateva through VS Code and terminal workflows, see test advertising placements, accumulate unmistakably simulated rewards, exercise simulated advertiser and operator flows, and generate reproducible quality, fraud, reliability, and accounting evidence.
 
 The sandbox is not a public paid product. It is the instrument through which the product will be discovered and validated.
 
@@ -78,7 +78,7 @@ The repository already contains a substantial foundation:
 - runtime kill switches for ads, earnings, deposits, payout requests, and automated payouts;
 - independently verifiable wait-attestation session and assertion models;
 - Docker, migration, browser E2E, package, backup/restore, security, and financial coverage gates;
-- a working terminal wrapper (`waitlayer run -- ...`);
+- a working terminal wrapper (`ateva run -- ...`);
 - a working VS Code extension with telemetry consent, false-positive feedback, experiment assignment, and heuristic wait detection.
 
 This is valuable. The project does not need to be rewritten.
@@ -112,9 +112,9 @@ The following decisions should be treated as current product directives.
 
 ### 3.1 Brand
 
-The working product name is **WaitLayer**.
+The working product name is **Ateva**.
 
-The repository may remain named `promptpay` temporarily, but all newly built product surfaces, protocol names, events, packages, and documentation should use WaitLayer.
+The repository may remain named `promptpay` temporarily, but all newly built product surfaces, protocol names, events, packages, and documentation should use Ateva.
 
 ### 3.2 Release philosophy
 
@@ -136,7 +136,7 @@ This does not mean supporting every IDE and every agent immediately. It means su
 The integration priority is:
 
 1. native provider hooks or plugins;
-2. a generic WaitLayer wrapper where native lifecycle events are unavailable;
+2. a generic Ateva wrapper where native lifecycle events are unavailable;
 3. optional process discovery only for setup suggestions and diagnostics.
 
 Process scanning is never a sufficient source of truth for reward-bearing activity.
@@ -177,7 +177,7 @@ Only whitelisted lifecycle metadata may leave the device.
 The existing standard split remains:
 
 - 60% developer;
-- 30% WaitLayer;
+- 30% Ateva;
 - 10% fraud/payment reserve.
 
 In Release 0.x, the split is simulated only.
@@ -192,7 +192,7 @@ Real earnings remain blocked until an independently verifiable attestation path 
 
 ## 4. Strategic product model
 
-WaitLayer should not define its product as “pay users for every second an AI process exists.”
+Ateva should not define its product as “pay users for every second an AI process exists.”
 
 The product should be modeled as four related layers.
 
@@ -212,7 +212,7 @@ This layer powers productivity analytics.
 
 This answers:
 
-- Is a WaitLayer-capable surface actually visible?
+- Is a Ateva-capable surface actually visible?
 - Is the user in the foreground?
 - Did the user return after a completion or permission request?
 - Is there one or more competing windows?
@@ -317,7 +317,7 @@ Deliverables:
 - hook installer, status, repair, and uninstaller;
 - Claude Code adapter;
 - Codex adapter;
-- generic `waitlayer run` compatibility adapter;
+- generic `ateva run` compatibility adapter;
 - local event spool/bridge;
 - capability/version reporting;
 - terminal completion experience that does not corrupt agent stdout.
@@ -467,18 +467,18 @@ Still disabled:
 
 The following current components should be extended rather than replaced:
 
-| Component | Current strength | Recommended treatment |
-|---|---|---|
-| NestJS API | mature auth, role, ledger, fraud, payout, audit and runtime modules | retain |
-| Next.js web | developer/advertiser/admin surfaces already exist | make mode-aware and sandbox-aware |
-| Prisma/Postgres | strong relational and accounting foundation | add agent-domain tables additively |
-| Redis | rate limiting and runtime invalidation | retain; add queue/lock use only where justified |
-| RuntimeConfig | fail-closed financial switches | retain and extend |
-| WaitAttestation | sound future financial boundary | retain; do not fake for sandbox |
-| CLI | authentication, device registration, wrapper, signing | evolve into integration manager and local bridge client |
-| VS Code extension | consent, UX, focus/task signals, ad panel | evolve into attention adapter and presentation client |
-| CI | unusually comprehensive for project maturity | add protocol, adapter, and agent-beta gates |
-| Ledgers | robust idempotency and reconciliation | reuse in isolated sandbox with explicit test currency/provider |
+| Component         | Current strength                                                    | Recommended treatment                                          |
+| ----------------- | ------------------------------------------------------------------- | -------------------------------------------------------------- |
+| NestJS API        | mature auth, role, ledger, fraud, payout, audit and runtime modules | retain                                                         |
+| Next.js web       | developer/advertiser/admin surfaces already exist                   | make mode-aware and sandbox-aware                              |
+| Prisma/Postgres   | strong relational and accounting foundation                         | add agent-domain tables additively                             |
+| Redis             | rate limiting and runtime invalidation                              | retain; add queue/lock use only where justified                |
+| RuntimeConfig     | fail-closed financial switches                                      | retain and extend                                              |
+| WaitAttestation   | sound future financial boundary                                     | retain; do not fake for sandbox                                |
+| CLI               | authentication, device registration, wrapper, signing               | evolve into integration manager and local bridge client        |
+| VS Code extension | consent, UX, focus/task signals, ad panel                           | evolve into attention adapter and presentation client          |
+| CI                | unusually comprehensive for project maturity                        | add protocol, adapter, and agent-beta gates                    |
+| Ledgers           | robust idempotency and reconciliation                               | reuse in isolated sandbox with explicit test currency/provider |
 
 ### 6.2 Components that are currently too coarse
 
@@ -523,7 +523,7 @@ It is useful as shadow telemetry. It must not become the core agent model.
 
 #### Terminal wrapper
 
-`waitlayer run -- ...` reliably observes process start and exit, but it cannot understand rich internal agent lifecycle state without parsing unstable terminal output.
+`ateva run -- ...` reliably observes process start and exit, but it cannot understand rich internal agent lifecycle state without parsing unstable terminal output.
 
 It is a strong fallback, not the ideal primary integration.
 
@@ -606,7 +606,7 @@ Priority definitions:
 **Resolution:**
 
 - use a separate database, Redis namespace/instance, object storage prefix, email domain/driver, and deployment environment;
-- add `WAITLAYER_ENVIRONMENT_KIND=development|test|sandbox|staging|production`;
+- add `ATEVA_ENVIRONMENT_KIND=development|test|sandbox|staging|production`;
 - reject `sandbox` provider/faucet/test-currency configuration outside `sandbox` or `test`;
 - reject production provider credentials in sandbox where possible;
 - display a persistent sandbox badge;
@@ -638,7 +638,7 @@ Priority definitions:
 
 **Resolution:**
 
-- hooks invoke a local WaitLayer sanitizer;
+- hooks invoke a local Ateva sanitizer;
 - sanitizer uses an allowlist, not a blacklist;
 - network upload never occurs with raw provider payloads;
 - prompt text, tool input, commands, outputs, transcript paths, and raw CWD are discarded;
@@ -782,7 +782,7 @@ Command hooks may block an agent if slow, malformed, or configured incorrectly.
 - no API request in the synchronous hook path;
 - strict timeout;
 - empty success response/exit 0;
-- WaitLayer never returns permission decisions;
+- Ateva never returns permission decisions;
 - failures are non-blocking;
 - performance metric for p50/p95/p99 handler latency;
 - kill switch and uninstall command.
@@ -984,7 +984,7 @@ These do not block the internal sandbox but block human/public beta.
 - real, monitored support/privacy/security mailboxes;
 - owned domain and DNS;
 - accurate legal entity naming;
-- removal of `WaitLayer, Inc.` unless that entity exists;
+- removal of `Ateva, Inc.` unless that entity exists;
 - consistent privacy contact domain;
 - corrected payout hold wording;
 - finalized telemetry notice and consent version;
@@ -1062,20 +1062,10 @@ interface AgentLifecycleEventV1 {
   installationId: string;
   deviceId?: string;
 
-  provider:
-    | 'claude_code'
-    | 'codex_cli'
-    | 'aider'
-    | 'generic_wrapper'
-    | 'vscode'
-    | 'unknown';
+  provider: 'claude_code' | 'codex_cli' | 'aider' | 'generic_wrapper' | 'vscode' | 'unknown';
 
   integrationMode:
-    | 'native_hook'
-    | 'native_plugin'
-    | 'wrapper'
-    | 'vscode_observation'
-    | 'heuristic_shadow';
+    'native_hook' | 'native_plugin' | 'wrapper' | 'vscode_observation' | 'heuristic_shadow';
 
   providerSessionHash?: string;
   providerTurnHash?: string;
@@ -1137,7 +1127,7 @@ Use namespaced canonical events.
 - `permission.allowed`
 - `permission.denied`
 
-WaitLayer should observe these events; it should never make the permission decision in Release 0.x.
+Ateva should observe these events; it should never make the permission decision in Release 0.x.
 
 #### Subagent/task
 
@@ -1333,27 +1323,27 @@ Use an additive migration:
 
 ### 9.1 Recommended first implementation
 
-Do not send provider hook payloads directly to the WaitLayer API.
+Do not send provider hook payloads directly to the Ateva API.
 
 Add CLI commands:
 
 ```bash
-waitlayer integrations install claude-code
-waitlayer integrations install codex
-waitlayer integrations status
-waitlayer integrations repair
-waitlayer integrations uninstall claude-code
-waitlayer hooks ingest --provider claude-code --event SessionStart
-waitlayer bridge start
-waitlayer bridge status
-waitlayer bridge flush
+ateva integrations install claude-code
+ateva integrations install codex
+ateva integrations status
+ateva integrations repair
+ateva integrations uninstall claude-code
+ateva hooks ingest --provider claude-code --event SessionStart
+ateva bridge start
+ateva bridge status
+ateva bridge flush
 ```
 
 ### 9.2 Hot path
 
 A provider command hook should:
 
-1. invoke `waitlayer hooks ingest`;
+1. invoke `ateva hooks ingest`;
 2. read JSON from stdin;
 3. identify provider/event;
 4. sanitize using an allowlist;
@@ -1464,7 +1454,7 @@ Codex requires hook trust for non-managed hooks. The installer must explain this
 
 #### Generic wrapper
 
-Retain `waitlayer run -- ...`.
+Retain `ateva run -- ...`.
 
 Enhance it to emit:
 
@@ -1483,11 +1473,11 @@ The integration manager must:
 
 - back up modified hook files;
 - merge rather than overwrite;
-- use a stable WaitLayer-owned marker/id;
+- use a stable Ateva-owned marker/id;
 - detect manual edits;
 - show diff before install where feasible;
 - re-run trust/setup instructions;
-- uninstall only WaitLayer-owned entries;
+- uninstall only Ateva-owned entries;
 - support provider minimum versions;
 - report degraded capability rather than silently guessing.
 
@@ -1502,7 +1492,7 @@ After native integrations exist, the VS Code extension should primarily provide:
 - user consent;
 - installation/session correlation;
 - foreground/background and window state;
-- visible WaitLayer surfaces;
+- visible Ateva surfaces;
 - task and shell corroboration;
 - completion/permission notifications;
 - sandbox ad presentation;
@@ -1577,8 +1567,8 @@ Never inject advertising into a coding agent’s stdout stream.
 
 For terminal users, use one of:
 
-- a WaitLayer sidecar/TUI pane;
-- desktop notification leading to a WaitLayer summary;
+- a Ateva sidecar/TUI pane;
+- desktop notification leading to a Ateva summary;
 - completion summary printed only after the agent exits and clearly separated;
 - web dashboard;
 - VS Code panel when terminal is integrated.
@@ -1591,7 +1581,7 @@ For terminal users, use one of:
 
 #### Foreground wait
 
-User is present and a WaitLayer surface is visible while an agent is processing.
+User is present and a Ateva surface is visible while an agent is processing.
 
 First external candidate.
 
@@ -1619,7 +1609,7 @@ Potentially relevant but psychologically sensitive. Do not implement beyond sand
 
 #### Dashboard native
 
-Conventional placement inside WaitLayer analytics.
+Conventional placement inside Ateva analytics.
 
 Lower technical risk and useful as a control group.
 
@@ -1725,9 +1715,9 @@ Use safe destinations under a sandbox domain or local fixtures. No external affi
 Recommended hostnames:
 
 ```text
-sandbox.waitlayer.<owned-domain>
-api.sandbox.waitlayer.<owned-domain>
-status.sandbox.waitlayer.<owned-domain>
+sandbox.ateva.<owned-domain>
+api.sandbox.ateva.<owned-domain>
+status.sandbox.ateva.<owned-domain>
 ```
 
 Until a domain is secured, use internal endpoints and do not ship public clients with speculative production domains.
@@ -1786,7 +1776,7 @@ Capabilities:
 - timeout;
 - idempotent replay.
 
-It must be impossible to instantiate when `NODE_ENV=production` or `WAITLAYER_ENVIRONMENT_KIND=production`.
+It must be impossible to instantiate when `NODE_ENV=production` or `ATEVA_ENVIRONMENT_KIND=production`.
 
 ### 12.5 Sandbox payout provider
 
@@ -1973,7 +1963,7 @@ actions:
   - start_task: fix_validation
   - background_after_seconds: 10
   - return_on_completion
-  - open_waitlayer_summary
+  - open_ateva_summary
 expected:
   sessions: 1
   work_units_min: 1
@@ -2209,7 +2199,7 @@ Provider hooks run with user permissions.
 
 Controls:
 
-- absolute path to signed/verified WaitLayer executable;
+- absolute path to signed/verified Ateva executable;
 - no shell interpolation of event data;
 - JSON via stdin;
 - no dynamic command construction;
@@ -2283,7 +2273,7 @@ Users must be able to:
 
 Recommended steps:
 
-1. explain WaitLayer’s purpose;
+1. explain Ateva’s purpose;
 2. state clearly that Release 0.x uses test credits;
 3. request account consent;
 4. install CLI/VSIX;
@@ -2298,15 +2288,15 @@ Recommended steps:
 
 Display:
 
-| State | Meaning |
-|---|---|
-| Native | lifecycle hooks active |
-| Wrapper | process lifecycle only |
-| Observed | VS Code/OS corroboration |
-| Shadow | heuristic local-only |
+| State    | Meaning                                  |
+| -------- | ---------------------------------------- |
+| Native   | lifecycle hooks active                   |
+| Wrapper  | process lifecycle only                   |
+| Observed | VS Code/OS corroboration                 |
+| Shadow   | heuristic local-only                     |
 | Degraded | integration installed but events missing |
-| Disabled | user/operator disabled |
-| Attested | reserved for future independent proof |
+| Disabled | user/operator disabled                   |
+| Attested | reserved for future independent proof    |
 
 Do not label a native hook as “verified” in the financial sense.
 
@@ -2533,7 +2523,7 @@ Generate JSON containing:
 
 ### Epic B — Environment isolation
 
-#### WL-010 — `WAITLAYER_ENVIRONMENT_KIND` (M)
+#### WL-010 — `ATEVA_ENVIRONMENT_KIND` (M)
 
 Add config validation and expose read-only health metadata.
 
@@ -2555,7 +2545,7 @@ Store environment marker and assert on startup.
 
 ### Epic C — Protocol
 
-#### WL-020 — `@waitlayer/agent-protocol` (L)
+#### WL-020 — `@ateva/agent-protocol` (L)
 
 Schemas, enums, sanitizer, versions.
 
@@ -2829,7 +2819,7 @@ For exploratory/live agent runs, collect distributions before setting hard publi
 
 ### 20.5 Reliability
 
-- local hook blocks agent because WaitLayer is offline: 0;
+- local hook blocks agent because Ateva is offline: 0;
 - acknowledged event lost after restart: 0;
 - unbounded queue growth: 0;
 - poisoned event blocks queue: 0;
@@ -2850,28 +2840,28 @@ Before human alpha:
 
 ## 21. Risk register
 
-| Risk | Likelihood | Impact | Mitigation | Detection | Release gate |
-|---|---:|---:|---|---|---|
-| provider hook API changes | medium | high | version adapters, golden fixtures, capability matrix | canary failures | 0.3+ |
-| raw prompt/code leakage | medium | critical | local allowlist sanitizer, forbidden scanner | planted-secret tests | every release |
-| hook blocks agent | medium | high | local-only hot path, timeout, non-blocking output | latency/error metrics | 0.3 |
-| duplicate VS Code/terminal session | high | high | local correlation and source precedence | duplicate scenario | 0.4 |
-| fake events | high | critical for money | non-financial telemetry, attestation later | fraud scenarios | paid launch |
-| sandbox/production crossover | low | critical | separate infra, markers, startup guards | startup tests | 0.5 |
-| misleading earnings language | medium | high | mode-aware copy and XTS | screenshot/text scan | 0.5 |
-| agent beta overstates human readiness | high | high | mandatory human alpha | governance review | 0.9 |
-| background work monetized as attention | medium | critical | separate processing/attention/opportunity models | invariant test | 0.5 |
-| multi-agent reward multiplication | high | critical | one attention owner, opportunity dedup | fraud scenarios | 0.7 |
-| local queue privacy exposure | medium | high | sanitized-only queue, permissions, TTL | local inspection test | 0.3 |
-| autonomous test issue spam | high | medium | deterministic auto-create only, triage queue | duplicate rate | 0.8 |
-| live-agent test cost runaway | medium | medium/high | budgets, timeouts, isolated triggers | spend alerts | 0.8 |
-| Vercel/deployment drift | current | medium | choose authoritative host and gate | deployment smoke | 0.1 |
-| legal entity/contact inaccuracy | current | high externally | correct before external users | legal checklist | 0.9 |
-| extension marketplace rejection | unknown | high | policy review, signing, beta channel | package review | 0.9 |
-| device fingerprint privacy | current | medium/high | random installation ID migration | payload audit | 0.3 |
-| ad manipulates failure/permission | medium | high | defer, strict UX policy | human review | later |
-| provider outage | medium | medium | degraded mode, wrapper fallback | health status | 0.3 |
-| missing shell integration | high in some environments | low/medium | capability downgrade | client telemetry | 0.4 |
+| Risk                                   |                Likelihood |             Impact | Mitigation                                           | Detection             | Release gate  |
+| -------------------------------------- | ------------------------: | -----------------: | ---------------------------------------------------- | --------------------- | ------------- |
+| provider hook API changes              |                    medium |               high | version adapters, golden fixtures, capability matrix | canary failures       | 0.3+          |
+| raw prompt/code leakage                |                    medium |           critical | local allowlist sanitizer, forbidden scanner         | planted-secret tests  | every release |
+| hook blocks agent                      |                    medium |               high | local-only hot path, timeout, non-blocking output    | latency/error metrics | 0.3           |
+| duplicate VS Code/terminal session     |                      high |               high | local correlation and source precedence              | duplicate scenario    | 0.4           |
+| fake events                            |                      high | critical for money | non-financial telemetry, attestation later           | fraud scenarios       | paid launch   |
+| sandbox/production crossover           |                       low |           critical | separate infra, markers, startup guards              | startup tests         | 0.5           |
+| misleading earnings language           |                    medium |               high | mode-aware copy and XTS                              | screenshot/text scan  | 0.5           |
+| agent beta overstates human readiness  |                      high |               high | mandatory human alpha                                | governance review     | 0.9           |
+| background work monetized as attention |                    medium |           critical | separate processing/attention/opportunity models     | invariant test        | 0.5           |
+| multi-agent reward multiplication      |                      high |           critical | one attention owner, opportunity dedup               | fraud scenarios       | 0.7           |
+| local queue privacy exposure           |                    medium |               high | sanitized-only queue, permissions, TTL               | local inspection test | 0.3           |
+| autonomous test issue spam             |                      high |             medium | deterministic auto-create only, triage queue         | duplicate rate        | 0.8           |
+| live-agent test cost runaway           |                    medium |        medium/high | budgets, timeouts, isolated triggers                 | spend alerts          | 0.8           |
+| Vercel/deployment drift                |                   current |             medium | choose authoritative host and gate                   | deployment smoke      | 0.1           |
+| legal entity/contact inaccuracy        |                   current |    high externally | correct before external users                        | legal checklist       | 0.9           |
+| extension marketplace rejection        |                   unknown |               high | policy review, signing, beta channel                 | package review        | 0.9           |
+| device fingerprint privacy             |                   current |        medium/high | random installation ID migration                     | payload audit         | 0.3           |
+| ad manipulates failure/permission      |                    medium |               high | defer, strict UX policy                              | human review          | later         |
+| provider outage                        |                    medium |             medium | degraded mode, wrapper fallback                      | health status         | 0.3           |
+| missing shell integration              | high in some environments |         low/medium | capability downgrade                                 | client telemetry      | 0.4           |
 
 ---
 
@@ -2927,15 +2917,15 @@ Fix the page before any external tester.
 
 ### 23.2 Legal entity
 
-`docs/legal/gdpr-dpa.md` identifies `WaitLayer, Inc.`.
+`docs/legal/gdpr-dpa.md` identifies `Ateva, Inc.`.
 
 Do not publish this unless that legal entity exists.
 
 ### 23.3 Contact domain
 
-- contact page uses `@waitlayer.com`;
-- DPA uses `privacy@waitlayer.dev`;
-- clients hardcode `api.waitlayer.com`.
+- contact page uses `@ateva.com`;
+- DPA uses `privacy@ateva.dev`;
+- clients hardcode `api.ateva.com`.
 
 Centralize these values and use verified owned domains.
 
@@ -3082,12 +3072,11 @@ This architecture supports the broader vision without forcing premature decision
 
 It also closes the most dangerous conceptual gap:
 
-> WaitLayer can respect autonomous background work while refusing to misrepresent unattended processing as continuous human attention.
+> Ateva can respect autonomous background work while refusing to misrepresent unattended processing as continuous human attention.
 
 The next action should be to open the Release 0.1 and Release 0.2 issues and execute the first implementation batch in Section 19.
 
 ---
-
 
 ## 27. Final refinement review
 
@@ -3392,29 +3381,29 @@ Those are owner, legal, operational, or commercial decisions with explicit phase
 
 ## Appendix E — Repository evidence map
 
-| Source path | Material finding used in this plan |
-|---|---|
-| `package.json` | WaitLayer monorepo, Node/pnpm versions, gate scripts |
-| `README.md` | telemetry-only beta, no rewards, current CLI wrapper behavior |
-| `AGENTS.md` | previous source-audit closure, gate history, destructive-test warning, remaining external work |
-| `docs/ops/remaining-open-items.md` | provider, credentials, branch protection, CI, legal, and infra operator items |
-| `packages/db/prisma/schema.prisma` | current event, wait, attestation, impression, campaign, ledger, payout, consent, and fraud models |
-| `apps/api/src/runtime-config/runtime-config.service.ts` | fail-closed launch mode and money switches |
-| `apps/api/src/extension/extension-wait.trait.ts` | wait start/end ingestion, signed evidence, server classification, duration and idempotency |
-| `apps/api/src/extension/extension-ad.trait.ts` | attestation and launch-mode requirements before reward-bearing ad serving |
-| `apps/cli/src/commands/run.ts` | wrapper observes process start/exit but not rich lifecycle |
-| `apps/cli/src/lib/api-client.ts` | signed events, device registration, current host-derived fingerprint, wait/ad API shape |
-| `apps/vscode-extension/src/detector-adapters.ts` | provider names are heuristic mappings, not live integrations |
-| `apps/vscode-extension/src/wait-detector.ts` | inactivity/task/terminal/window heuristics and one-active-wait model |
-| `apps/vscode-extension/src/extension.ts` | consent, attestation, ad panel, wait start/end coupling, false-positive feedback |
-| `apps/vscode-extension/package.json` | version, provisional publisher, UNLICENSED state, production domain defaults |
-| `.env.example` | current deployment, provider, privacy, attestation, and launch configuration surface |
-| `.github/workflows/ci.yml` | current CI/security/migration/package/Docker coverage |
-| `.github/workflows/staging.yml` | attestation-dependent staging financial smoke and deployment requirements |
-| `apps/web/src/app/contact/page.tsx` | hardcoded contacts and support-response promise |
-| `apps/web/src/app/terms/page.tsx` | beta wording, split, and 30-day hold |
-| `apps/web/src/app/payout-policy/page.tsx` | planned policy and inconsistent three-day hold statement |
-| `docs/legal/gdpr-dpa.md` | unverified legal-entity name and inconsistent privacy contact domain |
+| Source path                                             | Material finding used in this plan                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `package.json`                                          | Ateva monorepo, Node/pnpm versions, gate scripts                                                  |
+| `README.md`                                             | telemetry-only beta, no rewards, current CLI wrapper behavior                                     |
+| `AGENTS.md`                                             | previous source-audit closure, gate history, destructive-test warning, remaining external work    |
+| `docs/ops/remaining-open-items.md`                      | provider, credentials, branch protection, CI, legal, and infra operator items                     |
+| `packages/db/prisma/schema.prisma`                      | current event, wait, attestation, impression, campaign, ledger, payout, consent, and fraud models |
+| `apps/api/src/runtime-config/runtime-config.service.ts` | fail-closed launch mode and money switches                                                        |
+| `apps/api/src/extension/extension-wait.trait.ts`        | wait start/end ingestion, signed evidence, server classification, duration and idempotency        |
+| `apps/api/src/extension/extension-ad.trait.ts`          | attestation and launch-mode requirements before reward-bearing ad serving                         |
+| `apps/cli/src/commands/run.ts`                          | wrapper observes process start/exit but not rich lifecycle                                        |
+| `apps/cli/src/lib/api-client.ts`                        | signed events, device registration, current host-derived fingerprint, wait/ad API shape           |
+| `apps/vscode-extension/src/detector-adapters.ts`        | provider names are heuristic mappings, not live integrations                                      |
+| `apps/vscode-extension/src/wait-detector.ts`            | inactivity/task/terminal/window heuristics and one-active-wait model                              |
+| `apps/vscode-extension/src/extension.ts`                | consent, attestation, ad panel, wait start/end coupling, false-positive feedback                  |
+| `apps/vscode-extension/package.json`                    | version, provisional publisher, UNLICENSED state, production domain defaults                      |
+| `.env.example`                                          | current deployment, provider, privacy, attestation, and launch configuration surface              |
+| `.github/workflows/ci.yml`                              | current CI/security/migration/package/Docker coverage                                             |
+| `.github/workflows/staging.yml`                         | attestation-dependent staging financial smoke and deployment requirements                         |
+| `apps/web/src/app/contact/page.tsx`                     | hardcoded contacts and support-response promise                                                   |
+| `apps/web/src/app/terms/page.tsx`                       | beta wording, split, and 30-day hold                                                              |
+| `apps/web/src/app/payout-policy/page.tsx`               | planned policy and inconsistent three-day hold statement                                          |
+| `docs/legal/gdpr-dpa.md`                                | unverified legal-entity name and inconsistent privacy contact domain                              |
 
 ### External interfaces reviewed on 4 August 2026
 

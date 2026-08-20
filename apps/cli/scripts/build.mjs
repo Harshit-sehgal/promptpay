@@ -24,12 +24,12 @@ const result = await build({
   alias: {
     // These packages are intentionally private monorepo implementation
     // details. Bundle their source into the public CLI so npm never has to
-    // resolve an unpublished @waitlayer/* runtime package.
-    '@waitlayer/agent-protocol': resolve(repoRoot, 'packages/agent-protocol/src/index.ts'),
-    '@waitlayer/shared': resolve(repoRoot, 'packages/shared/src/index.ts'),
+    // resolve an unpublished @ateva/* runtime package.
+    '@ateva/agent-protocol': resolve(repoRoot, 'packages/agent-protocol/src/index.ts'),
+    '@ateva/shared': resolve(repoRoot, 'packages/shared/src/index.ts'),
   },
   define: {
-    'process.env.WAITLAYER_CLI_VERSION': JSON.stringify(manifest.version),
+    'process.env.ATEVA_CLI_VERSION': JSON.stringify(manifest.version),
   },
 });
 

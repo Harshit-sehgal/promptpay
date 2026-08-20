@@ -6,7 +6,7 @@ import {
   FalsePositiveReason,
   formatMinorUnits,
   WaitAttestationFlow,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 import { ctaTextForAd } from './ad-display';
 import { AdPanel } from './ad-panel';
@@ -97,7 +97,7 @@ export async function activate(context: vscode.ExtensionContext) {
     .catch((error: unknown) => {
       status.showEnvironmentMismatch(clientEnvironmentKind, 'unverified');
       const msg = error instanceof Error ? error.message : String(error);
-      console.warn(`WaitLayer: environment identity could not be verified — ${msg}`);
+      console.warn(`Ateva: environment identity could not be verified — ${msg}`);
     });
 
   // Frequency cap tracking
@@ -149,7 +149,7 @@ export async function activate(context: vscode.ExtensionContext) {
       },
       onError: (error) => {
         const msg = error instanceof Error ? error.message : String(error);
-        console.warn(`WaitLayer: local agent bridge unavailable — ${msg}`);
+        console.warn(`Ateva: local agent bridge unavailable — ${msg}`);
       },
     });
     bridgeClient.start();
@@ -184,7 +184,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register all commands
   const commands: vscode.Disposable[] = [
-    vscode.commands.registerCommand('waitlayer.login', async () => {
+    vscode.commands.registerCommand('ateva.login', async () => {
       if (!(await api.promptLogin())) return;
 
       // Reflect the authenticated state immediately; the balance request may
@@ -201,10 +201,10 @@ export async function activate(context: vscode.ExtensionContext) {
         status.setEarnings(amountMinor, currency);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: post-login balance refresh failed — ${msg}`);
+        console.warn(`Ateva: post-login balance refresh failed — ${msg}`);
       }
     }),
-    vscode.commands.registerCommand('waitlayer.logout', async () => {
+    vscode.commands.registerCommand('ateva.logout', async () => {
       try {
         await api.logout();
       } finally {
@@ -212,7 +212,7 @@ export async function activate(context: vscode.ExtensionContext) {
         status.setLoggedOut();
       }
     }),
-    vscode.commands.registerCommand('waitlayer.showEarnings', async () => {
+    vscode.commands.registerCommand('ateva.showEarnings', async () => {
       try {
         const bal = await api.getBalance();
         const preferred = config.preferredDisplayCurrency();
@@ -229,7 +229,7 @@ export async function activate(context: vscode.ExtensionContext) {
           : bal.pending.amountMinor;
         const breakdown = formatBreakdown(bal.available.byCurrency);
         const lines = [
-          `WaitLayer earnings — ${formatMinorUnits(available, currency)} available`,
+          `Ateva earnings — ${formatMinorUnits(available, currency)} available`,
           `Pending: ${formatMinorUnits(pending, currency)}`,
           ...(breakdown.length
             ? ['', 'Per-currency breakdown:', ...breakdown.map((b) => `  ${b}`)]
@@ -240,27 +240,27 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage(lines.join('\n'));
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: failed to fetch balance — ${msg}`);
-        vscode.window.showErrorMessage(`WaitLayer: failed to fetch balance`);
+        console.warn(`Ateva: failed to fetch balance — ${msg}`);
+        vscode.window.showErrorMessage(`Ateva: failed to fetch balance`);
       }
     }),
-    vscode.commands.registerCommand('waitlayer.toggleAds', async () => {
+    vscode.commands.registerCommand('ateva.toggleAds', async () => {
       const enabled = !(await config.adsEnabled());
       try {
         await api.updateAdsEnabled(enabled);
         await config.setAdsEnabled(enabled);
-        vscode.window.showInformationMessage(`WaitLayer: ads ${enabled ? 'enabled' : 'disabled'}`);
+        vscode.window.showInformationMessage(`Ateva: ads ${enabled ? 'enabled' : 'disabled'}`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: failed to update adsEnabled on server — ${msg}`);
+        console.warn(`Ateva: failed to update adsEnabled on server — ${msg}`);
         vscode.window
-          .showErrorMessage(`WaitLayer: ads were not changed — ${msg}`, 'Retry')
+          .showErrorMessage(`Ateva: ads were not changed — ${msg}`, 'Retry')
           .then(
-            (choice) => choice === 'Retry' && vscode.commands.executeCommand('waitlayer.toggleAds'),
+            (choice) => choice === 'Retry' && vscode.commands.executeCommand('ateva.toggleAds'),
           );
       }
     }),
-    vscode.commands.registerCommand('waitlayer.toggleWaitTelemetry', async () => {
+    vscode.commands.registerCommand('ateva.toggleWaitTelemetry', async () => {
       const enabled = !(await config.waitTelemetryEnabled());
       try {
         await api.updateWaitTelemetryEnabled(enabled);
@@ -269,31 +269,31 @@ export async function activate(context: vscode.ExtensionContext) {
         else stopBridge();
         vscode.window.showInformationMessage(
           enabled
-            ? 'WaitLayer: wait telemetry enabled. Detected waits may now be sent to WaitLayer.'
-            : 'WaitLayer: wait telemetry disabled. No detected waits will be sent to WaitLayer.',
+            ? 'Ateva: wait telemetry enabled. Detected waits may now be sent to Ateva.'
+            : 'Ateva: wait telemetry disabled. No detected waits will be sent to Ateva.',
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`WaitLayer: telemetry was not changed — ${msg}`);
+        vscode.window.showErrorMessage(`Ateva: telemetry was not changed — ${msg}`);
       }
     }),
-    vscode.commands.registerCommand('waitlayer.openDashboard', () => {
+    vscode.commands.registerCommand('ateva.openDashboard', () => {
       vscode.env.openExternal(vscode.Uri.parse(config.getDashboardUrl()));
     }),
-    vscode.commands.registerCommand('waitlayer.reportFalseWait', async (reason?: string) => {
+    vscode.commands.registerCommand('ateva.reportFalseWait', async (reason?: string) => {
       if (!(await config.waitTelemetryEnabled())) {
         vscode.window.showInformationMessage(
-          'WaitLayer: enable wait telemetry before reporting detection feedback.',
+          'Ateva: enable wait telemetry before reporting detection feedback.',
         );
         return;
       }
       if (!activeWaitStateId) {
-        vscode.window.showInformationMessage('WaitLayer: no active wait to report');
+        vscode.window.showInformationMessage('Ateva: no active wait to report');
         return;
       }
       if (flaggedWaitStateId === activeWaitStateId) {
         vscode.window.showInformationMessage(
-          'WaitLayer: this wait has already been reported as a false detection',
+          'Ateva: this wait has already been reported as a false detection',
         );
         return;
       }
@@ -328,15 +328,15 @@ export async function activate(context: vscode.ExtensionContext) {
           computeSuppressUntil(config.falsePositiveSuppressionMinutes(), Date.now()),
         );
         vscode.window.showInformationMessage(
-          'WaitLayer: thanks — this wait has been flagged as a false detection',
+          'Ateva: thanks — this wait has been flagged as a false detection',
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`WaitLayer: failed to flag false-positive wait — ${msg}`);
-        vscode.window.showErrorMessage(`WaitLayer: failed to report false wait — ${msg}`);
+        console.warn(`Ateva: failed to flag false-positive wait — ${msg}`);
+        vscode.window.showErrorMessage(`Ateva: failed to report false wait — ${msg}`);
       }
     }),
-    vscode.commands.registerCommand('waitlayer.toggleDetectorSource', async (source?: string) => {
+    vscode.commands.registerCommand('ateva.toggleDetectorSource', async (source?: string) => {
       const target =
         source ??
         (await vscode.window.showQuickPick([...KNOWN_DETECTOR_SOURCES], {
@@ -346,10 +346,10 @@ export async function activate(context: vscode.ExtensionContext) {
       const disabled = await config.toggleDetectorSource(target);
       const nowDisabled = disabled.includes(target.toLowerCase());
       vscode.window.showInformationMessage(
-        `WaitLayer: detector source '${target}' is now ${nowDisabled ? 'disabled' : 'enabled'}`,
+        `Ateva: detector source '${target}' is now ${nowDisabled ? 'disabled' : 'enabled'}`,
       );
     }),
-    vscode.commands.registerCommand('waitlayer.showExperimentAssignment', async () => {
+    vscode.commands.registerCommand('ateva.showExperimentAssignment', async () => {
       const assignment = await detectorState.getOrAssignExperiment(
         await config.getDeviceUserId(),
         vscode.env.machineId,
@@ -358,13 +358,13 @@ export async function activate(context: vscode.ExtensionContext) {
       const detail = assignment.enrolled
         ? `Enrolled — variant: ${assignment.variant} (bucket ${assignment.bucket}/100)`
         : `Not enrolled (bucket ${assignment.bucket}/100, rollout ${config.detectorRolloutPercent()}%)`;
-      vscode.window.showInformationMessage(`WaitLayer detector experiment: ${detail}`);
+      vscode.window.showInformationMessage(`Ateva detector experiment: ${detail}`);
     }),
     // P1 #12: the manifest advertises this command, so it must be registered.
     // A manually reported wait is a diagnostics / shadow-mode feedback
     // channel ONLY: the detector marks it `manual` + `shadow`, so it never
     // reaches the server and is never billable.
-    vscode.commands.registerCommand('waitlayer.triggerManualWait', async (tool?: string) => {
+    vscode.commands.registerCommand('ateva.triggerManualWait', async (tool?: string) => {
       const target =
         tool ??
         (await vscode.window.showQuickPick([...AI_TOOL_VALUES], {
@@ -374,12 +374,12 @@ export async function activate(context: vscode.ExtensionContext) {
       const waitStateId = detector.triggerManualWait(target);
       if (!waitStateId) {
         vscode.window.showInformationMessage(
-          `WaitLayer: manual wait not started (source '${target}' is disabled or suppressed)`,
+          `Ateva: manual wait not started (source '${target}' is disabled or suppressed)`,
         );
         return;
       }
       vscode.window.showInformationMessage(
-        `WaitLayer: manual wait reported for '${target}' (shadow-only — used for detection feedback, never billable)`,
+        `Ateva: manual wait reported for '${target}' (shadow-only — used for detection feedback, never billable)`,
       );
     }),
   ];
@@ -401,7 +401,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // them locally for its own state machine.
         if (event.shadow) return;
         if (!environmentVerified || !status.isEnvironmentVerified()) {
-          console.warn('WaitLayer: environment identity is not verified; suppressing wait telemetry');
+          console.warn('Ateva: environment identity is not verified; suppressing wait telemetry');
           return;
         }
 
@@ -427,19 +427,19 @@ export async function activate(context: vscode.ExtensionContext) {
         // telemetry.
         void Promise.resolve(
           vscode.window.showInformationMessage(
-            `WaitLayer detected an AI assistant wait (${event.tool}). ` +
+            `Ateva detected an AI assistant wait (${event.tool}). ` +
               `If this was a false detection, let us know.`,
             REPORT_FALSE_POSITIVE_ACTION,
           ),
         )
           .then(async (choice) => {
             if (choice && choice.title === REPORT_FALSE_POSITIVE_ACTION.title) {
-              await vscode.commands.executeCommand('waitlayer.reportFalseWait');
+              await vscode.commands.executeCommand('ateva.reportFalseWait');
             }
           })
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
-            console.warn(`WaitLayer: false-positive prompt failed — ${msg}`);
+            console.warn(`Ateva: false-positive prompt failed — ${msg}`);
           });
 
         const startPromise = (async (): Promise<string | null> => {
@@ -483,7 +483,7 @@ export async function activate(context: vscode.ExtensionContext) {
             attestation.cancel(event.waitStateId);
             attestationBegunWaits.delete(event.waitStateId);
             const msg = err instanceof Error ? err.message : String(err);
-            console.warn(`WaitLayer: failed to record wait state start — ${msg}`);
+            console.warn(`Ateva: failed to record wait state start — ${msg}`);
             return null;
           }
         })();
@@ -515,7 +515,7 @@ export async function activate(context: vscode.ExtensionContext) {
           const now = Date.now();
           adTimestamps = adTimestamps.filter((t) => now - t < 3600_000);
           if (adTimestamps.length >= maxAdsPerHour) {
-            console.warn('WaitLayer: frequency cap reached, skipping ad');
+            console.warn('Ateva: frequency cap reached, skipping ad');
             return;
           }
 
@@ -576,7 +576,7 @@ export async function activate(context: vscode.ExtensionContext) {
                   });
                 } catch (err: unknown) {
                   const msg = err instanceof Error ? err.message : String(err);
-                  console.warn(`WaitLayer: failed to record ad interaction — ${msg}`);
+                  console.warn(`Ateva: failed to record ad interaction — ${msg}`);
                 } finally {
                   panel.hide();
                 }
@@ -587,7 +587,7 @@ export async function activate(context: vscode.ExtensionContext) {
           // Don't disrupt the IDE with a modal, but make the failure visible in
           // the extension's output channel
           const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`WaitLayer: ad request/display failed — ${msg}`);
+          console.warn(`Ateva: ad request/display failed — ${msg}`);
         }
       } else if (signal.type === 'wait_end') {
         const event = signal.event;
@@ -632,7 +632,7 @@ export async function activate(context: vscode.ExtensionContext) {
             attestationBegunWaits.delete(event.waitStateId);
             pendingInteractions.delete(event.waitStateId);
             const msg = err instanceof Error ? err.message : String(err);
-            console.warn(`WaitLayer: failed to record wait state end — ${msg}`);
+            console.warn(`Ateva: failed to record wait state end — ${msg}`);
           } finally {
             // A newer wait can start while this end POST is in flight. Do not
             // hide that wait's panel or overwrite its status when the older end
@@ -646,7 +646,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     })().catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`WaitLayer: detector signal handler failed — ${msg}`);
+      console.warn(`Ateva: detector signal handler failed — ${msg}`);
     });
   });
 
@@ -659,29 +659,24 @@ export async function activate(context: vscode.ExtensionContext) {
       pendingInteractions.clear();
     },
   };
-  context.subscriptions.push(
-    ...commands,
-    attestationCleanup,
-    {
-      dispose: () => {
-        stopBridge();
-      },
+  context.subscriptions.push(...commands, attestationCleanup, {
+    dispose: () => {
+      stopBridge();
     },
-  );
-
+  });
 
   // Fetch server-side consent after boot. A failed initial sync is non-fatal:
   // no local state is changed, and successful login retries this exact path.
   void syncServerConsent().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`WaitLayer: failed to fetch developer settings — ${msg}`);
+    console.warn(`Ateva: failed to fetch developer settings — ${msg}`);
   });
 
   // Boot balance fetch. On transient failure (network not up yet at
   // activation time, device not registered) retry once after 30s so the
   // status bar self-heals without the user clicking "login" again. A
   // second failure leaves the status bar as "logged out" — the user
-  // can manually run `WaitLayer: Show Earnings` or `WaitLayer: Login`
+  // can manually run `Ateva: Show Earnings` or `Ateva: Login`
   // to re-attempt. Without this retry, any extension-activation-time
   // network hiccup permanently showed "logged out" with no recovery path
   // other than IDE restart or explicit login.
@@ -706,10 +701,10 @@ export async function activate(context: vscode.ExtensionContext) {
         const msg = err instanceof Error ? err.message : String(err);
         if (!bootRetried) {
           bootRetried = true;
-          console.warn(`[WaitLayer] Initial balance fetch failed — retrying in 30s: ${msg}`);
+          console.warn(`[Ateva] Initial balance fetch failed — retrying in 30s: ${msg}`);
           bootRetryTimer = setTimeout(fetchBootBalance, 30_000);
         } else {
-          console.warn(`[WaitLayer] Initial balance fetch failed after retry: ${msg}`);
+          console.warn(`[Ateva] Initial balance fetch failed after retry: ${msg}`);
           status.setLoggedOut();
         }
       });

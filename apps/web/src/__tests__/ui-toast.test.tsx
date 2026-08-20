@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import { ToastProvider, useToast } from '@waitlayer/ui';
+import { ToastProvider, useToast } from '@ateva/ui';
 
 function TriggerButton() {
   const { success } = useToast();

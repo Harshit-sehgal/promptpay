@@ -51,9 +51,9 @@ describe('StatusBar — registration', () => {
     expect(mock.created[0].priority).toBe(50);
     expect(mock.item.show).toHaveBeenCalledTimes(1);
     expect(context.subscriptions).toContain(mock.item);
-    expect(mock.item.text).toBe('$(zap) WaitLayer: idle');
-    expect(mock.item.tooltip).toBe('WaitLayer click to view earnings');
-    expect(mock.item.command).toBe('waitlayer.showEarnings');
+    expect(mock.item.text).toBe('$(zap) Ateva: idle');
+    expect(mock.item.tooltip).toBe('Ateva click to view earnings');
+    expect(mock.item.command).toBe('ateva.showEarnings');
   });
 });
 
@@ -63,7 +63,7 @@ describe('StatusBar — state updates', () => {
     bar.register(makeContext());
 
     bar.showAdServing();
-    expect(mock.item.text).toBe('$(zap) WaitLayer: showing ad');
+    expect(mock.item.text).toBe('$(zap) Ateva: showing ad');
   });
 
   it('shows the idle text', () => {
@@ -72,8 +72,8 @@ describe('StatusBar — state updates', () => {
 
     bar.showAdServing();
     bar.showIdle();
-    expect(mock.item.text).toBe('$(zap) WaitLayer: idle');
-    expect(mock.item.command).toBe('waitlayer.showEarnings');
+    expect(mock.item.text).toBe('$(zap) Ateva: idle');
+    expect(mock.item.command).toBe('ateva.showEarnings');
   });
 
   it('formats earnings as a dollar amount and updates the tooltip', () => {
@@ -81,21 +81,21 @@ describe('StatusBar — state updates', () => {
     bar.register(makeContext());
 
     bar.setEarnings(1250n, 'USD');
-    expect(mock.item.text).toBe('$(zap) WaitLayer: $12.50');
+    expect(mock.item.text).toBe('$(zap) Ateva: $12.50');
     expect(mock.item.tooltip).toBe('Click for balance details');
-    expect(mock.item.command).toBe('waitlayer.showEarnings');
+    expect(mock.item.command).toBe('ateva.showEarnings');
   });
 
   it('shows a persistent sandbox marker in every status state', () => {
     const bar = new StatusBar();
     bar.register(makeContext(), 'sandbox');
 
-    expect(mock.item.text).toContain('WaitLayer [SANDBOX]');
+    expect(mock.item.text).toContain('Ateva [SANDBOX]');
     expect(mock.item.tooltip).toContain('no cash value');
     bar.showAdServing();
-    expect(mock.item.text).toContain('WaitLayer [SANDBOX]');
+    expect(mock.item.text).toContain('Ateva [SANDBOX]');
     bar.setEarnings(1250n, 'USD');
-    expect(mock.item.text).toContain('WaitLayer [SANDBOX]');
+    expect(mock.item.text).toContain('Ateva [SANDBOX]');
     expect(mock.item.tooltip).toContain('no cash value');
   });
 
@@ -104,9 +104,9 @@ describe('StatusBar — state updates', () => {
     bar.register(makeContext());
 
     bar.setLoggedOut();
-    expect(mock.item.text).toBe('$(zap) WaitLayer: logged out');
-    expect(mock.item.tooltip).toBe('Log in to WaitLayer');
-    expect(mock.item.command).toBe('waitlayer.login');
+    expect(mock.item.text).toBe('$(zap) Ateva: logged out');
+    expect(mock.item.tooltip).toBe('Log in to Ateva');
+    expect(mock.item.command).toBe('ateva.login');
   });
 
   it('restores the authenticated command immediately after login', () => {
@@ -116,9 +116,9 @@ describe('StatusBar — state updates', () => {
 
     bar.setLoggedIn();
 
-    expect(mock.item.text).toBe('$(zap) WaitLayer: idle');
-    expect(mock.item.tooltip).toBe('WaitLayer click to view earnings');
-    expect(mock.item.command).toBe('waitlayer.showEarnings');
+    expect(mock.item.text).toBe('$(zap) Ateva: idle');
+    expect(mock.item.tooltip).toBe('Ateva click to view earnings');
+    expect(mock.item.command).toBe('ateva.showEarnings');
   });
 
   it('is a no-op before registration (no created item)', () => {

@@ -31,7 +31,7 @@ const SANDBOX_OUTCOMES: readonly SandboxPayoutOutcome[] = [
 async function clientForSandbox(): Promise<ApiClient | null> {
   const creds = await getCredentials();
   if (!creds) {
-    console.error(chalk.red('Not logged in. Run `waitlayer auth` first.'));
+    console.error(chalk.red('Not logged in. Run `ateva auth` first.'));
     process.exitCode = 1;
     return null;
   }

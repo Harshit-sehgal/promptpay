@@ -106,14 +106,14 @@ describe('MoneyIntegrityCronService alerting', () => {
   it('writes an audit row AND sends an operator alert email on drift', async () => {
     const { cron, audit, emailQueue } = makeCron({
       report: 'drift',
-      opsAlertEmail: 'ops@waitlayer.com',
+      opsAlertEmail: 'ops@ateva.com',
     });
     await (cron as unknown as { tick: () => Promise<void> }).tick();
     expect(audit.logStrict).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'money_integrity_discrepancy' }),
     );
     expect(emailQueue.sendMoneyIntegrityAlert).toHaveBeenCalledWith(
-      'ops@waitlayer.com',
+      'ops@ateva.com',
       expect.objectContaining({ severity: 'high', campaignDiscrepancyCount: 1 }),
     );
   });
@@ -121,7 +121,7 @@ describe('MoneyIntegrityCronService alerting', () => {
   it('still completes when the alert email fails (audit row is the durable record)', async () => {
     const { cron, audit, emailQueue } = makeCron({
       report: 'drift',
-      opsAlertEmail: 'ops@waitlayer.com',
+      opsAlertEmail: 'ops@ateva.com',
       emailFails: true,
     });
     // Must not throw — the cron swallows the email failure.

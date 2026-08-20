@@ -51,8 +51,8 @@ These assumptions were made on June 30, 2026 and should be rechecked before impl
 
 ## Compliance assumptions
 
-- WaitLayer must not claim universal payout availability until provider coverage is proven.
-- WaitLayer should avoid fixed earning promises.
+- Ateva must not claim universal payout availability until provider coverage is proven.
+- Ateva should avoid fixed earning promises.
 - Ad labels must be clear and visible.
 - Payout records, ledger records, fraud evidence, and audit logs may need retention even after user deletion requests, subject to applicable law.
 - Legal review is required before public launch.
@@ -66,4 +66,3 @@ These assumptions were made on June 30, 2026 and should be rechecked before impl
 - What CPM range can advertisers support while still funding meaningful user rewards?
 - How long should reserve funds be held before release?
 - Which provider should be second after manual PayPal: automated PayPal Payouts, Stripe Connect, or Wise/Payoneer?
-

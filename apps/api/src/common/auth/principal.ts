@@ -1,4 +1,4 @@
-import { UserRole } from '@waitlayer/db';
+import { UserRole } from '@ateva/db';
 
 /**
  * The single, canonical identity shape attached to `req.user` for every

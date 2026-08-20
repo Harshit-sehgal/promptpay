@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "reliability_tester",
   "environment": "sandbox",
-  "seed": "waitlayer-queue-full-v1",
+  "seed": "ateva-queue-full-v1",
   "reporting": {
     "deterministic": true,
     "severity": "critical",

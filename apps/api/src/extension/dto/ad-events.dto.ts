@@ -18,7 +18,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { AdPlacementType, ToolType } from '@waitlayer/shared';
+import { AdPlacementType, ToolType } from '@ateva/shared';
 
 import { WAIT_STATE_MAX_DURATION_SECONDS } from '../extension.constants';
 

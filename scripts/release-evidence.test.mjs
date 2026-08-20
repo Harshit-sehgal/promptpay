@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 const root = new URL('../', import.meta.url).pathname;
 
 test('release evidence generator records immutable source and explicit gate results', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'waitlayer-evidence-'));
+  const dir = mkdtempSync(join(tmpdir(), 'ateva-evidence-'));
   const output = join(dir, 'manifest.json');
   execFileSync(
     'node',

@@ -7,7 +7,7 @@ import {
   scanForbiddenAgentFields,
 } from './index';
 
-describe('@waitlayer/agent-protocol golden fixtures (WL-022)', () => {
+describe('@ateva/agent-protocol golden fixtures (WL-022)', () => {
   it('covers Claude, Codex, wrapper, and VS Code providers', () => {
     expect(AGENT_GOLDEN_FIXTURES.map((fixture) => fixture.provider)).toEqual([
       'claude_code',
@@ -19,11 +19,13 @@ describe('@waitlayer/agent-protocol golden fixtures (WL-022)', () => {
 
   it('normalizes every fixture to exactly its declared allowlisted metadata', () => {
     for (const fixture of loadGoldenAgentFixtures()) {
-      expect(sanitizeHookPayload(fixture.provider, fixture.providerEvent, fixture.payload)).toEqual({
-        provider: fixture.provider,
-        providerEvent: fixture.providerEvent,
-        metadata: fixture.expectedMetadata,
-      });
+      expect(sanitizeHookPayload(fixture.provider, fixture.providerEvent, fixture.payload)).toEqual(
+        {
+          provider: fixture.provider,
+          providerEvent: fixture.providerEvent,
+          metadata: fixture.expectedMetadata,
+        },
+      );
     }
   });
 
@@ -35,7 +37,9 @@ describe('@waitlayer/agent-protocol golden fixtures (WL-022)', () => {
           sanitizeHookPayload(fixture.provider, fixture.providerEvent, fixture.payload),
         ),
       ).toEqual([]);
-      expect(JSON.stringify(fixture)).not.toMatch(/prompt|command|terminal|source|path|secret|token/i);
+      expect(JSON.stringify(fixture)).not.toMatch(
+        /prompt|command|terminal|source|path|secret|token/i,
+      );
     }
   });
 

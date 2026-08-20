@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Manifesto — WaitLayer',
+  title: 'Manifesto — Ateva',
   description:
-    'WaitLayer Manifesto — developer attention is respected, privacy is non-negotiable, and participant compensation must be transparent and independently defined.',
+    'Ateva Manifesto — developer attention is respected, privacy is non-negotiable, and participant compensation must be transparent and independently defined.',
 };
 
 export default function ManifestoPage() {
@@ -17,11 +17,8 @@ export default function ManifestoPage() {
         >
           ← Back to home
         </Link>
-        <h1
-          className="text-4.5xl font-bold text-surface-900 tracking-tight mb-10"
-          style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '42px', fontWeight: 400 }}
-        >
-          The WaitLayer Manifesto
+        <h1 className="font-serif text-[42px] font-normal text-surface-900 tracking-tight mb-10">
+          The Ateva Manifesto
         </h1>
         <div className="text-surface-600 text-sm leading-relaxed space-y-6">
           <p
@@ -37,53 +34,41 @@ export default function ManifestoPage() {
             transparent, verifiable, and separate from customer payment custody.”
           </p>
 
-          <h2
-            className="text-xl font-semibold text-surface-900 mt-10 mb-3"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
-          >
+          <h2 className="font-serif text-[28px] font-normal text-surface-900 mt-10 mb-3">
             1. Attention is a scarce resource
           </h2>
           <p>
-            AI coding agents, builds, tests, and deployments create natural waiting periods. WaitLayer
-            is exploring whether a small, clearly labeled sponsor surface can fit those moments without
-            interrupting the developer or pretending to be part of the agent output.
+            AI coding agents, builds, tests, and deployments create natural waiting periods. Ateva
+            is exploring whether a small, clearly labeled sponsor surface can fit those moments
+            without interrupting the developer or pretending to be part of the agent output.
           </p>
 
-          <h2
-            className="text-xl font-semibold text-surface-900 mt-10 mb-3"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
-          >
+          <h2 className="font-serif text-[28px] font-normal text-surface-900 mt-10 mb-3">
             2. Privacy is non-negotiable
           </h2>
           <p>
-            WaitLayer does not need source code, prompts, terminal output, file contents, secrets, or
-            repository names to verify an eligible wait state. The product is designed around a narrow
-            telemetry allowlist and explicit user consent.
+            Ateva does not need source code, prompts, terminal output, file contents, secrets, or
+            repository names to verify an eligible wait state. The product is designed around a
+            narrow telemetry allowlist and explicit user consent.
           </p>
 
-          <h2
-            className="text-xl font-semibold text-surface-900 mt-10 mb-3"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
-          >
+          <h2 className="font-serif text-[28px] font-normal text-surface-900 mt-10 mb-3">
             3. Compensation should be explicit, not pass-through
           </h2>
           <p>
-            If participant rewards launch, WaitLayer will publish a reward schedule based on verified
-            eligible activity. That schedule is independent from advertiser campaign pricing. Advertisers
-            purchase a service from WaitLayer; WaitLayer separately bears the cost of participant
-            compensation through an approved fiat payout provider.
+            If participant rewards launch, Ateva will publish a reward schedule based on verified
+            eligible activity. That schedule is independent from advertiser campaign pricing.
+            Advertisers purchase a service from Ateva; Ateva separately bears the cost of
+            participant compensation through an approved fiat payout provider.
           </p>
 
-          <h2
-            className="text-xl font-semibold text-surface-900 mt-10 mb-3"
-            style={{ fontFamily: "'Instrument Serif', Georgia, serif", fontSize: '28px', fontWeight: 400 }}
-          >
+          <h2 className="font-serif text-[28px] font-normal text-surface-900 mt-10 mb-3">
             4. Verification comes before monetization
           </h2>
           <p>
-            The private beta is telemetry-only. Rewards and live campaign billing remain disabled until
-            the relevant verification, fraud, payment, and payout controls are independently reviewed and
-            production-ready.
+            The private beta is telemetry-only. Rewards and live campaign billing remain disabled
+            until the relevant verification, fraud, payment, and payout controls are independently
+            reviewed and production-ready.
           </p>
         </div>
       </div>

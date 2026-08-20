@@ -5,7 +5,7 @@ import {
   formatMinorUnits,
   majorToMinor,
   minorToMajorInputValue,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 /**
  * Per-currency campaign money-policy for web input forms. Reads the

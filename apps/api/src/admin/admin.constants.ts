@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 
-import { RecoveryDebtCaseStatus, ToolTypeEnum } from '@waitlayer/db';
+import { RecoveryDebtCaseStatus, ToolTypeEnum } from '@ateva/db';
 
 export const DEFAULT_DEVICE_RECOVERY_TOKEN_MINUTES = 15;
 

@@ -6,12 +6,12 @@ import {
   depositMinimumMinor,
   formatMinorUnits,
   payoutMinimumMinor,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 export const metadata: Metadata = {
-  title: 'Pricing — WaitLayer',
+  title: 'Pricing — Ateva',
   description:
-    'WaitLayer private beta — wait-state verification is free and live advertiser billing and participant payouts are not yet enabled.',
+    'Ateva private beta — wait-state verification is free and live advertiser billing and participant payouts are not yet enabled.',
 };
 
 const IconCheck = () => (
@@ -57,7 +57,7 @@ export default function PricingPage() {
             <div className="w-7 h-7 rounded-md bg-brand-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
               W
             </div>
-            <span className="text-surface-900 font-semibold text-sm tracking-tight">WaitLayer</span>
+            <span className="text-surface-900 font-semibold text-sm tracking-tight">Ateva</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link
@@ -162,22 +162,21 @@ export default function PricingPage() {
               <div className="bg-white border border-surface-200 rounded-2xl p-7">
                 <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money in</p>
                 <h3 className="font-semibold text-surface-900 text-lg mb-3">
-                  Advertiser → Dodo → WaitLayer
+                  Advertiser → Dodo → Ateva
                 </h3>
                 <p className="text-surface-600 text-sm leading-relaxed">
-                  An advertiser purchases campaign delivery from WaitLayer. Dodo Payments handles
-                  that customer transaction and settles it to WaitLayer. Dodo does not pay
-                  participants.
+                  An advertiser purchases campaign delivery from Ateva. Dodo Payments handles that
+                  customer transaction and settles it to Ateva. Dodo does not pay participants.
                 </p>
               </div>
               <div className="bg-white border border-surface-200 rounded-2xl p-7">
                 <p className="text-xs uppercase tracking-wider text-surface-400 mb-3">Money out</p>
                 <h3 className="font-semibold text-surface-900 text-lg mb-3">
-                  WaitLayer → separate payout provider → participant
+                  Ateva → separate payout provider → participant
                 </h3>
                 <p className="text-surface-600 text-sm leading-relaxed">
-                  If rewards launch, WaitLayer independently calculates eligible fiat compensation
-                  after verification and pays it through a separately approved payout provider.
+                  If rewards launch, Ateva independently calculates eligible fiat compensation after
+                  verification and pays it through a separately approved payout provider.
                 </p>
               </div>
             </div>

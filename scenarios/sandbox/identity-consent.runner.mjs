@@ -13,7 +13,7 @@ import {
 } from '../../apps/cli/dist/lib/agent-spool.js';
 
 const mode = process.argv[2];
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-scenario-consent-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-scenario-consent-'));
 const userId = 'scenario-consent-user';
 const deviceId = '00000000-0000-4000-8000-000000000091';
 

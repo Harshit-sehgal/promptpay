@@ -16,9 +16,9 @@ import {
   isAgentEventTimestampBounded,
   sanitizeHookPayload,
   scanForbiddenAgentFields,
-} from '@waitlayer/agent-protocol';
-import { Prisma } from '@waitlayer/db';
-import { verifySignature } from '@waitlayer/shared';
+} from '@ateva/agent-protocol';
+import { Prisma } from '@ateva/db';
+import { verifySignature } from '@ateva/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import { AgentAnalyticsQueryDto, AgentEventsBatchDto } from './dto';
@@ -49,8 +49,8 @@ export class AgentService {
     private readonly prisma: PrismaService,
     config: ConfigService,
   ) {
-    this.environmentKind = config.get<string>('WAITLAYER_ENVIRONMENT_KIND', 'development');
-    this.environmentId = config.get<string>('WAITLAYER_ENVIRONMENT_ID', 'local');
+    this.environmentKind = config.get<string>('ATEVA_ENVIRONMENT_KIND', 'development');
+    this.environmentId = config.get<string>('ATEVA_ENVIRONMENT_ID', 'local');
   }
 
   async getAnalytics(userId: string, query: AgentAnalyticsQueryDto) {
@@ -65,7 +65,11 @@ export class AgentService {
     if (end.getTime() - start.getTime() > maxWindowMs) {
       throw new BadRequestException('Analytics range cannot exceed 31 days');
     }
-    if (end.getTime() - start.getTime() < 0 || !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    if (
+      end.getTime() - start.getTime() < 0 ||
+      !Number.isFinite(start.getTime()) ||
+      !Number.isFinite(end.getTime())
+    ) {
       throw new BadRequestException('Analytics range must contain valid timestamps');
     }
 
@@ -352,11 +356,7 @@ export class AgentService {
       const latestEvent = existingSession
         ? await tx.agentLifecycleEvent.findFirst({
             where: { sessionId: existingSession.id },
-            orderBy: [
-              { occurredAt: 'desc' },
-              { sequence: 'desc' },
-              { eventId: 'desc' },
-            ],
+            orderBy: [{ occurredAt: 'desc' }, { sequence: 'desc' }, { eventId: 'desc' }],
             select: { occurredAt: true, sequence: true, eventId: true },
           })
         : null;

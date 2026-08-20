@@ -1,11 +1,11 @@
 import { createPublicKey } from 'node:crypto';
 
-const enforce = process.env.VERCEL === '1' || process.env.WAITLAYER_REQUIRE_DEPLOY_ENV === '1';
+const enforce = process.env.VERCEL === '1' || process.env.ATEVA_REQUIRE_DEPLOY_ENV === '1';
 const errors = [];
-const environmentKind = process.env.NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND ?? 'production';
+const environmentKind = process.env.NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND ?? 'production';
 if (!['development', 'test', 'sandbox', 'staging', 'production'].includes(environmentKind)) {
   errors.push(
-    'NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND must be development, test, sandbox, staging, or production',
+    'NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND must be development, test, sandbox, staging, or production',
   );
 }
 if (errors.length > 0) {

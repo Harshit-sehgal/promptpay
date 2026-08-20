@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { agentLifecycleEventSchema } from '@waitlayer/agent-protocol';
+import { agentLifecycleEventSchema } from '@ateva/agent-protocol';
 
 import {
   getBridgeStatus,
@@ -42,7 +42,7 @@ function makeEvent() {
 }
 
 function makePaths() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-bridge-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-bridge-'));
   directories.push(directory);
   return getSpoolPaths(directory);
 }
@@ -164,7 +164,9 @@ describe('agent bridge', () => {
           }
         });
         socket.once('connect', () =>
-          socket.write(`${JSON.stringify({ action: 'subscribe', secret: fs.readFileSync(paths.bridgeSecretFile, 'utf8').trim() })}\n`),
+          socket.write(
+            `${JSON.stringify({ action: 'subscribe', secret: fs.readFileSync(paths.bridgeSecretFile, 'utf8').trim() })}\n`,
+          ),
         );
         socket.once('error', reject);
       });

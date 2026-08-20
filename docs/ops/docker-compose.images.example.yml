@@ -2,22 +2,22 @@
 # the repository's development Compose file, so mock authentication, local
 # database credentials, source builds, and development NODE_ENV values cannot
 # leak into a release. Postgres and Redis are expected to be managed services.
-name: waitlayer-production
+name: ateva-production
 
 services:
   api:
-    image: ${WAITLAYER_API_IMAGE:?Set WAITLAYER_API_IMAGE to an immutable image@sha256 digest}
+    image: ${ATEVA_API_IMAGE:?Set ATEVA_API_IMAGE to an immutable image@sha256 digest}
     restart: unless-stopped
     stop_grace_period: 30s
     ports:
-      - '${WAITLAYER_API_BIND_ADDRESS:-127.0.0.1}:${WAITLAYER_API_PORT:-4002}:4002'
+      - '${ATEVA_API_BIND_ADDRESS:-127.0.0.1}:${ATEVA_API_PORT:-4002}:4002'
     environment:
       # This file runs shipped artifacts only. Staging uses the same optimized
       # production Node semantics; product identity is selected separately by
-      # WAITLAYER_ENVIRONMENT_KIND.
+      # ATEVA_ENVIRONMENT_KIND.
       NODE_ENV: production
-      WAITLAYER_ENVIRONMENT_KIND: ${WAITLAYER_ENVIRONMENT_KIND:-production}
-      WAITLAYER_ENVIRONMENT_ID: ${WAITLAYER_ENVIRONMENT_ID:?Set a stable deployment identity}
+      ATEVA_ENVIRONMENT_KIND: ${ATEVA_ENVIRONMENT_KIND:-production}
+      ATEVA_ENVIRONMENT_ID: ${ATEVA_ENVIRONMENT_ID:?Set a stable deployment identity}
       ENABLE_STAGING_FAUCET: ${ENABLE_STAGING_FAUCET:-false}
       API_PORT: '4002'
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
@@ -32,8 +32,8 @@ services:
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?Set JWT_PRIVATE_KEY}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY}
       JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
-      JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+      JWT_ISSUER: ${JWT_ISSUER:-ateva}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ateva-client}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
@@ -53,7 +53,7 @@ services:
       PAYOUT_DESTINATION_COOLDOWN_HOURS: ${PAYOUT_DESTINATION_COOLDOWN_HOURS:-24}
       PAYOUT_ENCRYPTION_KEY: ${PAYOUT_ENCRYPTION_KEY:?Set a canonical base64 32-byte payout encryption key}
       PAYOUT_HMAC_KEY: ${PAYOUT_HMAC_KEY:?Set a different canonical base64 32-byte payout HMAC key}
-      WAITLAYER_PAYOUT_PROVIDER_STATUS: ${WAITLAYER_PAYOUT_PROVIDER_STATUS:-{}}
+      ATEVA_PAYOUT_PROVIDER_STATUS: ${ATEVA_PAYOUT_PROVIDER_STATUS:-{}}
       VERIFIED_DETECTOR_VERSIONS: ${VERIFIED_DETECTOR_VERSIONS:-}
       # A null Compose mapping passes the value through when configured and
       # omits it when absent. An empty string is invalid for this optional JSON.
@@ -76,25 +76,25 @@ services:
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
 
   web:
-    image: ${WAITLAYER_WEB_IMAGE:?Set WAITLAYER_WEB_IMAGE to an immutable image@sha256 digest}
+    image: ${ATEVA_WEB_IMAGE:?Set ATEVA_WEB_IMAGE to an immutable image@sha256 digest}
     restart: unless-stopped
     stop_grace_period: 30s
     ports:
-      - '${WAITLAYER_WEB_BIND_ADDRESS:-127.0.0.1}:${WAITLAYER_WEB_PORT:-3000}:3000'
+      - '${ATEVA_WEB_BIND_ADDRESS:-127.0.0.1}:${ATEVA_WEB_PORT:-3000}:3000'
     environment:
       NODE_ENV: production
-      WAITLAYER_REQUIRE_DEPLOY_ENV: '1'
+      ATEVA_REQUIRE_DEPLOY_ENV: '1'
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:4002/api/v1}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL}
       NEXT_PUBLIC_WEB_URL: ${NEXT_PUBLIC_WEB_URL:?Set NEXT_PUBLIC_WEB_URL}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:?Set NEXT_PUBLIC_GOOGLE_CLIENT_ID}
-      NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND: ${NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND:-production}
+      NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND: ${NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND:-production}
       NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'false'
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?Set JWT_PUBLIC_KEY}
       JWT_PUBLIC_KEYS: ${JWT_PUBLIC_KEYS:-}
-      JWT_ISSUER: ${JWT_ISSUER:-waitlayer}
-      JWT_AUDIENCE: ${JWT_AUDIENCE:-waitlayer-client}
+      JWT_ISSUER: ${JWT_ISSUER:-ateva}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-ateva-client}
       BFF_TRUST_PROXY_HOPS: ${BFF_TRUST_PROXY_HOPS:-1}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       SENTRY_DSN: ${SENTRY_DSN:-}

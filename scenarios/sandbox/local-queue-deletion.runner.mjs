@@ -10,7 +10,7 @@ import {
   readSpoolStatus,
 } from '../../apps/cli/dist/lib/agent-spool.js';
 
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-scenario-queue-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-scenario-queue-'));
 try {
   const paths = getSpoolPaths(directory);
   const installationId = 'queue-delete-installation-v1';

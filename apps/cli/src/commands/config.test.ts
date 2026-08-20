@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
   return {
     api,
     creds: {
-      apiUrl: 'https://api.waitlayer.com/api/v1',
+      apiUrl: 'https://api.ateva.com/api/v1',
       token: 'tok',
       email: 'dev@test.com',
       role: 'developer',
@@ -62,7 +62,7 @@ describe('runConfig', () => {
   it('prints current settings on load', async () => {
     await runConfig();
     const output = logSpy.mock.calls.map((c) => c[0]).join('\n');
-    expect(output).toContain('WaitLayer Settings');
+    expect(output).toContain('Ateva Settings');
     expect(output).toContain('Ads enabled');
     expect(output).toContain('ABC123');
   });

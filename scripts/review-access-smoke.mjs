@@ -3,14 +3,14 @@
  * Secret-safe smoke test for the external advertiser review journey.
  *
  * Required environment:
- *   REVIEW_BASE_URL=https://www.waitlayer.com
+ *   REVIEW_BASE_URL=https://www.ateva.com
  *   REVIEW_EMAIL=<dedicated advertiser review account>
  *   REVIEW_ACCOUNT_PASSWORD=<password>
  *
  * The script never prints credentials, cookies, auth bodies, or provider data.
  */
 
-const REVIEW_CAMPAIGN_NAME = 'WaitLayer product review — draft campaign';
+const REVIEW_CAMPAIGN_NAME = 'Ateva product review — draft campaign';
 
 function fail(message) {
   console.error(`review-access-smoke: ${message}`);

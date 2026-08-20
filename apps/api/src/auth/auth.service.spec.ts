@@ -3,7 +3,7 @@ import { BadRequestException, ConflictException, UnauthorizedException } from '@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
-import { generateTotp } from '@waitlayer/shared';
+import { generateTotp } from '@ateva/shared';
 
 import { TEST_JWT_PRIVATE_KEY, TEST_JWT_PUBLIC_KEY } from './__fixtures__/test-keys';
 import { AuthService } from './auth.service';
@@ -88,14 +88,14 @@ function makeService(overrides?: Record<string, string>) {
     email,
     audit,
     createAccessToken: (sub: string, role: string, ttl = '15m', jti = 'access-jti') =>
-      jwt.signAsync({ sub, role, aud: ['waitlayer-client', 'access'], jti }, {
+      jwt.signAsync({ sub, role, aud: ['ateva-client', 'access'], jti }, {
         expiresIn: ttl,
-        issuer: 'waitlayer',
+        issuer: 'ateva',
       } as any),
     createRefreshToken: (sub: string, role: string, family: string, ttl = '30d', jti = 'sess-1') =>
-      jwt.signAsync({ sub, role, family, aud: ['waitlayer-client', 'refresh'], jti }, {
+      jwt.signAsync({ sub, role, family, aud: ['ateva-client', 'refresh'], jti }, {
         expiresIn: ttl,
-        issuer: 'waitlayer',
+        issuer: 'ateva',
       } as any),
   };
 }
@@ -825,7 +825,7 @@ describe('AuthService', () => {
           sub: 'u-reset',
           action: 'email-verification',
           fp: 'abc',
-          iss: 'waitlayer',
+          iss: 'ateva',
           aud: 'password-reset',
         },
         {

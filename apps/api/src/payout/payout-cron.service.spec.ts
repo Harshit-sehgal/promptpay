@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PayoutStatus } from '@waitlayer/shared';
+import { PayoutStatus } from '@ateva/shared';
 
 import { AlertsService } from '../observability/alerts.service';
 import { MetricsService } from '../observability/metrics.service';

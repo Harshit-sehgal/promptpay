@@ -26,14 +26,14 @@ if (!consented) {
     [
       'Refusing to run the integration reset: `prisma migrate reset --force` would',
       'destructively wipe the database at TEST_DATABASE_URL',
-      `  (set to ${process.env.TEST_DATABASE_URL ?? 'the default waitlayer_test :5433 database'}).`,
+      `  (set to ${process.env.TEST_DATABASE_URL ?? 'the default ateva_test :5433 database'}).`,
       '',
       'To run the full integration suite, prove consent explicitly:',
       '  PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=1 pnpm test',
       '',
       'Or run individual spec files against the already-migrated test database',
       '(the reset is skipped and the spec uses the current schema):',
-      '  pnpm --filter waitlayer-api exec vitest run src/integration/<spec>.spec.ts --no-file-parallelism',
+      '  pnpm --filter ateva-api exec vitest run src/integration/<spec>.spec.ts --no-file-parallelism',
       '',
     ].join('\n'),
   );

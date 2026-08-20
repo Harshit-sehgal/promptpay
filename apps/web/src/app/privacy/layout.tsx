@@ -9,9 +9,9 @@ import type { Metadata } from 'next';
  * bookmark and shared link read the same string.
  */
 export const metadata: Metadata = {
-  title: 'Privacy — WaitLayer',
+  title: 'Privacy — Ateva',
   description:
-    'What WaitLayer collects, what it never collects, and how long anything is retained. No code tracking, ever.',
+    'What Ateva collects, what it never collects, and how long anything is retained. No code tracking, ever.',
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {

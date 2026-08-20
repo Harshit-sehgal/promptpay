@@ -4,7 +4,7 @@ import {
   AGENT_ADAPTER_VERSION,
   AgentEventType,
   AgentLifecycleEventV1,
-} from '@waitlayer/agent-protocol';
+} from '@ateva/agent-protocol';
 
 export const GENERIC_WRAPPER_ADAPTER_VERSION = 'generic-wrapper-0.0.1';
 
@@ -49,7 +49,7 @@ export function createGenericWrapperEvent(input: WrapperEventInput): AgentLifecy
     eventId: deterministicEventUuid(identity),
     idempotencyKey: identity,
     environmentKind: resolveEnvironmentKind(),
-    environmentId: process.env.WAITLAYER_ENVIRONMENT_ID ?? 'local',
+    environmentId: process.env.ATEVA_ENVIRONMENT_ID ?? 'local',
     installationId: input.installationId,
     deviceId: input.deviceId,
     provider: 'generic_wrapper',
@@ -66,12 +66,13 @@ export function createGenericWrapperEvent(input: WrapperEventInput): AgentLifecy
 }
 
 export function normalizeExecutableFamily(executable: string): string {
-  const basename = executable
-    .replace(/\\/g, '/')
-    .split('/')
-    .pop()
-    ?.toLowerCase()
-    .replace(/\.(cmd|exe|bat|sh)$/i, '') ?? '';
+  const basename =
+    executable
+      .replace(/\\/g, '/')
+      .split('/')
+      .pop()
+      ?.toLowerCase()
+      .replace(/\.(cmd|exe|bat|sh)$/i, '') ?? '';
 
   if (basename === 'claude' || basename === 'claude-code') return 'claude_code';
   if (basename === 'codex' || basename === 'codex-cli') return 'codex_cli';
@@ -87,7 +88,10 @@ function durationBucket(durationMs: number): string {
   return '120s_plus';
 }
 
-function exitCodeCategory(code: number | null | undefined, signal: NodeJS.Signals | null | undefined): string {
+function exitCodeCategory(
+  code: number | null | undefined,
+  signal: NodeJS.Signals | null | undefined,
+): string {
   if (signal) return signalCategory(signal);
   if (code === 0) return 'success';
   if (typeof code === 'number' && code > 0) return 'nonzero';
@@ -109,7 +113,7 @@ function deterministicEventUuid(identity: string): string {
 }
 
 function resolveEnvironmentKind(): AgentLifecycleEventV1['environmentKind'] {
-  const candidate = process.env.WAITLAYER_ENVIRONMENT_KIND;
+  const candidate = process.env.ATEVA_ENVIRONMENT_KIND;
   if (
     candidate === 'development' ||
     candidate === 'test' ||

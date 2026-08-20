@@ -83,11 +83,11 @@ function makeTrait(
   };
   const config = {
     get: vi.fn((key: string) => {
-      if (key === 'WAITLAYER_STRIPE_CONNECT_RETURN_DOMAINS')
-        return overrides.returnDomains ?? 'app.waitlayer.com';
+      if (key === 'ATEVA_STRIPE_CONNECT_RETURN_DOMAINS')
+        return overrides.returnDomains ?? 'app.ateva.com';
       if (key === 'NODE_ENV') return overrides.nodeEnv;
       if (key === 'WEB_BASE_URL') return overrides.webBaseUrl;
-      if (key === 'WAITLAYER_PAYOUT_PROVIDER_STATUS') {
+      if (key === 'ATEVA_PAYOUT_PROVIDER_STATUS') {
         return JSON.stringify({ stripe_connect: overrides.launchStatus ?? 'available' });
       }
       return undefined;
@@ -113,8 +113,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
     const { trait } = makeTrait();
 
     const result = await trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-      refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-      returnUrl: 'https://app.waitlayer.com/onboarding/return',
+      refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+      returnUrl: 'https://app.ateva.com/onboarding/return',
     });
 
     expect(result.accountId).toBe('acct_test_123');
@@ -125,8 +125,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
     const { trait, prisma, payoutAccount } = makeTrait();
 
     await trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-      refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-      returnUrl: 'https://app.waitlayer.com/onboarding/return',
+      refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+      returnUrl: 'https://app.ateva.com/onboarding/return',
     });
 
     expect(prisma.$transaction).toHaveBeenCalled();
@@ -148,8 +148,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).resolves.toMatchObject({ accountId: 'acct_existing' });
 
@@ -175,8 +175,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).rejects.toThrow(ConflictException);
     expect(provider.createConnectAccount).not.toHaveBeenCalled();
@@ -198,8 +198,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).rejects.toThrow(/still in progress/i);
     expect(provider.createConnectAccount).not.toHaveBeenCalled();
@@ -220,8 +220,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).rejects.toThrow(/link failed/i);
     expect(payoutAccount.create).toHaveBeenCalledTimes(1);
@@ -231,12 +231,12 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
   it('binds production onboarding redirects to the configured HTTPS web origin', async () => {
     const { trait } = makeTrait({
       nodeEnv: 'production',
-      webBaseUrl: 'https://app.waitlayer.com',
+      webBaseUrl: 'https://app.ateva.com',
     });
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
         returnUrl: 'https://evil.example/onboarding/return',
       }),
     ).rejects.toThrow('configured production web origin');
@@ -245,13 +245,13 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
   it('accepts production onboarding redirects on the configured HTTPS web origin', async () => {
     const { trait } = makeTrait({
       nodeEnv: 'production',
-      webBaseUrl: 'https://app.waitlayer.com',
+      webBaseUrl: 'https://app.ateva.com',
     });
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return?connected=1',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return?connected=1',
       }),
     ).resolves.toMatchObject({ accountId: 'acct_test_123' });
   });
@@ -263,7 +263,7 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
       {},
       {
         get: vi.fn((key: string) => {
-          if (key === 'WAITLAYER_PAYOUT_PROVIDER_STATUS') {
+          if (key === 'ATEVA_PAYOUT_PROVIDER_STATUS') {
             return JSON.stringify({ stripe_connect: 'available' });
           }
           return undefined;
@@ -274,8 +274,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).rejects.toThrow(BadRequestException);
   });
@@ -287,8 +287,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).rejects.toThrow('Stripe not configured');
   });
@@ -298,18 +298,18 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).rejects.toThrow(/currently disabled/i);
   });
 
   it('rejects when return URL host is not in allowlist', async () => {
-    const { trait } = makeTrait({ returnDomains: 'app.waitlayer.com' });
+    const { trait } = makeTrait({ returnDomains: 'app.ateva.com' });
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
         returnUrl: 'https://evil.com/return',
       }),
     ).rejects.toThrow(/not allowed/i);
@@ -322,8 +322,8 @@ describe('PayoutMethodTrait.createStripeConnectOnboarding', () => {
 
     await expect(
       trait.createStripeConnectOnboarding('u1', 'dev@example.com', {
-        refreshUrl: 'https://app.waitlayer.com/onboarding/refresh',
-        returnUrl: 'https://app.waitlayer.com/onboarding/return',
+        refreshUrl: 'https://app.ateva.com/onboarding/refresh',
+        returnUrl: 'https://app.ateva.com/onboarding/return',
       }),
     ).rejects.toThrow(/Stripe API error/i);
   });

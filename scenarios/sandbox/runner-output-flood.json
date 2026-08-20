@@ -4,14 +4,10 @@
   "version": 1,
   "persona": "distracted_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-sandbox-v1",
-  "actions": [
-    "signup"
-  ],
+  "seed": "ateva-sandbox-v1",
+  "actions": ["signup"],
   "expected": {
-    "eventTypes": [
-      "session.started"
-    ],
+    "eventTypes": ["session.started"],
     "placementTypes": [],
     "financialMode": "sandbox",
     "hasCashValue": false
@@ -33,9 +29,7 @@
   },
   "runner": {
     "command": "node",
-    "args": [
-      "scenarios/sandbox/output-flood.runner.mjs"
-    ],
+    "args": ["scenarios/sandbox/output-flood.runner.mjs"],
     "timeoutMs": 5000
   }
 }

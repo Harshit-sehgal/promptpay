@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { EarningsLedger, Prisma } from '@waitlayer/db';
-import { payoutMinimumMinor, payoutProviderLaunchStatus, PayoutStatus } from '@waitlayer/shared';
+import { EarningsLedger, Prisma } from '@ateva/db';
+import { payoutMinimumMinor, payoutProviderLaunchStatus, PayoutStatus } from '@ateva/shared';
 
 import { AuditService } from '../audit/audit.service';
 import { isUniqueConstraintViolation } from '../common/utils/errors';
@@ -698,7 +698,7 @@ export class PayoutRequestTrait {
       if (activeFraudFlags > 0) {
         throw new ForbiddenException('Payout blocked due to pending fraud review');
       }
-      const launchOverrides = this.config.get<string>('WAITLAYER_PAYOUT_PROVIDER_STATUS');
+      const launchOverrides = this.config.get<string>('ATEVA_PAYOUT_PROVIDER_STATUS');
       if (
         payoutProviderLaunchStatus(pkt.payoutAccount.provider, launchOverrides) === 'coming_soon'
       ) {

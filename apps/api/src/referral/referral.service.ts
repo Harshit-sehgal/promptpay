@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { Prisma } from '@waitlayer/db';
-import { primaryCurrency, REFERRAL } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { primaryCurrency, REFERRAL } from '@ateva/shared';
 
 import { isUniqueConstraintViolation } from '../common/utils/errors';
 import { PrismaService } from '../config/prisma.service';

@@ -10,7 +10,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 
-import { loadEnv } from '@waitlayer/config';
+import { loadEnv } from '@ateva/config';
 
 import { AppModule } from './app.module';
 
@@ -105,7 +105,7 @@ async function bootstrap() {
 
   app.enableCors({
     // In production WEB_BASE_URL is validated to be a concrete origin (not
-    // '*') by @waitlayer/config. With credentials: true, a single explicit
+    // '*') by @ateva/config. With credentials: true, a single explicit
     // origin is required; reflect only that origin.
     origin: env.WEB_BASE_URL,
     credentials: true,
@@ -128,7 +128,7 @@ async function bootstrap() {
   try {
     await validateMigrations(getPrismaCliMigrationStatus(prisma));
   } catch (err) {
-    console.error('[WaitLayer] Migration check failed:', err);
+    console.error('[Ateva] Migration check failed:', err);
     if (process.env.NODE_ENV === 'production') {
       try {
         const alerts = app.get(AlertsService);
@@ -138,7 +138,7 @@ async function bootstrap() {
       }
       throw err;
     }
-    console.warn('[WaitLayer] Continuing boot despite migration mismatch (non-production).');
+    console.warn('[Ateva] Continuing boot despite migration mismatch (non-production).');
   }
 
   await app.get(EnvironmentMarkerService).verify();
@@ -149,7 +149,7 @@ async function bootstrap() {
   // CLI, and (future) external developer clients.
   if (env.NODE_ENV !== 'production' || env.SWAGGER_ENABLED === 'true') {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('WaitLayer API')
+      .setTitle('Ateva API')
       .setDescription('Privacy-first reward marketplace for AI wait time and developer attention')
       .setVersion('1.0')
       .addBearerAuth()
@@ -162,7 +162,7 @@ async function bootstrap() {
   }
 
   await app.listen(env.API_PORT);
-  console.log(`🚀 WaitLayer API running on http://localhost:${env.API_PORT}`);
+  console.log(`🚀 Ateva API running on http://localhost:${env.API_PORT}`);
 }
 
 // Surface unhandled failures explicitly and then fail fast. Registering these
@@ -170,13 +170,13 @@ async function bootstrap() {
 // would keep running after an unknown-corrupted state. In a financial app,
 // preserving the stack in logs is useful, but continuing is not.
 process.on('unhandledRejection', (reason) => {
-  console.error('[WaitLayer] Unhandled promise rejection:', reason);
+  console.error('[Ateva] Unhandled promise rejection:', reason);
   setImmediate(() => {
     throw reason instanceof Error ? reason : new Error(String(reason));
   });
 });
 process.on('uncaughtException', (err) => {
-  console.error('[WaitLayer] Uncaught exception:', err);
+  console.error('[Ateva] Uncaught exception:', err);
   process.exit(1);
 });
 

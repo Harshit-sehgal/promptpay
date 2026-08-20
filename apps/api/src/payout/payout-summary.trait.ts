@@ -1,8 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { Prisma } from '@waitlayer/db';
-import { PAYOUT, primaryCurrency } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { PAYOUT, primaryCurrency } from '@ateva/shared';
 
 import { safeDisplayDestination } from '../common/utils/payout-encryption';
 import { PrismaService } from '../config/prisma.service';

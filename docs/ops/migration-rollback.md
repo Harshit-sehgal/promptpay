@@ -37,7 +37,7 @@ If the migration dropped data or broke the schema such that old code can't run:
 ## Option C — reset a throwaway dev/CI database
 
 ```sh
-pnpm --filter @waitlayer/db exec prisma migrate reset --force   # dev only
+pnpm --filter @ateva/db exec prisma migrate reset --force   # dev only
 ```
 
 This recreates the whole database; it is not a rollback mechanism and must

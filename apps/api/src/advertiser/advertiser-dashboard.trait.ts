@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 
-import { Prisma } from '@waitlayer/db';
-import { CampaignStatus, primaryCurrency } from '@waitlayer/shared';
+import { Prisma } from '@ateva/db';
+import { CampaignStatus, primaryCurrency } from '@ateva/shared';
 
 import { PrismaService } from '../config/prisma.service';
 import {

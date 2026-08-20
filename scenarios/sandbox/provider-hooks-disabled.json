@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "privacy_conscious_user",
   "environment": "sandbox",
-  "seed": "waitlayer-hooks-disabled-v1",
+  "seed": "ateva-hooks-disabled-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

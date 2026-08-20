@@ -36,7 +36,7 @@ RUN printf 'registry=%s\nonly-built-dependencies=esbuild,@prisma/client,prisma,@
 # ── Build Stage: turbo build all packages ──
 FROM base AS build
 COPY . .
-RUN pnpm --filter @waitlayer/db run generate
+RUN pnpm --filter @ateva/db run generate
 # ── Build-time env for the web (Next.js) image ──────────────────────────
 # Next.js inlines the Edge auth environment at *build* time. Supplying these
 # only as runtime container env does NOT reach the middleware bundle: protected
@@ -52,9 +52,9 @@ RUN test -n "$JWT_PUBLIC_KEY"
 ENV JWT_PUBLIC_KEY=$JWT_PUBLIC_KEY
 ARG JWT_PUBLIC_KEYS=
 ENV JWT_PUBLIC_KEYS=$JWT_PUBLIC_KEYS
-ARG JWT_ISSUER=waitlayer
+ARG JWT_ISSUER=ateva
 ENV JWT_ISSUER=$JWT_ISSUER
-ARG JWT_AUDIENCE=waitlayer-client
+ARG JWT_AUDIENCE=ateva-client
 ENV JWT_AUDIENCE=$JWT_AUDIENCE
 ARG NEXT_PUBLIC_API_URL=http://localhost:4002/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
@@ -62,8 +62,8 @@ ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID=53592884041-8ctl5qb8dm99p9a5e7hf4gthgmgenabl.ap
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
 ARG NEXT_PUBLIC_WEB_URL=http://localhost:3000
 ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL
-ARG NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=production
-ENV NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND=$NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND
+ARG NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=production
+ENV NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND=$NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND
 ARG NEXT_PUBLIC_ALLOW_MOCK_AUTH=
 ENV NEXT_PUBLIC_ALLOW_MOCK_AUTH=$NEXT_PUBLIC_ALLOW_MOCK_AUTH
 ARG NEXT_PUBLIC_SENTRY_DSN=

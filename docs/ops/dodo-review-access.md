@@ -2,7 +2,7 @@
 
 This runbook creates and verifies a normal advertiser account that Dodo Payments
 (or another external compliance reviewer) can use to inspect the authenticated
-WaitLayer product. It does **not** create an admin, bypass authentication, enable
+Ateva product. It does **not** create an admin, bypass authentication, enable
 money switches, or grant access to provider secrets.
 
 ## Product/payment state shown to the reviewer
@@ -10,12 +10,12 @@ money switches, or grant access to provider secrets.
 The review deployment must match the beta architecture:
 
 ```text
-Advertiser → Dodo Payments → WaitLayer
+Advertiser → Dodo Payments → Ateva
 
-WaitLayer → separate payout provider → eligible participant   (future, disabled in beta)
+Ateva → separate payout provider → eligible participant   (future, disabled in beta)
 ```
 
-Dodo is used only for the advertiser/customer transaction. WaitLayer does not
+Dodo is used only for the advertiser/customer transaction. Ateva does not
 ask Dodo to split that transaction or forward part of it to participants. The
 initial participant reward design is fiat-only and remains disabled until a
 separate payout provider and independent wait attestation are approved.
@@ -92,7 +92,7 @@ DATABASE_URL='<target database url>' \
     --name 'Dodo Payments Reviewer' \
     --company 'Dodo Payments Review' \
     --country 'US' \
-    --website 'https://www.waitlayer.com'
+    --website 'https://www.ateva.com'
 ```
 
 The command prompts for the password with hidden input. For non-interactive
@@ -101,7 +101,7 @@ protected automation it can instead read `REVIEW_ACCOUNT_PASSWORD`.
 Then validate the deployed journey without printing secrets:
 
 ```sh
-REVIEW_BASE_URL='https://www.waitlayer.com' \
+REVIEW_BASE_URL='https://www.ateva.com' \
 REVIEW_EMAIL='<dedicated review mailbox>' \
 REVIEW_ACCOUNT_PASSWORD='<password>' \
 pnpm review:smoke
@@ -111,7 +111,7 @@ pnpm review:smoke
 
 Send only:
 
-- Login URL: `https://www.waitlayer.com/auth/login` (or the actual public review origin)
+- Login URL: `https://www.ateva.com/auth/login` (or the actual public review origin)
 - Review email/username
 - Review password
 - A short note that this is a dedicated advertiser review account and the sample

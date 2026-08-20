@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "new_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-identity-consent-v1",
+  "seed": "ateva-identity-consent-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

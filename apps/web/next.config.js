@@ -60,7 +60,7 @@ function securityHeaders() {
  * `dev` already runs on webpack for the Sentry webpack options below.
  */
 const nextConfig = {
-  transpilePackages: ['@waitlayer/ui', '@waitlayer/shared', '@waitlayer/config'],
+  transpilePackages: ['@ateva/ui', '@ateva/shared', '@ateva/config'],
   output: 'standalone',
   typedRoutes: true,
   crossOrigin: 'anonymous',

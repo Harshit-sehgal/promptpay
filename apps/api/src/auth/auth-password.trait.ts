@@ -42,7 +42,7 @@ export class AuthPasswordTrait {
     if (!user || !isActiveAccountStatus(user.status)) {
       return generic;
     }
-    const issuer = this.config.get<string>('JWT_ISSUER', 'waitlayer');
+    const issuer = this.config.get<string>('JWT_ISSUER', 'ateva');
     // Use RS256 asymmetric signing (not HS256 symmetric) so the reset token
     // is signed with the private key and verifiable with the public key.
     // This closes a security gap where a JWT_SECRET compromise (used for
@@ -81,7 +81,7 @@ export class AuthPasswordTrait {
       // Verify with RS256 using the public key (asymmetric verification).
       payload = await this.jwt.verifyAsync<PasswordResetPayload>(token, {
         algorithms: ['RS256'],
-        issuer: this.config.get<string>('JWT_ISSUER', 'waitlayer'),
+        issuer: this.config.get<string>('JWT_ISSUER', 'ateva'),
         audience: 'password-reset',
       });
     } catch {

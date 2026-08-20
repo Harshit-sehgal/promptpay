@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "codex_user",
   "environment": "sandbox",
-  "seed": "waitlayer-codex-v1",
+  "seed": "ateva-codex-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

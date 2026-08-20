@@ -8,7 +8,7 @@ import {
   AgentLifecycleEventV1,
   AgentProvider,
   sanitizeHookPayload,
-} from '@waitlayer/agent-protocol';
+} from '@ateva/agent-protocol';
 
 const MAX_HOOK_INPUT_BYTES = 256 * 1024;
 const MAX_IDENTIFIER_LENGTH = 512;
@@ -182,7 +182,7 @@ export function normalizeHookEvent(
     eventId: `00000000-0000-4000-8000-${replayHash.slice(0, 12)}`,
     idempotencyKey: `hook:${replayHash}`,
     environmentKind: options.environmentKind ?? resolveEnvironmentKind(),
-    environmentId: options.environmentId ?? process.env.WAITLAYER_ENVIRONMENT_ID ?? 'local',
+    environmentId: options.environmentId ?? process.env.ATEVA_ENVIRONMENT_ID ?? 'local',
     installationId: options.installationId,
     deviceId: options.deviceId,
     provider: options.provider,
@@ -328,7 +328,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function resolveEnvironmentKind(): AgentLifecycleEventV1['environmentKind'] {
-  const candidate = process.env.WAITLAYER_ENVIRONMENT_KIND;
+  const candidate = process.env.ATEVA_ENVIRONMENT_KIND;
   if (
     candidate === 'development' ||
     candidate === 'test' ||

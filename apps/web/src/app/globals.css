@@ -1,6 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital,wght@0,400;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;
+500;600&family=Instrument+Serif:ital,wght@0,400;1,400&display=swap');
 
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @config "../../tailwind.config.ts";
 
@@ -14,12 +15,9 @@
     border-color: rgb(229 229 229);
   }
 }
-
 :root {
   --background: 255 255 255;
   --foreground: 23 23 23;
-  --brand: 15 118 110;
-  --brand-light: 13 148 136;
   --surface: 250 250 250;
 
   --accent: #16a34a;
@@ -31,12 +29,10 @@
   --term-shadow: 0 0 0 1px hsla(0, 0%, 100%, 0.03), 0 40px 90px -45px rgba(0, 0, 0, 0.7);
   --num-display: inline-block;
 }
-
 html {
   scroll-behavior: smooth;
   overflow-x: clip;
 }
-
 body {
   background-color: #ffffff;
   color: rgb(23 23 23);
@@ -45,23 +41,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
-
 ::selection {
   background: #d8f3df;
   color: #101610;
 }
-
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
   outline: 3px solid rgba(8, 116, 67, 0.55);
   outline-offset: 3px;
 }
-
 /* Stronger focus for high-contrast / keyboard users on clickable elements */
 :where(a, button):focus-visible {
   outline-color: #087443;
   border-radius: 4px;
 }
-
 /* Respect reduced motion at the CSS level */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -78,26 +70,29 @@ body {
     transition-delay: 0ms !important;
   }
 }
-
 :where(h1, h2, h3, p) {
   text-wrap: pretty;
 }
-
-/* Custom CSS Classes from waitlayer.com */
-.wl-dot {
-  animation: wlpulse 2s ease-in-out infinite;
+/*
+ * Translucent sticky navigation surface.
+ *
+ * `.glass-nav` was applied on eight pages (pricing, status, faq, contact,
+ * comparison, security, advertiser-policy, payout-policy) but was never
+ * declared in any stylesheet, so those navs rendered with no backdrop at all
+ * and content scrolled visibly behind them. The landing page achieved the
+ * intended effect with utilities (`bg-white/90 backdrop-blur-md`); this makes
+ * the shared class match it.
+ */
+.glass-nav {
+  background-color: rgb(255 255 255 / 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
-
-@keyframes wlpulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
+@supports not (backdrop-filter: blur(12px)) {
+  .glass-nav {
+    background-color: rgb(255 255 255 / 0.98);
   }
 }
-
 .wl-link-u {
   background-image: linear-gradient(currentColor, currentColor);
   background-size: 0% 1px;
@@ -109,12 +104,10 @@ body {
     opacity 0.18s ease,
     color 0.18s ease;
 }
-
 .wl-link-u:hover {
   background-size: 100% 1px;
   opacity: 1;
 }
-
 .wl-eyebrow {
   font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.6875rem;
@@ -123,249 +116,22 @@ body {
   text-transform: uppercase;
   color: var(--accent-strong);
 }
-
-.wl-muted-copy {
-  color: var(--ink-muted);
-}
-
-@property --wlms {
-  syntax: '<integer>';
-  inherits: false;
-  initial-value: 0;
-}
-
-/* Verification widget custom animations */
-.wl-vbar {
-  display: block;
-  height: 100%;
-  width: 0;
-  background: var(--accent, #16a34a);
-  border-radius: 6px;
-  animation: wlvbar 6s ease-in-out infinite;
-}
-
-@keyframes wlvbar {
-  0%,
-  7% {
-    width: 0;
-  }
-  40% {
-    width: 100%;
-  }
-  92% {
-    width: 100%;
-  }
-  to {
-    width: 0;
-  }
-}
-
-.wl-vms {
-  counter-reset: wlms var(--wlms);
-  animation: wlvms 6s linear infinite;
-}
-
-.wl-vms:after {
-  content: counter(wlms);
-}
-
-@keyframes wlvms {
-  0%,
-  7% {
-    --wlms: 0;
-  }
-  40% {
-    --wlms: 5000;
-  }
-  92% {
-    --wlms: 5000;
-  }
-  to {
-    --wlms: 0;
-  }
-}
-
-.wl-vrow {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: #cfcfcf;
-  opacity: 0;
-}
-
-.wl-vrow1 {
-  animation: wlvr1 6s ease infinite;
-}
-.wl-vrow2 {
-  animation: wlvr2 6s ease infinite;
-}
-.wl-vrow3 {
-  animation: wlvr3 6s ease infinite;
-}
-.wl-vverified {
-  animation: wlvr4 6s ease infinite;
-}
-
-@keyframes wlvr1 {
-  0%,
-  45% {
-    opacity: 0;
-  }
-  48%,
-  to {
-    opacity: 1;
-  }
-}
-@keyframes wlvr2 {
-  0%,
-  51% {
-    opacity: 0;
-  }
-  54%,
-  to {
-    opacity: 1;
-  }
-}
-@keyframes wlvr3 {
-  0%,
-  57% {
-    opacity: 0;
-  }
-  60%,
-  to {
-    opacity: 1;
-  }
-}
-@keyframes wlvr4 {
-  0%,
-  64% {
-    opacity: 0;
-  }
-  67%,
-  to {
-    opacity: 1;
-  }
-}
-
-.wl-vcaret {
-  margin-left: 4px;
-  color: var(--accent, #16a34a);
-  animation: wlblink 1.05s step-end infinite;
-}
-
-@keyframes wlblink {
-  0%,
-  49% {
-    opacity: 1;
-  }
-  50%,
-  to {
-    opacity: 0;
-  }
-}
-
 /* Responsiveness media overrides */
 @media (max-width: 880px) {
-  .wl-hero-grid {
-    gap: 48px !important;
-    grid-template-columns: 1fr !important;
-  }
   .wl-2col {
     grid-template-columns: 1fr !important;
   }
-  .wl-cards {
-    grid-template-columns: 1fr 1fr !important;
-  }
-  .wl-nav-links {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 16px !important;
-    justify-content: flex-start;
-  }
-  .wl-sec {
-    padding: 72px 0 !important;
-  }
 }
-
 @media (max-width: 560px) {
-  .wl-cards {
-    grid-template-columns: 1fr !important;
-  }
   div[style*='padding:0 32px'] {
     padding-left: 20px !important;
     padding-right: 20px !important;
   }
 }
-
-@media (max-width: 680px) {
-  .wl-nav-links {
-    display: none !important;
-  }
-}
-
-/* Card hover scaling and transitions (honor reduced motion) */
-.wlh-card {
-  transition:
-    transform 0.25s ease,
-    box-shadow 0.3s ease,
-    border-color 0.25s ease;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .wlh-card {
-    will-change: transform;
-  }
-
-  .wlh-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 18px 38px -24px rgba(0, 0, 0, 0.3);
-    border-color: #d6d6d6;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wlh-card:hover {
-    border-color: #d6d6d6;
-  }
-}
-
-.wlh-btn {
-  transition:
-    transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1),
-    box-shadow 0.24s ease,
-    background-color 0.18s ease,
-    border-color 0.18s ease;
-}
-
-.wlh-btn:hover {
-  transform: translateY(-1px);
-}
-
-.wlh-btn:active {
-  transform: translateY(0);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .wlh-in {
-    animation: wlh-in 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both;
-  }
-  @keyframes wlh-in {
-    0% {
-      opacity: 0.92;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-
   *,
   *::before,
   *::after {
@@ -375,78 +141,36 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
-
-/* Background ripple nodes */
-.wlh-node {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #1c1c1c;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .wlh-node {
-    animation: wlh-ripple 3.6s ease-in-out infinite;
-  }
-  @keyframes wlh-ripple {
-    0%,
-    24%,
-    to {
-      background: #1c1c1c;
-      transform: scale(1);
-      box-shadow: none;
-    }
-    7% {
-      background: #16a34a;
-      transform: scale(1.9);
-      box-shadow: 0 0 6px rgba(22, 163, 74, 0.55);
-    }
-    16% {
-      background: #214a33;
-      transform: scale(1.25);
-      box-shadow: none;
-    }
-  }
-}
-
 /* Smooth scrollbar settings */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: rgb(212 212 212);
   border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(163 163 163);
 }
-
 /* Dark mode overrides for dashboard layouts */
 html.dark body {
   background-color: rgb(10 14 26);
   color: rgb(155 161 182);
 }
-
 html.dark * {
   border-color: rgb(42 49 73 / 0.5);
 }
-
 html.dark ::-webkit-scrollbar-track {
   background: rgb(10 14 26);
 }
-
 html.dark ::-webkit-scrollbar-thumb {
   background: rgb(42 49 73);
   border-radius: 3px;
 }
-
 html.dark ::-webkit-scrollbar-thumb:hover {
   background: rgb(82 90 118);
 }

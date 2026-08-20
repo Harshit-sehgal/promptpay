@@ -21,7 +21,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({
-  brand = 'WaitLayer',
+  brand = 'Ateva',
   brandLetter = 'W',
   brandColor = 'bg-brand-500',
   navItems,

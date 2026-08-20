@@ -12,7 +12,7 @@ import {
 } from '../../apps/cli/dist/lib/agent-spool.js';
 
 const mode = process.argv[2];
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-scenario-reliability-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-scenario-reliability-'));
 const paths = getSpoolPaths(directory);
 const installationId = 'reliability-boundary-installation-v1';
 const deviceId = '00000000-0000-4000-8000-000000000064';

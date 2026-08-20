@@ -2,7 +2,7 @@ import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsEnum, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-import { SIGNUP_ALLOWED_ROLES, UserRole } from '@waitlayer/shared';
+import { SIGNUP_ALLOWED_ROLES, UserRole } from '@ateva/shared';
 
 export class GoogleOAuthDto {
   @ApiProperty()

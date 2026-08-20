@@ -12,7 +12,7 @@ import {
   depositMinimumMinor,
   majorToMinor,
   minorToMajorInputValue,
-} from '@waitlayer/shared';
+} from '@ateva/shared';
 
 interface LedgerEntry {
   id: string;

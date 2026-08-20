@@ -24,7 +24,7 @@ const result = await build({
     // the manifest version is injected here instead. Device registration then
     // reports the real packaged version; dev/test source imports fall back to
     // the baseline constant in api-client.ts.
-    'process.env.WAITLAYER_EXTENSION_VERSION': JSON.stringify(manifest.version),
+    'process.env.ATEVA_EXTENSION_VERSION': JSON.stringify(manifest.version),
   },
 });
 

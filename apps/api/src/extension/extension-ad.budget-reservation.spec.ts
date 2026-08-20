@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { BidType } from '@waitlayer/db';
+import { BidType } from '@ateva/db';
 
 import { makeTestEvidence } from './evidence.test-helper';
 import { ExtensionService } from './extension.service';

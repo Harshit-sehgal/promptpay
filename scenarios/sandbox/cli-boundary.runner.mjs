@@ -16,7 +16,7 @@ import { normalizeHookEvent, readHookInputJson, resolveEventType } from '../../a
 import { runSupervisedCommand } from '../../apps/cli/dist/commands/run.js';
 
 const caseName = process.argv[2];
-const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'waitlayer-scenario-cli-'));
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ateva-scenario-cli-'));
 const installationId = 'cli-boundary-installation-v1';
 const deviceId = '00000000-0000-4000-8000-000000000081';
 
@@ -125,7 +125,7 @@ try {
     process.stdout.write(`${JSON.stringify([event('queue.quarantined', { quarantinedEvents: 1 })])}\n`);
   } else if (caseName === 'missing-executable') {
     await Promise.all([
-      runSupervisedCommand(['/definitely/missing/waitlayer-ai-executable']).then(
+      runSupervisedCommand(['/definitely/missing/ateva-ai-executable']).then(
         () => { throw new Error('missing executable unexpectedly spawned'); },
         (error) => {
           const message = String(error?.message ?? error);

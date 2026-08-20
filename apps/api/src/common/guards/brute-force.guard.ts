@@ -310,9 +310,9 @@ export function verifiedBffIdentity(
     const value = req.headers?.[name];
     return Array.isArray(value) ? value[0] : value;
   };
-  const clientId = header('x-waitlayer-client-id');
-  const networkHash = header('x-waitlayer-client-network');
-  const supplied = header('x-waitlayer-client-signature');
+  const clientId = header('x-ateva-client-id');
+  const networkHash = header('x-ateva-client-network');
+  const supplied = header('x-ateva-client-signature');
   if (
     !clientId ||
     !/^[0-9a-f-]{36}$/i.test(clientId) ||
@@ -323,7 +323,7 @@ export function verifiedBffIdentity(
     return null;
   }
   const expected = createHmac('sha256', secret)
-    .update(`waitlayer-bff-client-v2:${clientId}:${networkHash}`)
+    .update(`ateva-bff-client-v2:${clientId}:${networkHash}`)
     .digest('hex');
   const actual = supplied.slice(3);
   const expectedBytes = Buffer.from(expected);

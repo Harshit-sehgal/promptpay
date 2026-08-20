@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "reviewed_sandbox_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-finance-v1",
+  "seed": "ateva-finance-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

@@ -31,7 +31,7 @@ export default function HomePage() {
               <rect x="0" y="6.8" width="16" height="2.4" rx="0.4" fill="#0a0a0a" />
               <rect x="0" y="12.1" width="11" height="2.4" rx="0.4" fill="var(--accent,#16a34a)" />
             </svg>
-            <span className="text-base font-semibold tracking-tight">WaitLayer</span>
+            <span className="text-base font-semibold tracking-tight">Ateva</span>
           </Link>
 
           <nav className="hidden items-center gap-8 text-sm text-surface-600 md:flex">
@@ -87,8 +87,8 @@ export default function HomePage() {
                 Verify AI-agent wait time without reading the work.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-relaxed text-surface-600">
-                WaitLayer lets explicitly integrated AI-agent applications show a small, clearly
-                labeled sponsored unit during eligible waiting periods. The beta is validating the
+                Ateva lets explicitly integrated AI-agent applications show a small, clearly labeled
+                sponsored unit during eligible waiting periods. The beta is validating the
                 measurement and fraud controls before any reward or live campaign billing is
                 enabled.
               </p>
@@ -186,7 +186,7 @@ export default function HomePage() {
               </h2>
               <p className="mt-5 max-w-xl leading-relaxed text-surface-600">
                 The beta measures eligible wait states with explicit consent. It does not accrue a
-                cash balance. If participant compensation launches later, WaitLayer will publish an
+                cash balance. If participant compensation launches later, Ateva will publish an
                 independent fiat reward schedule based on verified eligible activity.
               </p>
             </div>
@@ -213,21 +213,21 @@ export default function HomePage() {
                 For advertisers
               </p>
               <h2 className="mt-3 font-serif text-4xl">
-                Buy verified campaign delivery from WaitLayer.
+                Buy verified campaign delivery from Ateva.
               </h2>
               <p className="mt-5 leading-relaxed text-white/65">
-                The planned advertiser flow is straightforward: the advertiser pays WaitLayer for
+                The planned advertiser flow is straightforward: the advertiser pays Ateva for
                 campaign delivery; Dodo Payments processes that customer transaction and settles it
-                to WaitLayer. Any future participant compensation is a separate WaitLayer expense,
+                to Ateva. Any future participant compensation is a separate Ateva expense,
                 calculated after verification and paid through another provider.
               </p>
             </div>
             <div className="mt-10 grid gap-5 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
                 <p className="font-mono text-xs uppercase tracking-wider text-white/60">Money in</p>
-                <p className="mt-3 text-xl font-semibold">Advertiser → Dodo Payments → WaitLayer</p>
+                <p className="mt-3 text-xl font-semibold">Advertiser → Dodo Payments → Ateva</p>
                 <p className="mt-3 text-sm leading-relaxed text-white/55">
-                  Full customer transaction settles to WaitLayer. No automatic participant split.
+                  Full customer transaction settles to Ateva. No automatic participant split.
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-7">
@@ -235,7 +235,7 @@ export default function HomePage() {
                   Future money out
                 </p>
                 <p className="mt-3 text-xl font-semibold">
-                  WaitLayer → separate payout provider → participant
+                  Ateva → separate payout provider → participant
                 </p>
                 <p className="mt-3 text-sm leading-relaxed text-white/55">
                   Independent fiat compensation only after the payout rail and reward program are

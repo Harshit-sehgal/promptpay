@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "reporting_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-ad-boundary-v1",
+  "seed": "ateva-ad-boundary-v1",
   "reporting": {
     "deterministic": true,
     "severity": "critical",

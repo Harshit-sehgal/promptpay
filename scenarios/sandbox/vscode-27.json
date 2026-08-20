@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "vscode_closed_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-vscode-attention-v1",
+  "seed": "ateva-vscode-attention-v1",
   "reporting": {
     "deterministic": true,
     "severity": "high",

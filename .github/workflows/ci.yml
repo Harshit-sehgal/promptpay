@@ -38,7 +38,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -57,7 +57,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Lint
         run: pnpm run lint
 
@@ -76,7 +76,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Build
         run: pnpm run build
       # P0.8: prove the host-side build output embeds no signing secrets
@@ -92,13 +92,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: waitlayer_test
-          POSTGRES_USER: waitlayer
-          POSTGRES_PASSWORD: waitlayer-test
+          POSTGRES_DB: ateva_test
+          POSTGRES_USER: ateva
+          POSTGRES_PASSWORD: ateva-test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U waitlayer -d waitlayer_test"
+          --health-cmd "pg_isready -U ateva -d ateva_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -112,12 +112,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+      DATABASE_URL: postgresql://ateva:ateva-test@localhost:5432/ateva_test
       # The API integration suite resets and runs against TEST_DATABASE_URL
       # (defaults to :5433 locally). CI only provisions postgres on :5432, so
       # the isolated-test URL must point there or every integration spec
       # fails to connect.
-      TEST_DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+      TEST_DATABASE_URL: postgresql://ateva:ateva-test@localhost:5432/ateva_test
       JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
       REDIS_URL: redis://localhost:6379
       TOTP_SECRET_ENCRYPTION_KEY: test-totp-encryption-key-not-for-production-32+
@@ -132,7 +132,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Generate ephemeral RS256 keys
         run: |
           PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
@@ -153,27 +153,27 @@ jobs:
           $PRIVATE_KEY
           EOF
           {
-            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PRIVATE_KEY<<ATEVA_PRIVATE_KEY_EOF'
             printf '%s\n' "$PRIVATE_KEY"
-            echo 'WAITLAYER_PRIVATE_KEY_EOF'
-            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<ATEVA_PUBLIC_KEY_EOF'
             printf '%s\n' "$PUBLIC_KEY"
-            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PUBLIC_KEY_EOF'
           } >> "$GITHUB_ENV"
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level moderate
       - name: Audit development dependency quarantine
         run: node scripts/audit-dependencies.mjs
       - name: Apply migrations
-        run: pnpm --filter @waitlayer/db migrate:deploy
+        run: pnpm --filter @ateva/db migrate:deploy
       - name: Assert no pending migrations
-        run: pnpm --filter @waitlayer/db migrate:status
+        run: pnpm --filter @ateva/db migrate:status
       - name: Assert migration-built schema has no drift
-        run: pnpm --filter @waitlayer/db migrate:drift
+        run: pnpm --filter @ateva/db migrate:drift
       - name: Test
         run: pnpm test
       - name: Enforce API coverage
-        run: pnpm --filter waitlayer-api test:cov
+        run: pnpm --filter ateva-api test:cov
       - name: Enforce financial-module branch coverage
         run: node scripts/enforce-financial-coverage.mjs
 
@@ -185,13 +185,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: waitlayer_test
-          POSTGRES_USER: waitlayer
-          POSTGRES_PASSWORD: waitlayer-test
+          POSTGRES_DB: ateva_test
+          POSTGRES_USER: ateva
+          POSTGRES_PASSWORD: ateva-test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U waitlayer -d waitlayer_test"
+          --health-cmd "pg_isready -U ateva -d ateva_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -205,7 +205,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+      DATABASE_URL: postgresql://ateva:ateva-test@localhost:5432/ateva_test
       JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
       REDIS_URL: redis://localhost:6379
     steps:
@@ -219,7 +219,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Generate ephemeral RS256 keys
         run: |
           PRIVATE_KEY=$(openssl genrsa 2048 2>/dev/null)
@@ -240,23 +240,23 @@ jobs:
           $PRIVATE_KEY
           EOF
           {
-            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PRIVATE_KEY<<ATEVA_PRIVATE_KEY_EOF'
             printf '%s\n' "$PRIVATE_KEY"
-            echo 'WAITLAYER_PRIVATE_KEY_EOF'
-            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<ATEVA_PUBLIC_KEY_EOF'
             printf '%s\n' "$PUBLIC_KEY"
-            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PUBLIC_KEY_EOF'
           } >> "$GITHUB_ENV"
       # The e2e job boots a COMPILED API against the fresh service Postgres.
       # Without applying migrations here, every fresh runner fails (the `test`
       # job's migrations do not persist across jobs).
       - name: Apply migrations
-        run: pnpm --filter @waitlayer/db migrate:deploy
+        run: pnpm --filter @ateva/db migrate:deploy
       - name: Install Playwright browsers
-        run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+        run: pnpm --filter ateva-web exec playwright install --with-deps chromium
       - name: Boot API for E2E
         run: |
-          pnpm --filter "waitlayer-api..." build
+          pnpm --filter "ateva-api..." build
           node apps/api/dist/apps/api/src/main.js &
           API_PID=$!
           for i in $(seq 1 30); do
@@ -266,7 +266,7 @@ jobs:
           done
           echo "API_PID=$API_PID" >> /tmp/e2e_pids
         env:
-          DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+          DATABASE_URL: postgresql://ateva:ateva-test@localhost:5432/ateva_test
           JWT_SECRET: test-jwt-secret-for-integration-test-runs-only-32+
           REDIS_URL: redis://localhost:6379
           WEB_BASE_URL: http://localhost:3000
@@ -286,8 +286,8 @@ jobs:
           THROTTLE_DEFAULT_LIMIT: '1000'
       - name: Build and boot web for E2E
         run: |
-          pnpm --filter "waitlayer-web..." build
-          pnpm --filter waitlayer-web start &
+          pnpm --filter "ateva-web..." build
+          pnpm --filter ateva-web start &
           WEB_PID=$!
           for i in $(seq 1 30); do
             if curl -fsS -o /dev/null http://localhost:3000; then break; fi
@@ -301,7 +301,7 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:4002/api/v1
           NEXT_PUBLIC_ALLOW_MOCK_AUTH: 'true'
       - name: Run Playwright E2E tests
-        run: pnpm --filter waitlayer-web e2e
+        run: pnpm --filter ateva-web e2e
         env:
           E2E_BASE_URL: http://localhost:3000
       # The VS Code extension's ApiClient had NO live coverage anywhere: its
@@ -311,14 +311,14 @@ jobs:
       # the balance deserializes to a BIGINT, which is the repo's money
       # invariant and cannot be proven by the mocked unit tests.
       - name: VS Code ApiClient live smoke against the running API
-        run: pnpm --filter waitlayer-vscode exec vitest run test/api-client.live.spec.ts
+        run: pnpm --filter ateva-vscode exec vitest run test/api-client.live.spec.ts
         env:
           RUN_LIVE_TESTS: 'true'
-          WAITLAYER_API_URL: http://localhost:4002/api/v1
+          ATEVA_API_URL: http://localhost:4002/api/v1
       - name: Enforce health metrics
-        run: pnpm --filter waitlayer-api exec node "$GITHUB_WORKSPACE/scripts/enforce-health-metrics.mjs"
+        run: pnpm --filter ateva-api exec node "$GITHUB_WORKSPACE/scripts/enforce-health-metrics.mjs"
         env:
-          DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+          DATABASE_URL: postgresql://ateva:ateva-test@localhost:5432/ateva_test
           API_BASE_URL: http://localhost:4002
       - name: Cleanup E2E servers
         if: always()
@@ -329,9 +329,9 @@ jobs:
             rm -f /tmp/e2e_pids
           fi
       - name: Build CLI artifact in the E2E job
-        run: pnpm --filter "waitlayer-cli..." build
+        run: pnpm --filter "ateva-cli..." build
       - name: Verify CLI bin artifacts exist
-        run: pnpm --filter waitlayer-cli pack:check
+        run: pnpm --filter ateva-cli pack:check
 
   # Run the same browser suite against a production-mode API and production
   # web build. This closes the configuration gap that let escaped deployment
@@ -343,13 +343,13 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: waitlayer_e2e_production
-          POSTGRES_USER: waitlayer
-          POSTGRES_PASSWORD: waitlayer-e2e-production
+          POSTGRES_DB: ateva_e2e_production
+          POSTGRES_USER: ateva
+          POSTGRES_PASSWORD: ateva-e2e-production
         ports:
           - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U waitlayer -d waitlayer_e2e_production"
+          --health-cmd "pg_isready -U ateva -d ateva_e2e_production"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -363,7 +363,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      E2E_PROD_DATABASE_URL: postgresql://waitlayer:waitlayer-e2e-production@localhost:5433/waitlayer_e2e_production?schema=public
+      E2E_PROD_DATABASE_URL: postgresql://ateva:ateva-e2e-production@localhost:5433/ateva_e2e_production?schema=public
       E2E_PROD_REDIS_DB: '12'
       E2E_PROD_ENVIRONMENT_ID: ci-production-browser
       E2E_PROD_API_PORT: '4108'
@@ -379,9 +379,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
       - name: Install Playwright browsers
-        run: pnpm --filter waitlayer-web exec playwright install --with-deps chromium
+        run: pnpm --filter ateva-web exec playwright install --with-deps chromium
       - name: Run browser E2E against the production-mode stack
         run: pnpm e2e:production
 
@@ -400,39 +400,39 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build CLI with workspace dependencies
-        run: pnpm --filter "waitlayer-cli..." build
+        run: pnpm --filter "ateva-cli..." build
       - name: Verify CLI bin artifacts
-        run: pnpm --filter waitlayer-cli pack:check
+        run: pnpm --filter ateva-cli pack:check
       - name: Pack CLI artifact
         run: |
           mkdir -p artifacts/cli
-          pnpm --filter waitlayer-cli pack --pack-destination "$GITHUB_WORKSPACE/artifacts/cli"
+          pnpm --filter ateva-cli pack --pack-destination "$GITHUB_WORKSPACE/artifacts/cli"
       - name: Smoke install packaged CLI
         shell: bash
         run: |
-          CLI_INSTALL_ROOT="$RUNNER_TEMP/waitlayer-cli-install"
+          CLI_INSTALL_ROOT="$RUNNER_TEMP/ateva-cli-install"
           mkdir -p "$CLI_INSTALL_ROOT"
           npm install --prefix "$CLI_INSTALL_ROOT" --ignore-scripts ./artifacts/cli/*.tgz
-          CLI_BIN="$CLI_INSTALL_ROOT/node_modules/.bin/waitlayer"
+          CLI_BIN="$CLI_INSTALL_ROOT/node_modules/.bin/ateva"
           test -x "$CLI_BIN"
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --version
-          WAITLAYER_API_URL=https://api.waitlayer.com/api/v1 "$CLI_BIN" --help
+          ATEVA_API_URL=https://api.ateva.com/api/v1 "$CLI_BIN" --version
+          ATEVA_API_URL=https://api.ateva.com/api/v1 "$CLI_BIN" --help
       - name: Build VS Code extension with workspace dependencies
-        run: pnpm --filter "waitlayer-vscode..." build
+        run: pnpm --filter "ateva-vscode..." build
       - name: Package VS Code extension (no publish)
         run: |
           mkdir -p artifacts/vscode
-          pnpm --filter waitlayer-vscode package:vsix -- "$GITHUB_WORKSPACE/artifacts/vscode/waitlayer-vscode.vsix"
+          pnpm --filter ateva-vscode package:vsix -- "$GITHUB_WORKSPACE/artifacts/vscode/ateva-vscode.vsix"
       - name: Smoke test VSIX metadata
         run: |
-          test -s artifacts/vscode/waitlayer-vscode.vsix
-          rm -rf /tmp/waitlayer-vsix
-          mkdir -p /tmp/waitlayer-vsix
-          unzip -q artifacts/vscode/waitlayer-vscode.vsix -d /tmp/waitlayer-vsix
-          cp /tmp/waitlayer-vsix/extension/package.json /tmp/waitlayer-vscode-package.json
-          node -e "const pkg = require('/tmp/waitlayer-vscode-package.json'); const url = pkg.contributes.configuration.properties['waitlayer.apiUrl'].default; if (url !== 'https://api.waitlayer.com/api/v1') throw new Error('Unexpected waitlayer.apiUrl default: ' + url);"
-          node scripts/verify-vsix-artifact.cjs /tmp/waitlayer-vsix/extension
-          node apps/vscode-extension/scripts/verify-isolated-artifact.cjs /tmp/waitlayer-vsix/extension
+          test -s artifacts/vscode/ateva-vscode.vsix
+          rm -rf /tmp/ateva-vsix
+          mkdir -p /tmp/ateva-vsix
+          unzip -q artifacts/vscode/ateva-vscode.vsix -d /tmp/ateva-vsix
+          cp /tmp/ateva-vsix/extension/package.json /tmp/ateva-vscode-package.json
+          node -e "const pkg = require('/tmp/ateva-vscode-package.json'); const url = pkg.contributes.configuration.properties['ateva.apiUrl'].default; if (url !== 'https://api.ateva.com/api/v1') throw new Error('Unexpected ateva.apiUrl default: ' + url);"
+          node scripts/verify-vsix-artifact.cjs /tmp/ateva-vsix/extension
+          node apps/vscode-extension/scripts/verify-isolated-artifact.cjs /tmp/ateva-vsix/extension
 
   # Build the Docker images and prove the COMPILED artifacts actually serve
   # traffic. The integration suite only exercises the source AppModule via
@@ -454,7 +454,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
 
       - name: Generate ephemeral RS256 keys
         run: |
@@ -476,12 +476,12 @@ jobs:
           $PRIVATE_KEY
           EOF
           {
-            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PRIVATE_KEY<<ATEVA_PRIVATE_KEY_EOF'
             printf '%s\n' "$PRIVATE_KEY"
-            echo 'WAITLAYER_PRIVATE_KEY_EOF'
-            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<ATEVA_PUBLIC_KEY_EOF'
             printf '%s\n' "$PUBLIC_KEY"
-            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PUBLIC_KEY_EOF'
           } >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
@@ -512,19 +512,19 @@ jobs:
         run: |
           # Resolve the WEB service's image exactly. `config --images` prints
           # every image including postgres/redis, and the old `grep -- '-web$'`
-          # never matched because the name carries a tag (`waitlayer-web:local`)
+          # never matched because the name carries a tag (`ateva-web:local`)
           # — so this step aborted with "web image name could not be resolved".
           # It had never run before: the job used to die earlier at compose
           # schema validation, which hid this completely.
-          # Reading services.web.image is exact and honours WAITLAYER_WEB_IMAGE.
+          # Reading services.web.image is exact and honours ATEVA_WEB_IMAGE.
           img=$(docker compose -f docker-compose.yml config --format json 2>/dev/null \
             | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).services.web.image||'')}catch{process.stdout.write('')}})") || true
           # Fallback for compose builds without `--format json`: match the image
           # name allowing a registry prefix and a tag. The previous `-web$` never
-          # matched, because the name always carries one (`waitlayer-web:local`).
+          # matched, because the name always carries one (`ateva-web:local`).
           if [ -z "$img" ]; then
             img=$(docker compose -f docker-compose.yml config --images \
-              | grep -E '(^|/)waitlayer-web(:|$)' | head -1)
+              | grep -E '(^|/)ateva-web(:|$)' | head -1)
           fi
           test -n "$img" || { echo "web image name could not be resolved"; exit 1; }
           echo "web image: $img"
@@ -638,7 +638,7 @@ jobs:
           # runs `wget` inside the container — and nothing in this step has ever
           # evaluated it. That gap is not academic: the next step's
           # `depends_on: api: service_healthy` failed with "container
-          # waitlayer-api-1 is unhealthy" for 272s while this step had just
+          # ateva-api-1 is unhealthy" for 272s while this step had just
           # proven the same image serves 200 on /health/ready in 46s.
           # The documented production cold start is `docker compose up -d --wait`,
           # which depends entirely on this probe, so assert it here where the
@@ -648,7 +648,7 @@ jobs:
               wget --no-verbose --tries=1 --spider http://localhost:4002/api/v1/health/ready; then
             echo "The API serves over the published port but its OWN healthcheck command fails."
             echo "───────── health probe history ─────────"
-            docker inspect --format '{{json .State.Health}}' waitlayer-api-1 || true
+            docker inspect --format '{{json .State.Health}}' ateva-api-1 || true
             echo "───────── wget present? ─────────"
             docker compose -f docker-compose.yml exec -T api sh -c 'command -v wget; wget --version 2>&1 | head -1' || true
             echo "───────── listening sockets ─────────"
@@ -656,7 +656,7 @@ jobs:
             exit 1
           fi
           echo "Container healthcheck command succeeded from inside the container"
-          docker inspect --format 'health={{.State.Health.Status}} failing={{.State.Health.FailingStreak}}' waitlayer-api-1 || true
+          docker inspect --format 'health={{.State.Health.Status}} failing={{.State.Health.FailingStreak}}' ateva-api-1 || true
 
           docker compose -f docker-compose.yml down -v
         env:
@@ -671,14 +671,14 @@ jobs:
           # `up -d web` waits on `depends_on: api: service_healthy`, so it can
           # fail BEFORE the readiness loop below ever runs — the diagnostics
           # further down never fired and the only output was
-          # "dependency failed to start: container waitlayer-api-1 is unhealthy",
+          # "dependency failed to start: container ateva-api-1 is unhealthy",
           # with no indication of why. Capture the api's health probe output and
           # logs at the point of failure.
           if ! docker compose -f docker-compose.yml up -d web; then
             echo "───────── compose up failed ─────────"
             docker compose -f docker-compose.yml ps || true
             echo "───────── api health probe history ─────────"
-            docker inspect --format '{{json .State.Health}}' waitlayer-api-1 2>/dev/null || true
+            docker inspect --format '{{json .State.Health}}' ateva-api-1 2>/dev/null || true
             echo "───────── api logs ─────────"
             docker compose -f docker-compose.yml logs --no-color --tail 200 api || true
             exit 1
@@ -711,8 +711,8 @@ jobs:
             fi
             sleep 2
           done
-          AUTH_STATUS=$(curl -s -o /tmp/waitlayer-auth.json -w '%{http_code}' \
-            -c /tmp/waitlayer-cookies.txt -X POST \
+          AUTH_STATUS=$(curl -s -o /tmp/ateva-auth.json -w '%{http_code}' \
+            -c /tmp/ateva-cookies.txt -X POST \
             http://localhost:3000/api/auth/google \
             -H 'Content-Type: application/json' \
             -H 'Origin: http://localhost:3000' \
@@ -721,7 +721,7 @@ jobs:
             echo "Web BFF mock sign-in failed with status $AUTH_STATUS"; exit 1
           fi
           PROTECTED_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
-            -b /tmp/waitlayer-cookies.txt http://localhost:3000/developer)
+            -b /tmp/ateva-cookies.txt http://localhost:3000/developer)
           if [ "$PROTECTED_STATUS" != "200" ]; then
             echo "Protected web route rejected API-issued cookie (status $PROTECTED_STATUS)"; exit 1
           fi
@@ -745,8 +745,8 @@ jobs:
           cfg=$(docker compose -f docker-compose.yml config --format json 2>/dev/null) || true
           api=$(printf '%s' "$cfg" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).services.api.image||'')}catch{process.stdout.write('')}})")
           web=$(printf '%s' "$cfg" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{process.stdout.write(JSON.parse(d).services.web.image||'')}catch{process.stdout.write('')}})")
-          [ -n "$api" ] || api=$(docker compose -f docker-compose.yml config --images | grep -E '(^|/)waitlayer-api(:|$)' | head -1)
-          [ -n "$web" ] || web=$(docker compose -f docker-compose.yml config --images | grep -E '(^|/)waitlayer-web(:|$)' | head -1)
+          [ -n "$api" ] || api=$(docker compose -f docker-compose.yml config --images | grep -E '(^|/)ateva-api(:|$)' | head -1)
+          [ -n "$web" ] || web=$(docker compose -f docker-compose.yml config --images | grep -E '(^|/)ateva-web(:|$)' | head -1)
           test -n "$api" && test -n "$web" || { echo "could not resolve built image names"; exit 1; }
           echo "api=$api" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
@@ -826,12 +826,12 @@ jobs:
           $PRIVATE_KEY
           EOF
           {
-            echo 'JWT_PRIVATE_KEY<<WAITLAYER_PRIVATE_KEY_EOF'
+            echo 'JWT_PRIVATE_KEY<<ATEVA_PRIVATE_KEY_EOF'
             printf '%s\n' "$PRIVATE_KEY"
-            echo 'WAITLAYER_PRIVATE_KEY_EOF'
-            echo 'JWT_PUBLIC_KEY<<WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PRIVATE_KEY_EOF'
+            echo 'JWT_PUBLIC_KEY<<ATEVA_PUBLIC_KEY_EOF'
             printf '%s\n' "$PUBLIC_KEY"
-            echo 'WAITLAYER_PUBLIC_KEY_EOF'
+            echo 'ATEVA_PUBLIC_KEY_EOF'
           } >> "$GITHUB_ENV"
       - name: Build the API image once
         run: docker compose -f docker-compose.yml build api
@@ -922,18 +922,18 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: waitlayer_test
-          POSTGRES_USER: waitlayer
-          POSTGRES_PASSWORD: waitlayer-test
+          POSTGRES_DB: ateva_test
+          POSTGRES_USER: ateva
+          POSTGRES_PASSWORD: ateva-test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U waitlayer -d waitlayer_test"
+          --health-cmd "pg_isready -U ateva -d ateva_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      SOURCE_DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_test
+      SOURCE_DATABASE_URL: postgresql://ateva:ateva-test@localhost:5432/ateva_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -945,9 +945,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build database package
-        run: pnpm --filter @waitlayer/db build
+        run: pnpm --filter @ateva/db build
       - name: Apply migrations to source DB
-        run: pnpm --filter @waitlayer/db migrate:deploy
+        run: pnpm --filter @ateva/db migrate:deploy
         env:
           DATABASE_URL: ${{ env.SOURCE_DATABASE_URL }}
       - name: Seed source DB with reference data
@@ -959,19 +959,19 @@ jobs:
           ./scripts/backup-db.sh ./backups "$SOURCE_DATABASE_URL"
       - name: Create fresh restore-target DB
         run: |
-          psql "$SOURCE_DATABASE_URL" -c "DROP DATABASE IF EXISTS waitlayer_restored;"
-          psql "$SOURCE_DATABASE_URL" -c "CREATE DATABASE waitlayer_restored;"
+          psql "$SOURCE_DATABASE_URL" -c "DROP DATABASE IF EXISTS ateva_restored;"
+          psql "$SOURCE_DATABASE_URL" -c "CREATE DATABASE ateva_restored;"
       - name: Restore into fresh DB
         run: |
-          DUMP=$(ls -1 backups/waitlayer-db-*.dump.gz | head -1)
-          ./scripts/restore-db.sh "$DUMP" "postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_restored"
+          DUMP=$(ls -1 backups/ateva-db-*.dump.gz | head -1)
+          ./scripts/restore-db.sh "$DUMP" "postgresql://ateva:ateva-test@localhost:5432/ateva_restored"
       - name: Apply migrations to restored DB
-        run: pnpm --filter @waitlayer/db migrate:deploy
+        run: pnpm --filter @ateva/db migrate:deploy
         env:
-          DATABASE_URL: postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_restored
+          DATABASE_URL: postgresql://ateva:ateva-test@localhost:5432/ateva_restored
       - name: Verify backup integrity (row counts + financial invariant)
         run: |
-          RESTORED_DATABASE_URL="postgresql://waitlayer:waitlayer-test@localhost:5432/waitlayer_restored" \
+          RESTORED_DATABASE_URL="postgresql://ateva:ateva-test@localhost:5432/ateva_restored" \
           node scripts/verify-backup.mjs
 
   # Docs-drift guard: assert AGENTS.md's key claims still match the code.
@@ -1010,12 +1010,12 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: waitlayer
-          POSTGRES_PASSWORD: waitlayer-ci
-          POSTGRES_DB: waitlayer_prodsmoke
+          POSTGRES_USER: ateva
+          POSTGRES_PASSWORD: ateva-ci
+          POSTGRES_DB: ateva_prodsmoke
         ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U waitlayer -d waitlayer_prodsmoke"
+          --health-cmd "pg_isready -U ateva -d ateva_prodsmoke"
           --health-interval 5s --health-timeout 5s --health-retries 20
       redis:
         image: redis:7-alpine
@@ -1024,16 +1024,16 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s
           --health-timeout 5s --health-retries 20
     env:
-      DATABASE_URL: postgresql://waitlayer:waitlayer-ci@localhost:5432/waitlayer_prodsmoke?schema=public
+      DATABASE_URL: postgresql://ateva:ateva-ci@localhost:5432/ateva_prodsmoke?schema=public
       REDIS_URL: redis://localhost:6379
       API_PORT: '4002'
-      API_BASE_URL: https://api.waitlayer.test
-      WEB_BASE_URL: https://www.waitlayer.test
+      API_BASE_URL: https://api.ateva.test
+      WEB_BASE_URL: https://www.ateva.test
       NODE_ENV: production
-      WAITLAYER_ENVIRONMENT_KIND: production
-      WAITLAYER_ENVIRONMENT_ID: ci-prod-smoke
-      JWT_ISSUER: waitlayer
-      JWT_AUDIENCE: waitlayer-client
+      ATEVA_ENVIRONMENT_KIND: production
+      ATEVA_ENVIRONMENT_ID: ci-prod-smoke
+      JWT_ISSUER: ateva
+      JWT_AUDIENCE: ateva-client
       PAYOUT_REQUIRE_2FA: 'true'
       PAYOUT_DESTINATION_COOLDOWN_HOURS: '24'
       BFF_TRUST_PROXY_HOPS: '1'
@@ -1042,10 +1042,10 @@ jobs:
       ALLOWED_CURRENCIES: USD,GBP
       COOKIE_SECURE: 'true'
       EMAIL_DRIVER: resend
-      EMAIL_FROM: noreply@waitlayer.test
+      EMAIL_FROM: noreply@ateva.test
       RESEND_API_KEY: re_ci_placeholder_never_sends
-      OPS_ALERT_EMAIL: ops@waitlayer.test
-      SMOKE_ADMIN_EMAIL: ci-prod-smoke@waitlayer.test
+      OPS_ALERT_EMAIL: ops@ateva.test
+      SMOKE_ADMIN_EMAIL: ci-prod-smoke@ateva.test
       SMOKE_ADMIN_PASSWORD: Str0ng!Passw0rd#2026
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -1058,7 +1058,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
-        run: pnpm --filter @waitlayer/db generate
+        run: pnpm --filter @ateva/db generate
 
       # PEMs are written in the SINGLE-LINE `\n`-escaped form on purpose: that
       # is the only form Compose and `--env-file` can carry, and it is the form
@@ -1104,7 +1104,7 @@ jobs:
           esac
 
       - name: Build API
-        run: pnpm --filter "waitlayer-api..." build
+        run: pnpm --filter "ateva-api..." build
 
       - name: Apply migrations
         run: cd packages/db && pnpm exec prisma migrate deploy
@@ -1218,7 +1218,7 @@ jobs:
         with:
           path: .
           format: spdx-json
-          output-file: waitlayer-sbom.spdx.json
+          output-file: ateva-sbom.spdx.json
       - name: License check
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:

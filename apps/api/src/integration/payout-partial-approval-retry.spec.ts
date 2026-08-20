@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -83,7 +83,7 @@ describe('Payout partial-approval retry loop (DB-backed)', () => {
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'admin-partial@waitlayer.com',
+        email: 'admin-partial@ateva.com',
         passwordHash: adminPasswordHash,
         name: 'Super Admin',
         role: UserRole.ADMIN,
@@ -111,7 +111,7 @@ describe('Payout partial-approval retry loop (DB-backed)', () => {
     const signupRes = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
       .send({
-        email: 'dev-partial-retry@waitlayer.com',
+        email: 'dev-partial-retry@ateva.com',
         password: 'Password123!',
         role: UserRole.DEVELOPER,
         name: 'Partial Developer',
@@ -129,13 +129,13 @@ describe('Payout partial-approval retry loop (DB-backed)', () => {
 
     const loginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'dev-partial-retry@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'dev-partial-retry@ateva.com', password: 'Password123!' })
       .expect(200);
     devToken = loginRes.body.accessToken;
 
     const adminLoginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'admin-partial@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'admin-partial@ateva.com', password: 'Password123!' })
       .expect(200);
     adminToken = adminLoginRes.body.accessToken;
 

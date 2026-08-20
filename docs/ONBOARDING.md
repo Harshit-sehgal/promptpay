@@ -1,6 +1,6 @@
 # Onboarding Guide (New Developers)
 
-Welcome to WaitLayer — a privacy-first reward marketplace for AI wait time and
+Welcome to Ateva — a privacy-first reward marketplace for AI wait time and
 developer attention. This gets you from clone to a running local stack.
 
 ## Prerequisites
@@ -15,7 +15,7 @@ developer attention. This gets you from clone to a running local stack.
 ## 1. Clone & install
 
 ```sh
-git clone <repo> && cd waitlayer
+git clone <repo> && cd ateva
 pnpm install            # also sets up Husky pre-commit via the `prepare` script
 cp .env.example .env    # then fill JWT_SECRET etc. (see below)
 ```

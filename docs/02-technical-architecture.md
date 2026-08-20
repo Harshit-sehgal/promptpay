@@ -2,7 +2,7 @@
 
 ## Architecture overview
 
-WaitLayer is a modular marketplace system with four first-class surfaces:
+Ateva is a modular marketplace system with four first-class surfaces:
 
 - Web app: developer, advertiser, admin, support, and public pages.
 - API: auth, ad serving, event ingestion, campaign management, ledger, payouts, fraud, admin, and reporting.

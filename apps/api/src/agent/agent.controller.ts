@@ -39,7 +39,7 @@ export class AgentController {
   ingestBatch(
     @CurrentUser('id') userId: string,
     @Body() dto: AgentEventsBatchDto,
-    @Headers('x-waitlayer-agent-protocol-version') protocolVersion?: string,
+    @Headers('x-ateva-agent-protocol-version') protocolVersion?: string,
   ) {
     return this.service.ingestBatch(userId, dto, protocolVersion);
   }

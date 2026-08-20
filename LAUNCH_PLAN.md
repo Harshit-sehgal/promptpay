@@ -1,4 +1,4 @@
-# WaitLayer Launch Plan — Historical Audit
+# Ateva Launch Plan — Historical Audit
 
 > **Status: SUPERSEDED (2026-08-18).** This document records a fresh code audit
 > performed on **2026-08-07** against `integration/agent-beta`; it is an audit
@@ -24,9 +24,9 @@ value proposition is switched off with no supplier able to switch it on.**
 
 Four historical facts defined the plan at the time:
 
-1. **The application has never been deployed.** `www.waitlayer.com` serves an
+1. **The application has never been deployed.** `www.ateva.com` serves an
    ~10-day-cached marketing build with 8 pages. `/auth/login`, `/auth/signup`,
-   `/developer`, `/advertiser`, `/admin` all 404. `api.waitlayer.com` has no DNS.
+   `/developer`, `/advertiser`, `/admin` all 404. `api.ateva.com` has no DNS.
 2. **A fresh production database cannot produce an admin.** There is no seed,
    script, or endpoint that creates one — so no campaign can be approved, no
    kill-switch can be flipped, and no payout can be processed. The product would
@@ -129,7 +129,7 @@ Then: add it as **step 1** of `docs/ops/deployment-checklist.md`, and add a hard
 
 ### B2 — The application has never been deployed
 
-**Evidence.** Live probe of `www.waitlayer.com`:
+**Evidence.** Live probe of `www.ateva.com`:
 
 ```
 200  /  /pricing  /faq  /manifesto  /changelog  /contact
@@ -139,7 +139,7 @@ Then: add it as **step 1** of `docs/ops/deployment-checklist.md`, and add a hard
      /advertiser-policy  /legal/*
 ```
 
-`x-vercel-cache: HIT`, `age: 881782` (≈10.2 days). `api.waitlayer.com` → no DNS.
+`x-vercel-cache: HIT`, `age: 881782` (≈10.2 days). `api.ateva.com` → no DNS.
 
 **Architecture note (good news).** Auth cookies are written by the **Next.js BFF**
 (`apps/web/src/app/api/auth/_lib/cookies.ts`), not by the API. So `__Host-`
@@ -153,8 +153,8 @@ HTTPS-reachable _server-side_ from the web host.
   already tuned for it). Redeploy from current `main`.
 - **API** → container host (Fly.io / Railway / Render / ECS) using the existing
   `api` Docker target, + managed Postgres + managed Redis. Point
-  `api.waitlayer.com` at it.
-- Set `NEXT_PUBLIC_API_URL=https://api.waitlayer.com/api/v1` and
+  `api.ateva.com` at it.
+- Set `NEXT_PUBLIC_API_URL=https://api.ateva.com/api/v1` and
   `API_INTERNAL_URL` in Vercel **build** variables — `next.config.js`/middleware
   inline these at build time (A-083), runtime env does not reach them.
 - Fill the `staging.yml` secrets (`CONTAINER_REGISTRY`, `STAGING_*`,
@@ -176,7 +176,7 @@ I'd take the split.
 `getWaitLaunchMode()` (`:410`) returns `earnings_enabled` only with a configured
 external issuer **and** version allowlist. `extension-ad.trait.ts:244-251` refuses
 to serve any monetizable ad otherwise. `docs/ops/wait-attestation-launch-gate.md`
-requires an issuer "whose signing key is not available to WaitLayer clients."
+requires an issuer "whose signing key is not available to Ateva clients."
 `tools/wait-attestation-bridge/README.md` admits the stub "always signs a fixed
 5-second duration" and is "prohibited for production."
 
@@ -187,7 +187,7 @@ vendor. You have to build the independent measurer yourself, or not settle.
 **Three paths:**
 
 **Path A — first-party measurement gateway (recommended for monetization).**
-WaitLayer operates an HTTPS gateway that the CLI/extension routes provider calls
+Ateva operates an HTTPS gateway that the CLI/extension routes provider calls
 through (developer brings their own provider key). The gateway measures
 start/end server-side and signs the assertion with a KMS-held key that never
 touches a client. This satisfies the launch gate's trust boundary _literally_.
@@ -221,7 +221,7 @@ and an operator.
 Only `manual` and `paypal_email` are `available`
 (`packages/shared/src/payout-providers.ts:32-45`), and both are "admin-processed
 at launch" — a human sending money by hand. The three real integrations are
-credential-gated behind `WAITLAYER_PAYOUT_PROVIDER_STATUS`, with a correct
+credential-gated behind `ATEVA_PAYOUT_PROVIDER_STATUS`, with a correct
 server-side guard at `payout-method.trait.ts:142-160`.
 
 **Solution.** Pick **PayPal Payouts** — lowest KYC friction for global small
@@ -281,7 +281,7 @@ Decoded from the actual build artifact:
   '# GDPR Data Processing Agreement\n\nContent unavailable.'
 
 docs/legal/gdpr-dpa.md  is 82 lines, starting:
-  '# WaitLayer — GDPR Data Processing Agreement (DPA)'
+  '# Ateva — GDPR Data Processing Agreement (DPA)'
 ```
 
 **Why this matters more than it looks.** All three are linked from
@@ -311,12 +311,12 @@ document and the only one with a regulatory edge._
 
 `apps/web/src/app/developer/page.tsx` (595 lines) contains **zero** references to
 the extension, the CLI, install commands, or device registration. And neither
-client is published — I checked: `registry.npmjs.org/waitlayer-cli` → **404**,
-VS Code Marketplace `waitlayer.waitlayer-vscode` → **404**. Both sit at `0.0.1`.
+client is published — I checked: `registry.npmjs.org/ateva-cli` → **404**,
+VS Code Marketplace `ateva.ateva-vscode` → **404**. Both sit at `0.0.1`.
 
 **Solution.** Publish both — `publish-vscode.yml` / `publish-cli.yml` and the VSIX
 isolation gates already exist and are proven. Then add a "Get started" panel to
-the developer dashboard: marketplace link, `npm i -g waitlayer-cli`, and a live
+the developer dashboard: marketplace link, `npm i -g ateva-cli`, and a live
 "device connected" indicator so activation is observable.
 
 ### B8 — No beta-state disclosure in the web app
@@ -347,7 +347,7 @@ the payout CTA on it. Ship this **before** taking any public signups.
   `OPS_ALERT_EMAIL` and route these to a human before any money moves.
 - `ALLOWED_COUNTRIES` / `ALLOWED_CURRENCIES` are required in production and are a
   **product/legal decision** — nobody has made it yet.
-- Uptime monitoring for `api.waitlayer.com` once it exists; `/status` already
+- Uptime monitoring for `api.ateva.com` once it exists; `/status` already
   proxies the API health contract (`app/api/platform-health/route.ts`).
 
 ---
@@ -412,7 +412,7 @@ defects that would each have stopped a deployment dead. All fixed and verified:
 
 Remaining, and genuinely operator-only:
 
-5. Provision managed Postgres + Redis; deploy API image; `api.waitlayer.com` DNS + TLS.
+5. Provision managed Postgres + Redis; deploy API image; `api.ateva.com` DNS + TLS.
 6. Fill `staging.yml` secrets; get one **green** staging run with the smoke test.
 7. Redeploy web from `main` with correct build-time env; verify all 21 routes.
 8. Sentry + alert routing; first backup + one rehearsed restore.
@@ -435,7 +435,7 @@ step 5–7's failure modes into a checklist that fails before users see them.
 - ~~Clients build and package cleanly~~ ✅ CLI exercised against a live
   production API (correct loopback warnings, commands resolve); VSIX packaged →
   extracted → `verify-vsix-artifact` **PASS**, zero runtime dependencies,
-  `waitlayer.apiUrl` defaults to `https://api.waitlayer.com/api/v1`.
+  `ateva.apiUrl` defaults to `https://api.ateva.com/api/v1`.
 
 Remaining, operator-only:
 

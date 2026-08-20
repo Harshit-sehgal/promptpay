@@ -12,7 +12,7 @@
  * its cause, in whichever job happens to compile first, as a wall of type
  * errors that look like a source problem rather than a generation problem.
  *
- * This runs as part of `pnpm --filter @waitlayer/db generate`, so every caller —
+ * This runs as part of `pnpm --filter @ateva/db generate`, so every caller —
  * CI, local development and the Docker build — gets the check for free, and a
  * partial generation fails loudly at the step that caused it.
  */
@@ -40,7 +40,7 @@ if (missing.length > 0) {
     `prisma generate reported success but the client is incomplete.\n` +
       `  Missing exports: ${missing.join(', ')}\n` +
       `  This is a generation failure, not a source error. Re-run\n` +
-      `  \`pnpm --filter @waitlayer/db generate\` and check that the Prisma\n` +
+      `  \`pnpm --filter @ateva/db generate\` and check that the Prisma\n` +
       `  engines are present (see scripts/ensure-prisma-engines.mjs).`,
   );
   process.exit(1);

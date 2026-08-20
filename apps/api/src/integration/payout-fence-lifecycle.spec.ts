@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
-import { UserRole } from '@waitlayer/shared';
+import { UserRole } from '@ateva/shared';
 
 import { AppModule } from '../app.module';
 import { ActionStepUpGuard } from '../common/guards/action-step-up.guard';
@@ -81,7 +81,7 @@ describe('Payout fence lifecycle (DB-backed)', () => {
     const adminPasswordHash = await bcrypt.hash('Password123!', 12);
     await prisma.user.create({
       data: {
-        email: 'admin-fence@waitlayer.com',
+        email: 'admin-fence@ateva.com',
         passwordHash: adminPasswordHash,
         name: 'Super Admin',
         role: UserRole.ADMIN,
@@ -106,7 +106,7 @@ describe('Payout fence lifecycle (DB-backed)', () => {
   });
 
   async function setupDeveloper() {
-    const devEmail = `dev-fence-${Date.now()}@waitlayer.com`;
+    const devEmail = `dev-fence-${Date.now()}@ateva.com`;
     const signupRes = await request(app.getHttpServer())
       .post('/api/v1/auth/signup')
       .send({
@@ -134,7 +134,7 @@ describe('Payout fence lifecycle (DB-backed)', () => {
 
     const adminLoginRes = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .send({ email: 'admin-fence@waitlayer.com', password: 'Password123!' })
+      .send({ email: 'admin-fence@ateva.com', password: 'Password123!' })
       .expect(200);
     adminToken = adminLoginRes.body.accessToken;
   }

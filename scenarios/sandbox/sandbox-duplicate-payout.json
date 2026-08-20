@@ -4,7 +4,7 @@
   "version": 1,
   "persona": "sandbox_developer",
   "environment": "sandbox",
-  "seed": "waitlayer-sandbox-payout-duplicate-v1",
+  "seed": "ateva-sandbox-payout-duplicate-v1",
   "reporting": {
     "deterministic": true,
     "severity": "critical",

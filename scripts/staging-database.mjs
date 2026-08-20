@@ -31,7 +31,7 @@ function quoteIdentifier(value) {
 
 function getDatabaseUrl() {
   if (!baseUrl) throw new Error('STAGING_DATABASE_URL is required');
-  if (!schema || !/^waitlayer_staging_[a-z0-9_]+$/.test(schema)) {
+  if (!schema || !/^ateva_staging_[a-z0-9_]+$/.test(schema)) {
     throw new Error('STAGING_DATABASE_SCHEMA is missing or invalid');
   }
   const url = new URL(baseUrl);
@@ -59,8 +59,8 @@ async function main() {
 
   if (operation === 'provision') {
     if (!baseUrl) throw new Error('STAGING_DATABASE_URL is required');
-    const generated = `waitlayer_staging_${process.env.GITHUB_RUN_ID ?? Date.now()}_${process.env.GITHUB_RUN_ATTEMPT ?? 1}`;
-    if (!/^waitlayer_staging_[a-z0-9_]+$/.test(generated)) {
+    const generated = `ateva_staging_${process.env.GITHUB_RUN_ID ?? Date.now()}_${process.env.GITHUB_RUN_ATTEMPT ?? 1}`;
+    if (!/^ateva_staging_[a-z0-9_]+$/.test(generated)) {
       throw new Error('Generated staging schema name is invalid');
     }
     const pool = new Pool({ connectionString: baseUrl, max: 1 });
@@ -75,7 +75,7 @@ async function main() {
   }
 
   if (!baseUrl) throw new Error('STAGING_DATABASE_URL is required');
-  if (!schema || !/^waitlayer_staging_[a-z0-9_]+$/.test(schema)) {
+  if (!schema || !/^ateva_staging_[a-z0-9_]+$/.test(schema)) {
     throw new Error('STAGING_DATABASE_SCHEMA is missing or invalid');
   }
   const pool = new Pool({ connectionString: baseUrl, max: 1 });

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { EmailService } from './email.service';
 
-
 /**
  * The CTA link is the highest-value target in this whole module: password-reset
  * and email-verification messages are the two that carry a token, and both put
@@ -12,7 +11,7 @@ import { EmailService } from './email.service';
  * comment, and a comment does not fail a build.
  */
 describe('EmailService CTA link safety', () => {
-  function service(webBaseUrl = 'https://www.waitlayer.test') {
+  function service(webBaseUrl = 'https://www.ateva.test') {
     const config = {
       get: (key: string, fallback?: unknown) =>
         key === 'WEB_BASE_URL' ? webBaseUrl : key === 'EMAIL_DRIVER' ? 'console' : fallback,
@@ -27,10 +26,10 @@ describe('EmailService CTA link safety', () => {
   it('accepts the links the real builders produce', () => {
     const s = service();
     expect(s.buildEmailVerification('u@example.com', 'tok-123').html).toContain(
-      'https://www.waitlayer.test/auth/verify-email?token=tok-123',
+      'https://www.ateva.test/auth/verify-email?token=tok-123',
     );
     expect(s.buildPasswordReset('u@example.com', 'tok-456').html).toContain(
-      'https://www.waitlayer.test/auth/reset-password?token=tok-456',
+      'https://www.ateva.test/auth/reset-password?token=tok-456',
     );
   });
 
@@ -43,8 +42,8 @@ describe('EmailService CTA link safety', () => {
     );
   });
 
-  it('refuses a link on someone else\'s origin', () => {
-    // A phishing link inside a genuine, correctly-signed WaitLayer email.
+  it("refuses a link on someone else's origin", () => {
+    // A phishing link inside a genuine, correctly-signed Ateva email.
     const s = service();
     expect(() => s.layout('t', '<p>b</p>', 'https://evil.example/steal', 'Go', 'f')).toThrow(
       /configured web origin/,
@@ -61,13 +60,7 @@ describe('EmailService CTA link safety', () => {
     // the "Or copy this link:" paragraph is a TEXT node, where an unescaped
     // `<` injects regardless of how safe the attribute is.
     const s = service();
-    const html = s.layout(
-      't',
-      '<p>b</p>',
-      'https://www.waitlayer.test/x?a=1&b=<script>',
-      'Go',
-      'f',
-    );
+    const html = s.layout('t', '<p>b</p>', 'https://www.ateva.test/x?a=1&b=<script>', 'Go', 'f');
     expect(html).not.toContain('<script>');
     expect(html).toContain('&amp;');
   });
