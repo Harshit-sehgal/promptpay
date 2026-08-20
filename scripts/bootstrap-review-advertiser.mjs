@@ -41,6 +41,10 @@ function parseArgs(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
+    // `pnpm run <script> -- --flag v` forwards the `--` separator itself, so a
+    // strict parser rejects the very invocation the runbook documents. Skip it
+    // rather than depend on a particular package-manager version.
+    if (flag === '--') continue;
     if (!known.has(flag)) fail(`unknown argument "${flag}"`);
     const value = argv[i + 1];
     if (value === undefined || value.startsWith('--')) fail(`${flag} requires a value`);

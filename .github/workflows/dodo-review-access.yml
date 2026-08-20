@@ -60,7 +60,7 @@ jobs:
       - name: Create dedicated advertiser review account
         if: ${{ inputs.bootstrap_account }}
         run: |
-          pnpm bootstrap:review-advertiser -- \
+          pnpm bootstrap:review-advertiser \
             --email "$REVIEW_EMAIL" \
             --name "Dodo Payments Reviewer" \
             --company "Dodo Payments Review" \

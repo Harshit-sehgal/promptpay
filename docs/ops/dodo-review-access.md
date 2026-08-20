@@ -54,12 +54,12 @@ is not sufficient for product review.
 The manual `.github/workflows/dodo-review-access.yml` workflow expects these
 secrets in the protected `production` environment:
 
-| Secret | Purpose |
-| --- | --- |
+| Secret                    | Purpose                                            |
+| ------------------------- | -------------------------------------------------- |
 | `PRODUCTION_DATABASE_URL` | Target database used only by the account bootstrap |
-| `PRODUCTION_WEB_URL` | Public HTTPS web origin used by the smoke test |
-| `DODO_REVIEW_EMAIL` | Dedicated advertiser review mailbox |
-| `DODO_REVIEW_PASSWORD` | Strong review-account password |
+| `PRODUCTION_WEB_URL`      | Public HTTPS web origin used by the smoke test     |
+| `DODO_REVIEW_EMAIL`       | Dedicated advertiser review mailbox                |
+| `DODO_REVIEW_PASSWORD`    | Strong review-account password                     |
 
 Use a dedicated mailbox. Do not reuse an operator/admin account.
 
@@ -87,7 +87,7 @@ From a trusted operator machine with access to the target database:
 
 ```sh
 DATABASE_URL='<target database url>' \
-  pnpm bootstrap:review-advertiser -- \
+  pnpm bootstrap:review-advertiser \
     --email '<dedicated review mailbox>' \
     --name 'Dodo Payments Reviewer' \
     --company 'Dodo Payments Review' \
