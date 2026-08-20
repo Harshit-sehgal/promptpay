@@ -561,33 +561,32 @@ export default function DeveloperDashboard() {
             <div className="border-b border-surface-100 px-5 py-4">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-surface-950">
                 <Zap className="h-4 w-4 text-surface-400" />
-                Revenue Split
+                Reward schedule
               </h2>
+            </div>
+            <div className="border-b border-surface-100 bg-amber-50 px-5 py-3 text-sm leading-6 text-amber-950">
+              Rewards are disabled during the private beta. Nothing accrues yet.
             </div>
             <div className="grid gap-0 divide-y divide-surface-100 md:grid-cols-3 md:divide-x md:divide-y-0">
               {[
                 {
-                  pct: '60%',
-                  label: 'Developer',
-                  detail: 'Paid to you for qualified attention.',
-                  tone: 'text-brand-700',
+                  label: 'Set independently',
+                  detail:
+                    'If rewards launch, WaitLayer publishes a rate for verified eligible activity. It is not a percentage of what an advertiser pays.',
                 },
                 {
-                  pct: '30%',
-                  label: 'Platform',
-                  detail: 'Infrastructure, review, and payments.',
-                  tone: 'text-surface-950',
+                  label: 'Paid separately',
+                  detail:
+                    'An advertiser payment settles in full to WaitLayer. Your compensation is a separate payment through an approved fiat payout provider.',
                 },
                 {
-                  pct: '10%',
-                  label: 'Reserve',
-                  detail: 'Fraud, disputes, and payout failure buffer.',
-                  tone: 'text-surface-500',
+                  label: 'Verified first',
+                  detail:
+                    'Only activity that clears the session, visibility, duplicate, budget, and fraud checks can qualify.',
                 },
               ].map((item) => (
                 <div key={item.label} className="px-5 py-5">
-                  <p className={`text-3xl font-semibold tracking-tight ${item.tone}`}>{item.pct}</p>
-                  <p className="mt-2 text-sm font-semibold text-surface-950">{item.label}</p>
+                  <p className="text-sm font-semibold text-surface-950">{item.label}</p>
                   <p className="mt-1 text-sm leading-6 text-surface-500">{item.detail}</p>
                 </div>
               ))}

@@ -25,8 +25,25 @@ import { fileURLToPath } from 'node:url';
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../apps/web/src/app');
 const COMPONENT_DIR = resolve(APP_DIR, '../components');
 
-/** Route prefixes that require a session, so their copy is not public. */
+/**
+ * Route prefixes that require a session. Their copy is not *public*, so they
+ * are exempt from the required-wording checks below — but NOT from the
+ * prohibited-claim scan. The 60/30/10 split survived longest on the
+ * authenticated developer dashboard, which is precisely the surface an
+ * external reviewer logs in to inspect.
+ */
 const PRIVATE_PREFIXES = ['/admin', '/advertiser/', '/developer', '/auth'];
+
+/**
+ * Operator-only internal tooling, exempt from the prohibited-claim scan.
+ *
+ * `/admin/ledger` reports the legacy split engine's existing balances for
+ * reconciliation. That is an internal accounting view of data that already
+ * exists — not a statement to a user about what they will be paid — and no
+ * external reviewer is given admin access. The end-user dashboards under
+ * `/developer` and `/advertiser` are deliberately NOT exempt.
+ */
+const OPERATOR_PREFIXES = ['/admin'];
 
 const PROHIBITED_PUBLIC_CLAIMS = [
   { pattern: /\bUSDC\b/i, label: 'USDC payout claim' },
@@ -54,22 +71,28 @@ function normalize(source) {
   return source.replace(/\s+/g, ' ');
 }
 
-/** Every `page.tsx` reachable without a session, as `[route, filePath]`. */
-function publicPages(dir = APP_DIR, prefix = '') {
+/** Every `page.tsx` in the app, as `[route, filePath]`. */
+function allPages(dir = APP_DIR, prefix = '') {
   const out = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
       const segment = /^[([_]/.test(entry) ? '' : `/${entry}`;
-      out.push(...publicPages(full, prefix + segment));
+      out.push(...allPages(full, prefix + segment));
     } else if (entry === 'page.tsx') {
       out.push([prefix === '' ? '/' : prefix, full]);
     }
   }
-  return out.filter(
-    ([route]) =>
-      !PRIVATE_PREFIXES.some((p) => route === p.replace(/\/$/, '') || route.startsWith(p)),
-  );
+  return out;
+}
+
+function isPublic(route) {
+  return !PRIVATE_PREFIXES.some((p) => route === p.replace(/\/$/, '') || route.startsWith(p));
+}
+
+/** Every `page.tsx` reachable without a session, as `[route, filePath]`. */
+function publicPages() {
+  return allPages().filter(([route]) => isPublic(route));
 }
 
 /**
@@ -95,10 +118,10 @@ function importedComponents(pageSource) {
   return files;
 }
 
-/** Public surface as `{ label, content }`, with each file read at most once. */
-function publicSurface() {
+/** Rendered surface as `{ label, content }`, with each file read at most once. */
+function surfaceFor(pages) {
   const seen = new Map();
-  for (const [route, file] of publicPages()) {
+  for (const [route, file] of pages) {
     const source = readFileSync(file, 'utf8');
     if (!seen.has(file)) seen.set(file, { label: route, content: normalize(source) });
     for (const component of importedComponents(source)) {
@@ -113,14 +136,22 @@ function publicSurface() {
   return [...seen.values()];
 }
 
+/** Everything a signed-in reviewer can reach, including the dashboards. */
+const renderedSurface = () =>
+  surfaceFor(
+    allPages().filter(([route]) => !OPERATOR_PREFIXES.some((p) => route.startsWith(p))),
+  );
+/** Only what an anonymous visitor can reach. */
+const publicSurface = () => surfaceFor(publicPages());
+
 function pageContent(surface, route) {
   const found = surface.find((entry) => entry.label === route);
   assert.ok(found, `expected ${route} to be part of the scanned public surface`);
   return found.content;
 }
 
-test('no public page claims a participant share of an advertiser payment', () => {
-  const surface = publicSurface();
+test('no rendered page claims a participant share of an advertiser payment', () => {
+  const surface = renderedSurface();
 
   for (const { label, content } of surface) {
     for (const { pattern, label: claim } of PROHIBITED_PUBLIC_CLAIMS) {
@@ -170,6 +201,17 @@ test('guards the guard — discovery and patterns must actually work', () => {
   ]) {
     assert.ok(labels.includes(route), `${route} is missing from the scanned public surface`);
   }
+
+  // The authenticated dashboards are the surface an external reviewer logs in
+  // to inspect, and are where the 60/30/10 split survived longest. If they fall
+  // out of the prohibited-claim scan, the gate loses the case it was widened for.
+  const scanned = renderedSurface().map((entry) => entry.label);
+  assert.ok(scanned.includes('/developer'), '/developer is not covered by the claim scan');
+  assert.ok(scanned.includes('/advertiser'), '/advertiser is not covered by the claim scan');
+  assert.ok(
+    !scanned.some((label) => label.startsWith('/admin')),
+    'operator-only /admin pages should stay exempt',
+  );
 
   // The homepage pulls the rewards calculator in from /components; if that
   // resolution breaks, claims could move there unchecked.

@@ -170,8 +170,8 @@ test.describe('Developer dashboard (authenticated)', () => {
   test('renders the trust and payout status section', async ({ page }) => {
     await page.goto('/developer');
     await expect(page.getByText('Trust & Payout Status').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Revenue Split').first()).toBeVisible();
-    await expect(page.getByText('60%').first()).toBeVisible();
+    await expect(page.getByText('Reward schedule').first()).toBeVisible();
+    await expect(page.getByText(/Rewards are disabled during the private beta/i)).toBeVisible();
   });
 
   test('developer settings page renders', async ({ page }) => {
