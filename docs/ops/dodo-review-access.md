@@ -1,9 +1,24 @@
 # Dodo Payments product-review access
 
-This runbook creates a normal advertiser account that Dodo Payments (or another
-external compliance reviewer) can use to inspect the authenticated WaitLayer
-product. It does **not** create an admin, bypass authentication, enable deposits,
-or grant access to provider secrets.
+This runbook creates and verifies a normal advertiser account that Dodo Payments
+(or another external compliance reviewer) can use to inspect the authenticated
+WaitLayer product. It does **not** create an admin, bypass authentication, enable
+money switches, or grant access to provider secrets.
+
+## Product/payment state shown to the reviewer
+
+The review deployment must match the beta architecture:
+
+```text
+Advertiser → Dodo Payments → WaitLayer
+
+WaitLayer → separate payout provider → eligible participant   (future, disabled in beta)
+```
+
+Dodo is used only for the advertiser/customer transaction. WaitLayer does not
+ask Dodo to split that transaction or forward part of it to participants. The
+initial participant reward design is fiat-only and remains disabled until a
+separate payout provider and independent wait attestation are approved.
 
 ## What the bootstrap creates
 
@@ -13,28 +28,60 @@ or grant access to provider secrets.
 - the matching advertiser profile;
 - one **draft** CPM campaign;
 - one **draft** sample creative;
-- an audit-log record identifying that the account was created by the external-review bootstrap.
+- an audit-log record identifying the external-review bootstrap.
 
-The draft campaign is intentionally inert. It is present only so the advertiser
-dashboard is useful during review and does not serve by itself.
+The draft campaign is intentionally inert and cannot serve by itself.
 
 ## Prerequisites
 
 Do not send review credentials until all of the following are true:
 
-1. The production/staging database has the current migrations applied.
-2. The NestJS API is deployed and reachable at its stable HTTPS origin.
-3. The Vercel web/BFF deployment points to that API (`NEXT_PUBLIC_API_URL` and
-   `API_INTERNAL_URL`) and its auth-key configuration matches the API.
-4. `/api/auth/config` is healthy from the deployed web origin and password login
-   reaches the API.
-5. The reviewer can reach `/auth/login` and `/advertiser` from the public web origin.
-6. Real-money feature switches remain fail-closed unless separately approved.
+1. The target database has current production migrations applied.
+2. The NestJS API is deployed at a stable HTTPS origin with production Postgres
+   and Redis available.
+3. The deployed web/BFF points to that API and its auth key configuration matches.
+4. The public web origin reaches `/api/auth/config` and `/api/auth/login`.
+5. `/auth/login` and `/advertiser` are reachable from outside the operator network.
+6. The public payment/reward wording passes `scripts/public-payment-claims.test.mjs`.
+7. Real-money switches remain fail-closed unless separately approved.
 
-A marketing-only deployment with a working "Join beta" form is not sufficient
-for product review. The authenticated web + API path must be deployed.
+Use the existing staging/production release workflow and deployment checklist for
+the deployment itself. A marketing-only site with a working “Join beta” button
+is not sufficient for product review.
 
-## Create the review account
+## Protected GitHub environment secrets
+
+The manual `.github/workflows/dodo-review-access.yml` workflow expects these
+secrets in the protected `production` environment:
+
+| Secret | Purpose |
+| --- | --- |
+| `PRODUCTION_DATABASE_URL` | Target database used only by the account bootstrap |
+| `PRODUCTION_WEB_URL` | Public HTTPS web origin used by the smoke test |
+| `DODO_REVIEW_EMAIL` | Dedicated advertiser review mailbox |
+| `DODO_REVIEW_PASSWORD` | Strong review-account password |
+
+Use a dedicated mailbox. Do not reuse an operator/admin account.
+
+## Preferred flow — GitHub Actions
+
+After the application has been deployed:
+
+1. Open **Actions → Dodo Review Access → Run workflow**.
+2. Set `bootstrap_account=true` on the first run only.
+3. Approve the protected `production` environment if required.
+4. Confirm the workflow passes all four checks:
+   - auth configuration reachable;
+   - advertiser login succeeds;
+   - draft review campaign visible;
+   - authenticated advertiser dashboard reachable.
+5. On later checks, run with `bootstrap_account=false`; this verifies the same
+   credentials without mutating the account.
+
+The workflow never prints the password, cookies, database URL, JWTs, or provider
+credentials and does not toggle any money switch.
+
+## Manual fallback
 
 From a trusted operator machine with access to the target database:
 
@@ -48,40 +95,33 @@ DATABASE_URL='<target database url>' \
     --website 'https://www.waitlayer.com'
 ```
 
-The command prompts for the password with hidden input. Prefer the prompt rather
-than `--password` so the credential does not end up in shell history or the
-process list.
+The command prompts for the password with hidden input. For non-interactive
+protected automation it can instead read `REVIEW_ACCOUNT_PASSWORD`.
 
-The command refuses to overwrite an existing email. Use a dedicated review
-mailbox rather than repurposing a real advertiser account.
+Then validate the deployed journey without printing secrets:
 
-## Validate before sharing
-
-Use a private/incognito browser session and confirm:
-
-1. Sign in at `https://www.waitlayer.com/auth/login`.
-2. The account lands on the advertiser area.
-3. The draft review campaign is visible.
-4. Campaign/payment actions behave according to the current beta switches; no
-   hidden mock-auth or admin-only access is exposed.
-5. Sign out and sign back in once more with the exact credentials being shared.
+```sh
+REVIEW_BASE_URL='https://www.waitlayer.com' \
+REVIEW_EMAIL='<dedicated review mailbox>' \
+REVIEW_ACCOUNT_PASSWORD='<password>' \
+pnpm review:smoke
+```
 
 ## What to send Dodo
 
 Send only:
 
-- Login URL: `https://www.waitlayer.com/auth/login`
+- Login URL: `https://www.waitlayer.com/auth/login` (or the actual public review origin)
 - Review email/username
 - Review password
-- A one-line note that the account is a dedicated advertiser review account and
-  the sample campaign is draft-only.
+- A short note that this is a dedicated advertiser review account and the sample
+  campaign is draft-only.
 
 Never send `DATABASE_URL`, Dodo API/webhook credentials, JWT keys, admin
-credentials, or infrastructure access.
+credentials, server access, or deployment credentials.
 
 ## Scope boundary
 
-This access bootstrap solves only the **review-account** problem. It does not
-change WaitLayer's payout economics, payout-provider architecture, Dodo product
-configuration, or production infrastructure. Those must be reviewed and
-deployed independently before any live money switch is enabled.
+Reviewer access does not itself approve live deposits or participant payouts.
+Dodo production credentials/product/webhook verification, production
+infrastructure, and any future payout provider remain separate launch gates.
