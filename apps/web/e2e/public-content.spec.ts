@@ -62,7 +62,7 @@ const PUBLIC_ROUTES: PublicRoute[] = [
     path: '/legal/gdpr-dpa',
     expect: ['Standard Contractual Clauses', 'Art. 6(1)(b)', 'Sub-processors'],
   },
-  { path: '/terms', expect: ['Acceptance', 'Fraud policy', 'Revenue sharing'] },
+  { path: '/terms', expect: ['Acceptance', 'Fraud policy', 'Participant compensation'] },
   {
     path: '/privacy',
     expect: ['We never read your source code or prompts', 'consent records'],
