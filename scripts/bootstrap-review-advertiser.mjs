@@ -7,14 +7,9 @@
  * mailbox verified so a reviewer can sign in immediately, and adds one inert
  * draft campaign + creative so the dashboard is useful on first login.
  *
- * No password or provider credential is stored in git. The password is prompted
- * with hidden input unless `--password` is supplied explicitly.
- *
- * Usage:
- *   DATABASE_URL=<production-or-staging-url> \
- *     pnpm bootstrap:review-advertiser -- \
- *       --email review@example.com \
- *       --company "External Review"
+ * No password or provider credential is stored in git. The password is read from
+ * REVIEW_ACCOUNT_PASSWORD when supplied (for an approved deployment workflow),
+ * otherwise from --password, otherwise from a hidden interactive prompt.
  */
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -97,7 +92,8 @@ async function main() {
     .toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) fail('--email must be a valid email address');
 
-  const password = args.password ?? (await promptHidden('Review account password (hidden): '));
+  const envPassword = process.env.REVIEW_ACCOUNT_PASSWORD;
+  const password = envPassword || args.password || (await promptHidden('Review account password (hidden): '));
   const passwordError = passwordValidationError(password);
   if (passwordError) fail(`password rejected — ${passwordError}\n${PASSWORD_RULES}`);
 
