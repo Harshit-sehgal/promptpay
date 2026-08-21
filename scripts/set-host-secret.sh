@@ -51,6 +51,15 @@ read_clipboard() {
 VALUE="$(read_clipboard || true)"
 VALUE="${VALUE%$'\n'}"
 
+# Dashboards hand out whole assignments as often as bare values — Upstash shows
+# `REDIS_URL="rediss://…"`, Supabase shows the URL alone. Accept either: strip a
+# leading `NAME=`, then one matching pair of surrounding quotes. Anything else is
+# left untouched so a real value containing `=` survives.
+VALUE="${VALUE#"$NAME"=}"
+if [[ ${#VALUE} -ge 2 && "$VALUE" == \"*\" ]]; then VALUE="${VALUE:1:${#VALUE}-2}"; fi
+if [[ ${#VALUE} -ge 2 && "$VALUE" == \'*\' ]]; then VALUE="${VALUE:1:${#VALUE}-2}"; fi
+VALUE="$(printf '%s' "$VALUE" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+
 if [[ -z "$VALUE" ]]; then
   echo "clipboard is empty — copy the value in the provider's dashboard first" >&2
   exit 1
@@ -90,14 +99,16 @@ case "$NAME" in
     ;;
 esac
 
-masked="$(printf '%s' "$VALUE" | sed -E 's#^(.{0,6}).*(.{4})$#\1…\2#')"
-printf 'setting %s on %s (length %s, %s)\n' "$NAME" "$HOST" "${#VALUE}" "$masked"
+# Prefix only — enough to confirm the right kind of value, never enough to be a
+# fragment worth having. A trailing group would narrow a brute force.
+masked="$(printf '%s' "$VALUE" | cut -c1-3)"
+printf 'setting %s on %s (length %s, starts %s…)\n' "$NAME" "$HOST" "${#VALUE}" "$masked"
 
-# The value travels on stdin, never in argv, so it stays out of the remote
-# process list. The file is rewritten through a 0600 temp file and renamed, so a
-# reader never observes a half-written env.
-printf '%s' "$VALUE" | ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=20 "$HOST" \
-  "VAR_NAME=$(printf '%q' "$NAME") ENV_PATH=$(printf '%q' "$ENV_PATH") python3 -" <<'REMOTE'
+# The remote program is not secret, so it travels in argv (base64 to survive
+# quoting) and stdin is left free for the value alone. An earlier version sent
+# the program on stdin as a heredoc, which silently consumed ssh's stdin — the
+# value never arrived and the remote saw an empty string.
+REMOTE_SCRIPT=$(cat <<'REMOTE'
 import os, sys
 
 name = os.environ["VAR_NAME"]
@@ -134,3 +145,10 @@ os.replace(tmp, path)
 remaining = sum(1 for l in out if "FILL_ME" in l)
 print(f"remote: {name} set ({'replaced' if found else 'appended'}); {remaining} placeholder(s) left")
 REMOTE
+)
+
+SCRIPT_B64="$(printf '%s' "$REMOTE_SCRIPT" | base64 -w0)"
+
+printf '%s' "$VALUE" | ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=20 "$HOST" \
+  "VAR_NAME=$(printf '%q' "$NAME") ENV_PATH=$(printf '%q' "$ENV_PATH") \
+   python3 -c \"import base64;exec(base64.b64decode('$SCRIPT_B64'))\""

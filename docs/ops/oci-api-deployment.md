@@ -95,6 +95,48 @@ these five is already generated:
 transaction pooler; the runtime uses the pooled URL and migrations use the
 direct one.
 
+**Use the session pooler for `DIRECT_URL`, not the direct connection.** Supabase
+serves direct connections over **IPv6 only** unless the paid IPv4 add-on is
+enabled, and this host has no IPv6 route:
+
+```console
+$ ip -6 route show default      # empty
+$ curl -6 https://ifconfig.co   # no egress
+```
+
+It does hold one global IPv6 address, so the failure is not obvious from
+`ip addr` alone — `DATABASE_URL` works (the transaction pooler is IPv4) while
+`prisma migrate deploy` hangs against an address the host can never reach.
+
+The three Supabase endpoints, and which one each variable wants:
+
+| Endpoint           | Port   | Stack | Use for                             |
+| ------------------ | ------ | ----- | ----------------------------------- |
+| Direct connection  | `5432` | IPv6  | nothing here — unreachable          |
+| Transaction pooler | `6543` | IPv4  | `DATABASE_URL` (+ `pgbouncer=true`) |
+| Session pooler     | `5432` | IPv4  | `DIRECT_URL` — migrations           |
+
+The session pooler is a full session-mode connection, so migrations run through
+it; the transaction pooler is not, which is why it cannot be used for them.
+Both pooler URLs use the `postgres.<project-ref>` username, not `postgres`.
+
+## Placing the secrets
+
+`scripts/set-host-secret.sh <VAR>` takes one value from the clipboard, checks it
+against the shape that variable must have, and streams it here over stdin —
+never in argv, so it stays out of this host's process list, and never printed.
+It refuses a pooled URL in `DIRECT_URL` and flags a non-TLS Upstash URL.
+
+Copy the value in the provider's dashboard, then:
+
+```bash
+scripts/set-host-secret.sh REDIS_URL
+```
+
+The Supabase database password cannot be read back from the dashboard — it
+offers only **Reset database password**. Either supply the stored password or
+reset it and copy the new one from the connection string shown at that moment.
+
 Run migrations before the first start:
 
 ```bash
