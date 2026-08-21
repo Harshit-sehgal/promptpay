@@ -36,15 +36,41 @@ export const ADVERTISER_EXPORT_LIMITS = {
 // account-wide impression/click counts use nested-relation counts.
 export const DASHBOARD_CAMPAIGN_SLICE = 20;
 
+/**
+ * Reject a query parameter that arrived as anything other than a string.
+ *
+ * `@Query('to') to?: string` is a compile-time claim, not a runtime guarantee:
+ * Express turns a repeated or bracketed parameter (`?to=a&to=b`, `?to[]=a`)
+ * into an array, and Nest hands it straight through. The declared type then
+ * lies, and `to.includes('T')` silently becomes `Array.prototype.includes`,
+ * which tests whether some ELEMENT equals `'T'` rather than whether the string
+ * contains a `T`.
+ *
+ * For `?to[]=2026-01-01T12:00:00Z` that check returns false, so the date-only
+ * branch appends another suffix and builds `2026-01-01T12:00:00ZT00:00:00.000Z`
+ * — an Invalid Date. `getTime()` is then NaN, `spanDays` is NaN, and
+ * `NaN > maxRangeDays` is false, so the A-032 maximum-range guard below is
+ * bypassed entirely and an Invalid Date is handed to Prisma.
+ */
+function requireDateParam(value: unknown, name: 'from' | 'to'): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') {
+    throw new BadRequestException(`'${name}' must be a single date value`);
+  }
+  return value;
+}
+
 export function buildReportsDateFilter(
-  from: string | undefined,
-  to: string | undefined,
+  fromInput: string | undefined,
+  toInput: string | undefined,
   maxRangeDays: number = REPORT_MAX_RANGE_DAYS,
 ): {
   gte?: Date;
   lte?: Date;
   lt?: Date;
 } {
+  const from = requireDateParam(fromInput, 'from');
+  const to = requireDateParam(toInput, 'to');
   const gte = from ? new Date(from) : undefined;
   const lte = to ? new Date(to) : undefined;
   if (gte && Number.isNaN(gte.getTime())) {
@@ -64,6 +90,12 @@ export function buildReportsDateFilter(
       createdAt.lte = lte;
     } else {
       const toUtc = new Date(`${to}T00:00:00.000Z`);
+      // Defence in depth: never let a NaN date reach the span check below or
+      // Prisma. A NaN bound makes `spanDays > maxRangeDays` false, which would
+      // silently disable the maximum-range limit rather than reject the input.
+      if (Number.isNaN(toUtc.getTime())) {
+        throw new BadRequestException(`Invalid 'to' date: ${to}`);
+      }
       createdAt.lt = new Date(toUtc.getTime() + 24 * 60 * 60 * 1000);
     }
   }

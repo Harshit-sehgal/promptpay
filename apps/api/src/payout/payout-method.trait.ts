@@ -293,7 +293,12 @@ export class PayoutMethodTrait {
         provider,
       )
     ) {
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(destination)) {
+      // The length cap is what makes this regex safe, not decoration. `.` is
+      // inside `[^@\s]`, so `[^@\s]+\.[^@\s]+` can split a long run of dots
+      // many ways and backtracks quadratically on attacker-chosen input. 254
+      // is the RFC 5321 maximum for an address, so this rejects nothing valid
+      // while bounding the match to a trivial amount of work.
+      if (destination.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(destination)) {
         throw new BadRequestException(
           `Payout destination for ${provider} must be a recipient email`,
         );
