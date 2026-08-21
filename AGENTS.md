@@ -22,6 +22,34 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Verified 2026-08-21 — staging provider inventory and OCI host state
+
+The operator-provided service locations were checked without reading or
+recording any credential values. This narrows the infrastructure work but does
+not claim a deployable staging or production environment:
+
+- Supabase organization `Harshit-sehgal's Org` contains a healthy
+  `promptpay-staging` project on AWS `ap-northeast-1` (`t3.nano`). It has no
+  repository connection, migrations, or backups yet. Its database password is
+  not available to the agent, so `DATABASE_URL` and `DIRECT_URL` remain
+  placeholders on the OCI host.
+- Upstash contains `promptpay-staging-redis` on the Free Tier in AWS
+  `ap-south-1`, with TLS enabled. Its endpoint/token have not been copied into
+  the host environment.
+- The authenticated Resend account has no API keys and no verified domains.
+  The OCI environment therefore still has `EMAIL_FROM=FILL_ME_VERIFIED_SENDER`
+  and its existing `RESEND_API_KEY` cannot be treated as belonging to this
+  account.
+- Read-only SSH verification reached `vnic1` and found `ateva-api.service`
+  loaded but **inactive (dead)**. The host is deliberately marked
+  `ATEVA_ENVIRONMENT_KIND=staging`; its database and Redis values are still
+  `FILL_ME_*`, so no start or money switch was attempted.
+
+Verification: local `pnpm typecheck` (17/17), `pnpm lint` (11/11), read-only
+Supabase/Upstash/Resend dashboard inspection, and read-only SSH/systemd/env
+inspection. Remaining work is tracked under operator issue #40 and still
+requires credential creation/retrieval and explicit secret injection.
+
 ## Resolved 2026-08-19 — advertiser waitlist (LAUNCH_PLAN Phase 2 step 11)
 
 The last missing code-side launch item is now implemented and gate-verified:
