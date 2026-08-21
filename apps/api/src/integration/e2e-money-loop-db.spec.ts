@@ -346,6 +346,9 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   ): Promise<{ ad: unknown; token?: string; waitStateId: string }> {
     const waitStateId = uid('ws');
     const sessionId = uid('sess');
+    // The independent proof must be issued before the server records the
+    // wait-start event; requestAd enforces that temporal binding.
+    const attestationSession = await seedWaitAttestationSession(waitStateId, sessionId);
     const startIdem = uid('start');
     await extension.recordWaitStateStart(developerId, {
       deviceId,
@@ -361,8 +364,6 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
 
     // The ad request requires an unconsumed wait-attestation session that was
     // issued before the wait began.
-    const attestationSession = await seedWaitAttestationSession(waitStateId, sessionId);
-
     const adIdem = opts.adIdempotencyKey ?? uid('ad');
     const adRes = await extension.requestAd(developerId, {
       deviceId,
@@ -559,6 +560,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
     await seedCampaign({ spent: 1_000_00n, budgetTotalMinor: 1_000_00n });
     const waitStateId = uid('ws');
     const sessionId = uid('sess');
+    await seedWaitAttestationSession(waitStateId, sessionId);
     await extension.recordWaitStateStart(developerId, {
       deviceId,
       sessionId,
@@ -570,7 +572,6 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signature: 'sig',
       evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
-    await seedWaitAttestationSession(waitStateId, sessionId);
     const res = await extension.requestAd(developerId, {
       deviceId,
       sessionId,
@@ -588,6 +589,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
     await seedCampaign({ balanceMinor: 0n });
     const waitStateId = uid('ws');
     const sessionId = uid('sess');
+    await seedWaitAttestationSession(waitStateId, sessionId);
     await extension.recordWaitStateStart(developerId, {
       deviceId,
       sessionId,
@@ -599,7 +601,6 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signature: 'sig',
       evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
-    await seedWaitAttestationSession(waitStateId, sessionId);
     const res = await extension.requestAd(developerId, {
       deviceId,
       sessionId,
@@ -636,6 +637,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
   it('two concurrent ad requests for the same wait: exactly one impression allocated', async () => {
     const waitStateId = uid('ws');
     const sessionId = uid('sess');
+    await seedWaitAttestationSession(waitStateId, sessionId);
     await extension.recordWaitStateStart(developerId, {
       deviceId,
       sessionId,
@@ -647,8 +649,7 @@ describe('P0.2 Money Loop (DB-backed, real money path)', () => {
       signature: 'sig',
       evidence: createSignedBillableEvidence(DEV_SECRET, waitStateId, sessionId),
     });
-    // Both concurrent requests share the same unconsumed attestation session.
-    await seedWaitAttestationSession(waitStateId, sessionId);
+    // Both concurrent requests share the same pre-issued, unconsumed session.
 
     const [r1, r2] = await Promise.allSettled([
       extension.requestAd(developerId, {

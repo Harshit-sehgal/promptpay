@@ -1,6 +1,6 @@
 import { createPublicKey } from 'node:crypto';
 
-// Accept the pre-rename `WAITLAYER_*` names. This script runs before any
+// Accept the pre-rename `ATEVA_*` names. This script runs before any
 // application code, so it cannot go through the `applyLegacyEnvAliases`
 // shim in @ateva/config — the fallback has to be spelled out here or a
 // deployment whose secrets still use the old prefix fails its preflight.

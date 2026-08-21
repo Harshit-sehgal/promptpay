@@ -22,6 +22,240 @@
   stash machinery produced phantom commits); if a commit is made with hooks
   bypassed, run `pnpm lint` + `pnpm typecheck` manually before pushing.
 
+## Resolved 2026-08-19 — advertiser waitlist (LAUNCH_PLAN Phase 2 step 11)
+
+The last missing code-side launch item is now implemented and gate-verified:
+advertiser interest capture while billing is closed.
+
+- **`POST /api/v1/marketing/waitlist`** (`apps/api/src/marketing/`) — public,
+  endpoint-throttled 5/min (same posture as feedback), honeypot spam guard,
+  `consent: true` mandatory (GDPR marketing consent stored per row), email
+  trimmed/lowercased at the DTO boundary and again in the service.
+  **Idempotent by email**: duplicates return 200 `alreadySignedUp` and never
+  overwrite an operator-set status (`pending → invited/onboarded/declined`);
+  a concurrent duplicate-create race (P2002) is treated as the duplicate it is.
+- **PII hygiene.** The email lives in exactly one table
+  (`advertiser_waitlist`); the audit trail records targetType
+  `advertiser_waitlist` + row id and deliberately omits the address, and
+  `ipHash` is a `privacyPseudonym`. `scripts/erase-waitlist-signup.mjs`
+  (`pnpm erase:waitlist --email <addr>`) performs GDPR Art. 17 erasure — row
+  delete + indexed audit scrub (afterSnap/beforeSnap/ipHash → null) in one
+  transaction — and refuses a production `NODE_ENV` without
+  `--confirm-production`.
+- **Admin surface:** `GET /api/v1/admin/waitlist` (admin/super_admin only,
+  bounded pagination, status filter, narrow select that cannot return
+  `ipHash`).
+- **Web:** `/advertisers` marketing page + `WaitlistSignup` client component
+  (toast on failure never fakes the recorded state, A-078 rule); homepage
+  "Reserve a sponsor slot" now points at the waitlist instead of a signup that
+  cannot yet spend. Added to the BFF proxy allowlist, sitemap, a11y sweep and
+  public-content gate.
+- **Gates:** API unit 8 (service), integration 4 (real DB: persist +
+  idempotency + consent refusal + admin 401), script tests 3
+  (`node --test scripts/erase-waitlist-signup.test.mjs`), browser e2e 2
+  (page render + form submit), web guard suites (proxy/sitemap/metadata/a11y)
+  green. Migration `20260819000000_advertiser_waitlist`; count 96 → **97**
+  (audit-claims machine-checks this). Dev + test DBs migrated, drift-free.
+
+**Remaining (operator-only, unchanged):** Dodo live credentials + webhook
+semantics (#39), production infrastructure + release secrets (#40), staging-
+to-production deployment (#41), independent wait attestation operator (#45),
+GitHub credential rotation, Google OAuth credentials (decision D6), client
+publishing tokens, legal review, and the production payout-operator / float
+decisions (§8.9/§8.11). The Dodo third-party-payout question (§8.2) and launch
+policy are resolved: Dodo cannot pay developers, and developer payouts remain
+disabled until a later automated rail is credentialed and approved (D4/D5/W2.B).
+
+## Resolved 2026-08-19 — historical blueprint status marker
+
+## Resolved 2026-08-19 — current documentation status pointers
+
+`README.md` now sends launch-readiness readers to the live residual register
+and marks the old launch plan as superseded. `docs/12-definition-of-done.md`
+now identifies its unchecked acceptance items as a planning template, and
+`docs/16-operational-runbooks.md` no longer presents the superseded foundation
+status document as its current companion. The runbook procedures themselves
+remain operational guidance.
+
+- Verification: `node --test scripts/ci-package-contract.test.mjs` 20/20,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
+## Resolved 2026-08-19 — current CI exposure scan evidence
+
+The public-exposure report now records a verified full-history gitleaks scan
+that passed in CI run `32287316349`, while retaining the
+older read-only-container scan at `407b001` as supplementary historical
+evidence. This closes the report's stale-evidence wording; credential rotation,
+Vercel access, and production secret verification remain operator tasks.
+
+- Verification: CI security job in
+  [32287316349](https://github.com/Harshit-sehgal/promptpay/actions/runs/32287316349),
+  `node --test scripts/ci-package-contract.test.mjs` 20/20,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
+`docs/ateva-implementation-blueprint.md` now explicitly labels its
+2026-08-04 verification basis as historical, points readers to this live
+register and the current operator issues, and preserves the architecture and
+release sequencing as planning guidance rather than current system state.
+
+- Verification: `node --test scripts/ci-package-contract.test.mjs` 17/17,
+  `node scripts/audit-claims.mjs` 15/15, and complete CI run
+  [32254361528](https://github.com/Harshit-sehgal/promptpay/actions/runs/32254361528)
+  passed on commit `6f11bcf`.
+- The Vercel preview failure remains an external deployment/configuration
+  blocker at the time of commit `6f11bcf`; it was subsequently resolved as
+  recorded below.
+
+## Resolved 2026-08-19 — Vercel Preview deployment compatibility
+
+The branch Preview failure was diagnosed and fixed end-to-end. The project
+variables `JWT_PUBLIC_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`, and
+`NEXT_PUBLIC_API_URL` now include Preview scope, and `BFF_TRUST_PROXY_HOPS=1`
+is configured for Production and Preview. `apps/web/next.config.js` keeps
+`output: 'standalone'` for container builds but omits it on Vercel, avoiding
+the Next 16.3 adapter's missing NFT-manifest failure.
+
+- Source fix: commit `36802a0` (`fix(web): disable standalone output on Vercel`).
+- Vercel deployment `76PS12GyxL2bZ69XNwccfMxHndiL` is **Ready** and the PR's
+  Vercel checks pass.
+- The authenticated Preview homepage renders the current application and
+  correctly reports degraded backend status while `api.ateva.com` has no
+  DNS record. This closes the Vercel build blocker, not the production
+  infrastructure/deployment issue tracked in #40/#41.
+- Verification: Vercel build, Vercel Preview Comments, `node scripts/audit-claims.mjs`
+  (15/15), focused replay integration (1/1), API typecheck, and API lint.
+
+## Verified 2026-08-19 — ateva.com attached to the current Vercel project
+
+Using the authenticated Vercel project session, `ateva.com` and
+`www.ateva.com` were attached to `promptpay` and assigned to Production;
+Vercel configured the apex-to-`www` redirect. Both domains remain
+**Verification Required** because Vercel reports that they are linked to
+another Vercel account. Vercel's DNS panel requires the dashboard-provided
+`_vercel` TXT verification records, the current apex A target, and the current
+`www` CNAME target. The registrar session is not authenticated, so DNS
+publication remains operator-owned. No verification token is recorded here.
+
+- Current public probe still shows the old marketing deployment until DNS
+  verification completes; `api.ateva.com` remains without a DNS record.
+- Verification: authenticated Vercel domain panel, public DNS probe, and
+  `curl` route probes on 2026-08-19.
+
+## Resolved 2026-08-19 — pre-start attestation serving boundary
+
+The production ad-serving gate now enforces the complete attestation start
+window. It requires the provider session to have been created no later than
+the server-recorded wait start and requires its short operation-start deadline
+to still cover that wait start. The previous query checked only the deadline;
+a session created after a wait began could therefore be selected for serving,
+even though the later attestation consumer correctly rejected that session.
+
+- Source fix: `ExtensionAdTrait.requestAd()` filters
+  `createdAt <= waitStart.createdAt` and
+  `operationStartDeadline > waitStart.createdAt`.
+- Regression coverage: the auction-selection spec models a post-start session,
+  verifies it is refused before auction/budget reservation, and asserts both
+  temporal predicates are sent to Prisma.
+- The DB-backed money-loop fixtures also issue their seeded sessions before
+  `recordWaitStateStart`, keeping the real integration path aligned with this
+  temporal contract.
+- Verification: focused API test **4/4**, API typecheck, API lint, Prettier,
+  and `git diff --check`.
+
+## Resolved 2026-08-19 — superseded register pointers removed
+
+The active signup-flow evidence comment and the historical blueprint no longer
+point readers at `docs/ops/remaining-open-items.md`, which is an explicitly
+superseded checklist. They now point to the live register or the current
+deployment checklist, and the CI contract suite prevents those stale pointers
+from returning.
+
+- Verification: `node --test scripts/ci-package-contract.test.mjs` 18/18,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
+## Resolved 2026-08-19 — public exposure evidence boundary
+
+`docs/ops/public-exposure-audit.md` now distinguishes current-tree
+build-artifact scanning from the historical full-history gitleaks snapshot at
+`407b001`. The local environment has no gitleaks executable, so the report no
+longer implies that the current `HEAD` received a fresh full-history scan.
+
+- Verification: `node scripts/scan-build-secrets.mjs`,
+  `node --test scripts/ci-package-contract.test.mjs` 19/19,
+  `node scripts/audit-claims.mjs` 15/15, Prettier, and `git diff --check` pass.
+
+## Resolved 2026-08-19 — configurable payout hold policy (DODO §8.11 code side)
+
+The code-side part of the Dodo settlement-cycle decision is now complete:
+operators can lengthen earnings holds at deploy time without a code change.
+
+- `PAYOUT_HOLD_DAYS_NEW_ACCOUNT`, `PAYOUT_HOLD_DAYS_NORMAL`,
+  `PAYOUT_HOLD_DAYS_HIGH_TRUST`, and `PAYOUT_HOLD_DAYS_EXTENDED` are validated
+  by `@ateva/config` as positive integers from 1 through 365.
+- `LedgerMathTrait.getHoldDays()` honours those values, keeps the shipped
+  defaults (30/14/7/60), floors unverified-source holds to the configured
+  extended value, and preserves restricted/banned `-1` as an unoverrideable
+  indefinite hold.
+- `.env.example`, `docs/ENV_REFERENCE.md`, and
+  `DODO_PAYMENTS_PLAN.md` §8.11 document the contract. Malformed runtime values
+  fall back to defaults rather than propagating `NaN` into ledger maturity.
+- Verification: `pnpm typecheck`, config 17/17, ledger/e2e-money-loop 100/100;
+  the full API suite was 1725 passed + 1 skipped before this doc-only update.
+
+**Remaining operator decision:** choose production hold values or fund a float
+to cover Dodo's settlement cycle. No money switch is enabled by this change.
+
+## Resolved 2026-08-19 — Playwright E2E installer resilience
+
+The CI browser jobs now cache the Playwright browser directory with a pinned
+`actions/cache` release. A cache hit verifies the browser without re-running
+the slow OS-dependency installer; a miss attempts the full
+`playwright install --with-deps chromium` setup for six minutes and then falls
+back to browser-only installation. This closes the repository-side failure mode
+where the development E2E job stalled in browser installation and consumed its
+30-minute job budget, while preserving dependency installation on new runners.
+
+- Both `e2e` and `e2e-production` use the same cache key derived from the lockfile
+  and web package manifest.
+- `node --test scripts/ci-package-contract.test.mjs` passes 15/15 and
+  `pnpm exec prettier --check .github/workflows/ci.yml scripts/ci-package-contract.test.mjs`
+  passes locally.
+- Fresh verification is complete on [CI run 32236328554](https://github.com/Harshit-sehgal/promptpay/actions/runs/32236328554)
+  at the post-fix SHA: both `e2e` and `e2e-production` passed, as did the full
+  test, Docker build, container boot soak, production boot smoke, security,
+  backup/restore, package-client, and audit-claims jobs. The separate Vercel
+  preview check remains an external deployment/configuration failure and is
+  not evidence against the repository-side CI fix.
+
+## Resolved 2026-08-19 — security action version cohesion
+
+The three CodeQL action Dependabot PRs were independently unmergeable because
+the security job's `init`, `autobuild`, and `analyze` steps must share one action
+version. Their logs showed a configuration mismatch when only one step moved to
+v4.37.7. The workflow now consolidates all three CodeQL steps on the pinned
+v4.37.7 commit and moves all three Trivy scans to the independently green
+v0.36.0 pin from PR #49. The new contract test requires each version-coupled
+group to remain internally consistent. Local verification is 20/20. Fresh CI
+verification is also complete on [run 32281043215](https://github.com/Harshit-sehgal/promptpay/actions/runs/32281043215): security and every other required repository job passed.
+
+## Resolved 2026-08-19 — sticky trust restrictions after device fraud
+
+Fresh CI run `32240939271` exposed a real race that the prior green run did not
+cover: duplicate-device registration correctly wrote `trustLevel=restricted`,
+but its asynchronous duplicate-account fraud flag could trigger a score
+recomputation that overwrote the user with `low_trust`. The same stale-write
+window existed for an operator-enforced `banned` level.
+
+- Trust-score recomputation now preserves `restricted` and `banned` as explicit
+  control states rather than treating them as score-derived levels.
+- Duplicate-device registration takes the per-user trust-score advisory lock
+  before changing the level, and never changes an already banned user to
+  restricted.
+- Verification: fraud/extension unit tests **61/61**, the real PostgreSQL
+  atomicity spec **3/3**, repeated three times; fresh CI run
+  `32241885124` passed the full test, E2E, Docker, security, and production
+  verification matrix.
+
 ## Resolved 2026-08-18 — repository stabilization
 
 - **Main CI restored green.** Full-history gitleaks flagged one verified-benign
@@ -96,9 +330,24 @@
   `node --test scripts/ci-package-contract.test.mjs` (15/15), release gates
   (122/122), and `node scripts/audit-claims.mjs` (15/15).
 
+## Resolved 2026-08-19 — deployed-web reachability diagnosis
+
+`pnpm deploy:doctor --with-network` now checks the web root, login route, and
+same-origin auth configuration endpoint in addition to the API health route and
+Redis socket. It records status only and never reads or prints response bodies,
+so a stale marketing deployment cannot be mistaken for a healthy application
+without creating a new secret or privacy exposure.
+
+- Focused verification: `scripts/deploy-doctor.test.mjs` 13/13, including
+  missing-route and network-failure cases.
+- The direct public probe found `/auth/login`, `/auth/signup`, `/developer`,
+  `/advertiser`, and `/api/auth/config` still return 404 while `/` returns 200;
+  this is an external deployment/configuration blocker, not a missing source
+  route. `api.ateva.com` also has no DNS answer.
+
 ## Historical Status Snapshot (2026-08-08)
 
-- **96 migrations.** The sandbox XTS economy wave (7 logical commits,
+- **97 migrations.** The sandbox XTS economy wave (7 logical commits,
   `34270c1`…`f27beb2`) landed the previously-uncommitted worktree on top of
   `25da3e1`: sandbox module + schema/migrations, extension non-cash placement
   path, web panels, VSIX packaging + attention promotion, scenario harness,
@@ -1793,9 +2042,29 @@ without bound. Restored with its module registration and verified against the
 real schema — `rejection_reason` exists, `'expired'` is already a live state,
 and `EXPLAIN` shows the sweep is now an Index Scan on the previously dead index.
 
-**23 dependabot branches** are open and untouched by this pass. They are
-mechanical dependency bumps; several target actions already pinned to SHAs in
-these workflows and will conflict. Review them after the launch, not before.
+**Four stale Dependabot PRs** remain open as of 2026-08-19:
+[#48](https://github.com/Harshit-sehgal/promptpay/pull/48),
+[#49](https://github.com/Harshit-sehgal/promptpay/pull/49),
+[#50](https://github.com/Harshit-sehgal/promptpay/pull/50), and
+[#51](https://github.com/Harshit-sehgal/promptpay/pull/51). Their isolated
+branches predate the cohesive action update in `c20218c` and the current Vercel
+configuration fix. Those action changes are already present and green on the
+current PR #53 head; the old PR checks are historical failures, not missing
+work on this branch. Do not merge them independently or treat them as
+release-ready; close or refresh them after the current line reaches `main`.
+
+## Resolved 2026-08-19 — real-Postgres wait-attestation replay evidence
+
+The code-side concurrency item in the attestation threat model is now covered
+by `apps/api/src/integration/wait-attestation-replay.spec.ts`. It seeds a
+server-issued session and completed server wait, then sends the same signed
+assertion through two concurrent `WaitAttestationService.consume` calls against
+the real test database. Exactly one call succeeds, one receives a
+`ConflictException`, and exactly one minimized attestation row plus one
+`consumedAt` timestamp remains. This proves the database CAS/unique replay
+boundary; it does not replace the independent-provider or staging launch gate.
+
+Verification: the focused integration spec and the API typecheck/lint gates.
 
 ## Open Items (external — operator / infra / product / legal, NOT code)
 
@@ -1811,11 +2080,19 @@ these workflows and will conflict. Review them after the launch, not before.
    analogous `PRODUCTION_*` values, plus the remote Compose `.env`
    (`NODE_ENV=production`, DB/Redis URLs, JWT keys, API URL, mock-auth off).
    Missing values fail the gate by design.
-3. **Public deployment — the application has never been deployed.** Corrected
-   2026-08-07; the prior wording ("stale build, `/comparison` 404") understated
-   this by an order of magnitude. Live probe of 21 routes on
-   `www.ateva.com` (Vercel project `prj_V9GCWpyR3BctdDuEYgPcGusD8au9`,
-   `x-vercel-cache: HIT`, `age: 881782` ≈ 10.2 days):
+3. **Public production deployment remains open.** The current Vercel Preview
+   is now ready, but it is not the production domain and remains protected by
+   Vercel access controls. `ateva.com` and `www.ateva.com` are now
+   attached to the current `promptpay` project but are still Verification
+   Required because Vercel reports another Vercel account association. A
+   fresh read-only recheck on **2026-08-19** confirms `www.ateva.com/`
+   returns `200` from the old cached marketing deployment, `/auth/login`,
+   `/auth/signup`, `/developer`, `/advertiser`, and `/api/auth/config` return
+   `404`, and `api.ateva.com` has no DNS record. Add the Vercel-provided
+   `_vercel` TXT records and current A/CNAME records at the registrar, then
+   recheck the rendered routes.
+   The 21-route enumeration below is retained as historical evidence; cache-age
+   values are intentionally not treated as current state:
    - `200` — `/`, `/pricing`, `/faq`, `/manifesto`, `/changelog`, `/contact`
    - `307` — `/terms`, `/privacy`
    - `404` — `/auth/login`, `/auth/signup`, `/developer`, `/advertiser`,
@@ -1856,8 +2133,10 @@ these workflows and will conflict. Review them after the launch, not before.
    reapproval, admin enforcement, no force pushes, and no branch deletion.
 6. **Revoke the leaked GitHub credential** previously embedded in `origin`
    (local remote sanitized; repository operator must rotate it).
-7. **Google OAuth credentials** for live Google sign-in (CSP `frame-src`
-   verified live; only the ID-token callback needs real creds).
+7. **Google OAuth credentials** for live Google sign-in (decision D6: enable at
+   launch). CSP `frame-src` is verified live; provision matching
+   `GOOGLE_CLIENT_ID` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` values, then verify
+   the ID-token callback.
 8. **PSP credentials/lifecycle (A-030):** which automated rails are enabled at
    the provider level; launch countries/currencies, KYC/tax/legal docs.
    Corrected 2026-08-07 — the prior wording ("`dodo_payments` is stub-only
@@ -1881,6 +2160,8 @@ these workflows and will conflict. Review them after the launch, not before.
      `apps/api/src/integration/payout-sandbox-run.spec.ts` against sandbox
      credentials before promoting via the env override.
      `README.md` already described this split correctly; this file did not.
+     **Operator decision D5 (2026-08-19):** do not enable `payouts.requests` or
+     `payouts.auto` at launch; the automated rail remains a later milestone.
 9. ~~**Green GitHub Actions SHA run:** `gh`/`act` unavailable in dev
    sandboxes.~~ **CLOSED 2026-08-08.** `gh` is available (2.45.0) and CI has
    run green end to end many times — `15ca0de`, `d3a6af1`, `f22544a`,

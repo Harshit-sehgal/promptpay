@@ -30,6 +30,7 @@ import { FeedbackModule } from './feedback/feedback.module';
 import { FraudModule } from './fraud/fraud.module';
 import { HealthModule } from './health/health.module';
 import { LedgerModule } from './ledger/ledger.module';
+import { MarketingModule } from './marketing/marketing.module';
 import { ObservabilityModule } from './observability/observability.module';
 import { PayoutModule } from './payout/payout.module';
 import { ReferralModule } from './referral/referral.module';
@@ -95,6 +96,7 @@ import { SandboxModule } from './sandbox/sandbox.module';
     ExtensionModule,
     FeedbackModule,
     LedgerModule,
+    MarketingModule,
     PayoutModule,
     FraudModule,
     CampaignModule,

@@ -100,11 +100,16 @@ export default function HomePage() {
                 >
                   {isAuthenticated ? 'Open dashboard' : 'Join developer beta'}
                 </Link>
+                {/*
+                  Signed-out advertisers go to the waitlist, not signup. Billing
+                  is closed, so inviting someone to create an account they cannot
+                  yet spend through is a dead end; `/advertisers` captures the
+                  interest instead. An advertiser who already has an account
+                  still lands on their dashboard.
+                */}
                 <Link
                   href={
-                    isAuthenticated && user?.role === 'advertiser'
-                      ? '/advertiser'
-                      : '/auth/signup?role=advertiser'
+                    isAuthenticated && user?.role === 'advertiser' ? '/advertiser' : '/advertisers'
                   }
                   className="inline-flex h-12 items-center rounded-lg border border-surface-300 px-6 text-sm font-semibold text-surface-800"
                 >

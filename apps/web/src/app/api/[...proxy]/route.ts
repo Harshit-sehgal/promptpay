@@ -91,6 +91,9 @@ export const ALLOWED_PATH_PREFIXES = [
   '/advertiser/export-data',
   '/advertiser/delete-account',
 
+  // Public marketing (no auth; the API throttles and validates)
+  '/marketing/waitlist',
+
   // Admin (gated by RoleGuard upstream; the proxy just forwards)
   '/admin/overview',
   '/admin/money-integrity',

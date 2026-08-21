@@ -72,7 +72,9 @@ re-run CI.
 - `pnpm install` sets up Husky via `prepare`. If hooks didn't install, run
   `pnpm exec husky init` (or `pnpm install` again). Verify `.husky/pre-commit`
   exists and `git config core.hooksPath` points at `.husky/_`.
-- Force a run: `pnpm exec lint-staged`.
+- To run the same formatter/linter manually, stage the intended files and run
+  `sh .husky/pre-commit`; it operates on the index and re-stages formatting
+  fixes without using `lint-staged` or a stash.
 
 ## Build fails on typecheck
 

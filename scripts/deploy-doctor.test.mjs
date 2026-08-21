@@ -7,6 +7,7 @@ import {
   diagnoseMigrationState,
   diagnoseMoneySwitches,
   probeNetwork,
+  probeWeb,
 } from './deploy-doctor.mjs';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -36,21 +37,30 @@ function finding(findings, name) {
 
 test('accepts a complete production-shaped environment without exposing values', () => {
   const findings = diagnoseEnvironment(BASE);
-  assert.equal(findings.some((item) => item.level === 'FAIL'), false);
+  assert.equal(
+    findings.some((item) => item.level === 'FAIL'),
+    false,
+  );
   const rendered = findings.map((item) => `${item.name} ${item.detail}`).join('\n');
-  assert.doesNotMatch(rendered, /password|redis-password|production-secret|BEGIN PRIVATE KEY|client\.apps/);
+  assert.doesNotMatch(
+    rendered,
+    /password|redis-password|production-secret|BEGIN PRIVATE KEY|client\.apps/,
+  );
 });
 
 test('rejects missing production infrastructure, auth, URLs, and OAuth inputs', () => {
-  const findings = diagnoseEnvironment({ NODE_ENV: 'production', ATEVA_ENVIRONMENT_KIND: 'production' });
+  const findings = diagnoseEnvironment({
+    NODE_ENV: 'production',
+    ATEVA_ENVIRONMENT_KIND: 'production',
+  });
   for (const name of ['database_url', 'redis-config', 'jwt-keys', 'web-api-url', 'google-oauth']) {
     assert.equal(finding(findings, name).level, 'FAIL', `${name} should fail closed`);
   }
 });
 
 test('rejects mismatched or malformed JWT material', () => {
-  const mismatched = generateKeyPairSync('rsa', { modulusLength: 2048 }).publicKey
-    .export({ type: 'spki', format: 'pem' })
+  const mismatched = generateKeyPairSync('rsa', { modulusLength: 2048 })
+    .publicKey.export({ type: 'spki', format: 'pem' })
     .toString();
   const findings = diagnoseEnvironment({ ...BASE, JWT_PUBLIC_KEY: mismatched });
   assert.match(finding(findings, 'jwt-keys').detail, /do not form one key pair/);
@@ -72,7 +82,10 @@ test('rejects non-HTTPS public endpoints and inconsistent API paths', () => {
 });
 
 test('requires matching Google OAuth IDs and complete Dodo configuration', () => {
-  const oauth = diagnoseEnvironment({ ...BASE, NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'other.apps.googleusercontent.com' });
+  const oauth = diagnoseEnvironment({
+    ...BASE,
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID: 'other.apps.googleusercontent.com',
+  });
   assert.match(finding(oauth, 'google-oauth').detail, /do not match/);
 
   const dodoEnv = {
@@ -107,7 +120,11 @@ test('reports enabled money switches without changing them', () => {
 
 test('migration probe passes only when every on-disk migration is applied', () => {
   const applied = new Set(['0_init', '20260801000000_x', '20260802000000_y']);
-  const pass = diagnoseMigrationState({ onDisk: ['0_init', '20260801000000_x', '20260802000000_y'], applied, failed: [] });
+  const pass = diagnoseMigrationState({
+    onDisk: ['0_init', '20260801000000_x', '20260802000000_y'],
+    applied,
+    failed: [],
+  });
   assert.equal(pass.level, 'PASS');
   assert.match(pass.detail, /3 migration\(s\) applied/);
 });
@@ -151,18 +168,57 @@ test('probes the versioned API health route without reading a response body', as
 });
 
 test('never turns an API error or network failure into a confident pass', async () => {
-  const httpError = await probeNetwork(
-    { API_BASE_URL: 'https://api.example.com' },
-    async () => ({ ok: false, status: 503 }),
-  );
+  const httpError = await probeNetwork({ API_BASE_URL: 'https://api.example.com' }, async () => ({
+    ok: false,
+    status: 503,
+  }));
   assert.equal(httpError.level, 'FAIL');
 
-  const networkError = await probeNetwork(
-    { API_BASE_URL: 'https://api.example.com' },
+  const networkError = await probeNetwork({ API_BASE_URL: 'https://api.example.com' }, async () => {
+    throw new Error('secret must not escape');
+  });
+  assert.equal(networkError.level, 'FAIL');
+  assert.doesNotMatch(networkError.detail, /secret/);
+});
+
+test('probes the web shell, login route, and same-origin auth config without reading bodies', async () => {
+  const requestedUrls = [];
+  const result = await probeWeb(
+    { NODE_ENV: 'production', WEB_BASE_URL: 'https://app.example.com' },
+    async (url, init) => {
+      requestedUrls.push(String(url));
+      assert.equal(init.method, 'GET');
+      assert.equal(init.headers.Accept, 'text/html,application/json');
+      return { ok: true, status: 200 };
+    },
+  );
+  assert.equal(result.level, 'PASS');
+  assert.deepEqual(requestedUrls, [
+    'https://app.example.com/',
+    'https://app.example.com/auth/login',
+    'https://app.example.com/api/auth/config',
+  ]);
+  assert.match(result.detail, /3 web routes returned 2xx/);
+});
+
+test('fails the web probe when a required route is missing or unreachable', async () => {
+  const missingRoute = await probeWeb(
+    { NODE_ENV: 'production', WEB_BASE_URL: 'https://app.example.com' },
+    async (url) => ({
+      ok: !String(url).endsWith('/auth/login'),
+      status: String(url).endsWith('/auth/login') ? 404 : 200,
+    }),
+  );
+  assert.equal(missingRoute.level, 'FAIL');
+  assert.match(missingRoute.detail, /\/auth\/login HTTP 404/);
+
+  const unreachable = await probeWeb(
+    { NODE_ENV: 'production', WEB_BASE_URL: 'https://app.example.com' },
     async () => {
       throw new Error('secret must not escape');
     },
   );
-  assert.equal(networkError.level, 'FAIL');
-  assert.doesNotMatch(networkError.detail, /secret/);
+  assert.equal(unreachable.level, 'FAIL');
+  assert.match(unreachable.detail, /\/ unreachable/);
+  assert.doesNotMatch(unreachable.detail, /secret/);
 });

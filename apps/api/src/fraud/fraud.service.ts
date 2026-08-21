@@ -693,14 +693,19 @@ export class FraudService {
     score = Math.max(TRUST_SCORE.MIN, Math.min(TRUST_SCORE.MAX, score));
 
     // Determine trust level
+    // Restricted and banned are operator/financial-control states, not score
+    // outcomes. A late fraud recomputation must never silently downgrade one
+    // of those states back to a score-derived level.
     const level =
-      score >= TRUST_SCORE.THRESHOLDS.HIGH_TRUST
-        ? TrustLevel.high_trust
-        : score >= TRUST_SCORE.THRESHOLDS.NORMAL
-          ? TrustLevel.normal
-          : score >= TRUST_SCORE.THRESHOLDS.LOW_TRUST
-            ? TrustLevel.low_trust
-            : TrustLevel.new;
+      user.trustLevel === TrustLevel.restricted || user.trustLevel === TrustLevel.banned
+        ? user.trustLevel
+        : score >= TRUST_SCORE.THRESHOLDS.HIGH_TRUST
+          ? TrustLevel.high_trust
+          : score >= TRUST_SCORE.THRESHOLDS.NORMAL
+            ? TrustLevel.normal
+            : score >= TRUST_SCORE.THRESHOLDS.LOW_TRUST
+              ? TrustLevel.low_trust
+              : TrustLevel.new;
 
     // Update trust score record
     await tx.trustScore.upsert({

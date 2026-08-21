@@ -67,10 +67,12 @@ not close those operator-owned live-provider checks.
 
 | ID  | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| D1  | **Dodo Payments is the sole payment rail for launch** — accepting (advertiser deposits) and managing (developer payouts, capability permitting — see §OQ-2).                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| D1  | **Dodo Payments is the sole money-in rail for launch** — advertiser deposits use Dodo. Developer payouts are a separate platform-rail decision because Dodo cannot pay third parties (D4/D5).                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | D2  | **Stripe is NOT active at launch.** Code, tests and providers stay in the tree (reversible); production env carries no Stripe credentials and every Stripe surface fails closed. Revisit later.                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | D3  | **(2026-08-17)** Operator supplied a Dodo API key. **Verified live: it is a TEST key** (`GET /products` → 200 on `https://test.dodopayments.com`, 401 on live). Stored only in gitignored `.env` + `apps/api/.env` as `DODO_API_KEY` with `DODO_BASE_URL=https://test.dodopayments.com`. A **live key is still pending** — never launch on the test base URL.                                                                                                                                                                                                                                                                  |
 | D4  | **(2026-08-17, verified from Dodo's docs + API index)** Dodo has **no third-party payout API**. Its payout endpoints are read-only (`List Payouts`, `Payout Breakup`, CSV) and settle the _merchant's own_ earnings to bank accounts that must match the verified entity ("cannot process payouts to mismatched or third-party accounts"). **W2.A is infeasible — W2.B is the branch**, architecturally, not just provisionally. Dodo deposits settle to the platform's bank on a bi-monthly/weekly/monthly cycle (min $50 USD threshold, MoR fees/taxes deducted first); developer payouts run from the platform's own rails. |
+| D5  | **(2026-08-19)** Operator decision: developer payouts are **deferred until a later automated rail** (PayPal Payouts/Wise after credentials and sandbox evidence). Keep `payouts.requests` and `payouts.auto` OFF for launch; `manual`/`paypal_email` remain implemented and fail-closed in the catalogue but are not the launch payout operation.                                                                                                                                                                                                                                                                              |
+| D6  | **(2026-08-19)** Operator decision: enable Google OAuth at launch once the matching server/web client IDs are provisioned. Mock Google remains prohibited in production; email/password remains available as a fallback.                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 Open questions requiring operator input are in **§8**. Nothing in §1–§7 should
 start on Dodo credentials-dependent work until §8 items 1–3 are answered.
@@ -255,15 +257,16 @@ platform rails.
   developer payout float — **platform cash-flow timing depends on Dodo's
   settlement cycle, not on when advertisers deposit**.
 
-### W2.B — platform rails for developer payouts (the branch)
+### W2.B — platform rails for developer payouts (deferred by D5)
 
-- Launch on the already-real rails: `manual` + `paypal_email`
-  (`packages/shared/src/payout-providers.ts:32-45`, admin-processed).
-- Consequence to accept explicitly: **no automated payouts, no
-  reconciliation story at volume** (AGENTS.md open item #8 warns about
-  `manual` at volume). §8.9 asks who operates this.
+- The code keeps `manual` + `paypal_email` available for a future operator
+  decision (`packages/shared/src/payout-providers.ts:32-45`, admin-processed),
+  but D5 explicitly defers developer payouts and keeps `payouts.requests` and
+  `payouts.auto` disabled at launch.
 - Revisit `paypal_payouts`/`wise` (both complete, credential-gated) as the
-  first automated out-rail later — do not delete them (D2 parity).
+  first automated out-rail later — do not delete them (D2 parity). Before
+  enabling the payout switch, run the provider sandbox journey and establish
+  reconciliation ownership.
 - **Cash-flow note (from D4):** developer payouts leave the platform bank
   that Dodo settles into, on a cycle up to bi-monthly. If a developer's
   earnings hold period expires before Dodo has settled the covering
@@ -324,17 +327,20 @@ launch. Order matters — the cold-start sequence is documented in
 5. **Admin operation**: bootstrap via `pnpm bootstrap:admin`, TOTP enrolment
    (`/admin/security`), MFA step-up verified — needed for campaign approval
    and every money switch.
-6. **Branch protection / CODEOWNERS** (open item #5), **rotate the leaked
-   GitHub credential** (open item #6), Google OAuth decision (§8.8), CI
-   test-DB consent (open item #10).
+6. **Branch protection / CODEOWNERS** — resolved and API-verified on
+   2026-08-18. The leaked GitHub credential still needs rotation (open item
+   #6). Google OAuth is approved for launch (D6); matching credentials still
+   need provisioning. CI test-DB reset consent remains a deliberate local
+   test prerequisite, not a product-launch blocker.
 
 ---
 
 ## 6. Workstream W5 — legal & compliance
 
-- `apps/web/src/app/legal/gdpr-dpa/page.tsx:109` lists sub-processors
-  "PayPal, Stripe, Wise, …" — **add Dodo Payments**; decide with counsel
-  whether inactive Stripe stays listed (recommend: keep, marked inactive).
+- **Code-side DPA update is complete:**
+  `apps/web/src/app/legal/gdpr-dpa/page.tsx` lists Dodo Payments as the
+  Merchant of Record for advertiser deposits and marks Stripe inactive. Legal
+  review and the final processor/refund wording decision remain operator-owned.
 - Terms + `payout-policy`: Dodo as Merchant of Record changes who the
   seller of record is and how tax/VAT is handled on advertiser deposits.
   Refund policy must match what Dodo actually executes. Requires §8.10.
@@ -347,9 +353,12 @@ launch. Order matters — the cold-start sequence is documented in
 
 - CLI `commands/sandbox.ts` was restored on 2026-08-18 with server-confirmed
   sandbox/test gating, exact bounded XTS amount parsing, and focused command
-  tests. VS Code `quiet-hours.ts` remains unported and is still non-blocking.
+  tests. VS Code quiet-hours evaluation is already implemented in
+  `apps/vscode-extension/src/config.ts`; the abandoned standalone
+  `quiet-hours.ts` branch file was dead code and is intentionally not ported.
 - TypeScript 7 branch: blocked on typescript-eslint ≥ TS 7.1 support.
-- 23 dependabot branches: review post-launch, not before.
+- Four Dependabot PRs are currently open; they are mechanical action bumps and
+  remain a review/disposition task rather than launch code.
 - `wait.earnings` attestation operator (open item #1) is the core-value-prop
   gap; it is an external dependency, not code — tracked in §8.4.
 
@@ -357,19 +366,19 @@ launch. Order matters — the cold-start sequence is documented in
 
 ## 8. Operator input register (blocking answers first)
 
-| #   | Question                                                                                                                                                                                                                                                                                               | Blocks                |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- |
-| 1   | **Dodo credentials**: ✅ test API key received 2026-08-17 (stored in gitignored envs, `DODO_BASE_URL` set to test). **Still needed:** live API key, and the **webhook signing secret** (Developer → Webhooks in the dashboard) — without it no webhook can be verified (W1.3). Who owns the dashboard? | W1.3, launch          |
-| 2   | ~~Does Dodo support third-party payouts?~~ **Answered 2026-08-17: no** (D4). Developer payouts run on `manual`/`paypal_email` at launch; confirm acceptable, or fund PayPal Payouts/Wise credentials for an automated rail later.                                                                      | W2 (closed → W2.B)    |
-| 3   | **Launch countries + currencies** — must be intersected with Dodo's supported set and with `CURRENCY_POLICY` (deposits and campaign budgets are per-currency). Also: create the Ateva "wallet top-up" **product** in the Dodo dashboard (test + live) — Dodo checkout is product-based.                | W1, config            |
-| 4   | **wait.earnings**: defer (recommended — no attestation operator exists) or is sourcing one in flight?                                                                                                                                                                                                  | W4.3 scope            |
-| 5   | **MoR fee treatment**: platform absorbs Dodo fees/taxes as COGS (recommended) or advertiser credited net? Dodo deducts taxes + platform fees before settlement — the advertiser ledger must credit one consistent figure.                                                                              | W1.3 ledger semantics |
-| 6   | **Stripe dashboard**: any live webhook endpoints/webhooks to disable? Confirm "inactive, not deleted" (D2).                                                                                                                                                                                            | W3                    |
-| 7   | **Infra**: where does the API run (host/provider), and who controls DNS for `api.ateva.com`? Container registry choice?                                                                                                                                                                                | W4.1–4.2              |
-| 8   | **Google OAuth** at launch, or email/password only?                                                                                                                                                                                                                                                    | W4.6                  |
-| 9   | **Who operates the admin console** (campaign approvals, money switches, manual payout processing — now definitely required per D4)?                                                                                                                                                                    | W2.B, W4.5            |
-| 10  | **Legal review** of terms/DPA/payout-policy once Dodo copy exists; refund policy decision.                                                                                                                                                                                                             | W5                    |
-| 11  | **Payout float sizing** (new, from D4): developer earnings hold period vs Dodo's settlement cycle (up to bi-monthly) — lengthen `holdDays` or fund a float?                                                                                                                                            | W2.B                  |
+| #   | Question                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Blocks                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 1   | **Dodo credentials**: ✅ test API key received 2026-08-17 (stored in gitignored envs, `DODO_BASE_URL` set to test). **Still needed:** live API key, and the **webhook signing secret** (Developer → Webhooks in the dashboard) — without it no webhook can be verified (W1.3). Who owns the dashboard?                                                                                                                                                                                                                                                                                                                  | W1.3, launch           |
+| 2   | ~~Does Dodo support third-party payouts?~~ **Answered 2026-08-17: no** (D4). **Answered 2026-08-19 by operator (D5):** defer developer payouts until a later automated rail; keep `payouts.requests`/`payouts.auto` OFF at launch. `manual`/`paypal_email` remain available in code but are not the launch operation.                                                                                                                                                                                                                                                                                                   | W2 (closed → deferred) |
+| 3   | **Launch countries + currencies** — must be intersected with Dodo's supported set and with `CURRENCY_POLICY` (deposits and campaign budgets are per-currency). Also: create the Ateva "wallet top-up" **product** in the Dodo dashboard (test + live) — Dodo checkout is product-based.                                                                                                                                                                                                                                                                                                                                 | W1, config             |
+| 4   | **wait.earnings**: defer (recommended — no attestation operator exists) or is sourcing one in flight?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | W4.3 scope             |
+| 5   | **MoR fee treatment**: platform absorbs Dodo fees/taxes as COGS (recommended) or advertiser credited net? Dodo deducts taxes + platform fees before settlement — the advertiser ledger must credit one consistent figure.                                                                                                                                                                                                                                                                                                                                                                                               | W1.3 ledger semantics  |
+| 6   | **Stripe dashboard**: any live webhook endpoints/webhooks to disable? Confirm "inactive, not deleted" (D2).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | W3                     |
+| 7   | **Infra**: where does the API run (host/provider), and who controls DNS for `api.ateva.com`? Container registry choice?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | W4.1–4.2               |
+| 8   | **Google OAuth**: **answered 2026-08-19 — enable at launch**. Provision matching `GOOGLE_CLIENT_ID` (API) and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (web/Vercel build); mock Google remains prohibited in production.                                                                                                                                                                                                                                                                                                                                                                                                          | W4.6 credentials       |
+| 9   | **Who operates the admin console** (campaign approvals, money switches, manual payout processing — now definitely required per D4)?                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | W2.B, W4.5             |
+| 10  | **Legal review** of terms/DPA/payout-policy once Dodo copy exists; refund policy decision.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | W5                     |
+| 11  | **Payout float sizing** (new, from D4): developer earnings hold period vs Dodo's settlement cycle (up to bi-monthly) — lengthen `holdDays` or fund a float? **Code side done 2026-08-19:** `PAYOUT_HOLD_DAYS_*` env overrides (new/low_trust 30, normal 14, high_trust 7, extended 60 defaults) are validated in the config schema and honoured by `LedgerMathTrait.getHoldDays` — the operator can now lengthen holds at deploy time with no code change; the restricted/banned −1 "indefinite" contract is not overridable. **Decision still operator-owned:** what values to run in production (vs funding a float). | W2.B                   |
 
 ---
 

@@ -61,7 +61,6 @@ function securityHeaders() {
  */
 const nextConfig = {
   transpilePackages: ['@ateva/ui', '@ateva/shared', '@ateva/config'],
-  output: 'standalone',
 
   /**
    * Next writes its own `AGENTS.md` and `CLAUDE.md` into this app on every
@@ -72,6 +71,11 @@ const nextConfig = {
    * of the repo's actual operating rules and audit trail.
    */
   agentRules: false,
+  // Vercel's Next 16 adapter expects the normal build output. Keeping
+  // standalone for container builds is useful, but enabling it on Vercel
+  // makes the adapter look for the NFT manifest that Next 16.3 no longer
+  // emits when the adapter is active.
+  output: process.env.VERCEL ? undefined : 'standalone',
   typedRoutes: true,
   crossOrigin: 'anonymous',
   experimental: { sri: { algorithm: 'sha384' } },
