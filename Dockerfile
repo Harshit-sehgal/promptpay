@@ -74,7 +74,26 @@ ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT=$NEXT_PUBLIC_SENTRY_ENVIRONMENT
 # middleware (its production fail-fast paths depend on it) and the web
 # prerender does not crash in dev mode (A-001).
 ENV NODE_ENV=production
-RUN pnpm run build
+# Optional narrowed build for memory-constrained hosts.
+#
+# The default builds every workspace, which is what CI and the web image need.
+# A 1 GB API host cannot finish that: the web build alone exhausts the box, and
+# the failure surfaces as an opaque OOM kill rather than a build error. Passing
+# `--build-arg BUILD_SCOPE=api` builds only `ateva-api` and the packages it
+# depends on, and `NODE_OPTIONS` lets that host cap the heap
+# (`--max-old-space-size=...`) to stay inside its limit.
+#
+# This started as an untracked edit on the deployment host, which meant the
+# only machine that could build the API carried a patch no one else had and no
+# rebuild would reproduce. It belongs here.
+ARG BUILD_SCOPE=all
+ARG NODE_OPTIONS=
+ENV NODE_OPTIONS=$NODE_OPTIONS
+RUN if [ "$BUILD_SCOPE" = "api" ]; then \
+      pnpm --filter ateva-api... run build; \
+    else \
+      pnpm run build; \
+    fi
 
 # ── API Runtime ──
 # Assembly stage: every step that CREATES files runs here, as root, with the
