@@ -62,6 +62,16 @@ function securityHeaders() {
 const nextConfig = {
   transpilePackages: ['@ateva/ui', '@ateva/shared', '@ateva/config'],
   output: 'standalone',
+
+  /**
+   * Next writes its own `AGENTS.md` and `CLAUDE.md` into this app on every
+   * `next dev` run. This repo already has an authoritative root `AGENTS.md`
+   * that `CLAUDE.md` points every agent at, so a generated second copy inside
+   * `apps/web` is worse than nothing: it is untracked, it silently reappears,
+   * and an agent that opens the nearest file gets Next's boilerplate instead
+   * of the repo's actual operating rules and audit trail.
+   */
+  agentRules: false,
   typedRoutes: true,
   crossOrigin: 'anonymous',
   experimental: { sri: { algorithm: 'sha384' } },

@@ -55,8 +55,11 @@ function fail(message) {
 }
 
 const databaseUrl = process.env.DATABASE_URL;
-const environmentKind = process.env.ATEVA_ENVIRONMENT_KIND;
-const environmentId = process.env.ATEVA_ENVIRONMENT_ID;
+// Accept the pre-rename names too; this script runs standalone, outside the
+// `applyLegacyEnvAliases` shim in @ateva/config.
+const environmentKind =
+  process.env.ATEVA_ENVIRONMENT_KIND ?? process.env.WAITLAYER_ENVIRONMENT_KIND;
+const environmentId = process.env.ATEVA_ENVIRONMENT_ID ?? process.env.WAITLAYER_ENVIRONMENT_ID;
 
 if (!databaseUrl) fail('DATABASE_URL is required');
 if (!environmentKind) fail('ATEVA_ENVIRONMENT_KIND is required');

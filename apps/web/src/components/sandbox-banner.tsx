@@ -13,7 +13,10 @@ type SandboxBannerProps = {
 };
 
 export default function SandboxBanner({ environmentKind }: SandboxBannerProps = {}) {
-  const localKind = environmentKind ?? process.env.NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND;
+  const localKind =
+    environmentKind ??
+    process.env.NEXT_PUBLIC_ATEVA_ENVIRONMENT_KIND ??
+    process.env.NEXT_PUBLIC_WAITLAYER_ENVIRONMENT_KIND;
   const [serverKind, setServerKind] = useState<string | null>(
     environmentKind ? environmentKind : null,
   );

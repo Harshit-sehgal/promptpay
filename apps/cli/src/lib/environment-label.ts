@@ -13,7 +13,7 @@ export async function printSandboxBanner(
   client?: { getEnvironmentIdentity?: () => Promise<EnvironmentIdentity> },
   output: NodeJS.WritableStream = process.stdout,
 ): Promise<void> {
-  const localKind = process.env.ATEVA_ENVIRONMENT_KIND;
+  const localKind = process.env.ATEVA_ENVIRONMENT_KIND ?? process.env.WAITLAYER_ENVIRONMENT_KIND;
   const getIdentity = client?.getEnvironmentIdentity;
   if (typeof getIdentity !== 'function') return;
 

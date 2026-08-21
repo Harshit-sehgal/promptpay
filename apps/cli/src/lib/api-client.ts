@@ -238,7 +238,9 @@ export class ApiClient {
     const fingerprint = legacySecretRecovery
       ? createLegacyFingerprint()
       : createHash('sha256').update(`ateva-installation:${installationId}`).digest('hex');
-    const recoverySupportToken = process.env.ATEVA_DEVICE_RECOVERY_TOKEN?.trim();
+    const recoverySupportToken = (
+      process.env.ATEVA_DEVICE_RECOVERY_TOKEN ?? process.env.WAITLAYER_DEVICE_RECOVERY_TOKEN
+    )?.trim();
     const registrationPayload = {
       toolType: 'terminal',
       // Keep fingerprintHash for legacy server/client compatibility while the

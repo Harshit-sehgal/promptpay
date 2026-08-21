@@ -548,7 +548,11 @@ function cloneRecord(value: ConfigShape): ConfigShape {
 }
 
 function resolveExecutable(): string {
-  return process.env.ATEVA_CLI_EXECUTABLE?.trim() || process.argv[1] || 'ateva';
+  return (
+    (process.env.ATEVA_CLI_EXECUTABLE ?? process.env.WAITLAYER_CLI_EXECUTABLE)?.trim() ||
+    process.argv[1] ||
+    'ateva'
+  );
 }
 
 function shellQuote(value: string): string {
